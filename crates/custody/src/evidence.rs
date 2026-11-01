@@ -8,6 +8,7 @@ use kassiber_pyjson::{Key, Value as Py};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
+mod observation;
 
 fn integer_or_zero(value: &Value) -> Result<Value, Error> {
     if truth(value) {
@@ -287,25 +288,7 @@ pub fn evidence_snapshot(
     key: &EventKey,
     override_raw: Option<Py>,
 ) -> Result<Value, Error> {
-    let quantity = quantity_payload(row, key)?;
-    let (quantity_hash, _) = codec::hash(&quantity, false).map_err(Error::encoding)?;
-    let mut detail = codec::from_json(
-        &json!({"schema_version":1,"quantity":quantity,"fingerprint":text(&row["fingerprint"]),"occurred_at":text(&row["occurred_at"]),"confirmed_at":text(&row["confirmed_at"]),"kind":text(&row["kind"]),"payment_hash":text(&row["payment_hash"]),"payment_hash_source":text(&row["payment_hash_source"]),"swap_refund_funding_txid":text(&row["swap_refund_funding_txid"]),"swap_refund_funding_vout":row["swap_refund_funding_vout"]}),
-    )?;
-    let raw = if let Some(raw) = override_raw {
-        raw
-    } else if row["raw_json"].is_null() {
-        Py::Dict(vec![])
-    } else {
-        raw_py(&row["raw_json"], "unparsed_text")?
-    };
-    if let Py::Dict(ref mut values) = detail {
-        values.push((Key::Str("raw_json".into()), raw));
-    }
-    let (detail_hash, payload_json) = codec::hash_py(&detail, false).map_err(Error::encoding)?;
-    Ok(
-        json!({"$type":"EvidenceSnapshot","quantity_hash":quantity_hash,"detail_hash":detail_hash,"payload_json":payload_json}),
-    )
+    observation::Commitment::build(row, key, override_raw).map(|snapshot| snapshot.value())
 }
 /// Native zero-delta suppression uses the historical closed-row predicate,
 /// which binds both hashes but does not additionally validate canonical scope.
@@ -319,48 +302,79 @@ pub fn current_observation(row: &Value) -> Result<bool, Error> {
     )
 }
 
-pub fn authority(row: &Value) -> Result<Value, Error> {
-    fn result(ok: bool, reason: &str, version: Value, graph: Value, quantity: Value) -> Value {
-        json!({"$type":"ChainObservationAuthority","authoritative":ok,"reason":reason,"authority_version":version,"graph_hash":graph,"quantity_hash":quantity})
+struct Authority {
+    authoritative: bool,
+    reason: &'static str,
+    version: Option<u8>,
+    graph: Option<String>,
+    quantity: Option<String>,
+}
+
+impl Authority {
+    fn new(
+        authoritative: bool,
+        reason: &'static str,
+        version: Option<u8>,
+        graph: Option<String>,
+        quantity: Option<String>,
+    ) -> Self {
+        Self {
+            authoritative,
+            reason,
+            version,
+            graph,
+            quantity,
+        }
     }
+
+    fn value(self) -> Value {
+        json!({"$type":"ChainObservationAuthority","authoritative":self.authoritative,"reason":self.reason,"authority_version":self.version,"graph_hash":self.graph,"quantity_hash":self.quantity})
+    }
+}
+
+pub fn authority(row: &Value) -> Result<Value, Error> {
+    authority_facts(row).map(Authority::value)
+}
+
+fn authority_facts(row: &Value) -> Result<Authority, Error> {
     let version = &row["observation_authority_version"];
     if version.is_null() || *version == json!("") {
-        return Ok(result(
+        return Ok(Authority::new(
             false,
             "provenance_missing",
-            Value::Null,
-            Value::Null,
-            Value::Null,
+            None,
+            None,
+            None,
         ));
     }
     if integer(version).ok() != Some(json!(1)) {
-        return Ok(result(
+        return Ok(Authority::new(
             false,
             "authority_version_unsupported",
-            Value::Null,
-            Value::Null,
-            Value::Null,
+            None,
+            None,
+            None,
         ));
     }
     let key = match event_key(row) {
         Ok(key) => key,
         Err(_) => {
-            return Ok(result(
+            return Ok(Authority::new(
                 false,
                 "canonical_event_invalid",
-                json!(1),
-                Value::Null,
-                Value::Null,
+                Some(1),
+                None,
+                None,
             ))
         }
     };
     if key.native_namespace != "chain" || !["bitcoin", "liquid"].contains(&key.chain.as_str()) {
-        return Ok(result(
+        return Ok(Authority::new(
             false,
             "canonical_chain_scope_invalid",
-            json!(1),
-            Value::Null,
-            Value::Null,
+            Some(1),
+            None,
+            None,
         ));
     }
     let q = observed_hash(row)?.0;
@@ -369,34 +383,34 @@ pub fn authority(row: &Value) -> Result<Value, Error> {
         .py_lower()
         != q
     {
-        return Ok(result(
+        return Ok(Authority::new(
             false,
             "quantity_hash_mismatch",
-            json!(1),
-            Value::Null,
-            json!(q),
+            Some(1),
+            None,
+            Some(q),
         ));
     }
     let g = graph_hash(&row["raw_json"])?.0;
     if strip(&text(&row["observation_graph_hash"])).py_lower() != g {
-        return Ok(result(
+        return Ok(Authority::new(
             false,
             "graph_hash_mismatch",
-            json!(1),
-            json!(g),
-            json!(q),
+            Some(1),
+            Some(g),
+            Some(q),
         ));
     }
     if row["observation_graph_hash"] != g || row["observation_quantity_hash"] != q {
-        return Ok(result(
+        return Ok(Authority::new(
             false,
             "authoritative_observation_invalid",
-            json!(1),
-            json!(g),
-            json!(q),
+            Some(1),
+            Some(g),
+            Some(q),
         ));
     }
-    Ok(result(true, "matched", json!(1), json!(g), json!(q)))
+    Ok(Authority::new(true, "matched", Some(1), Some(g), Some(q)))
 }
 
 const FIELDS:&str="id journal_transaction_id profile_id wallet_id wallet_kind fingerprint external_id external_id_kind native_event_id native_namespace source_ref backend_name occurred_at confirmed_at direction asset amount fee amount_includes_fee kind payment_hash payment_hash_source swap_refund_funding_txid swap_refund_funding_vout raw_json config_json wallet_config_json chain network observation_authority_version observation_graph_hash observation_quantity_hash observation_fee_attribution observation_application_revision observation_observed_at";
@@ -429,6 +443,12 @@ impl RowRecord for crate::snapshot::Record {
     }
 }
 pub fn enriched_rows<R: RowRecord>(rows: &[R]) -> Result<Vec<Value>, Error> {
+    enrich_with_keys(rows).map(|(rows, _)| rows)
+}
+
+fn enrich_with_keys<R: RowRecord>(
+    rows: &[R],
+) -> Result<(Vec<Value>, Vec<Option<EventKey>>), Error> {
     let fields: BTreeSet<&str> = FIELDS.split_whitespace().collect();
     // Rows are enriched independently; keep them, or the first refusal, in order.
     let enrich = |value: &R| -> Result<Value, Error> {
@@ -441,15 +461,15 @@ pub fn enriched_rows<R: RowRecord>(rows: &[R]) -> Result<Vec<Value>, Error> {
                 .map(|(k, v)| (k.clone(), v.clone()))
                 .collect(),
         );
-        let auth = authority(&item)?;
+        let auth = authority_facts(&item)?;
         let Value::Object(mut item) = std::mem::take(&mut item) else {
             unreachable!("row object")
         };
-        if truth(&auth["authoritative"]) {
-            item.insert("_kassiber_verified_chain_observation".into(), auth);
+        if auth.authoritative {
+            item.insert("_kassiber_verified_chain_observation".into(), auth.value());
         }
-        let config = crate::graph::transfer_object(original("config_json"));
-        let raw = crate::graph::transfer_object(original("raw_json"));
+        let config = crate::graph::transfer_object_ref(original("config_json"));
+        let raw = crate::graph::transfer_object_ref(original("raw_json"));
         let mut chain = if truth(&raw["chain"]) {
             raw["chain"].clone()
         } else {
@@ -476,12 +496,17 @@ pub fn enriched_rows<R: RowRecord>(rows: &[R]) -> Result<Vec<Value>, Error> {
         result.push(crate::par::unwrap(item)?);
     }
     crate::graph::normalize_owned_fees(&mut result)?;
-    let mut groups: BTreeMap<EventKey, Vec<usize>> = BTreeMap::new();
-    let keys = crate::par::map(&result, |row| {
-        (row["direction"] == "outbound").then(|| event_key(row))
-    });
-    for (i, key) in keys.into_iter().enumerate() {
-        if let Some(Ok(key)) = crate::par::unwrap(key) {
+    let keys: Vec<_> = crate::par::map(&result, |row| {
+        (row["direction"] == "outbound")
+            .then(|| event_key(row).ok())
+            .flatten()
+    })
+    .into_iter()
+    .map(crate::par::unwrap)
+    .collect();
+    let mut groups: BTreeMap<&EventKey, Vec<usize>> = BTreeMap::new();
+    for (i, key) in keys.iter().enumerate() {
+        if let Some(key) = key {
             if key.native_namespace == "chain" {
                 groups.entry(key).or_default().push(i);
             }
@@ -520,64 +545,13 @@ pub fn enriched_rows<R: RowRecord>(rows: &[R]) -> Result<Vec<Value>, Error> {
             }
         }
     }
-    Ok(result)
+    Ok((result, keys))
 }
 
-fn validate_observation(observation: &Value) -> Result<(), Error> {
-    for key in ["transaction_id", "anchor_transaction_id", "wallet_id"] {
-        if !truth(&observation[key]) {
-            return Err("quantity observations require transaction, anchor, and wallet ids".into());
-        }
-    }
-    let direction = text(&observation["direction"]);
-    if !["inbound", "outbound"].contains(&direction.as_str()) {
-        return Err("quantity observation direction must be inbound or outbound".into());
-    }
-    if !truth(&observation["asset"]) {
-        return Err("quantity observations require an asset".into());
-    }
-    let includes_fee = truth(&observation["amount_includes_fee"]);
-    let (amount, fee) = (&observation["amount_msat"], &observation["fee_msat"]);
-    // Python admits reviewed amounts up to its integer-string limit, beyond i128.
-    match (codec::checked_wide(amount), codec::checked_wide(fee)) {
-        (Some(amount), Some(fee)) => validate_quantity(&direction, includes_fee, amount, fee),
-        _ => validate_quantity(
-            &direction,
-            includes_fee,
-            codec::big(amount),
-            codec::big(fee),
-        ),
-    }
-}
-fn validate_quantity<T: Ord + From<i8>>(
-    direction: &str,
-    includes_fee: bool,
-    amount: T,
-    fee: T,
-) -> Result<(), Error> {
-    let zero = || T::from(0);
-    if amount < zero() {
-        return Err("quantity observation amount_msat must be non-negative".into());
-    }
-    if fee < zero() {
-        return Err("quantity observation fee_msat must be non-negative".into());
-    }
-    if direction == "inbound" && includes_fee {
-        return Err("inbound quantity cannot use amount_includes_fee".into());
-    }
-    if amount == zero() && !(direction == "outbound" && fee > zero()) {
-        return Err("zero quantity is valid only for a fee-only outbound".into());
-    }
-    if includes_fee && fee > amount {
-        return Err("an included fee cannot exceed the observed amount".into());
-    }
-    Ok(())
-}
 pub(crate) fn observation(row: &Value, key: &EventKey) -> Result<Value, Error> {
-    let result = observation_fields(row, key)?;
-    validate_observation(&result)?;
-    Ok(result)
+    observation::Observation::new(row, key).map(|observation| observation.value())
 }
+
 // Construction shared with exact native augmentation, whose admission uses BigInt.
 pub(crate) fn observation_fields(row: &Value, key: &EventKey) -> Result<Value, Error> {
     let snapshot = evidence_snapshot(row, key, None)?;
@@ -613,17 +587,26 @@ pub fn canonical_input(
     reconciliations: &Value,
     non_events: &BTreeSet<String>,
 ) -> Result<Value, Error> {
+    canonical_with_keys(rows, reconciliations, non_events, Vec::new())
+}
+
+fn canonical_with_keys(
+    rows: &[Value],
+    reconciliations: &Value,
+    non_events: &BTreeSet<String>,
+    mut prepared: Vec<Option<EventKey>>,
+) -> Result<Value, Error> {
     let mut groups: BTreeMap<EventKey, Vec<&Value>> = BTreeMap::new();
     let mut rejected = Vec::new();
     let mut events = Vec::new();
-    // Event keys are pure per row; derive them concurrently, then group in order.
-    let keys = crate::par::map(rows, |row| {
-        (!non_events.contains(&codec::pystr(&row["id"]))).then(|| event_key(row))
-    });
-    for (ordinal, (row, key)) in rows.iter().zip(keys).enumerate() {
-        let Some(key) = crate::par::unwrap(key) else {
+    for (ordinal, row) in rows.iter().enumerate() {
+        if non_events.contains(&codec::pystr(&row["id"])) {
             continue;
-        };
+        }
+        let key = prepared
+            .get_mut(ordinal)
+            .and_then(Option::take)
+            .map_or_else(|| event_key(row), Ok);
         match key {
             Ok(key) => groups.entry(key).or_default().push(row),
             Err(message) if message.is_value_or_type() => {
@@ -706,25 +689,12 @@ fn canonical_event(
     let mut errors = BTreeSet::new();
     for row in group {
         let built = (|| {
-            let mut observation = observation(row, key)?;
+            let mut observation = observation::Observation::new(row, key)?;
             if let Some(proof) = reconciliations
                 .get(text(&row["id"]))
                 .filter(|v| !v.is_null())
             {
-                observation["quantity_hash"]=json!(codec::hash(&json!({"observed_quantity_hash":observation["quantity_hash"],"receipt_reconciliation":proof}),false)?.0);
-                let mut payload =
-                    codec::loads(observation["evidence_payload_json"].as_str().unwrap())?;
-                if let Py::Dict(ref mut values) = payload {
-                    values.push((
-                        Key::Str("receipt_reconciliation".into()),
-                        codec::from_json(proof)?,
-                    ));
-                }
-                let (hash, text) = codec::hash_py(&payload, false)?;
-                observation["evidence_detail_hash"] = json!(hash);
-                observation["evidence_payload_json"] = json!(text);
-                observation["amount_msat"] = proof["amount_msat"].clone();
-                validate_observation(&observation)?;
+                observation.reconcile(proof)?;
             }
             Ok::<_, Error>(observation)
         })();
@@ -745,50 +715,16 @@ fn canonical_event(
             json!({"errors":errors}),
         )));
     }
-    let mut slots: BTreeMap<(String, String, String), Vec<&Value>> = BTreeMap::new();
-    for observation in &observations {
-        slots
-            .entry((
-                text(&observation["wallet_id"]),
-                text(&observation["direction"]),
-                text(&observation["asset"]),
-            ))
-            .or_default()
-            .push(observation);
+    let mut slots: BTreeMap<(&str, &str, &str), Vec<usize>> = BTreeMap::new();
+    for (index, observation) in observations.iter().enumerate() {
+        slots.entry(observation.slot()).or_default().push(index);
     }
     let mut contradictions = Vec::new();
     for ((wallet, direction, asset), items) in &slots {
-        let fits = items.iter().all(|i| {
-            codec::checked_wide(&i["amount_msat"]).is_some()
-                && codec::checked_wide(&i["fee_msat"]).is_some()
-        });
-        let semantics: Vec<Value> = if fits {
-            let set: BTreeSet<(i128, i128, bool)> = items
-                .iter()
-                .map(|i| {
-                    (
-                        wide(&i["amount_msat"]),
-                        wide(&i["fee_msat"]),
-                        truth(&i["amount_includes_fee"]),
-                    )
-                })
-                .collect();
-            set.into_iter().map(|t| json!(t)).collect()
-        } else {
-            // Python orders reviewed amounts beyond i128 exactly.
-            let set: BTreeMap<_, Value> = items
-                .iter()
-                .map(|i| {
-                    let flag = truth(&i["amount_includes_fee"]);
-                    let (amount, fee) = (&i["amount_msat"], &i["fee_msat"]);
-                    (
-                        (codec::big(amount), codec::big(fee), flag),
-                        json!([amount, fee, flag]),
-                    )
-                })
-                .collect();
-            set.into_values().collect()
-        };
+        let semantics: BTreeSet<(i128, i128, bool)> = items
+            .iter()
+            .map(|index| observations[*index].semantics())
+            .collect();
         if semantics.len() > 1 {
             contradictions.push(json!({"wallet_id":wallet,"direction":direction,"asset":asset,"semantics":semantics}));
         }
@@ -802,45 +738,44 @@ fn canonical_event(
             json!({"contradictory_slots":contradictions}),
         )));
     }
-    let legs: Vec<&Value> = slots
-        .values()
-        .map(|items| {
-            items
-                .iter()
-                .min_by_key(|i| {
-                    (
-                        text(&i["occurred_at"]),
-                        text(&i["evidence_detail_hash"]),
-                        text(&i["transaction_id"]),
-                    )
-                })
-                .copied()
-                .unwrap()
-        })
-        .collect();
-    let mut aliases = Vec::new();
+    let mut selected = vec![0; observations.len()];
+    let mut legs = Vec::with_capacity(slots.len());
+    for items in slots.values() {
+        let keeper = *items
+            .iter()
+            .min_by_key(|index| observations[**index].selection())
+            .unwrap();
+        for index in items {
+            selected[*index] = keeper;
+        }
+        legs.push(observations[keeper].value());
+    }
+    let mut aliases = Vec::with_capacity(observations.len());
     let mut snapshots = BTreeMap::new();
     let mut ids = BTreeSet::new();
-    for item in &observations {
-        let selected = legs
-            .iter()
-            .find(|v| {
-                v["wallet_id"] == item["wallet_id"]
-                    && v["direction"] == item["direction"]
-                    && v["asset"] == item["asset"]
-            })
-            .unwrap();
+    for (index, item) in observations.iter().enumerate() {
         aliases.push((
-            text(&item["transaction_id"]),
-            text(&selected["quantity_hash"]),
+            item.transaction_id.as_ref(),
+            observations[selected[index]]
+                .commitment
+                .quantity_hash
+                .as_str(),
         ));
-        ids.insert(text(&item["transaction_id"]));
-        snapshots.insert(text(&item["evidence_detail_hash"]),json!({"$type":"EvidenceSnapshot","quantity_hash":item["quantity_hash"],"detail_hash":item["evidence_detail_hash"],"payload_json":item["evidence_payload_json"]}));
+        ids.insert(item.transaction_id.as_ref());
+        snapshots.insert(item.commitment.detail_hash.as_str(), &item.commitment);
     }
     aliases.sort();
-    Ok(Ok(
-        json!({"$type":"CanonicalQuantityEvent","event_key":key.value(),"legs":legs,"evidence_snapshots":snapshots.into_values().collect::<Vec<_>>(),"source_transaction_ids":ids,"observation_aliases":aliases}),
-    ))
+    let snapshots: Vec<_> = snapshots.into_values().map(|item| {
+        json!({"$type":"EvidenceSnapshot","quantity_hash":item.quantity_hash,"detail_hash":item.detail_hash,"payload_json":item.payload_json})
+    }).collect();
+    let mut event = serde_json::Map::new();
+    event.insert("$type".into(), json!("CanonicalQuantityEvent"));
+    event.insert("event_key".into(), key.value());
+    event.insert("legs".into(), Value::Array(legs));
+    event.insert("evidence_snapshots".into(), Value::Array(snapshots));
+    event.insert("source_transaction_ids".into(), json!(ids));
+    event.insert("observation_aliases".into(), json!(aliases));
+    Ok(Ok(Value::Object(event)))
 }
 
 pub fn compute(snapshot: &Snapshot) -> Result<Value, Error> {
@@ -851,13 +786,13 @@ pub fn compute(snapshot: &Snapshot) -> Result<Value, Error> {
     let non_events = crate::graph::native_zero_delta_ids(rows, snapshot)?;
     drop(span);
     let span = crate::timing::span("evidence.enriched");
-    let enriched = enriched_rows(&snapshot.transactions)?;
+    let (enriched, keys) = enrich_with_keys(&snapshot.transactions)?;
     drop(span);
     let span = crate::timing::span("evidence.receipts");
     let reconciliations = crate::graph::reconcile_receipts(rows, snapshot)?;
     drop(span);
     let span = crate::timing::span("evidence.canonical");
-    let canonical = canonical_input(&enriched, &reconciliations, &non_events)?;
+    let canonical = canonical_with_keys(&enriched, &reconciliations, &non_events, keys)?;
     drop(span);
     let _span = crate::timing::span("evidence.value");
     // The object json! would build, with the stage parts moved rather than copied.
