@@ -282,7 +282,7 @@ def test_native_freshness_live_stream_matches_python(tmp_path, protocol):
 
 @pytest.mark.parametrize("protocol", ["electrum", "esplora"])
 def test_reference_prefetch_cancellation_repro_and_native_terminal_parity(tmp_path, protocol):
-    """Repro: Python prefetch keeps fetching after persisted job cancellation."""
+    """Both runtimes stop prefetch after persisted job cancellation."""
     config, chain, _ = _fixture("empty")
     python_book, rust_book = tmp_path / "python.sqlite", tmp_path / "rust.sqlite"
     create_book(python_book, config, extra_sql=CONTEXT_SQL)
@@ -324,4 +324,9 @@ def test_reference_prefetch_cancellation_repro_and_native_terminal_parity(tmp_pa
     assert expected["data"]["completed"][0]["status"] == "cancelled"
     assert reference_hits.cancelled_at is not None and native_hits.cancelled_at is not None
     assert len(native_hits) - native_hits.cancelled_at <= 1
-    assert len(reference_hits) - reference_hits.cancelled_at > 1
+    remaining = reference_hits[reference_hits.cancelled_at:]
+    if protocol == "electrum":
+        assert len(remaining) <= 7
+        assert all(request["method"] == "blockchain.scripthash.get_history" for request in remaining)
+    else:
+        assert len(remaining) <= 1

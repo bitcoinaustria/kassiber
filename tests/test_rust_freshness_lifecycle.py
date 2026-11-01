@@ -378,8 +378,7 @@ def test_reference_source_control_checkpoint_repro_and_native_parity(tmp_path, a
             args = {"job_id": job[0]} if action == "cancel" else {"source_key": job[1]}
             with deterministic_sources("r0"):
                 expected = daemon_freshness._freshness_control_payload(conn, args, action=action)
-            if action != "cancel":
-                assert expected["result"].pop("checkpoint") == checkpoint
+            assert "private-script-member" not in json.dumps(expected)
         kind = f"test.freshness.{action}"
         session.send(kind, "control", args)
         actual = session.until("control")

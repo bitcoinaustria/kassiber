@@ -778,5 +778,15 @@
       "lnd_report_python_vectors_pin_projection_and_exact_requests"
     ],
     "rule": "Keep the reference regex terminal-newline identifier quirk."
+  },
+  {
+    "id": "http-interruptible-backoff",
+    "file": "crates/chain/src/http.rs",
+    "find": "                        .min(Duration::from_millis(100)),",
+    "replace": "                        .min(Duration::from_secs(20)),",
+    "expect_failing": [
+      "checked_http_cancellation_interrupts_retry_backoff"
+    ],
+    "rule": "Cancellation interrupts a retry delay before another request is transmitted."
   }
 ]

@@ -336,6 +336,36 @@ fn checked_http_refuses_before_transport_and_rechecks_before_retry() {
     }
 }
 #[test]
+fn checked_http_cancellation_interrupts_retry_backoff() {
+    let server = FakeProvider::script(vec![(
+        503,
+        vec![("Retry-After".into(), "2".into())],
+        "retry".into(),
+    )])
+    .unwrap();
+    let config = backend(server.base(), false);
+    let proof = Consent::explicit_trigger(config.request());
+    let client = HttpClient::new(config, gate(Offline::Online), "fixture");
+    let started = Instant::now();
+    let check = || {
+        if started.elapsed() >= Duration::from_millis(150) {
+            Err(AppError::new("cancelled", "Request ended during backoff"))
+        } else {
+            Ok(())
+        }
+    };
+    assert_eq!(
+        client
+            .get_json_checked("tx/reference", Some(&proof), deadline(), &check)
+            .unwrap_err()
+            .code,
+        "cancelled"
+    );
+    assert!(started.elapsed() < Duration::from_secs(1));
+    assert_eq!(server.requests().len(), 1);
+}
+
+#[test]
 fn socket_forms_and_proxy_trust_scope_are_inert() {
     assert_eq!(
         config::socket_endpoint("example.com").unwrap(),

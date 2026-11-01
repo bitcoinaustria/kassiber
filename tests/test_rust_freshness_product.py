@@ -479,12 +479,7 @@ def test_product_source_controls_remain_available_during_fetch(tmp_path, protoco
                 session.until("sync", kind)
                 actual = [row for row in session.rows if row.get("request_id") == "sync" or row.get("event")]
                 (tmp_path / "product-control-parity.json").write_text(json.dumps({"actual": actual, "expected": expected}, indent=2))
-                if control == "cancel" and kind != KINDS[2]:
-                    assert actual[-1] == expected[-1]
-                    assert actual[:-1] == expected[:len(actual) - 1]
-                    assert len(expected) > len(actual)
-                else:
-                    assert actual == expected
+                assert actual == expected
                 assert dump_bytes(books[1]) == dump_bytes(books[0])
                 if control == "pause":
                     session.send("ui.freshness.resume", "resume", {"source_key": job[1]})

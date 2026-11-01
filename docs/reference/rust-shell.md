@@ -9855,14 +9855,13 @@ envelopes and every logical table. Separate live-daemon cases compare stream
 envelopes, results and full books on both protocols; these use a guarded test
 kind, not a registered product route or a hybrid served-by workload.
 
-A Python reference bug is reproduced by
-`test_reference_prefetch_cancellation_repro_and_native_terminal_parity` in
-`tests/test_rust_freshness_native.py`: cancellation persisted during active-book
-prefetch does not stop Python's later backend requests. Rust stops before the
-next batch, while its terminal envelope and every logical table match Python's
-cancelled outcome. The repro runs on both disposable protocols. Python was not
-changed; the cancelled prefetch event streams deliberately differ because the
-native fence prevents the remaining work.
+The cancellation regression
+`test_reference_prefetch_cancellation_repro_and_native_terminal_parity` now
+requires both runtimes to stop before another prefetch batch. Python rounds 7
+and 7b are integrated on the R4-15 line, including owner-thread checks,
+BDK/LWK step fences, checkpoint redaction and interruptible HTTP backoff.
+Terminal envelopes and every logical table retain exact parity on both
+protocols; no privacy exception is required.
 
 The exact remaining handoff is:
 
@@ -9956,11 +9955,10 @@ the worker receives no passphrase copy, and lock removes the session secret.
 tests hold a disposable Electrum/Esplora response while submitting controls,
 then check terminal state, subsequent traffic and publication. Source-control
 oracles compare complete typed envelopes and every logical table. Their
-explicit projection exception reproduces another Python reference bug:
-`test_reference_source_control_checkpoint_repro_and_native_parity` shows that
-pause/resume returns private checkpoints under `result`. Rust removes that
-container; Python is unchanged. The inherited active-prefetch cancellation
-repro and its deliberate privacy deviation are retained.
+checkpoint regression
+`test_reference_source_control_checkpoint_repro_and_native_parity` requires
+identical redacted pause/resume results. Python's cancellation and checkpoint
+fixes are integrated on the R4-15 line; both regressions compare directly.
 
 The exact remaining handoff is:
 
@@ -10053,7 +10051,7 @@ transaction-reference graph lookup service yet; neither a saved job nor a
 published grant initiates graph traffic, creates a graph freshness job or writes
 the graph cache. The guarded count-only inspection kind is absent from release
 builds and renderer/AI allowlists. No dependency or Python product code changes.
-The two recorded Python privacy deviations remain unchanged.
+Python now shares the cancellation and checkpoint-redaction fences.
 
 The exact remaining handoff is:
 
@@ -10168,7 +10166,7 @@ graph job, performs no lookup or recovery. The existing handoff inspection
 tests retain their inert mailbox until the worker is explicitly enabled. No
 dependency or Python product code changes.
 
-The two recorded Python privacy deviations remain unchanged. A separate
+Python now shares the cancellation and checkpoint-redaction fences. A separate
 correctness deviation has a disposable repro:
 `test_reference_electrum_mismatched_transaction_repro_and_native_refusal` shows
 that Python assigns the requested transaction ID to different Electrum bytes
@@ -10332,16 +10330,14 @@ events and every normalized table on both protocols, including restarts,
 reviewed books, workspace order and real automatic graph lookup. No-refresh
 sync retains journal staleness and reviewed accounting authority. Product
 controls remain available during fetch. Offline/no-egress, cancellation and
-expected-scope fences still precede transport. The three previously recorded
-reference deviations remain: stopping after prefetch cancellation, redacting
-pause/resume checkpoints and refusing mismatched Electrum transaction bytes.
+expected-scope fences still precede transport. Python now shares prefetch cancellation and pause/resume checkpoint
+redaction. The separate mismatched-Electrum-bytes reference bug remains.
 The additional `all:false`/missing-wallet repro is an unserved input shape.
 
 Occupied execution returns `project_operation_in_progress` from both selection
 and product dispatch, preventing a busy native request from selecting Python.
 Live source controls compare terminal envelopes and every normalized table;
-ordered events match apart from Python's recorded extra progress after prefetch
-cancellation. A workspace job already running when paused can finish, while
+ordered events include the same cancellation fence in both runtimes. A workspace job already running when paused can finish, while
 active-book prefetch rechecks dispatch eligibility. Missing/non-object BDK state
 aggregates retain Python's incomplete-state error; unsupported versions retain
 its rebuild error, separate from malformed changeset decoding. Discovery still
@@ -10355,8 +10351,8 @@ product behavior. The clean parity witness records 327 native round trips:
 `ui.workspace.freshness.run`, with zero served-shape fallbacks. It records a call
 only after envelopes, ordered events and every normalized table match.
 The separate default enqueue-only cases deliberately select Python before
-execution. Live-control comparisons retain only the documented prefetch-stop
-progress exception; terminal envelopes and complete books still match.
+execution. Live-control comparisons require exact ordered events, terminal envelopes and
+complete books after the Python cancellation fixes.
 
 Default refresh integration is deliberately separate. The dependency is the
 registered native `journals process` service from

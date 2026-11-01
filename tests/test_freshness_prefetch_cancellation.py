@@ -165,7 +165,7 @@ def test_uncancelled_request_counts(tmp_path, protocol, entrypoint, wallet_count
             else:
                 result = daemon_freshness._wallets_sync_payload(conn, runtime, {"all": True, "process_journals": False}, strict=True)
         assert [job["status"] for job in result["completed"]] == ["done"] * wallet_count
-        expected = 154 * wallet_count if protocol == "esplora" else 1 + 92 * wallet_count
+        expected = 152 * wallet_count if protocol == "esplora" else 1 + 92 * wallet_count
         assert len(hits["requests"]) == expected
         print(f"REQUEST_COUNT {entrypoint} {protocol} {wallet_count}: {len(hits['requests'])}")
 

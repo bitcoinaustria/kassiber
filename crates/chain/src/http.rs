@@ -232,7 +232,19 @@ impl HttpClient {
             self.gate
                 .authorize(self.backend.request.clone(), consent.cloned())
                 .map_err(|e| e.app_error())?;
-            std::thread::sleep(delay);
+            let wake = Instant::now() + delay;
+            while Instant::now() < wake {
+                check()?;
+                self.gate
+                    .authorize(self.backend.request.clone(), consent.cloned())
+                    .map_err(|e| e.app_error())?;
+                remaining(deadline)?;
+                std::thread::sleep(
+                    wake.saturating_duration_since(Instant::now())
+                        .min(Duration::from_millis(100)),
+                );
+            }
+            check()?;
             cumulative += delay;
         }
         unreachable!()
