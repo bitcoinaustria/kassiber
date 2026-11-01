@@ -9,9 +9,11 @@ import pytest
 
 from tests.rust_port.journal_scalar_vectors import PATH as SCALAR_PATH, vectors as scalar_vectors, render_vectors as scalar_render_vectors, refusal_vectors as scalar_refusal_vectors
 from tests.rust_port.journal_render_vectors import PATH, vectors, machine_msat_vectors, legacy_float_vectors, response_refusal_vectors
+from tests.rust_port.journal_native_vectors import PATH as NATIVE_PATH, vectors as native_vectors
 
 
 def test_render_vectors_rebuild_from_python_build():
+    assert json.loads(NATIVE_PATH.read_text()) == native_vectors()
     assert json.loads(SCALAR_PATH.read_text()) == scalar_vectors()
     assert json.loads(SCALAR_PATH.with_name("render-scalar-refusals.json").read_text()) == scalar_refusal_vectors()
     assert json.loads(SCALAR_PATH.with_name("render-scalar-coercions.json").read_text()) == scalar_render_vectors()

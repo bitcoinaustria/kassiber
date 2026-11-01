@@ -8,6 +8,7 @@ mod integer;
 #[cfg(any(test, feature = "test-harness"))]
 pub mod loader;
 mod model;
+pub mod native;
 pub mod persistence;
 #[cfg(any(test, feature = "test-harness"))]
 pub mod pipeline;

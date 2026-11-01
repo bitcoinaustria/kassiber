@@ -25,7 +25,7 @@ fn jd(d: &kassiber_tax_core::model::Dec) -> JournalDecimal {
 fn zero() -> JournalDecimal {
     JournalDecimal(Decimal::zero())
 }
-fn fixed(d: &Decimal) -> Result<Cow<'static, str>, Refusal> {
+pub(crate) fn fixed(d: &Decimal) -> Result<Cow<'static, str>, Refusal> {
     if d.is_zero() && d.exponent() >= 0 {
         return Ok(Cow::Borrowed(if d.is_sign_negative() { "-0" } else { "0" }));
     }
@@ -63,7 +63,7 @@ fn fixed(d: &Decimal) -> Result<Cow<'static, str>, Refusal> {
     }
     Ok(Cow::Owned(d.to_fixed_string()?))
 }
-fn float(d: &Decimal) -> f64 {
+pub(crate) fn float(d: &Decimal) -> f64 {
     d.to_string().parse().expect("finite Decimal text")
 }
 pub(crate) fn msat(d: &Decimal) -> Result<Value, Refusal> {

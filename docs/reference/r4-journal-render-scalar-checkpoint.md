@@ -136,3 +136,81 @@ The separately assigned branch audit and the checkpoint's complete renderer,
 persistence and custody mutation campaigns, generated-input/shadow lanes,
 integrated loaders and repository quality gate remain outside this prerequisite
 commit. The new focused mutation kills do not certify those campaigns.
+
+## Native ledger continuation
+
+This local continuation starts at `b3fabebb9` on
+`t3code/r4-11-render-fidelity-2`. **R4-11 remains unaccepted.**
+
+`crates/journals/src/native.rs` adds a comparison-only ledger reader over the
+native scalar algebra. Profiles, projection rows, entry fields, fragment
+provenance, carry overlays, holdings, audits, quarantine details, compatibility
+payouts and summaries retain native values. It shares the renderer's existing
+Decimal formatting and msat operations. Response fields are decoded when Python
+consumes them, and the caller still owns every entry identity. No command,
+production authority, persistence format, dependency or external I/O changes.
+
+The reader returns an owned `native::Ledger`. Its oracle snapshot keeps native
+nonfinite floats and Decimals distinct from literal objects. `native::Error`
+retains a native message, including actual surrogates in interpolated error
+text. The existing typed renderer and diagnostic probe remain unchanged.
+
+The immutable `render-native-ledger.json` witnesses are derived by calling the
+unchanged Python `ledger_response.read_ledger` or `empty_result` on every
+existing render operand. The adapter preserves the original wallet mapping
+keys and injects the declared identity tape at `journal_entry_id`. All **990**
+ledger states/refusals match exactly, including **383** frozen cases, **39**
+audit/carry cases, **550** response-refusal cases and **18** scalar coercions.
+This separate ledger oracle includes the complete intra-audit output, which
+`CustodyJournalBuilder.build()` omits from its returned state. The existing
+corpora are unchanged.
+
+All **42** all-feature release journal tests, the six Python oracle/capture tests,
+workspace formatting and scoped all-target/all-feature release clippy pass.
+All **ten** focused recipes in `crates/journals/scripts/native_mutations.json`
+are killed by `native_ledger_matches_python_consumption_and_scalars`, with a
+passing unmutated baseline and no survivors or build errors. Their source-bound mutation results and verification logs are retained locally under
+`target/r4-fidelity-2/`.
+
+This is a ledger boundary, not completion of requested item 1. Native
+builder-state assembly, diagnostic joins and the probe's raw decoder/handoff
+remain open. The four end-to-end surrogate repros therefore remain open even
+though the native ledger can carry those scalar types. The new ledger oracle
+does not certify malformed projection shapes, all wallet mapping shapes,
+nonfinite values in every consumed/ignored stage, or the complete native
+shape/refusal/UUID campaign. Transfer quantities still use the existing
+`JournalQuantity` snapshot adapter, and cross-asset projection shape consumption
+is not certified by this boundary. Successful native ledger results still need to be
+returned through the complete builder boundary. Python reference behavior is
+unchanged; no reference bug was identified.
+
+
+### Continuation verification and final CPU pairs
+
+The required classifier update leaves the inventory unchanged, and CI preflight
+passes all **57 tests**. All **188** existing and new recipes apply; only the ten
+new native-ledger recipes were executed in this continuation. The mutation
+source and build trees are deleted after their source-bound summary is saved.
+
+The single final campaign uses seven alternating back-to-back pairs on CPU 0
+against the retained `8a9492199` probe, whose SHA-256 is
+`3f0e6b8134ee075133ed906194491cec4f5e0389a7298419172ee981ffafec72`.
+Both probes first match complete state bytes on both identical copied 20k
+operands. No build or other test overlaps the campaign.
+
+| Book | Baseline best CPU (s) | Head best CPU (s) | Baseline median (s) | Head median (s) |
+| --- | ---: | ---: | ---: | ---: |
+| Generic 20k | 0.236217 | 0.229761 | 0.284954 | 0.275336 |
+| Multi-wallet 20k | 0.205968 | 0.227631 | 0.318648 | 0.353668 |
+
+Both probes miss the 0.15 s target. The retained baseline has stage timing
+instrumentation; this head probe uses default features. That build-feature
+difference limits the comparison. These samples measure the existing typed
+builder, because the new native ledger reader is not yet wired into its probe.
+They do not certify the new reader's performance or establish a fidelity
+regression. No second timing campaign or speed optimization is performed.
+
+`target/r4-fidelity-2/verification-index.json` binds the final source, fixtures,
+mutation kills, passing logs, probes, copied operands and all CPU samples.
+Verification build trees are removed after summarizing. The probes, operands,
+logs and summaries remain local. No push, PR or external comment is performed.
