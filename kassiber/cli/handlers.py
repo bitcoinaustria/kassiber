@@ -3873,14 +3873,7 @@ def _transaction_custody_projection_exists_sql(relation_type=None):
         EXISTS (
           SELECT 1 FROM profiles custody_profile
           WHERE custody_profile.id = t.profile_id
-            AND custody_profile.last_processed_at IS NOT NULL
-            AND custody_profile.journal_input_version =
-                custody_profile.last_processed_input_version
-            AND (custody_profile.required_journal_semantics_version = 0 OR (
-                custody_profile.journal_semantics_version = {core_custody_journal.JOURNAL_CALCULATION_SEMANTICS_VERSION}
-                AND custody_profile.journal_semantics_version >=
-                    custody_profile.required_journal_semantics_version
-            ))
+            AND {core_custody_journal.projection_freshness_sql('custody_profile')}
         )
     """
     move = """

@@ -1,5 +1,6 @@
 """Exit-tax review scenarios through journal processing and the pinned real RP2."""
 
+from kassiber.core.journal_calculation import stored_calculation
 import json
 from decimal import Decimal
 
@@ -21,7 +22,8 @@ METHODS = ("fifo", "lifo", "hifo", "lofo", "moving_average", "moving_average_at"
 def engine_book(tmp_path):
     connections = []
 
-    def build(rows, *, method="fifo", country="at", quotes=(), pair=False, overrides=None):
+    def build(rows, *, method="fifo", country="at", quotes=(), pair=False, overrides=None,
+              expected_quarantines=()):
         conn = open_db(tmp_path / f"engine-{len(connections)}")
         connections.append(conn)
         accounts.create_workspace(conn, "W")
@@ -57,7 +59,9 @@ def engine_book(tmp_path):
                 in_row=conn.execute("SELECT * FROM transactions WHERE id='move-in'").fetchone(),
             )
         handlers.process_journals(conn, "W", "P")
-        assert list(conn.execute("SELECT * FROM journal_quarantines")) == []
+        assert [r["transaction_id"] for r in conn.execute(
+            "SELECT * FROM journal_quarantines ORDER BY transaction_id"
+        )] == list(expected_quarantines)
         return conn
 
     yield build
@@ -117,7 +121,7 @@ def test_regime_inventory_matches_realized_lots_and_dashboard(engine_book, metho
         if entry["entry_type"] not in ("fee", "transfer_fee"):
             continue
         regimes = set()
-        for fragment in json.loads(entry["calculation_json"])["fragments"]:
+        for fragment in stored_calculation(entry)["fragments"]:
             regime = infer_regime_from_timestamp(fragment["lot"]["occurred_at"]) if country == "at" else "neu"
             regimes.add(regime)
             remaining[regime] -= Decimal(fragment["quantity_msat_exact"])
@@ -380,7 +384,7 @@ def test_reviewer_method_jurisdiction_override_matrix(engine_book, method, count
     for row in conn.execute("SELECT * FROM journal_entries WHERE entry_type='disposal'"):
         if country == "at":
             regimes = {infer_regime_from_timestamp(f["lot"]["occurred_at"])
-                       for f in json.loads(row["calculation_json"])["fragments"]}
+                       for f in stored_calculation(row)["fragments"]}
             assert regimes == {parse_marker(row["description"], MARKER_REGIME)}
         if row["transaction_id"] == "sell" and country == "at":
             # Overrides still change realized tax treatment.

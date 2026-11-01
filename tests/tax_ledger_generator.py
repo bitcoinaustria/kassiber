@@ -1472,9 +1472,9 @@ def _at_cases() -> list[GoldenCase]:
                 succeeds(descriptions=("at_alt_out=", "at_alt_in=", "at_regime_basis=wahlrecht"), entry_types=("transfer_fee",)),
             )
         )
-    # Fee first: a move out of a mixed wallet pays its fee from the Neu
-    # coins, so only the rest of the Neu reaches B; B's first sale uses it up
-    # and the next one is Alt.
+    # The Austrian moving average pays the fee from Neu before transferring
+    # the remainder. FIFO's fee and subsequent sales consume the oldest Alt
+    # lot, regardless of the transfer's intended regime markers.
     fee_first = [
         row("buy-alt", "A", "inbound", 10_000_000_000, "2020-06-01T00:00:00Z", rate="8000", kind="buy"),
         row("buy-neu", "A", "inbound", 1_000_000_000, "2024-06-01T00:00:00Z", rate="60000", kind="buy"),
@@ -1491,7 +1491,9 @@ def _at_cases() -> list[GoldenCase]:
                 profile("at", method),
                 fee_first,
                 [pair("pair-1", "move-out", "move-in")],
-                succeeds(regimes={"move-out": "neu", "sell-neu-remainder": "neu", "sell-after-neu-fee": "alt"}),
+                succeeds(regimes={"move-out": "neu" if method == "moving_average_at" else "alt",
+                                  "sell-neu-remainder": "neu" if method == "moving_average_at" else "alt",
+                                  "sell-after-neu-fee": "alt"}),
             )
         )
     # Fees under a lot method: a fee-only spend and a move fee, each taking
@@ -1718,8 +1720,8 @@ def _at_cases() -> list[GoldenCase]:
     for item in rows:
         if item["id"] == "sell-2":
             item["note"] = "at_regime=neu duplicate"
-    # Under a lot method nothing parses a sale's regime marker, so the
-    # duplicate stays in its description and the book succeeds.
+    # The lot method does not parse the sale's intent markers. Composition
+    # replaces them with the consumed regime after the book succeeds.
     cases.append(
         _book(
             "at-usertag-duplicate-regime-unconsulted",
@@ -1727,7 +1729,7 @@ def _at_cases() -> list[GoldenCase]:
             profile("at", "fifo"),
             rows,
             pairs,
-            succeeds(descriptions=("at_regime=neu at_pool=default at_regime=neu duplicate",)),
+            succeeds(descriptions=("at_regime=neu at_pool=default duplicate",)),
         )
     )
     rows, pairs = ledger_history()

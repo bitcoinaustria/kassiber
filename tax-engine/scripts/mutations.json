@@ -917,8 +917,8 @@
   {
     "id": "compose-merges-holding-periods",
     "file": "tax-engine/core/src/ledger/compose.rs",
-    "find": "            let key = (entry.row, gain_loss.long_term, at_category.clone());",
-    "replace": "            let key = (entry.row, false, at_category.clone());",
+    "find": "            let key = (\n                entry.row,\n                gain_loss.long_term,\n                at_category.clone(),\n                consumed_regime,\n            );",
+    "replace": "            let key = (\n                entry.row,\n                false,\n                at_category.clone(),\n                consumed_regime,\n            );",
     "expect_failing": [
       "ledger::compose::tests::realized_entries_sum_their_fragments_by_event_and_holding_period"
     ],
@@ -1109,7 +1109,7 @@
     "expect_failing": [
       "ledger::regimes::tests::the_cutoff_is_strict_and_an_unread_time_fails_with_pythons_value_error"
     ],
-    "rule": "A time's regime is Alt strictly before the Neuvermögen cutoff and Neu from it on."
+    "rule": "A time's regime is Alt strictly before the Neuverm\u00f6gen cutoff and Neu from it on."
   },
   {
     "id": "regimes-unread-time-is-neu",
@@ -1378,8 +1378,8 @@
   {
     "id": "compose-groups-ignore-categories",
     "file": "tax-engine/core/src/ledger/compose.rs",
-    "find": "            let key = (entry.row, gain_loss.long_term, at_category.clone());",
-    "replace": "            let key = (entry.row, gain_loss.long_term, None::<String>);",
+    "find": "            let key = (\n                entry.row,\n                gain_loss.long_term,\n                at_category.clone(),\n                consumed_regime,\n            );",
+    "replace": "            let key = (\n                entry.row,\n                gain_loss.long_term,\n                None::<String>,\n                consumed_regime,\n            );",
     "expect_failing": [
       "ledger::compose::tests::austrian_categories_follow_the_overrides_and_split_entries"
     ],
@@ -1937,5 +1937,45 @@
       "tests/test_tax_ledger_contract.py::test_the_reader_renders_every_stored_response_as_expected[carry-two-hop-spaced]"
     ],
     "rule": "A carried row's pricing method is carrying_value."
+  },
+  {
+    "id": "compose-consumed-regime-split",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "            let key = (\n                entry.row,\n                gain_loss.long_term,\n                at_category.clone(),\n                consumed_regime,\n            );",
+    "replace": "            let key = (\n                entry.row,\n                gain_loss.long_term,\n                at_category.clone(),\n                None::<&str>,\n            );",
+    "expect_failing": [
+      "consumed_regimes_split_before_disposal_overrides_and_fee_clearing"
+    ],
+    "rule": "A disposal override cannot merge fragments consuming different Alt/Neu regimes."
+  },
+  {
+    "id": "compose-consumed-marker",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "if let Some(regime) = group.consumed_regime",
+    "replace": "if let Some(regime) = None::<&str>",
+    "expect_failing": [
+      "consumed_regimes_split_before_disposal_overrides_and_fee_clearing"
+    ],
+    "rule": "Disposals and fees persist their pre-override consumed regime."
+  },
+  {
+    "id": "compose-fee-consumed-marker",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "if entry_type != EntryType::Income {",
+    "replace": "if entry_type == EntryType::Disposal {",
+    "expect_failing": [
+      "consumed_regimes_split_before_disposal_overrides_and_fee_clearing"
+    ],
+    "rule": "Fees keep consumed-lot markers even after clearing their realized tax category."
+  },
+  {
+    "id": "compose-remove-intent-markers",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "!token.starts_with(\"at_regime=\")",
+    "replace": "!token.starts_with(\"unused_regime=\")",
+    "expect_failing": [
+      "consumed_regimes_split_before_disposal_overrides_and_fee_clearing"
+    ],
+    "rule": "Consumed-lot authority replaces every input-intent regime marker."
   }
 ]

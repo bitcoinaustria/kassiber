@@ -25,6 +25,8 @@ class JournalProjectionFreshnessTest(unittest.TestCase):
             "last_processed_tx_count": 2,
             "journal_input_version": 3,
             "last_processed_input_version": 3,
+            "required_journal_semantics_version": 0,
+            "journal_semantics_version": 0,
         }
         cases = (
             (base, 2, "current", True, False),

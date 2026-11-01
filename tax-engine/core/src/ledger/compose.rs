@@ -16,9 +16,10 @@
 //!   fees and income included, has the lot engine's category, which the
 //!   row's overrides may replace or clear (`adapter.py:1453-1471`); the
 //!   first fragment whose classification failed fails the composition.
-//!   Fragments group by their category too, so one event can give several
-//!   entries, and a fee or transfer fee drops its category only after that
-//!   split (A map §9.9);
+//!   Fragments group by their category and consumed regime, so one event
+//!   can give several entries. Outflow descriptions retain the consumed
+//!   regime before overrides; fees drop their category after that split
+//!   (A map §9.9);
 //! - the two legs of each move the walk booked, in audit order;
 //! - holdings: each positive balance of a wallet with a label, valued at
 //!   the open lots' average basis;
@@ -133,6 +134,7 @@ struct Realized {
     long_term: bool,
     /// The Austrian category after the overrides.
     at_category: Option<String>,
+    consumed_regime: Option<&'static str>,
     quantity: Decimal,
     cost_basis: Decimal,
     proceeds: Decimal,
@@ -289,7 +291,7 @@ impl<'c, 'a> Composer<'c, 'a> {
         // By taxable event (row number), holding period, and on an Austrian
         // book category, in the order they first appear.
         let mut groups: Vec<Realized> = Vec::new();
-        let mut positions: HashMap<(i64, bool, Option<String>), usize> = HashMap::new();
+        let mut positions = HashMap::new();
         for gain_loss in &self.asset.output.gain_losses {
             let event = self.entry(gain_loss.event.row, gain_loss.event.kind)?;
             let entry = &event.entry;
@@ -304,15 +306,28 @@ impl<'c, 'a> Composer<'c, 'a> {
             } else {
                 EntryType::Disposal
             };
+            let mut consumed_regime = None;
             let at_category = if austrian {
                 let category = Self::classify(gain_loss)?;
+                if entry_type != EntryType::Income {
+                    consumed_regime = Some(if category.starts_with("alt") {
+                        "alt"
+                    } else {
+                        "neu"
+                    });
+                }
                 // The overrides of the event's row (an event's own, a
                 // move's out leg).
                 overridden(&self.book.rows[event.row], category)
             } else {
                 None
             };
-            let key = (entry.row, gain_loss.long_term, at_category.clone());
+            let key = (
+                entry.row,
+                gain_loss.long_term,
+                at_category.clone(),
+                consumed_regime,
+            );
             let position = match positions.get(&key) {
                 Some(&position) => position,
                 None => {
@@ -325,6 +340,7 @@ impl<'c, 'a> Composer<'c, 'a> {
                         description: description(entry)?,
                         long_term: gain_loss.long_term,
                         at_category,
+                        consumed_regime,
                         quantity: num::zero(),
                         cost_basis: num::zero(),
                         proceeds: num::zero(),
@@ -367,7 +383,23 @@ impl<'c, 'a> Composer<'c, 'a> {
                     proceeds: Dec(proceeds),
                     cost_basis: Dec(group.cost_basis),
                     gain_loss: Dec(gain_loss),
-                    description: group.description,
+                    description: if let Some(regime) = group.consumed_regime {
+                        std::iter::once(format!("at_regime={regime}"))
+                            .chain(
+                                group
+                                    .description
+                                    .split(|c: char| {
+                                        c.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&c)
+                                    })
+                                    .filter(|t| !t.is_empty())
+                                    .filter(|token| !token.starts_with("at_regime="))
+                                    .map(str::to_owned),
+                            )
+                            .collect::<Vec<_>>()
+                            .join(" ")
+                    } else {
+                        group.description
+                    },
                     at_category,
                     capital_gains_type: if group.long_term { "long" } else { "short" },
                     fragments: group.fragments,
@@ -1305,6 +1337,92 @@ mod tests {
     }
 
     #[test]
+    fn consumed_regimes_split_before_disposal_overrides_and_fee_clearing() {
+        for kind in ["sell", "fee"] {
+            for category in [None, Some("alt_taxfree"), Some("neu_gain"), Some("none")] {
+                for taxability in [false, true] {
+                    let fee = kind == "fee";
+                    let response = run(&austrian(
+                        "fifo",
+                        vec![
+                            row(
+                                "alt",
+                                "A",
+                                "inbound",
+                                "2020-01-01",
+                                10_000_000_000,
+                                json!({"rate":"8000E0"}),
+                            ),
+                            row(
+                                "neu",
+                                "A",
+                                "inbound",
+                                "2022-01-01",
+                                50_000_000_000,
+                                json!({}),
+                            ),
+                            row(
+                                "mixed",
+                                "A",
+                                "outbound",
+                                "2024-01-01",
+                                if fee { 0 } else { 30_000_000_000 },
+                                json!({
+                                    "fee_msat":if fee {30_000_000_000_u64} else {0},"kind":kind,
+                                    "category_override":category,"taxability_off":taxability,
+                                    "text":"old\u{1c}at_regime=neu at_regime=alt description",
+                                }),
+                            ),
+                        ],
+                        vec![],
+                    ));
+                    let out: Vec<_> = response["entries"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .filter(|r| r["entry_type"] == if fee { "fee" } else { "disposal" })
+                        .collect();
+                    assert_eq!(out.len(), 2, "{kind} {category:?} {taxability}");
+                    assert_eq!(out[0]["quantity"], "-1E-1");
+                    assert_eq!(out[1]["quantity"], "-2E-1");
+                    assert_eq!(
+                        out[0]["cost_basis"]
+                            .as_str()
+                            .unwrap()
+                            .parse::<crate::decimal::Decimal>()
+                            .unwrap(),
+                        "800".parse().unwrap()
+                    );
+                    assert_eq!(
+                        out[1]["cost_basis"]
+                            .as_str()
+                            .unwrap()
+                            .parse::<crate::decimal::Decimal>()
+                            .unwrap(),
+                        "8000".parse().unwrap()
+                    );
+                    for (entry, regime) in out.iter().zip(["alt", "neu"]) {
+                        let description = entry["description"].as_str().unwrap();
+                        assert!(description.starts_with(&format!("at_regime={regime} ")));
+                        assert_eq!(description.matches("at_regime=").count(), 1);
+                        if fee {
+                            assert_eq!(entry["at_category"], Value::Null);
+                            assert_eq!(
+                                entry["gain_loss"]
+                                    .as_str()
+                                    .unwrap()
+                                    .parse::<crate::decimal::Decimal>()
+                                    .unwrap(),
+                                "0".parse().unwrap()
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
     fn austrian_categories_follow_the_overrides_and_split_entries() {
         // The oracle gives the same (scratch replay on RP2, WI-9 log).
         let fifo = austrian_book("fifo");
@@ -1342,6 +1460,45 @@ mod tests {
             json!(["disposal", "sale1", "neu_loss"])
         );
         assert_eq!(categories(&average)[2], json!(["fee", "feeonly", null]));
+        // Two Neubestand lots on opposite sides of the sale price still
+        // require distinct realized categories within the same consumed regime.
+        let mixed_gain = run(&austrian(
+            "fifo",
+            vec![
+                row(
+                    "cheap",
+                    "A",
+                    "inbound",
+                    "2022-01-01",
+                    10_000_000_000,
+                    json!({"rate":"8000E0"}),
+                ),
+                row(
+                    "expensive",
+                    "A",
+                    "inbound",
+                    "2022-02-01",
+                    10_000_000_000,
+                    json!({"rate":"40000E0"}),
+                ),
+                row(
+                    "sale",
+                    "A",
+                    "outbound",
+                    "2024-01-01",
+                    20_000_000_000,
+                    json!({"rate":"20000E0"}),
+                ),
+            ],
+            vec![],
+        ));
+        assert_eq!(
+            categories(&mixed_gain),
+            vec![
+                json!(["disposal", "sale", "neu_gain"]),
+                json!(["disposal", "sale", "neu_loss"])
+            ]
+        );
         // A generic book reports no category at all.
         assert!(categories(&fifo_book())
             .iter()
