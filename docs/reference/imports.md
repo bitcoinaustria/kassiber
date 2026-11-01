@@ -566,7 +566,9 @@ number; an explicit `Fiat Value` does not turn those assets into fiat. For a
 separately valued Bitcoin leg, omit the opposing asset and amount and enter
 its reviewed `Fiat Value` in the book currency. Crypto-to-crypto rows (Bitcoin
 on both sides) are rejected. Amounts are in BTC (e.g. `0.05000000`) unless the asset is `SATS`,
-in which case whole satoshis are converted. Numbers may use either a dot or a
+in which case whole satoshis are converted. Amount suffixes accept `L-BTC` as
+well as `LBTC` and case-insensitive unit spellings such as `sats`.
+Numbers may use either a dot or a
 comma decimal separator (`0,05` and `3.000,00` are read the same as `0.05` and
 `3000.00`), so a sheet exported from a German/Austrian-locale spreadsheet
 imports correctly. Fiat columns must be in the book's currency — a EUR book

@@ -3229,7 +3229,7 @@ _GENERIC_LEDGER_DATE_HEADERS = {
 }
 
 _GENERIC_LEDGER_CURRENCY_SYMBOLS = (
-    "$", "€", "£", "CHF", "USD", "EUR", "GBP", "LBTC", "BTC", "XBT", "SATS", "SAT",
+    "$", "€", "£", "CHF", "USD", "EUR", "GBP", "L-BTC", "LBTC", "BTC", "XBT", "SATS", "SAT",
 )
 _GENERIC_LEDGER_EURO_DATE_RE = re.compile(r"^(\d{1,2})\.(\d{1,2})\.(\d{4})(?:[ T](.+))?$")
 
@@ -3269,8 +3269,10 @@ def _generic_ledger_decimal_cell(value, field, row_label):
     negative = text.startswith("(") and text.endswith(")")
     if negative:
         text = text[1:-1].strip()
-    for symbol in _GENERIC_LEDGER_CURRENCY_SYMBOLS:
-        text = text.replace(symbol, "")
+    text = re.sub(
+        "|".join(re.escape(symbol) for symbol in _GENERIC_LEDGER_CURRENCY_SYMBOLS),
+        "", text, flags=re.IGNORECASE,
+    )
     text = text.replace("\xa0", "").replace(" ", "").strip()
     if not text:
         return None
