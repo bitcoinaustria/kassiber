@@ -2,6 +2,7 @@ from dataclasses import replace
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -127,9 +128,10 @@ def test_exit_cli_wire_workbooks_database_and_zero_fallbacks(tmp_path, monkeypat
 
 
 @pytest.mark.skipif(not RUST_BIN, reason='requires Rust test-harness binary')
+@pytest.mark.parametrize('country', ['at', 'generic'])
 @pytest.mark.parametrize('blocked', [False, True])
-def test_exit_daemon_wire_workbooks_database_and_zero_fallbacks(tmp_path, monkeypatch, blocked):
-    root, database, env, call = _book(tmp_path, monkeypatch)
+def test_exit_daemon_wire_workbooks_database_and_zero_fallbacks(tmp_path, monkeypatch, blocked, country):
+    root, database, env, call = _book(tmp_path, monkeypatch, country)
     if blocked:
         conn = sqlite3.connect(database)
         conn.executescript("INSERT INTO freshness_source_states(profile_id,source_key,source_type,source_label,status,blocking_reports,updated_at) VALUES('p','a','wallet','Cold','failed',1,'fixed');")
@@ -138,6 +140,7 @@ def test_exit_daemon_wire_workbooks_database_and_zero_fallbacks(tmp_path, monkey
     exports = tmp_path / 'exports'
     requests = [{}, {}, {'departure_date': '2025-01-01', 'destination': 'third_country'}, {'destination': 'EU'},
         {'departure_date': 'bad'}, {'departure_date': '2025-01-01T12:00:00'}, {'departure_date': '2025-01-01 12:00:00.123'}, {'destination': 'bad'}, {'departure_date': False}, {'destination': 1},
+        {'departure_date': '2024-03-31T23:30:00Z'}, {'departure_date': '20240331'}, {'departure_date': '2024-03-31Z'},
         {'workspace': 'absent', 'profile': 'absent', 'year': 2024}, {'departure_date': []}, {'destination': {}},
         {'departure_date': '2024-12-31', 'destination': 'non-eu'}, None, [], 1]
     wire = b''.join((json.dumps(dict(request_id=f'{i}-{kind}', kind=kind, args=args)) + '\n').encode()
@@ -154,6 +157,9 @@ def test_exit_daemon_wire_workbooks_database_and_zero_fallbacks(tmp_path, monkey
             if record['kind'] != 'error' and 'file' in record.get('data', {}):
                 assert 'report_snapshot' not in record['data']
                 assert record['data']['bytes'] == Path(record['data']['file']).stat().st_size
+                data = record['data']
+                assert data['filename'].startswith(f"kassiber-exit-tax-{data['departure_date']}-")
+                assert not re.search(r'[<>:"/\\|?*\x00-\x1f]', data['filename'])
         return ([_wire(raw) for raw in records], _state(root),
             {str(p.relative_to(exports)): canonical(p) for p in exports.rglob('*.xlsx')})
     assert session(False) == session(True)

@@ -258,19 +258,17 @@ fn execute_admitted(
                 "year_handoff",
             )
         }
-        "ui.reports.export_exit_tax_xlsx" => (
-            "reports.export-exit-tax-xlsx",
-            format!(
-                "kassiber-exit-tax-{}",
-                if truthy(value(raw, "departure_date")) {
-                    py_str(value(raw, "departure_date"))
-                } else {
-                    "today".into()
-                }
-            ),
-            ".xlsx",
-            "exit_tax",
-        ),
+        "ui.reports.export_exit_tax_xlsx" => {
+            let report = execute_with_sources(conn, "reports.exit-tax", &args, sources)?;
+            let departure = value(&report, "departureDate").clone();
+            replace(&mut args, "departure_date", departure.clone());
+            (
+                "reports.export-exit-tax-xlsx",
+                format!("kassiber-exit-tax-{}", py_str(&departure)),
+                ".xlsx",
+                "exit_tax",
+            )
+        }
         "ui.reports.export_austrian_e1kv_xlsx" => (
             "reports.export-austrian-e1kv-xlsx",
             format!("kassiber-austrian-e1kv-{}", py_str(value(raw, "year"))),

@@ -6393,8 +6393,8 @@
   {
     "id": "exit-managed-native",
     "file": "crates/reports/src/export_request.rs",
-    "find": "\"reports.export-exit-tax-xlsx\",\n            format!",
-    "replace": "\"reports.export-xlsx\",\n            format!",
+    "find": "\"reports.export-exit-tax-xlsx\",\n                format!",
+    "replace": "\"reports.export-xlsx\",\n                format!",
     "expect_failing": [
       "exit_xlsx_managed_publication_preserves_reference_without_snapshots"
     ],
@@ -7620,6 +7620,46 @@
       "global_version_refuses_older_stamps_even_with_a_lower_requirement"
     ],
     "rule": "SQL freshness predicates require the current global calculation version, just like direct retained-journal readers."
+  },
+  {
+    "id": "mirror-exit-day-shape",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "if stripped.chars().count() != 10\n",
+    "replace": "if false && stripped.chars().count() != 10\n",
+    "expect_failing": [
+      "exit_departure_errors_distinguish_malformed_days_from_naive_times"
+    ],
+    "rule": "Malformed date-only departures report invalid dates, not missing offsets."
+  },
+  {
+    "id": "mirror-exit-error-code",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "return Err(AppError::new(\"validation\", \"Invalid exit-tax departure date\").with_hint(hint));",
+    "replace": "return Err(AppError::new(\"app_error\", \"Invalid exit-tax departure date\").with_hint(hint));",
+    "expect_failing": [
+      "exit_departure_errors_distinguish_malformed_days_from_naive_times"
+    ],
+    "rule": "Malformed departure shapes retain the validation error code."
+  },
+  {
+    "id": "mirror-exit-filename",
+    "file": "crates/reports/src/export_request.rs",
+    "find": "format!(\"kassiber-exit-tax-{}\", py_str(&departure)),",
+    "replace": "format!(\"kassiber-exit-tax-{}\", py_str(value(raw, \"departure_date\"))),",
+    "expect_failing": [
+      "exit_managed_filename_and_workbook_share_the_resolved_day_across_midnight"
+    ],
+    "rule": "Managed export filenames use the resolved civil day without forbidden platform punctuation."
+  },
+  {
+    "id": "mirror-exit-bind-day",
+    "file": "crates/reports/src/export_request.rs",
+    "find": "replace(&mut args, \"departure_date\", departure.clone());",
+    "replace": "",
+    "expect_failing": [
+      "exit_managed_filename_and_workbook_share_the_resolved_day_across_midnight"
+    ],
+    "rule": "The managed workbook uses the same resolved departure day even if the clock crosses midnight."
   },
   {
     "id": "handoff-b-calendar",

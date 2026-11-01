@@ -40,7 +40,8 @@ def cases():
          '2025-01-01T12:00:00', '2025-01-01 12:00:00', '2025-01-01T12:00:00.123456',
          '2025-01-01T12', '20250101T120000', '2025-01-01Z12:00:00',
          '2025-01-01T12:00:00+01:00', '20250101T120000+0100',
-         '2025-01-01T12:00:00Z', '2025-01-01T12:00:00-05:30'])]
+         '2025-01-01T12:00:00Z', '2025-01-01T12:00:00-05:30',
+         '2024-03-31Z', 'garbage', '1711843200', 'T24:00'])]
     changes = [
         ('generic', "UPDATE profiles SET tax_country='generic',gains_algorithm='HIFO',fiat_currency='USD';"),
         ('generic-invalid-days', "UPDATE profiles SET tax_country='generic',tax_long_term_days=-1;"),

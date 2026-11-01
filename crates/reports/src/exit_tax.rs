@@ -98,6 +98,12 @@ fn departure(
     let stripped = kassiber_pytext::strip(&raw);
     let hint =
         "Use a date (YYYY-MM-DD) or a date-time with an offset, e.g. 2025-01-01T12:00:00+01:00.";
+    if stripped.chars().count() != 10
+        && !stripped.to_uppercase().contains('T')
+        && !stripped.contains(' ')
+    {
+        return Err(AppError::new("validation", "Invalid exit-tax departure date").with_hint(hint));
+    }
     let input = stripped.replace('Z', "+00:00");
     let (instant, has_offset) =
         kassiber_rates::time::parse_with_offset(&input).ok_or_else(|| {
@@ -889,6 +895,84 @@ mod tests {
             }
             conn.execute_batch("ROLLBACK TO exit_vector; RELEASE exit_vector")
                 .unwrap();
+        }
+    }
+    #[test]
+    fn exit_departure_errors_distinguish_malformed_days_from_naive_times() {
+        let conn = Connection::open_in_memory().unwrap();
+        for is_at in [false, true] {
+            for (input, message) in [
+                ("20240331", "Invalid exit-tax departure date"),
+                ("2024-03-31Z", "Invalid exit-tax departure date"),
+                ("garbage", "Invalid exit-tax departure date"),
+                ("2024-02-30", "Invalid exit-tax departure date"),
+                ("1711843200", "Invalid exit-tax departure date"),
+                ("T24:00", "Invalid exit-tax departure date"),
+                (
+                    "2024-03-31T12:00:00",
+                    "Exit-tax departure time requires an offset",
+                ),
+            ] {
+                let args = dict([("departure_date", s(input))]);
+                let error = departure(&conn, &args, &Fixed, is_at).unwrap_err();
+                assert_eq!(error.code, "validation", "{input}");
+                assert_eq!(error.message, message, "{input}");
+                assert_eq!(error.hint.as_deref(), Some("Use a date (YYYY-MM-DD) or a date-time with an offset, e.g. 2025-01-01T12:00:00+01:00."));
+            }
+        }
+    }
+    #[test]
+    fn exit_managed_filename_and_workbook_share_the_resolved_day_across_midnight() {
+        struct Midnight(std::cell::Cell<usize>);
+        impl kassiber_setup::Sources for Midnight {
+            fn now(&self, _: &Connection) -> Result<String> {
+                let call = self.0.get();
+                self.0.set(call + 1);
+                Ok(if call == 0 {
+                    "2024-03-31T23:30:00Z"
+                } else {
+                    "2024-04-02T00:30:00Z"
+                }
+                .into())
+            }
+            fn uuid(&self, _: &Connection) -> Result<String> {
+                unreachable!()
+            }
+        }
+        for country in ["at", "generic"] {
+            for departure in [Value::Null, s("2024-03-31"), s("2024-03-31T23:30:00Z")] {
+                let root = tempfile::tempdir().unwrap();
+                let book = kassiber_store::Book::create(&root.path().join("data"), None).unwrap();
+                let conn = book.connection();
+                conn.execute_batch(include_str!("../tests/data/book.sql"))
+                    .unwrap();
+                conn.execute("UPDATE profiles SET tax_country=?", [country])
+                    .unwrap();
+                let args = dict([("departure_date", departure.clone())]);
+                let output = export_request::execute(
+                    conn,
+                    "ui.reports.export_exit_tax_xlsx",
+                    &args,
+                    &root.path().join("exports"),
+                    &Midnight(std::cell::Cell::new(0)),
+                )
+                .unwrap();
+                let day = if country == "at" && departure != s("2024-03-31") {
+                    "2024-04-01"
+                } else {
+                    "2024-03-31"
+                };
+                assert_eq!(text(&output, "departure_date"), day);
+                let filename = text(&output, "filename");
+                assert!(
+                    filename.starts_with(&format!("kassiber-exit-tax-{day}-")),
+                    "{filename}"
+                );
+                assert!(!filename
+                    .chars()
+                    .any(|c| c.is_control() || "<>:\"/\\|?*".contains(c)));
+                assert!(std::path::Path::new(&text(&output, "file")).is_file());
+            }
         }
     }
     #[test]
