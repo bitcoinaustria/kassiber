@@ -18,6 +18,8 @@ mod render;
 pub mod review_effects;
 #[cfg(feature = "test-harness")]
 pub mod review_workflow;
+#[cfg(feature = "test-harness")]
+mod review_simulation;
 pub mod scalar;
 pub mod service;
 pub mod storage;

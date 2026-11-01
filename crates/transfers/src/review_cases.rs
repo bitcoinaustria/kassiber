@@ -294,6 +294,19 @@ pub fn waiting_roots(rows: &Rows, details: &Rows) -> BTreeMap<String, String> {
 
 fn pair_records(conn: &Connection, scope: &Scope<'_>) -> Result<Rows> {
     let mut result = Rows::new();
+    for pair in current_pairs(conn, scope)? {
+        for side in ["out", "in"] {
+            let id = text(&pair, &format!("{side}_transaction_id"));
+            if !id.is_empty() {
+                result.entry(id).or_insert_with(|| pair.clone());
+            }
+        }
+    }
+    Ok(result)
+}
+
+pub(crate) fn current_pairs(conn: &Connection, scope: &Scope<'_>) -> Result<Vec<Value>> {
+    let mut result = Vec::new();
     for mut pair in list(&records::pairs(conn, scope)?).to_vec() {
         for side in ["out", "in"] {
             let leg = value(&pair, side);
@@ -309,12 +322,7 @@ fn pair_records(conn: &Connection, scope: &Scope<'_>) -> Result<Rows> {
                 set(&mut pair, &format!("{side}_{field}"), value(&leg, field));
             }
         }
-        for side in ["out", "in"] {
-            let id = text(&pair, &format!("{side}_transaction_id"));
-            if !id.is_empty() {
-                result.entry(id).or_insert_with(|| pair.clone());
-            }
-        }
+        result.push(pair);
     }
     Ok(result)
 }

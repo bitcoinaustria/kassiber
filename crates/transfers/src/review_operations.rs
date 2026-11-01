@@ -1,5 +1,5 @@
 //! Canonical, bounded review proposals. Digests bind content, never authority.
-use crate::{text, value};
+use crate::value;
 use bitcoin_hashes::{sha256, Hash};
 use kassiber_envelope::{get, s, set, AppError};
 use kassiber_pyjson::{dumps, Key, Options, Value};
@@ -73,7 +73,10 @@ pub fn normalize(operations: &Value) -> Result<Value> {
         if !matches!(operation, Value::Dict(_)) {
             return Err(error("Each review operation must be an object"));
         }
-        let kind = text(operation, "type");
+        let kind = match get(operation, "type") {
+            Some(Value::Str(raw)) => raw.as_str().unwrap_or_default(),
+            _ => "",
+        };
         if kind == "custody_component" {
             let request = value(operation, "request");
             if !exact(operation, &["type", "request"]) || !matches!(request, Value::Dict(_)) {
@@ -114,7 +117,7 @@ pub fn normalize(operations: &Value) -> Result<Value> {
             continue;
         }
         let mut allowed = vec!["type", "transaction_id", "reason"];
-        match kind.as_str() {
+        match kind {
             "price_override" => {
                 allowed.extend(["fiat_rate", "fiat_value"]);
                 let supplied: Vec<_> = ["fiat_rate", "fiat_value"]

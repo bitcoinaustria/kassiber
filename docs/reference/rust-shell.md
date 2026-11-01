@@ -9093,6 +9093,90 @@ This is a loader-integration boundary. Continue the transfers-13 order:
    and product zero-fallback behavior before registering all six routes.
    Counts remain **26/29 CLI leaves and 25/28 daemon kinds**.
 
+### Ordered review planning and validation (R5 transfers-15, partial)
+
+Branch `t3code/r5-transfers-15` starts at `59e1476a4`. The unregistered
+`review_workflow::plan` normalizes the proposal, clones the same database binding
+into RAM, resolves the live scoped profile and validates its exact input version.
+It builds canonical before effects, runs ordered operations through the existing
+native metadata/component/pair services, rebuilds after effects and constructs
+the complete portable artifact. The simulation's transaction belongs only to
+the disposable clone. A source writer is refused without committing or rolling
+back pending edits; autocommit and caller-owned read snapshots remain unchanged.
+SQLCipher uses a fresh ephemeral RAM key without reading the source key.
+
+All existing requested pair fingerprints are checked before the first operation.
+Sibling unpairs retain their confirmed baseline despite the batch's own
+allocation revisions. A non-unpair marks that baseline dirty: the next unpair
+rebuilds canonical suspense decisions and rereads fingerprints. Eligibility
+requires both a held leg and a canonical residual-suspense decision from that
+pair's component. Acquisition overrides retain their inbound/active-custody
+guards; price/exclusion targets use the initial canonical quarantine set.
+Metadata authoring reuses `kassiber-transactions` rather than duplicating its
+audit/pricing writer. This adds one existing workspace dependency edge and no
+third-party dependencies.
+
+`review_workflow::validate` checks profile scope, reruns the complete plan and
+compares the entire artifact with Python-compatible JSON equality. A digest
+alone cannot establish freshness or consent. The oracle freezes 37 complete
+Python plans/refusals and 144 validation outcomes, including changed policy and
+observations without an input-version increment. The genuine sibling-suspense
+fixture covers both removal orders; a fully allocated sibling group separately
+refuses. Source row dumps, `total_changes` and transaction ownership are pinned
+on plaintext and SQLCipher. A separate decision-refresh witness supplies an
+empty rebuilt canonical case set after real metadata to prove that the old
+suspense decision cannot authorize the subsequent unpair.
+
+Malformed Unicode operation names cannot alias supported types. Transaction
+references use the shared exact SQLite UTF-8 admission, and pair membership and
+baseline keys retain Python string code points. Five full Python refusal vectors
+pin surrogate-containing transaction ids, pair ids/fingerprints and operation
+types; the shared lossy display conversion is not used for their authority.
+
+The fresh planning mutation campaign kills all fifteen entries in
+[`review_plan_mutations.json`](../../crates/transfers/scripts/review_plan_mutations.json),
+after all six named witnesses pass unmutated. Each entry records its exact
+failing test. These cover operation/identifier admission, initial fingerprints,
+sibling baselines, canonical decision/fingerprint refresh, suspense provenance,
+quarantine/acquisition guards, operation order, version/scope checks, complete
+artifact recomputation and source transaction admission. The inherited thirteen
+review-case mutation entries remain applicable; that applicability check is not
+a fresh kill campaign.
+
+Final verification uses a fresh build tree after the Unicode guards: all 63
+transfer tests across thirteen targets pass, including the complete planning
+and validation corpus. All five current Python oracle checks pass. Clippy on
+all targets and rustdoc pass with warnings denied; workspace formatting and
+whitespace checks pass. The required classifier update records 5,808 tests in
+359 modules, and the CI preflight passes all 57 tests. Logs and a machine-readable
+summary remain in `target/r5-evidence/`; owned build and mutation trees are
+removed after recording their results.
+
+Reproduce with eight build jobs, debug/incremental output disabled and both
+`CARGO_TARGET_DIR` and `CARGO_BUILD_BUILD_DIR` under this worktree's `target/`.
+Keep `TMPDIR` there too; the account Cargo configuration otherwise redirects
+intermediates outside the worktree. The locked environment is prepared with
+`MATURIN_NO_INSTALL_RUST=1` and `uv sync --locked --python 3.11`:
+
+```sh
+mise exec rust@1.99.1 uv@latest -- cargo test --locked --offline -p kassiber-transfers --features test-harness -- --test-threads=1
+mise exec rust@1.99.1 uv@latest -- uv run --locked python crates/transfers/scripts/export_review_plans.py --check
+mise exec rust@1.99.1 uv@latest -- uv run --locked python crates/transfers/scripts/review_plan_mutation_check.py
+```
+
+This checkpoint implements planning and validation only. Continue with
+writer-locked atomic apply, historical idempotency before freshness, canonical
+journal storage/filed-report impacts, durable receipts, caller-owned transaction
+and cache restoration, and late rollback on both database bindings. Then close
+the review assembler's inherited strict typed admission and downstream
+serialization/authoring-string refusal gaps, including refusal versus no-op
+ordering in delegated metadata services. Preserve the forty seed-dependent
+reference-message exceptions and unchanged Python residual-fee refusal/repro. Prove complete
+database/envelope/authorship parity, the AI's once-only revalidated consent and
+zero-fallback execution before registering all six routes. Counts remain
+**26/29 CLI leaves and 25/28 daemon kinds**. No Python product code or route
+registration changes at this boundary.
+
 ### Bitcoin native fetch assembly (R5)
 
 Branch `t3code/r5-sync-11` starts at `6af84154`. This checkpoint implements

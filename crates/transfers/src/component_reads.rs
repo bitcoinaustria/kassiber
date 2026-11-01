@@ -28,7 +28,10 @@ fn transaction(c: &Connection, scope: &Scope<'_>, reference: &Value) -> Result<V
     })
 }
 
-fn reference_bind(v: &Value, index: usize) -> Result<kassiber_store::rusqlite::types::Value> {
+pub(super) fn reference_bind(
+    v: &Value,
+    index: usize,
+) -> Result<kassiber_store::rusqlite::types::Value> {
     if let Value::Str(text) = v {
         let points: Vec<_> = text.code_points().collect();
         if let Some(start) = points.iter().position(|p| (0xd800..=0xdfff).contains(p)) {

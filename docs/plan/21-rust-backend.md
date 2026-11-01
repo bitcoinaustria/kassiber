@@ -3219,6 +3219,26 @@ records fresh verification separately from inherited campaign evidence. Ordered
 planning, atomic apply and all six route registrations remain pending; counts
 are unchanged.
 
+### R5 transfers: ordered planning and validation (partial)
+
+Transfers-15 starts at `59e1476a4`. Its unregistered review workflow now simulates
+ordered metadata, acquisition, component and unpair operations on a same-binding
+RAM snapshot. It reuses the existing native metadata and custody services,
+prechecks confirmed pair fingerprints, preserves sibling-unpair baselines and
+refreshes canonical decisions and fingerprints after intervening operations.
+Validation recomputes the complete artifact against current evidence and policy.
+The existing workspace metadata crate is the only added dependency edge; no
+third-party package or runtime requirement changes.
+
+Complete Python oracles pin planning on plaintext/SQLCipher in autocommit and
+caller-read modes, plus recomputing validation on both bindings. Pending writers
+refuse and full source rows stay unchanged. See the [checkpoint](../reference/rust-shell.md#ordered-review-planning-and-validation-r5-transfers-15-partial)
+for named mutation evidence. Atomic apply, receipt/journal/filed-impact parity,
+caller transaction/cache restoration, assembler lossless/refusal closure and
+CLI/daemon/AI consent parity remain open. All six review routes remain
+unregistered; counts stay **26/29 CLI leaves and 25/28 daemon kinds**. The forty
+seed-dependent loader message exceptions and Python residual-fee refusal remain.
+
 ### R5 Bitcoin sync: native fetch assembly checkpoint
 
 The unregistered `wallets::fetch::Fetch` captures the supported single-wallet

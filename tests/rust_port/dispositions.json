@@ -20864,7 +20864,7 @@
           "subprocess"
         ],
         "group": "custody",
-        "reason": "regenerates unregistered review-case, operation, economic/policy-effect and portable-artifact primitive vectors from current Python; pins complete digests, exact scalars, bounded previews and refusal order while native comparisons preserve books and caller transactions; artifact construction/admission fixtures do not claim planning or apply parity",
+        "reason": "regenerates unregistered review-case, operation, economic/policy-effect, artifact and complete ordered-plan/recomputing-validation vectors from current Python; pins complete digests, exact scalars, mixed operations, sibling/intervening-unpair baselines and refusal order while native SQLite/SQLCipher comparisons preserve source rows and caller transactions; does not claim atomic apply or route parity",
         "reviewed": true,
         "tests": 1
       },
@@ -20874,7 +20874,7 @@
           "subprocess"
         ],
         "group": "custody",
-        "reason": "regenerates unregistered review-case, operation, economic/policy-effect and portable-artifact primitive vectors from current Python; pins complete digests, exact scalars, bounded previews and refusal order while native comparisons preserve books and caller transactions; artifact construction/admission fixtures do not claim planning or apply parity",
+        "reason": "regenerates unregistered review-case, operation, economic/policy-effect, artifact and complete ordered-plan/recomputing-validation vectors from current Python; pins complete digests, exact scalars, mixed operations, sibling/intervening-unpair baselines and refusal order while native SQLite/SQLCipher comparisons preserve source rows and caller transactions; does not claim atomic apply or route parity",
         "reviewed": true,
         "tests": 1
       },
@@ -20884,7 +20884,7 @@
           "subprocess"
         ],
         "group": "custody",
-        "reason": "regenerates unregistered review-case, operation, economic/policy-effect and portable-artifact primitive vectors from current Python; pins complete digests, exact scalars, bounded previews and refusal order while native comparisons preserve books and caller transactions; artifact construction/admission fixtures do not claim planning or apply parity",
+        "reason": "regenerates unregistered review-case, operation, economic/policy-effect, artifact and complete ordered-plan/recomputing-validation vectors from current Python; pins complete digests, exact scalars, mixed operations, sibling/intervening-unpair baselines and refusal order while native SQLite/SQLCipher comparisons preserve source rows and caller transactions; does not claim atomic apply or route parity",
         "reviewed": true,
         "tests": 1
       },
@@ -20894,7 +20894,17 @@
           "subprocess"
         ],
         "group": "custody",
-        "reason": "regenerates unregistered review-case, operation, economic/policy-effect and portable-artifact primitive vectors from current Python; pins complete digests, exact scalars, bounded previews and refusal order while native comparisons preserve books and caller transactions; artifact construction/admission fixtures do not claim planning or apply parity",
+        "reason": "regenerates unregistered review-case, operation, economic/policy-effect, artifact and complete ordered-plan/recomputing-validation vectors from current Python; pins complete digests, exact scalars, mixed operations, sibling/intervening-unpair baselines and refusal order while native SQLite/SQLCipher comparisons preserve source rows and caller transactions; does not claim atomic apply or route parity",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_review_plans_and_recomputing_validation_match_current_python": {
+        "disposition": "oracle",
+        "flags": [
+          "subprocess"
+        ],
+        "group": "custody",
+        "reason": "regenerates unregistered review-case, operation, economic/policy-effect, artifact and complete ordered-plan/recomputing-validation vectors from current Python; pins complete digests, exact scalars, mixed operations, sibling/intervening-unpair baselines and refusal order while native SQLite/SQLCipher comparisons preserve source rows and caller transactions; does not claim atomic apply or route parity",
         "reviewed": true,
         "tests": 1
       }
