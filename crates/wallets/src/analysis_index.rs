@@ -16,6 +16,7 @@ pub mod occurrences;
 pub mod sources;
 pub mod traversal;
 mod value;
+pub mod views;
 
 pub(super) trait Text {
     fn as_str(&self) -> Option<&str>;

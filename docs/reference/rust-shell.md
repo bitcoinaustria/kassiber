@@ -14582,3 +14582,48 @@ trees are removed after recording their results. Scratch/data roots stay under
 this worktree's `target/`, account `HOME` is preserved, and test jobs run
 serially. No background job remains. The full workspace runtime suite,
 Python/frontend quality gate and packaged/platform gates are not run.
+
+## Mirror bounded SQL views (R5, partial)
+
+`t3code/r5-privacy-mirror-5b` starts at `f40ca3663`. The read adapter in
+`analysis_index::views` borrows an already synchronized durable index. It does
+not install triggers, synchronize contributions, commit source work or fall
+back to the source builder. The parallel 5a branch owns durable publication and
+recovery. Product Mirror entry points remain unregistered at this boundary.
+
+`with_read` confines views and observer derivatives to one borrowed savepoint.
+A public derivative cannot upgrade to owner knowledge. Node/fact lookup,
+adjacency, aliases, seed identity reads, related findings/labels and private
+relevance aggregates are profile scoped. Visibility applies in SQL before
+traversal. Confirmation overlays stay local to the view. A shared read interface
+lets the existing traversal kernel operate on captured values or SQL; analytics
+receive only the selected nodes, edges and safe matching labels.
+
+Adjacency retains at most 6,002 identities per direction, including the blocked
+alternative-path edge and budget lookahead. Overview seed reads retain at most
+2,001 matching identities. Alias groups above 2,001 explicitly refuse with
+`chain_analysis_budget`; Python currently enumerates those groups. Related label
+queries use 200-node batches and retain the first 2,000 safe matches in identity
+order. More than 10,000 related/global findings also refuse explicitly. Counts
+use SQL aggregates without materializing the remaining book. These are native
+read bounds, not claims of whole-chain completeness or accounting authority.
+
+The unchanged-Python corpus covers 228 SQL view/query cases, including owner,
+public and disclosed knowledge, dataset visibility, ownership ambiguity, scope
+filters, observer-upgrade refusal and selected analytics. Native and retained
+Python tests compare canonical bytes and all 112 tables. The guarded driver
+adds 456 evaluations with offline mode off/on, zero Python fallback and empty
+network-attempt and ledger buffers. Success/failure preserve caller writes and
+rollback, and high-degree tests pin lookup limits and spend-presence queries.
+
+Nine view mutations are killed by the named SQL-view tests, whose unmodified
+baselines pass. The first run exposed an insufficient ownership-ambiguity
+fixture; the strengthened retained case makes that predicate independently
+observable. Verification logs retain both attempts under
+`target/r5-mirror-5b/`. No Python product code or reference behavior is changed.
+
+This completes only the bounded read-view boundary. Process/book-bound handles,
+report composition, transport acceptance and registration follow in separate
+commits. AI projections remain Python. There are no dependency, lockfile,
+product schema or egress-permission changes. Product served-by counts remain
+zero; full workspace, frontend and packaged/platform acceptance are not claimed.

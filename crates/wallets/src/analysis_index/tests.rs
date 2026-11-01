@@ -460,3 +460,105 @@ fn sql_sources_refuse_malformed_dataset_mappings_without_writes() {
         }
     }
 }
+
+#[test]
+fn sql_views_match_python_bytes_and_all_112_tables() {
+    let cases =
+        kassiber_pytext::loads(include_str!("../../tests/data/analysis_views.json")).unwrap();
+    for case in list(&cases) {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(include_str!(
+            "../../../reports/tests/data/privacy_hygiene_seed.sql"
+        ))
+        .unwrap();
+        conn.execute_batch(include_str!("../../../reports/tests/data/book.sql"))
+            .unwrap();
+        conn.execute_batch(field(case, "sql").as_str().unwrap())
+            .unwrap();
+        let before = tables(&conn);
+        conn.execute_batch("SAVEPOINT caller; UPDATE profiles SET label='Pending' WHERE id='p'")
+            .unwrap();
+        let pending = tables(&conn);
+        let actual = views::evaluate_fixture(case, &conn).unwrap();
+        assert_eq!(
+            canonical(&actual),
+            canonical(field(case, "expected")),
+            "{}",
+            field(case, "name").as_str().unwrap()
+        );
+        assert_eq!(tables(&conn), pending);
+        conn.execute_batch("ROLLBACK TO caller; RELEASE caller")
+            .unwrap();
+        assert_eq!(tables(&conn), before);
+        assert!(conn.is_autocommit());
+    }
+}
+
+#[test]
+fn sql_views_refuse_missing_state_and_release_failed_reads() {
+    let conn = Connection::open_in_memory().unwrap();
+    conn.execute_batch(include_str!(
+        "../../../reports/tests/data/privacy_hygiene_seed.sql"
+    ))
+    .unwrap();
+    conn.execute_batch(include_str!("../../../reports/tests/data/book.sql"))
+        .unwrap();
+    let before = tables(&conn);
+    assert!(views::with_read(&conn, "p", "owner", |_| Ok(())).is_err());
+    assert_eq!(tables(&conn), before);
+    assert!(conn.is_autocommit());
+    let cases =
+        kassiber_pytext::loads(include_str!("../../tests/data/analysis_views.json")).unwrap();
+    conn.execute_batch(field(&list(&cases)[0], "sql").as_str().unwrap())
+        .unwrap();
+    conn.execute_batch("SAVEPOINT caller; UPDATE profiles SET label='Pending' WHERE id='p'")
+        .unwrap();
+    let pending = tables(&conn);
+    let result: Result<(), _> = views::with_read(&conn, "p", "public", |_| Err(invalid()));
+    assert!(result.is_err());
+    assert_eq!(tables(&conn), pending);
+    views::with_read(&conn, "p", "owner", |view| {
+        assert!(traversal::query_read(view, &dict([("observer", s("public"))])).is_err());
+        Ok(())
+    })
+    .unwrap();
+    conn.execute_batch("ROLLBACK TO caller; RELEASE caller")
+        .unwrap();
+    assert!(conn.is_autocommit());
+}
+
+#[test]
+fn sql_views_bound_high_degree_lookups_without_writes() {
+    use views::GraphRead;
+    let conn = Connection::open_in_memory().unwrap();
+    conn.execute_batch(include_str!(
+        "../../../reports/tests/data/privacy_hygiene_seed.sql"
+    ))
+    .unwrap();
+    conn.execute_batch(include_str!("../../../reports/tests/data/book.sql"))
+        .unwrap();
+    let cases =
+        kassiber_pytext::loads(include_str!("../../tests/data/analysis_views.json")).unwrap();
+    let case = list(&cases)
+        .iter()
+        .find(|c| field(c, "name") == &s("stored-owner-0"))
+        .unwrap();
+    conn.execute_batch(field(case, "sql").as_str().unwrap())
+        .unwrap();
+    conn.execute_batch("WITH RECURSIVE n(x) AS (SELECT 0 UNION ALL SELECT x+1 FROM n WHERE x<7000) INSERT INTO chain_index_edges SELECT 'p',printf('edge%05d',x),'hub','other','{\"kind\":\"custody\"}','{\"kind\":\"custody\"}' FROM n;
+    INSERT INTO chain_index_edges VALUES('p','zz-spend','hub','other','{\"kind\":\"spends\"}','{\"kind\":\"spends\"}');
+    WITH RECURSIVE n(x) AS (SELECT 0 UNION ALL SELECT x+1 FROM n WHERE x<2100) INSERT INTO chain_index_aliases SELECT 'p','public','wide',printf('node%05d',x) FROM n;").unwrap();
+    let before = tables(&conn);
+    views::with_read(&conn, "p", "public", |view| {
+        assert_eq!(list(&view.get("outgoing", "hub")?).len(), 6002);
+        assert!(view.has_spend("hub")?);
+        assert_eq!(
+            view.get("subjects", "wide").unwrap_err().code,
+            "chain_analysis_budget"
+        );
+        Ok(())
+    })
+    .unwrap();
+    assert_eq!(tables(&conn), before);
+    assert!(conn.is_autocommit());
+}

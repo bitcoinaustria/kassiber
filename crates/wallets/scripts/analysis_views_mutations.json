@@ -1,0 +1,92 @@
+[
+  {
+    "id": "views-upgrade",
+    "file": "crates/wallets/src/analysis_index/views.rs",
+    "find": "self.public || observer == \"public\"",
+    "replace": "observer == \"public\"",
+    "expect_failing": [
+      "sql_views_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "A public view cannot upgrade itself to owner knowledge."
+  },
+  {
+    "id": "views-public-labels",
+    "file": "crates/wallets/src/analysis_index/views.rs",
+    "find": "if !findings && self.public {",
+    "replace": "if false {",
+    "expect_failing": [
+      "sql_views_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Public analytics admit only public dataset labels."
+  },
+  {
+    "id": "views-ownership-ambiguity",
+    "file": "crates/wallets/src/analysis_index/views.rs",
+    "find": "coalesce(json_extract(output_json,'$.ownership_ambiguous'),0)=0",
+    "replace": "1=1",
+    "expect_failing": [
+      "sql_views_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Ambiguous ownership is not actionable private relevance."
+  },
+  {
+    "id": "views-adjacency-cap",
+    "file": "crates/wallets/src/analysis_index/views.rs",
+    "find": "const EDGE_LOOKAHEAD: usize = 6002;",
+    "replace": "const EDGE_LOOKAHEAD: usize = 7001;",
+    "expect_failing": [
+      "sql_views_bound_high_degree_lookups_without_writes"
+    ],
+    "rule": "Adjacency materialization has a strict row bound."
+  },
+  {
+    "id": "views-alias-cap",
+    "file": "crates/wallets/src/analysis_index/views.rs",
+    "find": "if ids.len() > NODE_LOOKAHEAD {",
+    "replace": "if false {",
+    "expect_failing": [
+      "sql_views_bound_high_degree_lookups_without_writes"
+    ],
+    "rule": "Oversized alias resolution refuses explicitly."
+  },
+  {
+    "id": "views-spend-lookahead",
+    "file": "crates/wallets/src/analysis_index/views.rs",
+    "find": "AND json_extract(payload_json,'$.kind')='spends' LIMIT 1",
+    "replace": "AND json_extract(payload_json,'$.kind')='never' LIMIT 1",
+    "expect_failing": [
+      "sql_views_bound_high_degree_lookups_without_writes"
+    ],
+    "rule": "Spend presence is not inferred from a truncated adjacency list."
+  },
+  {
+    "id": "views-release",
+    "file": "crates/wallets/src/analysis_index/views.rs",
+    "find": "\"RELEASE chain_analysis_view_read\"",
+    "replace": "\"SELECT 1\"",
+    "expect_failing": [
+      "sql_views_refuse_missing_state_and_release_failed_reads"
+    ],
+    "rule": "Success and failure release only the borrowed read savepoint."
+  },
+  {
+    "id": "views-public-facts",
+    "file": "crates/wallets/src/analysis_index/views.rs",
+    "find": "if self.public {\n                    \"public_tx_json\"",
+    "replace": "if self.public {\n                    \"tx_json\"",
+    "expect_failing": [
+      "sql_views_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Public transaction facts cannot expose private metadata."
+  },
+  {
+    "id": "views-public-query-contract",
+    "file": "crates/wallets/src/analysis_index/traversal.rs",
+    "find": "if text(&query, \"observer\") == \"public\" && !index.public_visibility() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "sql_views_refuse_missing_state_and_release_failed_reads"
+    ],
+    "rule": "A public query cannot consume an owner view without projection."
+  }
+]

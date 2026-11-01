@@ -4330,3 +4330,13 @@ kill recovery, bounded observer-scoped SQL views, process/book-bound handles,
 the Mirror report and CLI/daemon acceptance/registration remain open. Mirror
 product served-by counts are zero. AI projections remain Python; this adds no
 schema, dependency or egress permission and makes no full Mirror acceptance claim.
+
+### R5 privacy: bounded SQL views (partial)
+
+The [SQL view checkpoint](../reference/rust-shell.md#mirror-bounded-sql-views-r5-partial)
+adds observer-scoped bounded reads over an already synchronized index, sharing
+the captured traversal and analytics kernels. It preserves caller transactions
+and all 112 tables, with 228 unchanged-Python cases and guarded native replay.
+Durable synchronization/recovery stays on the parallel 5a branch. Handles, the
+Mirror report and transport registration remain subsequent boundaries. Product
+served-by counts are zero, and AI projections remain Python.

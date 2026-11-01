@@ -29,6 +29,7 @@ pub fn tables(conn: &Connection) -> Vec<(String, Vec<Vec<Sql>>)> {
 
 pub fn evaluate(case: &Value, conn: &Connection) -> Result<Value, AppError> {
     match field(case, "operation").as_str() {
+        Some("views") => super::views::evaluate_fixture(case, conn),
         Some("sources") => {
             let result = super::sources::build_index_at(
                 conn,

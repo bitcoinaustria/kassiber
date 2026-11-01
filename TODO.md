@@ -632,8 +632,11 @@ registers them; exit-tax preserves its reference no-registration boundary.
   sourcing, source commitments and observer aliases. Retain independent typed
   node identity checks and the Python malformed-manifest reproduction; see the
   [legacy JSON checkpoint](docs/reference/rust-shell.md#mirror-legacy-json-compatibility-r5-partial).
+- [x] Port bounded observer-scoped Mirror SQL views and selected analytics, with
+  byte/all-table parity, no-egress and mutation checks; see the
+  [SQL view checkpoint](docs/reference/rust-shell.md#mirror-bounded-sql-views-r5-partial).
 - [ ] Finish Mirror's durable triggers/contributions, incremental synchronization
-  and SQLite/SQLCipher kill recovery, bounded observer-scoped SQL views,
+  and SQLite/SQLCipher kill recovery,
   process/book-bound handles, report composition and CLI/daemon acceptance with
   non-zero served-by counts. Preserve deterministic native
   ambiguity ordering; retain the recorded Python reference repro.

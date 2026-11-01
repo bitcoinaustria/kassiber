@@ -167,7 +167,7 @@ pub fn normalize_query(args: &Value) -> Result<Value, AppError> {
     Ok(q)
 }
 
-fn domain(node: &Value, query: &Value) -> bool {
+pub(super) fn domain(node: &Value, query: &Value) -> bool {
     if let Some(chain) = get(query, "chain") {
         if field(node, "chain") != chain {
             return false;
@@ -194,21 +194,33 @@ pub fn resolve_subject(
     subject: &str,
     query: &Value,
 ) -> Result<Vec<String>, AppError> {
-    let mut candidates = index.lookup("subjects", subject).unwrap_or(&Value::Null);
-    let lower = subject.to_lowercase();
-    if !truthy(candidates) && subject != lower {
-        candidates = index.lookup("subjects", &lower).unwrap_or(&Value::Null);
+    resolve_read(index, subject, query)
+}
+
+pub fn resolve_read(
+    index: &impl super::views::GraphRead,
+    subject: &str,
+    query: &Value,
+) -> Result<Vec<String>, AppError> {
+    let mut aliases = index.get("subjects", subject)?;
+    let lower = kassiber_pytext::lower(subject);
+    if !truthy(&aliases) && subject != lower {
+        aliases = index.get("subjects", &lower)?;
     }
-    let candidates: Vec<String> = list(candidates)
-        .iter()
-        .filter_map(Value::as_str)
-        .filter(|id| {
-            index
-                .lookup("nodes", id)
-                .is_some_and(|node| domain(node, query))
-        })
-        .map(str::to_owned)
-        .collect();
+    let mut candidates = Vec::new();
+    let mut domains = BTreeSet::new();
+    let mut address_match = false;
+    for id in list(&aliases).iter().filter_map(Value::as_str) {
+        let node = index.get("nodes", id)?;
+        if node != Value::Null && domain(&node, query) {
+            candidates.push(id.to_owned());
+            domains.insert((
+                text(&node, "chain").to_owned(),
+                text(&node, "network").to_owned(),
+            ));
+            address_match |= field(&node, "address") == &s(subject);
+        }
+    }
     if candidates.is_empty() {
         return Err(AppError::new(
             "not_found",
@@ -219,21 +231,10 @@ pub fn resolve_subject(
             ("local_only", Value::Bool(true)),
         ])));
     }
-    let domains: BTreeSet<_> = candidates
-        .iter()
-        .map(|id| {
-            let node = index.lookup("nodes", id).unwrap();
-            (text(node, "chain"), text(node, "network"))
-        })
-        .collect();
     let transaction_key = Regex::new(r"\A(?:tx:|out:)?[a-fA-F0-9]{64}(?::[0-9]+)?\z")
         .unwrap()
         .is_match(subject);
-    let physical = transaction_key
-        || subject.split(':').count() <= 2
-            && candidates
-                .iter()
-                .any(|id| field(index.lookup("nodes", id).unwrap(), "address") == &s(subject));
+    let physical = transaction_key || subject.split(':').count() <= 2 && address_match;
     if physical && domains.len() > 1 {
         return Err(AppError::new(
             "subject_ambiguous",
@@ -264,8 +265,8 @@ pub fn resolve_subject(
     Ok(candidates)
 }
 
-struct Traversal<'a> {
-    index: &'a AnalysisIndex,
+struct Traversal<'a, G> {
+    index: &'a G,
     query: &'a Value,
     nodes: BTreeSet<String>,
     edges: BTreeSet<String>,
@@ -275,8 +276,8 @@ struct Traversal<'a> {
     filtered: BTreeMap<String, usize>,
     omitted: usize,
 }
-impl<'a> Traversal<'a> {
-    fn new(index: &'a AnalysisIndex, query: &'a Value) -> Self {
+impl<'a, G: super::views::GraphRead> Traversal<'a, G> {
+    fn new(index: &'a G, query: &'a Value) -> Self {
         Self {
             index,
             query,
@@ -315,50 +316,43 @@ impl<'a> Traversal<'a> {
         self.nodes.insert(id.to_owned());
         true
     }
-    fn neighbors(&mut self, id: &str, blocked: &BTreeSet<String>) -> Vec<(String, String)> {
-        let node = self.index.lookup("nodes", id).unwrap();
-        let status = text(node, "status");
+    fn neighbors(
+        &mut self,
+        id: &str,
+        blocked: &BTreeSet<String>,
+    ) -> Result<Vec<(String, String)>, AppError> {
+        let node = self.index.get("nodes", id)?;
+        let status = text(&node, "status");
         if ["conflicting", "stale"].contains(&status) {
             self.stop(id, status, None);
-            return vec![];
+            return Ok(vec![]);
         }
         if status == "missing" {
             self.stop(id, "missing_observation", None);
         }
-        if text(node, "kind") == "transaction"
-            && !truthy(field(
-                self.index
-                    .lookup("transaction_facts", id)
-                    .unwrap_or(&Value::Null),
-                "complete",
-            ))
+        if text(&node, "kind") == "transaction"
+            && !truthy(field(&self.index.get("transaction_facts", id)?, "complete"))
         {
             self.stop(id, "incomplete_transaction", None);
         }
         let direction = text(self.query, "direction");
-        let outgoing = list(self.index.lookup("outgoing", id).unwrap_or(&Value::Null));
-        if text(node, "kind") == "output"
+        let outgoing = self.index.get("outgoing", id)?;
+        if text(&node, "kind") == "output"
             && ["forward", "both"].contains(&direction)
-            && !outgoing.iter().any(|eid| {
-                text(
-                    self.index.lookup("edges", eid.as_str().unwrap()).unwrap(),
-                    "kind",
-                ) == "spends"
-            })
+            && !self.index.has_spend(id)?
         {
             self.stop(id, "unobserved_successor", None);
         }
         let mut edge_ids = BTreeSet::new();
         if ["forward", "both"].contains(&direction) {
-            edge_ids.extend(outgoing.iter().filter_map(Value::as_str));
+            edge_ids.extend(list(&outgoing).iter().filter_map(Value::as_str));
         }
-        if ["backward", "both"].contains(&direction) {
-            edge_ids.extend(
-                list(self.index.lookup("incoming", id).unwrap_or(&Value::Null))
-                    .iter()
-                    .filter_map(Value::as_str),
-            );
-        }
+        let incoming = if ["backward", "both"].contains(&direction) {
+            self.index.get("incoming", id)?
+        } else {
+            Value::Null
+        };
+        edge_ids.extend(list(&incoming).iter().filter_map(Value::as_str));
         let mut result = vec![];
         for eid in edge_ids {
             if blocked.contains(eid) {
@@ -370,13 +364,13 @@ impl<'a> Traversal<'a> {
                 break;
             }
             self.inspections += 1;
-            let edge = self.index.lookup("edges", eid).unwrap();
-            let other = if text(edge, "source") == id {
-                text(edge, "target")
+            let edge = self.index.get("edges", eid)?;
+            let other = if text(&edge, "source") == id {
+                text(&edge, "target")
             } else {
-                text(edge, "source")
+                text(&edge, "source")
             };
-            let custody = text(edge, "kind") == "custody";
+            let custody = text(&edge, "kind") == "custody";
             if custody
                 && (!truthy(field(self.query, "include_relations"))
                     || text(self.query, "observer") == "public")
@@ -387,7 +381,7 @@ impl<'a> Traversal<'a> {
                     .or_default() += 1;
                 continue;
             }
-            let status = text(edge, "status");
+            let status = text(&edge, "status");
             if ["stale", "conflicting"].contains(&status) {
                 self.stop(
                     id,
@@ -400,16 +394,16 @@ impl<'a> Traversal<'a> {
                 );
                 continue;
             }
-            let other_node = self.index.lookup("nodes", other).unwrap();
+            let other_node = self.index.get("nodes", other)?;
             let amount_filter = integer(field(self.query, "min_amount_msat"))
-                .zip(integer(field(edge, "amount_msat")))
+                .zip(integer(field(&edge, "amount_msat")))
                 .is_some_and(|(min, amount)| amount < min);
-            let when = instant(field(other_node, "occurred_at"));
+            let when = instant(field(&other_node, "occurred_at"));
             let time_filter = when.is_some_and(|when| {
                 instant(field(self.query, "start")).is_some_and(|start| when < start)
                     || instant(field(self.query, "end")).is_some_and(|end| when > end)
             });
-            let filter = if !domain(other_node, self.query) {
+            let filter = if !domain(&other_node, self.query) {
                 Some("domain")
             } else if amount_filter {
                 Some("amount")
@@ -428,9 +422,9 @@ impl<'a> Traversal<'a> {
                 result.push((other.to_owned(), eid.to_owned()));
             }
         }
-        result
+        Ok(result)
     }
-    fn walk(&mut self, seeds: &[String]) {
+    fn walk(&mut self, seeds: &[String]) -> Result<(), AppError> {
         let mut queue = VecDeque::new();
         let mut distance = BTreeMap::new();
         for seed in seeds {
@@ -448,20 +442,21 @@ impl<'a> Traversal<'a> {
                 self.stop(&id, "depth_limit", Some(("depth", count(depth))));
                 continue;
             }
-            for (other, _) in self.neighbors(&id, &BTreeSet::new()) {
+            for (other, _) in self.neighbors(&id, &BTreeSet::new())? {
                 if !distance.contains_key(&other) {
                     distance.insert(other.clone(), depth + 1);
                     queue.push_back(other);
                 }
             }
         }
+        Ok(())
     }
     fn path(
         &mut self,
         seeds: &[String],
         targets: &BTreeSet<String>,
         blocked: &BTreeSet<String>,
-    ) -> Option<Value> {
+    ) -> Result<Option<Value>, AppError> {
         let mut queue = VecDeque::new();
         let mut prior: BTreeMap<String, Option<(String, String)>> = BTreeMap::new();
         let mut depth = BTreeMap::new();
@@ -473,7 +468,8 @@ impl<'a> Traversal<'a> {
             }
         }
         while let Some(id) = queue.pop_front() {
-            let status = text(self.index.lookup("nodes", &id).unwrap(), "status");
+            let node = self.index.get("nodes", &id)?;
+            let status = text(&node, "status");
             if ["stale", "conflicting"].contains(&status) {
                 self.stop(&id, status, None);
                 continue;
@@ -489,20 +485,22 @@ impl<'a> Traversal<'a> {
                 }
                 edges.reverse();
                 ids.reverse();
-                let relation = edges
-                    .iter()
-                    .any(|eid| text(self.index.lookup("edges", eid).unwrap(), "kind") == "custody");
-                return Some(dict([
+                let relation = edges.iter().try_fold(false, |found, eid| {
+                    self.index
+                        .get("edges", eid)
+                        .map(|edge| found || text(&edge, "kind") == "custody")
+                })?;
+                return Ok(Some(dict([
                     ("kind", s(if relation { "relation" } else { "physical" })),
                     ("node_ids", strings(ids)),
                     ("edge_ids", strings(edges)),
-                ]));
+                ])));
             }
             if depth[&id] >= size(field(self.query, "depth")) {
                 self.stop(&id, "depth_limit", Some(("depth", count(depth[&id]))));
                 continue;
             }
-            for (other, eid) in self.neighbors(&id, blocked) {
+            for (other, eid) in self.neighbors(&id, blocked)? {
                 if !prior.contains_key(&other) {
                     prior.insert(other.clone(), Some((id.clone(), eid)));
                     depth.insert(other.clone(), depth[&id] + 1);
@@ -510,30 +508,36 @@ impl<'a> Traversal<'a> {
                 }
             }
         }
-        None
+        Ok(None)
     }
 }
 
 pub fn query_index(index: &AnalysisIndex, args: &Value) -> Result<Value, AppError> {
     let query = normalize_query(args)?;
     let index = index.observer(text(&query, "observer"))?;
+    query_read(&index, &query)
+}
+
+pub fn query_read(index: &impl super::views::GraphRead, args: &Value) -> Result<Value, AppError> {
+    let query = normalize_query(args)?;
+    if text(&query, "observer") == "public" && !index.public_visibility() {
+        return Err(AppError::new(
+            "validation",
+            "Select a public analysis view before querying public knowledge",
+        ));
+    }
     let seeds = if let Some(subject) = field(&query, "subject").as_str() {
-        resolve_subject(&index, subject, &query)?
+        resolve_read(index, subject, &query)?
     } else {
-        list(field(index.snapshot(), "profile_seeds"))
-            .iter()
-            .filter_map(Value::as_str)
-            .filter(|id| domain(index.lookup("nodes", id).unwrap(), &query))
-            .map(str::to_owned)
-            .collect()
+        index.seeds(&query)?
     };
-    let mut walk = Traversal::new(&index, &query);
+    let mut walk = Traversal::new(index, &query);
     let mut paths = vec![];
     if text(&query, "mode") == "path" {
-        let targets = resolve_subject(&index, text(&query, "target"), &query)?
+        let targets = resolve_read(index, text(&query, "target"), &query)?
             .into_iter()
             .collect();
-        if let Some(primary) = walk.path(&seeds, &targets, &BTreeSet::new()) {
+        if let Some(primary) = walk.path(&seeds, &targets, &BTreeSet::new())? {
             let mut seen = BTreeSet::from([list(field(&primary, "edge_ids"))
                 .iter()
                 .map(|v| v.as_str().unwrap().to_owned())
@@ -547,7 +551,7 @@ pub fn query_index(index: &AnalysisIndex, args: &Value) -> Result<Value, AppErro
                     &seeds,
                     &targets,
                     &BTreeSet::from([eid.as_str().unwrap().to_owned()]),
-                ) {
+                )? {
                     let ids = list(field(&alternative, "edge_ids"))
                         .iter()
                         .map(|v| v.as_str().unwrap().to_owned())
@@ -566,28 +570,26 @@ pub fn query_index(index: &AnalysisIndex, args: &Value) -> Result<Value, AppErro
             });
         }
     } else {
-        walk.walk(&seeds);
+        walk.walk(&seeds)?;
     }
     let nodes: Vec<_> = walk
         .nodes
         .iter()
-        .map(|id| index.lookup("nodes", id).unwrap().clone())
-        .collect();
+        .map(|id| index.get("nodes", id))
+        .collect::<Result<_, _>>()?;
     let mut edges: Vec<_> = walk
         .edges
         .iter()
-        .map(|id| index.lookup("edges", id).unwrap().clone())
-        .collect();
+        .map(|id| index.get("edges", id))
+        .collect::<Result<_, _>>()?;
     let mut edge_ids = walk.edges.clone();
     if truthy(field(&query, "include_relations")) && text(&query, "observer") != "public" {
         for id in &walk.nodes {
-            for eid in list(index.lookup("outgoing", id).unwrap_or(&Value::Null))
-                .iter()
-                .filter_map(Value::as_str)
-            {
-                let edge = index.lookup("edges", eid).unwrap();
-                if text(edge, "kind") == "custody"
-                    && walk.nodes.contains(text(edge, "target"))
+            let outgoing = index.get("outgoing", id)?;
+            for eid in list(&outgoing).iter().filter_map(Value::as_str) {
+                let edge = index.get("edges", eid)?;
+                if text(&edge, "kind") == "custody"
+                    && walk.nodes.contains(text(&edge, "target"))
                     && !edge_ids.contains(eid)
                     && edges.len() < size(field(&query, "edge_limit"))
                 {
@@ -597,16 +599,7 @@ pub fn query_index(index: &AnalysisIndex, args: &Value) -> Result<Value, AppErro
             }
         }
     }
-    let findings = list(field(index.snapshot(), "findings"))
-        .iter()
-        .filter(|f| {
-            !truthy(field(f, "node_ids"))
-                || list(field(f, "node_ids"))
-                    .iter()
-                    .any(|id| id.as_str().is_some_and(|id| walk.nodes.contains(id)))
-        })
-        .cloned()
-        .collect();
+    let findings = index.findings_for_nodes(&walk.nodes)?;
     let frontier: Vec<_> = walk.frontier.values().cloned().collect();
     let missing = nodes.iter().any(|n| text(n, "status") == "missing")
         || frontier.iter().any(|f| {
@@ -617,7 +610,7 @@ pub fn query_index(index: &AnalysisIndex, args: &Value) -> Result<Value, AppErro
             ]
             .contains(&text(f, "reason"))
         });
-    let mut coverage = field(index.snapshot(), "coverage").clone();
+    let mut coverage = index.coverage()?;
     let stale = nodes.iter().any(|n| text(n, "status") == "stale")
         || frontier.iter().any(|f| text(f, "reason").contains("stale"))
         || truthy(field(&coverage, "reference_reconciling_count"));
@@ -662,10 +655,7 @@ pub fn query_index(index: &AnalysisIndex, args: &Value) -> Result<Value, AppErro
     ]);
     Ok(dict([
         ("schema_version", count(1)),
-        (
-            "snapshot_id",
-            field(index.snapshot(), "snapshot_id").clone(),
-        ),
+        ("snapshot_id", index.snapshot_id()),
         ("query", query.clone()),
         ("summary", summary),
         ("nodes", Value::List(nodes)),
