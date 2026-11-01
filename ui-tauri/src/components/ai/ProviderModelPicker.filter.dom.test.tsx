@@ -5,9 +5,9 @@
 // listing says nothing, as OpenAI's does) an id that names an embedding,
 // speech, image or moderation model. Show all models undoes it; the selected,
 // default and favorite models always stay; nothing here contacts a provider.
-// The effort menu offers an HTTP model only the levels its listing names.
+// The reasoning column offers an HTTP model only the levels its listing names.
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -301,7 +301,7 @@ describe("ProviderModelPicker usability filter", () => {
   });
 });
 
-describe("ProviderModelPicker effort menu for HTTP models", () => {
+describe("ProviderModelPicker reasoning column for HTTP models", () => {
   beforeEach(() => {
     mocks.invoke.mockReset();
     mocks.providers = PROVIDERS.map((provider) => ({ ...provider }));
@@ -321,16 +321,13 @@ describe("ProviderModelPicker effort menu for HTTP models", () => {
     mount(
       { provider: "openrouter", model: "vendor/reasoner" },
       { openrouter: [{ id: "vendor/reasoner", supports_tools: true, ...model }] },
-      { open: false, showThinkingEffort: true, thinkingEffort, onThinkingEffortChange },
+      { open: true, showThinkingEffort: true, thinkingEffort, onThinkingEffortChange },
     );
-    await act(async () => {
-      fireEvent.pointerDown(screen.getByRole("button", { name: /Reasoning effort/ }), {
-        button: 0,
-        pointerType: "mouse",
-      });
-    });
-    const levels = screen
-      .getAllByRole("menuitemradio")
+    // The picker's docked reasoning column.
+    const column = document.querySelector<HTMLElement>("[data-model-picker-effort]");
+    expect(column).not.toBeNull();
+    const levels = within(column!)
+      .getAllByRole("radio")
       .map((item) => item.textContent?.replace(/Default.*$/, "").trim() ?? "");
     return { levels, onThinkingEffortChange };
   }

@@ -225,7 +225,7 @@ export interface AiModelRow {
  * depend on the model (provider-broker `CLAUDE_MODELS` and Copilot's
  * `efforts`). Used only when the selected model's row is not known yet —
  * before **Check models**, the picker holds just the stored default id — so
- * the effort menu still offers the real levels without contacting anything.
+ * the reasoning column still offers the real levels without contacting anything.
  * Codex and OpenCode vary per model and stay discovery-only.
  */
 export const NATIVE_RUNTIME_REASONING_EFFORTS: Partial<
@@ -399,7 +399,7 @@ function reasoningEffortsFromCapabilityObject(value: unknown): string[] {
 /**
  * The specific reasoning-effort levels a model (or its provider) advertises,
  * lower-cased and de-duplicated in advertised order. Empty when nothing is
- * advertised — callers should fall back to their default level set.
+ * advertised; the picker then offers only Auto, never a made-up level.
  *
  * An HTTP model offers only the wire levels its listing names
  * (`reasoning_efforts`, which the daemon narrows to low/medium/high), or all

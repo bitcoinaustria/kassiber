@@ -72,6 +72,7 @@
     "modelContext": "Modell-Kontext",
     "thinking": "Nachdenken",
     "reasoningEffort": "Denkaufwand",
+    "reasoning": "Denkaufwand",
     "effort": {
       "auto": "Auto",
       "low": "Niedrig",
@@ -83,6 +84,7 @@
     },
     "effortDefault": "Standard",
     "effortAutoHint": "Das Modell entscheidet",
+    "effortLevelsUnknown": "Prüfe die Modelle, um die Stufen dieses Modells zu sehen.",
     "newLine": "Neue Zeile",
     "fastMode": {
       "label": "Schnellmodus",

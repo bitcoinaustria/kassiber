@@ -7,6 +7,8 @@
  * provider `a` and model `b:c` — model ids routinely contain `:` and `/`.
  */
 
+import type { AssistantThinkingEffort } from "./assistantSession";
+
 const MODEL_KEY_PREFIX = "model:";
 
 export function modelPickerModelKey(provider: string, model: string): string {
@@ -75,3 +77,33 @@ export const MODEL_PICKER_SHORTCUT = ["mod", "shift", "m"] as const;
  * the browsers' "bookmark this" key, so it reads as "add to favorites".
  */
 export const MODEL_PICKER_FAVORITE_SHORTCUT = ["mod", "d"] as const;
+
+/**
+ * Opens the picker on the reasoning levels, or moves there when it is open
+ * (T3 Code's `composer.effort` binding).
+ */
+export const MODEL_PICKER_EFFORT_SHORTCUT = ["mod", "shift", "e"] as const;
+
+/** Every level Kassiber can label and send, lowest first. */
+export const KNOWN_EFFORTS: readonly AssistantThinkingEffort[] = [
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+  "ultra",
+];
+
+/**
+ * Composer shortcuts mark the picker trigger before opening it, so the open
+ * picker lands on the asked-for control (T3 Code's `takeOpenTarget`).
+ */
+export function markOpenToEffort(trigger: HTMLElement): void {
+  trigger.dataset.openToEffort = "true";
+}
+
+export function takeOpenToEffort(trigger: HTMLElement | null): boolean {
+  if (!trigger?.dataset.openToEffort) return false;
+  delete trigger.dataset.openToEffort;
+  return true;
+}
