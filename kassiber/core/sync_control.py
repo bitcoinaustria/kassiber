@@ -73,10 +73,9 @@ def checked_parallel_map(step, items, check, max_workers):
             try:
                 if interrupted is not None:
                     raise interrupted
+                check(reply["item"])
                 if reply["is_progress"]:
                     progress(reply["payload"])
-                else:
-                    check(reply["item"])
             except BaseException as exc:
                 reply["error"] = exc
                 if not isinstance(exc, Exception):
