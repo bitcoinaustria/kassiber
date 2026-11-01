@@ -440,9 +440,38 @@ Without a market rate, fiat values show "—"
 instead of €0 or -100 %. Custody gaps and missing prices also show in the
 readiness pill and Book readiness panel. Book-set rows get a per-book badge, and
 the fiat total says how many books are incomplete. Reports marks cost basis,
-gain/loss, and estimated tax as Provisional while journals are stale or
-quarantines, custody gaps, or missing prices exist. Reports copy stays English
-under the deferred reporting-language policy in [i18n.md](i18n.md).
+gain/loss, and indicative tax as Provisional while journals are stale or
+quarantines, custody gaps, or missing prices exist, and names the cause with a
+link to the page that resolves it. Reports copy stays English under the
+deferred reporting-language policy in [i18n.md](i18n.md).
+
+Reports shows one tax year from `ui.reports.capital_gains`: whether it can be
+filed, its result and how that result is built, and the files that carry it.
+It lists no rows; those stay on Transactions. Proceeds, cost basis, and
+gain/loss come from the payload's full-year `totals`. For an Austrian EUR book
+the payload carries the core's indicative tax (`indicativeTax`: 27.5 % of KZ
+172 + 174 − 176, with KZ 801 listed and never estimated) and the screen shows
+it with the core's caveats behind the tile's info icon. Generic books get no estimate, and a region the
+screen does not recognise reads as generic, never as Austrian.
+
+The breakdown card states the result the way the report does. An Austrian book
+lists its E 1kv fields and KZ 801 on the E 1 with the core's amounts, then what
+stays off the return: tax-free Altbestand, tax-neutral swaps, and rows without
+a field. A generic book lists short-term gains, long-term gains, and income.
+Each row's transaction count links to Transactions filtered to exactly those
+transactions (`txids`, from the payload's `breakdown`); a group of more than 128
+opens the whole year instead, since the Transactions filter takes no more. How
+a single gain was calculated opens from the Calculation row on the
+transaction's Tax tab, which `ui.journals.events.list` feeds with an
+`explanationReference` for realized disposals and income.
+
+A Rules card lists the region, the book's stored gains algorithm, the rate,
+and the tax-year boundary, and links to Books, where they change. The Files panel writes the tax report as PDF, XLSX,
+or CSV (the year's E 1kv for an Austrian book, the complete history for a
+generic one), the bookkeeping handoff, the summary PDF, and the audit package;
+the ledger's own exports stay on Transactions. The summary's wallet scope and
+cover page and the audit package's scope and contents fold under their rows.
+The outcome of the last export stays at the top of the panel.
 
 Privacy Mirror is the dedicated desktop page for local privacy linkage. It
 reads `ui.reports.privacy_mirror` and shows exposure summary, adversary cards,
