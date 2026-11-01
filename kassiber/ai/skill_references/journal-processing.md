@@ -139,6 +139,13 @@ income, and for Austrian EUR books the Kennzahlen and indicative tax, withheld
 while any report blocker remains) and `delta` lists the years that change.
 Answer "what does this do to my taxes?" from a plan, never by estimating.
 
+`legacy_pair_fee_allocation_review_required` names a historical pair whose fee
+allocation needs review. Show the case's exact `repair.command` to the user:
+`transfers update --pair-id <pair-id> --note "Reviewed complete debit and residual"`,
+or unpair and pair the reviewed legs again. A simple pair can preview/apply
+`repair_legacy_pair` through the local CLI review workflow. AI cannot author
+that revision; never replace it with exclusion or automatic unpairing.
+
 In chat use `ui.review.cases`, inspect `ui.transactions.review_context` and
 `ui.transfers.review_context`, then `ui.review.plan`. Explain the returned
 before/after effects and tax delta and obtain per-call consent for

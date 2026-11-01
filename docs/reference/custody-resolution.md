@@ -277,6 +277,14 @@ of coarse-price acceptance targets after an earlier repair; any failure rolls ba
 them. Applying a pair, unpair, dismissal or undismissal through the CLI,
 desktop or AI also refreshes the shared transfer-candidate count used by Review.
 Supported operations:
+Supported batch operations are exact price overrides, explicitly justified
+exclusions, pair-review removal (`unpair`), legacy fee-pair revision
+(`repair_legacy_pair`), typed custody components, and local
+inbound `kind_override` declarations. The CLI accepts the existing component
+create/revise/state actions. AI batches create components; conversion components
+remain drafts until separately reviewed. Missing-wallet gap investigation keeps
+its existing local-provider-only tools (`ui.custody.review.plan/apply`) and is
+not smuggled into the general batch interface.
 
 | Type | Fields | Core service |
 | --- | --- | --- |
@@ -407,6 +415,16 @@ proof: a hop through an untracked wallet has two, so an unpair needs the
 owner's explicit choice for that pair, and its reason records that choice.
 The Review screen uses it for the pairs the owner picked, one or several,
 so the recalculated journals are stored in the same transaction.
+
+For a simple legacy pair blocked by
+`legacy_pair_fee_allocation_review_required`, cases offer `repair_legacy_pair`
+with the same `pair_id`, `expected_fingerprint`, and `reason` fields. Preview
+rebuilds the pair through the current authoring service in memory; explicit
+apply appends the corrected component revision and the reason to its note.
+The fingerprint and input version must still match and the legacy hold must
+still exist. This revision operation is local CLI only; the AI boundary refuses
+it with `interaction_required`. Grouped pairs keep the CLI update or
+unpair-and-pair guidance.
 
 Prices are decimal strings. Payouts, overrides, imports, manual/cached rates,
 commercial/document prices and source-of-funds values share finite decimal

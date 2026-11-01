@@ -8011,6 +8011,9 @@ def _validate_ai_review_operations(
         if not isinstance(operation, dict):
             raise AppError("Review operation must be an object", code="validation")
         kind = operation.get("type")
+        if kind == "repair_legacy_pair":
+            raise AppError("Legacy pair revision is a local CLI review workflow",
+                           code="interaction_required")
         request = operation.get("request")
         action = request.get("action", "create") if isinstance(request, dict) else None
         if not full_access and (

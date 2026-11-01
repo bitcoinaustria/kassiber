@@ -119,6 +119,72 @@ def test_pair_fee_audit_and_invalidation_roll_back_together_on_interruption(tmp_
         conn.close()
 
 
+def test_legacy_pair_lists_the_specific_review_code_and_concrete_repair(tmp_path):
+    from kassiber.core import custody_review_terms, custody_journal, quarantine_review, review_workflow
+    root = tmp_path / "book"
+    _restore(root)
+    conn = open_db(root)
+    try:
+        profile = conn.execute("SELECT * FROM profiles").fetchone()
+        pair, = custody_review_terms.list_pair_reviews(conn, profile["id"])
+        assert ISSUE in pair["review_codes"]
+        assert pair["review_required"]
+        assert f"transfers update --pair-id {pair['id']} --note" in pair["repair"]["command"]
+        state = review_workflow._build(conn, profile)
+        custody_journal.store_ledger_state(conn, profile, state)
+        conn.commit()
+        items = quarantine_review.review_quarantine(conn, profile, limit=20)["items"]
+        assert items
+        for item in items:
+            assert ISSUE in item["evidence"]["review_codes"]
+            assert item["evidence"]["repair"] == pair["repair"]
+            assert any(action["kind"] == "review_pair" and action["pair_id"] == pair["id"]
+                       for action in item["actions"])
+    finally:
+        conn.close()
+
+
+def test_legacy_pair_repair_is_read_only_in_preview_then_explicit_and_version_bound(tmp_path):
+    from kassiber.cli.handlers import _metadata_hooks
+    from kassiber.core import custody_review_terms, review_workflow as review
+    root = tmp_path / "book"
+    _restore(root)
+    conn = open_db(root)
+    try:
+        profile = conn.execute("SELECT * FROM profiles").fetchone()
+        before = _authored(conn)
+        cases = review.inspect_cases(conn, profile)["cases"]
+        case = next(case for case in cases if "repair_legacy_pair" in case["supported_operations"])
+        operation = {"type": "repair_legacy_pair", "pair_id": case["pair"]["pair_id"],
+                     "expected_fingerprint": case["pair"]["pair_fingerprint"],
+                     "reason": "Reviewed complete debit and principal residual"}
+        from kassiber.daemon import _validate_ai_review_operations
+        with pytest.raises(AppError) as ai_error:
+            _validate_ai_review_operations([operation])
+        assert ai_error.value.code == "interaction_required"
+        hooks = review.ReviewHooks(metadata=_metadata_hooks())
+        plan = review.plan_review(conn, profile, operations=[operation],
+                                  expected_input_version=profile["journal_input_version"], hooks=hooks)
+        assert _authored(conn) == before
+        assert all(item["reason"] != "custody_component_authored_active_invalid"
+                   for item in plan["after"]["quarantines"])
+        stale = {**operation, "expected_fingerprint": "stale"}
+        with pytest.raises(AppError) as raised:
+            review.plan_review(conn, profile, operations=[stale],
+                               expected_input_version=profile["journal_input_version"], hooks=hooks)
+        assert raised.value.code == "review_case_changed"
+        receipt = review.apply_review(conn, profile, artifact=plan, idempotency_key="pair-repair", hooks=hooks)
+        assert receipt["status"] == "verified"
+        pair, = custody_review_terms.list_pair_reviews(conn, profile["id"])
+        component = get_component(conn, pair["component_id"])
+        assert component["effective_state"] == "active"
+        assert not pair["review_required"]
+        assert len(_authored(conn)["custody_components"]) == len(before["custody_components"]) + 1
+        assert _authored(conn)["transactions"] == before["transactions"]
+    finally:
+        conn.close()
+
+
 @pytest.mark.parametrize("sources,receipts,refund,expected", [
     ([(1000, 10)], [600, 390], False, (1010, 990, 10, 10)),
     ([(500, 5), (500, 7)], [995], False, (1012, 995, 12, 5)),

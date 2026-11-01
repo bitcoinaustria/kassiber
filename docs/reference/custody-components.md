@@ -119,6 +119,13 @@ omitting it from the complete source debit require a new reviewed revision.
 They remain authored-active but ineffective with
 `legacy_pair_fee_allocation_review_required`; an audited one-shot compatibility
 step marks affected journals stale without changing those immutable facts.
+`transfers list` and quarantine review name that code and the affected pair.
+After reviewing the complete debit and residual, use
+`transfers update --pair-id <pair-id> --note "Reviewed complete debit and residual"`
+to author a corrected revision, or unpair and pair the reviewed legs again.
+Simple pairs also offer `repair_legacy_pair` through the explicit
+[review plan/apply workflow](custody-resolution.md); no repair happens on open
+or journal rebuild.
 Pair authoring uses that same debit when allocating a reviewed residual: a
 1,000 msat principal, separate 10 msat fee, and 998 msat receipt produce a
 1,010 msat source, 998 msat destination, 2 msat suspense, and 10 msat fee.

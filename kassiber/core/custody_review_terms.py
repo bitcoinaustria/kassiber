@@ -686,6 +686,7 @@ def list_pair_reviews(
         conn, profile_id=profile_id, include_deleted=include_deleted
     ):
         entry = pair_to_dict(row)
+        entry.update(pair_review_guidance(conn, row))
         entry["component"] = {
             "id": row["component_id"],
             "source_count": int(row["component_source_count"]),
@@ -718,6 +719,25 @@ def list_pair_reviews(
         }
         output.append(entry)
     return output
+
+
+def pair_review_guidance(conn, pair) -> dict[str, Any]:
+    """Explain legacy fee holds without revising any authored facts."""
+    from .custody_components import get_component
+    component = get_component(conn, pair["component_id"], include_local_evidence=False)
+    codes = sorted({issue["code"] for issue in component["validation"]["issues"]})
+    result = {"review_required": bool(codes), "review_codes": codes}
+    if "legacy_pair_fee_allocation_review_required" in codes:
+        result["repair"] = {
+            "code": "legacy_pair_fee_allocation_review_required",
+            "pair_id": pair["id"],
+            "command": f'transfers update --pair-id {pair["id"]} --note "Reviewed complete debit and residual"',
+            "alternative": f'transfers unpair --pair-id {pair["id"]}, then transfers pair with the reviewed legs',
+            "preview_operation": (
+                "repair_legacy_pair" if len(component["economic_terms"]) == 1 else None
+            ),
+        }
+    return result
 
 
 def delete_payout_review(

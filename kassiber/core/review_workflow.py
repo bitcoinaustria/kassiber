@@ -170,6 +170,15 @@ def _inspect_cases(conn, profile, *, limit, cursor):
                 and transaction_id in pairs):
             case["pair"] = quarantine_review.pair_evidence(conn, transaction_id, pairs[transaction_id])
             case["supported_operations"] = ["unpair", *case["supported_operations"]]
+        if transaction_id in pairs:
+            guidance = custody_review_terms.pair_review_guidance(conn, pairs[transaction_id])
+            if guidance.get("repair"):
+                case["missing_evidence"] = [{"code": code, "status": "unresolved"}
+                                            for code in guidance["review_codes"]]
+                case["repair"] = guidance["repair"]
+                case["pair"] = quarantine_review.pair_evidence(conn, transaction_id, pairs[transaction_id])
+                if guidance["repair"]["preview_operation"]:
+                    case["supported_operations"].append("repair_legacy_pair")
         cases.append(case)
     next_cursor = None
     if len(ids) > limit:
@@ -393,9 +402,9 @@ def _operations(operations):
             if set(operation["request"]) - allowed:
                 raise _error("Custody review request contains unsupported fields")
             continue
-        if kind == "unpair":
+        if kind in {"unpair", "repair_legacy_pair"}:
             if set(operation) != {"type", "pair_id", "expected_fingerprint", "reason"}:
-                raise _error("Unpair review requires exactly pair_id, expected_fingerprint and reason")
+                raise _error("Pair review requires exactly pair_id, expected_fingerprint and reason")
             for key in ("pair_id", "expected_fingerprint", "reason"):
                 if not isinstance(operation[key], str) or not operation[key].strip():
                     raise _error(f"Review operation requires {key}")
@@ -749,6 +758,19 @@ def _apply_operations(conn, profile, operations, hooks, authored_source, state, 
                 conn, workspace_id=profile["workspace_id"], profile_id=profile["id"],
                 expected_input_version=_version(conn, profile), authored_source=authored_source,
                 commit=False, **operation["request"],
+            )
+        elif kind == "repair_legacy_pair":
+            pair = quarantine_review.pairs_by_id(conn, str(profile["id"])).get(operation["pair_id"])
+            if pair is None:
+                raise _error("Review pair was not found", "review_case_changed")
+            guidance = custody_review_terms.pair_review_guidance(conn, pair)
+            if (quarantine_review.pair_fingerprint(conn, pair) != operation["expected_fingerprint"]
+                    or guidance.get("repair", {}).get("preview_operation") != kind):
+                raise _error("Legacy pair changed; inspect it again", "review_case_changed")
+            notes = ((pair.get("notes") or "") + "\nLegacy fee review: " + operation["reason"]).strip()
+            result = custody_review_terms.update_pair_review(
+                conn, profile=profile, pair_id=operation["pair_id"], notes=notes,
+                commit=False, authored_source=authored_source,
             )
         elif kind == "unpair":
             if quarantine_review.pairs_by_id(conn, str(profile["id"])).get(operation["pair_id"]) is None:

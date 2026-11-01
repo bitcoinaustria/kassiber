@@ -696,6 +696,12 @@ def review_quarantine(
             "evidence": evidence,
         }
         item["actions"] = _actions(info, item, evidence, root, wallets)
+        if transaction_id in pairs:
+            from .custody_review_terms import pair_review_guidance
+            guidance = pair_review_guidance(conn, pairs[transaction_id])
+            if guidance.get("repair"):
+                evidence.update(guidance)
+                item["actions"].append({"kind": "review_pair", **guidance["repair"]})
         # Wallet ids travel only inside the actions that need them.
         item.pop("wallet_id")
         items.append(item)
