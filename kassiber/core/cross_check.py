@@ -767,14 +767,14 @@ def cross_check(
 
     # 2. The same id on a transaction the user excluded. An exact id beats any
     # amount match, so an excluded row is never hidden behind a look-alike.
-    excluded_by_id: dict[tuple[str, str], _BookRow] = {}
+    excluded_by_id: dict[tuple[str, str, str], _BookRow] = {}
     for row in excluded:
         for key in {row.txid.lower(), row.id.lower()} - {""}:
-            excluded_by_id.setdefault((key, row.direction), row)
+            excluded_by_id.setdefault((key, row.direction, row.asset_id), row)
     excluded_pairs: list[tuple[_ToolRow, _BookRow, str]] = []
     without_id_match: list[_ToolRow] = []
     for tool_row in unmatched_tool:
-        book = excluded_by_id.get((tool_row.txid.lower(), tool_row.direction)) if tool_row.txid else None
+        book = excluded_by_id.get((tool_row.txid.lower(), tool_row.direction, tool_row.asset_id)) if tool_row.txid else None
         if book is not None and not book.matched and book.asset_id == tool_row.asset_id:
             book.matched = True
             excluded_pairs.append((tool_row, book, "txid"))
