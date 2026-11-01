@@ -13,6 +13,9 @@ export interface TransferCandidate {
   in_amount_msat: number;
   out_wallet_label: string;
   in_wallet_label: string;
+  /** The wallet's kind, which tells the rail (chain, Lightning, Liquid); absent from older daemons. */
+  out_wallet_kind?: string;
+  in_wallet_kind?: string;
   out_occurred_at: string;
   in_occurred_at: string;
   confidence: "exact" | "strong";
@@ -58,3 +61,26 @@ export function bulkPairable(candidates: TransferCandidate[]) {
 /** Same asset on both legs: a move between wallets rather than a swap. */
 export const isSameAsset = (candidate: TransferCandidate) =>
   candidate.out_asset.toUpperCase() === candidate.in_asset.toUpperCase();
+
+/** Pair kinds that move bitcoin between its own rails: peg-ins, peg-outs and Lightning swaps. */
+export const BITCOIN_SWAP_KINDS: ReadonlySet<string> = new Set([
+  "chain-swap",
+  "peg-in",
+  "peg-out",
+  "reverse-submarine-swap",
+  "submarine-swap",
+  "swap-refund",
+]);
+
+/**
+ * What pairing a candidate records: a move of the same asset, bitcoin
+ * changing rails, or a swap into another asset. The same reading as
+ * Transfers & Custody.
+ */
+export function moveType(candidate: TransferCandidate): "transfer" | "bitcoinSwap" | "swap" {
+  if (isSameAsset(candidate)) return "transfer";
+  if (candidate.candidate_type === "transfer" || BITCOIN_SWAP_KINDS.has(candidate.default_kind)) {
+    return "bitcoinSwap";
+  }
+  return "swap";
+}
