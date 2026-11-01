@@ -52,7 +52,7 @@ def test_durable_native_bytes_all_tables_without_network_consent(tmp_path, offli
 
 
 def test_durable_mutation_catalog_stays_applicable(tmp_path):
-    for name in ("analysis_durable_mutations.json", "analysis_synchronize_mutations.json"):
+    for name in ("analysis_durable_mutations.json", "analysis_synchronize_mutations.json", "analysis_recovery_mutations.json"):
         catalog = ROOT / "crates/wallets/scripts" / name
         entries = json.loads(catalog.read_text())
         result = subprocess.run([sys.executable, str(ROOT / "crates/wallets/scripts/record_mutation_check.py"), "--mutations", str(catalog), "--check"], env=child_env(tmp_path), check=True, capture_output=True, timeout=30)

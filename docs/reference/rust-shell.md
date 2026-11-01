@@ -14863,3 +14863,73 @@ and mutation scratch trees are removed after summarizing. Scratch stays inside
 this worktree and account `HOME` is unchanged. Test jobs run serially. Full
 workspace, Python/frontend quality-gate and packaged/platform acceptance are
 not claimed.
+
+## Mirror durable recovery (R5, partial)
+
+The durable layer's caller-owned transaction is now exercised on disk through
+the guarded `analysis_durable_fixture` harness. After every successful index
+SQL write, and immediately before and after commit, the parent pauses and kills
+the native child with `SIGKILL`. Each interrupted database must retain exactly
+the pre-publication state or the completed publication, including schema
+objects and every logical row in all tables. Separate Rust and unchanged-Python
+restarts must produce the same canonical state bytes and complete table
+commitments as uninterrupted Python. The production write adapter has no
+observer, process control or additional I/O path.
+
+The matrix covers ordinary SQLite and keyed SQLCipher, each in DELETE and WAL
+journal mode, with integrity checks and explicit journal-mode assertions.
+Each combination exercises the following positions:
+
+| Publication | Kill positions |
+| --- | ---: |
+| Cold generation | 95 |
+| Dataset expiry | 57 |
+| Verified-tip generation | 6 |
+| Watermark-only update | 6 |
+| Missing table and trigger repair | 171 |
+| Incremental output/spender change | 97 |
+| Warm retained generation | 5 |
+| Explicit rebuild | 95 |
+
+The four combinations total 2,128 interruptions and 4,256 independent restarts.
+Installation, source triggers, contributions, node/edge/public materialization,
+labels and generation writes are all observed. Missing-table repair retains
+the exact 111-table interrupted state until commit; completed publication and
+both restart paths compare all 112 tables. Native child stdout is also checked
+against literal canonical JSON encoding. Strict no-consent guards remain armed,
+including loopback, while the product offline switch alternates off/on. There
+are zero Python fallbacks and zero network attempts.
+
+The synchronization corpus now has 43 cases and 169 action snapshots, adding
+assertion deletion, ambiguous-occurrence withdrawal and 301-source bounded
+lookup coverage. The two new chunk mutations compile and are killed by the
+all-table synchronization oracle. Two recovery mutations also compile and are
+killed: committing individual statements violates interrupted-state atomicity;
+ignoring an existing generation violates resumed Python parity. Their runner
+rebuilds the native executable for each scratch-tree mutation and rejects skips.
+Together with the earlier boundaries, all 25 retained mutation recipes are
+killed with passing unmutated baselines.
+
+An initial executable parity check reused the last deliberately broken
+generation-upsert artifact from a shared Cargo build directory. Its failed
+revision/watermark comparison is retained in the local logs. Both mutation
+runners now use scratch-local build directories; the new chunk and recovery
+controls are rerun in isolation, and final verification rebuilds the real
+worktree from a clean tree. No product-source fix was needed.
+
+Local Linux verification uses Rust 1.99.1, locked Python 3.11.17 and offline
+Cargo with eight build jobs. Workspace formatting, wallet production and harness
+all-target Clippy with warnings denied, all 28 native index tests, five focused
+Python/native checks, the four recovery groups, the classifier update and the
+required 57-test CI preflight pass. The account `HOME` is preserved; scratch,
+books and build trees stay under this worktree's `target/`. Recovery summaries,
+mutation transcripts and `verification-summary.json` remain under
+`target/r5-mirror-5a/`; owned mutation and verification build trees are removed
+after summarizing.
+
+This completes this worker's durable triggers, contributions, synchronization
+and process-kill recovery scope. Bounded SQL views, process/book-bound handles,
+report composition and product registration remain separate work. Product
+Mirror served-by counts remain zero. No Python product code, dependency,
+lockfile, authored schema, accounting or network-consent contract changes.
+Platform packaging and the full Python/frontend quality gate are not claimed.

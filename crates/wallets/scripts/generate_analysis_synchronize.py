@@ -65,6 +65,10 @@ def vectors():
     add('physical-retraction', stored()+child, [sql(stored(raw_json=raw(removed=True)))])
     add('tip-with-label-overlay', stored()+label()+assertion(f'{BLOCK}:0'), [sql("UPDATE chain_analysis_acquisition_grants SET verified_tip_height=125; UPDATE chain_analysis_labels SET label='Changed';")])
     add('overlay-only-without-physical-renormalization',stored()+label(),[sql("UPDATE chain_analysis_labels SET label='Changed';")])
+    add('assertion-deleted-rebinds-source', stored()+assertion(f'{BLOCK}:0'), [sql('DELETE FROM chain_analysis_reference_assertions;')])
+    add('ambiguous-occurrence-withdrawal', stored()+assertion(f'{BLOCK}:0',grant='one')+assertion(f'{OTHER}:1',grant='two'), [sql("DELETE FROM chain_analysis_reference_assertions WHERE grant_id='two';")])
+    many = ''.join(insert('transactions', {'id':f'chunk-{i}','workspace_id':'ws','profile_id':'p','wallet_id':'cold','fingerprint':f'chunk-{i}','asset':'BTC','direction':'inbound','amount':i,'occurred_at':'fixed','created_at':'fixed'}) for i in range(301))
+    add('physical-source-lookup-chunks', many, [sql("UPDATE transactions SET note='changed' WHERE id LIKE 'chunk-%';")])
     return cases
 
 

@@ -1172,3 +1172,19 @@ amounts. There is no new CLI command, AI permission or network trigger;
 `reports privacy-hygiene` remains the separate configuration report. The
 [legacy acceptance checkpoint](rust-shell.md#legacy-hygiene-daemon-acceptance-r5-privacy-legacy)
 records complete-table, exact-wire and strict no-egress checks.
+
+## Native Mirror derived storage
+
+The unregistered native Mirror projection helper updates only the existing
+book-local derived index and source-change feed, inside the caller's transaction.
+Stored wallet configuration and observations supply local evidence; they grant
+no acquisition consent or accounting authority. Installation, synchronization,
+expiry handling and recovery perform no DNS, socket, HTTP, RPC, loopback or
+provider operation. Product routes and AI disclosure remain unchanged.
+
+After-statement observation and disk-book drivers exist only in the test harness.
+Their synthetic parity fixtures and SQLite/SQLCipher interruption artifacts stay
+under the disposable worktree data root; they are not product disk logging or
+user diagnostic exports. See the
+[native durability checkpoints](rust-shell.md#mirror-durable-triggers-and-contributions-r5-partial)
+for the boundary and verification evidence.

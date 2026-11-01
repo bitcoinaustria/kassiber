@@ -108,5 +108,25 @@
       "incremental_synchronization_preserves_atomicity_and_warm_contributions"
     ],
     "rule": "sync caller transaction"
+  },
+  {
+    "id": "sync-contributor-chunks",
+    "file": "crates/wallets/src/analysis_index/durable.rs",
+    "find": ".chunks(200)",
+    "replace": ".chunks(200).take(1)",
+    "expect_failing": [
+      "incremental_synchronization_matches_python_all_112_tables"
+    ],
+    "rule": "Contributor lookup preserves every bounded chunk of the affected region."
+  },
+  {
+    "id": "sync-dirty-source-chunks",
+    "file": "crates/wallets/src/analysis_index/durable/synchronize.rs",
+    "find": ".chunks(200)",
+    "replace": ".chunks(200).take(1)",
+    "expect_failing": [
+      "incremental_synchronization_matches_python_all_112_tables"
+    ],
+    "rule": "Incremental source reads retain dirty rows beyond the first bounded SQL chunk."
   }
 ]

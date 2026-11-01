@@ -654,7 +654,11 @@ registers them; exit-tax preserves its reference no-registration boundary.
 - [x] Integrate durable Mirror report reads with retained generations, exact
   all-table parity and caller rollback; see the
   [integration checkpoint](docs/reference/rust-shell.md#mirror-durable-read-integration-awaiting-recovery-and-registration-r5).
-- [ ] Finish Mirror's SQLite/SQLCipher kill recovery and CLI/daemon acceptance with
+- [x] Verify Mirror's durable SQLite/SQLCipher recovery after process kills at
+  every write and commit boundary, with Python byte/all-table parity in DELETE
+  and WAL modes; see the
+  [recovery checkpoint](docs/reference/rust-shell.md#mirror-durable-recovery-r5-partial).
+- [ ] Finish Mirror's CLI/daemon acceptance with
   non-zero served-by counts. Preserve deterministic native
   ambiguity ordering; retain the recorded Python reference repro.
 - [x] Port full-report, Austrian bundle and transaction CSV artifacts, saved

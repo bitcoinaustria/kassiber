@@ -13,6 +13,16 @@ spec.loader.exec_module(checker)
 checker.ENGINE_PACKAGES = ("-p", "kassiber-wallets", "--lib", "--features", "test-harness", "--offline")
 checker.MUTATIONS = Path(__file__).with_name("record_mutations.json")
 
+
+class IsolatedRunner(checker._Runner):
+    def __init__(self, scratch, env):
+        super().__init__(scratch, env)
+        self.cargo_env["CARGO_BUILD_BUILD_DIR"] = str(scratch / "target/build")
+        self.cargo_env["CARGO_TARGET_DIR"] = str(scratch / "target")
+
+
+checker._Runner = IsolatedRunner
+
 if __name__ == "__main__":
     os.environ["KASSIBER_TEST_NO_EGRESS"] = "1"
     raise SystemExit(checker.main())

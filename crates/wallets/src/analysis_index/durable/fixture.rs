@@ -7,6 +7,10 @@ thread_local! { static WRITE_OBSERVER: std::cell::RefCell<Option<WriteObserver>>
 pub fn set_write_observer(observer: Option<WriteObserver>) {
     WRITE_OBSERVER.with(|slot| *slot.borrow_mut() = observer);
 }
+pub fn checkpoint(phase: &str) {
+    after_write(phase);
+}
+
 pub(super) fn after_write(sql: &str) {
     WRITE_OBSERVER.with(|slot| {
         if let Some(observer) = slot.borrow_mut().as_mut() {

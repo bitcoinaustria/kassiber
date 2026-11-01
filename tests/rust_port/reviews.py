@@ -508,3 +508,12 @@ REVIEWS["tests/test_rust_legacy_privacy.py"] = {"*": {"disposition": "oracle", "
 
 REVIEWS["tests/test_rust_legacy_privacy_services.py"] = {"*": {"disposition": "oracle", "group": "reports", "reason": "compares the existing legacy snapshot through CLI-launched native daemon sessions and the unchanged configuration-report CLI, including exact wire bytes, all 112 tables, zero fallback routing, strict no-egress and honest native diagnostics; retains named transport mutation applicability"}}
 
+REVIEWS["tests/test_rust_analysis_durable.py"] = {"*": {
+    "disposition": "oracle", "group": "chain-sync",
+    "reason": "compares native durable triggers, contributions and incremental generation publication with unchanged Python canonical bytes, schema objects and all 112 tables; retains named mutations and no-consent native process checks; product Mirror routing remains separate",
+}}
+
+REVIEWS["tests/test_rust_analysis_recovery.py"] = {"*": {
+    "disposition": "oracle", "group": "chain-sync",
+    "reason": "kills native Mirror publication at every SQL write and commit boundary on disposable SQLite and SQLCipher books in DELETE and WAL modes; compares interrupted atomic state and Rust/Python restarts with unchanged Python canonical bytes and all 112 tables under strict no-egress guards",
+}}
