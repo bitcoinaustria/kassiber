@@ -1,8 +1,8 @@
 """Indicative Austrian tax for one tax year of one book.
 
-The assistant and the reports read this figure instead of applying a rate
-themselves: a model that recalls tax law from its weights gets the rate or the
-netting wrong, and a figure the core computes is the same everywhere.
+The assistant and the Reports screen read this figure instead of applying a
+rate themselves: a model that recalls tax law from its weights gets the rate or
+the netting wrong, and a figure the core computes is the same everywhere.
 
 Scope, deliberately narrow:
 
@@ -15,8 +15,10 @@ Scope, deliberately narrow:
 - KZ 801 (Altbestand Spekulationsgeschäfte, § 31 EStG) is taxed at the
   progressive tariff, which depends on income outside the book. It is reported
   as an amount and never estimated.
-- Any report blocker withholds the figure. A stale journal, a quarantine or a
-  custody gap would make a confident-looking number wrong.
+- For the assistant, any report blocker withholds the figure: a stale journal,
+  a quarantine or a custody gap would make a confident-looking number wrong.
+  The Reports screen computes it without blockers and marks it provisional for
+  the readiness causes it checks itself.
 
 This module owns no tax math beyond multiplying the reported base; it does not
 rebuild Alt/Neu classification or moving-average basis (RP2 owns those).

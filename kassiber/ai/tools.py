@@ -1159,10 +1159,12 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ToolEntry(
         name="ui.reports.capital_gains",
         description=(
-            "Read realized gains for one tax year: full-year totals, Austrian "
-            "Kennzahl rows, and the newest disposal/income rows with transaction "
-            "id, asset, msat, cost, proceeds, gain and Austrian category. Rows are "
-            "journal entries, not acquisition lots. Defaults to the latest year."
+            "Read realized gains for one tax year: full-year totals, a breakdown "
+            "by Austrian field or holding period, Austrian Kennzahl rows, and the "
+            "newest disposal/income rows with transaction id, asset, msat, cost, "
+            "proceeds, gain and Austrian category. Rows are journal entries, not "
+            "acquisition lots. With an asset, totals, breakdown and rows cover that "
+            "asset; Kennzahl rows stay book-wide. Defaults to the latest year."
         ),
         parameters={
             "type": "object",
