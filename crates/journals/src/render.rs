@@ -733,7 +733,7 @@ pub fn render_ledger<'i>(
 fn audit(inputs: &LedgerInputs<'_>, a: &AuditOut) -> Result<TransferAudit, Refusal> {
     let pair = array(&inputs.projection["intra_pairs"])
         .get(a.pair)
-        .ok_or_else(|| Refusal::new("IndexError", "list index out of range"))?;
+        .ok_or_else(|| Refusal::new("IndexError", "tuple index out of range"))?;
     let out = &pair["out"];
     let inbound = &pair["in"];
     let from = inputs
@@ -828,8 +828,7 @@ fn quarantine(profile: &Value, row: &Value, q: &QuarantineOut) -> Result<Quarant
             })
         }
         DetailKind::PrivacyHop => {
-            let boundary = string(&row["privacy_boundary"])
-                .trim()
+            let boundary = kassiber_pytext::strip(&string(&row["privacy_boundary"]))
                 .to_lowercase()
                 .replace('-', "_");
             if matches!(
@@ -886,7 +885,7 @@ fn quarantine(profile: &Value, row: &Value, q: &QuarantineOut) -> Result<Quarant
 fn boolish(v: &Value) -> bool {
     v == &Value::Bool(true)
         || matches!(
-            string(v).trim().to_lowercase().as_str(),
+            kassiber_pytext::strip(&string(v)).to_lowercase().as_str(),
             "1" | "true" | "yes" | "on"
         )
 }

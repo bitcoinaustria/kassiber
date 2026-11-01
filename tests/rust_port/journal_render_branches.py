@@ -298,11 +298,189 @@ def vectors():
         add_graph(name, rows=[row('source', 'wallet-a', 'outbound', raw=raw),
                              row('target', 'wallet-b', 'inbound')],
                   reasons=reasons, components=components, expected_candidates=0)
+    add_graph('multiple-sources-sort-by-id', rows=[
+        row('source-z', 'wallet-a', 'outbound', raw=graph()),
+        row('source-a', 'wallet-a', 'outbound', raw=graph()),
+        row('target', 'wallet-b', 'inbound')], reasons=[
+            ('source-z', REASON), ('source-a', REASON)], expected_candidates=2)
+    add_graph('multiple-destinations-sort-by-wallet', rows=[
+        row('source', 'wallet-a', 'outbound', 200_000_000, raw=graph(outputs=[
+            dict(scriptpubkey=SCRIPTS['wallet-c'], value_sats=100_000),
+            dict(scriptpubkey=SCRIPTS['wallet-b'], value_sats=100_000)])),
+        row('target-c', 'wallet-c', 'inbound'), row('target-b', 'wallet-b', 'inbound')],
+        expected_candidates=2)
+    index = OwnedIndex()
+    for script, wallet in [('wallet-b', 'wallet-b'), ('wallet-c', 'wallet-b'),
+                           ('wallet-c', 'wallet-c')]:
+        index.add_script(SCRIPTS[script], OwnedMatch(wallet, wallet, 'treasury',
+            'bitcoin', 'main', '', None, None, 'inventory', 'descriptor'))
+    add_graph('ambiguity-discards-earlier-destination', index=index, rows=[
+        row('source', 'wallet-a', 'outbound', raw=graph(outputs=[
+            dict(scriptpubkey=SCRIPTS['wallet-b'], value_sats=100_000),
+            dict(scriptpubkey=SCRIPTS['wallet-c'], value_sats=1)])),
+        row('target', 'wallet-b', 'inbound')], expected_candidates=0)
+    raw = graph()
+    raw['txid'] = 'c' * 64
+    add_graph('contradictory-graph-scope', rows=[
+        row('custody-tax:source', 'wallet-a', 'outbound', raw=raw),
+        row('target', 'wallet-b', 'inbound')], reasons=[('custody-tax:source', REASON)],
+        expected_candidates=0, index=index)
+    return cases
+
+def renderer_vectors():
+    import uuid
+    from kassiber.core.engines import ledger_response
+    from tests.custody_snapshot import to_jsonable
+    from tests.tax_ledger_generator import corpus
+    from tests.rust_port.journal_render_vectors import seeded_ids
+    cases = []
+    book = snapshot(0)
+    original = compute_custody_projection(book)
+    quantity = replace(original.quantity_state,
+        canonical_input=replace(original.quantity_state.canonical_input, events=()),
+        projection=replace(original.quantity_state.projection, observations=(), decisions=(), postings=()),
+        tax_eligibility=replace(original.quantity_state.tax_eligibility, eligible_decisions=()))
+    empty = dict(schema_version=2, ok=True, entries=[], holdings=[], tax_summary=[],
+                 carried_rows=[], intra_audit=[], quarantines=[])
+    base = replace(original, rows=[], owned_index=None, quantity_state=quantity,
+        finalized_tax_projection=replace(original.finalized_tax_projection, rows=(), intra_pairs=(), quarantines=()))
+
+    def add(name, custody=base, response=None, profile=None, group='other'):
+        audits = []
+        original_audit = ledger_response.render_audit
+
+        def observed_audit(inputs, audit):
+            result = original_audit(inputs, audit)
+            audits.append(result)
+            return result
+
+        with patch.object(uuid, 'uuid4', seeded_ids(name)), \
+             patch.object(ledger_response, 'render_audit', observed_audit):
+            record = clean_record(capture_projection(profile or book['profile'], custody,
+                response_override=deepcopy(response if response is not None else empty)))
+        assert 'custody' in record, (name, record)
+        if 'state' in record['expected']:
+            record['expected_audit'] = to_jsonable(audits, redact_config=False)
+        cases.append(dict(name=name, group=group, **record))
+
+    observation = original.quantity_state.projection.observations[0]
+    posting = next(p for p in original.quantity_state.projection.postings if p.location_kind == 'wallet')
+    def balance(name, postings=(), observations=(), loan=(), channel=None, components=(), holdings=()):
+        state = replace(quantity, projection=replace(quantity.projection,
+            observations=tuple(observations), postings=tuple(postings)))
+        add(name, replace(base, quantity_state=state, loan_legs=list(loan),
+                         channel_roles=channel or {}, active_components=list(components)),
+            dict(empty, holdings=list(holdings)), group='balances')
+    p = replace(posting, observation_hash=observation.quantity_hash, amount_msat=1)
+    balance('balance-no-differences')
+    balance('balance-wallet-only', [p, replace(p, location_kind='external', amount_msat=999)])
+    balance('balance-equal', [replace(p, amount_msat=100_000_000_000)], holdings=[
+        dict(wallet='Cold', asset='BTC', quantity='1E0', cost_basis='0E0')])
+    balance('balance-current-only', holdings=[dict(wallet='Cold', asset='BTC', quantity='1E0', cost_basis='0E0')])
+    loan = [dict(transaction_id=observation.transaction_id, role='principal')]
+    balance('balance-loan-reason', [p], [observation], loan=loan)
+    balance('balance-null-loan-id', [p], [observation], loan=[dict(transaction_id=None, role='principal')])
+    balance('balance-channel-overrides-loan', [p], [observation], loan=loan,
+        channel={observation.transaction_id: 'channel_open'})
+    for suspense in (-1, 0, 1):
+        comp = dict(validation=dict(suspense_msat=suspense), legs=[
+            dict(role='source', transaction_id=observation.transaction_id),
+            dict(role='destination', transaction_id='other-id'),
+            dict(role='source', transaction_id=None)])
+        balance(f'balance-suspense-{suspense}', [p], [observation], loan=loan,
+            channel={observation.transaction_id: 'channel_open'}, components=[comp])
+    other = replace(observation, quantity_hash='other-hash', transaction_id='other-id')
+    balance('balance-ambiguous-reasons', [p, replace(p, observation_hash='other-hash')],
+        [observation, other], loan=[*loan, dict(transaction_id='other-id', role='collateral')])
+    balance('balance-same-reason-twice', [p, p], [observation], loan=loan)
+    balance('balance-missing-observation', [p], loan=loan)
+    for n in (2**127+1, -2**127-1):
+        balance(f'balance-wide-{n}', [replace(p, amount_msat=n), p])
+    balance('balance-sorted-union', [replace(p, location_id='wallet-z', asset='LBTC'), p],
+        holdings=[dict(wallet='Hot', asset='BTC', quantity='1E0', cost_basis='0E0')])
+
+    source = dict(row('source', 'wallet-a', 'outbound'), custody_finalized_tax_projection=True)
+    custody = replace(base, finalized_tax_projection=replace(base.finalized_tax_projection, rows=(source,)))
+    for boundary in ('coinjoin', 'collaborative', 'payjoin', 'payment-in-coinjoin', 'sweep',
+                     'unknown', None, '', ' PAYJOIN ', '\x1cPAYJOIN\x1f'):
+        changed = dict(source, privacy_boundary=boundary, raw_json=json.dumps(dict(source='coordinator')))
+        c = replace(custody, finalized_tax_projection=replace(custody.finalized_tax_projection, rows=(changed,)))
+        response = dict(empty, quarantines=[dict(row='source', reason='privacy_hop_unresolved',
+            detail_kind='privacy_hop', detail=dict(privacy_boundary='old', source='old', keep='yes'))])
+        add(f'privacy-boundary-{boundary}', c, response)
+    for key in ('islikelycoinjoin', 'is_likely_coinjoin', 'isLikelyCoinJoin', 'likely_coinjoin', 'likelyCoinJoin'):
+        for value in (True, False, None, '', '1', 'true', 'yes', 'on', 'false', ' YES ',
+                      '\x1cYES\x1f'):
+            changed = dict(source, privacy_boundary='payjoin', raw_json=json.dumps({key: value}))
+            c = replace(custody, finalized_tax_projection=replace(custody.finalized_tax_projection, rows=(changed,)))
+            response = dict(empty, quarantines=[dict(row='source', reason='privacy_hop_unresolved',
+                detail_kind='privacy_hop', detail={})])
+            add(f'privacy-bool-{key}-{value!r}', c, response)
+    for kind in ('pricing_review', 'hold', 'plain', 'partner_leg'):
+        changed = dict(source, pricing_quality='exact', pricing_provider='provider')
+        c = replace(custody, finalized_tax_projection=replace(custody.finalized_tax_projection, rows=(changed,)))
+        response = dict(empty, quarantines=[dict(row='source', reason='missing_spot_price',
+            detail_kind=kind, detail=dict(pricing_provider='old', keep='yes'))])
+        add(f'quarantine-template-{kind}', c, response)
+
+    for name, raw in [('mapping', dict(source='mapping', islikelycoinjoin=True)),
+                      ('malformed', '{bad'), ('empty', ''), ('null', None),
+                      ('list', '[1]'), ('falsey-source', '{"source":false}')]:
+        changed = dict(source, privacy_boundary='payjoin', raw_json=raw)
+        c = replace(custody, finalized_tax_projection=replace(custody.finalized_tax_projection, rows=(changed,)))
+        response = dict(empty, quarantines=[dict(row='source', reason='privacy_hop_unresolved',
+            detail_kind='privacy_hop', detail={})])
+        add(f'privacy-raw-{name}', c, response)
+
+    for label in ('', None):
+        wallets = {key: dict(value) for key, value in base.wallet_refs_by_id.items()}
+        wallets['wallet-a']['label'] = label
+        add(f'holdings-skips-label-{label!r}', replace(base, wallet_refs_by_id=wallets),
+            dict(empty, holdings=[dict(wallet='' if label == '' else 'None',
+                asset='BTC', quantity='1E0', cost_basis='0E0')]))
+    for direction in ('outbound', 'inbound'):
+        projected = dict(source, direction=direction, journal_transaction_id='anchor')
+        add(f'payout-source-direction-{direction}', replace(base,
+            finalized_tax_projection=replace(base.finalized_tax_projection, rows=(projected,)),
+            direct_payout_records=[dict(id='payout', out_transaction_id='anchor')]))
+
+    for case in corpus():
+        if case.name not in ('generic-ledger-fifo', 'at-ledger-fifo'):
+            continue
+        c = replace(original, finalized_tax_projection=case.inputs.finalized_tax_projection,
+            wallet_refs_by_id=case.inputs.wallet_refs_by_id, direct_payout_records=case.inputs.direct_payout_records)
+        response = capture_projection(case.profile, c)['response']
+        add(f'render-{case.name}', c, response, case.profile)
+        for key, values in [('at_regime', [None, 'alt', 'neu']),
+                            ('regime_flows', [None, dict(out=dict(alt=1, neu=2),
+                                                       **{'in': dict(alt=3, neu=4)})]),
+                            ('at_pool', [None, '', 'pool'])]:
+            for value in values:
+                changed = deepcopy(response)
+                changed['intra_audit'][0][key] = value
+                add(f'audit-{case.name}-{key}-{value!r}', c, changed, case.profile)
+        pairs = tuple(dict(pair, group_id='') for pair in c.finalized_tax_projection.intra_pairs)
+        add(f'audit-{case.name}-ungrouped', replace(c,
+            finalized_tax_projection=replace(c.finalized_tax_projection, intra_pairs=pairs)), response, case.profile)
+        changed = deepcopy(response)
+        changed['intra_audit'][0]['pair'] = 999
+        add(f'audit-{case.name}-missing-pair', c, changed, case.profile)
+        for side in ('out', 'in'):
+            pair = c.finalized_tax_projection.intra_pairs[0]
+            wallets = {key: value for key, value in c.wallet_refs_by_id.items()
+                       if key != pair[side]['wallet_id']}
+            add(f'audit-{case.name}-missing-{side}-wallet',
+                replace(c, wallet_refs_by_id=wallets), response, case.profile)
+        for category in ('income_general', 'income_capital_yield', 'neu_gain', 'neu_loss', 'alt_spekulation', 'unknown', None):
+            changed = deepcopy(response)
+            entry = next(e for e in changed['entries'] if 'at_category' in e)
+            entry['at_category'] = category
+            add(f'category-{case.name}-{category}', c, changed, case.profile)
     return cases
 
 
 if __name__ == '__main__':
-    records = vectors()
+    records = vectors() + renderer_vectors()
     if '--accept' in sys.argv:
         PATH.write_text(json.dumps(records, indent=2, ensure_ascii=True) + '\n')
     else:

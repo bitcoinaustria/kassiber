@@ -1,11 +1,19 @@
 import json
 
-from tests.rust_port.journal_render_branches import PATH, vectors
+from tests.rust_port.journal_render_branches import PATH, renderer_vectors, vectors
 from tests.test_tax_mutations import checker
 
 
 def test_renderer_branch_witnesses_rebuild_from_python():
-    assert json.loads(PATH.read_text()) == vectors()
+    witnesses = json.loads(PATH.read_text())
+    assert witnesses == vectors() + renderer_vectors()
+    assert len({case['name'] for case in witnesses}) == len(witnesses)
+    for case in witnesses:
+        assert set(case['expected']) in ({'state'}, {'error'})
+        assert case['entry_ids'] == [item['python'] for item in case['uuid_mapping']]
+        if 'state' in case['expected']:
+            state = json.loads(case['expected']['state'])
+            assert [entry['id'] for entry in state['entries']] == case['entry_ids']
 
 
 def test_renderer_branch_mutations_apply_and_name_existing_tests():

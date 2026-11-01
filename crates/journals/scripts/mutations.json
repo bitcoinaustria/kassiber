@@ -1383,7 +1383,7 @@
     "id": "JR-source-cache-fee-representation",
     "file": "crates/journals/src/render.rs",
     "find": "cached.fee.same_representation(fee)",
-    "replace": "cached.fee == *fee",
+    "replace": "cached.fee == fee",
     "expect_failing": [
       "ledger_rendering_matches_python"
     ],

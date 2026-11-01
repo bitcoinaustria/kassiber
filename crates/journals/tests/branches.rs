@@ -11,17 +11,37 @@ fn check(group: &str) {
         let response = boundary::ledger_response(&case["response"]).unwrap();
         let ids = case["entry_ids"].as_array().unwrap();
         let mut consumed = 0;
-        let actual = boundary::build(
-            &case["profile"],
-            &case["custody"],
-            case["wallets"].as_array().unwrap(),
-            &response,
-            || {
-                let id = ids.get(consumed).and_then(Value::as_str).unwrap_or("");
-                consumed += 1;
-                id.into()
-            },
-        );
+        let inputs = kassiber_journals::LedgerInputs {
+            profile: &case["profile"],
+            projection: &case["custody"]["finalized_tax_projection"],
+            wallets: case["wallets"].as_array().unwrap(),
+            direct_payout_records: case["custody"]["direct_payout_records"].as_array().unwrap(),
+        };
+        let actual = kassiber_journals::render_ledger(&inputs, &response, || {
+            let id = ids.get(consumed).and_then(Value::as_str).unwrap_or("");
+            consumed += 1;
+            id.into()
+        })
+        .and_then(|ledger| {
+            if let Some(expected) = case.get("expected_audit") {
+                let canonical = |value: &Value| {
+                    kassiber_pyjson::dumps(
+                        &kassiber_custody::codec::from_json(value).unwrap(),
+                        &kassiber_pyjson::Options::new().sort_keys(true).compact(),
+                    )
+                    .unwrap()
+                };
+                let actual = canonical(&serde_json::to_value(&ledger.intra_audit).unwrap());
+                let expected = canonical(expected);
+                if actual != expected {
+                    failures.push(format!(
+                        "{}: audit {actual}, expected {expected}",
+                        case["name"]
+                    ));
+                }
+            }
+            boundary::finish(&case["custody"], ledger)
+        });
         match actual {
             Ok(state) => {
                 let actual = boundary::canonical(&state).unwrap();
@@ -67,4 +87,14 @@ fn component_exclusions_and_reason_precedence_match_python() {
 #[test]
 fn graph_scopes_owners_and_tolerances_match_python() {
     check("graph");
+}
+
+#[test]
+fn balance_explanations_match_python() {
+    check("balances");
+}
+
+#[test]
+fn audit_quarantine_and_entry_branches_match_python() {
+    check("other");
 }

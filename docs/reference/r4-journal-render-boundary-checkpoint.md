@@ -980,3 +980,150 @@ empty mutation build tree and freshens copied source timestamps. The runner
 checks the original source/test/fixture digests again after its run. These
 local results do not certify the separate scalar-fidelity branch or integrated
 R4-11 acceptance campaigns.
+
+## Branch audit: remaining render decisions
+
+The final branch batch expands `render-branches.json` to **234 witnesses**:
+34 component/reason cases, 65 graph/scope cases, 16 balance cases and 119
+audit/quarantine/entry cases. The generator still calls production Python;
+the native tests compare complete canonical bytes or every refusal attribute
+and cause, plus exact UUID consumption. Successful audit cases also retain
+the intermediate audit rows observed from Python's production `render_audit`;
+the native test compares those complete canonical bytes before the final join.
+The final `build()` state does not include those rows. The original 383 frozen cases, 39
+carry/float cases and 550 response refusals are retained unchanged.
+
+This batch repairs Python whitespace normalization in privacy boundary and
+likely-CoinJoin fields, including U+001C/U+001F. It also repairs the exact
+out-of-bounds audit-pair message: the finalized projection owns a tuple, so
+Python raises `IndexError: tuple index out of range`. No Python accounting
+code, scalar representation, dependency, persistence behavior or performance
+boundary changes in this batch.
+
+The following table completes the decision map above. `JRB-` is omitted from
+mutation names. Test keys expand to these exact Rust test names:
+
+- **B**: `balance_explanations_match_python`
+- **G**: `graph_scopes_owners_and_tolerances_match_python`
+- **A**: `audit_quarantine_and_entry_branches_match_python`
+- **L**: `ledger_rendering_matches_python`
+- **V**: `legacy_boundary_values_and_refusal_order_match_python`
+- **E**: `refusal_mapping_matches_python`
+
+| Branch | Python-derived witness | Mutation | Test |
+| --- | --- | --- | --- |
+| Empty quarantines skip review; nonempty quarantines retain source selection | `no-quarantines`, `graph-exact` | `no-quarantines` | `component_exclusions_and_reason_precedence_match_python` |
+| Unowned outputs cannot acquire a default owner | `unowned-output` | `unowned-output` | G |
+| Equal balances omit diagnostics; canonical/current-only keys remain | `balance-equal`, `balance-wallet-only`, `balance-current-only`, `balance-no-differences` | `balance-equal` | B |
+| Exactly one distinct explanation; duplicate observations do not create ambiguity | `balance-ambiguous-reasons`, `balance-same-reason-twice`, `balance-missing-observation` | `balance-single-reason` | B |
+| Loans require a transaction id | `balance-loan-reason`, `balance-null-loan-id` | `balance-loan-id` | B |
+| Channel explanation replaces loan | `balance-channel-overrides-loan` | `balance-channel-precedence` | B |
+| Only positive suspense replaces earlier reasons | `balance-suspense--1`, `balance-suspense-0`, `balance-suspense-1` | `balance-suspense-zero`, `balance-suspense-positive` | B |
+| Only identified source legs explain suspense | `balance-suspense-1` (distinct source/destination ids and a null source id) | `balance-source-role` | B |
+| Balance diagnostics sort the canonical/current union | `balance-sorted-union` | `balance-order` | B |
+| Sources sort by transaction id | `multiple-sources-sort-by-id` | `review-source-order` | G |
+| Destinations sort by wallet id | `multiple-destinations-sort-by-wallet` | `review-destination-order` | G |
+| Later ambiguity invalidates earlier destinations | `ambiguity-discards-earlier-destination` | `review-ambiguity-discards-prefix` | G |
+| Missing/contradictory scope cannot acquire a default | `contradictory-graph-scope`, `missing-graph-scope` | `review-missing-scope` | G |
+| Optional regime, flows and nonempty pool | `audit-<book>-at_regime-*`, `audit-<book>-regime_flows-*`, `audit-<book>-at_pool-*` | `audit-regime`, `audit-flows`, `audit-pool` | A |
+| Optional nonempty transfer group | `audit-<book>-ungrouped`, `render-<book>` | `audit-group` | A |
+| Requested pair must exist; exact tuple refusal | `audit-<book>-missing-pair` | `audit-pair-lookup`, `audit-pair-refusal` | A |
+| Both audit wallets must exist | `audit-<book>-missing-out-wallet`, `audit-<book>-missing-in-wallet` | `audit-source-lookup`, `audit-destination-lookup` | A |
+| Transfer direction chooses row, wallet and sign | `render-<book>` | `transfer-leg-direction` | A |
+| Pricing and hold enrichment follow template, independently of reason; plain/partner preserve detail | `quarantine-template-{pricing_review,hold,plain,partner_leg}` | `quarantine-pricing-template`, `quarantine-hold-template` | A |
+| Every supported privacy boundary admits enrichment | `privacy-boundary-{coinjoin,collaborative,payjoin,payment-in-coinjoin,sweep}`; unknown/empty/null decline it | `privacy-boundary-<kind>` (five recipes) | A |
+| Every historical likely-CoinJoin key participates | `privacy-bool-<key>-True`; false/empty/null witnesses take the complementary path | `privacy-key-<key>` (five recipes) | A |
+| Every accepted boolean text participates | `privacy-bool-<key>-{'1','true','yes','on'}`; `'false'` declines it | `privacy-bool-{1,true,yes,on}` | A |
+| Privacy normalization follows Python whitespace and case | control-whitespace `privacy-boundary-*` and `privacy-bool-*` | `privacy-boundary-python-strip`, `privacy-bool-python-strip` | A |
+| Raw mapping and JSON text both admit facts; malformed/nonmapping/absent payloads yield empty facts | `privacy-raw-{mapping,malformed,empty,null,list}` and `privacy-boundary-payjoin` | `privacy-raw-mapping` | A |
+| Falsey privacy source becomes empty text | `privacy-raw-falsey-source` | `privacy-source-fallback` | A |
+| Enrichment overwrites existing keys and inserts absent keys | `privacy-boundary-payjoin`, `quarantine-template-pricing_review`, `privacy-raw-mapping` | `enrichment-overwrite`, `enrichment-insert` | A |
+| Both income categories map to Kennzahl 172 | `category-<book>-{income_general,income_capital_yield}` | `category-{income_general,income_capital_yield}` | A |
+| Absent category omits facts; unknown category has null Kennzahl | `category-<book>-{None,unknown}` | `category-null`, `category-unknown` | A |
+| Unknown holding labels are skipped; assets retain insertion order | `holding-order-labels-and-rounding` in `render.json` | `holdings-unknown-wallet`, `holdings-asset-order` | L |
+| Duplicate labels use the last wallet reference | `holding-order-labels-and-rounding`, `head-cache-same-id` in `render.json` | `wallet-label-last` | L |
+| Null and empty labels never enter the reference map | `holdings-skips-label-None`, `holdings-skips-label-''` | `wallet-label-null`, `wallet-label-empty` | A |
+| Payout metadata requires its own id and source anchor | `payout-missing-id`, `payout-missing-anchor` in `render.json` | `payout-id`, `payout-anchor` | V |
+| Only outbound projected slices supply payout fallbacks | `payout-source-direction-{outbound,inbound}` | `payout-outbound` | A |
+| Empty payout input returns empty metadata | `payout-amount-filter` and the nonempty payout families in `render.json` | `payout-empty` | V |
+| Every mapped engine exception family and unknown family preserves its wrapper | `refusal-prepare-<family>` in `render.json` | `error-family-{ValueError,TypeError,RuntimeError,BuiltinValueError,AppError,InvalidOperation,DivisionByZero,Overflow,unknown}` | E |
+| Every stage preserves its wrapper, prefix, cause and code; unknown stage refuses | `refusal-<stage>-<family>` in `render.json` | `error-stage-{request,unsupported,validate,compute_multi,compute,prepare,classify,unknown}` | E |
+
+`<book>` denotes both `generic-ledger-fifo` and `at-ledger-fifo`. The table's
+parameter families are expanded into individual immutable cases and recipes;
+each recipe names its test in `branch_mutations.json`.
+
+The remaining renderer decisions already have Python-derived witnesses in
+`render.json`, `render-legacy-floats.json`, `render-response-refusals.json` and
+the msat fixtures. This inventory records their existing mutation/test mapping
+so they are not silently excluded from the branch audit. These inherited
+`JR-` recipes are kept in `scripts/mutations.json`; names below omit `JR-`.
+
+| Remaining decision family | Existing Python witness | Mutation family | Named test |
+| --- | --- | --- | --- |
+| Acquisitions, realized events, income/lot/override fragments and provenance | `generic-ledger-fifo`, `generic-income-kinds`, `at-overrides-fifo`, `at-ledger-fifo` | `basis-{income,lot,override}`, `source-{id,spot,fee}`, `fragment-proceeds`, `anchor`, `unit-cost`, `disposal-fiat` | L |
+| Gain, loss and Alt Kennzahl; summary term | `at-seed-*`, `at-alt-swap`, `generic-holding-period-*-fifo` | `kennzahl-{gain,loss,old}`, `summary-term`, `summary-basis` | L |
+| Source-cache hit and miss for every compared operand and exact representation; wallet head identity | `source-cache-*`, `head-cache-*` | `source-slot`, `source-cache-*`, `head-wallet-identity` | L |
+| Borrowed original pricing versus carried replacement; carry row admission and float conversion | `carry-*`, `source-cache-*`, `carry-rate-*` in the legacy-float corpus | `carry-{slot,quality,method,python-float,float-error}`, `pricing-{original-identity,borrowed-values,owned-values}` | L; `legacy_audit_and_carry_floats_match_python` |
+| Timestamp fast path, cached date, general parser and refusals | `source-timestamp-*` | `utc-{hour,minute,second,date,zone}`, `iso-unhashable` | L |
+| Method normalization and fixed-point/msat fast, wide and fallback paths | `method-stringification-*`; Python msat/fixed-value vectors | `method`, `method-python-strip`, `fixed-*`, `machine-*`, `round-half-up`, `sub-msat`, `decimal-context`, `signed-msat`, `fragment-msat-wire` | L; `fixed_point_text_matches_decimal_formatting`; `msat_conversion_matches_python_at_rounding_and_width_boundaries` |
+| Holdings insert versus accumulate, numeric key equivalence and unhashable keys | `holding-order-labels-and-rounding`, `holding-key-*` | `holdings-add`, `holding-{bool-key,float-key,unhashable}` | L; V |
+| Detail scalar/list/dict recursion, typed float conversion and canonical refusal | `detail-template-*`, `detail-float-*` | `quarantine-{reason,sort}`, `detail-{overflow,invalid-decimal}` | L; V |
+| Compatibility payout unique/absent/ambiguous sources, asset/amount filters and zero fallback | `payout-{missing-source,ambiguous-source,asset-filter,asset-before-amount,amount-filter,zero-fallback,negative-subunit}` | `payout-{unique-source,asset-filter,amount-filter,payout-amount}`, `int-*` | V |
+| Audit optional spot, float signs and overflow | `audit-float-*`, `audit-only-*` in the legacy-float corpus | `audit-native-*`, `audit-nonfinite-serialization`, `transfer-{sign,nonfinite-sign,nonfinite-scalar}` | L; `legacy_audit_and_carry_floats_match_python` |
+| Quantity small/wide addition, wallet-only postings, observation/reason join and falsey current keys | `balance-wallet-only`, `balance-wide-*`, `balance-missing-observation`, existing joins fixtures | `balance-{small-add,wide-add,wallet-kind,reason,reason-lookup,current-key}` | `balance_join_matches_existing_comparator_and_promotes_before_overflow`; `balance_current_keys_preserve_python_stringification` |
+| Empty/nonpairable reviews, inbound coercion before source selection, physical/literal groups, exact preference and review projection | `literal-*`, `graph-proof-*`, `ownership-inbound-*`, new graph cases above | `review-{pairable-early,pairable-filter,physical-group,legacy-group,prefer-exact,kind,fee,confidence}`, `legacy-identity`, `owned-amount`, `ownership-inbound-refusal` | `ownership_reviews_and_reconciliations_match_python`; V |
+| Recursive reconciliation dataclass projection | `reconciliation`, `residual-suspense` | `native-asdict` | `ownership_reviews_and_reconciliations_match_python` |
+| Error wrapper code and cause retention | `refusal-<stage>-<family>` | `refusal-{code,cause,wrapper}` | E |
+| Ordered response refusal paths and entry-head admission | all 550 refusal cases; `entry-profile-missing-workspace_id`, `entry-wallet-id-*` | `response-*`, `entry-{key-hash,refusal-uuid}`, `balance-suspense-refusal`, `summary-nonfinite-tag` | `malformed_response_refusals_consume_exact_uuid_tapes`; V |
+
+This inventory audits semantic decisions and their observable successful or
+refused outcomes. It does not claim that duplicated implementation guards
+with no independently observable outcome require invented witnesses. Nor does
+it certify successful lazy decoding, arbitrary raw shapes, lossless scalars,
+surrogates or UUID generation: those remain owned by the parallel fidelity
+branch. Exact UUID consumption for the operands audited here is checked.
+
+The final catalog contains **128 branch recipes**. All are killed by their
+named tests after a passing baseline. The full source-bound run also kills
+116 of the 117 inherited renderer recipes. The remaining inherited recipe,
+`JR-source-cache-fee-representation`, initially fails to compile: an earlier
+optimization made both fee operands borrowed, while the recipe still compares
+`cached.fee == *fee`. Its one-line repair compares `cached.fee == fee`, retaining
+the intended numeric-equality mutation. A fresh focused baseline passes and
+`ledger_rendering_matches_python` kills the corrected recipe. Thus **all 245
+current recipes have named kills** across those two source-identical runs;
+the compiler failure is excluded from the evidence.
+
+The discarded discovery run exposed four survivors: optional audit regime,
+flows, pool and group. These fields do not appear in the final `build()` state,
+so whole-state comparison alone cannot test them. Capturing Python's actual
+intermediate audit rows closes that gap. A malformed privacy-source recipe in
+that discovery run is repaired as well. The accepted full run uses an empty
+build tree and fresh source timestamps; all 128 branch recipes compile and
+are killed, including those four audit recipes. The focused inherited-recipe
+rerun likewise starts with an empty tree. Each summary binds its exact recipe,
+source, test and fixture bytes and checks for original-worktree drift afterward.
+
+Final verification passes **42 all-feature release journal tests**, including
+all 383 original cases, 39 carry/float cases, 550 response refusals and 234
+branch witnesses. All **eight Python oracle/capture tests** pass. Scoped
+all-target/all-feature release clippy for custody and journals passes with
+`-D warnings`; workspace formatting passes. The required classifier update
+registers the two reviewed Python branch tests and updates the inventory counts.
+The required CI preflight passes all **57 tests** after that update.
+
+Local evidence is retained under `target/r4-render-audit/`.
+`full-mutations.{json,log}` records the 244 accepted kills and excluded compile
+failure; `fee-recheck-mutations.{json,log}` records the corrected recipe's passing
+baseline and kill. `verification-index.json` validates and binds all 245 named
+kills to current recipe, source, test and fixture digests, records the check
+logs, and proves the three inherited render corpora are byte-identical to
+`de05eaa90`. Disposable mutation source, mutation build, verification build and
+test-data trees are deleted after summarizing. No background job remains.
+
+The branch audit is complete for this local source. **R4-11 remains unaccepted**
+pending the separately owned fidelity branch, final integrated persistence and
+custody campaigns, generated inputs, census/shadow recordings, repository gate,
+typed integration and final CPU certification. This branch performs no timing
+campaign or optimization and does not enable native production accounting.
