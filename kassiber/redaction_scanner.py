@@ -293,13 +293,12 @@ def redact_url_credentials(text: str) -> str:
         end = min(token_end, matches[index + 1].start() if index + 1 < len(matches) else len(view))
         last_at = view.rfind("@", start, end)
         if last_at < 0:
-            # A slash inside a nonnumeric password is ambiguous. Carry the
-            # start to the next bounded candidate, without rescanning a suffix.
+            # A colon prefix may be userinfo, including an empty or numeric
+            # password followed by a nested scheme. Carry its start without
+            # rescanning the suffix or excluding numeric credentials as ports.
             prefix = view[start:end].split("/", 1)[0]
-            if ":" in prefix:
-                password = prefix.split(":", 1)[1]
-                if password and not re.fullmatch(r"[0-9]+", password) and pending < 0:
-                    pending = start
+            if ":" in prefix and pending < 0:
+                pending = start
             continue
         start = pending if pending >= 0 else start
         userinfo = view[start:last_at]
