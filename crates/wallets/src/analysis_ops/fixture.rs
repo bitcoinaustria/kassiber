@@ -4,6 +4,22 @@ use kassiber_envelope::{build_error_envelope, success};
 /// Keys an in-memory SQLCipher book so watch operations see an encrypted database.
 pub const WATCH_KEY: &str = "PRAGMA key='analysis-watch-fixture'";
 
+/// `2026-01-01T00:00:00Z`, the fixture's default wall clock.
+pub const EPOCH: i64 = 1_767_225_600;
+
+pub struct FixedRuntime {
+    pub epoch: i64,
+    pub offline: bool,
+}
+impl Runtime for FixedRuntime {
+    fn epoch(&mut self) -> i64 {
+        self.epoch
+    }
+    fn offline(&self) -> bool {
+        self.offline
+    }
+}
+
 #[derive(Default)]
 pub struct FixedSources {
     counter: u64,
@@ -56,6 +72,13 @@ pub fn evaluate(case: &Value, conn: &Connection) -> Result<Value> {
                 operation,
                 field(action, "args"),
                 &mut sources,
+                &mut FixedRuntime {
+                    epoch: match field(action, "epoch") {
+                        Value::Int(n) => i64::try_from(n.clone()).unwrap(),
+                        _ => EPOCH,
+                    },
+                    offline: truthy(field(case, "offline")),
+                },
             ) {
                 Ok(result) => {
                     if !truthy(field(case, "caller_owned"))

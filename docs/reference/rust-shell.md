@@ -116,7 +116,8 @@ each family registers through its own CLI
 module. The [chain-analysis mutation checkpoint](#chain-analysis-local-mutations-r5-partial)
 adds seven local label, case and dataset lifecycle leaves, and the
 [evidence-watch checkpoint](#chain-analysis-evidence-watches-r5-partial) adds
-all eight `watches` leaves. Every other leaf parses exactly as in Python and then fails
+all eight `watches` leaves and the [source-grant checkpoint](#chain-analysis-source-grants-r5-partial)
+all five `sources` leaves. Every other leaf parses exactly as in Python and then fails
 `not_implemented`
 (`details.component` `cli`, `details.command` its dotted path), before any
 project is read or created. Nothing falls back to Python in the product.
@@ -15234,3 +15235,43 @@ killed.
 | **Total** | **40** | **26** |
 
 Counts are totals across offline off/on with zero Python fallbacks.
+
+## Chain-analysis source grants (R5, partial)
+
+`kassiber-wallets::analysis_ops::sources` ports `chain_analysis_backfill`'s
+`sources.plan`, `authorize`, `list`, `revoke` and `run`; CLI registrations rise
+from 169 to 174 and five daemon kinds are appended. None of these leaves
+contacts a source. A plan binds the book identity, the bound domain and a
+fingerprint of the saved Bitcoin Core row: its `updated_at` revision and a
+routing identity of scheme, host, port, path, proxy route, certificate,
+`insecure` and timeout, parsed like Python's `urlsplit` and never including
+credentials. Authorization requires a keyed SQLCipher book and the unchanged
+reviewed plan; it records the lifetime quota and expiry. `sources.run` only
+queues the next run after the same revocation, expiry, book, domain and source
+checks, and refuses while offline mode is on. Wall-clock seconds and the
+offline preference come from an explicit `Runtime` (test builds accept
+`KASSIBER_RUST_TEST_ANALYSIS_EPOCH`).
+
+`generate_analysis_grants.py` records eight unchanged-Python scenarios: 63 plan
+argument, bound, routing and backend refusals, an unbound book, plaintext
+refusal, the full grant lifecycle with expiry boundary and source/book/domain
+changes, offline refusal, a removed source, a foreign book and caller rollback,
+each with all 112 tables. `tests/test_rust_analysis_grants.py` replays them
+natively with strict no-consent guards and offline off/on, on SQLCipher DELETE
+and WAL books, and compares whole-process CLI and daemon bytes on an encrypted
+book with the offline preference off and on. Eight named mutations are killed.
+Python daemon errors for non-`AppError` exceptions carry a traceback in
+`debug`; the native daemon emits `null`, so that path is compared through the
+CLI and corpus only.
+
+| Operation (CLI `chain-analysis.`, daemon `ui.chain_analysis.`) | CLI invocations | Daemon requests |
+| --- | ---: | ---: |
+| `sources.plan` | 6 | 4 |
+| `sources.authorize` | 6 | 4 |
+| `sources.list` | 8 | 4 |
+| `sources.revoke` | 4 | 2 |
+| `sources.run` | 6 | 4 |
+| **Total** | **30** | **18** |
+
+The background source runner that performs the authorized Bitcoin Core block
+and subject reads is not yet ported.

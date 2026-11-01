@@ -680,8 +680,11 @@ registers them; exit-tax preserves its reference no-registration boundary.
 - [x] Port all eight chain-analysis `watches` commands and daemon kinds with
   CLI/daemon byte parity on encrypted books, all-112-table checks and named
   mutations; see the [watch checkpoint](docs/reference/rust-shell.md#chain-analysis-evidence-watches-r5-partial).
+- [x] Port the five chain-analysis `sources` commands and daemon kinds (plan,
+  authorize, list, revoke, queue) with byte parity, all-112-table checks and
+  named mutations; see the [source-grant checkpoint](docs/reference/rust-shell.md#chain-analysis-source-grants-r5-partial).
 - [ ] Finish the chain-analysis operations assignment: the background watch
-  tick and event delivery, all five source commands, dataset import, acquisition plan/apply,
+  tick, event delivery and authorized source runner, dataset import, acquisition plan/apply,
   matching daemon kinds, dataset import/discard async starts and job cancel.
   Preserve exact-action/once-only consent and source-revision fencing, gated
   egress, offline refusals and revocation/cancellation with loopback tests.

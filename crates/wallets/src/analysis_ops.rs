@@ -14,11 +14,38 @@ mod datasets;
 #[cfg(any(test, feature = "test-harness"))]
 pub mod fixture;
 mod labels;
+mod routing;
+mod sources;
 mod watches;
 
 pub struct Scope<'a> {
     pub workspace_id: &'a str,
     pub profile_id: &'a str,
+}
+
+/// Facts Python reads ambiently: wall-clock seconds, the offline preference
+/// and a caller's cancellation. None of them grants network authority.
+pub trait Runtime {
+    fn epoch(&mut self) -> i64;
+    fn offline(&self) -> bool;
+    fn cancelled(&self) -> bool {
+        false
+    }
+}
+
+/// Wall clock with a fail-closed offline reading.
+pub struct SystemRuntime {
+    pub offline: bool,
+}
+impl Runtime for SystemRuntime {
+    fn epoch(&mut self) -> i64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs() as i64)
+    }
+    fn offline(&self) -> bool {
+        self.offline
+    }
 }
 
 pub fn execute(
@@ -27,7 +54,14 @@ pub fn execute(
     operation: &str,
     args: &Value,
 ) -> Result<Value> {
-    execute_with_sources(conn, scope, operation, args, &mut SystemSources::default())
+    execute_with_sources(
+        conn,
+        scope,
+        operation,
+        args,
+        &mut SystemSources::default(),
+        &mut SystemRuntime { offline: true },
+    )
 }
 
 pub fn execute_with_sources(
@@ -36,6 +70,7 @@ pub fn execute_with_sources(
     operation: &str,
     args: &Value,
     sources: &mut dyn Sources,
+    runtime: &mut dyn Runtime,
 ) -> Result<Value> {
     let mut args = match args {
         Value::Null => dict::<&str>([]),
@@ -76,6 +111,10 @@ pub fn execute_with_sources(
         | "watches.acknowledge"
         | "watches.evaluate" => {
             watches::dispatch(conn, scope.profile_id, &operation[8..], &args, sources)
+        }
+        "sources.plan" | "sources.authorize" | "sources.list" | "sources.revoke"
+        | "sources.run" => {
+            sources::dispatch(conn, scope.profile_id, operation, &args, sources, runtime)
         }
         _ => Err(AppError::new(
             "not_implemented",
@@ -143,6 +182,14 @@ fn canonical(value: &Value) -> Result<String> {
         &Options::new().sort_keys(true).compact().allow_nan(false),
     )
     .map_err(|error| AppError::new("internal_error", error.to_string()))
+}
+
+fn digest(value: &Value) -> Result<String> {
+    use sha2::{Digest, Sha256};
+    Ok(Sha256::digest(canonical(value)?.as_bytes())
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect())
 }
 
 fn sql(value: &Value, index: usize) -> Result<Sql> {

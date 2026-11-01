@@ -510,14 +510,6 @@ fn observe(
     ))
 }
 
-fn digest(value: &Value) -> Result<String> {
-    use sha2::{Digest, Sha256};
-    Ok(Sha256::digest(canonical(value)?.as_bytes())
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect())
-}
-
 fn preview(
     conn: &Connection,
     profile: &str,

@@ -247,6 +247,11 @@ pub const IMPLEMENTED: &[&str] = &[
     "chain-analysis.watches.inbox",
     "chain-analysis.watches.acknowledge",
     "chain-analysis.watches.evaluate",
+    "chain-analysis.sources.plan",
+    "chain-analysis.sources.authorize",
+    "chain-analysis.sources.list",
+    "chain-analysis.sources.revoke",
+    "chain-analysis.sources.run",
 ];
 
 /// `_NO_BOOTSTRAP_DATABASE_PREFIXES`.

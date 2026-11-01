@@ -534,3 +534,8 @@ REVIEWS["tests/test_rust_analysis_watches.py"] = {"*": {
     "disposition": "oracle", "group": "chain-sync",
     "reason": "compares all eight native evidence-watch CLI/daemon routes with unchanged Python bytes and all 112 tables on keyed SQLCipher books; covers saved-report impacts, encryption refusal, SQLCipher DELETE/WAL rollback, named mutations, the retained acknowledgement-transaction reference quirk and zero-fallback no-consent processes with offline mode off/on; the background watch tick remains unported",
 }}
+
+REVIEWS["tests/test_rust_analysis_grants.py"] = {"*": {
+    "disposition": "oracle", "group": "chain-sync",
+    "reason": "compares all five native recurring-acquisition source CLI/daemon routes with unchanged Python bytes and all 112 tables; covers plan identity and routing fingerprints, encryption, exact-plan authorization, revision, expiry, source/book/domain fences, offline refusal, SQLCipher DELETE/WAL rollback, named mutations and zero-fallback processes; no source is contacted and the background runner remains unported",
+}}

@@ -19,6 +19,11 @@ pub const COMMANDS: &[&str] = &[
     "chain-analysis.watches.inbox",
     "chain-analysis.watches.acknowledge",
     "chain-analysis.watches.evaluate",
+    "chain-analysis.sources.plan",
+    "chain-analysis.sources.authorize",
+    "chain-analysis.sources.list",
+    "chain-analysis.sources.revoke",
+    "chain-analysis.sources.run",
 ];
 
 fn document(raw: &str) -> Result<Value, AppError> {

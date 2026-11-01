@@ -4448,3 +4448,12 @@ pins 18 unchanged-Python scenarios with all 112 tables, SQLCipher DELETE/WAL
 disk replay, encrypted-book CLI/daemon parity with offline off/on and nine
 killed mutations. The daemon's background watch tick, sources, dataset import,
 acquisition, async starts and job cancellation remain open.
+
+### R5 chain analysis: source grants (partial)
+
+The five `sources` leaves and daemon kinds now run natively, raising the CLI
+inventory to 174. Plans fingerprint the saved Bitcoin Core route without
+credentials; authorization, revocation, expiry and the queueing refusal while
+offline match Python byte for byte. See the
+[acceptance record](../reference/rust-shell.md#chain-analysis-source-grants-r5-partial).
+The authorized runner that actually reads blocks remains open.

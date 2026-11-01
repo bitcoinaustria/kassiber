@@ -29,6 +29,12 @@ def main():
         for module in [watches, filed_report_chain]:
             stack.enter_context(patch.object(module,'now_iso',return_value=REFERENCE.NOW))
             stack.enter_context(patch.object(module,'uuid',SimpleNamespace(uuid4=source.label_uuid)))
+        from kassiber.core import chain_analysis_backfill as backfill
+        stack.enter_context(patch.object(backfill,'now_iso',return_value=REFERENCE.NOW))
+        stack.enter_context(patch.object(backfill,'uuid',SimpleNamespace(uuid4=source.uuid)))
+        if os.environ.get('KASSIBER_RUST_TEST_ANALYSIS_EPOCH'):
+            epoch = int(os.environ['KASSIBER_RUST_TEST_ANALYSIS_EPOCH'])
+            stack.enter_context(patch.object(backfill,'time',SimpleNamespace(time=lambda: epoch)))
         if os.environ.get('KASSIBER_ANALYSIS_REFERENCE_NO_WATCH_WORKER') == '1':
             # Request/response parity only; the background tick has its own test.
             from kassiber import daemon

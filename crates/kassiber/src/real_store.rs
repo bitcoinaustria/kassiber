@@ -817,6 +817,26 @@ impl kassiber_wallets::publication::wallet::Sources for AnalysisSources {
         self.0.now()
     }
 }
+/// The wall clock and a fresh, fail-closed read of the offline preference.
+struct AnalysisRuntime;
+impl kassiber_wallets::analysis_ops::Runtime for AnalysisRuntime {
+    fn epoch(&mut self) -> i64 {
+        #[cfg(feature = "test-harness")]
+        if let Some(epoch) = std::env::var("KASSIBER_RUST_TEST_ANALYSIS_EPOCH")
+            .ok()
+            .and_then(|value| value.parse().ok())
+        {
+            return epoch;
+        }
+        kassiber_wallets::analysis_ops::SystemRuntime { offline: true }.epoch()
+    }
+    fn offline(&self) -> bool {
+        Context::from_env()
+            .ok()
+            .and_then(|ctx| kassiber_setup::offline::preference_path(&ctx).ok())
+            .is_none_or(|path| kassiber_setup::offline::enabled(&path))
+    }
+}
 impl kassiber_setup::Sources for ReportSources {
     fn uuid(&self, conn: &Connection) -> kassiber_setup::Result<String> {
         kassiber_setup::SystemSources.uuid(conn)
@@ -1274,6 +1294,7 @@ impl Book for RealBook {
             operation,
             args,
             &mut AnalysisSources::default(),
+            &mut AnalysisRuntime,
         )?;
         if kassiber_wallets::analysis_ops::is_write(operation) && !conn.is_autocommit() {
             conn.execute_batch("COMMIT")

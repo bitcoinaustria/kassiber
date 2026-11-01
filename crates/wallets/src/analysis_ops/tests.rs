@@ -104,6 +104,14 @@ fn analysis_watches_match_python_bytes_events_and_all_112_tables() {
 }
 
 #[test]
+fn analysis_source_grants_match_python_bytes_and_all_112_tables() {
+    run_corpus(
+        include_str!("../../tests/data/analysis_grants.json"),
+        "grants",
+    );
+}
+
+#[test]
 fn analysis_history_failure_rolls_back_label_and_import() {
     let conn = Connection::open_in_memory().unwrap();
     conn.execute_batch(include_str!(

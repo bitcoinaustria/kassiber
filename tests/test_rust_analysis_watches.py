@@ -72,7 +72,7 @@ def test_watch_python_reference_dangling_transaction_is_retained():
     assert reproduce() == {'acknowledged_missing': 'not_found', 'in_transaction': True}
 
 
-def books(tmp_path):
+def books(tmp_path, extra=''):
     from kassiber.db import open_db
     from types import SimpleNamespace
     from unittest.mock import patch
@@ -80,6 +80,7 @@ def books(tmp_path):
     conn = open_db(str(roots[0]))
     conn.executescript(OPS.BOOK.read_text())
     conn.executescript(REFERENCE.GRAPH + REFERENCE.CONFIRMED.replace(REFERENCE.BIND, '').replace(REFERENCE.A, CONFIRMED_TX).replace("'0123456789abcdef0123456789abcdef'", "(SELECT value FROM settings WHERE key='database_instance_id')"))
+    conn.executescript(extra)
     with patch.object(OPS.REFERENCE.projection_store, 'now_iso', return_value=OPS.REFERENCE.NOW), patch.object(OPS.REFERENCE.projection_store, 'uuid', SimpleNamespace(uuid4=lambda: SimpleNamespace(hex='0123456789abcdef0123456789abcdef'))):
         OPS.REFERENCE.run_analysis(conn, 'p', {})
     conn.commit()

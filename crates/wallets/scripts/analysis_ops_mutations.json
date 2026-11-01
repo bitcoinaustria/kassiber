@@ -198,5 +198,85 @@
       "analysis_watches_match_python_bytes_events_and_all_112_tables"
     ],
     "rule": "A reversed confirmation marks dependent saved reports uncertain."
+  },
+  {
+    "id": "analysis-grant-plan-fingerprint",
+    "file": "crates/wallets/src/analysis_ops/sources.rs",
+    "find": "        s(fingerprint.as_str()),\n        result.clone(),",
+    "replace": "        s(\"\"),\n        result.clone(),",
+    "expect_failing": [
+      "analysis_source_grants_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "A plan identity binds the source configuration fingerprint."
+  },
+  {
+    "id": "analysis-grant-authorize-unchanged",
+    "file": "crates/wallets/src/analysis_ops/sources.rs",
+    "find": "if canonical(submitted)? != canonical(&expected)? {",
+    "replace": "if false {",
+    "expect_failing": [
+      "analysis_source_grants_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Authorization stores only the unchanged reviewed plan."
+  },
+  {
+    "id": "analysis-grant-revoke-revision",
+    "file": "crates/wallets/src/analysis_ops/sources.rs",
+    "find": "            return Err(stale(\"Source authorization changed\"));",
+    "replace": "            let _ = stale(\"Source authorization changed\");",
+    "expect_failing": [
+      "analysis_source_grants_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Revocation binds the grant's current integer revision."
+  },
+  {
+    "id": "analysis-grant-expiry-boundary",
+    "file": "crates/wallets/src/analysis_ops/sources.rs",
+    "find": "expires <= runtime.epoch()",
+    "replace": "expires < runtime.epoch()",
+    "expect_failing": [
+      "analysis_source_grants_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "A grant expires exactly at its recorded deadline."
+  },
+  {
+    "id": "analysis-grant-source-fingerprint",
+    "file": "crates/wallets/src/analysis_ops/sources.rs",
+    "find": "    if field(&live, \"source_fingerprint\") != &s(fingerprint.as_str()) {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "analysis_source_grants_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "A changed source configuration invalidates the grant."
+  },
+  {
+    "id": "analysis-grant-offline-run",
+    "file": "crates/wallets/src/analysis_ops/sources.rs",
+    "find": "    if runtime.offline() {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "analysis_source_grants_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Offline mode refuses queueing acquisition instead of waiting silently."
+  },
+  {
+    "id": "analysis-grant-routing-proxy",
+    "file": "crates/wallets/src/analysis_ops/routing.rs",
+    "find": "            backend_value(backend, &[\"tor_proxy\", \"proxy\"]).as_deref(),\n            false,",
+    "replace": "            None,\n            false,",
+    "expect_failing": [
+      "analysis_source_grants_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "The plan identity binds the proxy route."
+  },
+  {
+    "id": "analysis-grant-unhashable",
+    "file": "crates/wallets/src/analysis_ops/sources.rs",
+    "find": "        Value::List(_) | Value::Dict(_) => Err(AppError::new(",
+    "replace": "        Value::List(_) | Value::Dict(_) if false => Err(AppError::new(",
+    "expect_failing": [
+      "analysis_source_grants_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Container choices fail like Python set membership."
   }
 ]
