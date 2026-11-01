@@ -131,7 +131,7 @@ at a time. Task-owned build trees must be summarized and removed at completion.
 | Locked environment | Passed, offline, CPython 3.11.17 |
 | Workspace formatting | Passed after compatibility fixes |
 | All-target workspace clippy `-D warnings` | Passed with journal harness/timing, binary, chain/wallet harnesses and network observer features |
-| Workspace tests | Ordered stack before the owned-converter fix: 1,889 passed across 143 harness results; zero failed or ignored. Fresh post-fix workspace run pending; the new focused regression passes |
+| Workspace tests | Post-fix stack at `90d84e390`: 1,890 passed across 143 harness results; zero failed or ignored, with the combined harness/observer features |
 | Binary / network-observer harness tests | 86 passed across nine harness results; zero failed or ignored |
 | Mutation catalog anchors | All 6,543 integrated recipes across 42 catalogs apply with zero problems; the owned-converter fix adds one recipe (6,544 total), with final applicability and full kills pending |
 | Test classification | Regenerated 6,022 definitions; final contract check/preflight pending |
@@ -141,14 +141,11 @@ at a time. Task-owned build trees must be summarized and removed at completion.
 | Full mutation kills in resumable shards | Pending fresh run |
 | Combined journals process / custody CPU | Pending fresh run |
 
-The saved pre-fix workspace run uses the combined harness and observer features and
-passes all 1,889 tests in one uninterrupted run. The owned-converter correction requires a fresh workspace result. The earlier run and its 73
+The fresh post-fix workspace run uses the combined harness and observer features and passes all 1,890 tests in one uninterrupted run. The earlier 1,889-test result remains a historical receipt. The earlier run and its 73
 initial failures/rechecks remain historical receipts, rather than the final
 coverage claim. The all-target feature check had also exposed a freshness
 fixture with obsolete `AppError` fields; the fixture is adapted and clippy passes.
-After saving the exact log hash and counts, 221 completed test executables were
-removed (4.988 GB unlinked), bringing the verification build tree to 7.3 GiB.
-Rebuilt debug fixtures, the hybrid candidate and optimized journal probes pass.
+After saving the exact post-fix log hash and counts, completed test executables were removed (2.537 GB unlinked), bringing the verification build tree to 7.6 GiB. Debug fixtures, the hybrid candidate, optimized journal probes and the Python binding are rebuilt from the corrected source.
 The custody/render receipts above precede the late mixed-revision guard; the
 generated snapshots do not exercise SQLite revision loading. The 274-case loader/BLOB suite reruns the affected boundary; the owned-converter fix also requires refreshed custody/render campaigns and native builds. The owner will run full census and shadow shards afterwards; focused lanes
 remain part of this integration's required work.
