@@ -42,7 +42,10 @@ category overrides, splitting mixed regimes into separate rows. Books with
 disposals but no fees are included. The migration retains observations, custody
 evidence, journal rows and saved/filed artifacts; only processing replaces the
 derived projection. Generic books receive no migration input-version bump.
-The global semantics check also refuses older stamped builds; an audit alone
+Every processed book, including generic books, requires one rebuild after
+upgrade because the global calculation semantics version increases to 2.
+The targeted Austrian migration and the global version check are separate:
+the latter also refuses older stamped builds after migration; an audit alone
 cannot make journals rebuilt by an older writer fresh.
 
 ## Dependency-origin correction
