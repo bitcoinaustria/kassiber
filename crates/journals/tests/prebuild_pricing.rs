@@ -183,3 +183,26 @@ fn prebuild_pricing_legacy_quantity_storage_and_lazy_refusals() {
         "empty-rate-and-value",
     ]);
 }
+
+#[test]
+fn prebuild_pricing_binary_numeric_refusals_and_special_values() {
+    check(&[
+        "binary-exact-cache",
+        "binary-empty-cache",
+        "binary-single-quote-cache",
+        "binary-all-bytes-cache",
+        "binary-numeric-cache",
+        "binary-exact-rate",
+        "binary-exact-value",
+        "binary-numeric-rate",
+        "binary-numeric-value",
+        "binary-quantity",
+        "binary-cache-ignored",
+        "positive-infinity",
+        "negative-infinity",
+        "signaling-nan-without-quantity",
+        "positive-infinite-real-cache",
+        "negative-infinite-real-cache",
+        "infinite-real-quantity",
+    ]);
+}

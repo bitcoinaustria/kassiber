@@ -216,6 +216,31 @@ fn date_error(iso: &str) -> Option<String> {
     reason
 }
 
+fn bytes_repr(bytes: &[u8]) -> String {
+    let quote = if bytes.contains(&b'\'') && !bytes.contains(&b'"') {
+        b'"'
+    } else {
+        b'\''
+    };
+    let mut text = format!("b{}", char::from(quote));
+    for &byte in bytes {
+        match byte {
+            b'\\' => text.push_str("\\\\"),
+            b'\t' => text.push_str("\\t"),
+            b'\n' => text.push_str("\\n"),
+            b'\r' => text.push_str("\\r"),
+            _ if byte == quote => {
+                text.push('\\');
+                text.push(char::from(byte));
+            }
+            32..=126 => text.push(char::from(byte)),
+            _ => text.push_str(&format!("\\x{byte:02x}")),
+        }
+    }
+    text.push(char::from(quote));
+    text
+}
+
 fn first(values: &[&Sql]) -> Result<Option<Price>, Refusal> {
     for value in values {
         let raw = match value {
@@ -224,12 +249,7 @@ fn first(values: &[&Sql]) -> Result<Option<Price>, Refusal> {
             Sql::Text(text) => text.clone(),
             Sql::Integer(n) => n.to_string(),
             Sql::Real(n) => kassiber_pyjson::float_repr(*n),
-            Sql::Blob(_) => {
-                return Err(Refusal::new(
-                    "TypeError",
-                    "binary journal pricing is unsupported",
-                ))
-            }
+            Sql::Blob(bytes) => bytes_repr(bytes),
         };
         return Price::parse(&raw).map(Some);
     }

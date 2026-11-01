@@ -18892,12 +18892,21 @@
     "stale_directory": "A nonempty recording directory is refused"
   },
   "remaining": [
-    "Execute inherited journal (112), transfer/daemon (280) and custody (2327) mutation gates; finish uncovered-branch audit",
-    "Whole-stage generic/multi-wallet 20k process CPU profiling, cache optimization and comparison against 0.03 seconds with complete cost breakdown if missed",
-    "Final acceptance record after all required gates pass"
+    "Complete the uncovered-region/branch witness and disposition audit",
+    "Execute inherited journal (112), transfer/daemon (280) and custody (2327) mutation catalogues",
+    "Profile whole-stage 20k process CPU, optimize caches, compare with 0.03 seconds and record a breakdown if missed",
+    "Bind final whole-campaign gates to the final implementation and write the acceptance record"
   ],
   "schema": "kassiber.r4-prebuild-campaign-checkpoint.v2",
   "status": "Generated, recorded, legacy/refusal and prebuild mutation/census checkpoints; R4-10 remains unaccepted",
+  "uncovered_numeric_followup": {
+    "base_commit": "b7cf849f9",
+    "file_comparisons": 530,
+    "new_mutations_killed": 19,
+    "python_reference_unchanged": true,
+    "record": "docs/reference/r4-prebuild-branch-results.json",
+    "status": "Verified binary refusal and exact nonfinite REAL dump expansion; full branch/inherited/CPU acceptance is open"
+  },
   "verification": {
     "classifier_update": "passed; two new oracle tests recorded",
     "combined_stage_file_comparisons": 16,

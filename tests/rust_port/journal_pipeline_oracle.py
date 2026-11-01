@@ -14,7 +14,7 @@ from unittest.mock import patch
 from kassiber.cli import handlers
 from kassiber.core import custody_authored_migration as migration
 from tests.rust_port.journal_prebuild_oracle import ROOT, CLOCK, refusal, seed, transaction, rate
-from tests.rust_port.journal_persistence_oracle import dump
+from tests.rust_port.journal_persistence_oracle import decode_scalar, dump
 from tests.rust_port.journal_source_overlap_oracle import vectors as source_vectors
 
 PATH = ROOT / "crates/journals/tests/data/prebuild-pipeline.json"
@@ -32,7 +32,7 @@ def restore(conn, before):
         placeholders = ','.join('?' for _ in data['columns'])
         for row in data['rows']:
             conn.execute(f'INSERT INTO "{table}"({columns}) VALUES({placeholders})',
-                         tuple(bytes.fromhex(v['$bytes']) if isinstance(v, dict) and '$bytes' in v else v for v in row))
+                         tuple(decode_scalar(v) for v in row))
     for _, sql in triggers:
         conn.execute(sql)
     conn.commit()

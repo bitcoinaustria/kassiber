@@ -173,3 +173,9 @@ Python refusal and rolls back the stage; it does not silently become a skipped
 migration. An oversized valid integer becomes the same exact blocking migration
 issue as Python, without a native fixed-width panic. Existing fractional-msat
 truncation is retained only for parity; see the [R4-10 edge evidence](r4-journal-pipeline.md#r4-10-legacy-and-refusal-expansion).
+
+Binary numeric prices retain their stored BLOB class and Python's chained
+decimal refusal during processing, including rollback of earlier pricing writes.
+The private comparison dump preserves infinite REAL bits rather than substituting
+null; this adds no database or product format. See the
+[uncovered numeric paths](r4-journal-pipeline.md#r4-10-uncovered-numeric-paths).

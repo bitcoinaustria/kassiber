@@ -13,7 +13,7 @@ import pytest
 from tests.rust_port.journal_pipeline_oracle import capture
 from tests.rust_port.journal_prebuild_campaign import PATH, frozen, packed
 from tests.rust_port.journal_prebuild_oracle import ROOT, seed, transaction, rate
-from tests.rust_port.journal_persistence_oracle import dump
+from tests.rust_port.journal_persistence_oracle import decode_scalar, dump
 
 
 def test_prebuild_recorder_preserves_pending_caller_writes():
@@ -43,6 +43,33 @@ def test_prebuild_campaign_scenario_vectors_reproduce():
     expected = dict(packed(cases), unrepresentable=rejections)
     assert json.loads(PATH.read_text()) == expected
     assert len({case['name'].split('/')[0] for case in cases}) == 12
+
+
+def test_prebuild_numeric_oracles_reproduce(monkeypatch):
+    from tests.rust_port import journal_pipeline_oracle, journal_prebuild_oracle
+
+    monkeypatch.setattr(sys, 'argv', ['prebuild-oracle'])
+    journal_prebuild_oracle.main()
+    journal_pipeline_oracle.main()
+
+
+def test_prebuild_dumps_round_trip_nonfinite_sqlite_values():
+    source = sqlite3.connect(':memory:')
+    restored = sqlite3.connect(':memory:')
+    try:
+        source.execute('CREATE TABLE samples(amount REAL)')
+        source.executemany('INSERT INTO samples(amount) VALUES(?)',
+                           [(float('inf'),), (float('-inf'),), (None,)])
+        captured = json.loads(json.dumps(dump(source), allow_nan=False))
+        restored.execute('CREATE TABLE samples(amount REAL)')
+        restored.executemany('INSERT INTO samples(rowid,amount) VALUES(?,?)',
+                             [tuple(decode_scalar(v) for v in row) for row in captured['samples']['rows']])
+        assert restored.execute('SELECT typeof(amount),amount FROM samples ORDER BY rowid').fetchall() == [
+            ('real', float('inf')), ('real', float('-inf')), ('null', None),
+        ]
+    finally:
+        source.close()
+        restored.close()
 
 
 @pytest.mark.skipif(sys.platform != 'linux' or os.uname().machine != 'x86_64', reason='native syscall guard requires Linux x86-64')

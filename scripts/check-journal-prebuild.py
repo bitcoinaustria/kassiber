@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from kassiber.cli.handlers import auto_price_transactions_from_rates_cache
 from tests.rust_port.journal_prebuild_oracle import capture, rate, seed, transaction, vectors
-from tests.rust_port.journal_persistence_oracle import dump
+from tests.rust_port.journal_persistence_oracle import decode_scalar, dump
 from tests.rust_port.journal_source_overlap_oracle import vectors as source_vectors
 from tests.rust_port.journal_legacy_refresh_oracle import vectors as legacy_vectors
 from tests.rust_port.journal_pipeline_oracle import vectors as pipeline_vectors
@@ -90,7 +90,7 @@ def parity(binary, root, stage=None):
                 names = ",".join('"' + name + '"' for name in data["columns"])
                 placeholders = ",".join("?" for _ in data["columns"])
                 for row in data["rows"]:
-                    values = [bytes.fromhex(v["$bytes"]) if isinstance(v, dict) and "$bytes" in v else v for v in row]
+                    values = [decode_scalar(v) for v in row]
                     conn.execute(f'INSERT INTO "{table}"({names}) VALUES({placeholders})', values)
             for obj in manifest["objects"]:
                 if obj[0] == "trigger": conn.execute(obj[3])

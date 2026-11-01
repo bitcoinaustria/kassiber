@@ -1,0 +1,2842 @@
+{
+  "base_commit": "b7cf849f9",
+  "coverage": {
+    "after": {
+      "active_bytes_repr_instantiations": [
+        {
+          "calls": 27,
+          "name": "_RNvNtNtCse1XXfkW4ghX_17kassiber_journals8prebuild7pricing10bytes_repr",
+          "regions": 49,
+          "zero_regions": 0
+        }
+      ],
+      "coverage_kind": "LLVM executable regions and lines; stable instrumentation emits zero branch counters, so this is not a branch-completeness claim",
+      "export_sha256": "547b220ae16cb75c159e7e98953d3964ddbacd2e17c762c3cf796ba35e777aaa",
+      "files": [
+        {
+          "path": "crates/journals/src/prebuild.rs",
+          "source_sha256": "40221ca89b394394f4bd7ce90246b26d0a4e6e36899f483b7e1d026d575f68d8",
+          "summary": {
+            "branches": {
+              "count": 0,
+              "covered": 0,
+              "notcovered": 0,
+              "percent": 0
+            },
+            "functions": {
+              "count": 6,
+              "covered": 6,
+              "percent": 100
+            },
+            "instantiations": {
+              "count": 42,
+              "covered": 33,
+              "percent": 78.57142857142857
+            },
+            "lines": {
+              "count": 50,
+              "covered": 50,
+              "percent": 100
+            },
+            "mcdc": {
+              "count": 0,
+              "covered": 0,
+              "notcovered": 0,
+              "percent": 0
+            },
+            "regions": {
+              "count": 63,
+              "covered": 59,
+              "notcovered": 4,
+              "percent": 93.65079365079364
+            }
+          },
+          "zero_count_region_entries": [
+            {
+              "column": 44,
+              "line": 36,
+              "source": "if conn.transaction_state(Some(\"main\"))? != rusqlite::TransactionState::Write {"
+            },
+            {
+              "column": 53,
+              "line": 50,
+              "source": "conn.execute_batch(&format!(\"SAVEPOINT {name}\"))?;"
+            },
+            {
+              "column": 51,
+              "line": 56,
+              "source": "conn.execute_batch(&format!(\"RELEASE {name}\"))?;"
+            }
+          ]
+        },
+        {
+          "path": "crates/journals/src/prebuild/legacy.rs",
+          "source_sha256": "db348d2bfbbec09410747fc586ec7c14ee717e45709d3ca3738da0fc8f2a121a",
+          "summary": {
+            "branches": {
+              "count": 0,
+              "covered": 0,
+              "notcovered": 0,
+              "percent": 0
+            },
+            "functions": {
+              "count": 9,
+              "covered": 5,
+              "percent": 55.55555555555556
+            },
+            "instantiations": {
+              "count": 18,
+              "covered": 5,
+              "percent": 27.77777777777778
+            },
+            "lines": {
+              "count": 80,
+              "covered": 64,
+              "percent": 80
+            },
+            "mcdc": {
+              "count": 0,
+              "covered": 0,
+              "notcovered": 0,
+              "percent": 0
+            },
+            "regions": {
+              "count": 92,
+              "covered": 73,
+              "notcovered": 19,
+              "percent": 79.34782608695652
+            }
+          },
+          "zero_count_region_entries": [
+            {
+              "column": 5,
+              "line": 31,
+              "source": "fn uuid(&self, _: &Connection) -> Result<String, AppError> {"
+            },
+            {
+              "column": 9,
+              "line": 32,
+              "source": "Err(AppError::new("
+            },
+            {
+              "column": 5,
+              "line": 36,
+              "source": "}"
+            },
+            {
+              "column": 32,
+              "line": 53,
+              "source": ".ok_or_else(|| Refusal::new(\"KeyError\", \"workspace_id\"))?,"
+            },
+            {
+              "column": 45,
+              "line": 53,
+              "source": ".ok_or_else(|| Refusal::new(\"KeyError\", \"workspace_id\"))?,"
+            },
+            {
+              "column": 73,
+              "line": 53,
+              "source": ".ok_or_else(|| Refusal::new(\"KeyError\", \"workspace_id\"))?,"
+            },
+            {
+              "column": 32,
+              "line": 56,
+              "source": ".ok_or_else(|| Refusal::new(\"KeyError\", \"id\"))?,"
+            },
+            {
+              "column": 45,
+              "line": 56,
+              "source": ".ok_or_else(|| Refusal::new(\"KeyError\", \"id\"))?,"
+            },
+            {
+              "column": 63,
+              "line": 56,
+              "source": ".ok_or_else(|| Refusal::new(\"KeyError\", \"id\"))?,"
+            },
+            {
+              "column": 45,
+              "line": 76,
+              "source": "\"OperationalError\""
+            },
+            {
+              "column": 33,
+              "line": 81,
+              "source": "e => e.into(),"
+            },
+            {
+              "column": 38,
+              "line": 81,
+              "source": "e => e.into(),"
+            },
+            {
+              "column": 40,
+              "line": 81,
+              "source": "e => e.into(),"
+            },
+            {
+              "column": 14,
+              "line": 90,
+              "source": ")?"
+            },
+            {
+              "column": 28,
+              "line": 93,
+              "source": ".ok_or_else(|| {"
+            },
+            {
+              "column": 17,
+              "line": 94,
+              "source": "Refusal::new("
+            },
+            {
+              "column": 21,
+              "line": 95,
+              "source": "\"RuntimeError\","
+            },
+            {
+              "column": 13,
+              "line": 98,
+              "source": "})?"
+            },
+            {
+              "column": 15,
+              "line": 98,
+              "source": "})?"
+            }
+          ]
+        },
+        {
+          "path": "crates/journals/src/prebuild/overlap.rs",
+          "source_sha256": "2562efc2b1a336834212ae5c33ffc61778dd0ba654568b2698cfc995545d099c",
+          "summary": {
+            "branches": {
+              "count": 0,
+              "covered": 0,
+              "notcovered": 0,
+              "percent": 0
+            },
+            "functions": {
+              "count": 40,
+              "covered": 39,
+              "percent": 97.5
+            },
+            "instantiations": {
+              "count": 140,
+              "covered": 84,
+              "percent": 60
+            },
+            "lines": {
+              "count": 495,
+              "covered": 479,
+              "percent": 96.76767676767678
+            },
+            "mcdc": {
+              "count": 0,
+              "covered": 0,
+              "notcovered": 0,
+              "percent": 0
+            },
+            "regions": {
+              "count": 885,
+              "covered": 839,
+              "notcovered": 46,
+              "percent": 94.80225988700565
+            }
+          },
+          "zero_count_region_entries": [
+            {
+              "column": 21,
+              "line": 25,
+              "source": "&nested[\"scriptpubkey\"]"
+            },
+            {
+              "column": 23,
+              "line": 45,
+              "source": "} else if v.as_number().is_some_and(|n| n.is_i64() || n.is_u64()) {"
+            },
+            {
+              "column": 25,
+              "line": 45,
+              "source": "} else if v.as_number().is_some_and(|n| n.is_i64() || n.is_u64()) {"
+            },
+            {
+              "column": 37,
+              "line": 45,
+              "source": "} else if v.as_number().is_some_and(|n| n.is_i64() || n.is_u64()) {"
+            },
+            {
+              "column": 53,
+              "line": 45,
+              "source": "} else if v.as_number().is_some_and(|n| n.is_i64() || n.is_u64()) {"
+            },
+            {
+              "column": 55,
+              "line": 45,
+              "source": "} else if v.as_number().is_some_and(|n| n.is_i64() || n.is_u64()) {"
+            },
+            {
+              "column": 67,
+              "line": 45,
+              "source": "} else if v.as_number().is_some_and(|n| n.is_i64() || n.is_u64()) {"
+            },
+            {
+              "column": 69,
+              "line": 45,
+              "source": "} else if v.as_number().is_some_and(|n| n.is_i64() || n.is_u64()) {"
+            },
+            {
+              "column": 17,
+              "line": 46,
+              "source": "\"int\""
+            },
+            {
+              "column": 17,
+              "line": 48,
+              "source": "\"float\""
+            },
+            {
+              "column": 13,
+              "line": 164,
+              "source": "continue;"
+            },
+            {
+              "column": 13,
+              "line": 172,
+              "source": "continue;"
+            },
+            {
+              "column": 557,
+              "line": 207,
+              "source": "let reviews = rows(conn, \"SELECT component.id AS component_id,term.legacy_source_id AS review_id,term.term_kind FROM custody_component_legs leg JOIN custody_components component ON component.id=leg.component_id LEFT JOIN custody_component_economic_terms term ON term.component_id=component.id AND (term.source_leg_id=leg.id OR term.target_leg_id=leg.id) WHERE component.profile_id=? AND component.state='active' AND COALESCE(leg.anchor_transaction_id,leg.transaction_id)=? ORDER BY component.created_at,component.id,term.ordinal LIMIT 1\", [profile,tx])?;"
+            },
+            {
+              "column": 46,
+              "line": 209,
+              "source": "let id = if truth(&r[\"review_id\"]) { &r[\"review_id\"] } else { &r[\"component_id\"] };"
+            },
+            {
+              "column": 218,
+              "line": 221,
+              "source": "let tx = rows(conn,\"SELECT t.id,t.wallet_id,t.external_id,t.occurred_at,t.excluded,w.label AS wallet_label FROM transactions t LEFT JOIN wallets w ON w.id=t.wallet_id WHERE t.profile_id=? AND t.id=?\",[profile,tx])?.remove(0);"
+            },
+            {
+              "column": 10,
+              "line": 228,
+              "source": ")?;"
+            },
+            {
+              "column": 179,
+              "line": 229,
+              "source": "let p = rows(conn, \"SELECT workspace_id,journal_input_version,last_processed_input_version,last_processed_at,last_processed_tx_count FROM profiles WHERE id=?\", [profile])?.remove(0);"
+            },
+            {
+              "column": 31,
+              "line": 232,
+              "source": "let field = identity()?;"
+            },
+            {
+              "column": 738,
+              "line": 233,
+              "source": "conn.execute(\"INSERT INTO transaction_edit_events(id,workspace_id,profile_id,transaction_id,wallet_id,transaction_external_id,transaction_occurred_at,source,reason,changed_at,journal_input_version,journal_input_version_after,last_processed_input_version,last_processed_at,last_processed_tx_count) VALUES(?,?,?,?,?,?,?,'cli',?,?,?,?,?,?,?)\",params![id,text(&p[\"workspace_id\"]),profile,text(&tx[\"id\"]),tx[\"wallet_id\"].as_str(),tx[\"external_id\"].as_str(),tx[\"occurred_at\"].as_str(),REASON,at,p[\"journal_input_version\"].as_i64().unwrap_or(0),p[\"journal_input_version\"].as_i64().unwrap_or(0)+1,p[\"last_processed_input_version\"].as_i64().unwrap_or(0),p[\"last_processed_at\"].as_str(),p[\"last_processed_tx_count\"].as_i64().unwrap_or(0)])?;"
+            },
+            {
+              "column": 175,
+              "line": 234,
+              "source": "conn.execute(\"INSERT INTO transaction_edit_fields(id,event_id,field,before_value,after_value,diff_json) VALUES(?,?,'excluded','false','true','{}')\",params![field,id])?;"
+            },
+            {
+              "column": 194,
+              "line": 235,
+              "source": "conn.execute(\"UPDATE profiles SET last_processed_at=NULL,last_processed_tx_count=0,journal_input_version=journal_input_version+1,ownership_review_counts_json=NULL WHERE id=?\",[profile])?;"
+            },
+            {
+              "column": 5,
+              "line": 237,
+              "source": "}"
+            },
+            {
+              "column": 6,
+              "line": 278,
+              "source": ")? {"
+            },
+            {
+              "column": 79,
+              "line": 284,
+              "source": "let (removed, kept): (Vec<_>, Vec<_>) = addresses(&row[\"config_json\"])?"
+            },
+            {
+              "column": 13,
+              "line": 288,
+              "source": "continue;"
+            },
+            {
+              "column": 9,
+              "line": 293,
+              "source": "}"
+            },
+            {
+              "column": 47,
+              "line": 296,
+              "source": "params![sources::stored_config(&c)?, id],"
+            },
+            {
+              "column": 10,
+              "line": 297,
+              "source": ")?;"
+            },
+            {
+              "column": 51,
+              "line": 303,
+              "source": "conn.execute(&sql, params_from_iter(args))?;"
+            },
+            {
+              "column": 105,
+              "line": 309,
+              "source": "updates.push(json!({\"wallet_id\":id,\"wallet\":if truth(&row[\"label\"]) {text(&row[\"label\"])} else {text(&row[\"id\"])},\"addresses_removed\":removed.len(),\"remaining_addresses\":kept.len(),\"deprecated\":kept.is_empty(),\"output_inventory_cleared\":true,\"refresh_checkpoint_reset\":true}));"
+            },
+            {
+              "column": 110,
+              "line": 309,
+              "source": "updates.push(json!({\"wallet_id\":id,\"wallet\":if truth(&row[\"label\"]) {text(&row[\"label\"])} else {text(&row[\"id\"])},\"addresses_removed\":removed.len(),\"remaining_addresses\":kept.len(),\"deprecated\":kept.is_empty(),\"output_inventory_cleared\":true,\"refresh_checkpoint_reset\":true}));"
+            },
+            {
+              "column": 54,
+              "line": 344,
+              "source": "if let Some(c) = conflict(conn, profile, &tx)? {"
+            },
+            {
+              "column": 35,
+              "line": 350,
+              "source": "let idx = index(conn, profile)?;"
+            },
+            {
+              "column": 41,
+              "line": 351,
+              "source": "let p = preview(conn, profile, &idx)?;"
+            },
+            {
+              "column": 45,
+              "line": 366,
+              "source": "let remaining = index(conn, profile)?.overlaps();"
+            },
+            {
+              "column": 38,
+              "line": 380,
+              "source": "let idx = index(conn, profile_id)?;"
+            },
+            {
+              "column": 135,
+              "line": 385,
+              "source": "let mut details = json!({\"overlap_count\":overlap[\"overlap_count\"],\"overlap\":overlap,\"repair_preview\":preview(conn,profile_id,&idx)?});"
+            },
+            {
+              "column": 20,
+              "line": 519,
+              "source": "return Err(Refusal::new("
+            },
+            {
+              "column": 48,
+              "line": 527,
+              "source": ".map(|(key, v)| Ok((key, project(v)?)))"
+            },
+            {
+              "column": 50,
+              "line": 528,
+              "source": ".collect::<Result<Vec<_>, Refusal>>()?;"
+            },
+            {
+              "column": 57,
+              "line": 533,
+              "source": "fields.push((\"source_overlap_repair\", project(v)?));"
+            },
+            {
+              "column": 58,
+              "line": 536,
+              "source": "fields.push((\"source_overlap_warning\", project(v)?));"
+            }
+          ]
+        },
+        {
+          "path": "crates/journals/src/prebuild/pipeline.rs",
+          "source_sha256": "cd84a30fbf91f4e817cb217daf42af5ac5252d85f56de111b45cc2ca4a87bd54",
+          "summary": {
+            "branches": {
+              "count": 0,
+              "covered": 0,
+              "notcovered": 0,
+              "percent": 0
+            },
+            "functions": {
+              "count": 10,
+              "covered": 7,
+              "percent": 70
+            },
+            "instantiations": {
+              "count": 60,
+              "covered": 28,
+              "percent": 46.666666666666664
+            },
+            "lines": {
+              "count": 83,
+              "covered": 79,
+              "percent": 95.18072289156626
+            },
+            "mcdc": {
+              "count": 0,
+              "covered": 0,
+              "notcovered": 0,
+              "percent": 0
+            },
+            "regions": {
+              "count": 110,
+              "covered": 95,
+              "notcovered": 15,
+              "percent": 86.36363636363636
+            }
+          },
+          "zero_count_region_entries": [
+            {
+              "column": 10,
+              "line": 21,
+              "source": ")?;"
+            },
+            {
+              "column": 25,
+              "line": 47,
+              "source": "require_writer(conn)?;"
+            },
+            {
+              "column": 28,
+              "line": 51,
+              "source": ".ok_or_else(|| Refusal::new(\"KeyError\", \"id\"))?;"
+            },
+            {
+              "column": 41,
+              "line": 51,
+              "source": ".ok_or_else(|| Refusal::new(\"KeyError\", \"id\"))?;"
+            },
+            {
+              "column": 59,
+              "line": 51,
+              "source": ".ok_or_else(|| Refusal::new(\"KeyError\", \"id\"))?;"
+            },
+            {
+              "column": 72,
+              "line": 53,
+              "source": "let warning = source_overlap_warning(conn, id, repair.as_ref())?;"
+            },
+            {
+              "column": 25,
+              "line": 73,
+              "source": "require_writer(conn)?;"
+            },
+            {
+              "column": 36,
+              "line": 81,
+              "source": ".ok_or_else(|| Refusal::new(\"KeyError\", \"id\"))?,"
+            },
+            {
+              "column": 49,
+              "line": 81,
+              "source": ".ok_or_else(|| Refusal::new(\"KeyError\", \"id\"))?,"
+            },
+            {
+              "column": 67,
+              "line": 81,
+              "source": ".ok_or_else(|| Refusal::new(\"KeyError\", \"id\"))?,"
+            },
+            {
+              "column": 36,
+              "line": 84,
+              "source": ".ok_or_else(|| Refusal::new(\"KeyError\", \"fiat_currency\"))?,"
+            },
+            {
+              "column": 49,
+              "line": 84,
+              "source": ".ok_or_else(|| Refusal::new(\"KeyError\", \"fiat_currency\"))?,"
+            },
+            {
+              "column": 78,
+              "line": 84,
+              "source": ".ok_or_else(|| Refusal::new(\"KeyError\", \"fiat_currency\"))?,"
+            },
+            {
+              "column": 89,
+              "line": 109,
+              "source": "let prepared = prepare_journals(conn, profile, decimal_context, clock, identity)?;"
+            }
+          ]
+        },
+        {
+          "path": "crates/journals/src/prebuild/pricing.rs",
+          "source_sha256": "de86b8a369da7488b715a88d32b9ca166ec46126e18e5c76c4b2ccdddc68c748",
+          "summary": {
+            "branches": {
+              "count": 0,
+              "covered": 0,
+              "notcovered": 0,
+              "percent": 0
+            },
+            "functions": {
+              "count": 27,
+              "covered": 26,
+              "percent": 96.29629629629629
+            },
+            "instantiations": {
+              "count": 54,
+              "covered": 26,
+              "percent": 48.148148148148145
+            },
+            "lines": {
+              "count": 346,
+              "covered": 328,
+              "percent": 94.79768786127167
+            },
+            "mcdc": {
+              "count": 0,
+              "covered": 0,
+              "notcovered": 0,
+              "percent": 0
+            },
+            "regions": {
+              "count": 685,
+              "covered": 622,
+              "notcovered": 63,
+              "percent": 90.8029197080292
+            }
+          },
+          "zero_count_region_entries": [
+            {
+              "column": 15,
+              "line": 73,
+              "source": "match self {"
+            },
+            {
+              "column": 93,
+              "line": 74,
+              "source": "Self::Finite(d) => Ok(Self::Finite(d.div(quantity, &context).map_err(arithmetic)?)),"
+            },
+            {
+              "column": 27,
+              "line": 75,
+              "source": "Self::Special(text) if text.contains(\"sNaN\") => Err(Refusal::new("
+            },
+            {
+              "column": 36,
+              "line": 75,
+              "source": "Self::Special(text) if text.contains(\"sNaN\") => Err(Refusal::new("
+            },
+            {
+              "column": 41,
+              "line": 75,
+              "source": "Self::Special(text) if text.contains(\"sNaN\") => Err(Refusal::new("
+            },
+            {
+              "column": 56,
+              "line": 75,
+              "source": "Self::Special(text) if text.contains(\"sNaN\") => Err(Refusal::new("
+            },
+            {
+              "column": 61,
+              "line": 75,
+              "source": "Self::Special(text) if text.contains(\"sNaN\") => Err(Refusal::new("
+            },
+            {
+              "column": 27,
+              "line": 79,
+              "source": "Self::Special(text) => Ok(Self::Special(text.clone())),"
+            },
+            {
+              "column": 36,
+              "line": 79,
+              "source": "Self::Special(text) => Ok(Self::Special(text.clone())),"
+            },
+            {
+              "column": 54,
+              "line": 84,
+              "source": "Self::Finite(d) => Ok(d.to_fixed_string()?),"
+            },
+            {
+              "column": 30,
+              "line": 93,
+              "source": ".map_err(|_| Refusal::new(\"OverflowError\", \"decimal float conversion failed\"))?,"
+            },
+            {
+              "column": 43,
+              "line": 93,
+              "source": ".map_err(|_| Refusal::new(\"OverflowError\", \"decimal float conversion failed\"))?,"
+            },
+            {
+              "column": 95,
+              "line": 93,
+              "source": ".map_err(|_| Refusal::new(\"OverflowError\", \"decimal float conversion failed\"))?,"
+            },
+            {
+              "column": 16,
+              "line": 143,
+              "source": "return None;"
+            },
+            {
+              "column": 40,
+              "line": 165,
+              "source": "year.is_multiple_of(4) && (!year.is_multiple_of(100) || year.is_multiple_of(400));"
+            },
+            {
+              "column": 69,
+              "line": 165,
+              "source": "year.is_multiple_of(4) && (!year.is_multiple_of(100) || year.is_multiple_of(400));"
+            },
+            {
+              "column": 74,
+              "line": 165,
+              "source": "year.is_multiple_of(4) && (!year.is_multiple_of(100) || year.is_multiple_of(400));"
+            },
+            {
+              "column": 23,
+              "line": 168,
+              "source": "if leap { 29 } else { 28 },"
+            },
+            {
+              "column": 39,
+              "line": 186,
+              "source": "let separator = iso.get(end..)?.chars().next()?;"
+            },
+            {
+              "column": 55,
+              "line": 186,
+              "source": "let separator = iso.get(end..)?.chars().next()?;"
+            },
+            {
+              "column": 36,
+              "line": 188,
+              "source": "let rest = iso.get(start..)?;"
+            },
+            {
+              "column": 17,
+              "line": 204,
+              "source": "break;"
+            },
+            {
+              "column": 71,
+              "line": 215,
+              "source": "kassiber_pytext::iso_datetime(std::str::from_utf8(&corrected).ok()?)?;"
+            },
+            {
+              "column": 26,
+              "line": 250,
+              "source": "Sql::Integer(n) => n.to_string(),"
+            },
+            {
+              "column": 32,
+              "line": 250,
+              "source": "Sql::Integer(n) => n.to_string(),"
+            },
+            {
+              "column": 34,
+              "line": 250,
+              "source": "Sql::Integer(n) => n.to_string(),"
+            },
+            {
+              "column": 88,
+              "line": 270,
+              "source": "Sql::Real(n) if n.is_finite() => format!(\"{:.0}\", n.trunc()).parse::<Decimal>()?,"
+            },
+            {
+              "column": 22,
+              "line": 281,
+              "source": "_ => \"NoneType\","
+            },
+            {
+              "column": 33,
+              "line": 292,
+              "source": ".map_err(arithmetic)?,"
+            },
+            {
+              "column": 6,
+              "line": 306,
+              "source": ")?;"
+            },
+            {
+              "column": 29,
+              "line": 310,
+              "source": "id: r.get(0)?,"
+            },
+            {
+              "column": 38,
+              "line": 311,
+              "source": "occurred_at: r.get(1)?,"
+            },
+            {
+              "column": 39,
+              "line": 312,
+              "source": "confirmed_at: r.get(2)?,"
+            },
+            {
+              "column": 32,
+              "line": 313,
+              "source": "asset: r.get(3)?,"
+            },
+            {
+              "column": 33,
+              "line": 314,
+              "source": "amount: r.get(4)?,"
+            },
+            {
+              "column": 35,
+              "line": 315,
+              "source": "currency: r.get(5)?,"
+            },
+            {
+              "column": 31,
+              "line": 316,
+              "source": "rate: r.get(6)?,"
+            },
+            {
+              "column": 32,
+              "line": 317,
+              "source": "value: r.get(7)?,"
+            },
+            {
+              "column": 37,
+              "line": 318,
+              "source": "rate_exact: r.get(8)?,"
+            },
+            {
+              "column": 38,
+              "line": 319,
+              "source": "value_exact: r.get(9)?,"
+            },
+            {
+              "column": 11,
+              "line": 321,
+              "source": "})?"
+            },
+            {
+              "column": 47,
+              "line": 322,
+              "source": ".collect::<rusqlite::Result<Vec<_>>>()?;"
+            },
+            {
+              "column": 6,
+              "line": 331,
+              "source": ")?;"
+            },
+            {
+              "column": 26,
+              "line": 342,
+              "source": "_ => None,"
+            },
+            {
+              "column": 10,
+              "line": 345,
+              "source": ")?;"
+            },
+            {
+              "column": 106,
+              "line": 349,
+              "source": "ORDER BY timestamp DESC,CASE WHEN source='manual' THEN 0 ELSE 1 END ASC,fetched_at DESC LIMIT 1\")?;"
+            },
+            {
+              "column": 101,
+              "line": 352,
+              "source": "pricing_granularity=?,pricing_method=?,pricing_external_ref=?,pricing_quality=? WHERE id=?\")?;"
+            },
+            {
+              "column": 70,
+              "line": 372,
+              "source": "let mut cached_rows = lookup.query(params![pair, pricing_at])?;"
+            },
+            {
+              "column": 46,
+              "line": 373,
+              "source": "let Some(cached) = cached_rows.next()? else {"
+            },
+            {
+              "column": 32,
+              "line": 377,
+              "source": "pair: cached.get(0)?,"
+            },
+            {
+              "column": 37,
+              "line": 378,
+              "source": "timestamp: cached.get(1)?,"
+            },
+            {
+              "column": 32,
+              "line": 379,
+              "source": "rate: cached.get(2)?,"
+            },
+            {
+              "column": 38,
+              "line": 380,
+              "source": "rate_exact: cached.get(3)?,"
+            },
+            {
+              "column": 34,
+              "line": 381,
+              "source": "source: cached.get(4)?,"
+            },
+            {
+              "column": 38,
+              "line": 382,
+              "source": "fetched_at: cached.get(5)?,"
+            },
+            {
+              "column": 39,
+              "line": 383,
+              "source": "granularity: cached.get(6)?,"
+            },
+            {
+              "column": 34,
+              "line": 384,
+              "source": "method: cached.get(7)?,"
+            },
+            {
+              "column": 79,
+              "line": 402,
+              "source": "rate = Some(value.divide(&quantity, scope.decimal_context)?);"
+            },
+            {
+              "column": 17,
+              "line": 403,
+              "source": "}"
+            },
+            {
+              "column": 38,
+              "line": 422,
+              "source": "let rate_exact = exact(&rate)?;"
+            },
+            {
+              "column": 40,
+              "line": 423,
+              "source": "let value_exact = exact(&value)?;"
+            },
+            {
+              "column": 25,
+              "line": 426,
+              "source": "real(&value)?,"
+            },
+            {
+              "column": 11,
+              "line": 440,
+              "source": "])?;"
+            }
+          ]
+        },
+        {
+          "path": "crates/journals/src/prebuild/sources.rs",
+          "source_sha256": "d34139e04e8257c78306cf7f1b066368283bb4e3aa6dd3b1407d02c93bc7563c",
+          "summary": {
+            "branches": {
+              "count": 0,
+              "covered": 0,
+              "notcovered": 0,
+              "percent": 0
+            },
+            "functions": {
+              "count": 46,
+              "covered": 41,
+              "percent": 89.13043478260869
+            },
+            "instantiations": {
+              "count": 98,
+              "covered": 45,
+              "percent": 45.91836734693878
+            },
+            "lines": {
+              "count": 358,
+              "covered": 328,
+              "percent": 91.62011173184358
+            },
+            "mcdc": {
+              "count": 0,
+              "covered": 0,
+              "notcovered": 0,
+              "percent": 0
+            },
+            "regions": {
+              "count": 783,
+              "covered": 713,
+              "notcovered": 70,
+              "percent": 91.06002554278416
+            }
+          },
+          "zero_count_region_entries": [
+            {
+              "column": 37,
+              "line": 9,
+              "source": "let mut stmt = conn.prepare(sql)?;"
+            },
+            {
+              "column": 38,
+              "line": 11,
+              "source": "let mut cursor = stmt.query(args)?;"
+            },
+            {
+              "column": 40,
+              "line": 13,
+              "source": "while let Some(row) = cursor.next()? {"
+            },
+            {
+              "column": 41,
+              "line": 16,
+              "source": "let v = match row.get_ref(i)? {"
+            },
+            {
+              "column": 34,
+              "line": 29,
+              "source": ".map_err(|_| Refusal::new(\"ValueError\", \"invalid UTF-8\"))?),"
+            },
+            {
+              "column": 47,
+              "line": 29,
+              "source": ".map_err(|_| Refusal::new(\"ValueError\", \"invalid UTF-8\"))?),"
+            },
+            {
+              "column": 78,
+              "line": 29,
+              "source": ".map_err(|_| Refusal::new(\"ValueError\", \"invalid UTF-8\"))?),"
+            },
+            {
+              "column": 28,
+              "line": 31,
+              "source": "return Err(Refusal::new(\"TypeError\", \"unexpected binary source field\"))"
+            },
+            {
+              "column": 14,
+              "line": 54,
+              "source": "_ => v.clone(),"
+            },
+            {
+              "column": 16,
+              "line": 54,
+              "source": "_ => v.clone(),"
+            },
+            {
+              "column": 20,
+              "line": 73,
+              "source": "return None;"
+            },
+            {
+              "column": 14,
+              "line": 82,
+              "source": "_ => kassiber_custody::codec::from_json(raw).unwrap_or(Py::Null),"
+            },
+            {
+              "column": 49,
+              "line": 82,
+              "source": "_ => kassiber_custody::codec::from_json(raw).unwrap_or(Py::Null),"
+            },
+            {
+              "column": 54,
+              "line": 82,
+              "source": "_ => kassiber_custody::codec::from_json(raw).unwrap_or(Py::Null),"
+            },
+            {
+              "column": 64,
+              "line": 82,
+              "source": "_ => kassiber_custody::codec::from_json(raw).unwrap_or(Py::Null),"
+            },
+            {
+              "column": 17,
+              "line": 87,
+              "source": "Py::Str(s) => s.as_str().unwrap_or(\"\").split(',').map(Py::from).collect(),"
+            },
+            {
+              "column": 23,
+              "line": 87,
+              "source": "Py::Str(s) => s.as_str().unwrap_or(\"\").split(',').map(Py::from).collect(),"
+            },
+            {
+              "column": 25,
+              "line": 87,
+              "source": "Py::Str(s) => s.as_str().unwrap_or(\"\").split(',').map(Py::from).collect(),"
+            },
+            {
+              "column": 48,
+              "line": 87,
+              "source": "Py::Str(s) => s.as_str().unwrap_or(\"\").split(',').map(Py::from).collect(),"
+            },
+            {
+              "column": 59,
+              "line": 87,
+              "source": "Py::Str(s) => s.as_str().unwrap_or(\"\").split(',').map(Py::from).collect(),"
+            },
+            {
+              "column": 73,
+              "line": 87,
+              "source": "Py::Str(s) => s.as_str().unwrap_or(\"\").split(',').map(Py::from).collect(),"
+            },
+            {
+              "column": 22,
+              "line": 93,
+              "source": "_ => unreachable!(\"JSON keys are strings\"),"
+            },
+            {
+              "column": 31,
+              "line": 96,
+              "source": "Py::Bool(_) => return Err(Refusal::new(\"TypeError\", \"'bool' object is not iterable\")),"
+            },
+            {
+              "column": 21,
+              "line": 98,
+              "source": "_ => return Err(Refusal::new(\"TypeError\", \"'float' object is not iterable\")),"
+            },
+            {
+              "column": 24,
+              "line": 107,
+              "source": "return None;"
+            },
+            {
+              "column": 41,
+              "line": 121,
+              "source": "\"0\" | \"false\" | \"no\" | \"off\" => Ok(false),"
+            },
+            {
+              "column": 9,
+              "line": 142,
+              "source": "}"
+            },
+            {
+              "column": 5,
+              "line": 143,
+              "source": "}"
+            },
+            {
+              "column": 5,
+              "line": 144,
+              "source": "(lower(&chain), lower(&network))"
+            },
+            {
+              "column": 6,
+              "line": 144,
+              "source": "(lower(&chain), lower(&network))"
+            },
+            {
+              "column": 12,
+              "line": 144,
+              "source": "(lower(&chain), lower(&network))"
+            },
+            {
+              "column": 21,
+              "line": 162,
+              "source": "Value::Bool(b) => Some(i64::from(*b)),"
+            },
+            {
+              "column": 27,
+              "line": 162,
+              "source": "Value::Bool(b) => Some(i64::from(*b)),"
+            },
+            {
+              "column": 51,
+              "line": 163,
+              "source": "Value::Number(n) => n.as_i64().or_else(|| {"
+            },
+            {
+              "column": 13,
+              "line": 164,
+              "source": "n.as_f64()"
+            },
+            {
+              "column": 15,
+              "line": 164,
+              "source": "n.as_f64()"
+            },
+            {
+              "column": 18,
+              "line": 165,
+              "source": ".filter(|v| v.is_finite())"
+            },
+            {
+              "column": 29,
+              "line": 165,
+              "source": ".filter(|v| v.is_finite())"
+            },
+            {
+              "column": 31,
+              "line": 165,
+              "source": ".filter(|v| v.is_finite())"
+            },
+            {
+              "column": 18,
+              "line": 166,
+              "source": ".map(|v| v.trunc() as i64)"
+            },
+            {
+              "column": 26,
+              "line": 166,
+              "source": ".map(|v| v.trunc() as i64)"
+            },
+            {
+              "column": 28,
+              "line": 166,
+              "source": ".map(|v| v.trunc() as i64)"
+            },
+            {
+              "column": 9,
+              "line": 167,
+              "source": "}),"
+            },
+            {
+              "column": 66,
+              "line": 169,
+              "source": "i64::try_from(n.clone()).unwrap_or(if n < 0.into() { i64::MIN } else { i64::MAX })"
+            },
+            {
+              "column": 14,
+              "line": 171,
+              "source": "_ => None,"
+            },
+            {
+              "column": 170,
+              "line": 181,
+              "source": "let counts: HashMap<String, i64> = rows(conn, \"SELECT wallet_id,COUNT(*) AS count FROM transactions WHERE profile_id=? AND excluded=0 GROUP BY wallet_id\", [profile])?"
+            },
+            {
+              "column": 134,
+              "line": 183,
+              "source": "let wallets = rows(conn, \"SELECT id,label,kind,config_json FROM wallets WHERE profile_id=? ORDER BY label ASC,id ASC\", [profile])?;"
+            },
+            {
+              "column": 17,
+              "line": 196,
+              "source": "wallet.clone()"
+            },
+            {
+              "column": 24,
+              "line": 196,
+              "source": "wallet.clone()"
+            },
+            {
+              "column": 43,
+              "line": 225,
+              "source": "if source.kind.is_empty() {"
+            },
+            {
+              "column": 21,
+              "line": 226,
+              "source": "source.kind = \"address\".into();"
+            },
+            {
+              "column": 193,
+              "line": 232,
+              "source": "let inventory = rows(conn, \"SELECT DISTINCT wallet_id,chain,network,address,script_pubkey,branch_label,branch_index,address_index,raw_json FROM wallet_utxos WHERE profile_id=?\", [profile])?;"
+            },
+            {
+              "column": 10,
+              "line": 253,
+              "source": ")?);"
+            },
+            {
+              "column": 228,
+              "line": 256,
+              "source": "for r in rows(conn, \"SELECT wallet_id,branch_index,MAX(address_index) AS max_index FROM wallet_utxos WHERE profile_id=? AND branch_index IS NOT NULL AND address_index IS NOT NULL GROUP BY wallet_id,branch_index\", [profile])? {"
+            },
+            {
+              "column": 184,
+              "line": 257,
+              "source": "if let (Some(b), Some(n)) = (integer(&r[\"branch_index\"]).and_then(|v| u32::try_from(v).ok()), integer(&r[\"max_index\"])) { maxes.insert((text(&r[\"wallet_id\"]), b), n.max(-1)); }"
+            },
+            {
+              "column": 159,
+              "line": 259,
+              "source": "for r in rows(conn, \"SELECT source_key,checkpoint_json FROM freshness_source_states WHERE profile_id=? AND source_key LIKE 'onchain_wallet:%'\", [profile])? {"
+            },
+            {
+              "column": 58,
+              "line": 265,
+              "source": "maxes.entry(key).and_modify(|v| *v = (*v).max(n).max(-1)).or_insert(n.max(-1));"
+            },
+            {
+              "column": 63,
+              "line": 265,
+              "source": "maxes.entry(key).and_modify(|v| *v = (*v).max(n).max(-1)).or_insert(n.max(-1));"
+            },
+            {
+              "column": 67,
+              "line": 265,
+              "source": "maxes.entry(key).and_modify(|v| *v = (*v).max(n).max(-1)).or_insert(n.max(-1));"
+            },
+            {
+              "column": 70,
+              "line": 265,
+              "source": "maxes.entry(key).and_modify(|v| *v = (*v).max(n).max(-1)).or_insert(n.max(-1));"
+            },
+            {
+              "column": 17,
+              "line": 266,
+              "source": "}"
+            },
+            {
+              "column": 56,
+              "line": 273,
+              "source": "|| (!text(&c[\"xpub\"]).trim().is_empty() && truth(&c[\"script_types\"]));"
+            },
+            {
+              "column": 62,
+              "line": 273,
+              "source": "|| (!text(&c[\"xpub\"]).trim().is_empty() && truth(&c[\"script_types\"]));"
+            },
+            {
+              "column": 17,
+              "line": 289,
+              "source": "continue;"
+            },
+            {
+              "column": 18,
+              "line": 299,
+              "source": ")?);"
+            },
+            {
+              "column": 13,
+              "line": 308,
+              "source": "continue;"
+            },
+            {
+              "column": 14,
+              "line": 328,
+              "source": "_ => 2,"
+            },
+            {
+              "column": 9,
+              "line": 343,
+              "source": "}"
+            }
+          ]
+        }
+      ],
+      "tests_failed": 0,
+      "tests_passed": 35
+    },
+    "before": {
+      "coverage_kind": "LLVM executable regions and lines; stable instrumentation emits zero branch counters, so this is not a branch-completeness claim",
+      "export_sha256": "3357dd75fea8ccc48725f99a54b5fb094dd30787ba686ebecf61184bf0c30fab",
+      "files": [
+        {
+          "path": "crates/journals/src/prebuild.rs",
+          "source_sha256": "40221ca89b394394f4bd7ce90246b26d0a4e6e36899f483b7e1d026d575f68d8",
+          "summary": {
+            "branches": {
+              "count": 0,
+              "covered": 0,
+              "notcovered": 0,
+              "percent": 0
+            },
+            "functions": {
+              "count": 6,
+              "covered": 6,
+              "percent": 100
+            },
+            "instantiations": {
+              "count": 42,
+              "covered": 33,
+              "percent": 78.57142857142857
+            },
+            "lines": {
+              "count": 50,
+              "covered": 50,
+              "percent": 100
+            },
+            "mcdc": {
+              "count": 0,
+              "covered": 0,
+              "notcovered": 0,
+              "percent": 0
+            },
+            "regions": {
+              "count": 63,
+              "covered": 59,
+              "notcovered": 4,
+              "percent": 93.65079365079364
+            }
+          },
+          "zero_count_region_entries": [
+            {
+              "column": 44,
+              "line": 36,
+              "source": "if conn.transaction_state(Some(\"main\"))? != rusqlite::TransactionState::Write {"
+            },
+            {
+              "column": 53,
+              "line": 50,
+              "source": "conn.execute_batch(&format!(\"SAVEPOINT {name}\"))?;"
+            },
+            {
+              "column": 51,
+              "line": 56,
+              "source": "conn.execute_batch(&format!(\"RELEASE {name}\"))?;"
+            }
+          ]
+        },
+        {
+          "path": "crates/journals/src/prebuild/legacy.rs",
+          "source_sha256": "db348d2bfbbec09410747fc586ec7c14ee717e45709d3ca3738da0fc8f2a121a",
+          "summary": {
+            "branches": {
+              "count": 0,
+              "covered": 0,
+              "notcovered": 0,
+              "percent": 0
+            },
+            "functions": {
+              "count": 9,
+              "covered": 5,
+              "percent": 55.55555555555556
+            },
+            "instantiations": {
+              "count": 18,
+              "covered": 5,
+              "percent": 27.77777777777778
+            },
+            "lines": {
+              "count": 80,
+              "covered": 64,
+              "percent": 80
+            },
+            "mcdc": {
+              "count": 0,
+              "covered": 0,
+              "notcovered": 0,
+              "percent": 0
+            },
+            "regions": {
+              "count": 92,
+              "covered": 73,
+              "notcovered": 19,
+              "percent": 79.34782608695652
+            }
+          },
+          "zero_count_region_entries": [
+            {
+              "column": 5,
+              "line": 31,
+              "source": "fn uuid(&self, _: &Connection) -> Result<String, AppError> {"
+            },
+            {
+              "column": 9,
+              "line": 32,
+              "source": "Err(AppError::new("
+            },
+            {
+              "column": 5,
+              "line": 36,
+              "source": "}"
+            },
+            {
+              "column": 32,
+              "line": 53,
+              "source": ".ok_or_else(|| Refusal::new(\"KeyError\", \"workspace_id\"))?,"
+            },
+            {
+              "column": 45,
+              "line": 53,
+              "source": ".ok_or_else(|| Refusal::new(\"KeyError\", \"workspace_id\"))?,"
+            },
+            {
+              "column": 73,
+              "line": 53,
+              "source": ".ok_or_else(|| Refusal::new(\"KeyError\", \"workspace_id\"))?,"
+            },
+            {
+              "column": 32,
+              "line": 56,
+              "source": ".ok_or_else(|| Refusal::new(\"KeyError\", \"id\"))?,"
+            },
+            {
+              "column": 45,
+              "line": 56,
+              "source": ".ok_or_else(|| Refusal::new(\"KeyError\", \"id\"))?,"
+            },
+            {
+              "column": 63,
+              "line": 56,
+              "source": ".ok_or_else(|| Refusal::new(\"KeyError\", \"id\"))?,"
+            },
+            {
+              "column": 45,
+              "line": 76,
+              "source": "\"OperationalError\""
+            },
+            {
+              "column": 33,
+              "line": 81,
+              "source": "e => e.into(),"
+            },
+            {
+              "column": 38,
+              "line": 81,
+              "source": "e => e.into(),"
+            },
+            {
+              "column": 40,
+              "line": 81,
+              "source": "e => e.into(),"
+            },
+            {
+              "column": 14,
+              "line": 90,
+              "source": ")?"
+            },
+            {
+              "column": 28,
+              "line": 93,
+              "source": ".ok_or_else(|| {"
+            },
+            {
+              "column": 17,
+              "line": 94,
+              "source": "Refusal::new("
+            },
+            {
+              "column": 21,
+              "line": 95,
+              "source": "\"RuntimeError\","
+            },
+            {
+              "column": 13,
+              "line": 98,
+              "source": "})?"
+            },
+            {
+              "column": 15,
+              "line": 98,
+              "source": "})?"
+            }
+          ]
+        },
+        {
+          "path": "crates/journals/src/prebuild/overlap.rs",
+          "source_sha256": "2562efc2b1a336834212ae5c33ffc61778dd0ba654568b2698cfc995545d099c",
+          "summary": {
+            "branches": {
+              "count": 0,
+              "covered": 0,
+              "notcovered": 0,
+              "percent": 0
+            },
+            "functions": {
+              "count": 40,
+              "covered": 39,
+              "percent": 97.5
+            },
+            "instantiations": {
+              "count": 140,
+              "covered": 84,
+              "percent": 60
+            },
+            "lines": {
+              "count": 495,
+              "covered": 479,
+              "percent": 96.76767676767678
+            },
+            "mcdc": {
+              "count": 0,
+              "covered": 0,
+              "notcovered": 0,
+              "percent": 0
+            },
+            "regions": {
+              "count": 885,
+              "covered": 839,
+              "notcovered": 46,
+              "percent": 94.80225988700565
+            }
+          },
+          "zero_count_region_entries": [
+            {
+              "column": 21,
+              "line": 25,
+              "source": "&nested[\"scriptpubkey\"]"
+            },
+            {
+              "column": 23,
+              "line": 45,
+              "source": "} else if v.as_number().is_some_and(|n| n.is_i64() || n.is_u64()) {"
+            },
+            {
+              "column": 25,
+              "line": 45,
+              "source": "} else if v.as_number().is_some_and(|n| n.is_i64() || n.is_u64()) {"
+            },
+            {
+              "column": 37,
+              "line": 45,
+              "source": "} else if v.as_number().is_some_and(|n| n.is_i64() || n.is_u64()) {"
+            },
+            {
+              "column": 53,
+              "line": 45,
+              "source": "} else if v.as_number().is_some_and(|n| n.is_i64() || n.is_u64()) {"
+            },
+            {
+              "column": 55,
+              "line": 45,
+              "source": "} else if v.as_number().is_some_and(|n| n.is_i64() || n.is_u64()) {"
+            },
+            {
+              "column": 67,
+              "line": 45,
+              "source": "} else if v.as_number().is_some_and(|n| n.is_i64() || n.is_u64()) {"
+            },
+            {
+              "column": 69,
+              "line": 45,
+              "source": "} else if v.as_number().is_some_and(|n| n.is_i64() || n.is_u64()) {"
+            },
+            {
+              "column": 17,
+              "line": 46,
+              "source": "\"int\""
+            },
+            {
+              "column": 17,
+              "line": 48,
+              "source": "\"float\""
+            },
+            {
+              "column": 13,
+              "line": 164,
+              "source": "continue;"
+            },
+            {
+              "column": 13,
+              "line": 172,
+              "source": "continue;"
+            },
+            {
+              "column": 557,
+              "line": 207,
+              "source": "let reviews = rows(conn, \"SELECT component.id AS component_id,term.legacy_source_id AS review_id,term.term_kind FROM custody_component_legs leg JOIN custody_components component ON component.id=leg.component_id LEFT JOIN custody_component_economic_terms term ON term.component_id=component.id AND (term.source_leg_id=leg.id OR term.target_leg_id=leg.id) WHERE component.profile_id=? AND component.state='active' AND COALESCE(leg.anchor_transaction_id,leg.transaction_id)=? ORDER BY component.created_at,component.id,term.ordinal LIMIT 1\", [profile,tx])?;"
+            },
+            {
+              "column": 46,
+              "line": 209,
+              "source": "let id = if truth(&r[\"review_id\"]) { &r[\"review_id\"] } else { &r[\"component_id\"] };"
+            },
+            {
+              "column": 218,
+              "line": 221,
+              "source": "let tx = rows(conn,\"SELECT t.id,t.wallet_id,t.external_id,t.occurred_at,t.excluded,w.label AS wallet_label FROM transactions t LEFT JOIN wallets w ON w.id=t.wallet_id WHERE t.profile_id=? AND t.id=?\",[profile,tx])?.remove(0);"
+            },
+            {
+              "column": 10,
+              "line": 228,
+              "source": ")?;"
+            },
+            {
+              "column": 179,
+              "line": 229,
+              "source": "let p = rows(conn, \"SELECT workspace_id,journal_input_version,last_processed_input_version,last_processed_at,last_processed_tx_count FROM profiles WHERE id=?\", [profile])?.remove(0);"
+            },
+            {
+              "column": 31,
+              "line": 232,
+              "source": "let field = identity()?;"
+            },
+            {
+              "column": 738,
+              "line": 233,
+              "source": "conn.execute(\"INSERT INTO transaction_edit_events(id,workspace_id,profile_id,transaction_id,wallet_id,transaction_external_id,transaction_occurred_at,source,reason,changed_at,journal_input_version,journal_input_version_after,last_processed_input_version,last_processed_at,last_processed_tx_count) VALUES(?,?,?,?,?,?,?,'cli',?,?,?,?,?,?,?)\",params![id,text(&p[\"workspace_id\"]),profile,text(&tx[\"id\"]),tx[\"wallet_id\"].as_str(),tx[\"external_id\"].as_str(),tx[\"occurred_at\"].as_str(),REASON,at,p[\"journal_input_version\"].as_i64().unwrap_or(0),p[\"journal_input_version\"].as_i64().unwrap_or(0)+1,p[\"last_processed_input_version\"].as_i64().unwrap_or(0),p[\"last_processed_at\"].as_str(),p[\"last_processed_tx_count\"].as_i64().unwrap_or(0)])?;"
+            },
+            {
+              "column": 175,
+              "line": 234,
+              "source": "conn.execute(\"INSERT INTO transaction_edit_fields(id,event_id,field,before_value,after_value,diff_json) VALUES(?,?,'excluded','false','true','{}')\",params![field,id])?;"
+            },
+            {
+              "column": 194,
+              "line": 235,
+              "source": "conn.execute(\"UPDATE profiles SET last_processed_at=NULL,last_processed_tx_count=0,journal_input_version=journal_input_version+1,ownership_review_counts_json=NULL WHERE id=?\",[profile])?;"
+            },
+            {
+              "column": 5,
+              "line": 237,
+              "source": "}"
+            },
+            {
+              "column": 6,
+              "line": 278,
+              "source": ")? {"
+            },
+            {
+              "column": 79,
+              "line": 284,
+              "source": "let (removed, kept): (Vec<_>, Vec<_>) = addresses(&row[\"config_json\"])?"
+            },
+            {
+              "column": 13,
+              "line": 288,
+              "source": "continue;"
+            },
+            {
+              "column": 9,
+              "line": 293,
+              "source": "}"
+            },
+            {
+              "column": 47,
+              "line": 296,
+              "source": "params![sources::stored_config(&c)?, id],"
+            },
+            {
+              "column": 10,
+              "line": 297,
+              "source": ")?;"
+            },
+            {
+              "column": 51,
+              "line": 303,
+              "source": "conn.execute(&sql, params_from_iter(args))?;"
+            },
+            {
+              "column": 105,
+              "line": 309,
+              "source": "updates.push(json!({\"wallet_id\":id,\"wallet\":if truth(&row[\"label\"]) {text(&row[\"label\"])} else {text(&row[\"id\"])},\"addresses_removed\":removed.len(),\"remaining_addresses\":kept.len(),\"deprecated\":kept.is_empty(),\"output_inventory_cleared\":true,\"refresh_checkpoint_reset\":true}));"
+            },
+            {
+              "column": 110,
+              "line": 309,
+              "source": "updates.push(json!({\"wallet_id\":id,\"wallet\":if truth(&row[\"label\"]) {text(&row[\"label\"])} else {text(&row[\"id\"])},\"addresses_removed\":removed.len(),\"remaining_addresses\":kept.len(),\"deprecated\":kept.is_empty(),\"output_inventory_cleared\":true,\"refresh_checkpoint_reset\":true}));"
+            },
+            {
+              "column": 54,
+              "line": 344,
+              "source": "if let Some(c) = conflict(conn, profile, &tx)? {"
+            },
+            {
+              "column": 35,
+              "line": 350,
+              "source": "let idx = index(conn, profile)?;"
+            },
+            {
+              "column": 41,
+              "line": 351,
+              "source": "let p = preview(conn, profile, &idx)?;"
+            },
+            {
+              "column": 45,
+              "line": 366,
+              "source": "let remaining = index(conn, profile)?.overlaps();"
+            },
+            {
+              "column": 38,
+              "line": 380,
+              "source": "let idx = index(conn, profile_id)?;"
+            },
+            {
+              "column": 135,
+              "line": 385,
+              "source": "let mut details = json!({\"overlap_count\":overlap[\"overlap_count\"],\"overlap\":overlap,\"repair_preview\":preview(conn,profile_id,&idx)?});"
+            },
+            {
+              "column": 20,
+              "line": 519,
+              "source": "return Err(Refusal::new("
+            },
+            {
+              "column": 48,
+              "line": 527,
+              "source": ".map(|(key, v)| Ok((key, project(v)?)))"
+            },
+            {
+              "column": 50,
+              "line": 528,
+              "source": ".collect::<Result<Vec<_>, Refusal>>()?;"
+            },
+            {
+              "column": 57,
+              "line": 533,
+              "source": "fields.push((\"source_overlap_repair\", project(v)?));"
+            },
+            {
+              "column": 58,
+              "line": 536,
+              "source": "fields.push((\"source_overlap_warning\", project(v)?));"
+            }
+          ]
+        },
+        {
+          "path": "crates/journals/src/prebuild/pipeline.rs",
+          "source_sha256": "cd84a30fbf91f4e817cb217daf42af5ac5252d85f56de111b45cc2ca4a87bd54",
+          "summary": {
+            "branches": {
+              "count": 0,
+              "covered": 0,
+              "notcovered": 0,
+              "percent": 0
+            },
+            "functions": {
+              "count": 10,
+              "covered": 7,
+              "percent": 70
+            },
+            "instantiations": {
+              "count": 60,
+              "covered": 28,
+              "percent": 46.666666666666664
+            },
+            "lines": {
+              "count": 83,
+              "covered": 79,
+              "percent": 95.18072289156626
+            },
+            "mcdc": {
+              "count": 0,
+              "covered": 0,
+              "notcovered": 0,
+              "percent": 0
+            },
+            "regions": {
+              "count": 110,
+              "covered": 95,
+              "notcovered": 15,
+              "percent": 86.36363636363636
+            }
+          },
+          "zero_count_region_entries": [
+            {
+              "column": 10,
+              "line": 21,
+              "source": ")?;"
+            },
+            {
+              "column": 25,
+              "line": 47,
+              "source": "require_writer(conn)?;"
+            },
+            {
+              "column": 28,
+              "line": 51,
+              "source": ".ok_or_else(|| Refusal::new(\"KeyError\", \"id\"))?;"
+            },
+            {
+              "column": 41,
+              "line": 51,
+              "source": ".ok_or_else(|| Refusal::new(\"KeyError\", \"id\"))?;"
+            },
+            {
+              "column": 59,
+              "line": 51,
+              "source": ".ok_or_else(|| Refusal::new(\"KeyError\", \"id\"))?;"
+            },
+            {
+              "column": 72,
+              "line": 53,
+              "source": "let warning = source_overlap_warning(conn, id, repair.as_ref())?;"
+            },
+            {
+              "column": 25,
+              "line": 73,
+              "source": "require_writer(conn)?;"
+            },
+            {
+              "column": 36,
+              "line": 81,
+              "source": ".ok_or_else(|| Refusal::new(\"KeyError\", \"id\"))?,"
+            },
+            {
+              "column": 49,
+              "line": 81,
+              "source": ".ok_or_else(|| Refusal::new(\"KeyError\", \"id\"))?,"
+            },
+            {
+              "column": 67,
+              "line": 81,
+              "source": ".ok_or_else(|| Refusal::new(\"KeyError\", \"id\"))?,"
+            },
+            {
+              "column": 36,
+              "line": 84,
+              "source": ".ok_or_else(|| Refusal::new(\"KeyError\", \"fiat_currency\"))?,"
+            },
+            {
+              "column": 49,
+              "line": 84,
+              "source": ".ok_or_else(|| Refusal::new(\"KeyError\", \"fiat_currency\"))?,"
+            },
+            {
+              "column": 78,
+              "line": 84,
+              "source": ".ok_or_else(|| Refusal::new(\"KeyError\", \"fiat_currency\"))?,"
+            },
+            {
+              "column": 89,
+              "line": 109,
+              "source": "let prepared = prepare_journals(conn, profile, decimal_context, clock, identity)?;"
+            }
+          ]
+        },
+        {
+          "path": "crates/journals/src/prebuild/pricing.rs",
+          "source_sha256": "9cf3f6a0408e3170bc93a932876b84be44487383642974efddc1a7e0a347f841",
+          "summary": {
+            "branches": {
+              "count": 0,
+              "covered": 0,
+              "notcovered": 0,
+              "percent": 0
+            },
+            "functions": {
+              "count": 26,
+              "covered": 25,
+              "percent": 96.15384615384616
+            },
+            "instantiations": {
+              "count": 52,
+              "covered": 25,
+              "percent": 48.07692307692308
+            },
+            "lines": {
+              "count": 329,
+              "covered": 294,
+              "percent": 89.36170212765957
+            },
+            "mcdc": {
+              "count": 0,
+              "covered": 0,
+              "notcovered": 0,
+              "percent": 0
+            },
+            "regions": {
+              "count": 634,
+              "covered": 555,
+              "notcovered": 79,
+              "percent": 87.53943217665615
+            }
+          },
+          "zero_count_region_entries": [
+            {
+              "column": 21,
+              "line": 45,
+              "source": "format!(\"{sign}Infinity\")"
+            },
+            {
+              "column": 15,
+              "line": 73,
+              "source": "match self {"
+            },
+            {
+              "column": 93,
+              "line": 74,
+              "source": "Self::Finite(d) => Ok(Self::Finite(d.div(quantity, &context).map_err(arithmetic)?)),"
+            },
+            {
+              "column": 27,
+              "line": 75,
+              "source": "Self::Special(text) if text.contains(\"sNaN\") => Err(Refusal::new("
+            },
+            {
+              "column": 36,
+              "line": 75,
+              "source": "Self::Special(text) if text.contains(\"sNaN\") => Err(Refusal::new("
+            },
+            {
+              "column": 41,
+              "line": 75,
+              "source": "Self::Special(text) if text.contains(\"sNaN\") => Err(Refusal::new("
+            },
+            {
+              "column": 56,
+              "line": 75,
+              "source": "Self::Special(text) if text.contains(\"sNaN\") => Err(Refusal::new("
+            },
+            {
+              "column": 61,
+              "line": 75,
+              "source": "Self::Special(text) if text.contains(\"sNaN\") => Err(Refusal::new("
+            },
+            {
+              "column": 27,
+              "line": 79,
+              "source": "Self::Special(text) => Ok(Self::Special(text.clone())),"
+            },
+            {
+              "column": 36,
+              "line": 79,
+              "source": "Self::Special(text) => Ok(Self::Special(text.clone())),"
+            },
+            {
+              "column": 54,
+              "line": 84,
+              "source": "Self::Finite(d) => Ok(d.to_fixed_string()?),"
+            },
+            {
+              "column": 28,
+              "line": 89,
+              "source": "Ok(Sql::Real(match self {"
+            },
+            {
+              "column": 30,
+              "line": 93,
+              "source": ".map_err(|_| Refusal::new(\"OverflowError\", \"decimal float conversion failed\"))?,"
+            },
+            {
+              "column": 43,
+              "line": 93,
+              "source": ".map_err(|_| Refusal::new(\"OverflowError\", \"decimal float conversion failed\"))?,"
+            },
+            {
+              "column": 95,
+              "line": 93,
+              "source": ".map_err(|_| Refusal::new(\"OverflowError\", \"decimal float conversion failed\"))?,"
+            },
+            {
+              "column": 56,
+              "line": 94,
+              "source": "Self::Special(text) if text.contains(\"sNaN\") => {"
+            },
+            {
+              "column": 24,
+              "line": 95,
+              "source": "return Err(Refusal::new("
+            },
+            {
+              "column": 27,
+              "line": 101,
+              "source": "Self::Special(text) if text.starts_with('-') => f64::NEG_INFINITY,"
+            },
+            {
+              "column": 36,
+              "line": 101,
+              "source": "Self::Special(text) if text.starts_with('-') => f64::NEG_INFINITY,"
+            },
+            {
+              "column": 41,
+              "line": 101,
+              "source": "Self::Special(text) if text.starts_with('-') => f64::NEG_INFINITY,"
+            },
+            {
+              "column": 56,
+              "line": 101,
+              "source": "Self::Special(text) if text.starts_with('-') => f64::NEG_INFINITY,"
+            },
+            {
+              "column": 61,
+              "line": 101,
+              "source": "Self::Special(text) if text.starts_with('-') => f64::NEG_INFINITY,"
+            },
+            {
+              "column": 33,
+              "line": 102,
+              "source": "Self::Special(_) => f64::INFINITY,"
+            },
+            {
+              "column": 16,
+              "line": 143,
+              "source": "return None;"
+            },
+            {
+              "column": 40,
+              "line": 165,
+              "source": "year.is_multiple_of(4) && (!year.is_multiple_of(100) || year.is_multiple_of(400));"
+            },
+            {
+              "column": 69,
+              "line": 165,
+              "source": "year.is_multiple_of(4) && (!year.is_multiple_of(100) || year.is_multiple_of(400));"
+            },
+            {
+              "column": 74,
+              "line": 165,
+              "source": "year.is_multiple_of(4) && (!year.is_multiple_of(100) || year.is_multiple_of(400));"
+            },
+            {
+              "column": 23,
+              "line": 168,
+              "source": "if leap { 29 } else { 28 },"
+            },
+            {
+              "column": 39,
+              "line": 186,
+              "source": "let separator = iso.get(end..)?.chars().next()?;"
+            },
+            {
+              "column": 55,
+              "line": 186,
+              "source": "let separator = iso.get(end..)?.chars().next()?;"
+            },
+            {
+              "column": 36,
+              "line": 188,
+              "source": "let rest = iso.get(start..)?;"
+            },
+            {
+              "column": 17,
+              "line": 204,
+              "source": "break;"
+            },
+            {
+              "column": 71,
+              "line": 215,
+              "source": "kassiber_pytext::iso_datetime(std::str::from_utf8(&corrected).ok()?)?;"
+            },
+            {
+              "column": 26,
+              "line": 225,
+              "source": "Sql::Integer(n) => n.to_string(),"
+            },
+            {
+              "column": 32,
+              "line": 225,
+              "source": "Sql::Integer(n) => n.to_string(),"
+            },
+            {
+              "column": 34,
+              "line": 225,
+              "source": "Sql::Integer(n) => n.to_string(),"
+            },
+            {
+              "column": 24,
+              "line": 228,
+              "source": "return Err(Refusal::new("
+            },
+            {
+              "column": 88,
+              "line": 250,
+              "source": "Sql::Real(n) if n.is_finite() => format!(\"{:.0}\", n.trunc()).parse::<Decimal>()?,"
+            },
+            {
+              "column": 20,
+              "line": 252,
+              "source": "return Err(Refusal::new("
+            },
+            {
+              "column": 33,
+              "line": 260,
+              "source": "Sql::Blob(_) => \"bytes\","
+            },
+            {
+              "column": 22,
+              "line": 261,
+              "source": "_ => \"NoneType\","
+            },
+            {
+              "column": 33,
+              "line": 272,
+              "source": ".map_err(arithmetic)?,"
+            },
+            {
+              "column": 6,
+              "line": 286,
+              "source": ")?;"
+            },
+            {
+              "column": 29,
+              "line": 290,
+              "source": "id: r.get(0)?,"
+            },
+            {
+              "column": 38,
+              "line": 291,
+              "source": "occurred_at: r.get(1)?,"
+            },
+            {
+              "column": 39,
+              "line": 292,
+              "source": "confirmed_at: r.get(2)?,"
+            },
+            {
+              "column": 32,
+              "line": 293,
+              "source": "asset: r.get(3)?,"
+            },
+            {
+              "column": 33,
+              "line": 294,
+              "source": "amount: r.get(4)?,"
+            },
+            {
+              "column": 35,
+              "line": 295,
+              "source": "currency: r.get(5)?,"
+            },
+            {
+              "column": 31,
+              "line": 296,
+              "source": "rate: r.get(6)?,"
+            },
+            {
+              "column": 32,
+              "line": 297,
+              "source": "value: r.get(7)?,"
+            },
+            {
+              "column": 37,
+              "line": 298,
+              "source": "rate_exact: r.get(8)?,"
+            },
+            {
+              "column": 38,
+              "line": 299,
+              "source": "value_exact: r.get(9)?,"
+            },
+            {
+              "column": 11,
+              "line": 301,
+              "source": "})?"
+            },
+            {
+              "column": 47,
+              "line": 302,
+              "source": ".collect::<rusqlite::Result<Vec<_>>>()?;"
+            },
+            {
+              "column": 6,
+              "line": 311,
+              "source": ")?;"
+            },
+            {
+              "column": 26,
+              "line": 322,
+              "source": "_ => None,"
+            },
+            {
+              "column": 10,
+              "line": 325,
+              "source": ")?;"
+            },
+            {
+              "column": 106,
+              "line": 329,
+              "source": "ORDER BY timestamp DESC,CASE WHEN source='manual' THEN 0 ELSE 1 END ASC,fetched_at DESC LIMIT 1\")?;"
+            },
+            {
+              "column": 101,
+              "line": 332,
+              "source": "pricing_granularity=?,pricing_method=?,pricing_external_ref=?,pricing_quality=? WHERE id=?\")?;"
+            },
+            {
+              "column": 70,
+              "line": 352,
+              "source": "let mut cached_rows = lookup.query(params![pair, pricing_at])?;"
+            },
+            {
+              "column": 46,
+              "line": 353,
+              "source": "let Some(cached) = cached_rows.next()? else {"
+            },
+            {
+              "column": 32,
+              "line": 357,
+              "source": "pair: cached.get(0)?,"
+            },
+            {
+              "column": 37,
+              "line": 358,
+              "source": "timestamp: cached.get(1)?,"
+            },
+            {
+              "column": 32,
+              "line": 359,
+              "source": "rate: cached.get(2)?,"
+            },
+            {
+              "column": 38,
+              "line": 360,
+              "source": "rate_exact: cached.get(3)?,"
+            },
+            {
+              "column": 34,
+              "line": 361,
+              "source": "source: cached.get(4)?,"
+            },
+            {
+              "column": 38,
+              "line": 362,
+              "source": "fetched_at: cached.get(5)?,"
+            },
+            {
+              "column": 39,
+              "line": 363,
+              "source": "granularity: cached.get(6)?,"
+            },
+            {
+              "column": 34,
+              "line": 364,
+              "source": "method: cached.get(7)?,"
+            },
+            {
+              "column": 51,
+              "line": 368,
+              "source": "let mut value = first(&[&row.value_exact])?;"
+            },
+            {
+              "column": 41,
+              "line": 377,
+              "source": "value = first(&[&row.value])?;"
+            },
+            {
+              "column": 79,
+              "line": 382,
+              "source": "rate = Some(value.divide(&quantity, scope.decimal_context)?);"
+            },
+            {
+              "column": 17,
+              "line": 383,
+              "source": "}"
+            },
+            {
+              "column": 38,
+              "line": 402,
+              "source": "let rate_exact = exact(&rate)?;"
+            },
+            {
+              "column": 40,
+              "line": 403,
+              "source": "let value_exact = exact(&value)?;"
+            },
+            {
+              "column": 24,
+              "line": 405,
+              "source": "real(&rate)?,"
+            },
+            {
+              "column": 25,
+              "line": 406,
+              "source": "real(&value)?,"
+            },
+            {
+              "column": 11,
+              "line": 420,
+              "source": "])?;"
+            }
+          ]
+        },
+        {
+          "path": "crates/journals/src/prebuild/sources.rs",
+          "source_sha256": "d34139e04e8257c78306cf7f1b066368283bb4e3aa6dd3b1407d02c93bc7563c",
+          "summary": {
+            "branches": {
+              "count": 0,
+              "covered": 0,
+              "notcovered": 0,
+              "percent": 0
+            },
+            "functions": {
+              "count": 46,
+              "covered": 41,
+              "percent": 89.13043478260869
+            },
+            "instantiations": {
+              "count": 98,
+              "covered": 45,
+              "percent": 45.91836734693878
+            },
+            "lines": {
+              "count": 358,
+              "covered": 328,
+              "percent": 91.62011173184358
+            },
+            "mcdc": {
+              "count": 0,
+              "covered": 0,
+              "notcovered": 0,
+              "percent": 0
+            },
+            "regions": {
+              "count": 783,
+              "covered": 713,
+              "notcovered": 70,
+              "percent": 91.06002554278416
+            }
+          },
+          "zero_count_region_entries": [
+            {
+              "column": 37,
+              "line": 9,
+              "source": "let mut stmt = conn.prepare(sql)?;"
+            },
+            {
+              "column": 38,
+              "line": 11,
+              "source": "let mut cursor = stmt.query(args)?;"
+            },
+            {
+              "column": 40,
+              "line": 13,
+              "source": "while let Some(row) = cursor.next()? {"
+            },
+            {
+              "column": 41,
+              "line": 16,
+              "source": "let v = match row.get_ref(i)? {"
+            },
+            {
+              "column": 34,
+              "line": 29,
+              "source": ".map_err(|_| Refusal::new(\"ValueError\", \"invalid UTF-8\"))?),"
+            },
+            {
+              "column": 47,
+              "line": 29,
+              "source": ".map_err(|_| Refusal::new(\"ValueError\", \"invalid UTF-8\"))?),"
+            },
+            {
+              "column": 78,
+              "line": 29,
+              "source": ".map_err(|_| Refusal::new(\"ValueError\", \"invalid UTF-8\"))?),"
+            },
+            {
+              "column": 28,
+              "line": 31,
+              "source": "return Err(Refusal::new(\"TypeError\", \"unexpected binary source field\"))"
+            },
+            {
+              "column": 14,
+              "line": 54,
+              "source": "_ => v.clone(),"
+            },
+            {
+              "column": 16,
+              "line": 54,
+              "source": "_ => v.clone(),"
+            },
+            {
+              "column": 20,
+              "line": 73,
+              "source": "return None;"
+            },
+            {
+              "column": 14,
+              "line": 82,
+              "source": "_ => kassiber_custody::codec::from_json(raw).unwrap_or(Py::Null),"
+            },
+            {
+              "column": 49,
+              "line": 82,
+              "source": "_ => kassiber_custody::codec::from_json(raw).unwrap_or(Py::Null),"
+            },
+            {
+              "column": 54,
+              "line": 82,
+              "source": "_ => kassiber_custody::codec::from_json(raw).unwrap_or(Py::Null),"
+            },
+            {
+              "column": 64,
+              "line": 82,
+              "source": "_ => kassiber_custody::codec::from_json(raw).unwrap_or(Py::Null),"
+            },
+            {
+              "column": 17,
+              "line": 87,
+              "source": "Py::Str(s) => s.as_str().unwrap_or(\"\").split(',').map(Py::from).collect(),"
+            },
+            {
+              "column": 23,
+              "line": 87,
+              "source": "Py::Str(s) => s.as_str().unwrap_or(\"\").split(',').map(Py::from).collect(),"
+            },
+            {
+              "column": 25,
+              "line": 87,
+              "source": "Py::Str(s) => s.as_str().unwrap_or(\"\").split(',').map(Py::from).collect(),"
+            },
+            {
+              "column": 48,
+              "line": 87,
+              "source": "Py::Str(s) => s.as_str().unwrap_or(\"\").split(',').map(Py::from).collect(),"
+            },
+            {
+              "column": 59,
+              "line": 87,
+              "source": "Py::Str(s) => s.as_str().unwrap_or(\"\").split(',').map(Py::from).collect(),"
+            },
+            {
+              "column": 73,
+              "line": 87,
+              "source": "Py::Str(s) => s.as_str().unwrap_or(\"\").split(',').map(Py::from).collect(),"
+            },
+            {
+              "column": 22,
+              "line": 93,
+              "source": "_ => unreachable!(\"JSON keys are strings\"),"
+            },
+            {
+              "column": 31,
+              "line": 96,
+              "source": "Py::Bool(_) => return Err(Refusal::new(\"TypeError\", \"'bool' object is not iterable\")),"
+            },
+            {
+              "column": 21,
+              "line": 98,
+              "source": "_ => return Err(Refusal::new(\"TypeError\", \"'float' object is not iterable\")),"
+            },
+            {
+              "column": 24,
+              "line": 107,
+              "source": "return None;"
+            },
+            {
+              "column": 41,
+              "line": 121,
+              "source": "\"0\" | \"false\" | \"no\" | \"off\" => Ok(false),"
+            },
+            {
+              "column": 9,
+              "line": 142,
+              "source": "}"
+            },
+            {
+              "column": 5,
+              "line": 143,
+              "source": "}"
+            },
+            {
+              "column": 5,
+              "line": 144,
+              "source": "(lower(&chain), lower(&network))"
+            },
+            {
+              "column": 6,
+              "line": 144,
+              "source": "(lower(&chain), lower(&network))"
+            },
+            {
+              "column": 12,
+              "line": 144,
+              "source": "(lower(&chain), lower(&network))"
+            },
+            {
+              "column": 21,
+              "line": 162,
+              "source": "Value::Bool(b) => Some(i64::from(*b)),"
+            },
+            {
+              "column": 27,
+              "line": 162,
+              "source": "Value::Bool(b) => Some(i64::from(*b)),"
+            },
+            {
+              "column": 51,
+              "line": 163,
+              "source": "Value::Number(n) => n.as_i64().or_else(|| {"
+            },
+            {
+              "column": 13,
+              "line": 164,
+              "source": "n.as_f64()"
+            },
+            {
+              "column": 15,
+              "line": 164,
+              "source": "n.as_f64()"
+            },
+            {
+              "column": 18,
+              "line": 165,
+              "source": ".filter(|v| v.is_finite())"
+            },
+            {
+              "column": 29,
+              "line": 165,
+              "source": ".filter(|v| v.is_finite())"
+            },
+            {
+              "column": 31,
+              "line": 165,
+              "source": ".filter(|v| v.is_finite())"
+            },
+            {
+              "column": 18,
+              "line": 166,
+              "source": ".map(|v| v.trunc() as i64)"
+            },
+            {
+              "column": 26,
+              "line": 166,
+              "source": ".map(|v| v.trunc() as i64)"
+            },
+            {
+              "column": 28,
+              "line": 166,
+              "source": ".map(|v| v.trunc() as i64)"
+            },
+            {
+              "column": 9,
+              "line": 167,
+              "source": "}),"
+            },
+            {
+              "column": 66,
+              "line": 169,
+              "source": "i64::try_from(n.clone()).unwrap_or(if n < 0.into() { i64::MIN } else { i64::MAX })"
+            },
+            {
+              "column": 14,
+              "line": 171,
+              "source": "_ => None,"
+            },
+            {
+              "column": 170,
+              "line": 181,
+              "source": "let counts: HashMap<String, i64> = rows(conn, \"SELECT wallet_id,COUNT(*) AS count FROM transactions WHERE profile_id=? AND excluded=0 GROUP BY wallet_id\", [profile])?"
+            },
+            {
+              "column": 134,
+              "line": 183,
+              "source": "let wallets = rows(conn, \"SELECT id,label,kind,config_json FROM wallets WHERE profile_id=? ORDER BY label ASC,id ASC\", [profile])?;"
+            },
+            {
+              "column": 17,
+              "line": 196,
+              "source": "wallet.clone()"
+            },
+            {
+              "column": 24,
+              "line": 196,
+              "source": "wallet.clone()"
+            },
+            {
+              "column": 43,
+              "line": 225,
+              "source": "if source.kind.is_empty() {"
+            },
+            {
+              "column": 21,
+              "line": 226,
+              "source": "source.kind = \"address\".into();"
+            },
+            {
+              "column": 193,
+              "line": 232,
+              "source": "let inventory = rows(conn, \"SELECT DISTINCT wallet_id,chain,network,address,script_pubkey,branch_label,branch_index,address_index,raw_json FROM wallet_utxos WHERE profile_id=?\", [profile])?;"
+            },
+            {
+              "column": 10,
+              "line": 253,
+              "source": ")?);"
+            },
+            {
+              "column": 228,
+              "line": 256,
+              "source": "for r in rows(conn, \"SELECT wallet_id,branch_index,MAX(address_index) AS max_index FROM wallet_utxos WHERE profile_id=? AND branch_index IS NOT NULL AND address_index IS NOT NULL GROUP BY wallet_id,branch_index\", [profile])? {"
+            },
+            {
+              "column": 184,
+              "line": 257,
+              "source": "if let (Some(b), Some(n)) = (integer(&r[\"branch_index\"]).and_then(|v| u32::try_from(v).ok()), integer(&r[\"max_index\"])) { maxes.insert((text(&r[\"wallet_id\"]), b), n.max(-1)); }"
+            },
+            {
+              "column": 159,
+              "line": 259,
+              "source": "for r in rows(conn, \"SELECT source_key,checkpoint_json FROM freshness_source_states WHERE profile_id=? AND source_key LIKE 'onchain_wallet:%'\", [profile])? {"
+            },
+            {
+              "column": 58,
+              "line": 265,
+              "source": "maxes.entry(key).and_modify(|v| *v = (*v).max(n).max(-1)).or_insert(n.max(-1));"
+            },
+            {
+              "column": 63,
+              "line": 265,
+              "source": "maxes.entry(key).and_modify(|v| *v = (*v).max(n).max(-1)).or_insert(n.max(-1));"
+            },
+            {
+              "column": 67,
+              "line": 265,
+              "source": "maxes.entry(key).and_modify(|v| *v = (*v).max(n).max(-1)).or_insert(n.max(-1));"
+            },
+            {
+              "column": 70,
+              "line": 265,
+              "source": "maxes.entry(key).and_modify(|v| *v = (*v).max(n).max(-1)).or_insert(n.max(-1));"
+            },
+            {
+              "column": 17,
+              "line": 266,
+              "source": "}"
+            },
+            {
+              "column": 56,
+              "line": 273,
+              "source": "|| (!text(&c[\"xpub\"]).trim().is_empty() && truth(&c[\"script_types\"]));"
+            },
+            {
+              "column": 62,
+              "line": 273,
+              "source": "|| (!text(&c[\"xpub\"]).trim().is_empty() && truth(&c[\"script_types\"]));"
+            },
+            {
+              "column": 17,
+              "line": 289,
+              "source": "continue;"
+            },
+            {
+              "column": 18,
+              "line": 299,
+              "source": ")?);"
+            },
+            {
+              "column": 13,
+              "line": 308,
+              "source": "continue;"
+            },
+            {
+              "column": 14,
+              "line": 328,
+              "source": "_ => 2,"
+            },
+            {
+              "column": 9,
+              "line": 343,
+              "source": "}"
+            }
+          ]
+        }
+      ],
+      "source_commit": "b7cf849f9"
+    },
+    "isolated_build_tree_removed": true,
+    "limit": "Zero-count region entries include generic instantiations and defensive paths. They are not counts of distinct branches; stable coverage emitted no branch counters. The remaining witness/disposition audit is open.",
+    "raw_after": {
+      "path": "target/r4-10/coverage/regions.json",
+      "sha256": "547b220ae16cb75c159e7e98953d3964ddbacd2e17c762c3cf796ba35e777aaa"
+    },
+    "raw_before": {
+      "path": "target/r4-10/coverage/regions-before-binary.json",
+      "sha256": "3357dd75fea8ccc48725f99a54b5fb094dd30787ba686ebecf61184bf0c30fab"
+    }
+  },
+  "discovery": {
+    "fix": "Use Python bytes representation through the existing decimal parser; preserve lazy field precedence and complete rollback",
+    "issue": "A legacy BLOB cached price raised a generic native TypeError instead of the Python chained decimal AppError; both restored all database writes",
+    "repro": {
+      "path": "target/r4-10/blob-rate-probe.json",
+      "sha256": "e10b766f1aac6035a22e04de3307086028e05178db7b25806c9cc571d69aa76f"
+    },
+    "scalar_dump_gap": "Python strict JSON could not encode infinite REALs and the native dump encoded them as null; the private dump format now tags their exact IEEE 754 bits"
+  },
+  "file_replay": {
+    "boundary": "ordered source repairs, drifted legacy pair refresh/profile reload, and cached pricing",
+    "full_dump_comparisons": 530,
+    "network": "native process killed on socket/connect/send syscalls; guard self-test passed",
+    "path": "target/r4-10/binary-files.json",
+    "sha256": "d62ff0f60653345afdd2174ae2e907cb242d6b61e7e5c27efd28b8ff76757145"
+  },
+  "mutations": {
+    "catalog": {
+      "path": "crates/journals/scripts/prebuild_binary_mutations.json",
+      "sha256": "a38ce5cfadb5d2e54fd675945c8109292e2ab6950a5432e2a4079992d6bff7cc"
+    },
+    "catalog_sha256": "a38ce5cfadb5d2e54fd675945c8109292e2ab6950a5432e2a4079992d6bff7cc",
+    "elapsed_seconds": 108.22891701399931,
+    "log": {
+      "path": "target/r4-10/numeric-mutations.log",
+      "sha256": "91240f028f0f07b5060b16ff65b41131bc7a383f04dada722a647033fd974692"
+    },
+    "recipes": 19,
+    "result": 0,
+    "source_sha256": {
+      "crates/journals/src/prebuild/pricing.rs": "de86b8a369da7488b715a88d32b9ca166ec46126e18e5c76c4b2ccdddc68c748",
+      "crates/journals/tests/support/mod.rs": "b08803499aa50a6687769235b4749580ee73df7dd4c229ced45a341690696150",
+      "tests/rust_port/journal_persistence_oracle.py": "0a243b400043e2678029d90beb817547a81fd62fa3890d82ddf2a258c7fc2ec5"
+    }
+  },
+  "native_probe": {
+    "path": "target/cargo/release/examples/journal-prebuild",
+    "sha256": "789532a66f02cb9aefdb2e5a3af4d4ab866a2d5ca1cfbef932af1b74f2b8833d"
+  },
+  "native_tests": {
+    "failed": 0,
+    "passed": 109,
+    "path": "target/r4-10/binary-native.log",
+    "scope": "Offline release journal and transfer crates with test-harness",
+    "sha256": "8dae66deca91fc2d9428852a9f3bfb254bedc38417ce9790dd2dd8bd6baa74e1"
+  },
+  "private_dump_format": {
+    "database_schema_unchanged": true,
+    "encoding": "16 lowercase hex digits of big-endian IEEE 754 binary64 bits",
+    "finite_scalars_unchanged": true,
+    "nonfinite_real_tag": "$real_bits",
+    "product_protocol_unchanged": true
+  },
+  "python_reference_unchanged": true,
+  "remaining": [
+    "Complete the uncovered-region/branch witness and disposition audit",
+    "Execute inherited journal (112), transfer/daemon (280) and custody (2327) mutation catalogues",
+    "Profile whole-stage 20k process CPU, optimize caches, compare with 0.03 seconds and record a breakdown if missed",
+    "Bind final whole-campaign gates to the final implementation and write the acceptance record"
+  ],
+  "schema": "kassiber.r4-prebuild-uncovered-numeric.v1",
+  "status": "Verified numeric refusal and scalar dump checkpoint; R4-10 remains unaccepted",
+  "vectors": {
+    "pipeline": {
+      "cases": 68,
+      "new_cases": [
+        "pricing/binary-exact-cache",
+        "pricing/binary-empty-cache",
+        "pricing/binary-single-quote-cache",
+        "pricing/binary-all-bytes-cache",
+        "pricing/binary-numeric-cache",
+        "pricing/binary-exact-rate",
+        "pricing/binary-exact-value",
+        "pricing/binary-numeric-rate",
+        "pricing/binary-numeric-value",
+        "pricing/binary-quantity",
+        "pricing/binary-cache-ignored",
+        "pricing/positive-infinity",
+        "pricing/negative-infinity",
+        "pricing/signaling-nan-without-quantity",
+        "pricing/positive-infinite-real-cache",
+        "pricing/negative-infinite-real-cache",
+        "pricing/infinite-real-quantity"
+      ],
+      "path": "crates/journals/tests/data/prebuild-pipeline.json",
+      "previous_cases_unchanged": 51,
+      "sha256": "4f97c581fc0e166fbb7278e30166cf609805b32558f7d0dc478a8847ae30d1d7"
+    },
+    "pricing": {
+      "cases": 86,
+      "new_cases": [
+        "binary-exact-cache",
+        "binary-empty-cache",
+        "binary-single-quote-cache",
+        "binary-all-bytes-cache",
+        "binary-numeric-cache",
+        "binary-exact-rate",
+        "binary-exact-value",
+        "binary-numeric-rate",
+        "binary-numeric-value",
+        "binary-quantity",
+        "binary-cache-ignored",
+        "positive-infinity",
+        "negative-infinity",
+        "signaling-nan-without-quantity",
+        "positive-infinite-real-cache",
+        "negative-infinite-real-cache",
+        "infinite-real-quantity"
+      ],
+      "path": "crates/journals/tests/data/prebuild-pricing.json",
+      "previous_cases_unchanged": 69,
+      "sha256": "97ddc1e60be36975ee6965c78e166c2216baf256b80d75c478c8d64a15c95f2c"
+    }
+  },
+  "verification": {
+    "classifier": {
+      "path": "target/r4-10/binary-classifier.log",
+      "sha256": "6d5aec411b822716320386bd5a09a02e20eb087879bc27512f783043fa4d4896"
+    },
+    "formatting": "cargo fmt --all -- --check: passed",
+    "full_python_harness": {
+      "path": "target/r4-10/binary-harness.log",
+      "sha256": "c3824251bf20ca7523df030b948ad6fe25ac18867dba87a5c26796d78b4f72d4"
+    },
+    "manual_second_pass": "Reviewed bytes quoting/escaping against every byte, exact error chaining and precedence, rollback after an earlier price write, REAL storage-class restoration, additive vectors, guard integrity and unchanged Python reference",
+    "preflight": {
+      "path": "target/r4-10/binary-preflight.log",
+      "sha256": "5c875015f6bba8cb424626a9bdee8af48a1fc57a91b308511ed42a275ab51246"
+    },
+    "recorder_mutations": {
+      "path": "target/r4-10/binary-recorder-mutations.log",
+      "sha256": "6617c2056f4f195204f6b2f6dd11bc74bf53f3acf3157600e52a4cc36430d21b"
+    },
+    "release_clippy": {
+      "path": "target/r4-10/binary-clippy.log",
+      "sha256": "6273ee77bec4bebe129f4383e4a45d50b34aae61de036d8e4de58c719f31b1df"
+    },
+    "scalar_oracle_controls": {
+      "path": "target/r4-10/binary-python.log",
+      "sha256": "3662410898ede9253e1699bea9a7a94049f0d39050eeb5a7f003d0e8d7cc065b"
+    }
+  }
+}

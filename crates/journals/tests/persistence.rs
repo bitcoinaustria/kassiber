@@ -244,6 +244,44 @@ fn dump_comparison_preserves_scalar_types_and_every_real_bit() {
 }
 
 #[test]
+fn complete_dumps_round_trip_infinite_reals_without_null_substitution() {
+    let source = Connection::open_in_memory().unwrap();
+    let sql = "CREATE TABLE samples(amount REAL)";
+    source.execute_batch(sql).unwrap();
+    for value in [Some(f64::INFINITY), Some(f64::NEG_INFINITY), None] {
+        source
+            .execute("INSERT INTO samples(amount) VALUES(?)", [value])
+            .unwrap();
+    }
+    let restored = Connection::open_in_memory().unwrap();
+    load_schema(
+        &restored,
+        &snapshot(&source),
+        &[serde_json::json!(["table", "samples", "samples", sql])],
+    );
+    let actual = restored
+        .prepare("SELECT typeof(amount),amount FROM samples ORDER BY rowid")
+        .unwrap()
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, Option<f64>>(1)?.map(f64::to_bits),
+            ))
+        })
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert_eq!(
+        actual,
+        vec![
+            ("real".into(), Some(f64::INFINITY.to_bits())),
+            ("real".into(), Some(f64::NEG_INFINITY.to_bits())),
+            ("null".into(), None),
+        ]
+    );
+}
+
+#[test]
 fn repeated_rebuilds_replace_small_tables_and_keep_sealed_resolutions() {
     for v in cases() {
         let c = Connection::open_in_memory().unwrap();

@@ -608,6 +608,10 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   completes across initial runs and exact continuations after recorder fixes.
   Three recorder/guard mutations are killed. Inherited mutation execution,
   the branch audit and whole-stage cache/CPU acceptance remain open.
+  The [numeric branch follow-up](docs/reference/r4-journal-pipeline.md#r4-10-uncovered-numeric-paths)
+  adds binary-number refusal and exact infinite-REAL dump witnesses, with 530
+  file comparisons and 19 killed numeric/dump mutations. Remaining branch
+  dispositions, inherited gates and final campaign binding still block acceptance.
 - [ ] Reject fractional legacy msat before Python's source-overlap fingerprint
   conversion can collapse distinct amounts. The disposable repro is
   `python -m tests.rust_port.repro_journal_fractional_source_overlap`;

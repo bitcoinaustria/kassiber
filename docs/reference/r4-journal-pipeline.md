@@ -922,6 +922,49 @@ and custody (2,327) mutation catalogues apply, but their execution, the branch a
 whole-stage cache/CPU work and final acceptance record remain open. The
 [campaign record](r4-prebuild-campaign-results.json) retains the exact scope.
 
+### R4-10 uncovered numeric paths
+
+Instrumented replay found a refusal mismatch for binary numeric storage. Python
+passes the bytes representation through its decimal parser and raises a chained
+`AppError`; native pricing had raised an unrelated `TypeError`. Native pricing
+now retains Python's quote choice, escaping and decimal cause. Empty bytes are
+not treated as missing prices, and an earlier successful price write still rolls
+back with the later refusal. The Python reference is unchanged.
+
+The corpus adds 17 pricing and 17 ordered cases: binary cache/transaction prices,
+all 256 byte values, lazy precedence, positive/negative infinity, signaling NaN
+without quantity, and infinite legacy quantities. All previous frozen operands,
+expectations and shared bases are unchanged. The corpus now has 86 pricing and
+68 ordered cases, and all **530 SQLite/SQLCipher file comparisons** pass under
+the socket guard.
+
+Those cases also exposed an incomplete comparison format: strict Python JSON
+could not encode infinite stored REALs, while the native dump encoded them as
+null. Private dumps now use `$real_bits` with sixteen hex digits encoding binary64 bits for
+nonfinite REALs. Both fixture loaders restore the storage class and sign; all
+finite scalar representations remain unchanged. This changes no book schema,
+stored production format or product protocol. SQLite round-trip controls and
+the complete stage comparisons prevent null substitution from passing.
+
+All **109 release journal/transfer tests**, **10 Python harness tests**, and
+**19 new numeric/dump mutations** pass; every mutation is killed by its named
+test after its baseline passes. The three recorder/guard mutations are also
+killed again. Formatting and release all-target Clippy pass with warnings denied.
+
+The refreshed coverage run passes 35 pre-build tests. Pricing executable-line
+coverage increases from 294/329 to 328/346, and the active bytes formatter has
+27 calls with no zero-count regions. The isolated coverage build tree is removed
+after export. Stable LLVM instrumentation emits no branch counters: the 209
+remaining zero-count region entries include generic instances and defensive paths,
+so they are not 209 distinct untested branches. Their witness/disposition audit
+is still open. The [branch record](r4-prebuild-branch-results.json) binds source
+hashes, raw exports, mutations and test artifacts.
+
+R4-10 remains **unaccepted**. The remaining branch audit, inherited mutation
+catalogues, whole-stage 20k cache/CPU work, final campaign binding and acceptance
+record remain open. Earlier generated/census/shadow evidence retains its original
+implementation binding; this checkpoint does not claim a fresh whole-campaign run.
+
 ## Performance budget
 
 The budget is for the Rust binary's `journals process` (no `--auto-pair`) on

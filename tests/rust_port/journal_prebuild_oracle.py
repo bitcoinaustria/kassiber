@@ -147,6 +147,23 @@ def vectors():
         "value-derived-rate": ({"fiat_value_exact": '1', "fiat_price_source": 'rates_cache'}, {"rate_exact": '', "rate": ''}),
         "legacy-text-amount-value-derived-rate": ({"amount": '1_000', "fiat_value_exact": '1', "fiat_price_source": 'rates_cache'}, {"rate_exact": '', "rate": ''}),
         "empty-rate-and-value": ({"amount": '1_000'}, {"rate_exact": '', "rate": ''}),
+        "binary-exact-cache": ({}, {"rate_exact": b'123'}),
+        "binary-empty-cache": ({}, {"rate_exact": b''}),
+        "binary-single-quote-cache": ({}, {"rate_exact": b"it's"}),
+        "binary-all-bytes-cache": ({}, {"rate_exact": bytes(range(256))}),
+        "binary-numeric-cache": ({}, {"rate_exact": None, "rate": b'123'}),
+        "binary-exact-rate": ({"fiat_rate_exact": b'1', "fiat_price_source": 'rates_cache'}, {}),
+        "binary-exact-value": ({"fiat_value_exact": b'1', "fiat_price_source": 'rates_cache'}, {}),
+        "binary-numeric-rate": ({"fiat_rate": b'1', "fiat_price_source": 'rates_cache'}, {"rate_exact": None}),
+        "binary-numeric-value": ({"fiat_value": b'1', "fiat_price_source": 'rates_cache', "amount": 0}, {}),
+        "binary-quantity": ({"amount": b'1'}, {}),
+        "binary-cache-ignored": ({"fiat_rate_exact": '1', "fiat_price_source": 'rates_cache'}, {"rate_exact": b'bad'}),
+        "positive-infinity": ({}, {"rate_exact": 'Infinity'}),
+        "negative-infinity": ({}, {"rate_exact": '-Infinity'}),
+        "signaling-nan-without-quantity": ({"amount": 0}, {"rate_exact": 'sNaN12'}),
+        "positive-infinite-real-cache": ({}, {"rate_exact": None, "rate": float('inf')}),
+        "negative-infinite-real-cache": ({}, {"rate_exact": None, "rate": float('-inf')}),
+        "infinite-real-quantity": ({"amount": float('inf')}, {}),
     }
     for name, (tx, cached) in cases.items():
         conn = sqlite3.connect(":memory:")
@@ -165,6 +182,9 @@ def vectors():
             rate(conn, source="a-provider", rate_exact="1", fetched_at="9999")
         if name == "invalid-exact":
             transaction(conn, id="earlier", occurred_at="2025-01-01T01:00:00Z")
+        if name == "binary-exact-cache":
+            transaction(conn, id="earlier", occurred_at="2025-01-01T01:00:00Z",
+                        fiat_rate_exact='1', fiat_price_source='rates_cache')
         output.append(capture(conn, name))
         conn.close()
     return output

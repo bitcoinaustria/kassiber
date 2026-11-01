@@ -6,7 +6,9 @@ UUIDs and clocks are retained; this is private test data, not diagnostics.
 from contextlib import ExitStack
 import itertools
 import json
+import math
 from pathlib import Path
+import struct
 import tempfile
 import uuid
 from unittest.mock import patch
@@ -19,6 +21,22 @@ PATH = Path(__file__).resolve().parents[2] / 'crates/journals/tests/data/persist
 CLOCK = '2026-10-31T12:00:00Z'
 
 
+def encode_scalar(value):
+    if isinstance(value, bytes):
+        return {'$bytes': value.hex()}
+    if isinstance(value, float) and not math.isfinite(value):
+        return {'$real_bits': struct.pack('>d', value).hex()}
+    return value
+
+
+def decode_scalar(value):
+    if isinstance(value, dict) and '$bytes' in value:
+        return bytes.fromhex(value['$bytes'])
+    if isinstance(value, dict) and '$real_bits' in value:
+        return struct.unpack('>d', bytes.fromhex(value['$real_bits']))[0]
+    return value
+
+
 def dump(conn):
     tables = {}
     for (table, sql) in conn.execute("SELECT name,sql FROM sqlite_master WHERE type='table' ORDER BY name").fetchall():
@@ -26,7 +44,7 @@ def dump(conn):
         columns = [row[1] for row in conn.execute(f'PRAGMA table_info({quoted})')]
         if 'WITHOUT ROWID' not in sql.upper(): columns.insert(0, '_rowid_')
         query = ','.join('"' + c.replace('"', '""') + '"' for c in columns)
-        rows = [[{'$bytes':v.hex()} if isinstance(v,bytes) else v for v in r]
+        rows = [[encode_scalar(v) for v in r]
                 for r in conn.execute(f'SELECT {query} FROM {quoted}')]
         rows.sort(key=lambda row: json.dumps(row, sort_keys=True))
         tables[table] = dict(columns=columns, rows=rows)

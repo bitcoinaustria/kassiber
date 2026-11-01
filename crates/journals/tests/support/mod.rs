@@ -32,6 +32,9 @@ fn scalar(v: &Value) -> Sql {
         Value::String(s) => Sql::Text(s.clone()),
         Value::Number(n) if n.is_i64() => Sql::Integer(n.as_i64().unwrap()),
         Value::Number(n) => Sql::Real(n.as_f64().unwrap()),
+        Value::Object(o) if o.len() == 1 && o.contains_key("$real_bits") => Sql::Real(
+            f64::from_bits(u64::from_str_radix(o["$real_bits"].as_str().unwrap(), 16).unwrap()),
+        ),
         Value::Object(o) if o.len() == 1 && o.contains_key("$bytes") => {
             let hex = o["$bytes"].as_str().unwrap();
             assert_eq!(hex.len() % 2, 0);
@@ -126,7 +129,7 @@ pub fn snapshot(c: &Connection) -> Value {
         let mut rows:Vec<Value>=select.query_map([],|r|{
             let mut values=Vec::new();
             for i in 0..columns.len(){values.push(match r.get_ref(i)?{
-                ValueRef::Null=>Value::Null,ValueRef::Integer(n)=>json!(n),ValueRef::Real(n)=>json!(n),ValueRef::Text(s)=>json!(std::str::from_utf8(s).unwrap()),ValueRef::Blob(s)=>json!({"$bytes":s.iter().map(|b|format!("{b:02x}")).collect::<String>()}),
+                ValueRef::Null=>Value::Null,ValueRef::Integer(n)=>json!(n),ValueRef::Real(n) if !n.is_finite()=>json!({"$real_bits":format!("{:016x}", n.to_bits())}),ValueRef::Real(n)=>json!(n),ValueRef::Text(s)=>json!(std::str::from_utf8(s).unwrap()),ValueRef::Blob(s)=>json!({"$bytes":s.iter().map(|b|format!("{b:02x}")).collect::<String>()}),
             });}Ok(Value::Array(values))
         }).unwrap().collect::<rusqlite::Result<_>>().unwrap();
         rows.sort_by_cached_key(|v| {
