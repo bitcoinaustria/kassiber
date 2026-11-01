@@ -4340,3 +4340,12 @@ and all 112 tables, with 228 unchanged-Python cases and guarded native replay.
 Durable synchronization/recovery stays on the parallel 5a branch. Handles, the
 Mirror report and transport registration remain subsequent boundaries. Product
 served-by counts are zero, and AI projections remain Python.
+
+### R5 privacy: process and book-bound handles (partial)
+
+The [handle checkpoint](../reference/rust-shell.md#mirror-process-and-book-bound-handles-r5-partial)
+adds HMAC references with a bounded RAM-only registry, process identity, book
+identity and current-view subject revalidation. Forty-eight unchanged-Python
+replay vectors and actual process-restart tests preserve bytes, all 112 tables
+and the no-egress boundary. This does not register a product entry point or port
+generic AI projections. Report composition and durable integration follow.

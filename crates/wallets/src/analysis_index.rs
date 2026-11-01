@@ -10,6 +10,7 @@ pub mod datasets;
 pub mod entropy;
 #[cfg(any(test, feature = "test-harness"))]
 pub mod fixture;
+pub mod handles;
 pub mod ingestion;
 mod observer;
 pub mod occurrences;

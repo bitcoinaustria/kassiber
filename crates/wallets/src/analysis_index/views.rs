@@ -126,6 +126,9 @@ pub fn with_read<R>(
 }
 
 impl<'a> SqlView<'a> {
+    pub(super) fn book_scope(&self) -> Result<super::handles::BookScope, AppError> {
+        super::handles::BookScope::read(self.conn, self.profile)
+    }
     fn new(
         conn: &'a Connection,
         profile: &'a str,

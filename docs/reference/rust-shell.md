@@ -14627,3 +14627,33 @@ report composition, transport acceptance and registration follow in separate
 commits. AI projections remain Python. There are no dependency, lockfile,
 product schema or egress-permission changes. Product served-by counts remain
 zero; full workspace, frontend and packaged/platform acceptance are not claimed.
+
+## Mirror process and book-bound handles (R5, partial)
+
+`analysis_index::handles` adds opaque HMAC-SHA256 references to a bounded
+32,768-entry RAM registry. A process-local key comes from SQLite's read-only
+random generator. References bind the database location, profile and existing
+database-instance identity. Successful replay refreshes LRU recency; eviction,
+unissued references, another scope, another process and a fresh registry refuse
+with the existing retryable stale-reference error. Keys are cleared on drop.
+
+Only nested `subject` and `target` inputs are decoded. The public decoder derives
+its book scope from the borrowed SQL view and revalidates each subject against
+that current view. The caller cannot substitute a different scope. No handle
+registry or key is persisted, and generic AI projections remain Python.
+
+Forty-eight unchanged-Python token/replay vectors compare canonical JSON bytes
+and all 112 logical tables. Guarded native evaluations run with offline mode
+off/on, zero Python fallback and no network attempts. Two actual native-process
+restart cases verify fresh tokens and exact stale-reference refusal bytes. The
+three native handle tests also cover process identity, connection/profile/book
+identity, subject disappearance and unissued tokens. All seven handle mutations
+compile and are killed by named tests, with passing unmodified baselines.
+
+Workspace formatting and wallet production/harness all-target Clippy pass with
+warnings denied. Evidence stays in `target/r5-mirror-5b/`; mutation build trees
+are removed after recording the summary. This completes the handle boundary
+only. Report composition, durable 5a integration and transport registration
+remain subsequent boundaries; product served-by counts remain zero. There are
+no dependency, lockfile, schema or egress-permission changes, and no full
+workspace, frontend or packaged acceptance claim.
