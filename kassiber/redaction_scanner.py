@@ -63,10 +63,33 @@ def _quoted_end(text: str, pos: int, delimiter: str) -> tuple[int, bool]:
 
 
 def _value_boundary(text: str, pos: int) -> bool:
-    if pos == len(text) or text[pos] in _SPACE + ")]}":
+    while pos < len(text):
+        if text[pos] in ")]}":
+            pos += 1
+        else:
+            delimiter, body = _quote_at(text, pos)
+            if not delimiter:
+                break
+            pos = body
+    if pos == len(text) or text[pos] in _SPACE:
         return True
     if text[pos] in ",;":
-        return pos + 1 == len(text) or text[pos + 1] in _SPACE + "\\\"'"
+        pos += 1
+        gap = pos
+        while pos < len(text) and text[pos] in _SPACE and text[pos] not in _LINES:
+            pos += 1
+        if pos == len(text) or text[pos] in _LINES:
+            return True
+        delimiter, body = _quote_at(text, pos)
+        key = _IDENTIFIER.match(text, body) if delimiter else None
+        if key and text.startswith(delimiter, key.end()):
+            tail = key.end() + len(delimiter)
+            while tail < len(text) and text[tail] in _SPACE:
+                tail += 1
+            return tail < len(text) and text[tail] in ":="
+        prose = _IDENTIFIER.match(text, pos) if pos > gap and not delimiter else None
+        if prose and re.fullmatch(r"[a-z]+", prose.group()):
+            return prose.end() == len(text) or text[prose.end()] in _SPACE + ".!?"
     return False
 
 
@@ -128,7 +151,8 @@ def redact_keyed_secrets(text: str) -> str:
             if in_url and match.start() == head_start and separator == ":" and pos + 1 < len(text) and text[pos + 1] not in _SPACE:
                 continue
             pos += 1
-            if pos < len(text) and text[pos] in "=>":
+            if pos < len(text) and (separator, text[pos]) in (("=", ">"), (":", "=")):
+                separator = "="
                 pos += 1
             while pos < len(text) and text[pos] in _SPACE:
                 pos += 1
