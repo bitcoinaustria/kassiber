@@ -36,6 +36,18 @@ impl From<JournalDecimal> for JournalQuantity {
         Self::Finite(value)
     }
 }
+impl std::fmt::Display for JournalQuantity {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Finite(value) => value.0.fmt(f),
+            Self::NonFinite { text } => f.write_str(match text {
+                NonFiniteDecimal::PositiveInfinity => "Infinity",
+                NonFiniteDecimal::NegativeInfinity => "-Infinity",
+                NonFiniteDecimal::NaN => "NaN",
+            }),
+        }
+    }
+}
 impl JournalQuantity {
     pub(crate) fn from_audit(value: f64, outbound: bool) -> Result<Self, crate::Refusal> {
         if value.is_finite() {
@@ -134,13 +146,6 @@ impl From<Value> for JournalMsat {
     }
 }
 impl JournalMsat {
-    pub(crate) fn value(&self) -> std::borrow::Cow<'_, Value> {
-        match self {
-            Self::Small(n) => std::borrow::Cow::Owned(Value::from(*n)),
-            Self::Wide(n) => std::borrow::Cow::Borrowed(n),
-        }
-    }
-
     pub(crate) fn as_i64(&self) -> Option<i64> {
         match self {
             Self::Small(n) => Some(*n),

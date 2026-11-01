@@ -123,10 +123,7 @@ fn compact<'a>(calculation: &'a Calculation, encoder: &mut Encoder<'a>) -> Optio
     let mut fragments = String::with_capacity(calculation.fragments.len() * 256);
     fragments.push('[');
     for (index, fragment) in calculation.fragments.iter().enumerate() {
-        if !exact_integer_text(
-            &fragment.quantity_msat.value(),
-            Some(&fragment.quantity_msat_exact),
-        ) {
+        if !exact_integer_text(&fragment.quantity_msat, Some(&fragment.quantity_msat_exact)) {
             return None;
         }
         match (
@@ -134,8 +131,7 @@ fn compact<'a>(calculation: &'a Calculation, encoder: &mut Encoder<'a>) -> Optio
             &fragment.acquisition_quantity_msat_exact,
         ) {
             (None, None) => {}
-            (Some(quantity), Some(exact)) if exact_integer_text(&quantity.value(), Some(exact)) => {
-            }
+            (Some(quantity), Some(exact)) if exact_integer_text(quantity, Some(exact)) => {}
             _ => return None,
         }
         if index > 0 {
@@ -237,8 +233,8 @@ mod audit_tests {
             assert_eq!(out, "prefix");
         }
         let mut out = String::new();
-        optional(&None, &mut out, &options);
-        optional(&Some("\n\"".into()), &mut out, &options);
+        optional(&None::<String>, &mut out, &options);
+        optional(&Some(String::from("\n\"")), &mut out, &options);
         assert_eq!(out, "null\"\\n\\\"\"");
     }
 }

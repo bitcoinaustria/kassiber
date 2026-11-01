@@ -1,29 +1,29 @@
 use super::*;
 use serde_json::json;
 
-fn source() -> Source {
+fn source() -> Source<'static> {
     Source {
         provenance: Arc::new(SourceProvenance {
             transaction_id: json!("tx\"\n🔥"),
             engine_event_id: "event".into(),
             occurred_at: "2024-01-01T00:00:00Z".into(),
-            pricing: PricingFacts(std::array::from_fn(|i| {
+            pricing: PricingFacts::Owned(Box::new(std::array::from_fn(|i| {
                 if i % 2 == 0 {
                     Value::Null
                 } else {
                     json!(format!("price-{i}"))
                 }
-            })),
+            }))),
         }),
         asset: "BTC".into(),
         spot_price_exact: "12.000".into(),
         fiat_fee_exact: "0.010".into(),
-        crypto_fee_msat: json!(-7),
+        crypto_fee_msat: json!(-7).into(),
         crypto_fee_msat_exact: "-7".into(),
     }
 }
 
-fn calculation(count: usize) -> Calculation {
+fn calculation(count: usize) -> Calculation<'static> {
     let source = source();
     Calculation {
         schema_version: 1,
@@ -31,21 +31,21 @@ fn calculation(count: usize) -> Calculation {
         method: "fifo\\\t".into(),
         fragments: (0..count)
             .map(|i| Fragment {
-                quantity_msat: json!(-(i as i64)),
+                quantity_msat: json!(-(i as i64)).into(),
                 quantity_msat_exact: format!("{}", -(i as i64)),
-                cost_basis_exact: format!("{i}.000"),
-                proceeds_exact: format!("{i}.100"),
+                cost_basis_exact: format!("{i}.000").into(),
+                proceeds_exact: format!("{i}.100").into(),
                 gain_loss_exact: "é\r\u{0008}\u{000c}".into(),
                 unit_basis_override_exact: (i % 2 == 0).then(|| "1.2300".into()),
                 basis_authority: "acquired_lot",
                 acquisition_basis_exact: (i % 3 == 0).then(|| "2.000".into()),
-                acquisition_quantity_msat: (i % 2 == 0).then(|| json!(31)),
+                acquisition_quantity_msat: (i % 2 == 0).then(|| json!(31).into()),
                 acquisition_quantity_msat_exact: (i % 2 == 0).then(|| "31".into()),
-                event: source.clone(),
+                event: source.clone().into(),
                 lot: (i % 3 != 0).then(|| {
                     let mut lot = source.clone();
                     lot.provenance = Arc::new((*source.provenance).clone());
-                    lot
+                    lot.into()
                 }),
             })
             .collect(),
@@ -117,11 +117,11 @@ fn comparison_dispatch_and_refusals_preserve_exact_storage_bytes() {
         let mut calculation = calculation(count);
         if count == 8 || count == 20 {
             for (index, fragment) in calculation.fragments.iter_mut().enumerate() {
-                Arc::make_mut(&mut fragment.event.provenance).engine_event_id =
-                    format!("event-{index}");
+                Arc::make_mut(&mut Arc::make_mut(&mut fragment.event).provenance).engine_event_id =
+                    format!("event-{index}").into();
                 let mut lot = source();
-                Arc::make_mut(&mut lot.provenance).engine_event_id = format!("lot-{index}");
-                fragment.lot = Some(lot);
+                Arc::make_mut(&mut lot.provenance).engine_event_id = format!("lot-{index}").into();
+                fragment.lot = Some(lot.into());
             }
         }
         let mut sources = Sources::default();
@@ -138,17 +138,23 @@ fn comparison_dispatch_and_refusals_preserve_exact_storage_bytes() {
             match field {
                 0 => calculation.schema_version = 2,
                 1 => fragment.quantity_msat_exact = "-999".into(),
-                2 => fragment.quantity_msat = json!(1.5),
+                2 => fragment.quantity_msat = json!(1.5).into(),
                 3 => fragment.acquisition_quantity_msat = None,
                 4 => fragment.acquisition_quantity_msat_exact = None,
                 5 => fragment.acquisition_quantity_msat_exact = Some("9".into()),
-                6 => Arc::make_mut(&mut fragment.event.provenance).transaction_id = json!(true),
-                7 => fragment.event.crypto_fee_msat_exact = "1".into(),
-                8 => Arc::make_mut(&mut fragment.event.provenance).pricing.0[6] = json!({}),
+                6 => {
+                    Arc::make_mut(&mut Arc::make_mut(&mut fragment.event).provenance)
+                        .transaction_id = json!(true)
+                }
+                7 => Arc::make_mut(&mut fragment.event).crypto_fee_msat_exact = "1".into(),
+                8 => {
+                    Arc::make_mut(&mut Arc::make_mut(&mut fragment.event).provenance).pricing[6] =
+                        json!({})
+                }
                 9 => {
-                    fragment.lot = Some(source());
-                    Arc::make_mut(&mut fragment.lot.as_mut().unwrap().provenance).transaction_id =
-                        json!([]);
+                    fragment.lot = Some(source().into());
+                    Arc::make_mut(&mut Arc::make_mut(fragment.lot.as_mut().unwrap()).provenance)
+                        .transaction_id = json!([]);
                 }
                 _ => unreachable!(),
             }
@@ -170,21 +176,22 @@ fn comparison_source_dictionary_retains_every_field_and_cache_identity() {
     for field in 0..19 {
         for count in [2, 9] {
             let mut calculation = calculation(count);
-            let source = &mut calculation.fragments[1].event;
+            let source = Arc::make_mut(&mut calculation.fragments[1].event);
             match field {
                 0 => Arc::make_mut(&mut source.provenance).transaction_id = Value::Null,
                 1 => Arc::make_mut(&mut source.provenance)
                     .engine_event_id
+                    .to_mut()
                     .push('x'),
                 2 => Arc::make_mut(&mut source.provenance).occurred_at.push('x'),
-                3 => source.asset.push('x'),
-                4 => source.spot_price_exact.push('0'),
-                5 => source.fiat_fee_exact.push('0'),
+                3 => source.asset.to_mut().push('x'),
+                4 => source.spot_price_exact.to_mut().push('0'),
+                5 => source.fiat_fee_exact.to_mut().push('0'),
                 6 => {
-                    source.crypto_fee_msat = json!(0);
+                    source.crypto_fee_msat = json!(0).into();
                     source.crypto_fee_msat_exact = "0".into();
                 }
-                _ => Arc::make_mut(&mut source.provenance).pricing.0[field - 7] = json!("changed"),
+                _ => Arc::make_mut(&mut source.provenance).pricing[field - 7] = json!("changed"),
             }
             assert_comparison(&calculation);
             let mut sources = Sources::default();
@@ -220,11 +227,16 @@ fn comparison_source_dictionary_retains_every_field_and_cache_identity() {
 
 #[test]
 fn comparison_scalars_refuse_noncanonical_tokens() {
-    for scalar in [Scalar::Null, Scalar::quoted("x"), Scalar::Integer("7")] {
+    for scalar in [
+        Scalar::Null,
+        Scalar::quoted("x"),
+        Scalar::Integer("7"),
+        Scalar::Small(7),
+    ] {
         let token = match scalar {
             Scalar::Null => b"null".as_slice(),
             Scalar::Text(..) => b"\"x\"",
-            Scalar::Integer(_) => b"7",
+            Scalar::Integer(_) | Scalar::Small(_) => b"7",
         };
         let mut cursor = Cursor(token);
         assert!(scalar.consume(&mut cursor).is_some());
@@ -239,12 +251,14 @@ fn comparison_scalars_refuse_noncanonical_tokens() {
     assert!(Cursor(b"").scalar(&json!(true)).is_none());
     let zero = Value::Number(serde_json::Number::from_string_unchecked("-0".into()));
     assert_eq!(zero.as_number().unwrap().as_str(), "-0");
-    assert!(Scalar::integer(&zero).consume(&mut Cursor(b"0")).is_some());
+    assert!(Scalar::integer(&zero.clone().into())
+        .consume(&mut Cursor(b"0"))
+        .is_some());
     let mut negative = source();
-    negative.crypto_fee_msat = zero;
+    negative.crypto_fee_msat = zero.into();
     negative.crypto_fee_msat_exact = "-0".into();
     let mut positive = negative.clone();
-    positive.crypto_fee_msat = json!(0);
+    positive.crypto_fee_msat = json!(0).into();
     positive.crypto_fee_msat_exact = "0".into();
     assert!(source_equal(&negative, &positive));
     assert!(source_equal(&positive, &negative));

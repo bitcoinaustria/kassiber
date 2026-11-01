@@ -71,6 +71,9 @@ pub fn refresh_native_checked<'a>(
                 match error {
                     pairing::AutomaticPairingError::App(error) => prebuild::app(error),
                     pairing::AutomaticPairingError::Sqlite(error) => error.into(),
+                    pairing::AutomaticPairingError::Python { family, message } => {
+                        Refusal::new(family, message)
+                    }
                 }
             })
         },

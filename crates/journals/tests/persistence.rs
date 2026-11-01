@@ -368,7 +368,7 @@ fn complete_dumps_round_trip_infinite_reals_without_null_substitution() {
     load_schema(
         &restored,
         &snapshot(&source),
-        &[serde_json::json!(["table", "samples", "samples", sql])],
+        &serde_json::json!([["table", "samples", "samples", sql]]),
     );
     let actual = restored
         .prepare("SELECT typeof(amount),amount FROM samples ORDER BY rowid")

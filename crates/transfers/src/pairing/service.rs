@@ -738,7 +738,7 @@ pub fn auto_pair_before_journals_captured(
     scope: &Scope<'_>,
     sources: &dyn Sources,
 ) -> std::result::Result<Value, AutomaticPairingError> {
-    crate::sql::capture_sqlite(|| auto_pair_before_journals(c, scope, sources))
+    crate::sql::capture_sqlite(|| Ok(auto_pair_before_journals(c, scope, sources)?))
 }
 
 #[cfg(test)]

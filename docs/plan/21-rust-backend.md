@@ -2649,7 +2649,7 @@ Python retains production journal authority, and the native loader remains
 behind `test-harness` until its separate integration/authority gates. Shipped
 Python was audited separately and is unaffected by the port-branch reference fix.
 
-<!-- inherited from process@684c76bad; pending r10 verification -->
+> Inherited from `t3code/r4-13-journals-process-6@684c76bad`; pending r10 verification.
 Loader-8's paired 20k CPU totals including admission remain 0.288331 s generic
 and 0.428645 s multi-wallet, both within 5% of loader-7. Those timings and the
 16,384-case non-BLOB audit are inherited unchanged; the final campaign results

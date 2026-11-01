@@ -347,15 +347,22 @@ mod tests {
         use storage::BindingRow;
         let cases: Value =
             serde_json::from_str(include_str!("../../tests/data/render.json")).unwrap();
-        let entry = array(&cases)
+        let responses: Vec<_> = array(&cases)
             .iter()
-            .find_map(|case| {
-                let response = crate::boundary::ledger_response(&case["response"]).ok()?;
+            .filter_map(|case| {
+                crate::boundary::ledger_response(&case["response"])
+                    .ok()
+                    .map(|response| (case, response))
+            })
+            .collect();
+        let entry = responses
+            .iter()
+            .find_map(|(case, response)| {
                 let state = crate::boundary::build(
                     &case["profile"],
                     &case["custody"],
                     array(&case["wallets"]),
-                    &response,
+                    response,
                     String::new,
                 )
                 .ok()?;

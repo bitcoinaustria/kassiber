@@ -622,7 +622,7 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   All 2,327 inherited custody recipes also pass across verified prefixes and
   a targeted continuation. Final campaign binding and acceptance remain open.
 
-<!-- inherited from prebuild@a0393276a; pending r10 verification -->
+> Inherited from `t3code/r4-10-prebuild-5@a0393276a`; pending r10 verification.
 - [ ] R4-9 to R4-12: native loader, pre-build repairs, rendering and joins,
   persistence, each with byte or database-dump parity.
 - [x] Finish the [R4-10 pre-build boundary](docs/reference/r4-journal-pipeline.md#r4-10-functional-acceptance):
@@ -654,7 +654,7 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   cells. Unchanged builds still need a cheap comparison path. Corrected appended
   benchmark inputs carry distinct raw identities and assert actual writes.
 
-<!-- inherited from persist-accept@d6e46912b; pending r10 verification -->
+> Inherited from `t3code/r4-12-persist-accept@d6e46912b`; pending r10 verification.
   repeated work; the last complete five-pair campaign passes one of eight
   required 20k fresh/unchanged cells. A later schema-preserving digest probe
   missed the generic unchanged CPU budget over five pairs and was withdrawn;
@@ -668,7 +668,7 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   rewrite witness remain, with a targeted `JP-signed-zero` kill. Corrected
   appended benchmark inputs carry distinct raw identities and assert actual writes.
 
-<!-- inherited from persist-accept@9730f9e4b; pending r10 verification -->
+> Inherited from `t3code/r4-12-persist-accept@9730f9e4b`; pending r10 verification.
   close the accepted CPU budgets (read floor + 0.15 s unchanged; write floor +
   0.15 s fresh), exhaustive persistence mutations and inherited campaign gates
   before wiring production in R4-13. The unregistered service, complete dump
@@ -746,7 +746,7 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
 - [ ] R4-13, R4-15 and R4-16: CLI and daemon journal commands, integration of
   automatic pairing, the freshness journal job and the authority switch.
 
-<!-- inherited from refresh@dfeaf1533; pending r10 verification -->
+> Inherited from `t3code/r4-15-journal-refresh@dfeaf1533`; pending r10 verification.
   reaches 13.02× / 11.75× Python at 20k. Pairing journal routes remain Python.
 - [ ] R4-13 and R4-16: CLI and daemon journal commands, integration of
   automatic pairing and the authority switch.
@@ -759,7 +759,7 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   gates, then register CLI and daemon in separate verified commits. Reconcile
   the desktop daemon's pairing default with R4-14 before changing its route;
 
-<!-- inherited from process@684c76bad; pending r10 verification -->
+> Inherited from `t3code/r4-13-journals-process-6@684c76bad`; pending r10 verification.
   The continuation imports complete R4-10 pre-build, R4-14 pairing, renderer
   boundary hardening and persistence recovery. Its real pre-build adapter retains
   profile reload and distinct repair/build/store/filed-report clocks; complete
@@ -802,7 +802,7 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   Lossless refusal closure, inherited campaigns and timing acceptance remain
   on the R4-13/R4-16 tracks.
 
-<!-- inherited from render@f1712c625; pending r10 verification -->
+> Inherited from `t3code/r4-11-render-fidelity-5@f1712c625`; pending r10 verification.
   ownership graph consumption is completed by the
   [native ownership continuation](docs/reference/r4-journal-render-scalar-checkpoint.md#native-ownership-graph-continuation),
   which compares 1,435 complete outcomes. The

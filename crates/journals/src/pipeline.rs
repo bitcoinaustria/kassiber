@@ -44,6 +44,8 @@ pub fn memory_snapshot(
 }
 
 pub struct Prepared {
+    response:
+        std::cell::OnceCell<Result<kassiber_tax_core::ledger::response::LedgerResponse, Refusal>>,
     pub computed: Computed,
     pub custody: Value,
     pub wallets: Vec<Value>,
@@ -79,6 +81,7 @@ impl Prepared {
         custody["rates"] = rates(&computed.snapshot.rate_rows)?;
         custody["warnings"] = warnings(&wallets, &computed.snapshot.ownership_warnings);
         Ok(Self {
+            response: std::cell::OnceCell::new(),
             computed,
             custody,
             wallets,
@@ -95,33 +98,40 @@ impl Prepared {
     }
 
     pub fn render(&self, ids: impl FnMut() -> String) -> Result<JournalState<'_>, Refusal> {
-        let response = match &self.computed.fusion {
-            Fusion::Empty => boundary::empty_response(),
-            Fusion::Ledger { response, .. } => {
-                let response = serde_json::from_str(response)
-                    .map_err(|error| Refusal::new("ValueError", error.to_string()))?;
-                boundary::ledger_response(&response)?
-            }
-            Fusion::Refused(error) => {
-                let mut refusal = Refusal::new(
-                    error["family"].as_str().unwrap_or("RuntimeError"),
-                    crate::string(&error["message"]),
-                );
-                refusal.code = error["code"].as_str().map(str::to_owned);
-                refusal.hint = error["hint"].as_str().map(str::to_owned);
-                refusal.details = error["details"].clone();
-                refusal.invariant = error["invariant"].as_str().map(str::to_owned);
-                refusal.error_class = error["error_class"].as_str().map(str::to_owned);
-                return Err(refusal);
-            }
-            Fusion::Skipped => {
-                return Err(Refusal::new(
-                    "RuntimeError",
-                    "journal build requires finalized custody projection",
-                ));
-            }
-        };
-        boundary::build(&self.profile, &self.custody, &self.wallets, &response, ids)
+        let response = self
+            .response
+            .get_or_init(|| {
+                let response = match &self.computed.fusion {
+                    Fusion::Empty => boundary::empty_response(),
+                    Fusion::Ledger { response, .. } => {
+                        let response = serde_json::from_str(response)
+                            .map_err(|error| Refusal::new("ValueError", error.to_string()))?;
+                        boundary::ledger_response(&response)?
+                    }
+                    Fusion::Refused(error) => {
+                        let mut refusal = Refusal::new(
+                            error["family"].as_str().unwrap_or("RuntimeError"),
+                            crate::string(&error["message"]),
+                        );
+                        refusal.code = error["code"].as_str().map(str::to_owned);
+                        refusal.hint = error["hint"].as_str().map(str::to_owned);
+                        refusal.details = error["details"].clone();
+                        refusal.invariant = error["invariant"].as_str().map(str::to_owned);
+                        refusal.error_class = error["error_class"].as_str().map(str::to_owned);
+                        return Err(refusal);
+                    }
+                    Fusion::Skipped => {
+                        return Err(Refusal::new(
+                            "RuntimeError",
+                            "journal build requires finalized custody projection",
+                        ));
+                    }
+                };
+                Ok(response)
+            })
+            .as_ref()
+            .map_err(Clone::clone)?;
+        boundary::build(&self.profile, &self.custody, &self.wallets, response, ids)
     }
 
     pub fn review_state(

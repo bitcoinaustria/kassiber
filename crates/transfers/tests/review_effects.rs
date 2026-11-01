@@ -38,22 +38,22 @@ fn string(value: &Value) -> &'static str {
         value => panic!("test vocabulary {value}"),
     }
 }
-fn entries(state: &Value) -> Vec<JournalEntryRow> {
+fn entries(state: &Value) -> Vec<JournalEntryRow<'_>> {
     state["entries"]
         .as_array()
         .unwrap()
         .iter()
         .map(|row| JournalEntryRow {
             id: row["id"].as_str().unwrap().into(),
-            workspace_id: row["workspace_id"].clone(),
-            profile_id: row["profile_id"].clone(),
+            workspace_id: &row["workspace_id"],
+            profile_id: &row["profile_id"],
             transaction_id: row["transaction_id"].clone(),
-            wallet_id: row["wallet_id"].clone(),
-            account_id: row["account_id"].clone(),
+            wallet_id: &row["wallet_id"],
+            account_id: &row["account_id"],
             occurred_at: row["occurred_at"].clone(),
             entry_type: string(&row["entry_type"]),
             asset: row["asset"].as_str().unwrap().into(),
-            quantity: decimal(&row["quantity"]),
+            quantity: decimal(&row["quantity"]).into(),
             fiat_value: decimal(&row["fiat_value"]),
             unit_cost: decimal(&row["unit_cost"]),
             cost_basis: optional(&row["cost_basis"]),

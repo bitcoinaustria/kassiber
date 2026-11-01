@@ -208,8 +208,10 @@ impl kassiber_wallets::freshness::execution::Handler for Refresh<'_> {
         #[cfg(feature = "test-harness")]
         let committed = std::cell::Cell::new(false);
         #[cfg(feature = "test-harness")]
+        let observed = std::cell::Cell::new(0);
+        #[cfg(feature = "test-harness")]
         let mut writes = RefreshWrites {
-            writes: Writes(0),
+            writes: Writes(&observed),
             committed: &committed,
         };
         #[cfg(not(feature = "test-harness"))]

@@ -1,4 +1,5 @@
 #![cfg(feature = "test-harness")]
+#[allow(dead_code)]
 mod support;
 use kassiber_envelope::AppError;
 use kassiber_journals::process::{self, RefreshOptions};

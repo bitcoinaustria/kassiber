@@ -44,7 +44,7 @@ The unregistered transfer review harness links the existing internal journal
 assembler directly to the case reader. This adds no external package or license.
 Review operation digests reuse the same locked `bitcoin_hashes` SHA-256 primitive.
 
-<!-- inherited from persist-accept@7536e8214; pending r10 verification -->
+> Inherited from `t3code/r4-12-persist-accept@7536e8214`; pending r10 verification.
 Persistence tests enable the existing store `test-hooks` feature's rusqlite
 authorizer to inject real PRAGMA refusals through its safe API. The standard
 library cannot inject SQLite authorization errors; no package or lockfile

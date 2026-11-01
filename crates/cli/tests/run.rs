@@ -4,7 +4,6 @@ use std::io::Write;
 use std::sync::{Arc, Mutex};
 
 #[cfg(feature = "test-probe")]
-use kassiber_cli::PROBE_NOT_IMPLEMENTED;
 use kassiber_cli::{run, Environment, Streams};
 use kassiber_runtime::fake::{FakeConfig, FakeStore};
 use kassiber_runtime::store::{BookStore, StubStore, UnlockMode};

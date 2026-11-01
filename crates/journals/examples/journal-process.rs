@@ -173,8 +173,8 @@ fn run(v: &Value) -> Result<(), Box<dyn std::error::Error>> {
     }
     c.execute_batch("PRAGMA foreign_keys=ON; PRAGMA temp_store=MEMORY; PRAGMA cache_size=-16000")?;
     if v["database"].is_null() {
-        if let Some(schema) = v["schema"].as_array() {
-            support::load_schema(&c, &v["before"], schema);
+        if !v["schema"].is_null() {
+            support::load_schema(&c, &v["before"], &v["schema"]);
         } else {
             support::load(&c, &v["before"]);
         }

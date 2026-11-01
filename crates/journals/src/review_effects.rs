@@ -25,12 +25,12 @@ fn scalar(value: &serde_json::Value) -> Result<Value> {
 fn entry(row: &JournalEntryRow) -> Result<Value> {
     Ok(dict([
         ("transaction_id", scalar(&row.transaction_id)?),
-        ("wallet_id", scalar(&row.wallet_id)?),
-        ("account_id", scalar(&row.account_id)?),
+        ("wallet_id", scalar(row.wallet_id)?),
+        ("account_id", scalar(row.account_id)?),
         ("occurred_at", scalar(&row.occurred_at)?),
         ("entry_type", s(row.entry_type)),
-        ("asset", s(row.asset.as_str())),
-        ("quantity", s(row.quantity.0.to_string())),
+        ("asset", s(row.asset.as_ref())),
+        ("quantity", s(row.quantity.to_string())),
         ("fiat_value", s(row.fiat_value.0.to_string())),
         ("unit_cost", s(row.unit_cost.0.to_string())),
         (
@@ -225,7 +225,7 @@ fn acquisition(state: &JournalState<'_>, conn: &Connection, scope: &Scope<'_>) -
     let mut totals = BTreeMap::<String, [Decimal; 5]>::new();
     for entry in &state.entries {
         let row = totals
-            .entry(entry.asset.clone())
+            .entry(entry.asset.to_string())
             .or_insert_with(|| std::array::from_fn(|_| Decimal::zero()));
         let mut add = |index: usize, number: &Decimal| -> Result<()> {
             row[index] = row[index]

@@ -490,44 +490,35 @@ fn typed_calculations_preserve_compact_bytes_and_all_dynamic_fallbacks() {
                     }
                     9 => c.fragments[0].acquisition_quantity_msat = Some(json!(true).into()),
                     10 => {
-                        std::sync::Arc::make_mut(&mut c.fragments[0].event).crypto_fee_msat_exact =
+                        Arc::make_mut(&mut c.fragments[0].event).crypto_fee_msat_exact =
                             "wrong".into()
                     }
                     11 => {
-                        std::sync::Arc::make_mut(&mut c.fragments[0].event).crypto_fee_msat =
+                        Arc::make_mut(&mut c.fragments[0].event).crypto_fee_msat =
                             json!(false).into()
                     }
                     12 => {
-                        std::sync::Arc::make_mut(
-                            &mut std::sync::Arc::make_mut(&mut c.fragments[0].event).provenance,
-                        )
-                        .transaction_id = json!(1)
+                        Arc::make_mut(&mut Arc::make_mut(&mut c.fragments[0].event).provenance)
+                            .transaction_id = json!(1)
                     }
                     13 => {
-                        std::sync::Arc::make_mut(
-                            &mut std::sync::Arc::make_mut(&mut c.fragments[0].event).provenance,
-                        )
-                        .pricing[0] = json!(true)
+                        Arc::make_mut(&mut Arc::make_mut(&mut c.fragments[0].event).provenance)
+                            .pricing[0] = json!(true)
                     }
                     14 => c.fragments[0].lot = None,
                     17 => {
-                        std::sync::Arc::make_mut(
-                            &mut std::sync::Arc::make_mut(&mut c.fragments[0].event).provenance,
-                        )
-                        .pricing[0] = json!(1)
+                        Arc::make_mut(&mut Arc::make_mut(&mut c.fragments[0].event).provenance)
+                            .pricing[0] = json!(1)
                     }
                     18 => {
                         let mut positive = c.fragments[0].clone();
                         positive.lot = None;
-                        std::sync::Arc::make_mut(&mut positive.event).crypto_fee_msat =
-                            json!(0).into();
-                        std::sync::Arc::make_mut(&mut positive.event).crypto_fee_msat_exact =
-                            "0".into();
+                        Arc::make_mut(&mut positive.event).crypto_fee_msat = json!(0).into();
+                        Arc::make_mut(&mut positive.event).crypto_fee_msat_exact = "0".into();
                         let mut negative = positive.clone();
-                        std::sync::Arc::make_mut(&mut negative.event).crypto_fee_msat =
+                        Arc::make_mut(&mut negative.event).crypto_fee_msat =
                             serde_json::from_str::<Value>("-0").unwrap().into();
-                        std::sync::Arc::make_mut(&mut negative.event).crypto_fee_msat_exact =
-                            "-0".into();
+                        Arc::make_mut(&mut negative.event).crypto_fee_msat_exact = "-0".into();
                         c.fragments = vec![negative, positive];
                     }
                     16 => {
@@ -574,7 +565,7 @@ fn typed_calculation_source_dictionary_preserves_order_and_deduplicates_large_in
     };
     for index in 0..4096 {
         let source = Source {
-            provenance: std::sync::Arc::new(SourceProvenance {
+            provenance: Arc::new(SourceProvenance {
                 transaction_id: json!(format!("transaction-{index}")),
                 engine_event_id: format!("event-{index}").into(),
                 occurred_at: "2026-01-01T00:00:00Z".into(),
@@ -626,7 +617,6 @@ fn typed_calculation_source_dictionary_preserves_order_and_deduplicates_large_in
 
 #[test]
 fn shared_calculation_encoder_keeps_every_source_operand_and_refusal() {
-    use std::sync::Arc;
     let cases: Value = serde_json::from_str(include_str!("../../tests/data/render.json")).unwrap();
     let responses: Vec<_> = array(&cases)
         .iter()

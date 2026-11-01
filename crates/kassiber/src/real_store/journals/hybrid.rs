@@ -142,7 +142,8 @@ pub(super) fn replay(
                 return Err(Failure::App(AppError {
                     code: error["code"].as_str().ok_or_else(failed)?.into(),
                     message: error["message"].as_str().ok_or_else(failed)?.into(),
-                    hint: error["hint"].as_str().map(str::to_owned),
+                    hint: error["hint"].as_str().map(Into::into),
+                    message_codepoints: None,
                     details: (!error["details"].is_null())
                         .then(|| convert(&error["details"]))
                         .transpose()

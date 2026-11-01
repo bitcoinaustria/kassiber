@@ -475,12 +475,6 @@ fn stage_value(value: &kassiber_pyjson::Value) -> Result<Value, Refusal> {
     use kassiber_pyjson::{Key, Value as Py};
     Ok(match value {
         Py::Null => Value::Null,
-        Py::Bytes(_) => {
-            return Err(Refusal::new(
-                "TypeError",
-                "Object of type bytes is not JSON serializable",
-            ))
-        }
         Py::Bool(v) => json!(v),
         Py::Int(v) => serde_json::from_str(&v.to_string())
             .map_err(|e| Refusal::new("ValueError", e.to_string()))?,

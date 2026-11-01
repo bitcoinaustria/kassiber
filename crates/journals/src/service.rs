@@ -204,7 +204,8 @@ pub fn application_error(refusal: Refusal) -> AppError {
         AppError {
             code: refusal.code.clone().unwrap_or_else(|| "app_error".into()),
             message: refusal.message.clone(),
-            hint: refusal.hint.clone(),
+            hint: refusal.hint.clone().map(Into::into),
+            message_codepoints: None,
             details: (!refusal.details.is_null())
                 .then(|| kassiber_custody::codec::from_json(&refusal.details).ok())
                 .flatten(),

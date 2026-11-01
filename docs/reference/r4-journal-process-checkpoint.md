@@ -518,7 +518,7 @@ eight build jobs, locked Python 3.11 and disposable roots under `target/`.
 The required classification update passes without inventory changes; CI
 preflight passes **57 tests**. The final workspace formatting check passes.
 
-<!-- inherited from process@684c76bad; pending r10 verification -->
+> Inherited from `t3code/r4-13-journals-process-6@684c76bad`; pending r10 verification.
 ## Third continuation: merged stages and process campaigns
 
 The local `t3code/r4-13-journals-process-3` continuation starts at
