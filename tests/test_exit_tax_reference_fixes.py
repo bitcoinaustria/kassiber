@@ -59,6 +59,14 @@ def test_malformed_date_only_departure_is_invalid_not_missing_an_offset(country,
         exit_tax._resolve_departure(departure, country)
 
 
+@pytest.mark.parametrize("country", ("at", "generic"))
+@pytest.mark.parametrize("departure", ("garbage", "2024-02-30", "1711843200", "T24:00"))
+def test_unparseable_departure_has_validation_error_code(country, departure):
+    with pytest.raises(AppError) as error:
+        exit_tax._resolve_departure(departure, country)
+    assert error.value.code == "validation"
+
+
 @pytest.mark.parametrize("country", ["at", "generic"])
 def test_report_names_the_books_selected_method(country):
     with _conn_with_rate(60000) as conn:
