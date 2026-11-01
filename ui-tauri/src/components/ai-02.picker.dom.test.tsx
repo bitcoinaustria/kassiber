@@ -2,7 +2,7 @@
 //
 // Integration: the composer with the real ProviderModelPicker and its docked
 // reasoning column (the other composer tests mock the picker). Covers the
-// composer's Mod+Shift+M and Mod+Shift+E shortcuts, and picking a model with
+// composer's Mod+Shift+M and Mod+Shift+K shortcuts, and picking a model with
 // the pointer while the picker stays open on its levels.
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
@@ -128,11 +128,11 @@ describe("Ai02 with the real model picker", () => {
     expect(screen.getByRole("combobox")).toBeTruthy();
   });
 
-  it("opens on the reasoning levels with Mod+Shift+E, and moves there when open", async () => {
+  it("opens on the reasoning levels with Mod+Shift+K, and moves there when open", async () => {
     render(<Harness onSelectionChange={vi.fn()} />);
     const composer = screen.getByRole("textbox");
     await act(async () => {
-      fireEvent.keyDown(composer, { key: "e", ctrlKey: true, shiftKey: true });
+      fireEvent.keyDown(composer, { key: "k", ctrlKey: true, shiftKey: true });
     });
     const column = document.querySelector<HTMLElement>("[data-model-picker-effort]")!;
     expect(column).not.toBeNull();
@@ -143,7 +143,7 @@ describe("Ai02 with the real model picker", () => {
     const search = screen.getByRole("combobox");
     search.focus();
     await act(async () => {
-      fireEvent.keyDown(search, { key: "e", ctrlKey: true, shiftKey: true });
+      fireEvent.keyDown(search, { key: "k", ctrlKey: true, shiftKey: true });
     });
     expect(screen.getByRole("combobox")).toBeTruthy();
     expect(column.contains(document.activeElement)).toBe(true);

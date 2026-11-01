@@ -224,6 +224,17 @@ describe("ProviderModelPicker docked traits", () => {
     expect(column()!.contains(document.activeElement)).toBe(true);
   });
 
+  it("does not switch models with ArrowRight on a highlight the mouse left behind", async () => {
+    const { onChange } = mount({ provider: "codex", model: "gpt-5.4" });
+    const search = screen.getByRole("combobox");
+    const other = screen.getByText("gpt-5.4-mini").closest("[data-model-picker-row], [role=option], li, button")!;
+    fireEvent.mouseMove(other);
+    await act(async () => {
+      fireEvent.keyDown(search, { key: "ArrowRight" });
+    });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it("keeps the picker open after Enter picks a model", async () => {
     const { onChange, onOpenChange } = mount({ provider: "codex", model: "gpt-5.4" });
     const search = screen.getByRole("combobox");

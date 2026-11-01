@@ -146,6 +146,10 @@ export function ModelPickerContent({
   }
   const [query, setQuery] = React.useState("");
   const [highlightedKey, setHighlightedKey] = React.useState<string | null>(null);
+  // Whether the highlight was last moved with the arrow keys. Only such a
+  // highlight is picked by ArrowRight; one the mouse or a rail switch left
+  // behind is not.
+  const keyboardHighlight = React.useRef(false);
   const [heldHeight, setHeldHeight] = React.useState<number | null>(null);
   const rootRef = React.useRef<HTMLDivElement>(null);
   const listRef = React.useRef<HTMLDivElement>(null);
@@ -377,6 +381,7 @@ export function ModelPickerContent({
     const start = highlightedIndex < 0 ? (delta > 0 ? -1 : 0) : highlightedIndex;
     const next = (start + delta + items.length) % items.length;
     scrollHighlightRef.current = true;
+    keyboardHighlight.current = true;
     setHighlightedKey(items[next].key);
   };
 
@@ -406,14 +411,18 @@ export function ModelPickerContent({
       event.currentTarget.selectionStart === query.length &&
       event.currentTarget.selectionEnd === query.length
     ) {
-      event.preventDefault();
-      // The column shows the selected model's levels, so a highlighted model
-      // is picked first; the picker then moves focus to its levels.
+      // The column shows the selected model's levels, so a model the arrow
+      // keys highlighted is picked first; the picker then moves to its
+      // levels. A highlight the mouse or a rail switch left behind is not
+      // picked by an arrow key; Enter picks it.
       const item = items[highlightedIndex];
-      if (item && item.key !== selectedKey && !selectDisabled) {
+      if (item && item.key !== selectedKey) {
+        if (!keyboardHighlight.current || highlightedKey === null || selectDisabled) return;
+        event.preventDefault();
         pick(item);
         return;
       }
+      event.preventDefault();
       onFocusEffort();
       return;
     }
@@ -665,7 +674,10 @@ export function ModelPickerContent({
                   jumpLabel={jumpLabels.get(item.key) ?? null}
                   disabled={selectDisabled}
                   onSelect={() => pick(item)}
-                  onHighlight={() => setHighlightedKey(item.key)}
+                  onHighlight={() => {
+                    keyboardHighlight.current = false;
+                    setHighlightedKey(item.key);
+                  }}
                   favoriteShortcut={favoriteShortcut}
                   onToggleFavorite={() => onToggleFavorite(item.provider.name, item.model.id)}
                 />

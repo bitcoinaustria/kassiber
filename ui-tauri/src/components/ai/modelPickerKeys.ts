@@ -80,9 +80,10 @@ export const MODEL_PICKER_FAVORITE_SHORTCUT = ["mod", "d"] as const;
 
 /**
  * Opens the picker on the reasoning levels, or moves there when it is open
- * (T3 Code's `composer.effort` binding).
+ * (T3 Code's `composer.effort` binding). T3 Code uses Mod+Shift+E, which the
+ * native menu already gives to Reports & Export.
  */
-export const MODEL_PICKER_EFFORT_SHORTCUT = ["mod", "shift", "e"] as const;
+export const MODEL_PICKER_EFFORT_SHORTCUT = ["mod", "shift", "k"] as const;
 
 /** Every level Kassiber can label and send, lowest first. */
 export const KNOWN_EFFORTS: readonly AssistantThinkingEffort[] = [

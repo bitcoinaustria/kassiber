@@ -366,13 +366,13 @@ export default function Ai02({
       setPickerOpen((open) => !open);
       return;
     }
-    // Mod+Shift+E opens the picker on its reasoning levels, or moves there
+    // Mod+Shift+K opens the picker on its reasoning levels, or moves there
     // when it is open (T3 Code's composer.effort).
     if (
       (event.metaKey || event.ctrlKey) &&
       event.shiftKey &&
       !event.altKey &&
-      event.key.toLowerCase() === "e"
+      event.key.toLowerCase() === "k"
     ) {
       if (!modelPickerEnabled) return;
       const trigger = surfaceRef.current?.querySelector<HTMLButtonElement>(

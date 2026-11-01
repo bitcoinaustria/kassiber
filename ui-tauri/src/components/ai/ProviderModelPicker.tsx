@@ -523,9 +523,10 @@ export function ProviderModelPicker({
       setPickerOpen(false);
       return;
     }
-    // The column renders the new model's levels on commit.
+    // The column renders the new model's levels on commit; a model without
+    // levels has nothing left to choose here, so the pick closes the picker.
     window.requestAnimationFrame(() => {
-      if (!focusEffort()) focusSearch();
+      if (!focusEffort()) setPickerOpen(false);
     });
   };
 
@@ -597,7 +598,7 @@ export function ProviderModelPicker({
                 data-fast-mode={fastOn || undefined}
                 className="min-w-0 max-w-full shrink justify-start"
                 onClick={(event) => {
-                  // Mod+Shift+E aimed at the open picker moves to its levels
+                  // Mod+Shift+K aimed at the open picker moves to its levels
                   // instead of closing it.
                   if (!open || !takeOpenToEffort(triggerRef.current)) return;
                   event.preventDefault();
@@ -669,7 +670,7 @@ export function ProviderModelPicker({
           )}
           onOpenAutoFocus={(event) => {
             // Focus the search field, as T3 Code does, so typing filters and
-            // the arrow keys drive the list straight away; Mod+Shift+E lands
+            // the arrow keys drive the list straight away; Mod+Shift+K lands
             // on the reasoning levels instead.
             event.preventDefault();
             if (takeOpenToEffort(triggerRef.current) && focusEffort()) return;

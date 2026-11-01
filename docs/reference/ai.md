@@ -866,11 +866,12 @@ composer toolbar.
   three modes with their descriptions. Changing the mode there behaves as
   described under [Permission modes](#permission-modes).
 
-Picking a model keeps the picker open and moves focus to that model's levels;
-Escape or a click outside closes it (without a column or footer, a pick closes
-it as before). ArrowRight at the end of the search text picks the highlighted
-model, or moves to the levels when it is already selected; the arrow keys move
-between levels, and ArrowLeft goes back to the search field. Mod+Shift+E opens
+Picking a model with reasoning levels keeps the picker open and moves focus to
+those levels; picking one without levels closes it. Escape or a click outside
+closes it too. ArrowRight at the end of the search text moves to the levels of
+the selected model; a different highlighted model is picked with Enter, never
+by an arrow key. The arrow keys move between levels, and ArrowLeft goes back
+to the search field. Mod+Shift+K opens
 the picker on the levels, or moves there when it is open. Opening the picker or
 any of its sections reads only the provider list and cached check results; it
 never contacts a provider.
