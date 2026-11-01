@@ -14169,3 +14169,82 @@ retain the local evidence; owned mutation/verification build trees are removed.
 All scratch/data roots stay under this worktree's `target/`, account `HOME` is
 preserved, and test jobs run serially. The full workspace runtime tests, full
 Python/frontend quality gate and packaged/platform gates are not run.
+
+## Mirror observation merge and confirmation prerequisite (R5, partial)
+
+`t3code/r5-privacy-mirror-2` starts at `f94d5b16d`. This continues within the
+first Mirror boundary. `analysis_index::ingestion::ObservationBuilder` merges
+caller-supplied stored transaction, cache, acquired reference and inventory
+rows, then freezes an `AnalysisIndex`. It shares protocol scope, stored mapping
+and exact output-value parsing with existing native primitives. Source ranks,
+irreversible conflicting fields, contradictory complete/partial shapes,
+retracted versus competing spenders, inventory ownership ambiguity, private
+branch evidence and explicit public Liquid values retain Python's behavior.
+Custody edges remain a separate overlay with caller-supplied freshness; the
+builder never derives accounting authority from connectivity or ownership.
+Repeated custody references retain the first edge amount, asset and freshness;
+missing endpoint labels and evidence follow the latest relation, as in Python.
+
+Insertion order is retained independently of lookup indexes, including the
+edge order consumed by the public observer projection. Ambiguous occurrence
+findings use deterministic native ordering and must equal one of eight frozen
+Python seed variants. The oracle replays fixed seeds; the eight-seed sample is
+not an exhaustive set of Python's possible orders. The existing reference
+reproduction and Python product code remain unchanged.
+
+`analysis_index::confirmations::ConfirmationOverlay` reads active assertions
+and their own profile-bound grants for one exact domain/occurrence/transaction.
+Only valid block anchors and verified tips establish depth. Newest valid
+observations win; equally recent contradictory heights/counts stay unknown.
+Counts never derive from wall time or an isolated block height. Missing tip
+columns preserve the original node. Caches belong to the caller's snapshot;
+selected outputs and transactions share an observation, while a fresh overlay
+sees a subsequent tip. Neither module commits, writes tables or opens a network
+route. Caller transaction/savepoint rollback is tested explicitly.
+
+The unchanged-Python corpus contains 339 new cases: 81 confirmation overlays
+and 258 ingestion cases, including 16 ingestion-to-public projections. Native
+and retained Python tests compare exact canonical result bytes and all sorted
+rows in every one of the 112 seeded tables. Two no-consent native driver runs
+cover offline mode off/on, require empty network attempt/ledger buffers and
+compare literal stdout. These are 678 native primitive evaluations with zero
+Python fallback. Product Mirror CLI and daemon served-by counts remain zero.
+This does not establish full source-builder or durable-index database parity.
+
+All 38 entries in `crates/wallets/scripts/analysis_ingestion_mutations.json`
+are killed by the ingestion, confirmation-overlay and caller-snapshot cache
+selections. All three selections pass unmutated. The unchanged shared checker
+compiles each mutation before counting its named test failure; there are no
+survivors, build errors or empty selections. Its build tree is removed after
+`target/r5-mirror-2/mutation-summary.json` and the run log are retained.
+
+Remaining work, in order:
+
+1. Complete full SQL source orchestration: wallet enrichment, source row and
+   missing-table coverage, authored labels, dataset matching/coverage and
+   custody freshness. Add support for Python's legacy non-finite JSON and lone
+   surrogates; the current JSON-row kernel explicitly refuses those mappings.
+   Port durable source triggers/contributions, incremental invalidation,
+   synchronization/recovery and bounded observer-scoped SQL views, preserving
+   caller transactions and all-table parity. This first boundary is incomplete.
+2. Traversal, clustering and patterns.
+3. Attribution/dataset services and conditional entropy.
+4. Process/book-bound handles and Mirror report composition.
+5. CLI/daemon acceptance, served-by/mutation evidence and registration.
+
+AI projections stay Python. No dependency, lockfile, schema, network permission
+or product registration changes are included. No Mirror completion or
+push-ready claim is made.
+
+Local Linux verification uses Rust 1.99.1 offline/locked and Python 3.11.17.
+All 163 wallet library tests pass, including the eight analysis-index tests;
+loopback-dependent fixtures run on disposable roots with the test guard armed.
+All nine retained Python/native oracle tests pass without skips. Workspace
+formatting and wallet production/test-harness all-target Clippy pass with
+warnings denied. The required classifier update records 5,719 test definitions,
+and CI preflight passes all 57 tests without skips.
+`target/r5-mirror-2/{mutation-summary,verification-summary}.json` and `logs/`
+retain the local evidence; owned mutation/verification build trees are removed.
+All scratch/data roots stay under this worktree's `target/`, account `HOME` is
+preserved, and test jobs run serially. The full workspace runtime tests, full
+Python/frontend quality gate and packaged/platform gates are not run.

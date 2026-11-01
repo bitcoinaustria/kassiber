@@ -4283,14 +4283,30 @@ ambiguous-occurrence findings have seven different orders while retaining the
 same snapshot ID. Native ambiguity collections are ordered. The future native
 builder must consume them deterministically; this branch does not fix Python.
 
-The first requested Mirror boundary still needs observation ingestion,
-confirmation overlays, durable-index synchronization and bounded SQL reads.
+At the initial checkpoint, the first requested Mirror boundary still needed
+observation ingestion, confirmation overlays, durable-index synchronization
+and bounded SQL reads.
 Subsequent boundaries remain traversal/clustering/patterns;
 attribution/datasets/entropy; process/book-bound handles and report composition;
 then CLI/daemon acceptance and registration. No full Mirror acceptance is claimed.
 
-All 34 new mutations are killed with four passing unmutated selections. Local
-Linux verification passes formatting, production/test-harness workspace Clippy
+The continuation from `f94d5b16d` ports the observation merge kernel and
+confirmation overlay as a further prerequisite within that first boundary.
+Stored/cached/acquired rows and inventory use the native occurrence resolver,
+exact msat arithmetic, ranked conflict barriers, complete-shape checks and
+observer projection. Custody relations retain caller-supplied freshness and
+remain separate from physical observations. The native builder accepts JSON
+rows; legacy mappings containing non-finite numbers or lone surrogates refuse
+instead of silently losing fields. Full SQL source orchestration, those legacy
+representations, durable synchronization and the bounded read view remain open.
+The [continuation checkpoint](../reference/rust-shell.md#mirror-observation-merge-and-confirmation-prerequisite-r5-partial)
+records the 339-case unchanged-Python corpus, exact bytes/all-table invariants
+and mutation verification. Mirror remains unregistered; AI projections stay
+Python. This does not complete any of the five requested Mirror boundaries.
+
+The initial prerequisite's 34 mutations are killed with four passing unmutated
+selections. Its local Linux verification passes formatting,
+production/test-harness workspace Clippy
 with warnings denied, all 159 wallet unit tests (19 socket-dependent cases need
 an isolated loopback-permitted rerun), and all five retained index-oracle tests.
 The required classifier update records 5,716 definitions; CI preflight passes
