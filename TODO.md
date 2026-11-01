@@ -602,11 +602,16 @@ registers them; exit-tax preserves its reference no-registration boundary.
 - [x] Port Mirror's observation merge kernel and confirmation overlay as an
   unregistered prerequisite. The 339-case oracle includes eight fixed Python
   ambiguity-order variants and chained public projections, with byte and
-  all-112-table checks. Full SQL source orchestration and durable publication
-  are still open; see the
+  all-112-table checks. Durable publication remains open; see the
   [ingestion prerequisite](docs/reference/rust-shell.md#mirror-observation-merge-and-confirmation-prerequisite-r5-partial).
-- [ ] Finish Mirror's full source orchestration (including legacy non-finite
-  JSON/lone-surrogate handling), durable projection synchronization/read view,
+- [x] Port Mirror's full SQL source orchestration and coverage over the existing
+  immutable index. Preserve wallet enrichment, reference activity, authored
+  labels, indexed dataset matches, visibility budgets and custody freshness.
+  The source oracle retains byte comparisons, all 112 tables, hash-seed
+  variants and a separate Python whitespace-script reproduction; see the
+  [SQL source checkpoint](docs/reference/rust-shell.md#mirror-sql-source-orchestration-r5-partial).
+- [ ] Finish Mirror's legacy non-finite JSON/lone-surrogate handling and durable
+  projection synchronization/read view,
   then traversal, clustering, patterns,
   attribution/dataset matching, conditional entropy, process/book-bound handles,
   report composition and CLI/daemon acceptance. Preserve deterministic native

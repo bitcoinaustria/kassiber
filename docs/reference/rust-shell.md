@@ -14248,3 +14248,86 @@ retain the local evidence; owned mutation/verification build trees are removed.
 All scratch/data roots stay under this worktree's `target/`, account `HOME` is
 preserved, and test jobs run serially. The full workspace runtime tests, full
 Python/frontend quality gate and packaged/platform gates are not run.
+
+## Mirror SQL source orchestration (R5, partial)
+
+`t3code/r5-privacy-mirror-3` starts at `3910d821d`. The unregistered native
+`analysis_index::sources::build_index` now orchestrates the full SQL source
+builder over the existing immutable `AnalysisIndex`. `build_index_at` accepts
+the captured UTC evaluation instant for deterministic comparisons. The index
+interface and observer projection remain available to the separate analytics
+port without durable-storage dependencies.
+
+One borrowed connection/savepoint supplies wallet-enriched transactions, the
+global reference cache, profile inventory, legacy acquisitions, active physical
+assertions, authored labels, dataset matches and custody relations. Coverage
+retains source row counts, missing required tables, rejected/invalid rows,
+reconciling assertions and exact journal freshness. Both successful and failed
+reads release their own savepoint, leave caller writes pending and change no
+table. The builder opens no provider and grants no network, ownership, custody
+or accounting authority.
+
+Dataset sourcing uses exact indexed subjects in batches of 200. It retains
+active-version provenance, the manifest state digest, validity windows,
+separate public/private populations of 5,000 claims, the 100,000-subject bound
+and oversized-script coverage. Authored labels retain canonical identity order
+and bind only matching chain/network aliases. As in Python, the builder's
+`observer` argument selects dataset visibility; callers explicitly apply
+`AnalysisIndex::observer("public")` before public analytics. This does not port
+dataset import, dataset-query services or attribution algorithms.
+
+The frozen unchanged-Python corpus adds 127 SQL source cases. Native tests
+compare canonical result bytes for 125 cases; the two large claim-limit cases
+compare canonical coverage/count/endpoint bytes and the complete snapshot
+digest. All 112 tables remain unchanged around every case. Coverage includes
+wallet configuration and source precedence, missing required/optional tables,
+active/reconciling references, authored-label normalization/order, attribution
+validity endpoints, exact lookup chunk boundaries, separate visibility limits,
+and custody freshness. Ambiguous findings must equal one of the eight recorded
+Python seed variants; native ordering remains deterministic.
+
+Caller-savepoint checks preserve pending writes through success and failure.
+Ten additional malformed manifest/source-record cases refuse without writes
+or an abandoned read transaction. All 25 recipes in
+`crates/wallets/scripts/analysis_sources_mutations.json` compile and are killed
+by the three named SQL-source selections, which pass unmutated. The retained
+logs include corrections to an initially non-compiling activity recipe and
+insufficient chunk/script fixtures; final outcomes have no survivors, build
+errors or empty selections. `target/r5-mirror-3/mutation-summary.json` records
+the final outcome and log for each recipe. Its build tree is removed.
+
+The source corpus preserves Python's existing whitespace-script failure.
+`tests/rust_port/repro_analysis_source_script.py` demonstrates that an otherwise
+accepted `aa  bb` script becomes a validation error merely because the dataset
+table exists, even with no active pack. The equivalent graph succeeds when
+that table is absent. Product Python is unchanged. The previous ambiguous
+occurrence finding-order reproduction and eight-seed variant policy remain.
+
+Legacy JSON containing non-finite values or lone surrogates still receives the
+explicit validation refusal inherited from the JSON-row kernel. Durable source
+triggers/contributions, incremental invalidation and synchronization, SQLite and
+SQLCipher process-kill recovery, and bounded observer-scoped SQL views remain
+unported. No durable-index, Mirror report, CLI/daemon registration, AI projection
+or push-ready acceptance is claimed. No dependency, lockfile, schema or network
+permission changes are included.
+
+Two native driver runs, with `KASSIBER_NO_EGRESS` unset/set and strict egress
+observation, compare literal canonical stdout and preserve all 112 tables.
+They add 254 native SQL-source evaluations with zero Python fallback and empty
+network attempt/ledger buffers. Mirror product CLI/daemon served-by counts stay
+zero. The shared driver also replays the earlier occurrence, observer,
+ingestion and confirmation corpora; this establishes no durable publication or
+product registration.
+
+Local Linux verification uses Rust 1.99.1 offline/locked and Python 3.11.17.
+All 11 native analysis-index tests and all 14 retained Python/native oracle
+tests pass without skips. Workspace formatting and wallet production and
+test-harness all-target Clippy pass with warnings denied. The required
+classifier update records 5,723 test definitions; CI preflight passes all 57
+tests without skips. The manual second pass added malformed-map refusals and
+strengthened the chunk/script fixtures. `target/r5-mirror-3/` retains the
+mutation/verification summaries and logs; owned mutation and verification
+build trees are removed. Scratch/data roots stay under this worktree's
+`target/`, account `HOME` is preserved, and test jobs run serially. The full
+workspace runtime suite, Python/frontend quality gate and packaged/platform
+gates are not run.
