@@ -2449,7 +2449,7 @@ unregistered until native journal processing and shared daemon acceptance land.
 The document CLI continuation below completes that registration; the bare-CR
 correction stays deferred.
 
-### R5 document ingestion: reviewed core checkpoint (partial)
+### R5 document ingestion: core and CLI
 
 `kassiber-wallets::file_import::document` normalizes OCR rows and reconstructs
 observations from the visible reviewed fields. It enforces exact integer msat,
@@ -2487,6 +2487,8 @@ books, managed evidence and outgoing provider requests across Python, raw Rust
 and the hybrid. All 64 hybrid document calls run in Rust with zero fallback;
 the native catalog now contains 160 entries. The shared daemon importer has
 no new native calls.
+All fifteen document CLI mutation recipes are killed by their named tests;
+the linked checkpoint records their mapping and the local verification scope.
 `ui.wallets.import_file` stays unregistered until native `journals process`
 and shared daemon acceptance land. R6 document AI projections and session/token
 flows remain on Python. PDF report generation also remains Python.

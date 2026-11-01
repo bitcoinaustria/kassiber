@@ -12068,3 +12068,34 @@ both codecs. Fifty frozen Python review transcripts additionally pin scripted
 stdin and sorted cell-confidence output. Native SIGINT handling is scoped to
 review and restores the previous handler and terminal flags. This acceptance
 was run on Linux; the Windows console handler is not platform-verified here.
+
+`crates/wallets/scripts/document_cli_mutations.json` names the following
+assertion-based killers. Its runner builds a disposable source copy and checks
+all named baselines before applying one recipe at a time. Build failures,
+skipped tests and empty selections do not count as kills.
+
+| Mutation (`CLI-document-` prefix) | Named killer |
+| --- | --- |
+| `default-selection`, `structure`, `confidence`, `dedup`, `cancel`, `cells` | `document_cli_review_matches_python_scripted_stdin` |
+| `noninteractive`, `wallet-order` | `RustDocumentCliTest::test_document_cli_refuses_before_provider_contact_and_resolves_scope_first` |
+| `pages` | `RustDocumentCliTest::test_document_cli_pdf_options_and_full_book_parity` |
+| `source-binding` | `RustDocumentCliTest::test_document_cli_changed_source_and_atomic_database_failure` |
+| `evidence`, `preview-registration`, `import-registration` | `RustDocumentCliTest::test_document_cli_preview_review_reimport_and_zero_fallback` |
+| `selection` | `RustDocumentCliTest::test_document_cli_imports_only_selected_rows` |
+| `sigint` | `RustDocumentCliTest::test_document_cli_sigint_cancels_without_writes` |
+
+All fifteen recipes are killed across two serial runs, with all seven named
+baselines passing and the continuation's four baselines rerun. The runner
+reads pytest's summary instead of mistaking the `quarantined_skipped` payload
+field for a skipped test; a regression pins that distinction. All 783 inherited
+wallet mutation entries still apply; their kills were not rerun here. Logs and
+the combined acceptance/mutation summaries are retained locally under
+`target/r5-document-artifacts/`.
+
+Verification also passes 50 CLI/runtime/secrets tests, all 22 native wallet
+document tests, focused Python document/reference regressions, offline Rust
+formatting and strict all-target CLI/runtime/secrets/application harness Clippy.
+The required classifier update inventories 5,752 Python tests, and
+`python_test_shards.py run preflight --ci` passes all 57 tests. The separately
+owned 58 loopback sandbox tests and the full workspace/frontend quality gate
+were not run in this local continuation.

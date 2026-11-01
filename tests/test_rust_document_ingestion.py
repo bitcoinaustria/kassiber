@@ -33,6 +33,17 @@ def cases():
 
 
 class DocumentIngestionReferenceTest(unittest.TestCase):
+    def test_document_cli_mutation_results_ignore_payload_words(self):
+        from crates.wallets.scripts.document_cli_mutation_check import pytest_outcome
+        def result(code, text):
+            return pytest_outcome(subprocess.CompletedProcess([], code, text, ''))
+        self.assertEqual(result(1, "E AssertionError: quarantined_skipped ERROR\n1 failed in 0.5s\n"), (1, True))
+        self.assertEqual(result(0, "1 passed in 0.5s\n"), (0, False))
+        for text in ["1 skipped in 0.5s\n", "1 passed, 1 subtests skipped in 0.5s\n",
+                     "1 failed, 1 error in 0.5s\n", "no tests ran in 0.5s\n"]:
+            self.assertEqual(result(1, text), (2, False))
+        self.assertEqual(result(1, "E RuntimeError: fixture failed\n1 failed in 0.5s\n"), (1, False))
+
     def test_document_cli_mutations_apply_once_and_name_existing_tests(self):
         from crates.wallets.scripts.document_cli_mutation_check import problems
         self.assertEqual(problems(), [])

@@ -2,6 +2,7 @@ import argparse
 import importlib.util
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -12,6 +13,19 @@ helper = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = helper
 SPEC.loader.exec_module(helper)
 CATALOG = Path(__file__).with_name('document_cli_mutations.json')
+
+
+def pytest_outcome(result):
+    summaries = re.findall(r'^(\d+ .+) in [\d.]+s(?: .*)?$', result.stdout, re.MULTILINE)
+    if not summaries:
+        return 2, False
+    counts = {}
+    for count, kind in re.findall(r'(\d+) (?:subtests )?(passed|failed|skipped|errors?)\b', summaries[-1]):
+        counts[kind] = counts.get(kind, 0) + int(count)
+    if (counts.get('skipped') or counts.get('error') or counts.get('errors')
+            or not (counts.get('passed', 0) + counts.get('failed', 0))):
+        return 2, False
+    return result.returncode, bool(counts.get('failed') and 'AssertionError:' in result.stdout)
 
 
 def problems():
@@ -65,10 +79,8 @@ def main():
             return run(['cargo', 'build', '-p', 'kassiber', '--features', 'test-harness', '--offline', '--locked'], label, cargo_env).returncode == 0
         def check(test, label):
             if test.startswith('tests/'):
-                result = run([sys.executable, '-m', 'pytest', test, '-q', '-x'], label)
-                if 'skipped' in result.stdout or (result.returncode == 0 and 'passed' not in result.stdout):
-                    return 2, False
-                return result.returncode, 'failed' in result.stdout and 'ERROR' not in result.stdout
+                result = run([sys.executable, '-m', 'pytest', test, '-q', '-x', '--color=no'], label)
+                return pytest_outcome(result)
             result = run(['cargo', 'test', '-p', 'kassiber-cli', '--lib', '--offline', '--locked', test], label, cargo_env)
             counts = [(int(a), int(b)) for a, b in helper._CARGO_RESULT.findall(result.stdout)]
             if not sum(a + b for a, b in counts):
