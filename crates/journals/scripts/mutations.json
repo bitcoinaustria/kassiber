@@ -2658,5 +2658,25 @@
       "storage_encodings_and_markers_match_python"
     ],
     "rule": "UUID hex retains each digest byte’s low nibble."
+  },
+  {
+    "id": "JP-padding-shortcut-negative-limit",
+    "file": "crates/journals/src/persistence/entries.rs",
+    "find": "-i128::from(kassiber_pydecimal::MAX_FIXED_PADDING) - 1..=0",
+    "replace": "-i128::from(kassiber_pydecimal::MAX_FIXED_PADDING) - 2..=0",
+    "expect_failing": [
+      "decimal_padding_validation_preserves_limits_without_formatting"
+    ],
+    "rule": "A one-digit negative exponent beyond the padding limit still refuses."
+  },
+  {
+    "id": "JP-padding-shortcut-positive-limit",
+    "file": "crates/journals/src/persistence/entries.rs",
+    "find": "-i128::from(kassiber_pydecimal::MAX_FIXED_PADDING) - 1..=0",
+    "replace": "-i128::from(kassiber_pydecimal::MAX_FIXED_PADDING) - 1..=i128::MAX",
+    "expect_failing": [
+      "decimal_padding_validation_preserves_limits_without_formatting"
+    ],
+    "rule": "The no-digit-count shortcut never accepts an oversized positive exponent."
   }
 ]

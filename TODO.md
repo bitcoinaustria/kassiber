@@ -684,8 +684,10 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   full decimal equality from 12 to 4,096 digits. Singleton timestamp tracking also
   improves an exact changed-book comparison across six runtime orders. Native
   timing operations now use fresh processes so the SQL floor cannot bias
-  allocator state. Finish the full eight-cell budget gate, then the mutation
-  audit and inherited campaigns.
+  allocator state. Bounded exponent validation also avoids coefficient digit
+  counts; its focused pairs improve at every measured width, while complete
+  store timings remain contention-qualified. Finish the full eight-cell budget
+  gate, then the mutation audit and inherited campaigns.
   Historical signed-zero, retained-column and mixed-clock witnesses remain.
   Corrected appended inputs carry distinct raw identities and assert actual writes.
   R4-9's test-only loader now constructs the current custody records directly;

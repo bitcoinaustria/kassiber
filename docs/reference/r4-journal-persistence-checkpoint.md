@@ -14,6 +14,60 @@ the proposed-budget language in the historical probes below. Repeat the read
 floor over at least five independent connections with load averages and use its
 minimum. The implementation and all acceptance gates remain open.
 
+## Padding validation continuation from `8cb7947cc`
+
+**R4-12 remains unaccepted.** Decimal padding validation now accepts the
+provably bounded exponent interval before counting coefficient digits. Every
+coefficient has at least one digit, so exponents from `-MAX_FIXED_PADDING - 1`
+through zero need at most the permitted padding. Other exponents retain the
+exact prior validation, including positive-exponent zero and the coefficient
+width adjustment for extremely small values. Formatting and comparison bytes
+remain identical.
+
+Five alternating child-process pairs each perform two million validations.
+Independent process-CPU minima, including process startup, in seconds:
+
+| Coefficient digits | Prior validation | Bounded exponent validation |
+| --- | ---: | ---: |
+| 10 | 0.015440 | 0.003759 |
+| 60 | 0.355666 | 0.003614 |
+| 130 | 0.442862 | 0.003661 |
+| 1,000 | 2.505042 | 0.003762 |
+
+All twenty focused pairs improve. These validate one already-parsed decimal
+per child; they do not time database reads, formatting or complete persistence.
+The closest indexed source archive was recovered and its SHA-256 verified as
+`37795f9fda326592577080861e78e8f159fc398eba8927022b5261d1ff2a0856`.
+The rebuilt starting writer already contains that path and its later retained
+coefficient, timestamp and UUID improvements; none was withdrawn.
+
+Five alternating native candidate/baseline pairs on identical physical copies
+match all thirty complete frozen Python dumps, including the prepared DML
+floor. Generic SQLite 20k fresh minima are 1.024948 candidate and 1.034361
+baseline, but the median paired ratio is 1.099077. Multi-wallet SQLCipher 20k
+unchanged minima are 0.589533 and 0.656632, with median ratio 0.805351 and four
+of five improved pairs. Unrelated phases vary substantially too. These runs
+do not establish a consistent fresh-store speedup or budget acceptance. The
+host started near load 7, but rose above 100 during the paired campaign.
+No other job ran in this worktree during timing. The lower accepted read
+floors are retained; no contention-inflated replacement is used.
+
+The boundary tests cover both signs, zero, wide coefficients and both sides of
+the exact padding limit without allocating hundred-megabyte fixed strings.
+Both new bound mutations compile and are killed by that witness; restored
+source passes again. All 63 journal tests pass, including physical SQLite and
+SQLCipher crash recovery and every-write refusal/unwind rollback. This is two
+targeted kills, not the exhaustive audit or the final 200-recipe campaign.
+Release all-target clippy, all 65 Python journal oracle/storage checks and
+200-recipe applicability pass. Classifier update leaves no generated diff;
+all 57 required preflight checks pass.
+
+The [padding validation record](r4-journal-persistence-padding-measurements.json)
+binds all samples, loads, source and binary hashes, scratch scripts, exact
+capture hashes and verification results. The eight CPU budgets and complete
+final-source matrix remain open, followed by the exhaustive persistence audit,
+the inherited full R4 campaigns and both-driver R4-13 contracts.
+
 ## Entry identity continuation from `6200534c2`
 
 **R4-12 remains unaccepted.** The retained writer completes the 32-cell

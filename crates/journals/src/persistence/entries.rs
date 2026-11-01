@@ -124,6 +124,11 @@ impl storage::BindingRow<29> for Row<'_, '_> {
 
 pub(super) fn validate(decimal: &JournalDecimal) -> Result<(), Refusal> {
     let d = &decimal.0;
+    if (-i128::from(kassiber_pydecimal::MAX_FIXED_PADDING) - 1..=0)
+        .contains(&i128::from(d.exponent()))
+    {
+        return Ok(());
+    }
     let padding = if d.exponent() >= 0 {
         if d.is_zero() {
             0
@@ -329,6 +334,33 @@ mod tests {
             return;
         }
         panic!("missing typed calculation fixture");
+    }
+
+    #[test]
+    fn decimal_padding_validation_preserves_limits_without_formatting() {
+        let limit = i128::from(kassiber_pydecimal::MAX_FIXED_PADDING);
+        for coefficient in [
+            "0",
+            "-0",
+            "1",
+            "-1",
+            "10",
+            "12345678901234567890123456789012345678901234567890",
+        ] {
+            let digits = coefficient.trim_start_matches('-').len() as i128;
+            for padding in [limit - 1, limit, limit + 1] {
+                let exponent = -digits - padding;
+                let decimal = JournalDecimal(format!("{coefficient}E{exponent}").parse().unwrap());
+                assert_eq!(validate(&decimal).is_ok(), padding <= limit);
+            }
+            for exponent in [-1, 0, 1, limit, limit + 1] {
+                let decimal = JournalDecimal(format!("{coefficient}E{exponent}").parse().unwrap());
+                assert_eq!(
+                    validate(&decimal).is_ok(),
+                    decimal.0.is_zero() || exponent <= limit
+                );
+            }
+        }
     }
 
     #[test]
