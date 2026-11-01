@@ -14455,10 +14455,62 @@ alongside their corrected verification runs. Mutation and verification build
 trees are removed after summaries are captured; all scratch/data roots remain
 inside this worktree and account `HOME` is unchanged.
 
-This is a clean partial handoff after requested boundary 4. Conditional entropy
-and full `analyze_index` composition remain unported. Process/book-bound handles,
+At this boundary, conditional entropy and full `analyze_index` composition
+remain unported; the following checkpoint completes those kernels. Process/book-bound handles,
 Mirror report composition, CLI/daemon acceptance and registration follow that
 work and the parallel SQL/durable-index branch. Product Mirror served-by counts
 remain zero and unsupported entry points continue to fail closed. AI projections
 remain Python. No dependency, lockfile, product schema or egress permission is
 changed. The full workspace runtime/frontend/platform gates are not claimed.
+
+
+## Mirror entropy and analytics composition (R5, partial)
+
+`analysis_index::entropy::analyze_transaction_entropy` ports the conditional
+financial-flow model over captured transaction facts. The independent model and
+explicit bounded-intrafee scenarios retain exact arbitrary-precision counts,
+value-class partition DP, labeled combinatorial weights, group histograms,
+exchangeable link incidence, deterministic examples and Python `math.log2`
+projection. Amounts remain integer msat until exact satoshi validation; unknown,
+nonintegral, zero, inconsistent, duplicate-identity and non-Bitcoin inputs fail
+closed. Collaboration markers and protocol names retain their Python meanings;
+these counts confer no ownership or accounting authority.
+
+State, value-pattern and memo-cell caps retain Python work accounting, including
+active ancestors. Forced phase/64-work cancellation and time checks preserve
+proved lower bounds without publishing partial exact counts or links. Optional
+in-process progress/cancellation hooks carry no identifiers. Clock and memory-cap
+injection exist only under test/test-harness configuration; production uses a
+monotonic clock and fixed model limits. Elapsed-time parity is tested with a
+controlled clock, not by expecting two real executions to take equal time.
+
+`analytics::analyze_index` composes clustering, patterns, exposure and conditional
+entropy over an already observer-projected snapshot and selected subgraph. It
+preserves coverage/reason order, entropy subject selection and the single
+transaction cap. It does not source observations or acquire data. The parallel
+SQL/durable-index branch can call these kernels without a durable-layer dependency.
+
+The unchanged-Python corpus adds 199 entropy cases, 35 large-integer logarithms
+and 254 full-composition cases. Across the five requested algorithm boundaries,
+there are 1,197 captured-snapshot/row vectors plus those logarithms. Canonical
+JSON bytes match, including state/cache metrics, callback phases and lower
+bounds. Four seeds (0, 1, 7, 42) reproduce the entropy and composition fixtures
+without new variants; the earlier occurrence-order reference repro remains.
+All 17 entropy and two composition mutations compile and are killed by named
+tests, whose unmutated baselines pass. The branch now has 65 killed recipes.
+
+Verification uses Rust 1.99.1, locked offline cargo, eight build jobs and the
+locked Python 3.11 environment. Formatting, wallet all-target production and
+harness Clippy, 17 native analysis-index tests, 28 Python/native oracle tests
+without skips, classifier update and the 57-test CI preflight pass. Native
+drivers retain no-consent/offline checks and zero fallback. Local logs and
+mutation summaries are retained under `target/r5-analysis/`; owned build and
+mutation scratch trees are removed after summaries. No background job remains.
+The full workspace/runtime/frontend/platform gates are not claimed.
+
+All five requested algorithm boundaries are committed locally. Product report
+projection and registration remain deferred until both R5 branches merge, along
+with process/book-bound handles and remaining source/dataset service integration.
+Mirror served-by counts remain zero and unsupported routes still fail closed.
+AI projections remain Python. There are no new dependencies, lockfile/schema
+changes, external writes or egress permissions.

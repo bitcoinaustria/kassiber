@@ -471,6 +471,8 @@ REVIEWS["tests/test_rust_analysis_traversal.py"] = {"*": {
 REVIEWS["tests/test_rust_analysis_analytics.py"] = {"*": {
     "disposition": "oracle", "group": "chain-sync",
     "reason": "compares native clustering, topology patterns, attribution and full analytics composition with unchanged Python over captured observer snapshots; retains byte checks, fixed hash-seed replay and named mutations; conditional entropy and product report transports are checked separately",
+
+    "reason": "compares native clustering, topology patterns, attribution and full analytics composition with unchanged Python over captured observer snapshots; retains byte checks, fixed hash-seed replay and named mutations; conditional entropy is checked separately and product report composition remains unported",
 }}
 
 
@@ -478,6 +480,7 @@ REVIEWS["tests/test_rust_analysis_datasets.py"] = {"*": {
     "disposition": "oracle", "group": "chain-sync",
     "reason": "compares native exact subject canonicalization and captured-row dataset matching with unchanged Python bytes, independent visibility limits, fixed hash seeds and named mutations; dataset lifecycle/query services remain separate",
 }}
+
 
 
 REVIEWS["tests/test_rust_analysis_entropy.py"] = {"*": {
@@ -500,3 +503,4 @@ REVIEWS["tests/test_rust_psbt_product.py"] = {"*": {"disposition": "oracle", "gr
 REVIEWS["tests/test_rust_legacy_privacy.py"] = {"*": {"disposition": "oracle", "group": "reports", "reason": "retains unchanged Python legacy scorer vectors for every transaction/inventory rule, canonical bytes and complete 112-table reads through a guarded native driver; checks six hash seeds and named mutation applicability"}}
 
 REVIEWS["tests/test_rust_legacy_privacy_services.py"] = {"*": {"disposition": "oracle", "group": "reports", "reason": "compares the existing legacy snapshot through CLI-launched native daemon sessions and the unchanged configuration-report CLI, including exact wire bytes, all 112 tables, zero fallback routing, strict no-egress and honest native diagnostics; retains named transport mutation applicability"}}
+

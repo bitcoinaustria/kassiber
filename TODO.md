@@ -624,10 +624,13 @@ registers them; exit-tax preserves its reference no-registration boundary.
   captured-row matching with independent visibility budgets; see the
   [attribution checkpoint](docs/reference/rust-shell.md#mirror-attribution-and-dataset-algorithms-r5-partial).
   SQL sourcing and dataset lifecycle/query services remain separate.
+- [x] Port conditional Mirror entropy (exact value-class partitions, bounded
+  intrafees, link counts and cooperative budgets) and full captured-index
+  analytics composition; see the
+  [entropy checkpoint](docs/reference/rust-shell.md#mirror-entropy-and-analytics-composition-r5-partial).
 - [ ] Finish Mirror's legacy non-finite JSON/lone-surrogate handling and durable
   projection synchronization/read view,
-  then conditional entropy, full analytics composition, process/book-bound handles,
-  report composition and CLI/daemon acceptance. Preserve deterministic native
+  process/book-bound handles, report composition and CLI/daemon acceptance. Preserve deterministic native
   ambiguity ordering; retain the recorded Python reference repro.
 - [x] Port full-report, Austrian bundle and transaction CSV artifacts, saved
   export registration and their daemon kinds. Preserve
