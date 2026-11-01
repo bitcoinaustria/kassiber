@@ -309,6 +309,42 @@ mod tests {
     use super::*;
 
     #[test]
+    fn native_loader_receipt_defaults_preserve_missing_scope_and_source_facts() {
+        for missing in [Value::Null, Value::from("")] {
+            assert_eq!(
+                scope(&missing, &Value::from("main")),
+                (String::new(), String::new())
+            );
+            assert_eq!(
+                scope(&Value::from("bitcoin"), &missing),
+                (String::new(), String::new())
+            );
+        }
+        assert_eq!(
+            scope(&Value::from(" BTC "), &Value::from("mainnet")),
+            ("bitcoin".into(), "main".into())
+        );
+        for raw in [Value::Null, Value::from("broken"), Value::from("[]")] {
+            assert_eq!(config(&dict([("config_json", raw)])).unwrap(), dict([]));
+        }
+        let wallet = dict([
+            ("id", Value::from("w")),
+            ("label", Value::Null),
+            ("kind", Value::Null),
+            ("config_json", Value::from("{}")),
+        ]);
+        for (kind, expected) in [("address_list", "address"), ("inventory", "")] {
+            let item = source("p", &wallet, "", "", "aa", kind, &HashMap::new()).unwrap();
+            assert_eq!(get(&item, "wallet_id"), &Value::from("w"));
+            assert_eq!(get(&item, "wallet_label"), &Value::from("w"));
+            assert_eq!(get(&item, "wallet_kind"), &Value::from(expected));
+            assert_eq!(get(&item, "chain"), &Value::from(""));
+            assert_eq!(get(&item, "network"), &Value::from(""));
+            assert_eq!(get(&item, "active_transaction_count"), &Value::from(0));
+        }
+    }
+
+    #[test]
     fn native_loader_receipt_filter_never_rejects_possible_identities() {
         use serde_json::{json, Value as J};
         let txid = "a".repeat(64);

@@ -1,0 +1,417 @@
+{
+  "schema": "kassiber.custody-loader-acceptance.v1",
+  "date": "2026-11-01",
+  "base_commit": "c5966c1ff",
+  "acceptance": "accepted except the BLOB corruption class (pending owner decision) and 16 seed-dependent messages (pending Python fix)",
+  "production_authority": "Python; native loader remains test-only",
+  "production_source_unchanged": true,
+  "post_campaign_metadata_changes": [
+    "acceptance documentation",
+    "Rust-port inventory explanation and generated counts; witness code unchanged"
+  ],
+  "toolchain": {
+    "rust": "1.99.1",
+    "python": "3.11.17",
+    "locked_uv": true,
+    "offline_cargo": true,
+    "maturin_no_install_rust": true,
+    "home_unchanged": true,
+    "scratch": "target/r4-loader-9",
+    "test_jobs": "serial"
+  },
+  "probe": {
+    "path": "target/r4-loader-9/custody-load",
+    "sha256": "e5d310a59b86b61a4583d72d5203df5a750eeebe4bdcce60b9185830dbac3ad4"
+  },
+  "harness": {
+    "target/r4-loader-9/run_mutations.py": "2e63ffb0442a39175ada4adc99edb4e9d38e9ab3736299409b58219e38bfe999",
+    "target/r4-loader-9/run_generated.py": "d8829d738b2accbde2d05b0fd8e604ee629d1b532ee0dbbecb5f241f3a603d71",
+    "target/r4-loader-9/run_gates.py": "c613b01b1acfe4667700205bfb6dc89e34cdc33fdb754d3bb57b92b27d48b2fd"
+  },
+  "mutation_campaigns": {
+    "loader": {
+      "catalog": "crates/journals/scripts/loader_mutations.json",
+      "catalog_sha256": "0340c0719304cd4ce80cb319e544dd7bba800a846a6e73c34bd32e508fdb165f",
+      "fingerprint": "4fad4595e2c5f54197420f51686356be4d237abcacc0c96e2e9ade7bd0e4b6f7",
+      "entries": 308,
+      "killed": 308,
+      "survivors": [],
+      "errors": [],
+      "unmutated_witness_filters": 33,
+      "kill_set_equals_catalog": true,
+      "wall_seconds": 1484.7741254099965,
+      "summary": "target/r4-loader-9/mutations-loader/summary.json",
+      "final_shard": "0000-0308",
+      "build_trees_deleted": true
+    },
+    "custody": {
+      "catalog": "crates/custody/scripts/mutations.json",
+      "catalog_sha256": "290ca47b68259c86dafdb524503907d3454fb11cb371447fbb11580d7225b5bd",
+      "original_fingerprint": "4fad4595e2c5f54197420f51686356be4d237abcacc0c96e2e9ade7bd0e4b6f7",
+      "resolution_fingerprint": "e9f666cc7875fa105094be40dee9cace0d9a88c1fbee1984e18b356259f2398f",
+      "entries": 2292,
+      "original_killed": 2289,
+      "reanchored_and_killed": [
+        "R7-price-exponent",
+        "R7-price-floor",
+        "projection-hash-type-family"
+      ],
+      "all_other_recipes_unchanged": true,
+      "killed": 2292,
+      "survivors": [],
+      "errors": [],
+      "kill_set_equals_catalog": true,
+      "unmutated_witness_filters": 408,
+      "shard_size": 256,
+      "original_shards": 9,
+      "resolution_shards": 3,
+      "segments": [
+        {
+          "summary": "summary-segment-1.json",
+          "wall_seconds": 10800.694940842994,
+          "completed": 1674,
+          "killed": 1674,
+          "survived": [],
+          "errors": []
+        },
+        {
+          "summary": "summary-original-campaign.json",
+          "wall_seconds": 1676.9210700959957,
+          "completed": 2292,
+          "killed": 2289,
+          "survived": [
+            "projection-hash-type-family",
+            "R7-price-exponent",
+            "R7-price-floor"
+          ],
+          "errors": []
+        },
+        {
+          "summary": "summary-resolution-hash-family.json",
+          "wall_seconds": 23.392294017001404,
+          "completed": 1,
+          "killed": 1,
+          "survived": [],
+          "errors": []
+        },
+        {
+          "summary": "summary-resolution-price-bounds.json",
+          "wall_seconds": 43.19134794799902,
+          "completed": 2,
+          "killed": 2,
+          "survived": [],
+          "errors": []
+        }
+      ],
+      "summary": "target/r4-loader-9/mutations-custody/summary.json",
+      "incremental_results": "target/r4-loader-9/mutations-custody/*/results.jsonl",
+      "build_trees_deleted": true
+    }
+  },
+  "loader_vectors": {
+    "byte_vectors": 76,
+    "refusals": 43,
+    "original_66_byte_vectors_preserved": true,
+    "live_python_tests": 216,
+    "rust_native_loader_tests": 27
+  },
+  "generated": {
+    "books": 24000,
+    "permutations": 1030,
+    "stages": 7,
+    "successful_seven_stage_comparisons": 24852,
+    "matching_finalized_refusals": 178,
+    "original_refusals": 170,
+    "permutation_refusals": 8,
+    "per_scenario_activity_and_frozen_interpretation_counts": true,
+    "suites": [
+      {
+        "suite": "evidence",
+        "all_seven_stages": 2058,
+        "books": 2000,
+        "permutations": 58
+      },
+      {
+        "suite": "components",
+        "all_seven_stages": 2312,
+        "books": 2000,
+        "permutations": 312
+      },
+      {
+        "suite": "samourai",
+        "all_seven_stages": 2068,
+        "books": 2000,
+        "permutations": 68
+      },
+      {
+        "suite": "recorded",
+        "all_seven_stages": 2092,
+        "books": 2000,
+        "permutations": 92
+      },
+      {
+        "suite": "fanout",
+        "all_seven_stages": 1916,
+        "books": 2000,
+        "permutations": 94,
+        "matching_refusals": 178
+      },
+      {
+        "suite": "graph",
+        "all_seven_stages": 2016,
+        "books": 2000,
+        "permutations": 16
+      },
+      {
+        "suite": "pipeline",
+        "all_seven_stages": 2024,
+        "books": 2000,
+        "permutations": 24
+      },
+      {
+        "suite": "safety",
+        "all_seven_stages": 2078,
+        "books": 2000,
+        "permutations": 78
+      },
+      {
+        "suite": "channels",
+        "all_seven_stages": 2064,
+        "books": 2000,
+        "permutations": 64
+      },
+      {
+        "suite": "native",
+        "all_seven_stages": 2110,
+        "books": 2000,
+        "permutations": 110
+      },
+      {
+        "suite": "reconciliation",
+        "all_seven_stages": 2050,
+        "books": 2000,
+        "permutations": 50
+      },
+      {
+        "suite": "gaps",
+        "all_seven_stages": 2064,
+        "books": 2000,
+        "permutations": 64
+      }
+    ],
+    "wall_seconds": 468.7493223000056,
+    "summary": "target/r4-loader-9/generated-summary.json"
+  },
+  "retained_replays": {
+    "requests": 159,
+    "permutations": 159,
+    "pre_request_refusals": 0,
+    "differences": 0
+  },
+  "focused": {
+    "census": {
+      "pytest_passed": 59,
+      "native_loader_exact_v1_matches": 53,
+      "stages": {
+        "components": {
+          "compared": 53,
+          "skipped": 0
+        },
+        "evidence": {
+          "compared": 53,
+          "skipped": 0
+        },
+        "interpretation": {
+          "compared": 53,
+          "skipped": 0
+        },
+        "gaps": {
+          "compared": 53,
+          "skipped": 0
+        },
+        "quantity": {
+          "compared": 53,
+          "skipped": 0
+        },
+        "finalized_projection": {
+          "compared": 53,
+          "skipped": 0
+        },
+        "fusion": {
+          "compared": 53,
+          "skipped": 0
+        }
+      },
+      "fresh_replays": {
+        "requests": 53,
+        "permutations": 53,
+        "pre_request_refusals": 0,
+        "differences": 0
+      }
+    },
+    "shadow": {
+      "pytest_passed": 59,
+      "native_loader_exact_v1_matches": 53,
+      "stages": {
+        "components": {
+          "compared": 53,
+          "skipped": 0
+        },
+        "evidence": {
+          "compared": 53,
+          "skipped": 0
+        },
+        "interpretation": {
+          "compared": 53,
+          "skipped": 0
+        },
+        "gaps": {
+          "compared": 53,
+          "skipped": 0
+        },
+        "quantity": {
+          "compared": 53,
+          "skipped": 0
+        },
+        "finalized_projection": {
+          "compared": 53,
+          "skipped": 0
+        },
+        "fusion": {
+          "compared": 53,
+          "skipped": 0
+        }
+      },
+      "fresh_replays": {
+        "requests": 53,
+        "permutations": 53,
+        "pre_request_refusals": 0,
+        "differences": 0
+      }
+    }
+  },
+  "rust": {
+    "custody_and_journals_tests": 636,
+    "failures": 0,
+    "ignored": 0,
+    "release_all_target_clippy": "pass with test-harness and -D warnings",
+    "workspace_format": "pass"
+  },
+  "inventory_update": "pass",
+  "preflight_tests": 57,
+  "gates": [
+    {
+      "gate": "generated",
+      "exit_code": 0,
+      "wall_seconds": 469.046,
+      "log": "target/r4-loader-9/logs/generated.log",
+      "log_sha256": "52548bd02bfe12b8455b507ae4bbf76aad3ec187b30c5bf6349b58597a28b056"
+    },
+    {
+      "gate": "retained-replays",
+      "exit_code": 0,
+      "wall_seconds": 13.838,
+      "log": "target/r4-loader-9/logs/retained-replays.log",
+      "log_sha256": "b30a6b3836ccc7e3bf59d69c3b45ce138c88117e51ec1ea353b28d4a611d1cfd"
+    },
+    {
+      "gate": "census",
+      "exit_code": 0,
+      "wall_seconds": 23.417,
+      "log": "target/r4-loader-9/logs/census.log",
+      "log_sha256": "ae65253e3bdecafda090bb1d1761ed8c1c9041a92937733bd2606044fcbb3759"
+    },
+    {
+      "gate": "census-fresh-replays",
+      "exit_code": 0,
+      "wall_seconds": 1.698,
+      "log": "target/r4-loader-9/logs/census-fresh-replays.log",
+      "log_sha256": "3841d9cdb23ac4b3a79d36cf5022586412f4c52a998aa010fafb7153c70af6cf"
+    },
+    {
+      "gate": "shadow",
+      "exit_code": 0,
+      "wall_seconds": 25.958,
+      "log": "target/r4-loader-9/logs/shadow.log",
+      "log_sha256": "002c620be712479f1f2a090441c5fe0c0a4c172d26b760a6228cd248f228a9e5"
+    },
+    {
+      "gate": "shadow-fresh-replays",
+      "exit_code": 0,
+      "wall_seconds": 1.587,
+      "log": "target/r4-loader-9/logs/shadow-fresh-replays.log",
+      "log_sha256": "3841d9cdb23ac4b3a79d36cf5022586412f4c52a998aa010fafb7153c70af6cf"
+    },
+    {
+      "gate": "rust-tests",
+      "exit_code": 0,
+      "wall_seconds": 288.039,
+      "log": "target/r4-loader-9/logs/rust-tests.log",
+      "log_sha256": "e0187bba4ab87273a18dd9db73cff10ee11117c41dfb4b1cc3f3bbe91f7fb81a"
+    },
+    {
+      "gate": "clippy",
+      "exit_code": 0,
+      "wall_seconds": 16.69,
+      "log": "target/r4-loader-9/logs/clippy.log",
+      "log_sha256": "a5c556269aa70cc5d8ff1525092958b256de369d305849a0cf31e6fcd79a17fd"
+    },
+    {
+      "gate": "rust-fmt",
+      "exit_code": 0,
+      "wall_seconds": 2.297,
+      "log": "target/r4-loader-9/logs/rust-fmt.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "gate": "loader-applicability",
+      "exit_code": 0,
+      "wall_seconds": 0.135,
+      "log": "target/r4-loader-9/logs/loader-applicability.log",
+      "log_sha256": "82c8b4459e0f1f0a26f1838184394b52775977c81e3c9f65f20d451582635123"
+    },
+    {
+      "gate": "custody-applicability",
+      "exit_code": 0,
+      "wall_seconds": 0.591,
+      "log": "target/r4-loader-9/logs/custody-applicability.log",
+      "log_sha256": "65af42fd7d079f3ddb4650d4b5b64636b7525935783ea6fd930212af6e461a36"
+    },
+    {
+      "gate": "inventory-update",
+      "exit_code": 0,
+      "wall_seconds": 12.897,
+      "log": "target/r4-loader-9/logs/inventory-update.log",
+      "log_sha256": "6d5aec411b822716320386bd5a09a02e20eb087879bc27512f783043fa4d4896"
+    },
+    {
+      "gate": "preflight",
+      "exit_code": 0,
+      "wall_seconds": 61.128,
+      "log": "target/r4-loader-9/logs/preflight.log",
+      "log_sha256": "cbdcfb66acf4f8c92cc920f6862cc827601905c2cb07ea283944a649df778253"
+    }
+  ],
+  "inherited": {
+    "rerun": false,
+    "reason": "Production source is unchanged; the owner requested retaining the loader-8 audit, pending classes and timing evidence.",
+    "audit": {
+      "reference": "docs/reference/r4-native-loader-8-storage-audit.json",
+      "sha256": "6069a31088980ad487446686e22ac45f6cb1d2264ed8b12f0ae71bc0f0b33eff",
+      "non_blob_cases": 16384,
+      "successful_projections": 5308,
+      "equal_refusals": 11076,
+      "writes": 0,
+      "unsafe_admissions": 0,
+      "pending_seed_dependent_messages": 16,
+      "pending_blob_gaps": 4446
+    },
+    "timing": {
+      "reference": "docs/reference/r4-native-loader-8-bench.json",
+      "sha256": "122463ebf80a0761ea41adc658d03e5598d362e750c2b8c13ee5470d305babce",
+      "generic_20k_cpu_seconds": 0.288331,
+      "multi_wallet_20k_cpu_seconds": 0.428645,
+      "within_loader_7_five_percent_budget": true
+    }
+  }
+}

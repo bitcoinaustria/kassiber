@@ -407,23 +407,21 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   A [projection/fusion kernel checkpoint](docs/reference/r4-journal-pipeline.md#projection-and-fusion-kernel-checkpoint)
   keeps stage models unchanged and reduces CPU, but the projection/request
   budgets and the no-engine-slowdown gate remain open.
-- [ ] R4-9 to R4-12: native loader, pre-build repairs, rendering and joins,
-  persistence, each with byte or database-dump parity.
+- [x] R4-9 native loader (evidence inherited from t3code/r4-9-loader-9@e15900677;
+  pending fresh r9 verification): **accepted except the BLOB corruption class (pending
+  owner decision) and 16 seed-dependent messages (pending Python fix)**.
+  Exhaustive map complete; all 308 loader and 2,292 custody recipes killed;
+  24,000 generated books/1,030 permutations, 159 retained replays/permutations
+  and focused census/shadow pass. The inherited 16,384-case non-BLOB audit keeps
+  zero writes/unsafe admissions; 4,446 BLOB gaps and sixteen message cases stay
+  pending. Timing remains within the owner's budget. Python retains production
+  authority ([acceptance and provenance](docs/reference/r4-native-loader-checkpoint.md#loader-9-acceptance)).
+- [ ] R4-10 to R4-12: pre-build repairs, rendering and joins, persistence,
+  each with byte or database-dump parity.
 - [ ] Finish the [R4-12 persistence checkpoint](docs/reference/r4-journal-persistence-checkpoint.md):
   close the write-floor budget, exhaustive persistence mutations and inherited
   campaign gates before wiring production in R4-13. The unregistered service,
   complete dump oracle and caller-owned storage scopes are implemented.
-  R4-9's test-only loader shares column layouts across native custody rows.
-  Loader-8's 16,384-case non-BLOB audit exits 0 with zero writes and zero native
-  admissions of Python-refused projections. Its sixteen mixed revision-reference
-  refusals match measured Python hash-seed variants, remain deterministic in
-  Rust, and are **pending Python determinism fix**. The 4,446 BLOB corruption-class
-  gaps remain **pending an owner decision**, with the loader-6 inventory unchanged.
-  Paired 20k CPU is 0.288 s generic / 0.429 s multi-wallet, within 5% of loader-7.
-  The loader catalogue has 136 entries and remains partial. Finish the exhaustive
-  branch mutation map, full 2,292-entry custody campaign and final generated/
-  permutation/replay/census/shadow gates before acceptance
-  ([evidence and remaining work](docs/reference/r4-native-loader-checkpoint.md)).
 - [ ] Finish the [R4-11 rendering checkpoint](docs/reference/r4-journal-render-checkpoint.md):
   close legacy-value/refusal gaps and complete exhaustive branch mutations
   and the inherited campaign gates. The [performance follow-up](docs/reference/r4-journal-render-performance-checkpoint.md)

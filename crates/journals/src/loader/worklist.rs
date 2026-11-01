@@ -118,3 +118,31 @@ fn sql_parameter(value: &Value) -> Result<rusqlite::types::Value> {
         _ => return Err(Error::Invalid("SQL parameter".into())),
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn native_loader_worklist_parameters_keep_sqlite_scalar_types() {
+        use rusqlite::types::Value as S;
+        for (value, expected) in [
+            (Value::Null, S::Null),
+            (Value::from(-1), S::Integer(-1)),
+            (Value::Float(1.5), S::Real(1.5)),
+            (Value::from("BTC"), S::Text("BTC".into())),
+        ] {
+            assert_eq!(sql_parameter(&value).unwrap(), expected);
+        }
+        for value in [
+            Value::Bool(true),
+            list(vec![]),
+            Value::from(u64::MAX),
+            Value::Str(kassiber_pyjson::PyStr::from_code_points([0xd800]).unwrap()),
+        ] {
+            assert!(sql_parameter(&value).is_err());
+        }
+        assert_eq!(string_or_empty(&Value::Null), "");
+        assert_eq!(string_or_empty(&Value::from("date")), "date");
+    }
+}

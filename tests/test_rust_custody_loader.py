@@ -564,6 +564,61 @@ def test_loader_preserves_retired_policies_warnings_and_core_outpoints(loose_boo
     check(conn)
 
 
+@pytest.mark.parametrize("network_override", [False, True])
+def test_loader_inventory_scope_overrides_wallet_config(loose_book, network_override):
+    conn, helper = loose_book
+    _source_inventory(conn, helper, "dd" * 32)
+    config = {"chain": "bitcoin", "network": "test"} if network_override else {"chain": "liquid", "network": "liquidv1"}
+    conn.execute("UPDATE wallets SET config_json=? WHERE id='wallet-a'", (json.dumps(config),))
+    graph = _graph("dd" * 32, inputs=[("aa" * 32, 0, SCRIPT_A, 100010)], outputs=[(SCRIPT_B, 100000)], fee=10)
+    _native_leg(conn, helper, "wallet-b", SCRIPT_B, graph)
+    snapshot = load_custody_snapshot(conn, _profile(conn), as_of=AS_OF)
+    assert any(item["source"] == "inventory" and item["chain"] == "bitcoin" and item["network"] == "main"
+               for item in snapshot["owned_index"]["by_script"][SCRIPT_A])
+    check(conn)
+
+
+def test_loader_infers_outpoint_from_liquid_unconfidential_alias(loose_book):
+    from tests.test_source_overlap import _descriptor_target
+    conn, helper = loose_book
+    bitcoin = _descriptor_config(1)
+    config = {"descriptor": f"ct(slip77({'03' * 32}),el{bitcoin['descriptor']})",
+              "chain": "liquid", "network": "liquidv1", "gap_limit": 1}
+    target = _descriptor_target(config)
+    conn.execute("UPDATE wallets SET kind='descriptor',config_json=? WHERE id='wallet-a'", (json.dumps(config),))
+    helper._tx(conn, tx_id="core", wallet_id="wallet-a", direction="inbound", amount=100000,
+               external_id="ee" * 32, raw_json="{}")
+    conn.execute("UPDATE transactions SET raw_json=? WHERE id='core'", (json.dumps([
+        {"txid": "ee" * 32, "vout": "7", "address": target.unconfidential_address}]),))
+    graph = _graph("dd" * 32, inputs=[("ee" * 32, 7, target.script_pubkey, 100010)],
+                   outputs=[(SCRIPT_B, 100000)], fee=10)
+    _native_leg(conn, helper, "wallet-b", SCRIPT_B, graph)
+    snapshot = load_custody_snapshot(conn, _profile(conn), as_of=AS_OF)
+    assert any(item["source"] == "derived" for item in snapshot["owned_index"]["by_outpoint"]["ee" * 32 + ":7"])
+    check(conn)
+
+
+@pytest.mark.parametrize("case", ["valid", "mismatched", "bool", "ambiguous"])
+def test_loader_legacy_outpoint_inference_requires_matching_exclusive_evidence(loose_book, case):
+    conn, helper = loose_book
+    config = {"chain": "bitcoin", "network": "main", "addresses": [ADDR_A]}
+    conn.execute("UPDATE wallets SET config_json=? WHERE id='wallet-a'", (json.dumps(config),))
+    if case == "ambiguous":
+        conn.execute("UPDATE wallets SET config_json=? WHERE id='wallet-b'", (json.dumps(config),))
+    reference_index = 1 if case == "bool" else 7
+    observation = {"txid": ("ff" if case == "mismatched" else "ee") * 32,
+                   "vout": True if case == "bool" else 7, "address": ADDR_A}
+    helper._tx(conn, tx_id="core", wallet_id="wallet-a", direction="inbound", amount=100000,
+               external_id="ee" * 32, raw_json="{}")
+    conn.execute("UPDATE transactions SET raw_json=? WHERE id='core'", (json.dumps([observation]),))
+    graph = _graph("dd" * 32, inputs=[("ee" * 32, reference_index, SCRIPT_A, 100010)],
+                   outputs=[(SCRIPT_B, 100000)], fee=10)
+    _native_leg(conn, helper, "wallet-b", SCRIPT_B, graph)
+    snapshot = load_custody_snapshot(conn, _profile(conn), as_of=AS_OF)
+    assert (("ee" * 32 + f":{reference_index}") in snapshot["owned_index"]["by_outpoint"]) == (case == "valid")
+    check(conn)
+
+
 def test_loader_opens_sqlcipher_through_store(tmp_path):
     from kassiber.db import open_db
     from tests.test_rp2_ownership_transfers import OwnershipDeriverHandlerTest
@@ -622,6 +677,7 @@ def test_loader_receipt_high_water_precedence(loose_book, checkpoint, output_ind
 
 
 @pytest.mark.parametrize("scan,used,history_floor,index", [
+    (None, None, 0, 501),
     (-2, None, 502, 502),
     ("505", None, 0, 505),
     (False, 501, 0, 503),
@@ -855,6 +911,18 @@ def _receipt_index_book(loose_book, deprecated):
                address=None, script_pubkey=SCRIPT_A, branch_index=branch,
                branch_label="receive", address_index=0, raw_json="{}")
     return conn
+
+
+@pytest.mark.parametrize("missing", ["chain", "network"])
+def test_loader_receipt_address_lists_require_explicit_scope(loose_book, missing):
+    conn = _receipt_index_book(loose_book, False)
+    config = {"chain": "bitcoin", "network": "main", "addresses": [ADDR_A, ADDR_B]}
+    del config[missing]
+    conn.execute("UPDATE wallets SET config_json=?", (json.dumps(config),))
+    snapshot = load_custody_snapshot(conn, _profile(conn), as_of=AS_OF)
+    assert snapshot["receipt_sources"]
+    assert all(source["source"] == "inventory" for source in snapshot["receipt_sources"])
+    check(conn)
 
 
 @pytest.mark.parametrize("deprecated", [False, True, "yes"])

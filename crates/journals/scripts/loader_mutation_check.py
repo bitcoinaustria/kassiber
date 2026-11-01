@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the experimental loader's partial mutation catalog in a disposable tree."""
+"""Run the experimental loader's branch mutation catalog in a disposable tree."""
 import importlib.util
 import os
 from pathlib import Path

@@ -2283,7 +2283,7 @@ on production routing, performance targets, automatic pairing and persisted
 shapes are recorded in the design. Book-open cost and allocator decisions
 remain open.
 
-### R4-9 loader continuation (unaccepted)
+### R4-9 native loader acceptance
 
 The [loader checkpoint](../reference/r4-native-loader-checkpoint.md) compares
 corruption refusals at the CLI/daemon code and rendered-message boundary.
@@ -2302,14 +2302,26 @@ refusals are deterministic; the cases remain **pending Python determinism fix**.
 The 4,446 BLOB corruption-class gaps remain **pending an owner decision**,
 unchanged, with their loader-6 inventory retained.
 
-The exhaustive branch map, full 2,292-entry custody mutation campaign and final
-generated/permutation/replay/census/shadow gates remain open. The partial loader
-catalogue has 136 entries. R4-9 is not accepted; the acceptance wording with both
-pending classes is conditional on completing those requirements. Python retains
-production journal authority. Loader-8's paired 20k CPU totals including
-admission are 0.288331 s generic and 0.428645 s multi-wallet, both within 5% of
-loader-7. The checkpoint owns the timing and verification evidence; inherited
-complete-campaign counts do not imply fresh reruns.
+Loader-9 completes the [exhaustive branch map](../reference/r4-native-loader-branch-map.md)
+and kills all **308 loader recipes** and **2,292 custody recipes**. Three custody
+recipes are re-anchored to their stated contracts and killed in fresh shards;
+all other original kills are retained with their source/catalogue fingerprints.
+The final 24,000 generated books and 1,030 permutations, 159 retained requests
+and their permutations, and focused census/shadow pass. Each focused lane also
+proves 53 exact native-loader byte matches and replays 53 fresh requests and
+permutations. The [acceptance record](../reference/r4-native-loader-checkpoint.md#loader-9-acceptance)
+owns the complete counts, re-anchor review and resumable campaign provenance.
+
+R4-9 is **accepted except the BLOB corruption class (pending owner decision)
+and 16 seed-dependent messages (pending Python fix)**. Loader-9 changes tests,
+fixtures, catalogues and acceptance records; production Rust and Python code are
+unchanged. Python retains production journal authority, and the loader remains
+behind `test-harness` until its separate integration/authority gates.
+
+Loader-8's paired 20k CPU totals including admission remain 0.288331 s generic
+and 0.428645 s multi-wallet, both within 5% of loader-7. Those timings and the
+16,384-case non-BLOB audit are inherited unchanged; the final campaign results
+above are fresh. The 4,446 BLOB gaps and sixteen message cases remain pending.
 
 ### R4-0 integrated stack
 

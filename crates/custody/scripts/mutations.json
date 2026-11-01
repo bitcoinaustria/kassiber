@@ -20647,11 +20647,11 @@
     "id": "projection-hash-type-family",
     "file": "crates/custody/src/finalized_projection.rs",
     "find": "        crate::interpretation::integer_or_zero(&row[key])?;",
-    "replace": "        let _ = &row[key];",
+    "replace": "        crate::interpretation::integer_or_zero(&row[key]).map_err(|_| \"ValueError\".to_owned())?;",
     "expect_failing": [
       "projection_fee_row_vectors"
     ],
-    "rule": "Malformed committed raw quantities retain Python TypeError rather than becoming a ValueError from generic hash encoding."
+    "rule": "Malformed committed raw quantities retain Python TypeError rather than a generic ValueError."
   },
   {
     "id": "projection-hash-admission-order",
@@ -22896,8 +22896,8 @@
   {
     "id": "R7-price-exponent",
     "file": "crates/custody/src/finalized_projection/money.rs",
-    "find": "d.exponent().unsigned_abs() <= 308",
-    "replace": "true",
+    "find": "number.exponent().unsigned_abs() > 308",
+    "replace": "false",
     "expect_failing": [
       "projection_base_row_vectors"
     ],
@@ -22906,8 +22906,8 @@
   {
     "id": "R7-price-floor",
     "file": "crates/custody/src/finalized_projection/money.rs",
-    "find": "d.copy_abs() >= Decimal::from_str(\"1e-13\").unwrap()",
-    "replace": "true",
+    "find": "number.copy_abs() < Decimal::from_str(\"1e-13\").unwrap()",
+    "replace": "false",
     "expect_failing": [
       "projection_base_row_vectors"
     ],

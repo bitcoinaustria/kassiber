@@ -81,7 +81,15 @@ def vectors():
                 *[("owned-horizon-" + str(i), cases.test_loader_owned_high_water_and_retired_floor, args) for i, args in enumerate((
                     (-2, None, 502, 502), ("505", None, 0, 505),
                     (False, 501, 0, 503), ("invalid", 501, "invalid", 503),
+                    (None, None, 0, 501),
                 ))],
+                *[("inventory-scope-" + str(i), cases.test_loader_inventory_scope_overrides_wallet_config, (override,))
+                  for i, override in enumerate((False, True))],
+                ("owned-liquid-alias", cases.test_loader_infers_outpoint_from_liquid_unconfidential_alias, ()),
+                *[("owned-legacy-" + case, cases.test_loader_legacy_outpoint_inference_requires_matching_exclusive_evidence, (case,))
+                  for case in ("valid", "mismatched", "bool", "ambiguous")],
+                *[("receipts-missing-" + missing, cases.test_loader_receipt_address_lists_require_explicit_scope, (missing,))
+                  for missing in ("chain", "network")],
                 *[("config-" + str(i), cases.test_loader_normalizes_config_and_preserves_storage, (config,))
                   for i, config in enumerate(cases.CONFIGS)],
             ]

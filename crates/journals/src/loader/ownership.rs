@@ -573,6 +573,205 @@ mod tests {
     use super::*;
 
     #[test]
+    fn native_loader_scoped_index_preserves_evidence_order_and_sorts_wallet_pairs() {
+        let a = match_facts(
+            &dict([("id", Value::from("a")), ("label", Value::from("A"))]),
+            "",
+            "bitcoin",
+            "main",
+            "inventory",
+        );
+        let b = match_facts(
+            &dict([("id", Value::from("b")), ("label", Value::from("B"))]),
+            "",
+            "bitcoin",
+            "main",
+            "inventory",
+        );
+        let mut index = Index::default();
+        for item in [&b, &a] {
+            index
+                .outpoint(&Value::from("tx"), &Value::from(0), item)
+                .unwrap();
+            index.txid(&Value::from("tx"), item);
+        }
+        let encoded = index.encode(&BTreeSet::from(["tx".into(), "tx:0".into()]));
+        let Value::List(outpoints) = get(&encoded, "by_scoped_outpoint") else {
+            panic!("outpoints")
+        };
+        assert_eq!(get(&outpoints[0], "matches"), &list(vec![b, a]));
+        let Value::List(txids) = get(&encoded, "txid_wallets_by_scope") else {
+            panic!("txids")
+        };
+        assert_eq!(
+            get(&txids[0], "matches"),
+            &list(vec![
+                list(vec![Value::from("a"), Value::from("A")]),
+                list(vec![Value::from("b"), Value::from("B")])
+            ])
+        );
+    }
+
+    #[test]
+    fn native_loader_ownership_helpers_keep_scope_and_evidence_separate() {
+        assert_eq!(address_key(&Value::from(" BC1QABC ")), "bc1qabc");
+        assert_eq!(address_key(&Value::from(" Base58ABC ")), "Base58ABC");
+        assert_eq!(address_key(&Value::Null), "");
+        for (input, expected) in [
+            (" 00AA ", Some("00aa")),
+            ("00  AA", Some("00  aa")),
+            ("", None),
+            ("a", None),
+            ("ag", None),
+            ("g0", None),
+            ("a ", None),
+        ] {
+            assert_eq!(normalized_script(&Value::from(input)).as_deref(), expected);
+        }
+        assert_eq!(normalized_script(&Value::Null), None);
+        for (input, expected) in [
+            (Value::from(-2), Some((-2).into())),
+            (Value::Bool(false), Some(0.into())),
+            (Value::from("١٢"), Some(12.into())),
+            (Value::Float(-1.9), Some((-1).into())),
+            (Value::Null, None),
+            (Value::from("no"), None),
+        ] {
+            assert_eq!(integer(&input), expected);
+        }
+        assert_eq!(
+            chain_network(&Value::Null, &Value::Null),
+            ("bitcoin".into(), "main".into())
+        );
+        assert_eq!(
+            chain_network(&Value::from(" Unknown "), &Value::from(" Custom ")),
+            ("unknown".into(), "custom".into())
+        );
+        for (input, expected) in [
+            ("{}", false),
+            ("{\"descriptor\": \" \"}", false),
+            ("{\"descriptor\": \"d\"}", true),
+            ("{\"xpub\":\"x\"}", false),
+            ("{\"xpub\":\"x\",\"script_types\":[\"wpkh\"]}", true),
+        ] {
+            assert_eq!(
+                has_descriptor(&kassiber_pytext::loads(input).unwrap()),
+                expected
+            );
+        }
+        for value in [Value::Null, Value::from("malformed")] {
+            assert_eq!(config(&dict([("config_json", value)])).unwrap(), dict([]));
+        }
+        for addresses_json in [
+            "null",
+            "\" a, ,b,a \"",
+            "[\" a \",\"b\",\"a\",\"\"]",
+            "{\"a\": 1, \"b\": 2}",
+        ] {
+            let result = addresses(&dict([(
+                "addresses",
+                kassiber_pytext::loads(addresses_json).unwrap(),
+            )]))
+            .unwrap();
+            assert_eq!(
+                result,
+                if addresses_json == "null" {
+                    vec![]
+                } else {
+                    vec!["a", "b"]
+                }
+            );
+        }
+        let item_a = match_facts(
+            &dict([
+                ("id", Value::from("a")),
+                ("label", Value::from("A")),
+                ("kind", Value::Null),
+            ]),
+            "treasury",
+            "bitcoin",
+            "mainnet",
+            "inventory",
+        );
+        let item_b = match_facts(
+            &dict([
+                ("id", Value::from("b")),
+                ("label", Value::from("B")),
+                ("kind", Value::from("custom")),
+            ]),
+            "",
+            "bitcoin",
+            "testnet",
+            "inventory",
+        );
+        assert_eq!(get(&item_a, "wallet_kind"), &Value::from(""));
+        assert_eq!(get(&item_b, "wallet_kind"), &Value::from("custom"));
+        let mut index = Index::default();
+        index.address(&Value::Null, &item_a);
+        index.address(&Value::from("BC1QABC"), &item_a);
+        index.script(None, &item_a);
+        index.script(Some(String::new()), &item_a);
+        index.script(Some("AA".into()), &item_a);
+        assert_eq!(index.addresses.entries.len(), 1);
+        assert_eq!(index.scripts.entries.len(), 1);
+        index
+            .outpoint(&Value::Null, &Value::from(0), &item_a)
+            .unwrap();
+        index
+            .outpoint(&Value::from("TX"), &Value::Null, &item_a)
+            .unwrap();
+        index
+            .outpoint(&Value::from("TX"), &Value::from(0), &item_a)
+            .unwrap();
+        index.txid(&Value::Null, &item_a);
+        for item in [&item_b, &item_a, &item_a] {
+            index.txid(&Value::from("TX"), item);
+        }
+        assert_eq!(index.txids.entries.len(), 1);
+        let encoded = index.encode(&BTreeSet::from(["aa".into(), "tx:0".into(), "tx".into()]));
+        assert_eq!(
+            get(&encoded, "by_script"),
+            &dict([("aa", list(vec![item_a.clone()]))])
+        );
+        assert_eq!(
+            get(&encoded, "by_outpoint"),
+            &dict([("tx:0", list(vec![item_a]))])
+        );
+        assert_eq!(
+            get(&encoded, "txid_wallets"),
+            &dict([(
+                "tx",
+                list(vec![
+                    list(vec![Value::from("a"), Value::from("A")]),
+                    list(vec![Value::from("b"), Value::from("B")])
+                ])
+            )])
+        );
+        let Value::List(scoped) = get(&encoded, "txid_wallets_by_scope") else {
+            panic!("scope")
+        };
+        assert_eq!(scoped.len(), 2);
+        for item in scoped {
+            let Value::List(matches) = get(item, "matches") else {
+                panic!("matches")
+            };
+            assert_eq!(matches.len(), 1);
+        }
+        assert_eq!(
+            get(&scoped[0], "key"),
+            &list(vec![
+                Value::from("bitcoin"),
+                Value::from("main"),
+                Value::from("tx")
+            ])
+        );
+        let mut groups = Groups::default();
+        groups.add("unreferenced".into(), Value::from(1));
+        assert_eq!(groups.matches("missing"), &[]);
+        assert_eq!(groups.encode(&BTreeSet::new()), dict([]));
+    }
+
+    #[test]
     fn native_loader_outpoint_integer_preserves_python_refusals() {
         for (value, expected) in [
             (Value::from("١_٢"), BigInt::from(12)),

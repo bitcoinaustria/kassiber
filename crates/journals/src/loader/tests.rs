@@ -1,6 +1,134 @@
 use super::*;
 
 #[test]
+fn native_loader_scalar_helpers_preserve_types_and_missing_values() {
+    use kassiber_pyjson::PyStr;
+    for (source, expected) in [
+        ("null", "null"),
+        ("true", "true"),
+        ("9223372036854775808", "9223372036854775808"),
+        ("1.25", "1.25"),
+        ("\"钱\"", "\"钱\""),
+        ("[1, false]", "[1,false]"),
+        ("{\"a\": [1]}", "{\"a\":[1]}"),
+    ] {
+        assert_eq!(
+            convert(kassiber_pytext::loads(source).unwrap())
+                .unwrap()
+                .to_string(),
+            expected
+        );
+    }
+    assert!(convert(Value::Str(PyStr::from_code_points(vec![0xd800]).unwrap())).is_err());
+    assert!(convert(Value::Dict(vec![(Key::Int(1.into()), Value::Null)])).is_err());
+    assert!(convert(Value::Dict(vec![(
+        Key::Str(PyStr::from_code_points(vec![0xd800]).unwrap()),
+        Value::Null
+    )]))
+    .is_err());
+    assert!(convert(Value::Decimal(kassiber_pydecimal::Decimal::zero())).is_err());
+    assert!(!truth(&Value::Decimal(kassiber_pydecimal::Decimal::zero())));
+    assert!(truth(&Value::Decimal("0.01".parse().unwrap())));
+    for (source, expected) in [
+        ("null", false),
+        ("false", false),
+        ("true", true),
+        ("0", false),
+        ("1", true),
+        ("0.0", false),
+        ("-0.1", true),
+        ("\"\"", false),
+        ("\"x\"", true),
+        ("[]", false),
+        ("[0]", true),
+        ("{}", false),
+        ("{\"a\": 0}", true),
+    ] {
+        assert_eq!(
+            truth(&kassiber_pytext::loads(source).unwrap()),
+            expected,
+            "{source}"
+        );
+    }
+    let mut row = dict([("first", Value::from(1))]);
+    set(&mut row, "first", Value::from(2));
+    set(&mut row, "second", Value::from(3));
+    assert_eq!(
+        row,
+        dict([("first", Value::from(2)), ("second", Value::from(3))])
+    );
+    assert_eq!(get(&row, "missing"), &Value::Null);
+    assert_eq!(get(&row, "first"), &Value::from(2));
+    assert_eq!(get(&Value::Null, "first"), &Value::Null);
+    for value in [Value::Null, Value::from("bad JSON"), Value::from("null")] {
+        assert_eq!(parsed(&value), Value::Null);
+    }
+    assert_eq!(
+        parsed(&Value::from("{\"a\": 1}")),
+        dict([("a", Value::from(1))])
+    );
+    assert_eq!(sql_value(ValueRef::Null).unwrap(), Value::Null);
+}
+
+#[test]
+fn native_loader_refusal_attributes_and_display_keep_private_values_out() {
+    let error = kassiber_envelope::AppError::new("validation", "synthetic")
+        .with_hint("hint")
+        .with_details(dict([("field", Value::from("amount"))]))
+        .retryable(true);
+    let Error::Reference(refusal) = app_refusal(error) else {
+        panic!("reference")
+    };
+    assert_eq!(refusal.family, "AppError");
+    assert_eq!(refusal.code.as_deref(), Some("validation"));
+    assert_eq!(refusal.message, "synthetic");
+    assert_eq!(refusal.hint.as_deref(), Some("hint"));
+    assert_eq!(refusal.retryable, Some(true));
+    assert_eq!(refusal.details, serde_json::json!({"field": "amount"}));
+    let Error::Reference(empty) = app_refusal(kassiber_envelope::AppError::new("x", "y")) else {
+        panic!("reference")
+    };
+    assert!(empty.details.is_null());
+    assert_eq!(empty.retryable, Some(false));
+    for (error, expected) in [
+        (
+            Error::TransactionRequired,
+            "custody loading requires the caller's write transaction",
+        ),
+        (
+            Error::Database(rusqlite::Error::InvalidParameterName("private".into())),
+            "custody snapshot database read failed",
+        ),
+        (Error::Unsupported("synthetic"), "synthetic"),
+        (
+            Error::Invalid("private".into()),
+            "custody snapshot contains unsupported facts",
+        ),
+        (
+            Error::Reference(refusal),
+            "custody snapshot reference refused",
+        ),
+        (
+            Error::Json(
+                kassiber_pyjson::dumps(&Value::Float(f64::NAN), &Options::new().allow_nan(false))
+                    .unwrap_err(),
+            ),
+            "custody snapshot v1 serialization failed",
+        ),
+    ] {
+        assert_eq!(error.to_string(), expected);
+    }
+    let conn = Connection::open_in_memory().unwrap();
+    assert!(operational(
+        &query(&conn, "SELECT absent FROM missing", []).unwrap_err()
+    ));
+    assert!(!operational(&Error::Invalid("private".into())));
+    assert!(!operational(&Error::Database(
+        rusqlite::Error::InvalidQuery
+    )));
+}
+
+#[test]
 fn native_loader_utf8_refusals_preserve_python_column_order_and_message() {
     let conn = Connection::open_in_memory().unwrap();
     let refusal = |sql: &str, direct: bool| {
@@ -418,6 +546,11 @@ fn native_loader_bounds_gap_worklist() {
           INSERT INTO wallets VALUES('a','p','A','custom','{}'),('b','p','B','custom','{}');
           WITH RECURSIVE n(i) AS (VALUES(0) UNION ALL SELECT i+1 FROM n WHERE i<50000)
           INSERT INTO transactions(id,profile_id,wallet_id,excluded) SELECT 'orphan-'||i,'p','absent',0 FROM n;").unwrap();
+        conn.execute(
+            "UPDATE wallets SET config_json=? WHERE id='a'",
+            [r#"{"chain":"bitcoin"}"#],
+        )
+        .unwrap();
         for i in 0..270 {
             conn.execute("INSERT INTO transactions VALUES(?,'p','a','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','outbound','BTC',?,0,0,0,'withdrawal',NULL,?,'acq','{}')",rusqlite::params![format!("out-{i:03}"),1_000_000+i,if structured { "whirlpool" } else { "" }]).unwrap();
         }
@@ -434,6 +567,12 @@ fn native_loader_bounds_gap_worklist() {
             .filter(|row| get(row, "direction") == &Value::from("outbound"))
             .collect::<Vec<_>>();
         assert_eq!(outbound.len(), if structured { 256 } else { 64 });
+        for row in &outbound {
+            assert_eq!(
+                get(row, "wallet_config_json"),
+                &Value::from(r#"{"chain": "bitcoin"}"#)
+            );
+        }
         assert_eq!(
             text(get(outbound[0], "id")),
             if structured { "out-000" } else { "out-206" }
@@ -445,6 +584,31 @@ fn native_loader_bounds_gap_worklist() {
         assert_eq!(rows.len() - outbound.len(), 512);
         assert_eq!(text(get(&rows[0], "id")), "in-000");
     }
+}
+
+#[test]
+fn native_loader_worklist_ranks_sources_across_assets_before_budgeting() {
+    let conn = Connection::open_in_memory().unwrap();
+    conn.execute_batch("CREATE TABLE wallets(id TEXT,profile_id TEXT,label TEXT,kind TEXT,config_json TEXT);
+      CREATE TABLE transactions(id TEXT,profile_id TEXT,wallet_id TEXT,occurred_at TEXT,created_at TEXT,direction TEXT,asset TEXT,amount INTEGER,fee INTEGER,amount_includes_fee INTEGER,excluded INTEGER,kind TEXT,kind_override TEXT,privacy_boundary TEXT,external_id TEXT,raw_json TEXT);
+      INSERT INTO wallets VALUES('a','p','A','custom','{}');
+      WITH RECURSIVE n(i) AS (VALUES(0) UNION ALL SELECT i+1 FROM n WHERE i<50000)
+      INSERT INTO transactions(id,profile_id,wallet_id,excluded) SELECT 'orphan-'||i,'p','absent',0 FROM n;").unwrap();
+    for (asset, amount) in [("BTC", 100_000), ("L-BTC", 200_000)] {
+        for i in 0..64 {
+            conn.execute("INSERT INTO transactions VALUES(?,'p','a','2026-01-01','2026-01-01','outbound',?,?,0,0,0,'withdrawal',NULL,NULL,'acq','{}')", rusqlite::params![format!("{asset}-{i:03}"),asset,amount+i]).unwrap();
+        }
+    }
+    let result = worklist::load(&conn, "p", &mut HashMap::new()).unwrap();
+    let Value::List(rows) = get(&result, "rows") else {
+        panic!("rows")
+    };
+    assert_eq!(rows.len(), 64);
+    assert!(rows
+        .iter()
+        .all(|row| get(row, "asset") == &Value::from("L-BTC")));
+    assert_eq!(get(&rows[0], "id"), &Value::from("L-BTC-000"));
+    assert_eq!(get(&rows[63], "id"), &Value::from("L-BTC-063"));
 }
 
 #[test]

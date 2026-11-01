@@ -595,6 +595,74 @@ mod tests {
     use super::*;
 
     #[test]
+    fn native_loader_adapter_preserves_order_and_refuses_invalid_shapes() {
+        assert!(native_rows(Value::Null).is_err());
+        assert!(native_rows(list(vec![Value::from(1)])).is_err());
+        assert_eq!(
+            native_rows(list(vec![dict([("id", Value::from("a"))])])).unwrap()[0]["id"],
+            J::from("a")
+        );
+        let row: Record = serde_json::json!({"id": 7})
+            .as_object()
+            .unwrap()
+            .clone()
+            .into();
+        assert_eq!(string(&row, "id"), "7");
+        assert_eq!(string(&row, "missing"), "None");
+        let mut gate = Gate::default();
+        let original = dict([("z", Value::from(1)), ("a", Value::from(2))]);
+        assert_eq!(
+            gate.native("profile", original.clone()).unwrap(),
+            serde_json::json!({"a": 2, "z": 1})
+        );
+        assert_eq!(
+            gate.encode(&serde_json::json!({"a": 2, "z": 1}), "profile")
+                .unwrap(),
+            original
+        );
+        assert_eq!(
+            gate.encode(
+                &serde_json::json!({"z": [null, true, 1.5, "x"], "a": 2}),
+                "other"
+            )
+            .unwrap(),
+            dict([
+                ("a", Value::from(2)),
+                (
+                    "z",
+                    list(vec![
+                        Value::Null,
+                        Value::Bool(true),
+                        Value::Float(1.5),
+                        Value::from("x")
+                    ])
+                )
+            ])
+        );
+        for raw in [
+            Value::Null,
+            Value::from("invalid"),
+            Value::from("[]"),
+            dict([]),
+        ] {
+            assert_eq!(normalize(raw).unwrap(), ("{}".into(), false));
+        }
+        assert_eq!(
+            normalize(dict([
+                ("chain", Value::from("bitcoin")),
+                ("secret", Value::from("samourai"))
+            ]))
+            .unwrap(),
+            (r#"{"chain": "bitcoin"}"#.into(), true)
+        );
+        assert_eq!(normalize(Value::from(r#"{"chain":"bitcoin","secret":"samourai","samourai":{"role":"postmix","group_id":"g","section":"s","secret":"drop"}}"#)).unwrap(), (r#"{"chain": "bitcoin", "samourai": {"role": "postmix", "group_id": "g", "section": "s"}}"#.into(), true));
+        assert_eq!(
+            normalize(Value::from(r#"{"samourai": 7}"#)).unwrap(),
+            (r#"{"samourai": null}"#.into(), true)
+        );
+    }
+
+    #[test]
     fn native_loader_filters_only_safe_confirmation_columns() {
         let conn = Connection::open_in_memory().unwrap();
         let mut reader = Reader::default();

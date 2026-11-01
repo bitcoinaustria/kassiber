@@ -1,19 +1,16 @@
 # R4-9 native custody loader checkpoint
 
-This is an **unaccepted, test-only checkpoint**, updated 2026-10-31. Loader-8
-continues `efcbb7af7` (loader-7) and applies the owner's hash-seed variant rule
-to the remaining 16 mixed revision-reference refusals. The 16,384-case non-BLOB
-audit now exits 0, with zero writes and zero native admissions of
-Python-refused projections. The 16 cases remain **pending Python determinism
-fix**; this does not claim that Python has become deterministic. The 4,446
-BLOB corruption-class gaps remain **pending an owner decision**, unchanged.
-Python retains every production load and journal route. Earlier sections retain
-their historical evidence.
+> Evidence inherited from t3code/r4-9-loader-9@e15900677; pending fresh r9 verification.
 
-Exhaustive loader branch mutations, the full 2,292-entry custody mutation
-campaign and the final generated/permutation/replay/census/shadow gates still
-keep R4-9 open. The acceptance wording with both pending classes is conditional
-on those remaining gates; this checkpoint does not claim acceptance.
+R4-9 is **accepted except the BLOB corruption class (pending owner decision)
+and 16 seed-dependent messages (pending Python fix)**, updated 2026-11-01.
+Loader-9 continues `c5966c1ff` (loader-8), completes the exhaustive branch map,
+and passes the loader/custody mutation and final parity campaigns. The
+[acceptance record](#loader-9-acceptance) distinguishes these fresh results from
+the unchanged loader-8 audit and timing evidence. Its 4,446 BLOB gaps and sixteen
+message cases remain explicit pending exceptions. Python retains every
+production load and journal route; the native loader remains test-only.
+Earlier sections retain their historical evidence.
 
 ## Representation and authority
 
@@ -812,21 +809,102 @@ This extends the named contracts but does not finish the exhaustive branch map.
 No full custody mutation, generator, replay or census/shadow rerun is claimed
 here. The inherited complete-campaign evidence remains historical.
 
-## Remaining acceptance work
+## Loader-9 acceptance
 
-1. Finish the exhaustive branch-to-named-mutation map. The 136-entry loader
-   catalogue remains partial. Then run the full 2,292-entry custody campaign in
-   resumable shards, with incremental logs and fresh build trees deleted after
-   each summarized shard; resolve survivors and runner errors.
-2. Rerun all 24,000 generated books and 1,030 permutations, all 159 retained
-   replays at `/home/tg/.cache/kassiber-verify/custody-recordings/`, and focused
-   census/shadow. Earlier full-campaign counts remain historical.
-3. Write acceptance and update plan 21/TODO only after those requirements pass.
-   The owner-authorized wording is "accepted except the BLOB corruption class
-   (pending owner decision) and 16 seed-dependent messages (pending Python fix)".
-   Until then R4-9 remains unaccepted. Keep both exceptions explicit; do not
-   resolve or waive the BLOB class without an owner decision. Python keeps
-   production authority until its separate integration gate.
+On 2026-11-01, R4-9 is **accepted except the BLOB corruption class (pending
+owner decision) and 16 seed-dependent messages (pending Python fix)**.
+The [verification summary](r4-native-loader-9-verification.json) records the
+catalogue hashes, campaign fingerprints, probe hash, gate counts and log paths.
+Production Rust and Python code are unchanged in loader-9: changes add test
+witnesses, fixtures, mutation recipes and acceptance documentation. The
+transitional representation and production-authority boundaries above remain.
+
+### Exhaustive map and mutation campaigns
+
+The [branch map](r4-native-loader-branch-map.md) covers the loader and all five
+modules, shared record/admission seams and downstream refusal contracts. It
+names each recipe and its killer, groups equivalent alternatives, and explains
+delegated, unreachable and representation-only defenses. The loader catalogue
+grows from 136 to **308 entries** without removing an entry. New witnesses cover
+scalar preservation/refusals, safe configuration, ownership scope and ordering,
+descriptor horizons, conservative legacy inference, receipt defaults, SQLite
+parameters and cross-asset worklist ranking.
+
+| Final catalogue | Killed | Survivors | Runner errors |
+| --- | ---: | ---: | ---: |
+| Loader | 308 / 308 | 0 | 0 |
+| Custody | 2,292 / 2,292 | 0 | 0 |
+
+All 33 loader witness filters pass unmutated before the final 308-entry run.
+Its final shard is `target/r4-loader-9/mutations-loader/0000-0308/`, with
+1,484.774 seconds wall time. The earlier exploratory shard is not the final
+campaign evidence.
+
+The custody campaign uses nine resumable shards of at most 256 entries, with
+incremental, fsynced `results.jsonl`, manifests, run logs and summaries under
+`target/r4-loader-9/mutations-custody/`. At the three-hour checkpoint, 1,674
+entries are killed, with no survivors/errors and 618 remaining. The resumed
+original campaign completes all 2,292 entries: 2,289 kills, three survivors and
+zero runner errors. Original segment times are 10,800.695 and 1,676.921 seconds;
+the checkpoint summary and complete original result are retained separately.
+Every named witness passes unmutated in its shard, covering 408 distinct filters.
+
+Three recipes are re-anchored to their stated contracts, preserving the same
+IDs and named killers:
+
+| Recipe | Re-anchor and named killer |
+| --- | --- |
+| `projection-hash-type-family` | Removing the preliminary conversion no longer changes the malformed-container refusal: the shared component integer converter also returns `TypeError`. The revised recipe explicitly substitutes `ValueError`, killed by `projection_fee_row_vectors` on the existing malformed amount/fee cases. |
+| `R7-price-exponent` | The base-row witness now calls `Money::finite_field`, so the recipe targets that method's exponent bound rather than `require_finite`. Existing long-exponent cases in `projection_base_row_vectors` kill it. |
+| `R7-price-floor` | The recipe targets `finite_field`'s nonzero precision floor, reached by the existing tiny-price cases in `projection_base_row_vectors`. |
+
+Each revised recipe builds and is killed in a fresh single-entry shard after
+its unmutated witness passes. The three resolution shards take 66.584 seconds
+combined. Production and witness code are unchanged between the original and
+resolution runs, and all other 2,289 recipes are unchanged. The aggregate
+summary proves that the union of unchanged original kills and fresh revised
+kills equals the final 2,292-entry catalogue; it does not relabel the original
+survivors as kills. Both original and resolution fingerprints are retained.
+Every shard's build and scratch trees are deleted after summarizing.
+
+### Final parity and verification gates
+
+| Gate | Fresh result |
+| --- | --- |
+| Twelve generated suites | 24,000 books and 1,030 permutations; 24,852 complete seven-stage matches and 178 matching finalized refusals |
+| Per-scenario controls | Exact visit counts, quantity activity/explicit inactive controls and frozen interpretation counts pass |
+| Retained replay | 159 requests and 159 permutations; zero differences and pre-request refusals |
+| Focused census | 59 tests; 53 builds compare all seven stages with zero skips; 53 exact native-loader v1 byte matches |
+| Focused shadow | 59 tests; 53 builds compare all seven stages with zero skips; 53 exact native-loader v1 byte matches |
+| Fresh recordings | Each focused lane replays 53 requests and 53 permutations; zero differences and pre-request refusals |
+| Custody/journals Rust suite | 636 tests pass; zero failures or ignored tests |
+| Loader oracle | 76 byte vectors and 43 refusals match Python; original 66 byte fixtures preserved; 216 live Python tests and 27 native-loader Rust tests pass |
+| Static and inventory gates | Offline release/all-target clippy with `test-harness` and `-D warnings`, workspace formatting, both catalogue applicability checks, Rust-port inventory update and 57-test CI preflight pass |
+
+The 178 generated refusals are the existing fanout nonfinite-price validation
+cases: **170 originals plus eight permutations**. Python and Rust agree on the
+refusal code/stage, and earlier outputs still compare without finalization.
+The focused modules are `test_custody_observation_consistency.py` and
+`test_source_overlap.py`. They use the explicit standalone loader probe and
+disposable recording roots. The retained corpus at
+`/home/tg/.cache/kassiber-verify/custody-recordings/` is read-only.
+
+The loader-8 audit and paired timing are inherited, not rerun or changed here.
+All **16,384 non-BLOB cases** retain their recorded matches, zero writes and
+zero unsafe admissions. The **4,446 BLOB gaps** remain pending an owner decision;
+the **16 seed-dependent messages** remain pending the Python determinism fix,
+under the existing measured-variant rule. No exception is expanded or resolved.
+Native 20k CPU including admission remains **0.288331 seconds generic** and
+**0.428645 seconds multi-wallet**, both within the owner's 5% loader-7 budget.
+
+Verification uses Rust 1.99.1, locked Python 3.11, offline Cargo and
+`MATURIN_NO_INSTALL_RUST=1`, with unchanged `HOME`, disposable worktree-local
+data roots and one test job at a time. A manual second pass checks the complete
+map, named killers, three re-anchors, aggregate provenance, fixture preservation
+and pending exceptions. Verification build trees and the copied uv cache are
+deleted after summarizing; scripts, probe, resumable logs and fresh recordings
+remain under `target/r4-loader-9`. No background job remains at handoff. This is
+a local acceptance commit, with no push, PR, external comment or routing change.
 
 ## R4-13 integration contract
 
