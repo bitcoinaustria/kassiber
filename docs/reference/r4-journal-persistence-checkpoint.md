@@ -35,6 +35,43 @@ This profile locates work and does not establish five-pair acceptance.
 binds every floor trial, load average, book manifest, source and binary hash,
 complete-dump hash and the separate baseline profile. No acceptance is claimed.
 
+## Singleton timestamp tracking from `9788b0070`
+
+Retained comparison now allocates creation-clock tracking only for timestamp
+groups with at least two desired entries. Singleton rows still validate both
+timestamp scalar types. Mixed-clock groups, removed siblings, duplicate ids,
+write order and the whole-group rewrite rule retain their existing behavior.
+When no row or creation-clock group changed, comparison also avoids rebuilding
+an empty set of dirty times; SQL statement preparation remains intact.
+
+A frozen generic 20k changed-book capture compares the prior implementation,
+a boxed-binding probe and this candidate in all six runtime permutations.
+Every operation starts in a fresh process from the same physical database copy
+and checks its complete frozen Python dump. All 18 dumps match. The candidate
+is faster in five of six pairs, with median candidate/prior CPU ratio 0.946153.
+Independent minima improve from **0.470110 to 0.449503 CPU seconds**, at load
+18.20–22.68. This is a measured improvement, not complete budget acceptance.
+
+The boxed-binding probe is withdrawn for its measured regression: its minimum
+is 0.475681 seconds and its median paired ratio is 1.003682. Its source patch,
+binary hash and all measurements remain in the
+[allocation comparison record](r4-journal-persistence-allocation-comparison-measurements.json).
+It is not withdrawn for missing a budget.
+
+The earlier five-pair 20k allocation runs retain all 160 exact dumps, but their
+performance ratios have an allocator-state confounder: only the candidate
+process also replayed the SQL floor between trials. The benchmark now launches
+each native operation in a fresh process, including the floor. Old paired
+ratios are qualified and are not the evidence for retaining this optimization.
+The same record includes the corrected generic 2k comparison and the serial
+five-connection read-floor repeat. An overlapping compile invalidates the
+first floor attempt; only the separate serial repeat is used.
+
+All 35 library and 18 persistence tests pass. Release all-target clippy and
+mutation applicability pass; the two new recipes await final kills. The full
+eight-cell 20k budget gate, remaining 2k/appended/changed comparisons, exhaustive
+mutations, inherited campaigns and R4-13 contracts remain open.
+
 ## Exact wide coefficient comparison from `bbe6e0694`
 
 Unchanged decimals now compare retained ASCII digits against the exact

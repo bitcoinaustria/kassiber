@@ -435,8 +435,23 @@ fn replace<const N: usize, T: BindingRow<N>>(
             ))
         })
         .collect::<Option<Vec<_>>>();
+    let mut shared_times = if tie.is_some() {
+        vec![false; rows.len()]
+    } else {
+        Vec::new()
+    };
     if let Some(ordered) = &mut ordered {
         ordered.sort_unstable_by(|a, b| (a.0, a.1).cmp(&(b.0, b.1)));
+        if tie.is_some() {
+            for pair in ordered.windows(2) {
+                if pair[0].0 == pair[1].0 {
+                    shared_times[pair[0].2] = true;
+                    shared_times[pair[1].2] = true;
+                }
+            }
+        }
+    } else {
+        shared_times.fill(true);
     }
     let order = if ordered.is_some() {
         if N == 12 {
@@ -500,13 +515,15 @@ fn replace<const N: usize, T: BindingRow<N>>(
                         .get_ref(N - 1)?
                         .as_str()
                         .map_err(rusqlite::Error::from)?;
-                    match stamps.entry(time) {
-                        std::collections::hash_map::Entry::Vacant(entry) => {
-                            entry.insert((created.into(), false));
-                        }
-                        std::collections::hash_map::Entry::Occupied(mut entry) => {
-                            if entry.get().0 != created {
-                                entry.get_mut().1 = true;
+                    if shared_times[index] {
+                        match stamps.entry(time) {
+                            std::collections::hash_map::Entry::Vacant(entry) => {
+                                entry.insert((created.into(), false));
+                            }
+                            std::collections::hash_map::Entry::Occupied(mut entry) => {
+                                if entry.get().0 != created {
+                                    entry.get_mut().1 = true;
+                                }
                             }
                         }
                     }
@@ -517,7 +534,9 @@ fn replace<const N: usize, T: BindingRow<N>>(
             }
         }
     }
-    if let Some(tie) = tie {
+    if let Some(tie) = tie.filter(|_| {
+        changed.iter().any(|&changed| changed) || stamps.values().any(|(_, mixed)| *mixed)
+    }) {
         let mut dirty_times = HashSet::new();
         for (index, row) in rows.iter().enumerate() {
             let time = row

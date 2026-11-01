@@ -2548,5 +2548,25 @@
       "typed_decimal_comparison_retains_every_fixed_digit_sign_and_scale"
     ],
     "rule": "Overflowing retained digits cannot wrap into the expected 256-bit coefficient."
+  },
+  {
+    "id": "JP-shared-time-detection",
+    "file": "crates/journals/src/storage.rs",
+    "find": "if pair[0].0 == pair[1].0 {",
+    "replace": "if false && pair[0].0 == pair[1].0 {",
+    "expect_failing": [
+      "mixed_timestamps_and_signed_zero_force_entry_rewrites"
+    ],
+    "rule": "Every retained sibling contributes its creation clock before a mixed timestamp group can be retained."
+  },
+  {
+    "id": "JP-dirty-time-gate",
+    "file": "crates/journals/src/storage.rs",
+    "find": "changed.iter().any(|&changed| changed) || stamps.values().any(|(_, mixed)| *mixed)",
+    "replace": "false || stamps.values().any(|(_, mixed)| *mixed)",
+    "expect_failing": [
+      "entry_deltas_rewrite_timestamp_groups_and_retain_untouched_rowids"
+    ],
+    "rule": "A content change still propagates to its whole timestamp group when retained creation clocks agree."
   }
 ]

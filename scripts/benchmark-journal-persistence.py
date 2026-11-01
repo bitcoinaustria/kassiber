@@ -6,6 +6,7 @@ outside the timer; storage and COMMIT are inside, passive checkpoint outside.
 Every run starts from the same physical database. Five Python/Rust pairs
 alternate order by default; --runs allows exploratory measurements.
 --baseline-probe adds a second native binary to each alternating trial.
+Each native operation uses a fresh process, including the prepared DML floor.
 """
 from contextlib import ExitStack
 from decimal import Decimal
@@ -57,7 +58,7 @@ def main():
     if not out.is_relative_to(target): parser.error('--out must be under target/')
     out.mkdir(parents=True,exist_ok=True)
     manifest=dict(book=json.loads((args.book/'bench-book.json').read_text()),runs=args.runs,
-        python=sys.version,cpus=os.cpu_count(),probe_sha256=hashlib.sha256(args.probe.read_bytes()).hexdigest(),
+        python=sys.version,cpus=os.cpu_count(),native_process='fresh per operation; no allocator state shared with floor',probe_sha256=hashlib.sha256(args.probe.read_bytes()).hexdigest(),
         harness_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         sources={str(path):hashlib.sha256(path.read_bytes()).hexdigest() for path in sorted(Path('crates/journals/src').rglob('*.rs'))})
     if args.baseline_probe:
@@ -133,15 +134,15 @@ def main():
         request.write_text(json.dumps(dict(vector,expected=expected),separators=(',',':')))
         floor_request.write_text(json.dumps(dict(name=mode,database=str(floor/'kassiber.sqlite3'),passphrase=passphrase,floor=recorder.batches,expected=expected),separators=(',',':')))
         trials=[]
-        probes={'rust':subprocess.Popen([str(args.probe.resolve())],stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True)}
+        probes={'rust':args.probe.resolve()}
         if args.baseline_probe:
-            probes['baseline']=subprocess.Popen([str(args.baseline_probe.resolve())],stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True)
+            probes['baseline']=args.baseline_probe.resolve()
         def rust(path,dest,engine='rust'):
-            probe=probes[engine]
             if dest.exists(): shutil.rmtree(dest)
             shutil.copytree(base,dest)
-            load=os.getloadavg()[0];probe.stdin.write(str(path)+'\n');probe.stdin.flush()
-            result=json.loads(probe.stdout.readline())
+            load=os.getloadavg()[0]
+            process=subprocess.run([str(probes[engine])],input=str(path)+'\n',capture_output=True,text=True,check=True)
+            result=json.loads(process.stdout)
             if not result['ok']: raise RuntimeError(json.dumps(result)[:2000])
             return dict(seconds=result['seconds'],cpu_seconds=result['cpu_seconds'],phases=result.get('phases'),load1=load)
         def py():
@@ -162,18 +163,13 @@ def main():
             assert dump(c)==expected
             c.execute('PRAGMA wal_checkpoint(PASSIVE)');c.close()
             return dict(seconds=seconds,cpu_seconds=cpu_seconds,load1=load)
-        try:
-            runs=args.runs
-            for run in range(runs):
-                pair={}
-                engines=['python',*probes]
-                for engine in (engines if run%2==0 else engines[::-1]):
-                    pair[engine]=py() if engine=='python' else rust(request,native,engine)
-                pair['floor']=rust(floor_request,floor);trials.append(pair)
-                print(mode,run,pair,flush=True)
-        finally:
-            for probe in probes.values():
-                probe.stdin.close();probe.wait(timeout=60)
+        for run in range(args.runs):
+            pair={}
+            engines=['python',*probes]
+            for engine in (engines if run%2==0 else engines[::-1]):
+                pair[engine]=py() if engine=='python' else rust(request,native,engine)
+            pair['floor']=rust(floor_request,floor);trials.append(pair)
+            print(mode,run,pair,flush=True)
         best={engine:min(t[engine]['cpu_seconds'] for t in trials) for engine in ('python',*probes,'floor')}
         best_wall={engine:min(t[engine]['seconds'] for t in trials) for engine in ('python',*probes,'floor')}
         results.append(dict(mode=mode,transactions=count,appended_transactions=len(appended_ids),activity=activity,
