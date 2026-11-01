@@ -36,6 +36,7 @@ mod privacy_hygiene;
 mod snapshot_write;
 mod snapshots;
 pub mod source_funds_cases;
+pub mod source_funds_links;
 pub mod source_funds_mutations;
 mod source_funds_reads;
 pub mod source_funds_recipients;
@@ -127,6 +128,9 @@ pub fn execute_with_sources(
 ) -> Result<Value> {
     if source_funds_recipients::handles(command) {
         return source_funds_recipients::execute(conn, command, args, sources);
+    }
+    if source_funds_links::handles(command) {
+        return source_funds_links::execute(conn, command, args, sources);
     }
     if source_funds_mutations::handles(command) {
         return source_funds_mutations::execute(conn, command, args, sources);

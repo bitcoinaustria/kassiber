@@ -1366,6 +1366,31 @@ admission and internal-error traceback/debug process parity remain unaccepted.
 PDF-containing exports remain Python; there are no dependency, lockfile, schema
 or tax-rule changes.
 
+### R5 authored link mutation continuation (partial)
+
+The mutation continuation adds link creation, review and managed-id evidence
+association through the native report service, CLI and daemon. Creation checks
+endpoint exclusivity, dates, same-asset self-transfer rules and allocation
+bounds before returning a duplicate. Review preserves omitted stored msat,
+rejects allocation edits on rejection and checks supplied inspection amounts
+before any write. These provenance records establish no ownership or tax facts.
+
+A 308-case frozen corpus compares complete helper envelopes and all 112 tables
+on SQLite and SQLCipher, with unchanged attachment bytes/hashes. Process tests
+compare 20 CLI mutations and 17 daemon mutations plus two reads with zero
+fallback. Busy and deferred commits and late statement/attachment refusals
+restore all rows; nested statement failures retain unrelated pending work.
+The inventory becomes 165 native CLI leaves and 13 source-funds daemon kinds.
+The [link checkpoint](../reference/rust-shell.md#source-funds-link-mutation-checkpoint-r5-partial)
+records named mutation kills, verification and the fractional inspection-input
+Python reproduction. Python product code is unchanged.
+
+Batch review, persisted suggest/assemble, native AI consent/once-only admission,
+internal-error diagnostics and complete case saving remain separate boundaries.
+The report producer branch has no new commits available at this checkpoint;
+traversal alone cannot authorize case saving. No dependencies, lockfiles,
+schema or tax rules change.
+
 ### Service slice contract (R4 onward)
 
 From R4 on, work lands as vertical slices: one command family, or one

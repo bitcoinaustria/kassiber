@@ -503,9 +503,15 @@ registers them; exit-tax preserves its reference no-registration boundary.
   report producers and their new transports remain unregistered. Resolve the
   recorded Python privacy-boundary fee-attribution discrepancy explicitly at
   the report parity boundary, without silently changing the reference here.
-- [ ] Complete source-funds case saving and link mutations/batch review
+- [x] Port link creation, review and managed-id evidence association through
+  the shared native service, CLI and daemon, preserving exact stored msat,
+  stale-review preconditions, explicit allocation policy and scoped evidence.
+  Compare all 112 tables and attachment hashes on SQLite and SQLCipher, prove
+  late rollback and zero transport fallback, and kill named mutations. See the
+  [link checkpoint](docs/reference/rust-shell.md#source-funds-link-mutation-checkpoint-r5-partial).
+- [ ] Complete source-funds case saving and batch review
   (including persisted suggest/assemble) in separate verified
-  commits on `t3code/r5-sof-mutations-2`. Preserve consent, once-only execution
+  commits on `t3code/r5-sof-mutations-3`. Preserve consent, once-only execution
   and SQLite/SQLCipher rollback.
   A [native frozen-case persistence helper](docs/reference/rust-shell.md#source-funds-frozen-case-persistence-foundation-r5-partial)
   now prepares the two-row case/snapshot write; full case saving still needs the

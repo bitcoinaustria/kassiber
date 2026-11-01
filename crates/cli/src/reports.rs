@@ -37,6 +37,9 @@ pub const COMMANDS: &[&str] = &[
     "source-funds.recipients.create",
     "source-funds.recipients.update",
     "source-funds.recipients.delete",
+    "source-funds.links.create",
+    "source-funds.links.review",
+    "source-funds.links.attach",
 ];
 pub fn kind(command: &str) -> Option<&'static str> {
     match command {
@@ -93,8 +96,26 @@ fn source_funds_request(args: &Namespace) -> Value {
             "kind",
             "default_reveal_mode",
             "notes",
+            "from_transaction",
+            "from_source",
+            "to_transaction",
+            "link_type",
+            "confidence",
+            "method",
+            "allocation_amount",
+            "from_asset",
+            "allocation_policy",
+            "explanation",
+            "uses_chain_observation",
+            "chain_data_confirmed",
+            "link",
         ]
-        .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null))),
+        .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null)))
+        .into_iter()
+        .chain([(
+            "from_allocation_amount",
+            args.get("from_amount").cloned().unwrap_or(Value::Null),
+        )]),
     )
 }
 
@@ -209,6 +230,108 @@ fn request(args: &Namespace) -> Value {
 mod tests {
     use super::*;
     use kassiber_envelope::get;
+    #[test]
+    fn source_funds_link_cli_forwards_fields_and_registers_mutations() {
+        for tail in [
+            vec![
+                "create",
+                "--from-transaction",
+                "in",
+                "--to-transaction",
+                "out",
+                "--type",
+                "self_transfer",
+                "--state",
+                "suggested",
+                "--confidence",
+                "weak",
+                "--method",
+                "exact method",
+                "--asset",
+                "BTC",
+                "--from-asset",
+                "BTC",
+                "--allocation-amount",
+                "0.00000100001",
+                "--from-amount",
+                "0.00000100002",
+                "--allocation-policy",
+                "explicit",
+                "--explanation",
+                "Provenance",
+                "--uses-chain-observation",
+                "--chain-data-confirmed",
+                "--attachment",
+                "a-a",
+                "--attachment",
+                "a-z",
+            ],
+            vec![
+                "review",
+                "--link",
+                "l-z",
+                "--state",
+                "reviewed",
+                "--from-amount",
+                "0.00000100002",
+                "--no-chain-observation",
+                "--unconfirmed-chain-data",
+            ],
+            vec!["attach", "--link", "l-z", "--attachment", "a-a"],
+        ] {
+            let command = format!("source-funds.links.{}", tail[0]);
+            let mut argv = vec!["source-funds", "links"];
+            argv.extend(tail);
+            argv.extend(["--workspace", "Main", "--profile", "Book"]);
+            let args = crate::argparse::parse_args(
+                &argv.into_iter().map(String::from).collect::<Vec<_>>(),
+                crate::argparse::Context {
+                    width: 78,
+                    version: "test",
+                },
+            )
+            .unwrap();
+            assert!(COMMANDS.contains(&command.as_str()));
+            assert!(crate::describe::IMPLEMENTED.contains(&command.as_str()));
+            let actual = execute(&mut SourceFundsCapture, &command, &args).unwrap();
+            assert_eq!(
+                get(&actual, "command"),
+                Some(&kassiber_envelope::s(command.as_str()))
+            );
+            let payload = get(&actual, "args").unwrap();
+            for key in [
+                "workspace",
+                "profile",
+                "from_transaction",
+                "from_source",
+                "to_transaction",
+                "link_type",
+                "state",
+                "confidence",
+                "method",
+                "asset",
+                "allocation_amount",
+                "from_asset",
+                "allocation_policy",
+                "explanation",
+                "uses_chain_observation",
+                "chain_data_confirmed",
+                "attachments",
+                "link",
+                "attachment",
+            ] {
+                assert_eq!(
+                    get(payload, key),
+                    Some(args.get(key).unwrap_or(&Value::Null)),
+                    "{key}"
+                );
+            }
+            assert_eq!(
+                get(payload, "from_allocation_amount"),
+                Some(args.get("from_amount").unwrap_or(&Value::Null))
+            );
+        }
+    }
     #[test]
     fn source_funds_recipient_cli_forwards_fields_and_registers_mutations() {
         for (action, fields) in [
@@ -436,7 +559,6 @@ mod tests {
             "reports.export-source-funds-bundle",
             "source-funds.suggest",
             "source-funds.assemble",
-            "source-funds.links.create",
         ] {
             assert!(!COMMANDS.contains(&command));
             assert!(!crate::describe::IMPLEMENTED.contains(&command));

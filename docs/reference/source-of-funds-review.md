@@ -145,12 +145,13 @@ listing. These editor reads retain full attachment metadata without opening
 evidence files. Case listings use their frozen recipient fields and do not
 load or validate the saved report payload. They do not rebuild journals or
 establish provenance, ownership or tax facts. Native source creation and managed
-evidence association, plus recipient creation, updates and soft deletion, are
+evidence association, link creation/review and managed-id attachment, plus
+recipient creation, updates and soft deletion, are
 available through the CLI and daemon. They retain the provenance boundary and
 roll back failed writes; native AI consent/once-only
 admission remains pending. The bounded traversal planner is implemented, while
 report production, review/input handoffs, coverage, suggest/assemble dry runs
-and link/case mutations remain pending. PDF rendering and PDF-containing
+and batch review/case saving remain pending. PDF rendering and PDF-containing
 bundles remain in Python by the owner's decision; their routes are not
 registered natively.
 

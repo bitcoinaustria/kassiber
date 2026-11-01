@@ -6540,6 +6540,79 @@ traversal planner alone cannot admit a save. PDF rendering and PDF-containing
 bundles remain Python. No dependency, lockfile, schema or tax-rule changes are
 included.
 
+## Source-funds link mutation checkpoint (R5 partial)
+
+`t3code/r5-sof-mutations-3` starts at `1f18dd8a9` and adds link creation,
+review and managed-id evidence association through `source_funds_links` and
+both native transports. The inventory becomes 165 native CLI leaves and 13
+source-funds daemon kinds. Provenance creates no custody, ownership, basis or
+tax authority and reads no evidence files or URLs.
+
+Creation validates exactly one parent endpoint, source/transaction chronology,
+allocation bounds and same-asset self-transfer identities before duplicate
+lookup. Duplicate calls preserve the existing identity, amounts and evidence.
+Review preserves every omitted stored millisatoshi, rejects allocation edits
+on rejection, binds optional inspection preconditions to the stored amounts
+and validates edits even when the link remains suggested or rejected.
+Managed attachments are scoped to the active profile; repeated associations
+retain their original timestamp and identity.
+
+One admitted transaction owns validation, writes and response projection.
+Late attachment and statement failures, busy commits and deferred foreign-key
+commit failures roll back all effects on SQLite and SQLCipher. Nested statement
+failures preserve unrelated pending work. This changes neither schema nor
+journal invalidation and introduces no dependency or lockfile change.
+
+The frozen Python corpus contains 308 synthetic cases. All 616 SQLite/SQLCipher
+process comparisons pass with full helper envelope bytes, all 112 tables and
+unchanged managed evidence bytes/hashes. Actual transport comparisons cover
+20 CLI mutations and 17 daemon mutations plus two reads with literal response
+bytes and zero fallback. Generated link ids have a one-to-one normalization;
+only test builds inject the clock. Internal-error diagnostic process acceptance
+remains a separate boundary.
+
+The unchanged Python reference accepts a fractional expected-msat precondition
+by truncating it with `int()`. The local reproduction is:
+
+```sh
+mise exec rust@1.99.1 uv@latest -- uv run --locked python \
+  -m crates.reports.scripts.repro_python_source_funds_link_preconditions
+```
+
+It approves a link storing 100001 msat after receiving 100001.9 as the expected
+amount. The corpus pins that reference quirk without changing Python or the
+stored allocation. It is not a new accounting or ownership rule.
+
+All 873 report mutation entries apply. The 31 new link entries pass their five
+named unmutated baselines and are killed without survivors, build errors or
+empty selections. The 842 inherited entries retain their previous evidence.
+
+| Named test | New mutations killed |
+| --- | ---: |
+| `source_funds_links_pin_validation_envelopes_and_all_112_tables` | 23 |
+| `source_funds_links_preserve_outer_work_and_roll_back_late_failures_on_both_stores` | 2 |
+| `source_funds_links_roll_back_busy_and_deferred_commits_on_both_stores` | 1 |
+| `source_funds_link_cli_forwards_fields_and_registers_mutations` | 4 |
+| `source_funds_link_daemon_preserves_arguments_and_registers_mutations` | 1 |
+
+Verification evidence is recorded in `target/r5-sof-mutations-3/`. All books,
+preferences, owner roots, scratch and build output remain worktree-local;
+account `HOME` is preserved, Cargo uses eight jobs, and verification jobs run
+serially. This is Linux verification, without a full workspace/frontend gate,
+live regtest or platform/package acceptance claim.
+
+All 15 source-funds Rust integration tests pass, as do the CLI/daemon library
+tests. Rust 1.99.1 locked/offline formatting and reports/CLI/daemon all-target
+clippy with warnings denied pass. The required classifier update records 5,721
+definitions and keeps both new Python tests as reviewed report oracles in the
+serial daemon lane. Final CI preflight passes all 57 tests.
+
+Batch review, persisted suggest/assemble, native AI consent and once-only
+execution, diagnostic wire acceptance and full case saving remain pending.
+No new report producer commits are available from `t3code/r5-sof-reads-4` at
+this checkpoint. Complete saving still needs report, diagram, fingerprint and
+write-lock integration. PDF rendering and PDF-containing bundles remain Python.
+
 ## Not yet ported
 
 The diagnostics slice now implements explicit public reports and native debug

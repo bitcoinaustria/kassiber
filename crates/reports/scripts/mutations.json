@@ -9919,5 +9919,315 @@
       "source_funds_recipients_preserve_outer_work_and_roll_back_late_failures_on_both_stores"
     ],
     "rule": "SQLCipher constraint failures retain the reference internal-error envelope instead of SQLite validation mapping."
+  },
+  {
+    "id": "sof-link-exact-msat",
+    "file": "crates/reports/src/source_funds_links.rs",
+    "find": "Amount::Msat(n) => Ok(Value::Int(n.into())),",
+    "replace": "Amount::Msat(n) => Ok(Value::Int((n / 1000 * 1000).into())),",
+    "expect_failing": [
+      "source_funds_links_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Authored quantities retain every millisatoshi."
+  },
+  {
+    "id": "sof-link-endpoint-exclusive",
+    "file": "crates/reports/src/source_funds_links.rs",
+    "find": "truthy(from_ref) == truthy(source_ref)",
+    "replace": "truthy(from_ref) != truthy(source_ref)",
+    "expect_failing": [
+      "source_funds_links_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "A link requires exactly one source endpoint."
+  },
+  {
+    "id": "sof-link-child-bound",
+    "file": "crates/reports/src/source_funds_links.rs",
+    "find": "if exceeds(value(candidate, \"allocation_amount\"), to)? {",
+    "replace": "if false {",
+    "expect_failing": [
+      "source_funds_links_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Every authored allocation stays within its child amount."
+  },
+  {
+    "id": "sof-link-source-time",
+    "file": "crates/reports/src/source_funds_links.rs",
+    "find": "if truthy(source) && after(value(source, \"acquired_at\"), value(to, \"occurred_at\")) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "source_funds_links_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Source evidence cannot postdate the transaction it funds."
+  },
+  {
+    "id": "sof-link-self-loop",
+    "file": "crates/reports/src/source_funds_links.rs",
+    "find": "if value(from, \"id\") == value(to, \"id\") {",
+    "replace": "if false {",
+    "expect_failing": [
+      "source_funds_links_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "A transaction cannot fund itself."
+  },
+  {
+    "id": "sof-link-parent-time",
+    "file": "crates/reports/src/source_funds_links.rs",
+    "find": "if after(value(from, \"occurred_at\"), value(to, \"occurred_at\")) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "source_funds_links_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Parents cannot postdate their children."
+  },
+  {
+    "id": "sof-link-parent-bound",
+    "file": "crates/reports/src/source_funds_links.rs",
+    "find": "if exceeds(parent_amount, from)? {",
+    "replace": "if exceeds(&Value::Null, from)? {",
+    "expect_failing": [
+      "source_funds_links_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "A reviewed parent allocation respects its observed amount."
+  },
+  {
+    "id": "sof-link-parent-fallback",
+    "file": "crates/reports/src/source_funds_links.rs",
+    "find": "value(candidate, \"allocation_amount\")\n    } else {",
+    "replace": "&Value::Null\n    } else {",
+    "expect_failing": [
+      "source_funds_links_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "An omitted parent allocation falls back to the child allocation for validation."
+  },
+  {
+    "id": "sof-link-same-asset",
+    "file": "crates/reports/src/source_funds_links.rs",
+    "find": "if parent != child {",
+    "replace": "if parent == child {",
+    "expect_failing": [
+      "source_funds_links_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Self-transfer endpoints must have the same normalized asset."
+  },
+  {
+    "id": "sof-link-child-asset",
+    "file": "crates/reports/src/source_funds_links.rs",
+    "find": "if asset(value(candidate, \"asset\")) != child {",
+    "replace": "if false {",
+    "expect_failing": [
+      "source_funds_links_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "A self-transfer link asset agrees with the child."
+  },
+  {
+    "id": "sof-link-parent-asset",
+    "file": "crates/reports/src/source_funds_links.rs",
+    "find": "}) != parent\n    {",
+    "replace": "}) == parent\n    {",
+    "expect_failing": [
+      "source_funds_links_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "A self-transfer from-asset agrees with the parent."
+  },
+  {
+    "id": "sof-link-reference-scope",
+    "file": "crates/reports/src/source_funds_links.rs",
+    "find": "SELECT * FROM source_funds_links WHERE profile_id=? AND id=?",
+    "replace": "SELECT * FROM source_funds_links WHERE profile_id=? OR id=?",
+    "expect_failing": [
+      "source_funds_links_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Link references cannot reach another book."
+  },
+  {
+    "id": "sof-link-duplicate",
+    "file": "crates/reports/src/source_funds_links.rs",
+    "find": "if let Some(existing) = found.first() {",
+    "replace": "if let Some(existing) = found.first().filter(|_| false) {",
+    "expect_failing": [
+      "source_funds_links_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Repeated authored links return the existing identity and evidence."
+  },
+  {
+    "id": "sof-link-duplicate-validation",
+    "file": "crates/reports/src/source_funds_links.rs",
+    "find": "    validate(&candidate, &from, &source, &to)?;\n    let source_id",
+    "replace": "    if false { validate(&candidate, &from, &source, &to)?; }\n    let source_id",
+    "expect_failing": [
+      "source_funds_links_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Creation validates even when the endpoint already has a link."
+  },
+  {
+    "id": "sof-link-review-rejection",
+    "file": "crates/reports/src/source_funds_links.rs",
+    "find": "normalize(raw_state, \"state\")? == \"rejected\"",
+    "replace": "normalize(raw_state, \"state\")? == \"never\"",
+    "expect_failing": [
+      "source_funds_links_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "A rejection cannot carry allocation edits."
+  },
+  {
+    "id": "sof-link-review-stale",
+    "file": "crates/reports/src/source_funds_links.rs",
+    "find": "if current != Value::Int(expected) {",
+    "replace": "if current == Value::Int(expected) {",
+    "expect_failing": [
+      "source_funds_links_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Review decisions remain bound to the inspected msat values."
+  },
+  {
+    "id": "sof-link-review-omitted",
+    "file": "crates/reports/src/source_funds_links.rs",
+    "find": "if !optional(value(args, key)) {",
+    "replace": "if true {",
+    "expect_failing": [
+      "source_funds_links_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Omitted amounts preserve the exact stored allocation."
+  },
+  {
+    "id": "sof-link-review-suggested-bounds",
+    "file": "crates/reports/src/source_funds_links.rs",
+    "find": "[\"allocation_amount\", \"from_allocation_amount\"].contains(key)",
+    "replace": "[\"never\", \"never\"].contains(key)",
+    "expect_failing": [
+      "source_funds_links_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Allocation edits are validated even without approval."
+  },
+  {
+    "id": "sof-link-review-empty",
+    "file": "crates/reports/src/source_funds_links.rs",
+    "find": "if updates.is_empty() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "source_funds_links_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "A review without deliberate edits is refused."
+  },
+  {
+    "id": "sof-link-review-clock",
+    "file": "crates/reports/src/source_funds_links.rs",
+    "find": "updates.push((\"updated_at\", s(sources.now(conn)?)));",
+    "replace": "updates.push((\"updated_at\", value(link,\"updated_at\").clone()));",
+    "expect_failing": [
+      "source_funds_links_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Successful review records its operation timestamp."
+  },
+  {
+    "id": "sof-link-create-attachment-scope",
+    "file": "crates/reports/src/source_funds_links.rs",
+    "find": "            require_attachment(conn, profile, &attachment)?;",
+    "replace": "            if false { require_attachment(conn, profile, &attachment)?; }",
+    "expect_failing": [
+      "source_funds_links_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Every attached evidence identity belongs to the selected book."
+  },
+  {
+    "id": "sof-link-attach-scope",
+    "file": "crates/reports/src/source_funds_links.rs",
+    "find": "        require_attachment(conn, &profile, &attachment)?;",
+    "replace": "        if false { require_attachment(conn, &profile, &attachment)?; }",
+    "expect_failing": [
+      "source_funds_links_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Evidence association cannot reuse an attachment from another book."
+  },
+  {
+    "id": "sof-link-admission",
+    "file": "crates/reports/src/source_funds_links.rs",
+    "find": "crate::export::admitted(conn, || {",
+    "replace": "(|_: &Connection, operation: &dyn Fn() -> Result<Value>| operation())(conn, &|| {",
+    "expect_failing": [
+      "source_funds_links_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Link operations roll back late statements and attachments."
+  },
+  {
+    "id": "sof-link-nested-commit",
+    "file": "crates/reports/src/export.rs",
+    "find": "\"RELEASE report_export\"\n        })",
+    "replace": "\"COMMIT\"\n        })",
+    "expect_failing": [
+      "source_funds_links_preserve_outer_work_and_roll_back_late_failures_on_both_stores"
+    ],
+    "rule": "A nested link operation cannot commit unrelated caller work."
+  },
+  {
+    "id": "sof-link-late-rollback",
+    "file": "crates/reports/src/export.rs",
+    "find": "\"ROLLBACK\"\n        } else {",
+    "replace": "\"SELECT 1\"\n        } else {",
+    "expect_failing": [
+      "source_funds_links_roll_back_busy_and_deferred_commits_on_both_stores"
+    ],
+    "rule": "Busy and deferred link commits restore all tables."
+  },
+  {
+    "id": "sof-link-nested-rollback",
+    "file": "crates/reports/src/export.rs",
+    "find": "\"ROLLBACK TO report_export; RELEASE report_export\"",
+    "replace": "\"ROLLBACK\"",
+    "expect_failing": [
+      "source_funds_links_preserve_outer_work_and_roll_back_late_failures_on_both_stores"
+    ],
+    "rule": "A failed nested link operation preserves unrelated pending work."
+  },
+  {
+    "id": "sof-link-cli-registration",
+    "file": "crates/cli/src/reports.rs",
+    "find": "    \"source-funds.links.create\",\n    \"source-funds.links.review\",",
+    "replace": "    \"source-funds.links.create\",",
+    "expect_failing": [
+      "source_funds_link_cli_forwards_fields_and_registers_mutations"
+    ],
+    "rule": "Review is served by the native CLI."
+  },
+  {
+    "id": "sof-link-cli-admission",
+    "file": "crates/cli/src/describe.rs",
+    "find": "    \"source-funds.links.review\",\n    \"source-funds.links.attach\",",
+    "replace": "    \"source-funds.links.review\",",
+    "expect_failing": [
+      "source_funds_link_cli_forwards_fields_and_registers_mutations"
+    ],
+    "rule": "Evidence association is admitted by the native command inventory."
+  },
+  {
+    "id": "sof-link-cli-fields",
+    "file": "crates/cli/src/reports.rs",
+    "find": "            \"from_transaction\",\n            \"from_source\",",
+    "replace": "            \"from_transaction\",",
+    "expect_failing": [
+      "source_funds_link_cli_forwards_fields_and_registers_mutations"
+    ],
+    "rule": "The CLI forwards authored source endpoints to the shared service."
+  },
+  {
+    "id": "sof-link-cli-from-amount",
+    "file": "crates/cli/src/reports.rs",
+    "find": "args.get(\"from_amount\").cloned().unwrap_or(Value::Null)",
+    "replace": "Value::Null",
+    "expect_failing": [
+      "source_funds_link_cli_forwards_fields_and_registers_mutations"
+    ],
+    "rule": "The CLI preserves exact authored parent amounts."
+  },
+  {
+    "id": "sof-link-daemon-registration",
+    "file": "crates/daemon/src/reports.rs",
+    "find": "    \"ui.source_funds.links.review\",\n    \"ui.source_funds.links.attach\",",
+    "replace": "    \"ui.source_funds.links.review\",",
+    "expect_failing": [
+      "source_funds_link_daemon_preserves_arguments_and_registers_mutations"
+    ],
+    "rule": "Managed link evidence association is served by the native daemon."
   }
 ]

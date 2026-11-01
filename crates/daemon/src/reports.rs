@@ -27,6 +27,9 @@ pub const KINDS: &[&str] = &[
     "ui.source_funds.sources.create",
     "ui.source_funds.sources.attach",
     "ui.source_funds.links.list",
+    "ui.source_funds.links.create",
+    "ui.source_funds.links.review",
+    "ui.source_funds.links.attach",
     "ui.source_funds.evidence.list",
     "ui.source_funds.recipients.list",
     "ui.source_funds.recipients.create",
@@ -406,6 +409,38 @@ mod tests {
     }
 
     #[test]
+    fn source_funds_link_daemon_preserves_arguments_and_registers_mutations() {
+        let args = dict([
+            ("link", s(" l-z ")),
+            ("attachment_id", s(" a-a ")),
+            ("allocation_amount", s("0.00000100001")),
+            ("from_allocation_amount", s("0.00000100002")),
+            ("expected_allocation_amount_msat", Value::Int(100001.into())),
+            (
+                "expected_from_allocation_amount_msat",
+                Value::Int(100002.into()),
+            ),
+            ("uses_chain_observation", Value::Bool(false)),
+            ("chain_data_confirmed", Value::Bool(false)),
+        ]);
+        for kind in [
+            "ui.source_funds.links.create",
+            "ui.source_funds.links.review",
+            "ui.source_funds.links.attach",
+        ] {
+            assert!(KINDS.contains(&kind));
+            let actual = execute(&mut SourceFundsCapture, kind, Some(&args)).unwrap();
+            assert_eq!(get(&actual, "command"), Some(&s(kind)));
+            assert_eq!(get(&actual, "args"), Some(&args));
+            assert_eq!(
+                execute(&mut SourceFundsCapture, kind, Some(&Value::Bool(false)))
+                    .unwrap_err()
+                    .code,
+                "validation"
+            );
+        }
+    }
+    #[test]
     fn source_funds_recipient_daemon_preserves_arguments_and_registers_mutations() {
         let args = dict([
             ("recipient", s(" r-a ")),
@@ -463,7 +498,6 @@ mod tests {
             "ui.source_funds.cases.save",
             "ui.source_funds.suggest",
             "ui.source_funds.assemble",
-            "ui.source_funds.links.create",
         ] {
             assert!(!KINDS.contains(&kind));
         }

@@ -24,11 +24,11 @@ pub fn handles(command: &str) -> bool {
     )
 }
 
-fn optional(v: &Value) -> bool {
+pub(super) fn optional(v: &Value) -> bool {
     matches!(v, Value::Null) || matches!(v, Value::Str(raw) if raw.as_str() == Some(""))
 }
 
-fn parameter(conn: &Connection, v: &Value, index: usize) -> Result<SqlValue> {
+pub(super) fn parameter(conn: &Connection, v: &Value, index: usize) -> Result<SqlValue> {
     Ok(match v {
         Value::Null => SqlValue::Null,
         Value::Bool(v) => SqlValue::Integer(i64::from(*v)),
@@ -64,13 +64,13 @@ fn parameter(conn: &Connection, v: &Value, index: usize) -> Result<SqlValue> {
     })
 }
 
-enum Amount {
+pub(super) enum Amount {
     Missing,
     Msat(i64),
     Overflow,
 }
 
-fn amount(v: &Value) -> Result<Amount> {
+pub(super) fn amount(v: &Value) -> Result<Amount> {
     if optional(v) {
         return Ok(Amount::Missing);
     }
@@ -110,7 +110,7 @@ fn amount(v: &Value) -> Result<Amount> {
         .unwrap_or(Amount::Overflow))
 }
 
-fn required_text(args: &Value, key: &str, command: &str) -> Result<String> {
+pub(super) fn required_text(args: &Value, key: &str, command: &str) -> Result<String> {
     match value(args, key) {
         Value::Str(raw) if raw.as_str().is_some_and(|v| !strip(v).is_empty()) => {
             Ok(strip(raw.as_str().unwrap()).into())
@@ -122,7 +122,7 @@ fn required_text(args: &Value, key: &str, command: &str) -> Result<String> {
     }
 }
 
-fn require_attachment(conn: &Connection, profile: &str, attachment: &str) -> Result<()> {
+pub(super) fn require_attachment(conn: &Connection, profile: &str, attachment: &str) -> Result<()> {
     if rows(
         conn,
         "SELECT id FROM attachments WHERE profile_id=? AND id=?",
@@ -138,7 +138,7 @@ fn require_attachment(conn: &Connection, profile: &str, attachment: &str) -> Res
     Ok(())
 }
 
-fn resolve_source(conn: &Connection, profile: &str, reference: &str) -> Result<Value> {
+pub(super) fn resolve_source(conn: &Connection, profile: &str, reference: &str) -> Result<Value> {
     let found = rows(conn, "SELECT * FROM source_funds_sources WHERE profile_id=? AND (id=? OR lower(label)=lower(?)) ORDER BY created_at DESC,id DESC LIMIT 2", [profile, reference, reference])?;
     if found.len() > 1 {
         return Err(AppError::new(

@@ -204,6 +204,9 @@ pub const IMPLEMENTED: &[&str] = &[
     "source-funds.recipients.create",
     "source-funds.recipients.update",
     "source-funds.recipients.delete",
+    "source-funds.links.create",
+    "source-funds.links.review",
+    "source-funds.links.attach",
 ];
 
 /// `_NO_BOOTSTRAP_DATABASE_PREFIXES`.

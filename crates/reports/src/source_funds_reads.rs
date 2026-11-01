@@ -94,7 +94,7 @@ fn amount(v: &Value) -> Result<Value> {
     }
 }
 
-fn integer(v: &Value) -> std::result::Result<String, String> {
+pub(super) fn integer(v: &Value) -> std::result::Result<String, String> {
     match v {
         Value::Int(n) => Ok(n.to_string()),
         Value::Bool(b) => Ok(i64::from(*b).to_string()),
@@ -180,7 +180,11 @@ pub(crate) fn source(conn: &Connection, row: &Value) -> Result<Value> {
     ]))
 }
 
-fn resolve_transaction(conn: &Connection, profile: &str, reference: &str) -> Result<String> {
+pub(super) fn resolve_transaction(
+    conn: &Connection,
+    profile: &str,
+    reference: &str,
+) -> Result<String> {
     if let Some(row) = rows(
         conn,
         "SELECT id FROM transactions WHERE profile_id=? AND id=?",
@@ -260,7 +264,7 @@ fn links(conn: &Connection, profile: &str, args: &Value, desktop: bool) -> Resul
     .map(Value::List)
 }
 
-fn link(conn: &Connection, row: &Value) -> Result<Value> {
+pub(super) fn link(conn: &Connection, row: &Value) -> Result<Value> {
     let mut fields: Vec<_> = [
         "id",
         "from_source_id",
