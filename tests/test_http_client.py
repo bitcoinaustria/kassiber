@@ -6,10 +6,60 @@ from email.message import Message
 from urllib import error as urlerror
 from unittest.mock import Mock, patch
 
+import pytest
+
 from kassiber import http_client
+from kassiber.core.sync_control import sync_transport_check
 from kassiber.envelope import build_error_envelope
 from kassiber.errors import AppError
 from kassiber.log_ring import sanitize_traceback_text
+
+
+@pytest.mark.parametrize("status", [429, 503])
+def test_retry_sleep_rechecks_cancellation_within_one_slice(status):
+    headers = Message()
+    headers["Retry-After"] = "10"
+    opener = Mock(side_effect=urlerror.HTTPError(
+        "http://127.0.0.1", status, "throttled", headers, io.BytesIO(b"")))
+    waits = []
+    cancelled = False
+
+    def sleep(delay):
+        nonlocal cancelled
+        waits.append(delay)
+        cancelled = True
+
+    def check():
+        if cancelled:
+            raise AppError("Saved cancellation", code="cancelled", retryable=False)
+
+    token = sync_transport_check.set(check)
+    try:
+        with pytest.raises(AppError) as error:
+            http_client.request_with_retry("http://127.0.0.1", opener, sleeper=sleep)
+    finally:
+        sync_transport_check.reset(token)
+    assert error.value.code == "cancelled"
+    assert sum(waits) <= 0.1
+    opener.assert_called_once()
+
+
+def test_retry_sleep_preserves_delay_and_attempts_with_check():
+    headers = Message()
+    headers["Retry-After"] = "2"
+    opener = Mock(side_effect=[urlerror.HTTPError(
+        "http://127.0.0.1", 429, "throttled", headers, io.BytesIO(b"")), {"ok": True}])
+    waits = []
+    on_retry = Mock()
+    token = sync_transport_check.set(lambda: None)
+    try:
+        assert http_client.request_with_retry("http://127.0.0.1", opener, sleeper=waits.append, on_retry=on_retry) == {"ok": True}
+    finally:
+        sync_transport_check.reset(token)
+    assert sum(waits) == pytest.approx(2)
+    assert max(waits) <= 0.1
+    assert opener.call_count == 2
+    on_retry.assert_called_once_with(1, 2, 2.0)
 
 
 class HttpClientTest(unittest.TestCase):
