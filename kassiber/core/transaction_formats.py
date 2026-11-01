@@ -158,7 +158,7 @@ def _cointracking_row(row: PlatformRow) -> dict[str, str]:
         "Exchange": row.wallet,
         "Trade-Group": "Kassiber",
         "Comment": row.comment,
-        "Date": row.occurred_at.strftime("%Y-%m-%d %H:%M:%S"),
+        "Date": f"{row.occurred_at.year:04d}-" + row.occurred_at.strftime("%m-%d %H:%M:%S"),
         "Tx-ID": row.transaction_id,
         "Buy Value in Account Currency": row.value if inbound else "",
         "Sell Value in Account Currency": "" if inbound else row.value,
@@ -216,7 +216,7 @@ _BLOCKPIT_LABELS = {
 def _blockpit_row(row: PlatformRow) -> dict[str, str]:
     inbound = row.event in _INBOUND_EVENTS
     output = {
-        "Date (UTC)": row.occurred_at.strftime("%d.%m.%Y %H:%M:%S"),
+        "Date (UTC)": row.occurred_at.strftime("%d.%m.") + f"{row.occurred_at.year:04d} " + row.occurred_at.strftime("%H:%M:%S"),
         "Integration Name": row.wallet,
         "Label": _BLOCKPIT_LABELS[row.event],
         "Outgoing Asset": "" if inbound else row.asset_code,
