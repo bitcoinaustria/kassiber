@@ -2,8 +2,10 @@
 //! No command registration, clock, entropy, connection opening or commit occurs
 //! here. Values are bound through the book's existing SQLCipher driver.
 use crate::{pyjson, Refusal};
+#[cfg(test)]
+use kassiber_store::rusqlite::params_from_iter;
 use kassiber_store::rusqlite::{
-    self, params_from_iter,
+    self,
     types::{Value as Sql, ValueRef},
     Connection, ToSql,
 };
@@ -594,11 +596,21 @@ fn replace<const N: usize, T: BindingRow<N>>(
     }
     let slots = vec!["?"; N].join(",");
     let mut insert = conn.prepare(&format!("INSERT INTO {table}({names}) VALUES({slots})"))?;
+    let mut bound = [None; N];
     for (index, row) in rows.iter().enumerate() {
         if changed[index] {
-            insert.execute(params_from_iter(
-                (0..N).map(|index| CellParam(row.cell(index))),
-            ))?;
+            for (index, prior) in bound.iter_mut().enumerate() {
+                let value = row.cell(index);
+                let same = prior.is_some_and(|prior| match (prior, value) {
+                    (ValueRef::Real(a), ValueRef::Real(b)) => a.to_bits() == b.to_bits(),
+                    _ => prior == value,
+                });
+                if !same {
+                    insert.raw_bind_parameter(index + 1, CellParam(value))?;
+                    *prior = Some(value);
+                }
+            }
+            insert.raw_execute()?;
             observer.wrote(table)?;
         }
     }

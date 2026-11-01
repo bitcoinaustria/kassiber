@@ -1,0 +1,3847 @@
+{
+  "status": "Verified partial speed continuation; R4-12 remains unaccepted",
+  "base_commit": "a63556cc7",
+  "branch": "t3code/r4-12-persist-9",
+  "scope": "Reuse unchanged INSERT bindings in journal entry and quantity posting writes. Preserve one execution and observer callback per row; compare REAL bits, scalar types and complete text/blob bytes.",
+  "remaining": [
+    "Pass all eight final-source 20k CPU budgets.",
+    "Complete the final-source 32-cell 2k/20k, generic/multi-wallet, SQLite/SQLCipher unchanged/fresh/appended/changed matrix with exact dumps and five alternating pairs.",
+    "Continue comparison, preparation and encoding optimization; the planned allocation-free decimal/UUID encoding, trusted-input path and hash-free comparison are not implemented here.",
+    "Branch/refusal audit and R4-13 checks remain with the parallel acceptance worker."
+  ],
+  "toolchain": "MATURIN_NO_INSTALL_RUST=1 mise exec rust@1.99.1 uv@latest; uv sync --locked --python 3.11; offline cargo; CARGO_BUILD_JOBS=8; TMPDIR and UV scratch under worktree target; HOME unchanged; no new dependencies.",
+  "profiles": {
+    "native_reply_projection": "Keep native success, timing, phases and write count; summarize repeated per-row table trace as counts and bind complete raw reply by SHA-256. Raw replies remain under target/profile.",
+    "method": "Local pmp.py GDB stack sampling at 3 ms; eight baseline cells. Filter stacks to persistence::store and classify deepest binding/SQL/encoding/comparison paths; preparation is the residual. Approximate stack attribution, not acceptance timing. Profiling uses the symbolized baseline, and all native replies verify frozen complete Python dumps. No per-profile CPU/load ratio acceptance claim.",
+    "cells": [
+      {
+        "cell": "generic-20000-cipher-fresh",
+        "samples": 320,
+        "category_samples": {
+          "SQL": 215,
+          "preparation": 51,
+          "binding": 26,
+          "encoding": 28
+        },
+        "stack_sha256": "b65217283ca7880c7c6d4559280df900f1adc918b300fc50308c5020df7043eb",
+        "top_leaf": [
+          [
+            "?",
+            87
+          ],
+          [
+            "pwrite64",
+            41
+          ],
+          [
+            "sqlite3BtreeIndexMoveto",
+            16
+          ],
+          [
+            "sqlite3VdbeExec",
+            13
+          ],
+          [
+            "pcache1FetchNoMutex",
+            10
+          ],
+          [
+            "sha512_block_data_order_avx2",
+            9
+          ],
+          [
+            "vdbeRecordCompareString",
+            9
+          ],
+          [
+            "kassiber_journals::persistence::quantity::posting_fields",
+            6
+          ],
+          [
+            "pthread_mutex_lock",
+            6
+          ],
+          [
+            "core::hash::sip::{impl#5}::write<core::hash::sip::Sip13Rounds>",
+            5
+          ],
+          [
+            "cellSizePtrIdxLeaf",
+            5
+          ],
+          [
+            "core::ptr::copy_nonoverlapping<u8>",
+            4
+          ],
+          [
+            "core::hash::sip::{impl#8}::c_rounds",
+            3
+          ],
+          [
+            "sqlite3_bind_text64",
+            3
+          ],
+          [
+            "pageFindSlot",
+            3
+          ]
+        ],
+        "metadata": {
+          "load": [
+            130.56103515625,
+            91.46337890625,
+            88.99365234375
+          ],
+          "request_sha256": "8437b1fcfb1c22859707aea093b977d9b74bed76ff0bb0b6e046530ae41af0b5",
+          "binary_sha256": "b82b1926f1c55d0138ca27c37fa53b0cf123cc2dc3f6da9a856dd9605617dc94",
+          "native_reply": {
+            "ok": true,
+            "name": "fresh",
+            "seconds": 24.161429544,
+            "cpu_seconds": 1.6232740000000003,
+            "phases": {
+              "begin": {
+                "cpu": 1.7999999999851468e-05,
+                "wall": 1.942e-05
+              },
+              "commit": {
+                "cpu": 0.784014,
+                "wall": 16.252425265
+              },
+              "complete": {
+                "cpu": 0.01753500000000008,
+                "wall": 0.022284002
+              },
+              "entries_prepare": {
+                "cpu": 0.10146099999999958,
+                "wall": 0.614212579
+              },
+              "entries_write": {
+                "cpu": 0.2951000000000006,
+                "wall": 2.467746116
+              },
+              "filed": {
+                "cpu": 0.0002909999999998192,
+                "wall": 0.000282677
+              },
+              "pricing": {
+                "cpu": 0.0665659999999999,
+                "wall": 0.463562114
+              },
+              "quantity": {
+                "cpu": 0.004205999999999932,
+                "wall": 0.521381743
+              },
+              "quantity_other": {
+                "cpu": 0.017147000000000467,
+                "wall": 0.02010078
+              },
+              "quantity_postings_bind": {
+                "cpu": 0.03896999999999995,
+                "wall": 0.066245421
+              },
+              "quantity_postings_prepare": {
+                "cpu": 0.0151760000000003,
+                "wall": 0.018327778
+              },
+              "quantity_postings_write": {
+                "cpu": 0.2671669999999997,
+                "wall": 2.491334479
+              },
+              "setup": {
+                "cpu": 0.001954999999999707,
+                "wall": 0.810029813
+              },
+              "small_tables": {
+                "cpu": 0.013653999999999833,
+                "wall": 0.413376806
+              }
+            },
+            "writes": 60023
+          },
+          "native_reply_sha256": "e5977d8ed2f791573eb34ed47445846b73388b4e6160c56e71397be3bccd086f",
+          "write_table_counts": {
+            "journal_custody_gap_inputs": 1,
+            "journal_quarantines": 1,
+            "journal_tax_summary": 8,
+            "journal_account_holdings": 2,
+            "journal_wallet_holdings": 2,
+            "journal_custody_reconciliations": 1,
+            "journal_quantity_issues": 1,
+            "journal_quantity_balances": 4,
+            "journal_custody_decisions": 1,
+            "journal_custody_economic_relations": 1,
+            "journal_quantity_postings": 40000,
+            "journal_entries": 20000,
+            "profiles": 1
+          }
+        }
+      },
+      {
+        "cell": "generic-20000-cipher-unchanged",
+        "samples": 172,
+        "category_samples": {
+          "SQL": 89,
+          "preparation": 56,
+          "comparison": 25,
+          "encoding": 2
+        },
+        "stack_sha256": "67cf8b8dfb4964e6b6f9600315bec1722a321ffbb398bcb8ab25e611937db9e9",
+        "top_leaf": [
+          [
+            "?",
+            36
+          ],
+          [
+            "sha512_block_data_order_avx2",
+            34
+          ],
+          [
+            "core::hash::sip::{impl#5}::write<core::hash::sip::Sip13Rounds>",
+            9
+          ],
+          [
+            "pread64",
+            8
+          ],
+          [
+            "kassiber_journals::persistence::quantity::posting_fields",
+            5
+          ],
+          [
+            "core::slice::cmp::{impl#0}::eq<u8, u8>",
+            5
+          ],
+          [
+            "sqlite3VdbeExec",
+            5
+          ],
+          [
+            "pwrite64",
+            4
+          ],
+          [
+            "alloc::collections::btree::node::NodeRef::keys<alloc::string::String, serde_json::value::Value, alloc::collections::btree::node::marker::LeafOrInternal>",
+            2
+          ],
+          [
+            "core::ptr::write<[rusqlite::types::value_ref::ValueRef; 12]>",
+            2
+          ],
+          [
+            "sqlite3_column_count",
+            2
+          ],
+          [
+            "core::ptr::copy_nonoverlapping<u8>",
+            2
+          ],
+          [
+            "sqlite3ValueText",
+            2
+          ],
+          [
+            "sqlite3_column_text",
+            2
+          ],
+          [
+            "kassiber_journals::persistence::entries::{impl#1}::cell",
+            2
+          ]
+        ],
+        "metadata": {
+          "load": [
+            110.880859375,
+            92.38525390625,
+            89.45263671875
+          ],
+          "request_sha256": "b4869161ee660633f774480f9901a3db8758546d2afb241f77a7dae2dac4f072",
+          "binary_sha256": "b82b1926f1c55d0138ca27c37fa53b0cf123cc2dc3f6da9a856dd9605617dc94",
+          "native_reply": {
+            "ok": true,
+            "name": "unchanged",
+            "seconds": 1.619768128,
+            "cpu_seconds": 0.5055339999999999,
+            "phases": {
+              "begin": {
+                "cpu": 1.9999999999686935e-05,
+                "wall": 2.0841e-05
+              },
+              "commit": {
+                "cpu": 0.0032880000000004017,
+                "wall": 0.337676269
+              },
+              "complete": {
+                "cpu": 0.005062999999999818,
+                "wall": 0.006198748
+              },
+              "entries_prepare": {
+                "cpu": 0.04361899999999963,
+                "wall": 0.099946165
+              },
+              "entries_write": {
+                "cpu": 0.1630980000000002,
+                "wall": 0.331550203
+              },
+              "filed": {
+                "cpu": 0.00016700000000025028,
+                "wall": 0.000161394
+              },
+              "pricing": {
+                "cpu": 0.06878299999999982,
+                "wall": 0.109543804
+              },
+              "quantity": {
+                "cpu": 0.0037959999999999106,
+                "wall": 0.020495649
+              },
+              "quantity_other": {
+                "cpu": 0.016963000000000505,
+                "wall": 0.058878745
+              },
+              "quantity_postings_bind": {
+                "cpu": 0.03747699999999998,
+                "wall": 0.223097725
+              },
+              "quantity_postings_prepare": {
+                "cpu": 0.015347999999999917,
+                "wall": 0.019098036
+              },
+              "quantity_postings_write": {
+                "cpu": 0.13563899999999984,
+                "wall": 0.242882386
+              },
+              "setup": {
+                "cpu": 0.0014370000000001326,
+                "wall": 0.125192578
+              },
+              "small_tables": {
+                "cpu": 0.010823999999999945,
+                "wall": 0.044960834
+              }
+            },
+            "writes": 23
+          },
+          "native_reply_sha256": "70535fc157e0e9385d8ac6e102e97358c9e04abe0844008b25dde70ef57b1099",
+          "write_table_counts": {
+            "journal_custody_gap_inputs": 1,
+            "journal_quarantines": 1,
+            "journal_tax_summary": 8,
+            "journal_account_holdings": 2,
+            "journal_wallet_holdings": 2,
+            "journal_custody_reconciliations": 1,
+            "journal_quantity_issues": 1,
+            "journal_quantity_balances": 4,
+            "journal_custody_decisions": 1,
+            "journal_custody_economic_relations": 1,
+            "profiles": 1
+          }
+        }
+      },
+      {
+        "cell": "generic-20000-sqlite-fresh",
+        "samples": 241,
+        "category_samples": {
+          "preparation": 51,
+          "binding": 23,
+          "SQL": 141,
+          "encoding": 26
+        },
+        "stack_sha256": "716b0a6b30cff1d1f9565ed077f6d5e3ee2a53ab8b8b9dfd97bab9125f6070a9",
+        "top_leaf": [
+          [
+            "?",
+            81
+          ],
+          [
+            "sqlite3BtreeIndexMoveto",
+            18
+          ],
+          [
+            "sqlite3VdbeExec",
+            12
+          ],
+          [
+            "vdbeRecordCompareString",
+            8
+          ],
+          [
+            "core::hash::sip::{impl#5}::write<core::hash::sip::Sip13Rounds>",
+            6
+          ],
+          [
+            "alloc::collections::btree::node::NodeRef::find_key_index<alloc::collections::btree::node::marker::Immut, alloc::string::String, serde_json::value::Value, alloc::collections::btree::node::marker::LeafOrInternal, str>",
+            3
+          ],
+          [
+            "kassiber_journals::persistence::quantity::posting_fields",
+            3
+          ],
+          [
+            "kassiber_journals::persistence::borrowed",
+            3
+          ],
+          [
+            "core::slice::cmp::{impl#0}::eq<u8, u8>",
+            3
+          ],
+          [
+            "pcache1FetchNoMutex",
+            3
+          ],
+          [
+            "btreeParseCellPtrIndex",
+            3
+          ],
+          [
+            "core::ptr::write<[rusqlite::types::value_ref::ValueRef; 12]>",
+            2
+          ],
+          [
+            "core::ptr::copy_nonoverlapping<u8>",
+            2
+          ],
+          [
+            "releaseMemArray",
+            2
+          ],
+          [
+            "moveToRoot",
+            2
+          ]
+        ],
+        "metadata": {
+          "load": [
+            100.302734375,
+            91.03759765625,
+            89.0634765625
+          ],
+          "request_sha256": "cb240f419ab14f7792a26670c7a94b4aa964039bb1ee8b29a58a97f14e599e5f",
+          "binary_sha256": "b82b1926f1c55d0138ca27c37fa53b0cf123cc2dc3f6da9a856dd9605617dc94",
+          "native_reply": {
+            "ok": true,
+            "name": "fresh",
+            "seconds": 62.978620909,
+            "cpu_seconds": 1.0859229999999997,
+            "phases": {
+              "begin": {
+                "cpu": 1.999999999990898e-05,
+                "wall": 2.142e-05
+              },
+              "commit": {
+                "cpu": 0.3685459999999998,
+                "wall": 60.866250105
+              },
+              "complete": {
+                "cpu": 0.014575000000000227,
+                "wall": 0.018498082
+              },
+              "entries_prepare": {
+                "cpu": 0.08289999999999997,
+                "wall": 0.234500486
+              },
+              "entries_write": {
+                "cpu": 0.2634979999999998,
+                "wall": 0.526810623
+              },
+              "filed": {
+                "cpu": 0.00018099999999998673,
+                "wall": 0.000180414
+              },
+              "pricing": {
+                "cpu": 0.022971000000000075,
+                "wall": 0.052289318
+              },
+              "quantity": {
+                "cpu": 0.0033480000000001287,
+                "wall": 0.028673434
+              },
+              "quantity_other": {
+                "cpu": 0.018927999999999834,
+                "wall": 0.353505097
+              },
+              "quantity_postings_bind": {
+                "cpu": 0.04382200000000003,
+                "wall": 0.067184204
+              },
+              "quantity_postings_prepare": {
+                "cpu": 0.017476999999999965,
+                "wall": 0.043661912
+              },
+              "quantity_postings_write": {
+                "cpu": 0.24083300000000007,
+                "wall": 0.727655697
+              },
+              "setup": {
+                "cpu": 0.00032199999999993345,
+                "wall": 0.000318958
+              },
+              "small_tables": {
+                "cpu": 0.008479000000000347,
+                "wall": 0.058982998
+              }
+            },
+            "writes": 60023
+          },
+          "native_reply_sha256": "959c3dc349e9685cea9df3e4d13d1768e4360f994723bc7c2d32269603440314",
+          "write_table_counts": {
+            "journal_custody_gap_inputs": 1,
+            "journal_quarantines": 1,
+            "journal_tax_summary": 8,
+            "journal_account_holdings": 2,
+            "journal_wallet_holdings": 2,
+            "journal_custody_reconciliations": 1,
+            "journal_quantity_issues": 1,
+            "journal_quantity_balances": 4,
+            "journal_custody_decisions": 1,
+            "journal_custody_economic_relations": 1,
+            "journal_quantity_postings": 40000,
+            "journal_entries": 20000,
+            "profiles": 1
+          }
+        }
+      },
+      {
+        "cell": "generic-20000-sqlite-unchanged",
+        "samples": 105,
+        "category_samples": {
+          "preparation": 50,
+          "SQL": 28,
+          "comparison": 23,
+          "encoding": 4
+        },
+        "stack_sha256": "14acfde3a9e589b252a6859a15bb0a6ddee062cab96c5915aaa7980f1ac80418",
+        "top_leaf": [
+          [
+            "?",
+            33
+          ],
+          [
+            "core::hash::sip::{impl#5}::write<core::hash::sip::Sip13Rounds>",
+            6
+          ],
+          [
+            "btreeParseCellPtrIndex",
+            5
+          ],
+          [
+            "columnMem",
+            5
+          ],
+          [
+            "kassiber_journals::persistence::quantity::posting_fields",
+            3
+          ],
+          [
+            "core::hash::sip::{impl#8}::d_rounds",
+            3
+          ],
+          [
+            "sqlite3VdbeExec",
+            3
+          ],
+          [
+            "kassiber_journals::persistence::entries::{impl#1}::cell",
+            3
+          ],
+          [
+            "alloc::collections::btree::node::NodeRef::keys<alloc::string::String, serde_json::value::Value, alloc::collections::btree::node::marker::LeafOrInternal>",
+            2
+          ],
+          [
+            "core::ptr::write<[rusqlite::types::value_ref::ValueRef; 12]>",
+            2
+          ],
+          [
+            "kassiber_journals::persistence::borrowed",
+            2
+          ],
+          [
+            "core::str::validations::run_utf8_validation",
+            2
+          ],
+          [
+            "sqlite3_value_type",
+            2
+          ],
+          [
+            "btreeParseCellPtr",
+            2
+          ],
+          [
+            "core::iter::traits::iterator::Iterator::try_fold<core::slice::iter::Iter<u8>, (), core::iter::adapters::copied::copy_try_fold::{closure_env#0}<u8, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::traits::iterator::Iterator::all::check::{closure_env#0}<u8, kassiber_journals::storage::calculation::compare::{impl#3}::quoted::{closure_env#0}>>, core::ops::control_flow::ControlFlow<(), ()>>",
+            2
+          ]
+        ],
+        "metadata": {
+          "load": [
+            149.06884765625,
+            110.30615234375,
+            96.11669921875
+          ],
+          "request_sha256": "d6f4946412c87c4f0b59fdfe5e52d20c31d2ede6aad5caaa8b14247185049e7e",
+          "binary_sha256": "b82b1926f1c55d0138ca27c37fa53b0cf123cc2dc3f6da9a856dd9605617dc94",
+          "native_reply": {
+            "ok": true,
+            "name": "unchanged",
+            "seconds": 2.561786851,
+            "cpu_seconds": 0.4330130000000003,
+            "phases": {
+              "begin": {
+                "cpu": 2.2999999999884224e-05,
+                "wall": 2.467e-05
+              },
+              "commit": {
+                "cpu": 0.11954500000000001,
+                "wall": 1.741441142
+              },
+              "complete": {
+                "cpu": 0.003277999999999892,
+                "wall": 0.003936395
+              },
+              "entries_prepare": {
+                "cpu": 0.036714000000000135,
+                "wall": 0.065686508
+              },
+              "entries_write": {
+                "cpu": 0.085032,
+                "wall": 0.213910225
+              },
+              "filed": {
+                "cpu": 0.00010699999999985721,
+                "wall": 0.000102962
+              },
+              "pricing": {
+                "cpu": 0.02170699999999992,
+                "wall": 0.181148653
+              },
+              "quantity": {
+                "cpu": 0.003047000000000022,
+                "wall": 0.023678995
+              },
+              "quantity_other": {
+                "cpu": 0.01653500000000019,
+                "wall": 0.019756662
+              },
+              "quantity_postings_bind": {
+                "cpu": 0.03479600000000005,
+                "wall": 0.083196256
+              },
+              "quantity_postings_prepare": {
+                "cpu": 0.015356000000000147,
+                "wall": 0.018066411
+              },
+              "quantity_postings_write": {
+                "cpu": 0.09181999999999979,
+                "wall": 0.203838085
+              },
+              "setup": {
+                "cpu": 0.0003309999999998592,
+                "wall": 0.000334698
+              },
+              "small_tables": {
+                "cpu": 0.004707000000000239,
+                "wall": 0.006604838
+              }
+            },
+            "writes": 23
+          },
+          "native_reply_sha256": "d06524b1e58c64e2919fe419676707e60d3abdd793b8d7bbe8e07dbdddf7aa80",
+          "write_table_counts": {
+            "journal_custody_gap_inputs": 1,
+            "journal_quarantines": 1,
+            "journal_tax_summary": 8,
+            "journal_account_holdings": 2,
+            "journal_wallet_holdings": 2,
+            "journal_custody_reconciliations": 1,
+            "journal_quantity_issues": 1,
+            "journal_quantity_balances": 4,
+            "journal_custody_decisions": 1,
+            "journal_custody_economic_relations": 1,
+            "profiles": 1
+          }
+        }
+      },
+      {
+        "cell": "multi-wallet-20000-cipher-fresh",
+        "samples": 362,
+        "category_samples": {
+          "SQL": 235,
+          "preparation": 75,
+          "binding": 32,
+          "encoding": 20
+        },
+        "stack_sha256": "8fec15d327e1ea337d7948b6d35ea5d150a36859f6081169dcac1170bd91fad5",
+        "top_leaf": [
+          [
+            "?",
+            111
+          ],
+          [
+            "sqlite3BtreeIndexMoveto",
+            27
+          ],
+          [
+            "pwrite64",
+            21
+          ],
+          [
+            "pcache1FetchNoMutex",
+            15
+          ],
+          [
+            "sqlite3VdbeExec",
+            12
+          ],
+          [
+            "sha512_block_data_order_avx2",
+            11
+          ],
+          [
+            "kassiber_journals::persistence::quantity::posting_fields",
+            7
+          ],
+          [
+            "balance_nonroot",
+            6
+          ],
+          [
+            "core::slice::cmp::{impl#0}::eq<u8, u8>",
+            5
+          ],
+          [
+            "core::hash::sip::{impl#5}::write<core::hash::sip::Sip13Rounds>",
+            5
+          ],
+          [
+            "sqlite3VdbeRecordCompareWithSkip",
+            5
+          ],
+          [
+            "free",
+            5
+          ],
+          [
+            "alloc::collections::btree::node::NodeRef::keys<alloc::string::String, serde_json::value::Value, alloc::collections::btree::node::marker::LeafOrInternal>",
+            4
+          ],
+          [
+            "pthread_mutex_lock",
+            4
+          ],
+          [
+            "pageFindSlot",
+            3
+          ]
+        ],
+        "metadata": {
+          "load": [
+            129.1259765625,
+            109.50732421875,
+            96.36962890625
+          ],
+          "request_sha256": "13ede06674b63d4dc79f61875e671af7333e308831415a4f3da67d0e2d224996",
+          "binary_sha256": "b82b1926f1c55d0138ca27c37fa53b0cf123cc2dc3f6da9a856dd9605617dc94",
+          "native_reply": {
+            "ok": true,
+            "name": "fresh",
+            "seconds": 4.825492777,
+            "cpu_seconds": 1.3847230000000001,
+            "phases": {
+              "begin": {
+                "cpu": 2.1000000000270802e-05,
+                "wall": 2.146e-05
+              },
+              "commit": {
+                "cpu": 0.3795470000000001,
+                "wall": 1.376070962
+              },
+              "complete": {
+                "cpu": 0.01715,
+                "wall": 0.021691818
+              },
+              "entries_prepare": {
+                "cpu": 0.08814300000000008,
+                "wall": 0.213035985
+              },
+              "entries_write": {
+                "cpu": 0.3613000000000004,
+                "wall": 1.127030518
+              },
+              "filed": {
+                "cpu": 8.000000000230045e-06,
+                "wall": 1.71e-06
+              },
+              "pricing": {
+                "cpu": 0.06936399999999976,
+                "wall": 0.101544453
+              },
+              "quantity": {
+                "cpu": 0.013577999999999868,
+                "wall": 0.12070564
+              },
+              "quantity_other": {
+                "cpu": 0.057925000000000004,
+                "wall": 0.141557209
+              },
+              "quantity_postings_bind": {
+                "cpu": 0.04888899999999996,
+                "wall": 0.072575061
+              },
+              "quantity_postings_prepare": {
+                "cpu": 0.015261999999999887,
+                "wall": 0.156913285
+              },
+              "quantity_postings_write": {
+                "cpu": 0.31625400000000026,
+                "wall": 1.222579789
+              },
+              "setup": {
+                "cpu": 0.0021610000000000795,
+                "wall": 0.245272794
+              },
+              "small_tables": {
+                "cpu": 0.015106999999999537,
+                "wall": 0.026430251
+              }
+            },
+            "writes": 65850
+          },
+          "native_reply_sha256": "591b441f2e909bf1b81f789aeace5df97026d5a0db9ce43fe4cd4c3e903d3477",
+          "write_table_counts": {
+            "journal_custody_gap_inputs": 1,
+            "journal_quarantines": 18,
+            "journal_tax_summary": 11,
+            "journal_account_holdings": 3,
+            "journal_wallet_holdings": 4,
+            "journal_custody_reconciliations": 1,
+            "journal_quantity_issues": 1,
+            "journal_quantity_balances": 309,
+            "journal_custody_decisions": 1,
+            "journal_custody_economic_relations": 301,
+            "journal_quantity_postings": 45216,
+            "journal_entries": 19983,
+            "profiles": 1
+          }
+        }
+      },
+      {
+        "cell": "multi-wallet-20000-cipher-unchanged",
+        "samples": 203,
+        "category_samples": {
+          "SQL": 87,
+          "preparation": 84,
+          "comparison": 31,
+          "encoding": 1
+        },
+        "stack_sha256": "370a6fc1d34843e7dda9e0077cd53d5d83138f92cff7295d60649ed89941dfa9",
+        "top_leaf": [
+          [
+            "?",
+            51
+          ],
+          [
+            "sha512_block_data_order_avx2",
+            35
+          ],
+          [
+            "core::hash::sip::{impl#5}::write<core::hash::sip::Sip13Rounds>",
+            8
+          ],
+          [
+            "sqlite3VdbeExec",
+            8
+          ],
+          [
+            "kassiber_journals::persistence::quantity::posting_fields",
+            6
+          ],
+          [
+            "pread64",
+            5
+          ],
+          [
+            "core::slice::cmp::{impl#0}::eq<u8, u8>",
+            4
+          ],
+          [
+            "core::str::validations::run_utf8_validation",
+            4
+          ],
+          [
+            "aesni_cbc_encrypt",
+            3
+          ],
+          [
+            "core::ptr::copy_nonoverlapping<u8>",
+            3
+          ],
+          [
+            "kassiber_journals::persistence::store<journal_persist::BenchWrites, journal_persist::run::{closure_env#0}>",
+            3
+          ],
+          [
+            "serde_json::value::Value::as_number",
+            3
+          ],
+          [
+            "alloc::collections::btree::node::NodeRef::find_key_index<alloc::collections::btree::node::marker::Immut, alloc::string::String, serde_json::value::Value, alloc::collections::btree::node::marker::LeafOrInternal, str>",
+            2
+          ],
+          [
+            "alloc::collections::btree::node::NodeRef::keys<alloc::string::String, serde_json::value::Value, alloc::collections::btree::node::marker::LeafOrInternal>",
+            2
+          ],
+          [
+            "sqlite3_column_bytes",
+            2
+          ]
+        ],
+        "metadata": {
+          "load": [
+            108.17822265625,
+            106.0703125,
+            95.5224609375
+          ],
+          "request_sha256": "637a26153e888203a6d4b89d0eb664a84c8836ee24b88b91a8bf324f90f45861",
+          "binary_sha256": "b82b1926f1c55d0138ca27c37fa53b0cf123cc2dc3f6da9a856dd9605617dc94",
+          "native_reply": {
+            "ok": true,
+            "name": "unchanged",
+            "seconds": 1.280700066,
+            "cpu_seconds": 0.6124680000000002,
+            "phases": {
+              "begin": {
+                "cpu": 1.8999999999991246e-05,
+                "wall": 1.9911e-05
+              },
+              "commit": {
+                "cpu": 0.005526999999999838,
+                "wall": 0.323636205
+              },
+              "complete": {
+                "cpu": 0.007242999999999888,
+                "wall": 0.008938313
+              },
+              "entries_prepare": {
+                "cpu": 0.055918000000000134,
+                "wall": 0.092834726
+              },
+              "entries_write": {
+                "cpu": 0.16970399999999985,
+                "wall": 0.246591675
+              },
+              "filed": {
+                "cpu": 9.000000000369823e-06,
+                "wall": 1.83e-06
+              },
+              "pricing": {
+                "cpu": 0.06910900000000009,
+                "wall": 0.092508448
+              },
+              "quantity": {
+                "cpu": 0.011576000000000253,
+                "wall": 0.028679214
+              },
+              "quantity_other": {
+                "cpu": 0.05574600000000007,
+                "wall": 0.114235426
+              },
+              "quantity_postings_bind": {
+                "cpu": 0.05160700000000018,
+                "wall": 0.067533902
+              },
+              "quantity_postings_prepare": {
+                "cpu": 0.017658999999999647,
+                "wall": 0.021518604
+              },
+              "quantity_postings_write": {
+                "cpu": 0.15582899999999977,
+                "wall": 0.25641743
+              },
+              "setup": {
+                "cpu": 0.0014819999999997613,
+                "wall": 0.013651766
+              },
+              "small_tables": {
+                "cpu": 0.011026999999999898,
+                "wall": 0.014073026
+              }
+            },
+            "writes": 651
+          },
+          "native_reply_sha256": "ce333bc69da10cf59f4d10e5fc861382629f3fc54756d7957a5181abb5b0a23c",
+          "write_table_counts": {
+            "journal_custody_gap_inputs": 1,
+            "journal_quarantines": 18,
+            "journal_tax_summary": 11,
+            "journal_account_holdings": 3,
+            "journal_wallet_holdings": 4,
+            "journal_custody_reconciliations": 1,
+            "journal_quantity_issues": 1,
+            "journal_quantity_balances": 309,
+            "journal_custody_decisions": 1,
+            "journal_custody_economic_relations": 301,
+            "profiles": 1
+          }
+        }
+      },
+      {
+        "cell": "multi-wallet-20000-sqlite-fresh",
+        "samples": 265,
+        "category_samples": {
+          "preparation": 60,
+          "SQL": 151,
+          "binding": 28,
+          "encoding": 26
+        },
+        "stack_sha256": "f8a7aa785f5a8e82b71dd91439ec35aef5e2780b9eb62d351cdae5facddbe9d7",
+        "top_leaf": [
+          [
+            "?",
+            90
+          ],
+          [
+            "sqlite3VdbeExec",
+            18
+          ],
+          [
+            "sqlite3BtreeIndexMoveto",
+            18
+          ],
+          [
+            "pcache1FetchNoMutex",
+            7
+          ],
+          [
+            "vdbeRecordCompareString",
+            5
+          ],
+          [
+            "core::str::validations::run_utf8_validation",
+            4
+          ],
+          [
+            "core::hash::sip::{impl#5}::write<core::hash::sip::Sip13Rounds>",
+            4
+          ],
+          [
+            "cellSizePtrIdxLeaf",
+            4
+          ],
+          [
+            "balance_nonroot",
+            4
+          ],
+          [
+            "core::slice::cmp::{impl#0}::eq<u8, u8>",
+            3
+          ],
+          [
+            "pageFindSlot",
+            3
+          ],
+          [
+            "core::hash::sip::u8to64_le",
+            3
+          ],
+          [
+            "serde_json::value::Value::as_str",
+            2
+          ],
+          [
+            "kassiber_journals::persistence::quantity::posting_fields",
+            2
+          ],
+          [
+            "core::ptr::write<[rusqlite::types::value_ref::ValueRef; 12]>",
+            2
+          ]
+        ],
+        "metadata": {
+          "load": [
+            89.90087890625,
+            102.130859375,
+            94.40234375
+          ],
+          "request_sha256": "43c2cfb490fb3397d712e26872f6656bb3a91797f485446da2eb5f8f4e00058a",
+          "binary_sha256": "b82b1926f1c55d0138ca27c37fa53b0cf123cc2dc3f6da9a856dd9605617dc94",
+          "native_reply": {
+            "ok": true,
+            "name": "fresh",
+            "seconds": 11.274523562,
+            "cpu_seconds": 1.327648,
+            "phases": {
+              "begin": {
+                "cpu": 1.7999999999851468e-05,
+                "wall": 1.8731e-05
+              },
+              "commit": {
+                "cpu": 0.5293639999999997,
+                "wall": 8.897143572
+              },
+              "complete": {
+                "cpu": 0.012491999999999948,
+                "wall": 0.014535107
+              },
+              "entries_prepare": {
+                "cpu": 0.08921699999999966,
+                "wall": 0.280685659
+              },
+              "entries_write": {
+                "cpu": 0.2605380000000004,
+                "wall": 0.737791448
+              },
+              "filed": {
+                "cpu": 8.000000000230045e-06,
+                "wall": 1.1e-06
+              },
+              "pricing": {
+                "cpu": 0.025335000000000107,
+                "wall": 0.040853535
+              },
+              "quantity": {
+                "cpu": 0.004962000000000133,
+                "wall": 0.025562851
+              },
+              "quantity_other": {
+                "cpu": 0.05263200000000001,
+                "wall": 0.129615814
+              },
+              "quantity_postings_bind": {
+                "cpu": 0.05015400000000003,
+                "wall": 0.068256159
+              },
+              "quantity_postings_prepare": {
+                "cpu": 0.015189000000000119,
+                "wall": 0.018199744
+              },
+              "quantity_postings_write": {
+                "cpu": 0.2808299999999999,
+                "wall": 0.872534474
+              },
+              "setup": {
+                "cpu": 0.0004409999999999137,
+                "wall": 0.00043861
+              },
+              "small_tables": {
+                "cpu": 0.006415999999999755,
+                "wall": 0.188775746
+              }
+            },
+            "writes": 65850
+          },
+          "native_reply_sha256": "7e25f896bb6f8cf50b225e94413257f387be79d5bbc9791561e757cb7b7d1c61",
+          "write_table_counts": {
+            "journal_custody_gap_inputs": 1,
+            "journal_quarantines": 18,
+            "journal_tax_summary": 11,
+            "journal_account_holdings": 3,
+            "journal_wallet_holdings": 4,
+            "journal_custody_reconciliations": 1,
+            "journal_quantity_issues": 1,
+            "journal_quantity_balances": 309,
+            "journal_custody_decisions": 1,
+            "journal_custody_economic_relations": 301,
+            "journal_quantity_postings": 45216,
+            "journal_entries": 19983,
+            "profiles": 1
+          }
+        }
+      },
+      {
+        "cell": "multi-wallet-20000-sqlite-unchanged",
+        "samples": 140,
+        "category_samples": {
+          "preparation": 70,
+          "SQL": 30,
+          "comparison": 38,
+          "binding": 1,
+          "encoding": 1
+        },
+        "stack_sha256": "9232b95f1d8c966396021cba09ac1babab84b706403020f338bd4784faa90608",
+        "top_leaf": [
+          [
+            "?",
+            44
+          ],
+          [
+            "kassiber_journals::persistence::quantity::posting_fields",
+            7
+          ],
+          [
+            "sqlite3VdbeExec",
+            7
+          ],
+          [
+            "core::str::validations::run_utf8_validation",
+            5
+          ],
+          [
+            "btreeInitPage",
+            5
+          ],
+          [
+            "kassiber_journals::persistence::entries::{impl#1}::cell",
+            5
+          ],
+          [
+            "core::iter::traits::iterator::Iterator::try_fold<core::slice::iter::Iter<u8>, (), core::iter::adapters::copied::copy_try_fold::{closure_env#0}<u8, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::traits::iterator::Iterator::all::check::{closure_env#0}<u8, kassiber_journals::storage::calculation::compare::{impl#3}::quoted::{closure_env#0}>>, core::ops::control_flow::ControlFlow<(), ()>>",
+            5
+          ],
+          [
+            "core::slice::cmp::{impl#0}::eq<u8, u8>",
+            4
+          ],
+          [
+            "core::hash::sip::{impl#5}::write<core::hash::sip::Sip13Rounds>",
+            4
+          ],
+          [
+            "rusqlite::types::value_ref::{impl#13}::eq",
+            4
+          ],
+          [
+            "core::hash::sip::u8to64_le",
+            4
+          ],
+          [
+            "alloc::collections::btree::node::NodeRef::keys<alloc::string::String, serde_json::value::Value, alloc::collections::btree::node::marker::LeafOrInternal>",
+            3
+          ],
+          [
+            "kassiber_journals::storage::calculation::compare::Cursor::scalar",
+            3
+          ],
+          [
+            "alloc::vec::Vec::as_slice<u8, alloc::alloc::Global>",
+            2
+          ],
+          [
+            "core::hash::sip::{impl#8}::c_rounds",
+            2
+          ]
+        ],
+        "metadata": {
+          "load": [
+            71.01708984375,
+            96.69384765625,
+            92.806640625
+          ],
+          "request_sha256": "f74d3400a83bec47b6c1fdbabb16f142b72f0bda9158c29fa976f817c5f51fcb",
+          "binary_sha256": "b82b1926f1c55d0138ca27c37fa53b0cf123cc2dc3f6da9a856dd9605617dc94",
+          "native_reply": {
+            "ok": true,
+            "name": "unchanged",
+            "seconds": 0.658621429,
+            "cpu_seconds": 0.4234880000000003,
+            "phases": {
+              "begin": {
+                "cpu": 1.7999999999851468e-05,
+                "wall": 1.9521e-05
+              },
+              "commit": {
+                "cpu": 0.0022679999999999367,
+                "wall": 0.020029548
+              },
+              "complete": {
+                "cpu": 0.007868000000000208,
+                "wall": 0.010103051
+              },
+              "entries_prepare": {
+                "cpu": 0.050903000000000365,
+                "wall": 0.082347745
+              },
+              "entries_write": {
+                "cpu": 0.10988399999999965,
+                "wall": 0.143514625
+              },
+              "filed": {
+                "cpu": 7.999999999785956e-06,
+                "wall": 1.31e-06
+              },
+              "pricing": {
+                "cpu": 0.021621999999999808,
+                "wall": 0.027352243
+              },
+              "quantity": {
+                "cpu": 0.005231000000000208,
+                "wall": 0.030453247
+              },
+              "quantity_other": {
+                "cpu": 0.050585000000000324,
+                "wall": 0.067999553
+              },
+              "quantity_postings_bind": {
+                "cpu": 0.046584999999999877,
+                "wall": 0.068192888
+              },
+              "quantity_postings_prepare": {
+                "cpu": 0.016128000000000142,
+                "wall": 0.020037198
+              },
+              "quantity_postings_write": {
+                "cpu": 0.1051949999999997,
+                "wall": 0.178968631
+              },
+              "setup": {
+                "cpu": 0.0004770000000000607,
+                "wall": 0.000473381
+              },
+              "small_tables": {
+                "cpu": 0.0066790000000001015,
+                "wall": 0.009051506
+              }
+            },
+            "writes": 651
+          },
+          "native_reply_sha256": "86b8d97cf92f6c564c60e90bfced355f025b89c43b26eed1a0abb82f64867adf",
+          "write_table_counts": {
+            "journal_custody_gap_inputs": 1,
+            "journal_quarantines": 18,
+            "journal_tax_summary": 11,
+            "journal_account_holdings": 3,
+            "journal_wallet_holdings": 4,
+            "journal_custody_reconciliations": 1,
+            "journal_quantity_issues": 1,
+            "journal_quantity_balances": 309,
+            "journal_custody_decisions": 1,
+            "journal_custody_economic_relations": 301,
+            "profiles": 1
+          }
+        }
+      }
+    ],
+    "baseline_binary_sha256": "b82b1926f1c55d0138ca27c37fa53b0cf123cc2dc3f6da9a856dd9605617dc94"
+  },
+  "isolated_binding_probe": {
+    "method": "Five alternating independent child-process pairs, 100,000 twelve-column SQLite inserts per child; process CPU includes row allocation, database setup, insertion and count. Full-bind and cached-bind paths otherwise share the same program. Exact scalar/type/sign parity is independently pinned by the journal regression.",
+    "trials": [
+      {
+        "full": {
+          "cpu_seconds": 0.151242,
+          "wall_seconds": 0.15262192199588753,
+          "load": [
+            29.87890625,
+            27.8759765625,
+            29.09765625
+          ]
+        },
+        "reuse": {
+          "cpu_seconds": 0.14096599999999998,
+          "wall_seconds": 0.14233361699734814,
+          "load": [
+            29.87890625,
+            27.8759765625,
+            29.09765625
+          ]
+        }
+      },
+      {
+        "reuse": {
+          "cpu_seconds": 0.134147,
+          "wall_seconds": 0.13578328999574296,
+          "load": [
+            29.87890625,
+            27.8759765625,
+            29.09765625
+          ]
+        },
+        "full": {
+          "cpu_seconds": 0.1554959999999999,
+          "wall_seconds": 0.1574329370050691,
+          "load": [
+            29.87890625,
+            27.8759765625,
+            29.09765625
+          ]
+        }
+      },
+      {
+        "full": {
+          "cpu_seconds": 0.15396800000000005,
+          "wall_seconds": 0.15537270798813552,
+          "load": [
+            29.87890625,
+            27.8759765625,
+            29.09765625
+          ]
+        },
+        "reuse": {
+          "cpu_seconds": 0.13301799999999997,
+          "wall_seconds": 0.13463914301246405,
+          "load": [
+            29.87890625,
+            27.8759765625,
+            29.09765625
+          ]
+        }
+      },
+      {
+        "reuse": {
+          "cpu_seconds": 0.14940900000000004,
+          "wall_seconds": 0.15139032300794497,
+          "load": [
+            29.87890625,
+            27.8759765625,
+            29.09765625
+          ]
+        },
+        "full": {
+          "cpu_seconds": 0.18486600000000003,
+          "wall_seconds": 0.1876427780080121,
+          "load": [
+            29.87890625,
+            27.8759765625,
+            29.09765625
+          ]
+        }
+      },
+      {
+        "full": {
+          "cpu_seconds": 0.18244699999999986,
+          "wall_seconds": 0.18624452501535416,
+          "load": [
+            29.87890625,
+            27.8759765625,
+            29.09765625
+          ]
+        },
+        "reuse": {
+          "cpu_seconds": 0.16145500000000024,
+          "wall_seconds": 0.1634930520085618,
+          "load": [
+            29.87890625,
+            27.8759765625,
+            29.09765625
+          ]
+        }
+      }
+    ],
+    "best": {
+      "full": 0.151242,
+      "reuse": 0.13301799999999997
+    },
+    "median_paired_reuse_full": 0.8639327652499216,
+    "improved_pairs": 5
+  },
+  "full_store_pairs": {
+    "probes": {
+      "baseline": "a0708b6510c28b885be23063fb179adeb929a49c3fb332e72bef3ebb8d13291e",
+      "candidate": "049559e630ebabf78dbea3c9fe2020f7c2dcbd7451ba63be94e07500eb962b4b"
+    },
+    "sources": {
+      "crates/journals/src/boundary/joins.rs": "58b06db41921c470886b1cd1e190f506d6fd9175645c58321340fc6dd464c68e",
+      "crates/journals/src/boundary.rs": "2ddc678761e48f07a4277b2c20622a94a631f2c7c3725eefa32370a71abd878d",
+      "crates/journals/src/compute.rs": "b50c57224fc536c3df0fdff7d4d465d396aed6f717c158fb668f0fee0d507102",
+      "crates/journals/src/lib.rs": "f3d8fc2ab7257405c56545dda5d0bf7b3c24d90be78b8ccdc219feda380a576d",
+      "crates/journals/src/loader/direct.rs": "6f4ff944e2dd1a053ae54807ad510094ffa7c6c72c7c97b25cb5b2a4b876b999",
+      "crates/journals/src/loader/ownership.rs": "e9fd153c3ddbc0b7ad836c280e2219d8c0285e46e80f457fb5039003d250c2c8",
+      "crates/journals/src/loader/receipts.rs": "08b0978e2fed949d12af142596d9c91f1e39436d6dd2665e62e374af69bb4453",
+      "crates/journals/src/loader/tests.rs": "c32901ad80222bb09c20979247c37cebc1801dfd26dfc5cddc430c7bc034b804",
+      "crates/journals/src/loader/worklist.rs": "64670923212f75666cf0496da7e4ff7a9073e85e382d715bdebf05776a5d3516",
+      "crates/journals/src/loader.rs": "42698dcb84c9f0aba04eef10a14ecdb2e8b0497960f8bdd4d48dd7a17c762465",
+      "crates/journals/src/model.rs": "68f10bb6e44e1283ccf887606562fd908ad764848e7a4f3fdbe5e2f196239f8b",
+      "crates/journals/src/persistence/entries.rs": "dc7f05fee56637b02bea63a907f8abb55e28ea0e727ee8cd6024fbe50df76e8e",
+      "crates/journals/src/persistence/filed.rs": "24206d69912e8b067199a1f42a3ba1ba257ed40ff99e1569d0dc9d4d3ff94432",
+      "crates/journals/src/persistence/quantity.rs": "947e1c3927fc943f0eb187604e82e06a37ded17ccbf617d51358abbdd0a4a094",
+      "crates/journals/src/persistence/quarantine.rs": "c9cb06f5e0b8ab54fc47c20d9b4f7dc63a54379444e864fb450d0ef2f8235c0d",
+      "crates/journals/src/persistence.rs": "d9b90aa760f761c365fa1fe89335480a5553d371a79934cb5b730c8ab2947513",
+      "crates/journals/src/render.rs": "afac4610917b0ed8ef320385b7f80ca5cb28bd69187e9c00b5dac5b998550d45",
+      "crates/journals/src/storage/calculation/compare.rs": "710b4e6bb35fcae468e7f29ca7d4227965aa9e1fdff1e603d89bc927d16af45f",
+      "crates/journals/src/storage/calculation.rs": "9ccbf092810fec1392096f9c6e4df6c8202af46c5458eb00c3828b7b9a1bce44",
+      "crates/journals/src/storage/tests.rs": "9cf98f8c31fd76a01e7289a9321adefa26ab1c0cde24c8a20859a3124d23a2c2",
+      "crates/journals/src/storage.rs": "677431937543c7ae27309ad4b35aaab504fe4fe0c9591e7d8433f52e7fb1a2d6"
+    },
+    "cells": [
+      {
+        "name": "generic-20000-sqlite-fresh",
+        "requests": {
+          "request.json": "cb240f419ab14f7792a26670c7a94b4aa964039bb1ee8b29a58a97f14e599e5f",
+          "floor.json": "e0ae7789d14f63784636d9821f2d9a2d012264704b2245c1a7f679d31dbd0564"
+        },
+        "trials": [
+          {
+            "baseline": {
+              "cpu_seconds": 1.0136310000000002,
+              "seconds": 1.069513418,
+              "phases": {
+                "begin": {
+                  "cpu": 2.0999999999826713e-05,
+                  "wall": 2.327e-05
+                },
+                "commit": {
+                  "cpu": 0.2371859999999999,
+                  "wall": 0.28490414
+                },
+                "complete": {
+                  "cpu": 0.01462500000000011,
+                  "wall": 0.014749433
+                },
+                "entries_prepare": {
+                  "cpu": 0.10069199999999956,
+                  "wall": 0.101590815
+                },
+                "entries_write": {
+                  "cpu": 0.2552850000000002,
+                  "wall": 0.257451476
+                },
+                "filed": {
+                  "cpu": 0.00012999999999996348,
+                  "wall": 0.000124633
+                },
+                "pricing": {
+                  "cpu": 0.02499600000000024,
+                  "wall": 0.025203061
+                },
+                "quantity": {
+                  "cpu": 0.0035089999999997623,
+                  "wall": 0.003544395
+                },
+                "quantity_other": {
+                  "cpu": 0.019830000000000236,
+                  "wall": 0.020836307
+                },
+                "quantity_postings_bind": {
+                  "cpu": 0.04664299999999999,
+                  "wall": 0.047413772
+                },
+                "quantity_postings_prepare": {
+                  "cpu": 0.017295999999999978,
+                  "wall": 0.017454296
+                },
+                "quantity_postings_write": {
+                  "cpu": 0.2864199999999997,
+                  "wall": 0.28909939
+                },
+                "setup": {
+                  "cpu": 0.0003650000000003928,
+                  "wall": 0.000361669
+                },
+                "small_tables": {
+                  "cpu": 0.006609000000000087,
+                  "wall": 0.006663688
+                }
+              },
+              "load": [
+                28.60693359375,
+                24.75732421875,
+                28.572265625
+              ],
+              "exact_dump": true
+            },
+            "candidate": {
+              "cpu_seconds": 1.004966,
+              "seconds": 1.053458275,
+              "phases": {
+                "begin": {
+                  "cpu": 2.4000000000246047e-05,
+                  "wall": 2.4811e-05
+                },
+                "commit": {
+                  "cpu": 0.24880600000000008,
+                  "wall": 0.290568246
+                },
+                "complete": {
+                  "cpu": 0.016207999999999778,
+                  "wall": 0.01633895
+                },
+                "entries_prepare": {
+                  "cpu": 0.1066830000000003,
+                  "wall": 0.10763263
+                },
+                "entries_write": {
+                  "cpu": 0.279061,
+                  "wall": 0.281505759
+                },
+                "filed": {
+                  "cpu": 0.00013700000000005375,
+                  "wall": 0.000130033
+                },
+                "pricing": {
+                  "cpu": 0.0215749999999999,
+                  "wall": 0.021768779
+                },
+                "quantity": {
+                  "cpu": 0.0029530000000002055,
+                  "wall": 0.002985812
+                },
+                "quantity_other": {
+                  "cpu": 0.019203999999999777,
+                  "wall": 0.019362492
+                },
+                "quantity_postings_bind": {
+                  "cpu": 0.038607999999999976,
+                  "wall": 0.0389732
+                },
+                "quantity_postings_prepare": {
+                  "cpu": 0.01678500000000005,
+                  "wall": 0.016941294
+                },
+                "quantity_postings_write": {
+                  "cpu": 0.24799300000000013,
+                  "wall": 0.250193252
+                },
+                "setup": {
+                  "cpu": 0.00035299999999960363,
+                  "wall": 0.000347628
+                },
+                "small_tables": {
+                  "cpu": 0.006549999999999834,
+                  "wall": 0.006598808
+                }
+              },
+              "load": [
+                29.19921875,
+                24.9443359375,
+                28.6123046875
+              ],
+              "exact_dump": true
+            },
+            "floor": {
+              "cpu_seconds": 0.730192,
+              "seconds": 0.79306256,
+              "load": [
+                29.82421875,
+                25.14453125,
+                28.65771484375
+              ],
+              "exact_dump": true
+            }
+          },
+          {
+            "candidate": {
+              "cpu_seconds": 0.9585980000000003,
+              "seconds": 1.10100548,
+              "phases": {
+                "begin": {
+                  "cpu": 1.8999999999991246e-05,
+                  "wall": 2.059e-05
+                },
+                "commit": {
+                  "cpu": 0.23920900000000023,
+                  "wall": 0.37532142
+                },
+                "complete": {
+                  "cpu": 0.018895999999999802,
+                  "wall": 0.019069875
+                },
+                "entries_prepare": {
+                  "cpu": 0.0962029999999996,
+                  "wall": 0.097042356
+                },
+                "entries_write": {
+                  "cpu": 0.27194600000000024,
+                  "wall": 0.274272817
+                },
+                "filed": {
+                  "cpu": 0.00015300000000006975,
+                  "wall": 0.000144114
+                },
+                "pricing": {
+                  "cpu": 0.02267100000000033,
+                  "wall": 0.022882907
+                },
+                "quantity": {
+                  "cpu": 0.0027460000000001372,
+                  "wall": 0.002773666
+                },
+                "quantity_other": {
+                  "cpu": 0.017587999999999937,
+                  "wall": 0.017746423
+                },
+                "quantity_postings_bind": {
+                  "cpu": 0.03885100000000019,
+                  "wall": 0.039184565
+                },
+                "quantity_postings_prepare": {
+                  "cpu": 0.016047999999999618,
+                  "wall": 0.016187517
+                },
+                "quantity_postings_write": {
+                  "cpu": 0.2258960000000001,
+                  "wall": 0.227847039
+                },
+                "setup": {
+                  "cpu": 0.0002849999999998687,
+                  "wall": 0.000281007
+                },
+                "small_tables": {
+                  "cpu": 0.008061999999999792,
+                  "wall": 0.008127413
+                }
+              },
+              "load": [
+                30.15869140625,
+                25.2919921875,
+                28.6865234375
+              ],
+              "exact_dump": true
+            },
+            "baseline": {
+              "cpu_seconds": 1.171745,
+              "seconds": 1.293617678,
+              "phases": {
+                "begin": {
+                  "cpu": 1.8000000000295557e-05,
+                  "wall": 1.9661e-05
+                },
+                "commit": {
+                  "cpu": 0.2749290000000002,
+                  "wall": 0.388027252
+                },
+                "complete": {
+                  "cpu": 0.022170000000000023,
+                  "wall": 0.022384214
+                },
+                "entries_prepare": {
+                  "cpu": 0.1260270000000001,
+                  "wall": 0.127280758
+                },
+                "entries_write": {
+                  "cpu": 0.3618840000000003,
+                  "wall": 0.365489434
+                },
+                "filed": {
+                  "cpu": 0.00019799999999969842,
+                  "wall": 0.000189015
+                },
+                "pricing": {
+                  "cpu": 0.02474899999999991,
+                  "wall": 0.024977357
+                },
+                "quantity": {
+                  "cpu": 0.002887000000000084,
+                  "wall": 0.002912899
+                },
+                "quantity_other": {
+                  "cpu": 0.020118999999999776,
+                  "wall": 0.020302914
+                },
+                "quantity_postings_bind": {
+                  "cpu": 0.03914400000000007,
+                  "wall": 0.039515033
+                },
+                "quantity_postings_prepare": {
+                  "cpu": 0.015832999999999764,
+                  "wall": 0.015976121
+                },
+                "quantity_postings_write": {
+                  "cpu": 0.27290000000000014,
+                  "wall": 0.275489576
+                },
+                "setup": {
+                  "cpu": 0.0003249999999999087,
+                  "wall": 0.000320748
+                },
+                "small_tables": {
+                  "cpu": 0.010534999999999961,
+                  "wall": 0.010626174
+                }
+              },
+              "load": [
+                30.46630859375,
+                25.43701171875,
+                28.71533203125
+              ],
+              "exact_dump": true
+            },
+            "floor": {
+              "cpu_seconds": 0.8068170000000001,
+              "seconds": 0.913426062,
+              "load": [
+                31.87060546875,
+                25.81201171875,
+                28.8193359375
+              ],
+              "exact_dump": true
+            }
+          },
+          {
+            "baseline": {
+              "cpu_seconds": 1.0365379999999997,
+              "seconds": 1.128094646,
+              "phases": {
+                "begin": {
+                  "cpu": 1.700000000015578e-05,
+                  "wall": 1.832e-05
+                },
+                "commit": {
+                  "cpu": 0.2545670000000002,
+                  "wall": 0.338255524
+                },
+                "complete": {
+                  "cpu": 0.020334000000000074,
+                  "wall": 0.0205107
+                },
+                "entries_prepare": {
+                  "cpu": 0.11393499999999968,
+                  "wall": 0.115103118
+                },
+                "entries_write": {
+                  "cpu": 0.2908740000000001,
+                  "wall": 0.293994297
+                },
+                "filed": {
+                  "cpu": 0.00017899999999970717,
+                  "wall": 0.000170064
+                },
+                "pricing": {
+                  "cpu": 0.028214000000000183,
+                  "wall": 0.028651074
+                },
+                "quantity": {
+                  "cpu": 0.002715000000000023,
+                  "wall": 0.002740205
+                },
+                "quantity_other": {
+                  "cpu": 0.01839000000000013,
+                  "wall": 0.018551333
+                },
+                "quantity_postings_bind": {
+                  "cpu": 0.03460099999999988,
+                  "wall": 0.034837531
+                },
+                "quantity_postings_prepare": {
+                  "cpu": 0.015498000000000012,
+                  "wall": 0.015608723
+                },
+                "quantity_postings_write": {
+                  "cpu": 0.246931,
+                  "wall": 0.249175238
+                },
+                "setup": {
+                  "cpu": 0.0003149999999998432,
+                  "wall": 0.000312188
+                },
+                "small_tables": {
+                  "cpu": 0.009945000000000093,
+                  "wall": 0.01004429
+                }
+              },
+              "load": [
+                34.28369140625,
+                26.4130859375,
+                28.99755859375
+              ],
+              "exact_dump": true
+            },
+            "candidate": {
+              "cpu_seconds": 0.9890379999999999,
+              "seconds": 1.051947949,
+              "phases": {
+                "begin": {
+                  "cpu": 2.0000000000131024e-05,
+                  "wall": 2.1421e-05
+                },
+                "commit": {
+                  "cpu": 0.22556299999999974,
+                  "wall": 0.280138326
+                },
+                "complete": {
+                  "cpu": 0.014234999999999776,
+                  "wall": 0.014333822
+                },
+                "entries_prepare": {
+                  "cpu": 0.08998000000000017,
+                  "wall": 0.090622713
+                },
+                "entries_write": {
+                  "cpu": 0.2423059999999997,
+                  "wall": 0.244109117
+                },
+                "filed": {
+                  "cpu": 0.00012200000000017752,
+                  "wall": 0.000117352
+                },
+                "pricing": {
+                  "cpu": 0.02227699999999988,
+                  "wall": 0.02261711
+                },
+                "quantity": {
+                  "cpu": 0.0030760000000000787,
+                  "wall": 0.003095913
+                },
+                "quantity_other": {
+                  "cpu": 0.019822999999999702,
+                  "wall": 0.021133654
+                },
+                "quantity_postings_bind": {
+                  "cpu": 0.04294500000000001,
+                  "wall": 0.043283413
+                },
+                "quantity_postings_prepare": {
+                  "cpu": 0.018152999999999864,
+                  "wall": 0.018311177
+                },
+                "quantity_postings_write": {
+                  "cpu": 0.30454000000000025,
+                  "wall": 0.308069933
+                },
+                "setup": {
+                  "cpu": 0.00033599999999989194,
+                  "wall": 0.000331758
+                },
+                "small_tables": {
+                  "cpu": 0.005632000000000303,
+                  "wall": 0.005662985
+                }
+              },
+              "load": [
+                33.2998046875,
+                26.33935546875,
+                28.9599609375
+              ],
+              "exact_dump": true
+            },
+            "floor": {
+              "cpu_seconds": 0.8419009999999999,
+              "seconds": 0.917669764,
+              "load": [
+                32.07421875,
+                26.20068359375,
+                28.90087890625
+              ],
+              "exact_dump": true
+            }
+          },
+          {
+            "candidate": {
+              "cpu_seconds": 1.0548799999999998,
+              "seconds": 1.232330545,
+              "phases": {
+                "begin": {
+                  "cpu": 2.2999999999884224e-05,
+                  "wall": 2.4581e-05
+                },
+                "commit": {
+                  "cpu": 0.36030700000000015,
+                  "wall": 0.529959269
+                },
+                "complete": {
+                  "cpu": 0.013395999999999741,
+                  "wall": 0.013481662
+                },
+                "entries_prepare": {
+                  "cpu": 0.0946170000000004,
+                  "wall": 0.097429925
+                },
+                "entries_write": {
+                  "cpu": 0.2410559999999995,
+                  "wall": 0.243086533
+                },
+                "filed": {
+                  "cpu": 0.00011500000000008725,
+                  "wall": 0.000112133
+                },
+                "pricing": {
+                  "cpu": 0.01876599999999984,
+                  "wall": 0.018917151
+                },
+                "quantity": {
+                  "cpu": 0.0032610000000001804,
+                  "wall": 0.003283569
+                },
+                "quantity_other": {
+                  "cpu": 0.0164979999999999,
+                  "wall": 0.016620337
+                },
+                "quantity_postings_bind": {
+                  "cpu": 0.05215799999999993,
+                  "wall": 0.052676487
+                },
+                "quantity_postings_prepare": {
+                  "cpu": 0.01834099999999994,
+                  "wall": 0.018520122
+                },
+                "quantity_postings_write": {
+                  "cpu": 0.23066200000000014,
+                  "wall": 0.232456538
+                },
+                "setup": {
+                  "cpu": 0.00034999999999985043,
+                  "wall": 0.000345938
+                },
+                "small_tables": {
+                  "cpu": 0.005309000000000452,
+                  "wall": 0.005341807
+                }
+              },
+              "load": [
+                32.07421875,
+                26.20068359375,
+                28.90087890625
+              ],
+              "exact_dump": true
+            },
+            "baseline": {
+              "cpu_seconds": 0.8919890000000001,
+              "seconds": 0.943593573,
+              "phases": {
+                "begin": {
+                  "cpu": 1.7999999999851468e-05,
+                  "wall": 1.9961e-05
+                },
+                "commit": {
+                  "cpu": 0.2131120000000002,
+                  "wall": 0.259651277
+                },
+                "complete": {
+                  "cpu": 0.01448000000000027,
+                  "wall": 0.014587808
+                },
+                "entries_prepare": {
+                  "cpu": 0.09199199999999985,
+                  "wall": 0.092776344
+                },
+                "entries_write": {
+                  "cpu": 0.23994400000000038,
+                  "wall": 0.241527715
+                },
+                "filed": {
+                  "cpu": 0.00013099999999965917,
+                  "wall": 0.000125313
+                },
+                "pricing": {
+                  "cpu": 0.02250099999999966,
+                  "wall": 0.022661641
+                },
+                "quantity": {
+                  "cpu": 0.002695000000000114,
+                  "wall": 0.002722415
+                },
+                "quantity_other": {
+                  "cpu": 0.018525000000000347,
+                  "wall": 0.018660706
+                },
+                "quantity_postings_bind": {
+                  "cpu": 0.03268099999999974,
+                  "wall": 0.032920956
+                },
+                "quantity_postings_prepare": {
+                  "cpu": 0.01440100000000033,
+                  "wall": 0.014501666
+                },
+                "quantity_postings_write": {
+                  "cpu": 0.2351589999999999,
+                  "wall": 0.237001787
+                },
+                "setup": {
+                  "cpu": 0.00034099999999970265,
+                  "wall": 0.000337608
+                },
+                "small_tables": {
+                  "cpu": 0.005984999999999907,
+                  "wall": 0.006018224
+                }
+              },
+              "load": [
+                31.02685546875,
+                26.0810546875,
+                28.84765625
+              ],
+              "exact_dump": true
+            },
+            "floor": {
+              "cpu_seconds": 0.702302,
+              "seconds": 0.730230479,
+              "load": [
+                29.8232421875,
+                25.91357421875,
+                28.7783203125
+              ],
+              "exact_dump": true
+            }
+          },
+          {
+            "baseline": {
+              "cpu_seconds": 0.951781,
+              "seconds": 1.25392978,
+              "phases": {
+                "begin": {
+                  "cpu": 2.1000000000048757e-05,
+                  "wall": 2.2061e-05
+                },
+                "commit": {
+                  "cpu": 0.22322599999999992,
+                  "wall": 0.518048614
+                },
+                "complete": {
+                  "cpu": 0.012582000000000093,
+                  "wall": 0.012670772
+                },
+                "entries_prepare": {
+                  "cpu": 0.11917799999999978,
+                  "wall": 0.120955627
+                },
+                "entries_write": {
+                  "cpu": 0.2441230000000001,
+                  "wall": 0.245845448
+                },
+                "filed": {
+                  "cpu": 0.00012200000000017752,
+                  "wall": 0.000117333
+                },
+                "pricing": {
+                  "cpu": 0.02386300000000041,
+                  "wall": 0.024427653
+                },
+                "quantity": {
+                  "cpu": 0.002807000000000004,
+                  "wall": 0.002832088
+                },
+                "quantity_other": {
+                  "cpu": 0.022221999999999742,
+                  "wall": 0.022411856
+                },
+                "quantity_postings_bind": {
+                  "cpu": 0.039948000000000095,
+                  "wall": 0.040583718
+                },
+                "quantity_postings_prepare": {
+                  "cpu": 0.015498000000000012,
+                  "wall": 0.015619233
+                },
+                "quantity_postings_write": {
+                  "cpu": 0.24220599999999992,
+                  "wall": 0.244322312
+                },
+                "setup": {
+                  "cpu": 0.0003189999999999582,
+                  "wall": 0.000314907
+                },
+                "small_tables": {
+                  "cpu": 0.005640999999999785,
+                  "wall": 0.005680566
+                }
+              },
+              "load": [
+                29.1162109375,
+                25.83154296875,
+                28.736328125
+              ],
+              "exact_dump": true
+            },
+            "candidate": {
+              "cpu_seconds": 0.951597,
+              "seconds": 0.997640263,
+              "phases": {
+                "begin": {
+                  "cpu": 2.1000000000048757e-05,
+                  "wall": 2.2271e-05
+                },
+                "commit": {
+                  "cpu": 0.24678999999999984,
+                  "wall": 0.287128473
+                },
+                "complete": {
+                  "cpu": 0.01843600000000034,
+                  "wall": 0.018585124
+                },
+                "entries_prepare": {
+                  "cpu": 0.10217900000000002,
+                  "wall": 0.103010478
+                },
+                "entries_write": {
+                  "cpu": 0.26286200000000015,
+                  "wall": 0.264994456
+                },
+                "filed": {
+                  "cpu": 0.00019499999999972317,
+                  "wall": 0.000187714
+                },
+                "pricing": {
+                  "cpu": 0.02176900000000037,
+                  "wall": 0.021954764
+                },
+                "quantity": {
+                  "cpu": 0.0030480000000001617,
+                  "wall": 0.003074523
+                },
+                "quantity_other": {
+                  "cpu": 0.01747199999999971,
+                  "wall": 0.01761814
+                },
+                "quantity_postings_bind": {
+                  "cpu": 0.03795700000000002,
+                  "wall": 0.038276674
+                },
+                "quantity_postings_prepare": {
+                  "cpu": 0.01671800000000001,
+                  "wall": 0.016886213
+                },
+                "quantity_postings_write": {
+                  "cpu": 0.21426599999999985,
+                  "wall": 0.215878053
+                },
+                "setup": {
+                  "cpu": 0.00035799999999985843,
+                  "wall": 0.000362129
+                },
+                "small_tables": {
+                  "cpu": 0.009497999999999784,
+                  "wall": 0.009575869
+                }
+              },
+              "load": [
+                29.34716796875,
+                25.93408203125,
+                28.75390625
+              ],
+              "exact_dump": true
+            },
+            "floor": {
+              "cpu_seconds": 0.757975,
+              "seconds": 0.815419553,
+              "load": [
+                29.80029296875,
+                26.0849609375,
+                28.78759765625
+              ],
+              "exact_dump": true
+            }
+          }
+        ],
+        "best": {
+          "baseline": 0.8919890000000001,
+          "candidate": 0.951597,
+          "floor": 0.702302
+        },
+        "median_paired_candidate_baseline": 0.9914515242726395,
+        "median_paired_phase_ratios": {
+          "entries_prepare": 0.8573646142744483,
+          "entries_write": 1.004634414696759,
+          "quantity_postings_prepare": 1.0787198348173956,
+          "quantity_postings_bind": 0.9925148170856357,
+          "quantity_postings_write": 0.884643650446314,
+          "pricing": 0.8631381020963231,
+          "commit": 1.0489910871636614
+        },
+        "candidate_improved_pairs": 4
+      },
+      {
+        "name": "multi-wallet-20000-cipher-unchanged",
+        "requests": {
+          "request.json": "637a26153e888203a6d4b89d0eb664a84c8836ee24b88b91a8bf324f90f45861",
+          "floor.json": "0fed545a924afa584574270f6d16010f60046e46192d53294cb8b64758148059"
+        },
+        "trials": [
+          {
+            "baseline": {
+              "cpu_seconds": 0.594007,
+              "seconds": 0.678428873,
+              "phases": {
+                "begin": {
+                  "cpu": 1.9999999999686935e-05,
+                  "wall": 2.003e-05
+                },
+                "commit": {
+                  "cpu": 0.004237999999999964,
+                  "wall": 0.084077297
+                },
+                "complete": {
+                  "cpu": 0.005962000000000245,
+                  "wall": 0.006020594
+                },
+                "entries_prepare": {
+                  "cpu": 0.050023999999999624,
+                  "wall": 0.050364233
+                },
+                "entries_write": {
+                  "cpu": 0.1678930000000003,
+                  "wall": 0.169134627
+                },
+                "filed": {
+                  "cpu": 7.000000000090267e-06,
+                  "wall": 1.32e-06
+                },
+                "pricing": {
+                  "cpu": 0.06622000000000039,
+                  "wall": 0.066704762
+                },
+                "quantity": {
+                  "cpu": 0.010421000000000014,
+                  "wall": 0.010547402
+                },
+                "quantity_other": {
+                  "cpu": 0.054551000000000016,
+                  "wall": 0.054969422
+                },
+                "quantity_postings_bind": {
+                  "cpu": 0.05500999999999978,
+                  "wall": 0.055492814
+                },
+                "quantity_postings_prepare": {
+                  "cpu": 0.01762700000000006,
+                  "wall": 0.017794335
+                },
+                "quantity_postings_write": {
+                  "cpu": 0.14938899999999977,
+                  "wall": 0.150499312
+                },
+                "setup": {
+                  "cpu": 0.0012490000000004997,
+                  "wall": 0.001254499
+                },
+                "small_tables": {
+                  "cpu": 0.011383999999999617,
+                  "wall": 0.011496264
+                }
+              },
+              "load": [
+                33.01953125,
+                26.814453125,
+                29.00927734375
+              ],
+              "exact_dump": true
+            },
+            "candidate": {
+              "cpu_seconds": 0.643891,
+              "seconds": 0.715372725,
+              "phases": {
+                "begin": {
+                  "cpu": 2.799999999991698e-05,
+                  "wall": 2.9081e-05
+                },
+                "commit": {
+                  "cpu": 0.004586999999999897,
+                  "wall": 0.048442906
+                },
+                "complete": {
+                  "cpu": 0.0071630000000002525,
+                  "wall": 0.007212773
+                },
+                "entries_prepare": {
+                  "cpu": 0.0630569999999997,
+                  "wall": 0.063505106
+                },
+                "entries_write": {
+                  "cpu": 0.17930400000000013,
+                  "wall": 0.180829866
+                },
+                "filed": {
+                  "cpu": 4.999999999810711e-06,
+                  "wall": 1.36e-06
+                },
+                "pricing": {
+                  "cpu": 0.06820599999999999,
+                  "wall": 0.068719679
+                },
+                "quantity": {
+                  "cpu": 0.014178000000000246,
+                  "wall": 0.014948787
+                },
+                "quantity_other": {
+                  "cpu": 0.061637000000000164,
+                  "wall": 0.062169073
+                },
+                "quantity_postings_bind": {
+                  "cpu": 0.047893000000000185,
+                  "wall": 0.048357154
+                },
+                "quantity_postings_prepare": {
+                  "cpu": 0.025441999999999965,
+                  "wall": 0.026140844
+                },
+                "quantity_postings_write": {
+                  "cpu": 0.15852999999999984,
+                  "wall": 0.160908471
+                },
+                "setup": {
+                  "cpu": 0.0021849999999998815,
+                  "wall": 0.022312452
+                },
+                "small_tables": {
+                  "cpu": 0.011591000000000129,
+                  "wall": 0.011666138
+                }
+              },
+              "load": [
+                31.9765625,
+                26.701171875,
+                28.96044921875
+              ],
+              "exact_dump": true
+            },
+            "floor": {
+              "cpu_seconds": 0.02069500000000002,
+              "seconds": 0.089326262,
+              "load": [
+                32.138671875,
+                26.82275390625,
+                28.98779296875
+              ],
+              "exact_dump": true
+            }
+          },
+          {
+            "candidate": {
+              "cpu_seconds": 0.6276409999999997,
+              "seconds": 0.848681836,
+              "phases": {
+                "begin": {
+                  "cpu": 1.8000000000295557e-05,
+                  "wall": 1.815e-05
+                },
+                "commit": {
+                  "cpu": 0.012866999999999962,
+                  "wall": 0.206340965
+                },
+                "complete": {
+                  "cpu": 0.008160000000000167,
+                  "wall": 0.008245117
+                },
+                "entries_prepare": {
+                  "cpu": 0.0600360000000002,
+                  "wall": 0.060517295
+                },
+                "entries_write": {
+                  "cpu": 0.17318999999999996,
+                  "wall": 0.177106537
+                },
+                "filed": {
+                  "cpu": 1.09999999997612e-05,
+                  "wall": 1.59e-06
+                },
+                "pricing": {
+                  "cpu": 0.07379299999999978,
+                  "wall": 0.077847368
+                },
+                "quantity": {
+                  "cpu": 0.0090650000000001,
+                  "wall": 0.009141408
+                },
+                "quantity_other": {
+                  "cpu": 0.05844099999999974,
+                  "wall": 0.062695987
+                },
+                "quantity_postings_bind": {
+                  "cpu": 0.046263000000000165,
+                  "wall": 0.049216805
+                },
+                "quantity_postings_prepare": {
+                  "cpu": 0.014402999999999722,
+                  "wall": 0.014496926
+                },
+                "quantity_postings_write": {
+                  "cpu": 0.15843500000000033,
+                  "wall": 0.169937796
+                },
+                "setup": {
+                  "cpu": 0.0011199999999997878,
+                  "wall": 0.001127087
+                },
+                "small_tables": {
+                  "cpu": 0.011826000000000114,
+                  "wall": 0.011935665
+                }
+              },
+              "load": [
+                31.96728515625,
+                26.8759765625,
+                28.99365234375
+              ],
+              "exact_dump": true
+            },
+            "baseline": {
+              "cpu_seconds": 0.698725,
+              "seconds": 0.752775708,
+              "phases": {
+                "begin": {
+                  "cpu": 1.8000000000295557e-05,
+                  "wall": 1.9481e-05
+                },
+                "commit": {
+                  "cpu": 0.005811000000000455,
+                  "wall": 0.053121568
+                },
+                "complete": {
+                  "cpu": 0.006067999999999962,
+                  "wall": 0.006124546
+                },
+                "entries_prepare": {
+                  "cpu": 0.0758529999999995,
+                  "wall": 0.07664607
+                },
+                "entries_write": {
+                  "cpu": 0.19209000000000032,
+                  "wall": 0.193807176
+                },
+                "filed": {
+                  "cpu": 8.999999999481645e-06,
+                  "wall": 1.69e-06
+                },
+                "pricing": {
+                  "cpu": 0.07474000000000025,
+                  "wall": 0.075492522
+                },
+                "quantity": {
+                  "cpu": 0.011301999999999701,
+                  "wall": 0.011477923
+                },
+                "quantity_other": {
+                  "cpu": 0.07577100000000003,
+                  "wall": 0.076524427
+                },
+                "quantity_postings_bind": {
+                  "cpu": 0.05411199999999994,
+                  "wall": 0.054584882
+                },
+                "quantity_postings_prepare": {
+                  "cpu": 0.017446999999999768,
+                  "wall": 0.01763225
+                },
+                "quantity_postings_write": {
+                  "cpu": 0.17301100000000025,
+                  "wall": 0.17469681
+                },
+                "setup": {
+                  "cpu": 0.001200000000000312,
+                  "wall": 0.001202679
+                },
+                "small_tables": {
+                  "cpu": 0.011204000000000214,
+                  "wall": 0.01131215
+                }
+              },
+              "load": [
+                32.45068359375,
+                27.06103515625,
+                29.04248046875
+              ],
+              "exact_dump": true
+            },
+            "floor": {
+              "cpu_seconds": 0.09191999999999995,
+              "seconds": 0.25139409,
+              "load": [
+                31.05322265625,
+                26.8603515625,
+                28.966796875
+              ],
+              "exact_dump": true
+            }
+          },
+          {
+            "baseline": {
+              "cpu_seconds": 0.5847710000000004,
+              "seconds": 0.67998866,
+              "phases": {
+                "begin": {
+                  "cpu": 1.8999999999991246e-05,
+                  "wall": 2.0881e-05
+                },
+                "commit": {
+                  "cpu": 0.0048960000000000115,
+                  "wall": 0.049657455
+                },
+                "complete": {
+                  "cpu": 0.005303000000000058,
+                  "wall": 0.005340577
+                },
+                "entries_prepare": {
+                  "cpu": 0.04426299999999994,
+                  "wall": 0.044592005
+                },
+                "entries_write": {
+                  "cpu": 0.1717310000000003,
+                  "wall": 0.173198474
+                },
+                "filed": {
+                  "cpu": 7.000000000090267e-06,
+                  "wall": 1.36e-06
+                },
+                "pricing": {
+                  "cpu": 0.0655380000000001,
+                  "wall": 0.066019456
+                },
+                "quantity": {
+                  "cpu": 0.01440700000000028,
+                  "wall": 0.014542097
+                },
+                "quantity_other": {
+                  "cpu": 0.051579000000000264,
+                  "wall": 0.05194537
+                },
+                "quantity_postings_bind": {
+                  "cpu": 0.0492969999999997,
+                  "wall": 0.049689025
+                },
+                "quantity_postings_prepare": {
+                  "cpu": 0.026505000000000223,
+                  "wall": 0.02676221
+                },
+                "quantity_postings_write": {
+                  "cpu": 0.13865599999999967,
+                  "wall": 0.13955531
+                },
+                "setup": {
+                  "cpu": 0.0016579999999999373,
+                  "wall": 0.047619186
+                },
+                "small_tables": {
+                  "cpu": 0.01081899999999969,
+                  "wall": 0.01090971
+                }
+              },
+              "load": [
+                31.05322265625,
+                26.8603515625,
+                28.966796875
+              ],
+              "exact_dump": true
+            },
+            "candidate": {
+              "cpu_seconds": 0.8411589999999998,
+              "seconds": 0.951342627,
+              "phases": {
+                "begin": {
+                  "cpu": 2.4999999999941735e-05,
+                  "wall": 2.5441e-05
+                },
+                "commit": {
+                  "cpu": 0.007380999999999638,
+                  "wall": 0.04987549
+                },
+                "complete": {
+                  "cpu": 0.011481000000000297,
+                  "wall": 0.011584356
+                },
+                "entries_prepare": {
+                  "cpu": 0.07537599999999989,
+                  "wall": 0.076177418
+                },
+                "entries_write": {
+                  "cpu": 0.24014099999999994,
+                  "wall": 0.244944877
+                },
+                "filed": {
+                  "cpu": 8.999999999925734e-06,
+                  "wall": 1.45e-06
+                },
+                "pricing": {
+                  "cpu": 0.0829150000000003,
+                  "wall": 0.08674114
+                },
+                "quantity": {
+                  "cpu": 0.012243999999999922,
+                  "wall": 0.012371684
+                },
+                "quantity_other": {
+                  "cpu": 0.08908199999999988,
+                  "wall": 0.092421456
+                },
+                "quantity_postings_bind": {
+                  "cpu": 0.07117399999999963,
+                  "wall": 0.071949867
+                },
+                "quantity_postings_prepare": {
+                  "cpu": 0.024412000000000322,
+                  "wall": 0.024681299
+                },
+                "quantity_postings_write": {
+                  "cpu": 0.20966200000000024,
+                  "wall": 0.212030242
+                },
+                "setup": {
+                  "cpu": 0.002110999999999752,
+                  "wall": 0.05317416
+                },
+                "small_tables": {
+                  "cpu": 0.015038000000000107,
+                  "wall": 0.015192973
+                }
+              },
+              "load": [
+                29.927734375,
+                26.6962890625,
+                28.90234375
+              ],
+              "exact_dump": true
+            },
+            "floor": {
+              "cpu_seconds": 0.02535799999999999,
+              "seconds": 0.074704643,
+              "load": [
+                30.173828125,
+                26.80126953125,
+                28.9248046875
+              ],
+              "exact_dump": true
+            }
+          },
+          {
+            "candidate": {
+              "cpu_seconds": 0.7644169999999999,
+              "seconds": 0.842428487,
+              "phases": {
+                "begin": {
+                  "cpu": 2.200000000041058e-05,
+                  "wall": 2.283e-05
+                },
+                "commit": {
+                  "cpu": 0.006873000000000573,
+                  "wall": 0.07750987
+                },
+                "complete": {
+                  "cpu": 0.008001999999999843,
+                  "wall": 0.008112914
+                },
+                "entries_prepare": {
+                  "cpu": 0.07165799999999978,
+                  "wall": 0.072242314
+                },
+                "entries_write": {
+                  "cpu": 0.198909,
+                  "wall": 0.200896205
+                },
+                "filed": {
+                  "cpu": 6.999999999646178e-06,
+                  "wall": 1.84e-06
+                },
+                "pricing": {
+                  "cpu": 0.07185200000000025,
+                  "wall": 0.072614833
+                },
+                "quantity": {
+                  "cpu": 0.015127000000000113,
+                  "wall": 0.015362977
+                },
+                "quantity_other": {
+                  "cpu": 0.06181800000000015,
+                  "wall": 0.062336397
+                },
+                "quantity_postings_bind": {
+                  "cpu": 0.08541200000000027,
+                  "wall": 0.086213768
+                },
+                "quantity_postings_prepare": {
+                  "cpu": 0.029330999999999996,
+                  "wall": 0.029615757
+                },
+                "quantity_postings_write": {
+                  "cpu": 0.2013429999999996,
+                  "wall": 0.20320777
+                },
+                "setup": {
+                  "cpu": 0.0017449999999996635,
+                  "wall": 0.001761642
+                },
+                "small_tables": {
+                  "cpu": 0.012304000000000315,
+                  "wall": 0.012471288
+                }
+              },
+              "load": [
+                30.173828125,
+                26.80126953125,
+                28.9248046875
+              ],
+              "exact_dump": true
+            },
+            "baseline": {
+              "cpu_seconds": 0.8976600000000001,
+              "seconds": 1.068966315,
+              "phases": {
+                "begin": {
+                  "cpu": 2.0999999999826713e-05,
+                  "wall": 2.189e-05
+                },
+                "commit": {
+                  "cpu": 0.006510000000000016,
+                  "wall": 0.049382249
+                },
+                "complete": {
+                  "cpu": 0.009786000000000072,
+                  "wall": 0.009866176
+                },
+                "entries_prepare": {
+                  "cpu": 0.11039699999999986,
+                  "wall": 0.12446025
+                },
+                "entries_write": {
+                  "cpu": 0.2946789999999999,
+                  "wall": 0.298349562
+                },
+                "filed": {
+                  "cpu": 1.3000000000040757e-05,
+                  "wall": 2.79e-06
+                },
+                "pricing": {
+                  "cpu": 0.08651600000000004,
+                  "wall": 0.087910948
+                },
+                "quantity": {
+                  "cpu": 0.014515000000000278,
+                  "wall": 0.021484523
+                },
+                "quantity_other": {
+                  "cpu": 0.08614599999999983,
+                  "wall": 0.087288394
+                },
+                "quantity_postings_bind": {
+                  "cpu": 0.06634399999999996,
+                  "wall": 0.06701613
+                },
+                "quantity_postings_prepare": {
+                  "cpu": 0.02781699999999976,
+                  "wall": 0.02848413
+                },
+                "quantity_postings_write": {
+                  "cpu": 0.17987800000000043,
+                  "wall": 0.181646905
+                },
+                "setup": {
+                  "cpu": 0.0019839999999997637,
+                  "wall": 0.099727771
+                },
+                "small_tables": {
+                  "cpu": 0.013040999999999858,
+                  "wall": 0.013247846
+                }
+              },
+              "load": [
+                29.93896484375,
+                26.85791015625,
+                28.92041015625
+              ],
+              "exact_dump": true
+            },
+            "floor": {
+              "cpu_seconds": 0.02177000000000001,
+              "seconds": 0.068230719,
+              "load": [
+                31.3056640625,
+                27.1923828125,
+                29.017578125
+              ],
+              "exact_dump": true
+            }
+          },
+          {
+            "baseline": {
+              "cpu_seconds": 0.6598119999999996,
+              "seconds": 0.721380808,
+              "phases": {
+                "begin": {
+                  "cpu": 1.9999999999686935e-05,
+                  "wall": 2.1321e-05
+                },
+                "commit": {
+                  "cpu": 0.007585999999999871,
+                  "wall": 0.060674858
+                },
+                "complete": {
+                  "cpu": 0.008534000000000042,
+                  "wall": 0.008679608
+                },
+                "entries_prepare": {
+                  "cpu": 0.06295899999999977,
+                  "wall": 0.063550987
+                },
+                "entries_write": {
+                  "cpu": 0.1948240000000001,
+                  "wall": 0.197099635
+                },
+                "filed": {
+                  "cpu": 1.0000000000065512e-05,
+                  "wall": 2.25e-06
+                },
+                "pricing": {
+                  "cpu": 0.06795000000000018,
+                  "wall": 0.068543485
+                },
+                "quantity": {
+                  "cpu": 0.009764999999999802,
+                  "wall": 0.011866243
+                },
+                "quantity_other": {
+                  "cpu": 0.05831300000000006,
+                  "wall": 0.058801704
+                },
+                "quantity_postings_bind": {
+                  "cpu": 0.051436999999999955,
+                  "wall": 0.05193244
+                },
+                "quantity_postings_prepare": {
+                  "cpu": 0.017829000000000317,
+                  "wall": 0.017999049
+                },
+                "quantity_postings_write": {
+                  "cpu": 0.16765699999999972,
+                  "wall": 0.169123717
+                },
+                "setup": {
+                  "cpu": 0.001196000000000197,
+                  "wall": 0.001200238
+                },
+                "small_tables": {
+                  "cpu": 0.011716999999999977,
+                  "wall": 0.011820732
+                }
+              },
+              "load": [
+                31.3056640625,
+                27.1923828125,
+                29.017578125
+              ],
+              "exact_dump": true
+            },
+            "candidate": {
+              "cpu_seconds": 0.9263110000000001,
+              "seconds": 1.431037436,
+              "phases": {
+                "begin": {
+                  "cpu": 2.0000000000131024e-05,
+                  "wall": 2.146e-05
+                },
+                "commit": {
+                  "cpu": 0.03129000000000026,
+                  "wall": 0.497255988
+                },
+                "complete": {
+                  "cpu": 0.008167999999999953,
+                  "wall": 0.008387051
+                },
+                "entries_prepare": {
+                  "cpu": 0.12105500000000013,
+                  "wall": 0.131702883
+                },
+                "entries_write": {
+                  "cpu": 0.22591300000000025,
+                  "wall": 0.231523696
+                },
+                "filed": {
+                  "cpu": 7.999999999785956e-06,
+                  "wall": 1.55e-06
+                },
+                "pricing": {
+                  "cpu": 0.10993799999999965,
+                  "wall": 0.111144313
+                },
+                "quantity": {
+                  "cpu": 0.014363000000000348,
+                  "wall": 0.014492586
+                },
+                "quantity_other": {
+                  "cpu": 0.11007100000000047,
+                  "wall": 0.111131042
+                },
+                "quantity_postings_bind": {
+                  "cpu": 0.06030299999999977,
+                  "wall": 0.060881013
+                },
+                "quantity_postings_prepare": {
+                  "cpu": 0.02070799999999995,
+                  "wall": 0.020900439
+                },
+                "quantity_postings_write": {
+                  "cpu": 0.21029399999999976,
+                  "wall": 0.212334819
+                },
+                "setup": {
+                  "cpu": 0.0018120000000001468,
+                  "wall": 0.018498751
+                },
+                "small_tables": {
+                  "cpu": 0.012351999999999919,
+                  "wall": 0.012683792
+                }
+              },
+              "load": [
+                31.361328125,
+                27.2724609375,
+                29.03369140625
+              ],
+              "exact_dump": true
+            },
+            "floor": {
+              "cpu_seconds": 0.025866,
+              "seconds": 0.393858571,
+              "load": [
+                32.298828125,
+                27.595703125,
+                29.119140625
+              ],
+              "exact_dump": true
+            }
+          }
+        ],
+        "best": {
+          "baseline": 0.5847710000000004,
+          "candidate": 0.6276409999999997,
+          "floor": 0.02069500000000002
+        },
+        "median_paired_candidate_baseline": 1.0839788083305417,
+        "median_paired_phase_ratios": {
+          "entries_prepare": 1.2605349432272543,
+          "entries_write": 1.0679659068573426,
+          "quantity_postings_prepare": 1.0544271488658106,
+          "quantity_postings_bind": 1.172366195540172,
+          "quantity_postings_write": 1.1193308798185388,
+          "pricing": 1.0299909392932587,
+          "commit": 1.5075571895424063
+        },
+        "candidate_improved_pairs": 2
+      }
+    ]
+  },
+  "full_store_interpretation": "All thirty complete frozen Python dumps match, including floors. Generic SQLite fresh has four improved pairs and a slightly better median, but its minimum regresses. Multi-wallet SQLCipher unchanged has two improved pairs and a slower minimum and median. These loaded runs do not establish a consistent full-store speedup or any CPU-budget acceptance. Retain the change for the isolated five-pair binding speedup.",
+  "baseline_provenance": {
+    "binary_sha256": "a0708b6510c28b885be23063fb179adeb929a49c3fb332e72bef3ebb8d13291e",
+    "retained_record": "docs/reference/r4-journal-persistence-empty-table-measurements.json",
+    "record_sha256": "17c4949470c645b8f522ad4df7de89504055b2b8a1a7f2a433c317926cf84a7f",
+    "binding": "source_and_binary_sha256/target/journal-persist-empty"
+  },
+  "read_floor_repeat": {
+    "probe_sha256": "b4cd0c25f7999975147182c09a15f04ece2844572a4f0d729c6d72a37c13ad74",
+    "sources": {
+      "/home/tg/.t3/worktrees/kassiber/t3-4ba85549/scripts/benchmark-journal-read-floor.py": "e21f18f7038ed52e0ce2ec6f8e43c12e6be226a13ba293731ad1a5081e4f1231",
+      "crates/journals/examples/journal-read-floor.rs": "baa58d6380a351ed68bd7bd160713b76eddf7705c9f413455c08bc319b77f63e"
+    },
+    "method": "Five scans on independent newly opened connections, matching native benchmark cache state; independent CPU minimum. Prepared SELECTs, borrowed ValueRef for every retained column, one black_box touch per scalar, no hashing, conversion, allocation or byte comparison. SELECT iteration and COMMIT timed. Complete dumps verified outside timing.",
+    "cells": [
+      {
+        "database": "/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/read-floor-repeat/generic-20000-sqlite/kassiber.sqlite3",
+        "fresh_connection_per_trial": true,
+        "trials": [
+          {
+            "cpu_seconds": 0.098709,
+            "entries": {
+              "bytes": 17490451,
+              "cells": 580000,
+              "rows": 20000,
+              "types": [
+                155728,
+                20000,
+                64102,
+                340170,
+                0
+              ]
+            },
+            "loadavg": "36.36 129.32 124.53 45/2373 45",
+            "postings": {
+              "bytes": 13796732,
+              "cells": 480000,
+              "rows": 40000,
+              "types": [
+                0,
+                40000,
+                0,
+                440000,
+                0
+              ]
+            },
+            "run": 0,
+            "seconds": 0.099623027
+          },
+          {
+            "cpu_seconds": 0.116625,
+            "entries": {
+              "bytes": 17490451,
+              "cells": 580000,
+              "rows": 20000,
+              "types": [
+                155728,
+                20000,
+                64102,
+                340170,
+                0
+              ]
+            },
+            "loadavg": "36.36 129.32 124.53 40/2374 45",
+            "postings": {
+              "bytes": 13796732,
+              "cells": 480000,
+              "rows": 40000,
+              "types": [
+                0,
+                40000,
+                0,
+                440000,
+                0
+              ]
+            },
+            "run": 1,
+            "seconds": 0.118679162
+          },
+          {
+            "cpu_seconds": 0.10078799999999999,
+            "entries": {
+              "bytes": 17490451,
+              "cells": 580000,
+              "rows": 20000,
+              "types": [
+                155728,
+                20000,
+                64102,
+                340170,
+                0
+              ]
+            },
+            "loadavg": "36.36 129.32 124.53 23/2355 45",
+            "postings": {
+              "bytes": 13796732,
+              "cells": 480000,
+              "rows": 40000,
+              "types": [
+                0,
+                40000,
+                0,
+                440000,
+                0
+              ]
+            },
+            "run": 2,
+            "seconds": 0.101686527
+          },
+          {
+            "cpu_seconds": 0.11274300000000004,
+            "entries": {
+              "bytes": 17490451,
+              "cells": 580000,
+              "rows": 20000,
+              "types": [
+                155728,
+                20000,
+                64102,
+                340170,
+                0
+              ]
+            },
+            "loadavg": "36.36 129.32 124.53 23/2396 45",
+            "postings": {
+              "bytes": 13796732,
+              "cells": 480000,
+              "rows": 40000,
+              "types": [
+                0,
+                40000,
+                0,
+                440000,
+                0
+              ]
+            },
+            "run": 3,
+            "seconds": 0.117126646
+          },
+          {
+            "cpu_seconds": 0.12240199999999996,
+            "entries": {
+              "bytes": 17490451,
+              "cells": 580000,
+              "rows": 20000,
+              "types": [
+                155728,
+                20000,
+                64102,
+                340170,
+                0
+              ]
+            },
+            "loadavg": "36.36 129.32 124.53 24/2413 45",
+            "postings": {
+              "bytes": 13796732,
+              "cells": 480000,
+              "rows": 40000,
+              "types": [
+                0,
+                40000,
+                0,
+                440000,
+                0
+              ]
+            },
+            "run": 4,
+            "seconds": 0.126148991
+          }
+        ],
+        "book": {
+          "schema": "kassiber.journals-bench-book.v1",
+          "kind": "generic",
+          "transactions": 20000,
+          "seed": 1,
+          "csv_sha256": {
+            "book.csv": "7b09f4fd1d6fc465734d1c30db1e8ca2445577932c2fd924ab593106172cf6b1"
+          },
+          "pegs": 0,
+          "pegs_paired": 0,
+          "journals": {
+            "entries_created": 20000,
+            "quarantined": 0,
+            "cross_asset_pairs": 0,
+            "processed_transactions": 20000
+          },
+          "built_by": "32767d331e7be68c1efba00f9811f501d8a5f76f",
+          "build_seconds": 37.0,
+          "source": "copied historical synthetic book; CSV digests checked against the continuation record",
+          "normalized_by": "51bd20498 Python capture with fixed persistence clock"
+        },
+        "policy": {
+          "journal_mode": "wal",
+          "synchronous": 1
+        },
+        "logical_dump_sha256": "e84cbbb69099b92264a01781662330470de13d8f335c95034a61979070335e47",
+        "best_cpu": 0.098709
+      },
+      {
+        "database": "/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/read-floor-repeat/generic-20000-cipher/kassiber.sqlite3",
+        "fresh_connection_per_trial": true,
+        "trials": [
+          {
+            "cpu_seconds": 0.219926,
+            "entries": {
+              "bytes": 17490451,
+              "cells": 580000,
+              "rows": 20000,
+              "types": [
+                155728,
+                20000,
+                64102,
+                340170,
+                0
+              ]
+            },
+            "loadavg": "41.57 103.15 115.65 18/2357 46",
+            "postings": {
+              "bytes": 13796732,
+              "cells": 480000,
+              "rows": 40000,
+              "types": [
+                0,
+                40000,
+                0,
+                440000,
+                0
+              ]
+            },
+            "run": 0,
+            "seconds": 0.222348227
+          },
+          {
+            "cpu_seconds": 0.19585899999999995,
+            "entries": {
+              "bytes": 17490451,
+              "cells": 580000,
+              "rows": 20000,
+              "types": [
+                155728,
+                20000,
+                64102,
+                340170,
+                0
+              ]
+            },
+            "loadavg": "41.57 103.15 115.65 6/2380 46",
+            "postings": {
+              "bytes": 13796732,
+              "cells": 480000,
+              "rows": 40000,
+              "types": [
+                0,
+                40000,
+                0,
+                440000,
+                0
+              ]
+            },
+            "run": 1,
+            "seconds": 0.197136485
+          },
+          {
+            "cpu_seconds": 0.21813400000000005,
+            "entries": {
+              "bytes": 17490451,
+              "cells": 580000,
+              "rows": 20000,
+              "types": [
+                155728,
+                20000,
+                64102,
+                340170,
+                0
+              ]
+            },
+            "loadavg": "41.57 103.15 115.65 18/2370 46",
+            "postings": {
+              "bytes": 13796732,
+              "cells": 480000,
+              "rows": 40000,
+              "types": [
+                0,
+                40000,
+                0,
+                440000,
+                0
+              ]
+            },
+            "run": 2,
+            "seconds": 0.221467816
+          },
+          {
+            "cpu_seconds": 0.2155499999999999,
+            "entries": {
+              "bytes": 17490451,
+              "cells": 580000,
+              "rows": 20000,
+              "types": [
+                155728,
+                20000,
+                64102,
+                340170,
+                0
+              ]
+            },
+            "loadavg": "41.57 103.15 115.65 12/2330 46",
+            "postings": {
+              "bytes": 13796732,
+              "cells": 480000,
+              "rows": 40000,
+              "types": [
+                0,
+                40000,
+                0,
+                440000,
+                0
+              ]
+            },
+            "run": 3,
+            "seconds": 0.217174104
+          },
+          {
+            "cpu_seconds": 0.21532299999999993,
+            "entries": {
+              "bytes": 17490451,
+              "cells": 580000,
+              "rows": 20000,
+              "types": [
+                155728,
+                20000,
+                64102,
+                340170,
+                0
+              ]
+            },
+            "loadavg": "41.57 103.15 115.65 11/2349 46",
+            "postings": {
+              "bytes": 13796732,
+              "cells": 480000,
+              "rows": 40000,
+              "types": [
+                0,
+                40000,
+                0,
+                440000,
+                0
+              ]
+            },
+            "run": 4,
+            "seconds": 0.216819335
+          }
+        ],
+        "book": {
+          "schema": "kassiber.journals-bench-book.v1",
+          "kind": "generic",
+          "transactions": 20000,
+          "seed": 1,
+          "csv_sha256": {
+            "book.csv": "7b09f4fd1d6fc465734d1c30db1e8ca2445577932c2fd924ab593106172cf6b1"
+          },
+          "pegs": 0,
+          "pegs_paired": 0,
+          "journals": {
+            "entries_created": 20000,
+            "quarantined": 0,
+            "cross_asset_pairs": 0,
+            "processed_transactions": 20000
+          },
+          "built_by": "32767d331e7be68c1efba00f9811f501d8a5f76f",
+          "build_seconds": 37.0,
+          "source": "copied historical synthetic book; CSV digests checked against the continuation record",
+          "normalized_by": "51bd20498 Python capture with fixed persistence clock"
+        },
+        "policy": {
+          "journal_mode": "delete",
+          "synchronous": 2
+        },
+        "logical_dump_sha256": "e84cbbb69099b92264a01781662330470de13d8f335c95034a61979070335e47",
+        "best_cpu": 0.19585899999999995
+      },
+      {
+        "database": "/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/read-floor-repeat/multi-wallet-20000-sqlite/kassiber.sqlite3",
+        "fresh_connection_per_trial": true,
+        "trials": [
+          {
+            "cpu_seconds": 0.096399,
+            "entries": {
+              "bytes": 18327488,
+              "cells": 579507,
+              "rows": 19983,
+              "types": [
+                147517,
+                19983,
+                67077,
+                344930,
+                0
+              ]
+            },
+            "loadavg": "39.44 101.69 115.11 11/2295 47",
+            "postings": {
+              "bytes": 15470911,
+              "cells": 542592,
+              "rows": 45216,
+              "types": [
+                0,
+                45216,
+                0,
+                497376,
+                0
+              ]
+            },
+            "run": 0,
+            "seconds": 0.097117908
+          },
+          {
+            "cpu_seconds": 0.107353,
+            "entries": {
+              "bytes": 18327488,
+              "cells": 579507,
+              "rows": 19983,
+              "types": [
+                147517,
+                19983,
+                67077,
+                344930,
+                0
+              ]
+            },
+            "loadavg": "37.48 100.25 114.57 12/2295 47",
+            "postings": {
+              "bytes": 15470911,
+              "cells": 542592,
+              "rows": 45216,
+              "types": [
+                0,
+                45216,
+                0,
+                497376,
+                0
+              ]
+            },
+            "run": 1,
+            "seconds": 0.108369516
+          },
+          {
+            "cpu_seconds": 0.103246,
+            "entries": {
+              "bytes": 18327488,
+              "cells": 579507,
+              "rows": 19983,
+              "types": [
+                147517,
+                19983,
+                67077,
+                344930,
+                0
+              ]
+            },
+            "loadavg": "37.48 100.25 114.57 18/2306 47",
+            "postings": {
+              "bytes": 15470911,
+              "cells": 542592,
+              "rows": 45216,
+              "types": [
+                0,
+                45216,
+                0,
+                497376,
+                0
+              ]
+            },
+            "run": 2,
+            "seconds": 0.104158676
+          },
+          {
+            "cpu_seconds": 0.101524,
+            "entries": {
+              "bytes": 18327488,
+              "cells": 579507,
+              "rows": 19983,
+              "types": [
+                147517,
+                19983,
+                67077,
+                344930,
+                0
+              ]
+            },
+            "loadavg": "37.48 100.25 114.57 23/2313 47",
+            "postings": {
+              "bytes": 15470911,
+              "cells": 542592,
+              "rows": 45216,
+              "types": [
+                0,
+                45216,
+                0,
+                497376,
+                0
+              ]
+            },
+            "run": 3,
+            "seconds": 0.102422685
+          },
+          {
+            "cpu_seconds": 0.10483399999999998,
+            "entries": {
+              "bytes": 18327488,
+              "cells": 579507,
+              "rows": 19983,
+              "types": [
+                147517,
+                19983,
+                67077,
+                344930,
+                0
+              ]
+            },
+            "loadavg": "37.48 100.25 114.57 20/2310 47",
+            "postings": {
+              "bytes": 15470911,
+              "cells": 542592,
+              "rows": 45216,
+              "types": [
+                0,
+                45216,
+                0,
+                497376,
+                0
+              ]
+            },
+            "run": 4,
+            "seconds": 0.105888538
+          }
+        ],
+        "book": {
+          "schema": "kassiber.journals-bench-book.v1",
+          "kind": "multi-wallet",
+          "transactions": 20000,
+          "seed": 7,
+          "csv_sha256": {
+            "Hot.csv": "8d3852c3bcdb36bdd425b76fb3a8e5f64bf462e57c6b61294ed774681ac81146",
+            "Cold.csv": "ed3a0928e98404316be9b9fa7e3b603f4d4e0d7577633bec06e441d8d0e8ff5f",
+            "LHot.csv": "0cdeee02cfd30c7a1bc950bb013c3bbe793b4f1c7f19bc7ab4a4569100117b7a",
+            "LCold.csv": "94adb338d7efdf3b52025c2ef85e0fb586a7f501ff446d6aef3572295f8fc748"
+          },
+          "pegs": 3306,
+          "pegs_paired": 300,
+          "journals": {
+            "entries_created": 19983,
+            "quarantined": 17,
+            "cross_asset_pairs": 300,
+            "processed_transactions": 20000
+          },
+          "built_by": "b5eb38ea8cb764675322e61e9b957a57deb947c6",
+          "build_seconds": 1239.1,
+          "source": "copied historical synthetic book; CSV digests checked against the continuation record",
+          "normalized_by": "51bd20498 Python capture with fixed persistence clock"
+        },
+        "policy": {
+          "journal_mode": "wal",
+          "synchronous": 1
+        },
+        "logical_dump_sha256": "bbb6ef650d07e302354e377486f79289385e659cc19854c4f4023d29541dd218",
+        "best_cpu": 0.096399
+      },
+      {
+        "database": "/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/read-floor-repeat/multi-wallet-20000-cipher/kassiber.sqlite3",
+        "fresh_connection_per_trial": true,
+        "trials": [
+          {
+            "cpu_seconds": 0.25177400000000005,
+            "entries": {
+              "bytes": 18327488,
+              "cells": 579507,
+              "rows": 19983,
+              "types": [
+                147517,
+                19983,
+                67077,
+                344930,
+                0
+              ]
+            },
+            "loadavg": "37.50 90.61 110.54 18/2510 48",
+            "postings": {
+              "bytes": 15470911,
+              "cells": 542592,
+              "rows": 45216,
+              "types": [
+                0,
+                45216,
+                0,
+                497376,
+                0
+              ]
+            },
+            "run": 0,
+            "seconds": 0.255745934
+          },
+          {
+            "cpu_seconds": 0.24067899999999998,
+            "entries": {
+              "bytes": 18327488,
+              "cells": 579507,
+              "rows": 19983,
+              "types": [
+                147517,
+                19983,
+                67077,
+                344930,
+                0
+              ]
+            },
+            "loadavg": "37.50 90.61 110.54 33/2480 48",
+            "postings": {
+              "bytes": 15470911,
+              "cells": 542592,
+              "rows": 45216,
+              "types": [
+                0,
+                45216,
+                0,
+                497376,
+                0
+              ]
+            },
+            "run": 1,
+            "seconds": 0.243137953
+          },
+          {
+            "cpu_seconds": 0.2187340000000001,
+            "entries": {
+              "bytes": 18327488,
+              "cells": 579507,
+              "rows": 19983,
+              "types": [
+                147517,
+                19983,
+                67077,
+                344930,
+                0
+              ]
+            },
+            "loadavg": "37.50 90.61 110.54 14/2444 48",
+            "postings": {
+              "bytes": 15470911,
+              "cells": 542592,
+              "rows": 45216,
+              "types": [
+                0,
+                45216,
+                0,
+                497376,
+                0
+              ]
+            },
+            "run": 2,
+            "seconds": 0.220251316
+          },
+          {
+            "cpu_seconds": 0.2211660000000002,
+            "entries": {
+              "bytes": 18327488,
+              "cells": 579507,
+              "rows": 19983,
+              "types": [
+                147517,
+                19983,
+                67077,
+                344930,
+                0
+              ]
+            },
+            "loadavg": "37.50 90.61 110.54 17/2443 48",
+            "postings": {
+              "bytes": 15470911,
+              "cells": 542592,
+              "rows": 45216,
+              "types": [
+                0,
+                45216,
+                0,
+                497376,
+                0
+              ]
+            },
+            "run": 3,
+            "seconds": 0.222789417
+          },
+          {
+            "cpu_seconds": 0.23863299999999987,
+            "entries": {
+              "bytes": 18327488,
+              "cells": 579507,
+              "rows": 19983,
+              "types": [
+                147517,
+                19983,
+                67077,
+                344930,
+                0
+              ]
+            },
+            "loadavg": "37.50 90.61 110.54 21/2455 48",
+            "postings": {
+              "bytes": 15470911,
+              "cells": 542592,
+              "rows": 45216,
+              "types": [
+                0,
+                45216,
+                0,
+                497376,
+                0
+              ]
+            },
+            "run": 4,
+            "seconds": 0.240874959
+          }
+        ],
+        "book": {
+          "schema": "kassiber.journals-bench-book.v1",
+          "kind": "multi-wallet",
+          "transactions": 20000,
+          "seed": 7,
+          "csv_sha256": {
+            "Hot.csv": "8d3852c3bcdb36bdd425b76fb3a8e5f64bf462e57c6b61294ed774681ac81146",
+            "Cold.csv": "ed3a0928e98404316be9b9fa7e3b603f4d4e0d7577633bec06e441d8d0e8ff5f",
+            "LHot.csv": "0cdeee02cfd30c7a1bc950bb013c3bbe793b4f1c7f19bc7ab4a4569100117b7a",
+            "LCold.csv": "94adb338d7efdf3b52025c2ef85e0fb586a7f501ff446d6aef3572295f8fc748"
+          },
+          "pegs": 3306,
+          "pegs_paired": 300,
+          "journals": {
+            "entries_created": 19983,
+            "quarantined": 17,
+            "cross_asset_pairs": 300,
+            "processed_transactions": 20000
+          },
+          "built_by": "b5eb38ea8cb764675322e61e9b957a57deb947c6",
+          "build_seconds": 1239.1,
+          "source": "copied historical synthetic book; CSV digests checked against the continuation record",
+          "normalized_by": "51bd20498 Python capture with fixed persistence clock"
+        },
+        "policy": {
+          "journal_mode": "delete",
+          "synchronous": 2
+        },
+        "logical_dump_sha256": "bbb6ef650d07e302354e377486f79289385e659cc19854c4f4023d29541dd218",
+        "best_cpu": 0.2187340000000001
+      }
+    ]
+  },
+  "retained_cell_budget_results": {
+    "generic-20000-sqlite-fresh": {
+      "candidate_cpu": 0.951597,
+      "lower_write_floor": 0.639016,
+      "allowance": 0.789016,
+      "excess": 0.162581,
+      "passed": false
+    },
+    "multi-wallet-20000-cipher-unchanged": {
+      "candidate_cpu": 0.627641,
+      "lower_read_floor": 0.208488,
+      "allowance": 0.358488,
+      "excess": 0.269153,
+      "passed": false
+    }
+  },
+  "prior_lower_read_floors": {
+    "generic-20000-sqlite": 0.07471,
+    "generic-20000-cipher": 0.193554,
+    "multi-wallet-20000-sqlite": 0.083554,
+    "multi-wallet-20000-cipher": 0.208488
+  },
+  "retained_lower_read_floors": {
+    "generic-20000-sqlite": 0.07471,
+    "generic-20000-cipher": 0.193554,
+    "multi-wallet-20000-sqlite": 0.083554,
+    "multi-wallet-20000-cipher": 0.208488
+  },
+  "prior_lower_fresh_write_floors": {
+    "generic-20000-sqlite": 0.639016,
+    "generic-20000-cipher": 0.701157,
+    "multi-wallet-20000-sqlite": 0.717763,
+    "multi-wallet-20000-cipher": 0.775388
+  },
+  "verification": {
+    "journal-tests": {
+      "log": "target/evidence/journal-tests.log",
+      "sha256": "a829d8e3efa785e088bd5bd2513e351f2e705b5e448a24ae2feaae9992d530c2",
+      "output": "   Compiling kassiber-journals v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-4ba85549/crates/journals)\n    Finished `release` profile [optimized + debuginfo] target(s) in 12m 31s\n     Running unittests src/lib.rs (target/build/release/deps/kassiber_journals-95da63b3db835833)\n\nrunning 38 tests\ntest boundary::joins::tests::balance_current_keys_preserve_python_stringification ... ok\ntest boundary::joins::tests::balance_join_matches_existing_comparator_and_promotes_before_overflow ... ok\ntest loader::direct::tests::native_loader_reads_direct_columns_without_conversion ... ok\ntest loader::receipts::tests::native_loader_receipt_filter_never_rejects_possible_identities ... ok\ntest loader::tests::native_loader_bounds_gap_worklist ... ok\ntest loader::tests::native_loader_keeps_sql_values_and_refuses_blob_coercion ... ok\ntest loader::tests::native_loader_matches_python_database_bytes ... ok\ntest loader::tests::native_loader_preserves_receipt_error_precedence ... ok\ntest loader::tests::native_loader_requires_caller_write_transaction ... ok\ntest loader::tests::native_loader_selects_bounded_worklist_from_active_count ... ok\ntest persistence::entries::tests::decimal_padding_validation_preserves_limits_without_formatting ... ok\ntest persistence::entries::tests::typed_decimal_comparison_retains_every_fixed_digit_sign_and_scale ... ok\ntest persistence::entries::tests::typed_retained_columns_force_real_delta_writes_and_unchanged_rows_prepare_no_bindings ... ok\ntest persistence::filed::tests::filed_chain_resolution_requires_authoritative_retraction_or_confirmed_observation ... ok\ntest persistence::filed::tests::filed_summary_parsing_preserves_safe_fallbacks_and_scalar_refusals ... ok\ntest persistence::quantity::tests::economic_relation_source_ids_use_first_truthy_id_or_empty_string ... ok\ntest persistence::tests::scalar_bindings_preserve_types_signs_and_refuse_wide_or_structured_values ... ok\ntest persistence::tests::shared_decimal_spelling_preserves_float_bits_and_exact_text ... ok\ntest render::tests::msat_conversion_matches_python_at_rounding_and_width_boundaries ... ok\ntest storage::calculation::compare::tests::canonical_string_comparison_preserves_escaping_and_byte_boundaries ... ok\ntest storage::tests::compact_tuple_refuses_nonintegral_or_structured_scalars ... ok\ntest storage::tests::entry_deltas_rewrite_timestamp_groups_and_retain_untouched_rowids ... ok\ntest storage::tests::every_entry_real_column_preserves_the_negative_zero_rewrite_rule ... ok\ntest storage::tests::every_retained_content_column_forces_writes_but_the_build_clock_does_not ... ok\ntest storage::tests::malformed_storage_id_and_tie_shapes_refuse_without_writes ... ok\ntest storage::tests::mixed_timestamps_and_signed_zero_force_entry_rewrites ... ok\ntest storage::tests::posting_deltas_reject_duplicates_and_keep_unchanged_rows ... ok\ntest storage::tests::posting_time_order_keeps_identity_when_times_move_or_are_null ... ok\ntest storage::tests::processing_marker_refuses_datetime_overflow ... ok\ntest storage::tests::quarantine_deduplication_and_enrichment_match_lossless_python_json ... ok\ntest storage::tests::removing_a_mixed_clock_sibling_keeps_the_survivors_rowid_and_creation_time ... ok\ntest storage::tests::retained_comparisons_distinguish_cell_boundaries_blob_text_and_null_text ... ok\ntest storage::tests::reused_insert_bindings_match_full_binds_for_every_scalar_transition ... ok\ntest storage::tests::scoped_cache_and_checkpoint_restore_exact_settings ... ok\ntest storage::tests::shared_calculation_encoder_keeps_every_source_operand_and_refusal ... ok\ntest storage::tests::storage_encodings_and_markers_match_python ... ok\ntest storage::tests::typed_calculation_source_dictionary_preserves_order_and_deduplicates_large_inputs ... ok\ntest storage::tests::typed_calculations_preserve_compact_bytes_and_all_dynamic_fallbacks ... ok\n\ntest result: ok. 38 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.08s\n\n     Running tests/crash.rs (target/build/release/deps/crash-a19972f142008959)\n\nrunning 2 tests\ntest killed_writes_recover_complete_stale_books_on_sqlite_and_sqlcipher ... ok\ntest persistence_crash_child ... ok\n\ntest result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 134.14s\n\n     Running tests/fusion_parity.rs (target/build/release/deps/fusion_parity-79eee4bb34c7a633)\n\nrunning 2 tests\ntest decision_only_builds_skip_fusion ... ok\ntest pipeline_fusion_matches_the_harness ... ok\n\ntest result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s\n\n     Running tests/oracle.rs (target/build/release/deps/oracle-5f96dd88cd435484)\n\nrunning 4 tests\ntest ledger_rendering_matches_python ... ok\ntest ownership_reviews_and_reconciliations_match_python ... ok\ntest quarantine_candidate_enrichment_is_compact_sorted_and_ascii ... ok\ntest refusal_mapping_matches_python ... ok\n\ntest result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.29s\n\n     Running tests/persistence.rs (target/build/release/deps/persistence-9aede8247ea07490)\n\nrunning 18 tests\ntest absent_quantity_preserves_quantity_rows_and_clears_reconciliations ... ok\ntest binding_refusals_precede_decimal_formatting_and_roll_back_every_write ... ok\ntest component_blockers_keep_filed_impacts_pending_without_quarantines ... ok\ntest corrupt_filed_snapshot_refuses_and_rolls_back_freshness ... ok\ntest dump_comparison_preserves_scalar_types_and_every_real_bit ... ok\ntest economic_relation_fallbacks_and_nonpositive_amounts_preserve_exact_principal ... ok\ntest every_write_failure_and_panic_rolls_back_the_journal ... ok\ntest journal_persistence_matches_complete_python_dumps ... ok\ntest malformed_entry_and_holding_bindings_roll_back_before_freshness ... ok\ntest missing_inactive_or_changed_components_never_persist_reconciliations ... ok\ntest nested_cache_and_checkpoint_refusals_restore_signed_settings ... ok\ntest pending_chain_impacts_stay_open_without_dependencies_or_current_authority ... ok\ntest persistence_refuses_without_a_caller_transaction ... ok\ntest repeated_rebuilds_replace_small_tables_and_keep_sealed_resolutions ... ok\ntest sqlcipher_delete_full_preserves_complete_dumps_and_cache_settings ... ok\ntest synthetic_quarantines_are_filtered_before_readiness ... ok\ntest typed_entry_negative_zero_forces_rewrites_in_all_five_real_columns ... ok\ntest wal_checkpoint_waits_for_commit_and_retains_active_readers ... ok\n\ntest result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 29.55s\n\n   Doc-tests kassiber_journals\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n"
+    },
+    "fmt-final": {
+      "log": "target/evidence/fmt-final.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "output": ""
+    },
+    "clippy": {
+      "log": "target/evidence/clippy.log",
+      "sha256": "9a18ae56b5762e64791c11ab0caa831ef92a8c076fba4414f9dbdfd8be7a7173",
+      "output": "    Checking cfg-if v1.0.5\n    Checking typenum v1.20.1\n    Checking memchr v2.8.3\n    Checking libc v0.2.189\n    Checking subtle v2.6.1\n    Checking zeroize v1.9.1\n    Checking serde_core v1.0.228\n    Checking cpufeatures v0.2.17\n    Checking zerocopy v0.8.63\n    Checking smallvec v1.16.4\n    Checking num-traits v0.2.19\n    Checking zmij v1.0.23\n    Checking itoa v1.0.18\n    Checking arrayvec v0.7.8\n    Checking bitcoin-io v0.1.101\n    Checking const-oid v0.10.2\n    Checking hex-conservative v0.2.3\n    Checking bitflags v2.13.2\n    Checking cpufeatures v0.3.1\n    Checking num-integer v0.1.47\n    Checking foldhash v0.2.0\n    Checking generic-array v0.14.7\n    Checking hybrid-array v0.4.15\n    Checking hashbrown v0.17.1\n    Checking secp256k1-sys v0.10.1\n    Checking num-bigint v0.4.8\n    Checking getrandom v0.2.17\n    Checking serde v1.0.228\n    Checking serde_json v1.0.151\n    Checking rand_core v0.6.4\n    Checking block-buffer v0.10.4\n    Checking block-buffer v0.12.1\n    Checking crypto-common v0.2.2\n    Checking inout v0.1.4\n    Checking tinystr v0.8.5\n    Checking crypto-common v0.1.7\n    Checking bech32 v0.11.1\n    Checking bitcoin_hashes v0.14.101\n    Checking digest v0.10.7\n    Checking cipher v0.4.4\n    Checking digest v0.11.3\n    Checking kassiber-pydecimal v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-4ba85549/crates/pydecimal)\n    Checking hmac v0.12.1\n    Checking sha2 v0.11.1\n    Checking unic-langid-impl v0.9.6\n    Checking universal-hash v0.5.1\n    Checking aho-corasick v1.1.5\n    Checking opaque-debug v0.3.1\n    Checking const-oid v0.9.6\n    Checking regex-syntax v0.8.11\n    Checking kassiber-pyjson v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-4ba85549/crates/pyjson)\n    Checking unic-langid v0.9.6\n    Checking der v0.7.10\n    Checking getrandom v0.4.3\n    Checking ff v0.13.1\n    Checking futures-sink v0.3.34\n    Checking linux-raw-sys v0.12.1\n    Checking futures-core v0.3.34\n    Checking once_cell v1.21.4\n    Checking base16ct v0.2.0\n    Checking bit-vec v0.8.0\n    Checking futures-channel v0.3.34\n    Checking group v0.13.0\n    Checking base58ck v0.1.101\n    Checking ppv-lite86 v0.2.21\n    Checking hex_lit v0.1.1\n    Checking bit-set v0.8.0\n    Checking hkdf v0.12.4\n    Checking bitcoin-units v0.1.101\n    Checking crypto-bigint v0.5.5\n    Checking rustix v1.1.6\n    Checking rustls-pki-types v1.15.1\n    Checking log v0.4.34\n    Checking sec1 v0.7.3\n    Checking rand_chacha v0.3.1\n    Checking futures-io v0.3.34\n    Checking base64 v0.21.7\n    Checking slab v0.4.12\n    Checking pin-project-lite v0.2.17\n    Checking futures-task v0.3.34\n    Checking rand v0.8.8\n    Checking rustc-hash v2.1.3\n    Checking futures-util v0.3.34\n    Checking thiserror v2.0.21\n    Checking type-map v0.5.1\n    Checking nix v0.30.1\n    Checking regex-automata v0.4.18\n    Checking kassiber-pytext v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-4ba85549/crates/pytext)\n    Checking openssl-sys v0.9.117\n    Checking elliptic-curve v0.13.8\n    Checking polyval v0.6.2\n    Checking secp256k1 v0.29.1\n    Checking sha2 v0.10.9\n    Checking aead v0.5.2\n    Checking same-file v1.0.6\n    Checking bitcoin v0.32.102\n    Checking untrusted v0.9.0\n    Checking simd-adler32 v0.3.10\n    Checking base64 v0.22.1\n    Checking ring v0.17.14\n    Checking walkdir v2.5.0\n    Checking libsqlite3-sys v0.38.2\n    Checking kassiber-paths v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-4ba85549/crates/paths)\n    Checking ghash v0.5.1\n    Checking primeorder v0.13.6\n    Checking intl-memoizer v0.5.3\n    Checking fluent-syntax v0.12.0\n    Checking crc32fast v1.5.3\n    Checking fluent-langneg v0.13.1\n    Checking intl_pluralrules v7.0.2\n    Checking poly1305 v0.8.0\n    Checking chacha20 v0.9.1\n    Checking ctr v0.9.2\n    Checking aes v0.8.4\n    Checking hashlink v0.12.2\n    Checking fastrand v2.5.0\n    Checking scopeguard v1.2.0\n    Checking fallible-streaming-iterator v0.1.9\n    Checking percent-encoding v2.3.2\n    Checking utf8_iter v1.0.4\n    Checking fallible-iterator v0.3.0\n    Checking idna_adapter v1.0.0\n    Checking adler2 v2.0.1\n    Checking self_cell v1.3.0\n    Checking aes-gcm v0.10.3\n    Checking miniz_oxide v0.8.9\n    Checking fluent-bundle v0.16.0\n    Checking idna v1.1.0\n    Checking rusqlite v0.40.1\n    Checking futures-executor v0.3.34\n    Checking fancy-regex v0.20.0\n    Checking rustls-webpki v0.103.16\n    Checking futures v0.3.34\n    Checking form_urlencoded v1.2.2\n    Checking tempfile v3.27.0\n    Checking lock_api v0.4.14\n    Checking chacha20poly1305 v0.10.1\n    Checking parking_lot_core v0.9.12\n    Checking p256 v0.13.2\n    Checking kassiber-ownership v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-4ba85549/crates/ownership)\n    Checking rust-embed-utils v8.13.0\n    Checking openssl-probe v0.2.2\n    Checking keccak v0.1.6\n    Checking zlib-rs v0.6.8\n    Checking rust-embed v8.13.0\n    Checking hpke v0.12.0\n    Checking rustls-native-certs v0.8.5\n    Checking rustls v0.23.46\n    Checking sha3 v0.10.9\n    Checking curve25519-dalek v4.1.3\n    Checking kassiber-store v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-4ba85549/crates/store)\n    Checking thiserror v1.0.69\n    Checking parking_lot v0.12.5\n    Checking secp256k1-zkp-sys v0.10.1\n    Checking kassiber-envelope v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-4ba85549/crates/envelope)\n    Checking url v2.5.8\n    Checking httparse v1.10.1\n    Checking bitcoin-private v0.1.0\n    Checking fluent v0.17.0\n    Checking cookie-factory v0.3.3\n    Checking webpki-roots v1.0.11\n    Checking arc-swap v1.9.3\n    Checking pbkdf2 v0.12.2\n    Checking salsa20 v0.10.2\n    Checking kem v0.3.0-pre.0\n    Checking hybrid-array v0.2.3\n    Checking nom v8.0.0\n    Checking flate2 v1.1.9\n    Checking secrecy v0.10.3\n    Checking io_tee v0.1.1\n    Checking bumpalo v3.20.3\n    Checking equivalent v1.0.3\n   Compiling kassiber-diagnostics v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-4ba85549/crates/diagnostics)\n    Checking zopfli v0.8.4\n    Checking indexmap v2.14.2\n    Checking pin-project v1.1.13\n    Checking scrypt v0.11.0\n    Checking x25519-dalek v2.0.1\n    Checking i18n-embed v0.16.0\n    Checking secp256k1-zkp v0.11.2\n    Checking xattr v1.7.0\n    Checking ml-kem v0.2.3\n    Checking filetime v0.2.29\n    Checking typed-path v0.13.0\n    Checking lazy_static v1.5.1\n    Checking tar v0.4.46\n    Checking uuid v1.29.0\n    Checking miniscript v12.3.8\n    Checking bdk_core v0.6.3\n    Checking elements v0.25.3\n    Checking regex v1.13.1\n    Checking kassiber-custody v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-4ba85549/crates/custody)\n    Checking kassiber-tax-core v0.2.0 (/home/tg/.t3/worktrees/kassiber/t3-4ba85549/tax-engine/core)\n    Checking zip v9.1.3\n    Checking age-core v0.12.0\n    Checking kassiber-net v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-4ba85549/crates/net)\n    Checking age v0.12.1\n    Checking kassiber-chain v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-4ba85549/crates/chain)\n    Checking kassiber-rates v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-4ba85549/crates/rates)\n    Checking rust_xlsxwriter v0.102.0\n    Checking bdk_chain v0.23.3\n    Checking elements-miniscript v0.4.0\n    Checking kassiber-setup v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-4ba85549/crates/setup)\n    Checking bdk_wallet v3.0.0\n    Checking kassiber-xlsx v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-4ba85549/crates/xlsx)\n    Checking kassiber-wallets v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-4ba85549/crates/wallets)\n    Checking kassiber-reports v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-4ba85549/crates/reports)\n    Checking kassiber-journals v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-4ba85549/crates/journals)\n    Finished `release` profile [optimized + debuginfo] target(s) in 14.73s\n"
+    },
+    "python-journals": {
+      "log": "target/evidence/python-journals.log",
+      "sha256": "30ef0ce8979494bbe77579671f341c5d15cb8da713addecca4865a9567aa008e",
+      "output": ".................................................................        [100%]\n65 passed in 276.06s (0:04:36)\n"
+    },
+    "mutation-applicability": {
+      "log": "target/evidence/mutation-applicability.log",
+      "sha256": "761c5eae1644e3a94afa418695138751a6f4da2fa1e77e25ff6be7511a39e6b1",
+      "output": "203 entries apply\n"
+    },
+    "mutations": {
+      "log": "target/evidence/mutations.log",
+      "sha256": "ca6569e97d981d334063483638efe8a4b94a7479260de2bbe049d50a1eb0c1f8",
+      "output": "run ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'entry_deltas_rewrite_timestamp_groups_and_retain_untouched_rowids', '--test-threads=1']\ncompleted 0 seconds 105.576\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'malformed_storage_id_and_tie_shapes_refuse_without_writes', '--test-threads=1']\ncompleted 0 seconds 0.34\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'mixed_timestamps_and_signed_zero_force_entry_rewrites', '--test-threads=1']\ncompleted 0 seconds 0.346\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'nested_cache_and_checkpoint_refusals_restore_signed_settings', '--test-threads=1']\ncompleted 0 seconds 0.656\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'posting_deltas_reject_duplicates_and_keep_unchanged_rows', '--test-threads=1']\ncompleted 0 seconds 0.34\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'removing_a_mixed_clock_sibling_keeps_the_survivors_rowid_and_creation_time', '--test-threads=1']\ncompleted 0 seconds 0.321\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'reused_insert_bindings_match_full_binds_for_every_scalar_transition', '--test-threads=1']\ncompleted 0 seconds 0.311\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'scoped_cache_and_checkpoint_restore_exact_settings', '--test-threads=1']\ncompleted 0 seconds 0.372\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'storage_encodings_and_markers_match_python', '--test-threads=1']\ncompleted 0 seconds 0.506\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'wal_checkpoint_waits_for_commit_and_retains_active_readers', '--test-threads=1']\ncompleted 0 seconds 0.828\nbaseline: 10 tests pass unmutated\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 4.055\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'reused_insert_bindings_match_full_binds_for_every_scalar_transition', '--test-threads=1']\ncompleted 101 seconds 0.167\nkilled   JP-reused-binding-transition (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 3.828\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'reused_insert_bindings_match_full_binds_for_every_scalar_transition', '--test-threads=1']\ncompleted 101 seconds 0.189\nkilled   JP-reused-binding-real-sign (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 4.495\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'storage_encodings_and_markers_match_python', '--test-threads=1']\ncompleted 101 seconds 0.167\nkilled   JP-uuid-version (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 3.859\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'storage_encodings_and_markers_match_python', '--test-threads=1']\ncompleted 101 seconds 0.373\nkilled   JP-uuid-variant (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 4.307\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'storage_encodings_and_markers_match_python', '--test-threads=1']\ncompleted 101 seconds 0.426\nkilled   JP-clock-repeat (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 4.902\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'storage_encodings_and_markers_match_python', '--test-threads=1']\ncompleted 101 seconds 0.193\nkilled   JP-clock-successor (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 3.641\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'storage_encodings_and_markers_match_python', '--test-threads=1']\ncompleted 101 seconds 0.18\nkilled   JP-calculation-version (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 4.046\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'storage_encodings_and_markers_match_python', '--test-threads=1']\ncompleted 101 seconds 0.208\nkilled   JP-source-dedupe (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 3.743\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'storage_encodings_and_markers_match_python', '--test-threads=1']\ncompleted 101 seconds 0.203\nkilled   JP-legacy-fallback (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 4.048\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'mixed_timestamps_and_signed_zero_force_entry_rewrites', '--test-threads=1']\ncompleted 101 seconds 0.194\nkilled   JP-same-column-tuple (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 3.888\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'mixed_timestamps_and_signed_zero_force_entry_rewrites', '--test-threads=1']\ncompleted 101 seconds 0.197\nkilled   JP-signed-zero (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 3.999\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'posting_deltas_reject_duplicates_and_keep_unchanged_rows', '--test-threads=1']\ncompleted 101 seconds 0.197\nkilled   JP-duplicate-postings (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 4.002\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'entry_deltas_rewrite_timestamp_groups_and_retain_untouched_rowids', '--test-threads=1']\ncompleted 101 seconds 0.194\nkilled   JP-entry-tie (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 4.06\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'mixed_timestamps_and_signed_zero_force_entry_rewrites', '--test-threads=1']\ncompleted 101 seconds 0.247\nkilled   JP-mixed-stamps (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 4.465\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'entry_deltas_rewrite_timestamp_groups_and_retain_untouched_rowids', '--test-threads=1']\ncompleted 101 seconds 0.28\nkilled   JP-delete-removed (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 4.991\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'scoped_cache_and_checkpoint_restore_exact_settings', '--test-threads=1']\ncompleted 101 seconds 0.256\nkilled   JP-cache-size (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 10.99\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'wal_checkpoint_waits_for_commit_and_retains_active_readers', '--test-threads=1']\ncompleted 101 seconds 1.785\nkilled   JP-wal-disable (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 4.027\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'wal_checkpoint_waits_for_commit_and_retains_active_readers', '--test-threads=1']\ncompleted 101 seconds 5.66\nkilled   JP-wal-passive (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 4.271\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'storage_encodings_and_markers_match_python', '--test-threads=1']\ncompleted 101 seconds 0.223\nkilled   JP-compact-ascii (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 5.087\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'storage_encodings_and_markers_match_python', '--test-threads=1']\ncompleted 101 seconds 0.306\nkilled   JP-compact-null (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 5.435\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'storage_encodings_and_markers_match_python', '--test-threads=1']\ncompleted 101 seconds 0.405\nkilled   JP-compact-separator (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 5.022\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'storage_encodings_and_markers_match_python', '--test-threads=1']\ncompleted 101 seconds 0.222\nkilled   JP-compact-top-shape (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 5.535\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'storage_encodings_and_markers_match_python', '--test-threads=1']\ncompleted 101 seconds 0.257\nkilled   JP-compact-schema-type (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 5.678\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'storage_encodings_and_markers_match_python', '--test-threads=1']\ncompleted 101 seconds 0.283\nkilled   JP-compact-schema-value (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 5.371\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'storage_encodings_and_markers_match_python', '--test-threads=1']\ncompleted 101 seconds 0.269\nkilled   JP-compact-engine-type (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 5.172\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'storage_encodings_and_markers_match_python', '--test-threads=1']\ncompleted 101 seconds 0.302\nkilled   JP-compact-method-type (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 5.749\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'storage_encodings_and_markers_match_python', '--test-threads=1']\ncompleted 101 seconds 0.405\nkilled   JP-compact-fragment-quantity (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 5.807\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'storage_encodings_and_markers_match_python', '--test-threads=1']\ncompleted 101 seconds 0.281\nkilled   JP-compact-null-acquisition (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 5.367\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'storage_encodings_and_markers_match_python', '--test-threads=1']\ncompleted 101 seconds 0.412\nkilled   JP-compact-fragment-text (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 5.806\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'storage_encodings_and_markers_match_python', '--test-threads=1']\ncompleted 101 seconds 0.301\nkilled   JP-compact-source-text (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 5.347\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'storage_encodings_and_markers_match_python', '--test-threads=1']\ncompleted 101 seconds 0.226\nkilled   JP-compact-pricing-text (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 4.602\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'storage_encodings_and_markers_match_python', '--test-threads=1']\ncompleted 101 seconds 0.376\nkilled   JP-compact-source-fee (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 4.391\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'nested_cache_and_checkpoint_refusals_restore_signed_settings', '--test-threads=1']\ncompleted 101 seconds 0.412\nkilled   JP-cache-restore-negative (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 4.39\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'scoped_cache_and_checkpoint_restore_exact_settings', '--test-threads=1']\ncompleted 101 seconds 0.249\nkilled   JP-checkpoint-enter-transaction (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 4.173\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'scoped_cache_and_checkpoint_restore_exact_settings', '--test-threads=1']\ncompleted 101 seconds 0.188\nkilled   JP-checkpoint-pending-transaction (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 4.483\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'nested_cache_and_checkpoint_refusals_restore_signed_settings', '--test-threads=1']\ncompleted 101 seconds 0.317\nkilled   JP-checkpoint-restore (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 4.324\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'nested_cache_and_checkpoint_refusals_restore_signed_settings', '--test-threads=1']\ncompleted 101 seconds 0.387\nkilled   JP-cache-drop-negative (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 4.191\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'storage_encodings_and_markers_match_python', '--test-threads=1']\ncompleted 101 seconds 0.201\nkilled   JP-compact-source-shape (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 4.028\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'storage_encodings_and_markers_match_python', '--test-threads=1']\ncompleted 101 seconds 0.17\nkilled   JP-compact-pricing-shape (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 3.555\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'storage_encodings_and_markers_match_python', '--test-threads=1']\ncompleted 101 seconds 0.186\nkilled   JP-compact-fragment-shape (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 4.026\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'removing_a_mixed_clock_sibling_keeps_the_survivors_rowid_and_creation_time', '--test-threads=1']\ncompleted 101 seconds 0.223\nkilled   JP-removed-mixed-clock-identity (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 4.382\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'mixed_timestamps_and_signed_zero_force_entry_rewrites', '--test-threads=1']\ncompleted 101 seconds 0.355\nkilled   JP-shared-time-detection (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 4.542\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'entry_deltas_rewrite_timestamp_groups_and_retain_untouched_rowids', '--test-threads=1']\ncompleted 101 seconds 0.202\nkilled   JP-dirty-time-gate (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 4.932\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'storage_encodings_and_markers_match_python', '--test-threads=1']\ncompleted 101 seconds 0.21\nkilled   JP-uuid-high-digit (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 3.879\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'storage_encodings_and_markers_match_python', '--test-threads=1']\ncompleted 101 seconds 0.252\nkilled   JP-uuid-low-digit (1 failing)\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--no-run']\ncompleted 0 seconds 4.12\nrun ['cargo', 'test', '--offline', '--manifest-path', '/home/tg/.t3/worktrees/kassiber/t3-4ba85549/target/tmp/kassiber-mutation-check-u17eiofn/Cargo.toml', '-p', 'kassiber-journals', '--locked', '--', 'malformed_storage_id_and_tie_shapes_refuse_without_writes', '--test-threads=1']\ncompleted 101 seconds 0.195\nkilled   JP-fresh-tie-validation (1 failing)\nall 46 mutations killed\n"
+    },
+    "classifier": {
+      "log": "target/evidence/classifier.log",
+      "sha256": "6d5aec411b822716320386bd5a09a02e20eb087879bc27512f783043fa4d4896",
+      "output": "wrote tests/rust_port/dispositions.json\n"
+    },
+    "preflight": {
+      "log": "target/evidence/preflight.log",
+      "sha256": "f21b1cff8a3a8c4c5981a118c9b076e20cba8b7bdc56db1a3795a858f58ff36b",
+      "output": "> /home/tg/.t3/worktrees/kassiber/t3-4ba85549/.venv/bin/python -m pytest /home/tg/.t3/worktrees/kassiber/t3-4ba85549/tests/rust_port/test_contracts.py /home/tg/.t3/worktrees/kassiber/t3-4ba85549/tests/rust_port/test_inventory.py /home/tg/.t3/worktrees/kassiber/t3-4ba85549/tests/test_ci_shards.py /home/tg/.t3/worktrees/kassiber/t3-4ba85549/tests/test_connection_catalog_drift.py /home/tg/.t3/worktrees/kassiber/t3-4ba85549/tests/test_dependency_drift.py /home/tg/.t3/worktrees/kassiber/t3-4ba85549/tests/test_report_contract_drift.py /home/tg/.t3/worktrees/kassiber/t3-4ba85549/tests/test_workflow_pins.py\n============================= test session starts ==============================\nplatform linux -- Python 3.11.17, pytest-9.1.1, pluggy-1.6.0\nrootdir: /home/tg/.t3/worktrees/kassiber/t3-4ba85549\nconfigfile: pyproject.toml\nplugins: xdist-3.8.0\ncollected 57 items\n\ntests/rust_port/test_contracts.py ..                                     [  3%]\ntests/rust_port/test_inventory.py ........                               [ 17%]\ntests/test_ci_shards.py ..................                               [ 49%]\ntests/test_connection_catalog_drift.py ..................                [ 80%]\ntests/test_dependency_drift.py ....                                      [ 87%]\ntests/test_report_contract_drift.py .                                    [ 89%]\ntests/test_workflow_pins.py ......                                       [100%]\n\n======================== 57 passed in 97.04s (0:01:37) =========================\n"
+    }
+  },
+  "sources": {
+    "crates/journals/src/storage.rs": "677431937543c7ae27309ad4b35aaab504fe4fe0c9591e7d8433f52e7fb1a2d6",
+    "crates/journals/src/storage/tests.rs": "cd35223c091cef1314f9fc4a0c1ce111815bb7506e5d8b7213089ae8b8a7135a",
+    "crates/journals/scripts/mutations.json": "6e7230d599f1b6b9d36405a6eeb265207c7ad2039330c96aad73869b032d9c81"
+  },
+  "scratch_sources": {
+    "target/run": "#!/usr/bin/env bash\nset -euo pipefail\nexport MATURIN_NO_INSTALL_RUST=1 CARGO_BUILD_JOBS=8\nexport CARGO_TARGET_DIR=\"$PWD/target\" CARGO_BUILD_BUILD_DIR=\"$PWD/target/build\"\nexport TMPDIR=\"$PWD/target/tmp\" UV_CACHE_DIR=\"$PWD/target/uv-cache\"\nexport KASSIBER_NO_EGRESS=1 CARGO_NET_OFFLINE=true\nexec mise exec rust@1.99.1 uv@latest -- \"$@\"\n",
+    "target/pmp.py": "from pathlib import Path\nimport json,subprocess,os,shutil,sys,hashlib\nroot=Path(sys.argv[1]).resolve();dest=Path('target/profile').resolve();dest.mkdir(exist_ok=True)\nname=root.parent.name+'-'+root.name\nnative=dest/'native'\nif native.exists():shutil.rmtree(native)\nshutil.copytree(root/'base',native)\nrequest=json.loads((root/'request.json').read_text());request['database']=str(native/'kassiber.sqlite3')\npath=dest/(name+'.json');path.write_text(json.dumps(request))\ninp=dest/'input';inp.write_text(str(path)+'\\n')\nout=dest/(name+'-stacks.json')\nreply=dest/(name+'-reply.json')\nload=os.getloadavg()\nenv={**os.environ,'PMP_INPUT':str(inp),'PMP_OUTPUT':str(out),'PMP_REPLY':str(reply)}\nwith (dest/(name+'.log')).open('w') as log:\n    subprocess.run(['gdb','-q','-nx','-nh','-batch','-x','target/pmp-gdb.py',str(Path(sys.argv[2]).resolve())],env=env,stdout=log,stderr=subprocess.STDOUT,check=True)\nresult=json.loads(reply.read_text());assert result['ok'],name\n(dest/(name+'-metadata.json')).write_text(json.dumps({'load':load,'request_sha256':hashlib.sha256((root/'request.json').read_bytes()).hexdigest(),'binary_sha256':hashlib.sha256(Path(sys.argv[2]).read_bytes()).hexdigest(),'native_reply':result},indent=2)+'\\n')\nprint(name,len(json.loads(out.read_text())),result['cpu_seconds'],flush=True)\n\npath.unlink()\nshutil.rmtree(native)\n",
+    "target/pmp-gdb.py": "import gdb, threading, time, os, signal, json, shlex\nfrom pathlib import Path\nfor cmd in ['set pagination off','set confirm off','set debuginfod enabled off','set print frame-arguments none','handle SIGSTOP stop nopass']:\n    gdb.execute(cmd)\ngdb.execute('starti < '+shlex.quote(os.environ['PMP_INPUT'])+' > '+shlex.quote(os.environ['PMP_REPLY']),to_string=True)\npid=gdb.selected_inferior().pid\nfinished=threading.Event()\nresumed=threading.Event()\ndef sample():\n    while not finished.is_set():\n        if not resumed.wait(0.1):continue\n        resumed.clear()\n        time.sleep(0.003)\n        try:os.kill(pid,signal.SIGSTOP)\n        except ProcessLookupError:return\nthread=threading.Thread(target=sample,daemon=True)\nthread.start()\nsamples=[]\ntry:\n    while gdb.selected_inferior().pid:\n        resumed.set()\n        gdb.execute('continue',to_string=True)\n        if not gdb.selected_inferior().pid:break\n        stack=[]\n        frame=gdb.newest_frame()\n        while frame:\n            stack.append(frame.name() or '?')\n            frame=frame.older()\n        samples.append(stack)\nfinally:\n    finished.set()\n    thread.join()\n    Path(os.environ['PMP_OUTPUT']).write_text(json.dumps(samples))\n",
+    "target/profile-all.py": "from pathlib import Path\nimport subprocess\nfor root in sorted(Path('target/cells').glob('*/*')):\n    if root.name in ('fresh','unchanged'):\n        subprocess.run(['target/run','uv','run','--locked','python','target/pmp.py',str(root),'target/journal-persist-symbols'],check=True)\n",
+    "target/summarize-profiles.py": "from pathlib import Path\nfrom collections import Counter\nimport json,hashlib,os\nout=[]\nfor path in sorted(Path('target/profile').glob('*stacks.json')):\n    stacks=json.loads(path.read_text());stacks=[s for s in stacks if any('kassiber_journals::persistence::store' in f for f in s)]\n    counts=Counter()\n    for stack in stacks:\n        text='\\n'.join(stack)\n        if any(s in text for s in ('bind_parameter','sqlite3_bind_')):category='binding'\n        elif any(s in text for s in ('sqlite3VdbeExec','sqlite3_step','sqlite3PagerCommit','pager_write','sqlite3Btree','sqlite3_column_','Statement::value_ref','sqlite3_blob')):category='SQL'\n        elif any(s in text for s in ('journal_entry_id','to_fixed_string','decimal_bindings','calculation::compact','calculation::source','Encoder::encode','dumps_str_into')):category='encoding'\n        elif any(s in text for s in ('::matches','same_row','coefficient_matches','fixed_equal','consume_direct','Cursor::','Cursor>::')):category='comparison'\n        else:category='preparation'\n        counts[category]+=1\n    record={'cell':path.name.removesuffix('-stacks.json'),'samples':len(stacks),'category_samples':dict(counts),'stack_sha256':hashlib.sha256(path.read_bytes()).hexdigest(),'top_leaf':Counter(s[0] for s in stacks).most_common(15)}\n    metadata=path.with_name(path.name.replace('-stacks.json','-metadata.json'))\n    if metadata.exists():record['metadata']=json.loads(metadata.read_text())\n    out.append(record)\n    print(record['cell'],record['samples'],{k:round(v/len(stacks)*100,1) for k,v in counts.items()})\nPath('target/evidence/baseline-profiles.json').write_text(json.dumps(out,indent=2)+'\\n')\n",
+    "target/pairs.py": "from pathlib import Path\nimport hashlib,json,os,shutil,subprocess,sys,re\nroots=[Path(p).resolve() for p in sys.argv[3:]]\nprobes={name:Path(path).resolve() for name,path in zip(('baseline','candidate'),sys.argv[1:3])}\nout=Path(os.environ.get('PAIRS_OUT','target/pairs')).resolve();out.mkdir(exist_ok=True,parents=True)\nrecord={'probes':{k:hashlib.sha256(p.read_bytes()).hexdigest() for k,p in probes.items()},'sources':{str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(Path('crates/journals/src').rglob('*.rs'))},'cells':[]}\nfor root in roots:\n    name=root.parent.name+'-'+root.name;work=out/name;work.mkdir(exist_ok=True)\n    cell={'name':name,'requests':{p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in ('request.json','floor.json')},'trials':[]}\n    database=work/'data'\n    for filename in ('request.json','floor.json'):\n        source=(root/filename).read_text()\n        source,count=re.subn(r'\"database\"\\s*:\\s*\"(?:[^\"\\\\]|\\\\.)*\"',lambda _: '\"database\":'+json.dumps(str(database/'kassiber.sqlite3')),source,count=1)\n        assert count==1\n        (work/filename).write_text(source)\n    for trial in range(int(os.environ.get('PAIRS_RUNS','5'))):\n        pair={}\n        for engine in (['baseline','candidate'] if trial%2==0 else ['candidate','baseline'])+['floor']:\n            database=work/'data'\n            if database.exists():shutil.rmtree(database)\n            shutil.copytree(root/'base',database)\n            request_path=work/('floor.json' if engine=='floor' else 'request.json')\n            load=os.getloadavg();probe=probes['candidate' if engine=='floor' else engine]\n            result=subprocess.run([str(probe)],input=str(request_path)+'\\n',capture_output=True,text=True,check=True)\n            value=json.loads(result.stdout)\n            if not value['ok']:raise RuntimeError(str(value)[:1000])\n            pair[engine]={k:value[k] for k in ('cpu_seconds','seconds','phases') if k in value}|{'load':load,'exact_dump':True}\n            shutil.rmtree(database)\n        cell['trials'].append(pair)\n        print(name,trial,{k:round(v['cpu_seconds'],6) for k,v in pair.items()},flush=True)\n        (work/'summary.json').write_text(json.dumps(cell,indent=2)+'\\n')\n    cell['best']={k:min(t[k]['cpu_seconds'] for t in cell['trials']) for k in ('baseline','candidate','floor')}\n    (work/'request.json').unlink()\n    (work/'floor.json').unlink()\n    record['cells'].append(cell)\n    (out/'summary.json').write_text(json.dumps(record,indent=2)+'\\n')\n",
+    "target/capture.py": "#!/usr/bin/env python3\n\"\"\"Measure Python, native persistence, and an identical prepared DML floor.\n\nOnly target/ scratch books are written. Rendering and dump comparison are\noutside the timer; storage and COMMIT are inside, passive checkpoint outside.\nEvery run starts from the same physical database. Five Python/Rust pairs\nalternate order by default; --runs allows exploratory measurements.\n--baseline-probe adds a second native binary to each alternating trial.\nEach native operation uses a fresh process, including the prepared DML floor.\n\"\"\"\nfrom contextlib import ExitStack\nfrom decimal import Decimal\nfrom datetime import datetime, timedelta\nimport argparse\nimport hashlib\nimport json\nimport os\nfrom pathlib import Path\nimport shutil\nimport subprocess\nimport sys\nimport time\nimport uuid\nfrom unittest.mock import patch\n\nsys.path.insert(0,str(Path(__file__).resolve().parents[1]))\nfrom kassiber.db import open_db\nfrom kassiber.core import custody_journal,custody_filed_reports,filed_report_chain\nfrom kassiber.core.journal_storage import journal_write_cache\nfrom tests.rust_port.journal_persistence_oracle import capture,dump,CLOCK\n\n\nclass Recording:\n    def __init__(self,conn): self.conn=conn;self.batches=[]\n    def __getattr__(self,name): return getattr(self.conn,name)\n    def execute(self,sql,args=()):\n        if sql.lstrip().split()[0].upper() in ('INSERT','UPDATE','DELETE','REPLACE'):\n            if self.batches and self.batches[-1][0]==sql: self.batches[-1][1].append(list(args))\n            else: self.batches.append([sql,[list(args)]])\n        return self.conn.execute(sql,args)\n    def executemany(self,sql,rows):\n        rows=list(rows);self.batches.append([sql,[list(r) for r in rows]])\n        return self.conn.executemany(sql,rows)\n\n\ndef main():\n    parser=argparse.ArgumentParser(description=__doc__)\n    parser.add_argument('--book',type=Path,required=True)\n    parser.add_argument('--out',type=Path,required=True)\n    parser.add_argument('--modes',nargs='+',default=['fresh','unchanged','appended','changed'])\n    parser.add_argument('--probe',type=Path,default=Path('target/release/examples/journal-persist'))\n    parser.add_argument('--baseline-probe',type=Path)\n    parser.add_argument('--runs',type=int,default=5)\n    parser.add_argument('--cipher',action='store_true',help='encrypt each disposable starting copy with a synthetic test key')\n    args=parser.parse_args()\n    if args.runs < 1: parser.error('--runs must be positive')\n    target=Path('target').resolve();out=args.out.resolve()\n    if not out.is_relative_to(target): parser.error('--out must be under target/')\n    out.mkdir(parents=True,exist_ok=True)\n    manifest=dict(book=json.loads((args.book/'bench-book.json').read_text()),runs=args.runs,\n        python=sys.version,cpus=os.cpu_count(),native_process='fresh per operation; no allocator state shared with floor',probe_sha256=hashlib.sha256(args.probe.read_bytes()).hexdigest(),\n        harness_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),\n        sources={str(path):hashlib.sha256(path.read_bytes()).hexdigest() for path in sorted(Path('crates/journals/src').rglob('*.rs'))})\n    if args.baseline_probe:\n        manifest['baseline_probe_sha256']=hashlib.sha256(args.baseline_probe.read_bytes()).hexdigest()\n    (out/'environment.json').write_text(json.dumps(manifest,indent=2)+'\\n')\n    passphrase='synthetic-test-only' if args.cipher else None\n    def connect(root): return open_db(root,passphrase=passphrase)\n    results=[]\n    for mode in args.modes:\n        root=out/mode;root.mkdir(exist_ok=True)\n        base=root/'base';base.mkdir(exist_ok=True)\n        shutil.copyfile(args.book/'data/kassiber.sqlite3',base/'kassiber.sqlite3')\n        if args.cipher:\n            from sqlcipher3 import dbapi2 as sqlcipher\n            plain=base/'kassiber.sqlite3';encrypted=base/'encrypted.sqlite3'\n            c=sqlcipher.connect(plain)\n            version=c.execute('PRAGMA user_version').fetchone()[0]\n            c.execute('ATTACH DATABASE ? AS encrypted KEY ?',(str(encrypted),passphrase))\n            c.execute(\"SELECT sqlcipher_export('encrypted')\")\n            c.execute(f'PRAGMA encrypted.user_version={int(version)}')\n            c.execute('DETACH DATABASE encrypted');c.close()\n            plain.unlink();encrypted.replace(plain)\n        conn=connect(base)\n        profile=conn.execute('SELECT * FROM profiles LIMIT 1').fetchone()\n        count=conn.execute('SELECT COUNT(*) FROM transactions').fetchone()[0]\n        appended_ids=set()\n        if mode=='fresh':\n            conn.execute('DELETE FROM journal_entries');conn.execute('DELETE FROM journal_quantity_postings')\n        elif mode=='appended':\n            rows=conn.execute(\"SELECT * FROM transactions WHERE direction='inbound' AND kind='buy' ORDER BY occurred_at LIMIT ?\",(count//100,)).fetchall()\n            latest=datetime.fromisoformat(conn.execute('SELECT MAX(occurred_at) FROM transactions').fetchone()[0].replace('Z','+00:00'))\n            for index,row in enumerate(rows):\n                occurred=latest+timedelta(seconds=index+1)\n                assert occurred<=datetime.fromisoformat(CLOCK.replace('Z','+00:00')), 'appended observation is outside the build clock'\n                occurred=occurred.isoformat().replace('+00:00','Z')\n                identity=f'append-{index}';appended_ids.add(identity)\n                row=dict(row);row.update(id=identity,fingerprint=identity,external_id=identity,occurred_at=occurred)\n                if row['confirmed_at'] is not None: row['confirmed_at']=occurred\n                raw=json.loads(row['raw_json']);raw.update(txid=identity,date=occurred)\n                row['raw_json']=json.dumps(raw,sort_keys=True)\n                conn.execute(f'INSERT INTO transactions({\",\".join(row)}) VALUES({\",\".join(\"?\" for _ in row)})',tuple(row.values()))\n        elif mode=='changed':\n            rows=conn.execute('SELECT id,fiat_rate_exact FROM transactions ORDER BY occurred_at').fetchall()\n            for row in rows[::20]:\n                rate=str(Decimal(row['fiat_rate_exact'] or '30000')*Decimal('1.01'))\n                conn.execute('UPDATE transactions SET fiat_rate=?,fiat_rate_exact=? WHERE id=?',(float(rate),rate,row['id']))\n        conn.execute('UPDATE profiles SET journal_input_version=journal_input_version+1');conn.commit()\n        conn.execute('PRAGMA wal_checkpoint(TRUNCATE)')\n        conn.close()\n        reference=root/'reference';shutil.copytree(base,reference,dirs_exist_ok=True)\n        conn=connect(reference);recorder=Recording(conn);states=[]\n        original=custody_journal.store_ledger_state\n        def observed(c,p,state,**kw):\n            states.append(state);return original(c,p,state,**kw)\n        with patch.object(custody_journal,'store_ledger_state',observed):\n            vector=capture(recorder,mode,conn.execute('SELECT * FROM profiles LIMIT 1').fetchone())\n        expected=vector.pop('expected');vector.pop('before');conn.close()\n        activity={table:{'insert':0,'delete':0} for table in ('journal_entries','journal_quantity_postings')}\n        for sql,rows in recorder.batches:\n            for table,counts in activity.items():\n                if sql.startswith(f'INSERT INTO {table}('): counts['insert']+=len(rows)\n                if sql.startswith(f'DELETE FROM {table} '): counts['delete']+=len(rows)\n        if mode=='unchanged': assert not any(n for counts in activity.values() for n in counts.values()), activity\n        if mode in ('fresh','appended'): assert all(counts['insert'] for counts in activity.values()), activity\n        if mode=='changed': assert activity['journal_entries']['insert'], activity\n        if mode=='appended':\n            stored=expected['journal_entries'];transaction_index=stored['columns'].index('transaction_id')\n            assert appended_ids <= {r[transaction_index] for r in stored['rows']}, 'appended observations collapsed or were withheld'\n        native=root/'native';python=root/'python';floor=root/'floor'\n        request=root/'request.json';floor_request=root/'floor.json'\n        vector.update(database=str(native/'kassiber.sqlite3'))\n        if passphrase: vector['passphrase']=passphrase\n        request.write_text(json.dumps(dict(vector,expected=expected),separators=(',',':')))\n        floor_request.write_text(json.dumps(dict(name=mode,database=str(floor/'kassiber.sqlite3'),passphrase=passphrase,floor=recorder.batches,expected=expected),separators=(',',':')))\n        shutil.rmtree(reference)\n        print(root,flush=True)\n        continue\n        trials=[]\n        probes={'rust':args.probe.resolve()}\n        if args.baseline_probe:\n            probes['baseline']=args.baseline_probe.resolve()\n        def rust(path,dest,engine='rust'):\n            if dest.exists(): shutil.rmtree(dest)\n            shutil.copytree(base,dest)\n            load=os.getloadavg()[0]\n            process=subprocess.run([str(probes[engine])],input=str(path)+'\\n',capture_output=True,text=True,check=True)\n            result=json.loads(process.stdout)\n            if not result['ok']: raise RuntimeError(json.dumps(result)[:2000])\n            return dict(seconds=result['seconds'],cpu_seconds=result['cpu_seconds'],phases=result.get('phases'),load1=load)\n        def py():\n            if python.exists(): shutil.rmtree(python)\n            shutil.copytree(base,python);c=connect(python)\n            c.execute('PRAGMA wal_autocheckpoint=0')\n            identities=iter(vector['ids'])\n            with ExitStack() as stack:\n                stack.enter_context(patch.object(uuid,'uuid4',lambda:uuid.UUID(next(identities))))\n                for module in (custody_journal,custody_filed_reports,filed_report_chain):\n                    stack.enter_context(patch.object(module,'now_iso',lambda:CLOCK))\n                stack.enter_context(journal_write_cache(c))\n                c.execute('BEGIN IMMEDIATE');c.execute('SAVEPOINT journals_process')\n                load=os.getloadavg()[0];start_cpu=time.process_time();start=time.perf_counter()\n                original(c,vector['record']['profile'],states[0],created_at=CLOCK)\n                c.execute('RELEASE journals_process');c.commit()\n                seconds=time.perf_counter()-start;cpu_seconds=time.process_time()-start_cpu\n            assert dump(c)==expected\n            c.execute('PRAGMA wal_checkpoint(PASSIVE)');c.close()\n            return dict(seconds=seconds,cpu_seconds=cpu_seconds,load1=load)\n        for run in range(args.runs):\n            pair={}\n            engines=['python',*probes]\n            for engine in (engines if run%2==0 else engines[::-1]):\n                pair[engine]=py() if engine=='python' else rust(request,native,engine)\n            pair['floor']=rust(floor_request,floor);trials.append(pair)\n            print(mode,run,pair,flush=True)\n        best={engine:min(t[engine]['cpu_seconds'] for t in trials) for engine in ('python',*probes,'floor')}\n        best_wall={engine:min(t[engine]['seconds'] for t in trials) for engine in ('python',*probes,'floor')}\n        results.append(dict(mode=mode,transactions=count,appended_transactions=len(appended_ids),activity=activity,\n            entries=len(expected['journal_entries']['rows']),postings=len(expected['journal_quantity_postings']['rows']),\n            best=best,best_wall=best_wall,trials=trials,over_floor=best['rust']-best['floor']))\n        (out/'summary.json').write_text(json.dumps(results,indent=2)+'\\n')\n        shutil.rmtree(root)\n\n\nif __name__=='__main__': main()\n",
+    "target/bind-micro.rs": "use kassiber_store::rusqlite::{Connection, params_from_iter, types::{Value,ValueRef}};\nuse std::hint::black_box;\nstruct Param<'a>(ValueRef<'a>);\nimpl kassiber_store::rusqlite::ToSql for Param<'_> {\n fn to_sql(&self)->kassiber_store::rusqlite::Result<kassiber_store::rusqlite::types::ToSqlOutput<'_>> {Ok(kassiber_store::rusqlite::types::ToSqlOutput::Borrowed(self.0))}\n}\nfn main() {\n    let reuse=std::env::args().nth(1).as_deref()==Some(\"reuse\");\n    let c=Connection::open_in_memory().unwrap();\n    c.execute_batch(\"CREATE TABLE t(a,b,c,d,e,f,g,h,i,j,k,l);BEGIN\").unwrap();\n    let mut statement=c.prepare(\"INSERT INTO t VALUES(?,?,?,?,?,?,?,?,?,?,?,?)\").unwrap();\n    let rows:Vec<[Value;12]>=(0..100_000).map(|i| [Value::Text(i.to_string()),Value::Text(\"workspace\".into()),Value::Text(\"profile\".into()),Value::Text(format!(\"transaction-{i}\")),Value::Text(format!(\"observation-{i}\")),Value::Text(\"time\".into()),Value::Text(\"BTC\".into()),Value::Text(\"wallet\".into()),Value::Text(\"location\".into()),Value::Integer(i),Value::Text(\"included\".into()),Value::Text(\"created\".into())]).collect();\n    let mut bound:[Option<ValueRef<'_>>;12]=[None;12];\n    for row in &rows {\n        if reuse {\n            for (index,prior) in bound.iter_mut().enumerate() {\n                let value=ValueRef::from(&row[index]);\n                let same=prior.is_some_and(|prior| match(prior,value) {(ValueRef::Real(a),ValueRef::Real(b))=>a.to_bits()==b.to_bits(),_=>prior==value});\n                if !same { statement.raw_bind_parameter(index+1,Param(value)).unwrap();*prior=Some(value); }\n            }\n            statement.raw_execute().unwrap();\n        } else { statement.execute(params_from_iter(row)).unwrap(); }\n    }\n    black_box(c.query_row(\"SELECT COUNT(*) FROM t\",[],|r|r.get::<_,i64>(0)).unwrap());\n}\n",
+    "target/run-mutations.py": "from pathlib import Path\nimport importlib.util,json,sys,time,os\nroot=Path.cwd()\nspec=importlib.util.spec_from_file_location('journal_mutations',root/'crates/journals/scripts/mutation_check.py')\nmodule=importlib.util.module_from_spec(spec);sys.modules[spec.name]=module;spec.loader.exec_module(module)\noriginal=module._run\n\ndef run(command,cwd,env):\n    env={**env,'CARGO_BUILD_JOBS':'8'}\n    start=time.monotonic()\n    print('run',command,flush=True)\n    result=original(command,cwd,env)\n    print('completed',result.returncode,'seconds',round(time.monotonic()-start,3),flush=True)\n    return result\n\nmodule._run=run\nmutations=[m for m in module.checker.load(module.checker.MUTATIONS) if m.file=='crates/journals/src/storage.rs']\nmutations.sort(key=lambda m: not m.id.startswith('JP-reused-binding-'))\n(root/'target/evidence/mutation-selection.json').write_text(json.dumps([m.id for m in mutations],indent=2)+'\\n')\nsys.exit(module.checker.check(mutations))\n",
+    "target/verify-rest": "#!/usr/bin/env bash\nset -euo pipefail\nexport UV_NO_SYNC=1 CARGO_PROFILE_RELEASE_DEBUG=1\nexport KASSIBER_PYTHON=\"$PWD/.venv/bin/python\"\ntarget/run cargo fmt --all -- --check > target/evidence/fmt-final.log 2>&1\ntarget/run cargo clippy --offline --release -p kassiber-journals --all-targets -- -D warnings > target/evidence/clippy.log 2>&1\ntarget/run uv run --locked python -m pytest tests/test_rust_journal_persistence.py tests/test_rust_journal_render.py tests/test_journal_storage_format.py -q > target/evidence/python-journals.log 2>&1\ntarget/run uv run --locked python crates/journals/scripts/mutation_check.py --check > target/evidence/mutation-applicability.log 2>&1\ntarget/run uv run --locked python -c \"import shutil; shutil.rmtree('target/build'); shutil.rmtree('target/release')\"\ntarget/run uv run --locked python target/run-mutations.py > target/evidence/mutations.log 2>&1\ntarget/run uv run --locked python -m tests.rust_port.classify_tests update > target/evidence/classifier.log 2>&1\ntarget/run uv run --locked python scripts/python_test_shards.py run preflight --ci > target/evidence/preflight.log 2>&1\n"
+  },
+  "excluded_attempts": [
+    "Initial profiler trials sent repeated SIGSTOP while resolving stacks; repeat all eight with synchronized resume/sample before attribution. An intermediate profile repeat discarded inferior stdout through GDB output capture; repeat all eight with separate native reply files and assert complete-dump equality.",
+    "Scratch cleanup raced with multi-wallet SQLCipher capture generation and removed an open reference database. The capture failed and both affected cells were regenerated serially. Seed books and source files were not affected.",
+    "Preliminary identical-binary phase trials overlapped capture generation and were stopped after the focused fresh cell. They establish no speed improvement and are excluded from final speed evidence."
+  ],
+  "host_notes": "One-minute load observed as high as 243.01 during verification compilation. Timing pairs and independent-connection read-floor trials carry their own recorded load. No tests or benchmarks ran concurrently in this worktree during the retained paired timing, microprobe or read-floor repeat.",
+  "cleanup": {
+    "verification_build_trees_removed": true,
+    "all_launched_jobs_completed": true
+  }
+}

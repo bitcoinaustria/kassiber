@@ -36,6 +36,57 @@ the proposed-budget language in the historical probes below. Repeat the read
 floor over at least five independent connections with load averages and use its
 minimum. The implementation and all acceptance gates remain open.
 
+## Reused INSERT bindings continuation from `a63556cc7`
+
+**R4-12 remains unaccepted.** Entry and quantity-posting INSERTs retain their
+bound values between rows and rebind only changed scalars. The comparison keeps
+SQLite types, complete text/blob bytes and REAL bit patterns distinct. Each row
+still executes separately and invokes its observer immediately afterward.
+Comparison, preparation, accounting and transaction ownership are unchanged.
+
+Eight baseline 20k cells have local GDB stack profiles, including separately
+captured native replies that verify complete frozen Python dumps. Their stack
+attribution separates preparation, comparison, binding, encoding and SQL; the
+instrumented CPU measurements are not acceptance timings.
+
+Five alternating independent-process pairs of 100,000 twelve-column inserts
+improve minimum process CPU from **0.151242 to 0.133018 seconds**; all five pairs
+improve. This isolates repeated binding and includes process startup, input
+allocation and SQL. The scalar-transition regression independently compares
+cached bindings with full binds, including type changes and signed zero.
+
+Five alternating full-store pairs per cell match all thirty complete frozen
+Python dumps, including the prepared DML floors. Generic SQLite 20k fresh has
+four improved pairs and median candidate/baseline ratio **0.991452**, but its
+minimum regresses from **0.891989 to 0.951597 seconds**. Multi-wallet SQLCipher
+20k unchanged has two improved pairs, median ratio **1.083979**, and minima
+**0.584771 / 0.627641 seconds**. These loaded runs do not establish a consistent
+full-store speedup or budget acceptance. The isolated binding speedup justifies
+retaining the change; the full-store regressions remain in the evidence.
+
+The five-independent-connection read-floor repeat verifies complete dumps,
+integrity and foreign keys for both shapes and drivers. Its minima are generic
+**0.098709 / 0.195859 seconds** and multi-wallet **0.096399 / 0.218734 seconds**,
+SQLite / SQLCipher respectively. All exceed the earlier lower floors, which
+remain **0.074710 / 0.193554** and **0.083554 / 0.208488**. The lower generic
+SQLite fresh write floor remains **0.639016**. Neither retained timing cell
+passes its allowance; no higher floor is substituted.
+
+All 64 Rust journal tests and 65 Python journal checks pass, including both
+physical drivers' crash recovery, every-write refusal/unwind rollback and exact
+dumps. All 203 mutation recipes apply, and all 46 recipes for the touched
+production file are killed. Release all-target clippy, formatting, classifier
+update and all 57 required preflight checks pass. Verification runs serially;
+the shared host's observed one-minute load reaches 243 during compilation.
+Verification build trees are removed after summarizing.
+
+The [binding reuse record](r4-journal-persistence-bind-reuse-measurements.json)
+binds samples, loads, source/binary/capture hashes, scratch sources and check
+outputs. This is a verified partial boundary. The eight final-source 20k CPU
+budgets and complete final-source 32-cell matrix remain open. Further
+comparison, preparation and encoding optimization is still required; the
+parallel branch/refusal audit and R4-13 contract work are not claimed here.
+
 ## Empty-table setup continuation from `ab67908b2`
 
 **R4-12 remains unaccepted.** Empty profile-scoped retained tables now skip

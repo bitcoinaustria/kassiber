@@ -4778,5 +4778,25 @@
       "quantity_issues_keep_filed_impacts_pending_without_other_barriers"
     ],
     "rule": "Quantity issues alone block filed-impact resolution even when no component blocker or live quarantine remains."
+  },
+  {
+    "id": "JP-reused-binding-transition",
+    "file": "crates/journals/src/storage.rs",
+    "find": "if !same {\n                    insert.raw_bind_parameter",
+    "replace": "if prior.is_none() {\n                    insert.raw_bind_parameter",
+    "expect_failing": [
+      "reused_insert_bindings_match_full_binds_for_every_scalar_transition"
+    ],
+    "rule": "Reused insert parameters must rebind every changed scalar, including changes of SQLite type."
+  },
+  {
+    "id": "JP-reused-binding-real-sign",
+    "file": "crates/journals/src/storage.rs",
+    "find": "(ValueRef::Real(a), ValueRef::Real(b)) => a.to_bits() == b.to_bits(),",
+    "replace": "(ValueRef::Real(a), ValueRef::Real(b)) => a == b,",
+    "expect_failing": [
+      "reused_insert_bindings_match_full_binds_for_every_scalar_transition"
+    ],
+    "rule": "Reused REAL bindings must distinguish positive and negative zero exactly as full binds do."
   }
 ]

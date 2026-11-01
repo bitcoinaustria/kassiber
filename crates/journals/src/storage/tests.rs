@@ -57,6 +57,61 @@ fn snapshot<const N: usize>(c: &Connection, table: &str) -> Vec<(i64, [Sql; N])>
         .unwrap()
 }
 #[test]
+fn reused_insert_bindings_match_full_binds_for_every_scalar_transition() {
+    let c = Connection::open_in_memory().unwrap();
+    for table in ["journal_entries", "reference"] {
+        c.execute_batch(&format!(
+            "CREATE TABLE {table}({})",
+            ENTRY_COLUMNS.join(",")
+        ))
+        .unwrap();
+    }
+    let values = [
+        Sql::Null,
+        Sql::Null,
+        Sql::Integer(1),
+        Sql::Integer(1),
+        Sql::Real(1.0),
+        Sql::Real(1.0),
+        Sql::Real(0.0),
+        Sql::Real(-0.0),
+        Sql::Real(0.0),
+        Sql::Blob(Vec::new()),
+        Sql::Text(String::new()),
+        Sql::Text("é🔥\0".into()),
+        Sql::Text("é🔥\0".into()),
+        Sql::Blob(b"bytes\0".to_vec()),
+        Sql::Null,
+    ];
+    let rows: Vec<_> = values
+        .into_iter()
+        .enumerate()
+        .map(|(index, value)| {
+            let mut row = entry(&format!("id-{index}"), "time", "created");
+            row[9] = value;
+            row
+        })
+        .collect();
+    let mut reference = c
+        .prepare(&format!(
+            "INSERT INTO reference VALUES({})",
+            vec!["?"; ENTRY_COLUMNS.len()].join(",")
+        ))
+        .unwrap();
+    for row in &rows {
+        reference.execute(params_from_iter(row)).unwrap();
+    }
+    replace_journal_entries(&c, "p", &rows, &mut ()).unwrap();
+    let actual = snapshot::<29>(&c, "journal_entries");
+    let expected = snapshot::<29>(&c, "reference");
+    assert_eq!(actual, expected);
+    for ((_, actual), (_, expected)) in actual.iter().zip(&expected) {
+        if let (Sql::Real(actual), Sql::Real(expected)) = (&actual[9], &expected[9]) {
+            assert_eq!(actual.to_bits(), expected.to_bits());
+        }
+    }
+}
+#[test]
 fn entry_deltas_rewrite_timestamp_groups_and_retain_untouched_rowids() {
     let c = Connection::open_in_memory().unwrap();
     table(&c, "journal_entries", &ENTRY_COLUMNS);
