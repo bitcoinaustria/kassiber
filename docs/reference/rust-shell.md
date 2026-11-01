@@ -113,7 +113,8 @@ The native catalog includes `wallets import-btcpay`, `wallets import-ledger`,
 [PSBT/preview completion](#chain-analysis-psbt-preview-and-receipt-completion-r5)).
 `commands describe` lists the supported leaves from `crates/cli/src/describe.rs`;
 each family registers through its own CLI
-module. Every other leaf parses exactly as in Python and then fails
+module. The [chain-analysis mutation checkpoint](#chain-analysis-local-mutations-r5-partial)
+adds seven local label, case and dataset lifecycle leaves. Every other leaf parses exactly as in Python and then fails
 `not_implemented`
 (`details.component` `cli`, `details.command` its dotted path), before any
 project is read or created. Nothing falls back to Python in the product.
@@ -15086,3 +15087,94 @@ Toolchains were Rust 1.99.1, locked Python 3.11.17 and offline Cargo. Account
 mutation trees are removed. There are no dependency or lockfile changes. The
 full workspace suite, the Python/frontend quality gate and packaged/platform
 acceptance are not claimed.
+
+## Chain-analysis local mutations (R5, partial)
+
+`t3code/r5-chain-analysis-ops` starts from `b258fb1c9` and cherry-picks
+`e4c26e5f7` as `9b3cb52a9`, retaining the durable recovery evidence. The
+`kassiber-wallets::analysis_ops` service owns authored labels, immutable saved
+investigations and complete/incomplete dataset lifecycle changes. CLI and
+daemon adapters share that service over the admitted book. The CLI registration
+count rises from 154 to 161; seven daemon kinds are appended. Separate exact
+route allowlists leave the parallel read worker's family available for merging.
+Integration must sort the combined read/operation kind set as one prefix in
+`daemon.ready`, following Python's chain-analysis union order.
+
+Labels preserve integer revision guards, append-only canonical history,
+explicit domain/subject validation and atomic structured imports. Cases
+recompute the result through the native durable index and bounded SQL views,
+bind the expected snapshot, limit retained bytes and check content integrity
+before deletion. Revocation retains complete packs as provenance. Discard
+requires an idle connection and deletes only incomplete packs, in batches of
+2,000 claims with the same intermediate commits as Python. These claims and
+investigations do not confer ownership, custody, basis or tax authority.
+
+The unchanged-Python oracle retains 158 scenarios and 185 action snapshots,
+including successful saved-case round trips, stale revisions/snapshots,
+cross-book refusals, failed imports, caller-owned rollback, lone surrogates,
+revision overflow, corrupt saved content and a 2,001-claim cleanup. Each action
+compares canonical envelopes, transaction state, schema objects and commitments
+for all 112 tables. The native process replays the corpus with strict no-consent
+guards and the product offline switch off/on. Disk checks cover SQLite and
+SQLCipher in DELETE and WAL modes, including injected label-history SQL
+failures and integrity checks. Injected raw SQLite faults use the existing
+redacted native database-error mapping; those fault checks compare rollback
+state rather than Python's raw exception text.
+
+Whole-process tests in `tests/test_rust_analysis_ops.py` compare CLI and daemon
+request/response bytes with unchanged Python dispatch. The ready-envelope
+check projects the advertised kinds to these seven entries plus `status`,
+retaining their sorted prefix and all other ready fields. An inherited
+ordering mismatch among unrelated report/export kinds prevents claiming
+full-list ready-byte parity; captures remain in `ready-native.json` and
+`ready-reference.json` under the local evidence directory. Product tests use
+deterministic test-only clocks and UUID sources; production retains native
+sources. The following counts are
+the total across offline off/on, with zero in-scope Python fallbacks:
+
+| Operation (CLI `chain-analysis.`, daemon `ui.chain_analysis.`) | CLI invocations | Daemon requests |
+| --- | ---: | ---: |
+| `labels.upsert` | 8 | 8 |
+| `labels.import` | 4 | 4 |
+| `labels.delete` | 4 | 4 |
+| `cases.save` | 4 | 4 |
+| `cases.delete` | 4 | 4 |
+| `datasets.revoke` | 4 | 4 |
+| `datasets.discard` | 4 | 4 |
+| **Total** | **32** | **32** |
+
+Product routing oracles use plaintext books; the admitted-connection harness
+provides the SQLite/SQLCipher and DELETE/WAL coverage described above.
+
+The eleven recipes in `crates/wallets/scripts/analysis_ops_mutations.json`
+pin edit revisions, history, deletion, import atomicity, snapshot binding,
+case integrity, dataset revocation/cleanup, scope binding and SQL rollback.
+All eleven compile and are killed by their named tests, after five passing
+unmutated selections. The retained Python reference repro is
+`tests/rust_port/repro_analysis_label_address.py`: Liquid P2PKH raises
+`RuntimeError("Invalid address")`, while a Bitcoin testnet P2SH can pass Liquid
+regtest validation. The native advisory validator preserves that behavior;
+Python product code is unchanged.
+
+Local Linux verification passes workspace formatting, production and harness
+Clippy for the changed crates with warnings denied, six native operation
+tests, 18 CLI and 17 daemon unit tests, and all 17 Python cases across completed
+focused selections. The required classifier update records 5,765 definitions;
+CI preflight passes all 57 tests without skips. Rust 1.99.1, locked Python
+3.11.17 and offline Cargo are used with six build jobs after the host restart.
+The account `HOME` is preserved and uv uses the shared cache. Summaries and
+transcripts remain under `target/r5-chain-analysis-ops/`; build and mutation
+trees and disposable verification books are removed after summarizing.
+
+This is a partial checkpoint. Still required from the operations assignment:
+all eight `watches` leaves (`preview`, `create`, `list`, `configure`, `delete`,
+`inbox`, `acknowledge`, `evaluate`); all five `sources` leaves (`plan`,
+`authorize`, `list`, `revoke`, `run`); `datasets.import`; `acquire.plan/apply`;
+their daemon kinds, `datasets.import.start`, `datasets.discard.start` and
+`ui.chain_analysis.jobs.cancel`. The read worker owns the other read routes.
+Acquisition/source exact-action consent, once-only authorization, revocation,
+cancellation and `kassiber-net` egress acceptance remain unimplemented here.
+Unsupported routes fail closed. AI projections remain Python. No new
+dependency, schema or network permission is added; no loopback backend test is
+attempted by this local-only slice. Full quality-gate, platform packaging and
+complete operations acceptance are not claimed.

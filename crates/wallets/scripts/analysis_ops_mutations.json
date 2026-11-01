@@ -1,0 +1,112 @@
+[
+  {
+    "id": "analysis-label-edit-revision",
+    "file": "crates/wallets/src/analysis_ops/labels.rs",
+    "find": "if !matches!(get(args, \"expected_revision\"), Some(Value::Int(n)) if n == revision) {\n                return Err(stale(\"Label changed; reload before editing\"));",
+    "replace": "if false {\n                return Err(stale(\"Label changed; reload before editing\"));",
+    "expect_failing": [
+      "analysis_labels_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "A label edit must bind the current integer revision."
+  },
+  {
+    "id": "analysis-label-history",
+    "file": "crates/wallets/src/analysis_ops/labels.rs",
+    "find": "history(conn, &id, revision, &timestamp)",
+    "replace": "current(conn, &id)",
+    "expect_failing": [
+      "analysis_labels_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Every authored label revision must append the exact historical payload."
+  },
+  {
+    "id": "analysis-label-delete",
+    "file": "crates/wallets/src/analysis_ops/labels.rs",
+    "find": "SET deleted=1,revision=?,updated_at=?",
+    "replace": "SET deleted=0,revision=?,updated_at=?",
+    "expect_failing": [
+      "analysis_labels_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Deletion must retire the claim while preserving its history."
+  },
+  {
+    "id": "analysis-label-import-atomic",
+    "file": "crates/wallets/src/analysis_ops/labels.rs",
+    "find": "atomic(conn, || {\n        let mut results",
+    "replace": "Ok::<(), AppError>(()).and_then(|_| {\n        let mut results",
+    "expect_failing": [
+      "analysis_imports_match_python_atomic_history_and_all_112_tables"
+    ],
+    "rule": "A rejected import must roll back earlier claims and history in the batch."
+  },
+  {
+    "id": "analysis-case-snapshot",
+    "file": "crates/wallets/src/analysis_ops/cases.rs",
+    "find": "if field(&result, \"snapshot_id\") != field(args, \"expected_snapshot_id\") {",
+    "replace": "if false {",
+    "expect_failing": [
+      "analysis_cases_match_python_bytes_integrity_and_all_112_tables"
+    ],
+    "rule": "Saving requires the server-recomputed input snapshot approved by the user."
+  },
+  {
+    "id": "analysis-case-delete",
+    "file": "crates/wallets/src/analysis_ops/cases.rs",
+    "find": "DELETE FROM chain_analysis_cases WHERE profile_id=? AND id=?",
+    "replace": "DELETE FROM chain_analysis_cases WHERE profile_id=? AND id=? AND 0",
+    "expect_failing": [
+      "analysis_cases_match_python_bytes_integrity_and_all_112_tables"
+    ],
+    "rule": "Delete the requested saved case without deleting its observations."
+  },
+  {
+    "id": "analysis-case-integrity",
+    "file": "crates/wallets/src/analysis_ops/cases.rs",
+    "find": "|| digest(&result)? != field(&row, \"result_digest\").as_str().unwrap_or(\"\")",
+    "replace": "|| false",
+    "expect_failing": [
+      "analysis_cases_match_python_bytes_integrity_and_all_112_tables"
+    ],
+    "rule": "Case deletion must check retained content integrity first."
+  },
+  {
+    "id": "analysis-dataset-revoke",
+    "file": "crates/wallets/src/analysis_ops/datasets.rs",
+    "find": "SET status='revoked',revision=revision+1",
+    "replace": "SET status='superseded',revision=revision+1",
+    "expect_failing": [
+      "analysis_dataset_lifecycle_matches_python_and_all_112_tables"
+    ],
+    "rule": "Revocation must remove the dataset from active attribution."
+  },
+  {
+    "id": "analysis-dataset-discard",
+    "file": "crates/wallets/src/analysis_ops/datasets.rs",
+    "find": "DELETE FROM chain_analysis_datasets WHERE id=? AND profile_id=? AND status='failed'",
+    "replace": "DELETE FROM chain_analysis_datasets WHERE id=? AND profile_id=? AND status='failed' AND 0",
+    "expect_failing": [
+      "analysis_dataset_lifecycle_matches_python_and_all_112_tables"
+    ],
+    "rule": "Cleanup removes an incomplete dataset after bounded claim deletion."
+  },
+  {
+    "id": "analysis-operation-scope",
+    "file": "crates/wallets/src/analysis_ops.rs",
+    "find": "if expected != &Value::Null",
+    "replace": "if false && expected != &Value::Null",
+    "expect_failing": [
+      "analysis_labels_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "An operation must remain bound to its original book scope."
+  },
+  {
+    "id": "analysis-operation-rollback",
+    "file": "crates/wallets/src/analysis_ops.rs",
+    "find": "conn.execute_batch(\n                \"ROLLBACK TO SAVEPOINT chain_analysis_ops; RELEASE SAVEPOINT chain_analysis_ops\",",
+    "replace": "conn.execute_batch(\n                \"RELEASE SAVEPOINT chain_analysis_ops\",",
+    "expect_failing": [
+      "analysis_history_failure_rolls_back_label_and_import"
+    ],
+    "rule": "A database failure must not leave the label without its historical revision."
+  }
+]

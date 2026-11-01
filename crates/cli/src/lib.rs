@@ -48,6 +48,7 @@ mod workspaces;
 
 mod transfers;
 
+mod chain_analysis_ops;
 mod chain_analysis_reads;
 mod review;
 

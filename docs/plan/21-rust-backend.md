@@ -4407,3 +4407,33 @@ dataset preview, and staged source grants. A bounded receipt runtime serves the
 clear grants and receipts and cancel workers. Python's hash-seed-dependent
 manifest field order is recorded; the native port uses sorted order. AI
 projections remain in Python, and nothing introduces egress.
+
+### R5 chain analysis: local mutation checkpoint (partial)
+
+`t3code/r5-chain-analysis-ops` branches from `b258fb1c9` and includes the
+`e4c26e5f7` durable recovery checkpoint. The shared native analysis-operations
+service registers seven CLI leaves and matching daemon kinds: label
+upsert/import/delete, case save/delete and dataset revoke/discard. The CLI
+inventory rises from 154 to 161. Exact appended registries keep this work
+independent of the parallel read-command port; AI projections stay Python.
+
+The [acceptance record](../reference/rust-shell.md#chain-analysis-local-mutations-r5-partial)
+pins 158 unchanged-Python scenarios, 185 action snapshots, canonical envelopes
+and all 112 tables. It includes caller rollback, SQLite/SQLCipher DELETE/WAL
+SQL failures, strict no-consent replay with offline off/on, whole-process CLI
+and daemon parity and eleven named mutation recipes. Saved cases recompute
+through the native durable index; labels retain revisioned history and imports
+are atomic. Incomplete dataset cleanup retains Python's bounded commit policy.
+All eleven mutations are killed with passing baselines; 41 native unit tests,
+17 Python cases and the required 57-test CI preflight pass. Formatting,
+production/harness Clippy and the required classifier update also pass.
+A separate repro records Python's Liquid legacy address-validation bug without
+changing Python product code.
+
+The operations assignment remains incomplete: watches preview/create/list/
+configure/delete/inbox/acknowledge/evaluate, sources plan/authorize/list/revoke/
+run, dataset import, acquisition plan/apply, their daemon kinds, dataset
+import/discard async starts and job cancellation. Exact-action consent,
+once-only source authorization and gated acquisition egress with revocation
+and cancellation still need implementation and loopback acceptance. No new
+network capability or accounting authority is introduced by this checkpoint.

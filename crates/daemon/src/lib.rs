@@ -190,6 +190,7 @@ pub fn supported_kinds() -> Vec<&'static str> {
     );
     kinds.push(SUPPORTED_KINDS[3]);
     kinds.extend(chain_analysis_reads::KINDS);
+    kinds.splice(0..0, chain_analysis_ops::KINDS.iter().copied());
     #[cfg(feature = "test-kinds")]
     kinds.extend(test_kinds::KINDS);
     kinds
@@ -728,6 +729,17 @@ impl Daemon {
                 return Ok((Some(locked), false));
             }
             let payload = metadata::execute(self.book_mut()?.as_mut(), &kind_text, args.as_ref())?;
+            return Ok((
+                Some(with_request_id(success(&kind_text, payload), &request_id)),
+                false,
+            ));
+        }
+        if chain_analysis_ops::KINDS.contains(&kind_text.as_str()) {
+            if let Some(locked) = self.open_lazily(&request_id)? {
+                return Ok((Some(locked), false));
+            }
+            let payload =
+                chain_analysis_ops::execute(self.book_mut()?.as_mut(), &kind_text, args.as_ref())?;
             return Ok((
                 Some(with_request_id(success(&kind_text, payload), &request_id)),
                 false,
@@ -1294,6 +1306,7 @@ impl Daemon {
 }
 
 mod accounts;
+mod chain_analysis_ops;
 mod context;
 mod networks;
 mod offline;

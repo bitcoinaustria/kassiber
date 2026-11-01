@@ -790,6 +790,33 @@ impl JournalReply for NativeJournalReply<'_> {
 /// Only test builds accept an injected report clock. UUIDs retain their native
 /// source and process oracles declare a one-to-one mapping for generated ids.
 struct ReportSources;
+#[derive(Default)]
+struct AnalysisSources(kassiber_wallets::publication::wallet::SystemSources);
+impl kassiber_wallets::publication::wallet::Sources for AnalysisSources {
+    fn id(&mut self) -> String {
+        #[cfg(feature = "test-harness")]
+        if std::env::var("KASSIBER_RUST_TEST_ANALYSIS_IDS").as_deref() == Ok("sequential") {
+            use std::sync::atomic::{AtomicU64, Ordering};
+            static NEXT: AtomicU64 = AtomicU64::new(1);
+            let offset = std::env::var("KASSIBER_RUST_TEST_ANALYSIS_ID_OFFSET")
+                .ok()
+                .and_then(|value| value.parse::<u64>().ok())
+                .unwrap_or_default();
+            return format!(
+                "00000000-0000-4000-8000-{:012x}",
+                NEXT.fetch_add(1, Ordering::Relaxed).saturating_add(offset)
+            );
+        }
+        self.0.id()
+    }
+    fn now(&mut self) -> String {
+        #[cfg(feature = "test-harness")]
+        if let Ok(stamp) = std::env::var("KASSIBER_RUST_TEST_ANALYSIS_TIME") {
+            return stamp;
+        }
+        self.0.now()
+    }
+}
 impl kassiber_setup::Sources for ReportSources {
     fn uuid(&self, conn: &Connection) -> kassiber_setup::Result<String> {
         kassiber_setup::SystemSources.uuid(conn)
@@ -1228,6 +1255,31 @@ impl Book for RealBook {
             },
             command,
         )
+    }
+    fn chain_analysis_ops(
+        &mut self,
+        workspace: Option<&Value>,
+        profile: Option<&Value>,
+        operation: &str,
+        args: &Value,
+    ) -> Result<Value, AppError> {
+        let (workspace_id, profile_id) = self.resolve_scope(workspace, profile)?;
+        let conn = self.conn()?;
+        let result = kassiber_wallets::analysis_ops::execute_with_sources(
+            conn,
+            &kassiber_wallets::analysis_ops::Scope {
+                workspace_id: &workspace_id,
+                profile_id: &profile_id,
+            },
+            operation,
+            args,
+            &mut AnalysisSources::default(),
+        )?;
+        if !conn.is_autocommit() {
+            conn.execute_batch("COMMIT")
+                .map_err(kassiber_wallets::database_error)?;
+        }
+        Ok(result)
     }
     fn attachments(
         &mut self,

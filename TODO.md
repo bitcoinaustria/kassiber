@@ -673,6 +673,15 @@ registers them; exit-tax preserves its reference no-registration boundary.
   AI projections stay Python.
 - [ ] Share the native analysis receipt/grant runtime with the dataset
   import/discard `.start` workers when the operations slice registers them.
+- [x] Port chain-analysis label upsert/import/delete, case save/delete and
+  dataset revoke/discard through one native service, with CLI/daemon byte
+  parity, all-112-table checks, SQLite/SQLCipher rollback and named mutations;
+  see the [local mutation checkpoint](docs/reference/rust-shell.md#chain-analysis-local-mutations-r5-partial).
+- [ ] Finish the chain-analysis operations assignment: all eight watches
+  commands, all five source commands, dataset import, acquisition plan/apply,
+  matching daemon kinds, dataset import/discard async starts and job cancel.
+  Preserve exact-action/once-only consent and source-revision fencing, gated
+  egress, offline refusals and revocation/cancellation with loopback tests.
 - [x] Port full-report, Austrian bundle and transaction CSV artifacts, saved
   export registration and their daemon kinds. Preserve
   sealed summaries, hashes and phase-4 append-only impact history.

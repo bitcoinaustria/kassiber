@@ -524,3 +524,8 @@ REVIEWS["tests/test_rust_chain_analysis_reads.py"] = {"*": {"disposition": "orac
 REVIEWS["tests/test_rust_chain_analysis_psbt_reads.py"] = {"*": {"disposition": "oracle", "group": "chain-sync", "reason": "compares native PSBT analyze/compare/entropy, BIP78 signature and output checks, staged source grants and analysis receipts with unchanged Python unsorted envelope bytes and all 112 tables; daemon receipts are compared with job identifiers, elapsed time and completion races masked; CLI/daemon routing runs under strict no-consent guards with zero fallback"}}
 
 REVIEWS["tests/test_rust_chain_analysis_dataset_preview.py"] = {"*": {"disposition": "oracle", "group": "chain-sync", "reason": "compares native streaming dataset preview (strict CSV, JSONL, manifests, claims and URL rules), staged grants and preview receipts with unchanged Python unsorted envelope bytes and all 112 tables; records the reference's hash-seed manifest order variants and pins sorted order; CLI/daemon routing runs under strict no-consent guards with zero fallback"}}
+
+REVIEWS["tests/test_rust_analysis_ops.py"] = {"*": {
+    "disposition": "oracle", "group": "chain-sync",
+    "reason": "compares seven native label, saved-case and dataset lifecycle CLI/daemon routes with unchanged Python bytes and all 112 tables; checks SQLite/SQLCipher rollback, named mutations, the retained Liquid address reference bug and zero-fallback no-consent processes with offline mode off/on; watches, source/acquisition consent and async workers remain unported",
+}}

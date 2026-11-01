@@ -232,6 +232,13 @@ pub const IMPLEMENTED: &[&str] = &[
     "chain-analysis.psbt.compare",
     "chain-analysis.psbt.entropy",
     "chain-analysis.datasets.preview",
+    "chain-analysis.labels.upsert",
+    "chain-analysis.labels.import",
+    "chain-analysis.labels.delete",
+    "chain-analysis.cases.save",
+    "chain-analysis.cases.delete",
+    "chain-analysis.datasets.revoke",
+    "chain-analysis.datasets.discard",
 ];
 
 /// `_NO_BOOTSTRAP_DATABASE_PREFIXES`.
