@@ -26,7 +26,7 @@ def cancellation_backend(protocol, book, hits):
     def record(request):
         with hits["lock"]:
             hits["requests"].append(request)
-            fetching = (request == "blockchain.scripthash.get_history" if protocol == "electrum"
+            fetching = (request == hits.get("cancel_method", "blockchain.scripthash.get_history") if protocol == "electrum"
                         else request.startswith("/scripthash/"))
             if fetching and hits["cancelled_at"] is None:
                 with sqlite3.connect(book) as control:
@@ -61,7 +61,7 @@ def cancellation_backend(protocol, book, hits):
                 result = {
                     "server.version": ["fixture", "1.6"],
                     "blockchain.headers.subscribe": {"height": 100, "hex": "00" * 80},
-                    "blockchain.scripthash.subscribe": "used",
+                    "blockchain.scripthash.subscribe": hits.get("subscription_status", "used"),
                     "blockchain.scripthash.get_history": [],
                     "blockchain.scripthash.listunspent": [],
                 }[method]
@@ -547,3 +547,110 @@ def test_bdk_cancellation_stops_incremental_widening(monkeypatch):
     finally:
         sync_transport_check.reset(token)
     assert len(horizons) == 1
+
+
+@pytest.mark.parametrize("protocol", ["esplora", "electrum"])
+def test_single_wallet_passes_transport_cancellation(tmp_path, protocol):
+    # No progress callback: only the explicit check passthrough can stop I/O.
+    with cancellation_book(tmp_path / "data") as conn:
+        job = daemon_freshness._freshness_run_payload(conn, {}, {"rates": False, "journals": False, "run": False})["enqueued"][0]
+        wallet = dict(conn.execute("SELECT * FROM wallets").fetchone())
+        hits = {"requests": [], "cancelled_at": None, "lock": threading.Lock()}
+        book = conn.execute("PRAGMA database_list").fetchone()[2]
+        with cancellation_backend(protocol, book, hits) as url:
+            with pytest.raises(AppError) as error:
+                handlers.sync_wallet_from_backend(
+                    conn, backend_runtime(protocol, url), "w", "p", wallet,
+                    check_cancelled=lambda: freshness._check_cancelled(conn, job["id"]),
+                )
+        assert error.value.code == "cancelled"
+        assert hits["cancelled_at"] is not None
+        assert len(hits["requests"]) - hits["cancelled_at"] <= 1
+        assert conn.execute("SELECT count(*) FROM wallet_utxo_refreshes").fetchone()[0] == 0
+
+
+@pytest.mark.parametrize("protocol", ["esplora", "electrum"])
+def test_negative_balance_repair_passes_transport_cancellation(tmp_path, monkeypatch, protocol):
+    from tests.test_bdk_observer import _descriptor_wallet
+
+    with cancellation_book(tmp_path / "data") as conn:
+        config = json.loads(_descriptor_wallet()[0]["config_json"])
+        config.update(backend="fixture", gap_limit=2)
+        conn.execute("UPDATE wallets SET kind='descriptor', config_json=?", (json.dumps(config),))
+        conn.commit()
+        job = daemon_freshness._freshness_run_payload(conn, {}, {"rates": False, "journals": False, "run": False})["enqueued"][0]
+        wallet = dict(conn.execute("SELECT * FROM wallets").fetchone())
+        profile = dict(conn.execute("SELECT * FROM profiles").fetchone())
+        monkeypatch.setattr(handlers, "_prospective_negative_balance_events", lambda *_args: [{"asset": "BTC", "running_balance_msat": -1}])
+        monkeypatch.setattr(core_sync, "negative_balance_rescan_gap_limit", lambda _state: 4)
+        hits = {"requests": [], "cancelled_at": None, "lock": threading.Lock()}
+        hits.update(subscription_status=None, cancel_method="blockchain.scripthash.subscribe")
+        book = conn.execute("PRAGMA database_list").fetchone()[2]
+        with cancellation_backend(protocol, book, hits) as url:
+            runtime = backend_runtime(protocol, url)
+            backend = runtime["backends"]["fixture"]
+            if protocol == "electrum":
+                # A custom CA selects compatibility; TCP needs no CA file.
+                backend["certificate"] = "fixture-ca"
+            state = sync_backends.resolve_wallet_sync_targets(backend, wallet)
+            initial = core_sync.WalletBackendFetch(backend, state, (), {}, protocol, 0, False)
+            prepared = handlers._prepare_negative_balance_repairs(
+                conn, runtime, profile, [wallet], handlers._wallet_sync_hooks(commit=False), {wallet["id"]: initial},
+                check_wallet_cancelled=lambda _wallet: freshness._check_cancelled(conn, job["id"]),
+            )
+        assert isinstance(prepared[wallet["id"]], AppError)
+        assert prepared[wallet["id"]].code == "cancelled"
+        assert hits["cancelled_at"] is not None
+        assert len(hits["requests"]) - hits["cancelled_at"] <= 1
+        assert conn.execute("SELECT count(*) FROM chain_observer_instances").fetchone()[0] == 0
+
+
+def test_shared_electrum_checks_cancellation_before_connect(tmp_path):
+    from kassiber.core.sync_control import run_sync_network
+
+    with cancellation_book(tmp_path / "data") as conn:
+        job = daemon_freshness._freshness_run_payload(conn, {}, {"rates": False, "journals": False, "run": False})["enqueued"][0]
+        hits = {"requests": [], "cancelled_at": -1, "connections": 0, "lock": threading.Lock()}
+        checked = False
+
+        def check():
+            nonlocal checked
+            if not checked:
+                # Cancellation arrives after the worker starts, before it
+                # queues its first request on the shared dispatcher.
+                conn.execute("UPDATE freshness_jobs SET cancel_requested=1 WHERE id=?", (job["id"],))
+                conn.commit()
+                checked = True
+                return
+            freshness._check_cancelled(conn, job["id"])
+
+        with native_electrum_backend(None, hits) as url:
+            with sync_backends.shared_electrum_client_pool() as pool:
+                client = pool.client(backend_runtime("electrum", url)["backends"]["fixture"])
+                with pytest.raises(AppError) as error:
+                    run_sync_network(lambda: client.call("blockchain.scripthash.get_history", ["00" * 32]), check)
+        assert error.value.code == "cancelled"
+        assert hits["requests"] == []
+        assert hits["connections"] == 0
+
+
+@pytest.mark.parametrize("operation", ["call", "batch_call"])
+def test_direct_electrum_checks_saved_cancellation(tmp_path, operation):
+    with cancellation_book(tmp_path / "data") as conn:
+        job = daemon_freshness._freshness_run_payload(conn, {}, {"rates": False, "journals": False, "run": False})["enqueued"][0]
+        hits = {"requests": [], "cancelled_at": None, "connections": 0, "lock": threading.Lock()}
+        book = conn.execute("PRAGMA database_list").fetchone()[2]
+        with native_electrum_backend(book, hits) as url:
+            with sync_backends.ElectrumClient(backend_runtime("electrum", url)["backends"]["fixture"]) as client:
+                token = sync_transport_check.set(lambda: freshness._check_cancelled(conn, job["id"]))
+                try:
+                    assert client.call("blockchain.scripthash.get_history", ["00" * 32]) == []
+                    with pytest.raises(AppError) as error:
+                        if operation == "call":
+                            client.call("blockchain.scripthash.listunspent", ["00" * 32])
+                        else:
+                            client.batch_call([("blockchain.scripthash.listunspent", ["00" * 32])] * 2)
+                finally:
+                    sync_transport_check.reset(token)
+        assert error.value.code == "cancelled"
+        assert len(hits["requests"]) == hits["cancelled_at"]
