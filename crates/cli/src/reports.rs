@@ -1159,6 +1159,43 @@ mod tests {
         }
     }
     #[test]
+    fn privacy_mirror_cli_preserves_scope_and_output_audience() {
+        for format in ["json", "table", "plain", "csv"] {
+            let args = crate::argparse::parse_args(
+                &[
+                    "--format",
+                    format,
+                    "reports",
+                    "privacy-mirror",
+                    "--workspace",
+                    "Main",
+                    "--profile",
+                    "Book",
+                ]
+                .map(str::to_owned),
+                crate::argparse::Context {
+                    width: 78,
+                    version: "test",
+                },
+            )
+            .unwrap();
+            let payload = request(&args);
+            assert_eq!(
+                get(&payload, "workspace"),
+                Some(&kassiber_envelope::s("Main"))
+            );
+            assert_eq!(
+                get(&payload, "profile"),
+                Some(&kassiber_envelope::s("Book"))
+            );
+            assert_eq!(get(&payload, "csv"), Some(&Value::Bool(format == "csv")));
+            assert_eq!(
+                get(&payload, "text"),
+                Some(&Value::Bool(matches!(format, "table" | "plain")))
+            );
+        }
+    }
+    #[test]
     fn year_handoff_cli_forwards_year_file_and_book_scope() {
         let args = crate::argparse::parse_args(
             &[

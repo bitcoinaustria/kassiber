@@ -641,6 +641,10 @@ registers them; exit-tax preserves its reference no-registration boundary.
 - [x] Compose the native Mirror report over SQL views and existing analytics,
   preserving public observer knowledge, private relevance and bounded report
   projection; see the [report checkpoint](docs/reference/rust-shell.md#mirror-report-projection-r5-partial).
+- [x] Prepare Mirror report scope/table adapters, CLI scope/format forwarding and
+  daemon empty-argument validation, keeping product routes unregistered until
+  durable recovery acceptance; see the
+  [transport checkpoint](docs/reference/rust-shell.md#mirror-transport-adapters-awaiting-registration-r5).
 - [ ] Finish Mirror's durable triggers/contributions, incremental synchronization
   and SQLite/SQLCipher kill recovery and CLI/daemon acceptance with
   non-zero served-by counts. Preserve deterministic native

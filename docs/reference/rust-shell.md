@@ -14696,3 +14696,39 @@ mutation summaries remain under `target/r5-mirror-5b/`. This is the report
 boundary only: transports and durable 5a integration follow, with product
 served-by counts still zero. No dependency, lockfile, schema or network permission
 changes are included. Full workspace, frontend and platform gates are not claimed.
+
+## Mirror transport adapters awaiting registration (R5)
+
+`kassiber-reports::privacy_mirror` adds the existing active-scope projection and
+finding/coverage table rows. The shared report dispatcher selects the redacted
+CLI audience or local desktop audience before table shaping, without invoking
+accounting readiness. The CLI already forwards the existing workspace/profile
+and format fields. The daemon adapter admits only absent/null/empty-object args,
+returns the existing sorted unknown-key details and refuses audience or wallet
+overrides. No generic AI dispatch is registered or changed.
+
+Six unchanged-Python wrapper cases match report/table bytes and preserve all 112
+logical tables, including a deliberately stale accounting journal. Native CLI
+format/scope and daemon validation tests pass. Production all-target Clippy for
+reports, CLI and daemon passes with warnings denied. Three compiled mutations
+are killed: active-scope privacy, finding authority in tables and unknown daemon
+arguments. Local summaries/logs remain in `target/r5-mirror-5b/`. This is adapter
+acceptance, not whole-process Mirror registration or packaged acceptance.
+
+Registration remains the final step. After merging the complete 5a durable
+layer and its SQLite/SQLCipher kill-recovery evidence, add a Mirror-specific
+savepoint around scope resolution, synchronization and report construction.
+Successful release must retain a synchronized generation and failure must roll
+back only that savepoint; the general report read path always rolls back and
+cannot own this publication. Keep caller transactions and writes intact. Then
+add `reports.privacy-mirror` to CLI `reports::COMMANDS` and
+`describe::IMPLEMENTED`, and `ui.reports.privacy_mirror` to daemon
+`reports::KINDS`. Run whole-process CLI/daemon byte and all-table comparisons,
+including cold/warm/incremental books, invalid arguments, both no-egress states
+and non-zero Rust served-by counts with zero Python fallback. Update execution
+evidence and this checkpoint in that final registration commit.
+
+The current transport registration lists still exclude Mirror and product
+served-by counts remain zero. Unsupported product entry points fail closed.
+There are no dependency, lockfile, schema or egress-permission changes. Full
+workspace, frontend and platform gates are not claimed.

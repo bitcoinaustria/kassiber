@@ -35,6 +35,7 @@ mod legacy_privacy_wire;
 pub mod lightning;
 mod platform_csv;
 mod privacy_hygiene;
+pub mod privacy_mirror;
 pub mod psbt_privacy;
 mod snapshot_write;
 mod snapshots;
@@ -243,6 +244,24 @@ pub fn execute_with_sources(
             return Ok(
                 if truthy(value(args, "text")) || truthy(value(args, "csv")) {
                     privacy_hygiene::table(&report)
+                } else {
+                    report
+                },
+            );
+        }
+        if matches!(
+            command,
+            "reports.privacy-mirror" | "ui.reports.privacy_mirror"
+        ) {
+            let report = privacy_mirror::report(
+                conn,
+                &workspace,
+                &profile,
+                command == "reports.privacy-mirror",
+            )?;
+            return Ok(
+                if truthy(value(args, "text")) || truthy(value(args, "csv")) {
+                    privacy_mirror::table(&report)
                 } else {
                     report
                 },

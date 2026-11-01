@@ -4359,3 +4359,12 @@ finding remains public. The 142-case unchanged-Python report corpus checks both
 local and redacted report bytes, all 112 tables, budgets and no-egress. Generic
 AI projections remain Python. CLI/daemon acceptance and registration still await
 the durable integration boundary.
+
+### R5 privacy: transport adapters awaiting registration
+
+The [transport checkpoint](../reference/rust-shell.md#mirror-transport-adapters-awaiting-registration-r5)
+adds report scope/table mapping, CLI scope/format forwarding and daemon argument
+validation. Six wrapper cases retain byte and all-112-table parity; three
+adapter mutations are killed. Product registration remains deliberately last,
+after durable integration and SQLite/SQLCipher recovery acceptance, with
+whole-process served-by evidence still required.

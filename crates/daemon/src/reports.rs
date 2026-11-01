@@ -58,8 +58,11 @@ pub fn execute(book: &mut dyn Book, kind: &str, raw: Option<&Value>) -> Result<V
     if kind.starts_with("ui.source_funds.") {
         return book.reports(kind, &cross_check_args(raw)?);
     }
-    if kind == "ui.reports.privacy_hygiene" {
-        return book.reports(kind, &privacy_args(raw)?);
+    if matches!(
+        kind,
+        "ui.reports.privacy_hygiene" | "ui.reports.privacy_mirror"
+    ) {
+        return book.reports(kind, &privacy_args(kind, raw)?);
     }
     if matches!(
         kind,
@@ -241,7 +244,7 @@ fn psbt_args(raw: Option<&Value>) -> Result<Value, AppError> {
     Ok(dict([("psbt", psbt.clone())]))
 }
 
-fn privacy_args(raw: Option<&Value>) -> Result<Value, AppError> {
+fn privacy_args(kind: &str, raw: Option<&Value>) -> Result<Value, AppError> {
     let empty = dict::<&str>([]);
     let args = raw.filter(|v| !matches!(v, Value::Null)).unwrap_or(&empty);
     let Value::Dict(fields) = args else {
@@ -262,7 +265,7 @@ fn privacy_args(raw: Option<&Value>) -> Result<Value, AppError> {
         });
         return Err(AppError::new(
             "validation",
-            "ui.reports.privacy_hygiene received unsupported arguments",
+            format!("{kind} received unsupported arguments"),
         )
         .with_details(dict([("unknown", Value::List(unknown))])));
     }
@@ -868,22 +871,68 @@ mod tests {
     }
 
     #[test]
+    fn privacy_mirror_daemon_accepts_only_an_empty_object() {
+        for raw in [None, Some(Value::Null), Some(dict::<&str>([]))] {
+            assert_eq!(
+                privacy_args("ui.reports.privacy_mirror", raw.as_ref()).unwrap(),
+                dict::<&str>([])
+            );
+        }
+        for raw in [s(""), Value::Bool(false), Value::List(vec![])] {
+            assert_eq!(
+                privacy_args("ui.reports.privacy_mirror", Some(&raw))
+                    .unwrap_err()
+                    .message,
+                "daemon args must be an object"
+            );
+        }
+        let error = privacy_args(
+            "ui.reports.privacy_mirror",
+            Some(&dict([
+                ("wallet", s("cold")),
+                ("redacted", Value::Bool(true)),
+            ])),
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "validation");
+        assert_eq!(
+            error.message,
+            "ui.reports.privacy_mirror received unsupported arguments"
+        );
+        assert_eq!(
+            error.details,
+            Some(dict([(
+                "unknown",
+                Value::List(vec![s("redacted"), s("wallet")])
+            )]))
+        );
+    }
+    #[test]
     fn privacy_hygiene_daemon_rejects_unknown_fields_and_non_objects() {
-        assert_eq!(privacy_args(None).unwrap(), dict::<&str>([]));
-        assert_eq!(privacy_args(Some(&Value::Null)).unwrap(), dict::<&str>([]));
+        assert_eq!(
+            privacy_args("ui.reports.privacy_hygiene", None).unwrap(),
+            dict::<&str>([])
+        );
+        assert_eq!(
+            privacy_args("ui.reports.privacy_hygiene", Some(&Value::Null)).unwrap(),
+            dict::<&str>([])
+        );
         for raw in [
             Value::List(vec![]),
             Value::Bool(false),
             s(""),
             Value::Int(0.into()),
         ] {
-            let error = privacy_args(Some(&raw)).unwrap_err();
+            let error = privacy_args("ui.reports.privacy_hygiene", Some(&raw)).unwrap_err();
             assert_eq!(error.code, "validation");
             assert_eq!(error.message, "daemon args must be an object");
             assert_eq!(error.details, Some(dict([("type", s(type_name(&raw)))])));
         }
-        let error =
-            privacy_args(Some(&dict([("z", Value::Null), ("a", Value::Null)]))).unwrap_err();
+        let error = privacy_args(
+            "ui.reports.privacy_hygiene",
+            Some(&dict([("z", Value::Null), ("a", Value::Null)])),
+        )
+        .unwrap_err();
         assert_eq!(
             error.message,
             "ui.reports.privacy_hygiene received unsupported arguments"
