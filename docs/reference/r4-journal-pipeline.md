@@ -17,10 +17,10 @@ restack and its verification. The separate [tax-engine speed pass](tax-engine.md
 measures 2.03–3.96× faster `ledger` calls with byte-identical responses; its
 timings supersede the engine line in this design's original measurements.
 R4-9 has a [test-only loader checkpoint](r4-native-loader-checkpoint.md)
-whose loader-9 exhaustive map is combined with closed BLOB parity; forty
-seed-dependent messages remain pending Python determinism fix. Evidence
-inherited from t3code/r4-9-loader-9@e15900677 and
-t3code/r4-9-loader-blob@d03c0b9a1; pending fresh r9 verification.
+whose accepted determinism continuation combines loader-9's exhaustive map,
+lossless BLOB consumers and one exact typed revision refusal. All forty older
+seed-dependent message exceptions are closed in that source record. Evidence
+inherited from t3code/r4-9-loader-determinism@aaf6216e3; pending fresh r9 verification.
 Python retains production authority.
 The [R4-14 pairing stage](rust-pairing.md) reuses the native transfer library;
 its 20k process CPU acceptance is 13.02× generic and 11.75× multi-wallet.
