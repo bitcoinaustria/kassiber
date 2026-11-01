@@ -765,3 +765,60 @@ jobs have finished.
 8. Keep performance acceptance on the separate worker track: measure the
    registered command from process start to exit against the owner's 4× target
    and four design budgets, then address R4-15/R4-16 authority work.
+
+## Fourth continuation: stage representation integration
+
+`t3code/r4-13-journals-process-4` starts at `649a72f1a`. It integrates the
+renderer audit through `71307a23f`, native scalar ledger through `8225d58c1`,
+and persistence through `8cb7947cc`, including their missing prerequisites.
+Loader `aaf6216e3` is already represented by the inherited `718c49640`;
+its duplicate cherry-pick is skipped. This remains an unregistered checkpoint.
+
+The merged stage tips do not compile together without adapting persistence to
+the renderer's borrowed entry/profile fields, borrowed-or-owned pricing facts,
+and `JournalQuantity`/`JournalMsat` representations. The integration keeps
+borrowed operands alive through storage, retains copy-on-write pricing edits in
+the existing regression witnesses, and compares both small and wide msat
+values without narrowing. Entry bindings preserve refusal precedence for
+metadata, quantity and decimal formatting, including nonfinite quantities. Synthetic
+pipeline responses now provide all mandatory empty response arrays required by
+the stricter decoder.
+
+The loader's existing native BLOB variant also needs explicit handling in the
+renderer scalar primitives. Five immutable Python-derived byte witnesses pin
+type, truth, escaped representation/text, raw JSON serialization refusal,
+lossless oracle snapshots, and rejection by checked serde admission. These
+primitive checks do not certify native numeric BLOB consumers or the complete
+process handoff. Five named scalar mutations cover the new handling; four
+existing render/persistence recipes are reanchored to the merged source. The
+journal mutation wrapper now respects `CARGO_BUILD_JOBS`, defaulting to eight.
+
+The combined all-feature journal verification passes **147 tests** across the
+broad run and focused reruns, including the repaired seven-test pipeline suite,
+three scalar tests, and SQLite/SQLCipher crash recovery. The native
+ledger test compares all 990 inherited ledger states/refusals. All **66 Python
+checks** pass for renderer/scalar regeneration and capture, rendering branches,
+complete persistence replay, live native processing and ordered refresh. These
+include the eight BLOB-consumer comparisons, active repairs/pricing, lifecycle
+tapes, both refresh commits and abrupt writer recovery. Scoped all-target,
+all-feature clippy passes with warnings denied; workspace formatting passes.
+All **nine affected mutation recipes** are killed with **five passing
+unmutated baselines**, zero survivors and zero build errors. All **875 entries**
+apply across the ten journal catalogs; this bounded execution does not close
+the full inherited mutation gate.
+The required classifier update refreshes the disposition count table, and CI
+preflight passes all **57 tests**. Local source-bound evidence is retained in
+`target/r4-13/integration-4/`; disposable mutation and verification build trees
+are removed after summarizing.
+
+Registration prerequisites remain exactly as listed above. In particular,
+`process::stage_value` still explicitly refuses NaN, actual surrogate strings
+and non-string keys. The new native ledger reader has not replaced builder
+assembly, diagnostic joins or persistence's serde operands. Production scope
+resolution must retain stored profile values, and the shared book service must
+bind the real lifecycle `SystemSources`; the probe's injected profile and tapes
+do not satisfy that requirement. The earlier 25,030 generated and 318 recorded
+comparisons belong to their recorded source and binary, and do not certify
+this merge. Complete inherited campaigns and each route's authority, envelope,
+event, zero-fallback and mutation gates remain open. No registered-command
+performance result exists, and probe timings are not substituted for one.

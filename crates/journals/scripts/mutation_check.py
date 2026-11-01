@@ -44,7 +44,7 @@ def _offline_run(command, cwd, env):
             # Every mutant must compile. The selected integration target also
             # compiles in outcome(); build errors there remain checker errors.
             command = [*command, '--lib']
-        env = {**env, 'CARGO_BUILD_BUILD_DIR': str(cwd / 'target/build'), 'CARGO_TARGET_DIR': str(cwd / 'target'), 'CARGO_BUILD_JOBS': '8', 'CARGO_PROFILE_DEV_DEBUG': '0', 'CARGO_INCREMENTAL': '1'}
+        env = {**env, 'CARGO_BUILD_BUILD_DIR': str(cwd / 'target/build'), 'CARGO_TARGET_DIR': str(cwd / 'target'), 'CARGO_BUILD_JOBS': '8', 'CARGO_PROFILE_DEV_DEBUG': '0', 'CARGO_INCREMENTAL': '0'}
     return _run(command, cwd, env)
 
 checker._run = _offline_run

@@ -2,6 +2,36 @@ use kassiber_journals::scalar;
 use serde_json::Value;
 
 #[test]
+fn byte_scalars_keep_python_identity_and_serialization_refusal() {
+    let cases: Vec<Value> =
+        serde_json::from_str(include_str!("data/render-scalar-bytes.json")).unwrap();
+    for case in cases {
+        let hex = case["hex"].as_str().unwrap();
+        let native = scalar::Value::Bytes(
+            hex.as_bytes()
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|pair| u8::from_str_radix(std::str::from_utf8(pair).unwrap(), 16).unwrap())
+                .collect(),
+        );
+        assert_eq!(scalar::kind(&native), case["kind"]);
+        assert_eq!(scalar::truth(&native), case["truth"].as_bool().unwrap());
+        assert_eq!(scalar::repr(&native), case["representation"]);
+        assert_eq!(scalar::text(&native).as_str().unwrap(), case["text"]);
+        assert!(scalar::to_json(&native).is_none());
+        assert_eq!(
+            scalar::encode(&native).unwrap_err().to_string(),
+            case["encoding_error"]
+        );
+        assert_eq!(
+            scalar::encode(&scalar::snapshot(&native)).unwrap(),
+            case["snapshot"]
+        );
+    }
+}
+
+#[test]
 fn lossless_scalars_match_python_bytes_and_types() {
     let cases: Vec<Value> = serde_json::from_str(include_str!("data/render-scalars.json")).unwrap();
     for case in cases {

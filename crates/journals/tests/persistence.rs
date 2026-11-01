@@ -89,7 +89,6 @@ fn persistence_refuses_without_a_caller_transaction() {
 #[test]
 fn binding_refusals_precede_decimal_formatting_and_roll_back_every_write() {
     use kassiber_journals::JournalDecimal;
-    use serde_json::json;
     let v = &cases()[0];
     let c = Connection::open_in_memory().unwrap();
     load(&c, &v["before"]);
@@ -99,8 +98,7 @@ fn binding_refusals_precede_decimal_formatting_and_roll_back_every_write() {
         let result = store_with(&c, v, &mut Writes::default(), |state| {
             let entry = &mut state.entries[0];
             if bad_metadata {
-                static BAD: std::sync::LazyLock<Value> = std::sync::LazyLock::new(|| json!({"unsupported":true}));
-                entry.workspace_id = &BAD;
+                entry.workspace_id = state.custody_quantity;
             }
             entry.quantity = JournalDecimal("1E+20".parse().unwrap()).into();
             entry.fiat_value = JournalDecimal("1E+100000001".parse().unwrap());
@@ -494,16 +492,18 @@ fn synthetic_quarantines_are_filtered_before_readiness() {
 
 #[test]
 fn malformed_entry_and_holding_bindings_roll_back_before_freshness() {
-    use serde_json::json;
     let v = cases().remove(0);
     for mode in 0..6 {
         let c = Connection::open_in_memory().unwrap();
         load(&c, &v["before"]);
         c.execute_batch("BEGIN IMMEDIATE").unwrap();
         let result = store_with(&c, &v, &mut Writes::default(), |s| match mode {
-            0 => s.entries[0].workspace_id = json!({"bad":1}),
-            1 => s.entries[0].profile_id = json!([]),
-            2 => s.entries[0].quantity.0 = "9223372036854775808".parse().unwrap(),
+            0 => s.entries[0].workspace_id = s.custody_quantity,
+            1 => s.entries[0].profile_id = s.custody_component_blockers,
+            2 => {
+                s.entries[0].quantity =
+                    kassiber_journals::JournalDecimal("9223372036854775808".parse().unwrap()).into()
+            }
             3 => s.account_holdings.pairs[0].0.pop().map(|_| ()).unwrap(),
             4 => s.wallet_holdings.pairs[0].0.push(Value::Null),
             5 => s.entries[0].transaction_id = serde_json::from_str("9223372036854775808").unwrap(),

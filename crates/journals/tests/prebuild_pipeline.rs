@@ -158,7 +158,7 @@ fn custody() -> Value {
         "component_blockers":[],"quantity_state":null,"gap_ignored_transaction_ids":[],"gap_accounting_ignored_transaction_ids":[]})
 }
 fn response() -> kassiber_tax_core::ledger::response::LedgerResponse {
-    boundary::ledger_response(&json!({"ok":true,"entries":[{"entry_type":"acquisition","row":"legacy-in","wallet":"Legacy","asset":"BTC","quantity":"9E-9","fiat_value":"36E-5","unit_cost":"40000E0","description":"pipeline rollback witness"}]})).unwrap()
+    boundary::ledger_response(&json!({"ok":true,"carried_rows":[],"intra_audit":[],"holdings":[],"quarantines":[],"tax_summary":[],"entries":[{"entry_type":"acquisition","row":"legacy-in","wallet":"Legacy","asset":"BTC","quantity":"9E-9","fiat_value":"36E-5","unit_cost":"40000E0","description":"pipeline rollback witness"}]})).unwrap()
 }
 fn store(
     c: &Connection,
@@ -167,11 +167,12 @@ fn store(
 ) -> Result<persistence::Stored, Refusal> {
     let custody = custody();
     let wallets = [json!({"id":"legacy-wallet","label":"Legacy","wallet_account_id":null})];
+    let response = response();
     let state = boundary::build(
         &p.repaired.profile,
         &custody,
         &wallets,
-        &response(),
+        &response,
         String::new,
     )?;
     persistence::store_ledger_state(

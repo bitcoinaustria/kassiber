@@ -25,6 +25,22 @@ def vectors():
     return result
 
 
+def byte_vectors():
+    from tests.custody_snapshot import to_jsonable
+    result = []
+    for value in (b'', b'0', b'1.5', b'\x00\xff', b"'\"\\\n"):
+        try:
+            json.dumps(value)
+        except TypeError as exc:
+            encoding_error = str(exc)
+        result.append(dict(hex=value.hex(), kind=type(value).__name__, truth=bool(value),
+                           text=str(value), representation=repr(value),
+                           encoding_error=encoding_error,
+                           snapshot=json.dumps(to_jsonable(value), sort_keys=True,
+                                               ensure_ascii=True, separators=(',', ':'))))
+    return result
+
+
 def render_vectors():
     from dataclasses import replace
     from unittest.mock import patch
@@ -73,6 +89,7 @@ def refusal_vectors():
 
 if __name__ == '__main__':
     for name, records in [('render-scalars.json', vectors()),
+                          ('render-scalar-bytes.json', byte_vectors()),
                           ('render-scalar-coercions.json', render_vectors()),
                           ('render-scalar-refusals.json', refusal_vectors())]:
         PATH.with_name(name).write_text(json.dumps(records, ensure_ascii=True, indent=2) + '\n')

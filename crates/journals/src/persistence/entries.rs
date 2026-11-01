@@ -6,7 +6,7 @@ pub(super) struct Plan<'a> {
     pub id: String,
     pub metadata: [ValueRef<'a>; 15],
     pub quantity: Sql,
-    pub entry: &'a JournalEntryRow,
+    pub entry: &'a JournalEntryRow<'a>,
     pub calculation: Prepared<'a>,
 }
 

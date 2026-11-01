@@ -9,7 +9,7 @@ pub(crate) mod compare;
 
 #[derive(Hash, PartialEq, Eq)]
 struct SourceKey<'a> {
-    provenance: *const SourceProvenance,
+    provenance: *const SourceProvenance<'a>,
     asset: &'a str,
     spot: &'a str,
     fiat_fee: &'a str,
@@ -86,11 +86,8 @@ fn optional(value: &Option<impl AsRef<str>>, out: &mut String, options: &Options
 }
 fn source(source: &Source, options: &Options) -> Option<String> {
     if !text(&source.provenance.transaction_id)
-        || !exact_integer_text(
-            &source.crypto_fee_msat.value(),
-            Some(&source.crypto_fee_msat_exact),
-        )
-        || source.provenance.pricing.0.iter().any(|v| !text(v))
+        || !exact_integer_text(&source.crypto_fee_msat, Some(&source.crypto_fee_msat_exact))
+        || source.provenance.pricing.iter().any(|v| !text(v))
     {
         return None;
     }
@@ -98,7 +95,7 @@ fn source(source: &Source, options: &Options) -> Option<String> {
     out.push('[');
     scalar(&source.provenance.transaction_id, &mut out, options)?;
     for value in [
-        source.provenance.engine_event_id.as_str(),
+        source.provenance.engine_event_id.as_ref(),
         &source.provenance.occurred_at,
         &source.asset,
         &source.spot_price_exact,
@@ -111,7 +108,7 @@ fn source(source: &Source, options: &Options) -> Option<String> {
     msat(&source.crypto_fee_msat, &mut out, options)?;
     for index in [0, 5, 1, 2, 9, 10, 11, 8, 7, 4, 3, 6] {
         out.push(',');
-        scalar(&source.provenance.pricing.0[index], &mut out, options)?;
+        scalar(&source.provenance.pricing[index], &mut out, options)?;
     }
     out.push(']');
     Some(out)

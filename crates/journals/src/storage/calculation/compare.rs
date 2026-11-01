@@ -11,6 +11,7 @@ enum Scalar<'a> {
     Null,
     Text(&'a str, bool),
     Integer(&'a str),
+    Small(i64),
 }
 impl<'a> Scalar<'a> {
     fn text(value: &'a Value) -> Option<Self> {
@@ -27,15 +28,21 @@ impl<'a> Scalar<'a> {
                 .all(|b| matches!(b, 0x20..=0x7e) && !matches!(b, b'"' | b'\\')),
         )
     }
-    fn integer(value: &'a Value) -> Self {
-        let n = value.as_number().expect("validated integer").as_str();
-        Self::Integer(if n == "-0" { "0" } else { n })
+    fn integer(value: &'a JournalMsat) -> Self {
+        match value {
+            JournalMsat::Small(n) => Self::Small(*n),
+            JournalMsat::Wide(value) => {
+                let n = value.as_number().expect("validated integer").as_str();
+                Self::Integer(if n == "-0" { "0" } else { n })
+            }
+        }
     }
     fn consume(self, cursor: &mut Cursor<'_>) -> Option<()> {
         match self {
             Self::Null => cursor.take(b"null"),
             Self::Text(s, plain) => cursor.quoted_known(s, plain),
             Self::Integer(s) => cursor.take(s.as_bytes()),
+            Self::Small(n) => write!(cursor, "{n}").ok(),
         }
     }
 }
@@ -48,9 +55,9 @@ pub(crate) struct Sources<'a> {
 
 pub(crate) enum Prepared<'a> {
     Absent,
-    Direct(&'a Calculation),
+    Direct(&'a Calculation<'a>),
     Compact {
-        calculation: &'a Calculation,
+        calculation: &'a Calculation<'a>,
         sources: Vec<usize>,
         links: Vec<[Option<usize>; 2]>,
     },
@@ -82,14 +89,14 @@ impl<'a> Sources<'a> {
     fn shape(&self, source: &'a Source) -> Option<[Scalar<'a>; 19]> {
         if !text(&source.provenance.transaction_id)
             || !exact_integer_text(&source.crypto_fee_msat, Some(&source.crypto_fee_msat_exact))
-            || source.provenance.pricing.0.iter().any(|v| !text(v))
+            || source.provenance.pricing.iter().any(|v| !text(v))
         {
             return None;
         }
         let mut shape = [Scalar::Null; 19];
         shape[0] = Scalar::text(&source.provenance.transaction_id)?;
         for (index, value) in [
-            source.provenance.engine_event_id.as_str(),
+            source.provenance.engine_event_id.as_ref(),
             &source.provenance.occurred_at,
             &source.asset,
             &source.spot_price_exact,
@@ -105,14 +112,14 @@ impl<'a> Sources<'a> {
             .into_iter()
             .enumerate()
         {
-            shape[index + 7] = Scalar::text(&source.provenance.pricing.0[pricing])?;
+            shape[index + 7] = Scalar::text(&source.provenance.pricing[pricing])?;
         }
         Some(shape)
     }
 
     pub(crate) fn prepare(
         &mut self,
-        calculation: Option<&'a Calculation>,
+        calculation: Option<&'a Calculation<'a>>,
         encoder: &mut Encoder<'a>,
     ) -> Result<Prepared<'a>, Refusal> {
         let Some(calculation) = calculation else {
@@ -128,7 +135,7 @@ impl<'a> Sources<'a> {
         Ok(Prepared::Fallback(legacy, compact))
     }
 
-    fn compact(&mut self, calculation: &'a Calculation) -> Option<Prepared<'a>> {
+    fn compact(&mut self, calculation: &'a Calculation<'a>) -> Option<Prepared<'a>> {
         if calculation.schema_version != 1 {
             return None;
         }
@@ -294,7 +301,7 @@ impl Prepared<'_> {
 fn valid_source(source: &Source) -> bool {
     text(&source.provenance.transaction_id)
         && exact_integer_text(&source.crypto_fee_msat, Some(&source.crypto_fee_msat_exact))
-        && source.provenance.pricing.0.iter().all(text)
+        && source.provenance.pricing.iter().all(text)
 }
 
 fn valid_direct(calculation: &Calculation) -> bool {
@@ -310,28 +317,29 @@ fn valid_direct(calculation: &Calculation) -> bool {
                     _ => false,
                 }
                 && valid_source(&fragment.event)
-                && fragment.lot.as_ref().is_none_or(valid_source)
+                && fragment
+                    .lot
+                    .as_ref()
+                    .is_none_or(|source| valid_source(source))
         })
 }
 
 fn source_equal(a: &Source, b: &Source) -> bool {
-    fn integer(v: &Value) -> &str {
-        let s = v.as_number().expect("validated source integer").as_str();
-        if s == "-0" {
-            "0"
-        } else {
-            s
+    fn integer_equal(a: &JournalMsat, b: &JournalMsat) -> bool {
+        match (a.as_i64(), b.as_i64()) {
+            (Some(a), Some(b)) => a == b,
+            _ => a.to_string() == b.to_string(),
         }
     }
     a.asset == b.asset
         && a.spot_price_exact == b.spot_price_exact
         && a.fiat_fee_exact == b.fiat_fee_exact
-        && integer(&a.crypto_fee_msat) == integer(&b.crypto_fee_msat)
+        && integer_equal(&a.crypto_fee_msat, &b.crypto_fee_msat)
         && (Arc::ptr_eq(&a.provenance, &b.provenance)
             || (a.provenance.transaction_id == b.provenance.transaction_id
                 && a.provenance.engine_event_id == b.provenance.engine_event_id
                 && a.provenance.occurred_at == b.provenance.occurred_at
-                && a.provenance.pricing.0 == b.provenance.pricing.0))
+                && a.provenance.pricing.iter().eq(b.provenance.pricing.iter())))
 }
 
 fn consume_direct(calculation: &Calculation, cursor: &mut Cursor<'_>) -> Option<()> {
@@ -364,7 +372,7 @@ fn consume_direct(calculation: &Calculation, cursor: &mut Cursor<'_>) -> Option<
         cursor.take(b"[")?;
         cursor.scalar(&source.provenance.transaction_id)?;
         for value in [
-            source.provenance.engine_event_id.as_str(),
+            source.provenance.engine_event_id.as_ref(),
             &source.provenance.occurred_at,
             &source.asset,
             &source.spot_price_exact,
@@ -377,7 +385,7 @@ fn consume_direct(calculation: &Calculation, cursor: &mut Cursor<'_>) -> Option<
         Scalar::integer(&source.crypto_fee_msat).consume(cursor)?;
         for index in [0, 5, 1, 2, 9, 10, 11, 8, 7, 4, 3, 6] {
             cursor.take(b",")?;
-            cursor.scalar(&source.provenance.pricing.0[index])?;
+            cursor.scalar(&source.provenance.pricing[index])?;
         }
         cursor.take(b"]")?;
     }

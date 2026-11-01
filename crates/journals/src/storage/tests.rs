@@ -507,16 +507,14 @@ fn typed_calculations_preserve_compact_bytes_and_all_dynamic_fallbacks() {
                         std::sync::Arc::make_mut(
                             &mut std::sync::Arc::make_mut(&mut c.fragments[0].event).provenance,
                         )
-                        .pricing
-                        .0[0] = json!(true)
+                        .pricing[0] = json!(true)
                     }
                     14 => c.fragments[0].lot = None,
                     17 => {
                         std::sync::Arc::make_mut(
                             &mut std::sync::Arc::make_mut(&mut c.fragments[0].event).provenance,
                         )
-                        .pricing
-                        .0[0] = json!(1)
+                        .pricing[0] = json!(1)
                     }
                     18 => {
                         let mut positive = c.fragments[0].clone();
@@ -578,9 +576,9 @@ fn typed_calculation_source_dictionary_preserves_order_and_deduplicates_large_in
         let source = Source {
             provenance: std::sync::Arc::new(SourceProvenance {
                 transaction_id: json!(format!("transaction-{index}")),
-                engine_event_id: format!("event-{index}"),
+                engine_event_id: format!("event-{index}").into(),
                 occurred_at: "2026-01-01T00:00:00Z".into(),
-                pricing: PricingFacts(std::array::from_fn(|_| Value::Null)),
+                pricing: PricingFacts::Owned(Box::new(std::array::from_fn(|_| Value::Null))),
             }),
             asset: "BTC".into(),
             spot_price_exact: "30000".into(),
@@ -630,15 +628,19 @@ fn typed_calculation_source_dictionary_preserves_order_and_deduplicates_large_in
 fn shared_calculation_encoder_keeps_every_source_operand_and_refusal() {
     use std::sync::Arc;
     let cases: Value = serde_json::from_str(include_str!("../../tests/data/render.json")).unwrap();
+    let responses: Vec<_> = array(&cases)
+        .iter()
+        .map(|case| crate::boundary::ledger_response(&case["response"]).ok())
+        .collect();
     let calculation = array(&cases)
         .iter()
-        .find_map(|case| {
-            let response = crate::boundary::ledger_response(&case["response"]).ok()?;
+        .zip(&responses)
+        .find_map(|(case, response)| {
             let state = crate::boundary::build(
                 &case["profile"],
                 &case["custody"],
                 array(&case["wallets"]),
-                &response,
+                response.as_ref()?,
                 String::new,
             )
             .ok()?;
@@ -662,8 +664,8 @@ fn shared_calculation_encoder_keeps_every_source_operand_and_refusal() {
                 source.crypto_fee_msat_exact = "7".into();
             }
             4 => source.crypto_fee_msat_exact = "mismatch".into(),
-            5 => source.crypto_fee_msat = json!(true).into(),
-            6 => Arc::make_mut(&mut source.provenance).pricing.0[0] = json!(true),
+            5 => source.crypto_fee_msat = msat(json!(true)),
+            6 => Arc::make_mut(&mut source.provenance).pricing[0] = json!(true),
             7 => Arc::make_mut(&mut source.provenance).transaction_id = json!(42),
             8 => Arc::make_mut(&mut source.provenance).occurred_at = "other".into(),
             _ => unreachable!(),

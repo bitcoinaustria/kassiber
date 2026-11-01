@@ -267,7 +267,7 @@ fn store<O: storage::WriteObserver>(
     for e in &state.entries {
         let key = (
             quantity::key(&e.transaction_id),
-            quantity::key(&e.wallet_id),
+            quantity::key(e.wallet_id),
             e.entry_type,
             e.asset.as_ref(),
         );
@@ -286,11 +286,11 @@ fn store<O: storage::WriteObserver>(
             .get(key.0.as_ref())
             .unwrap_or(&(Sql::Null, Sql::Null));
         let metadata = [
-            borrowed(&e.workspace_id)?,
-            borrowed(&e.profile_id)?,
+            borrowed(e.workspace_id)?,
+            borrowed(e.profile_id)?,
             borrowed(&e.transaction_id)?,
-            borrowed(&e.wallet_id)?,
-            borrowed(&e.account_id)?,
+            borrowed(e.wallet_id)?,
+            borrowed(e.account_id)?,
             borrowed(&e.occurred_at)?,
             ValueRef::Text(e.entry_type.as_bytes()),
             ValueRef::Text(e.asset.as_bytes()),
@@ -307,7 +307,10 @@ fn store<O: storage::WriteObserver>(
                 .map_or(ValueRef::Null, |s| ValueRef::Text(s.as_bytes())),
             ValueRef::Text(at.as_bytes()),
         ];
-        let quantity = bind(&e.quantity.msat()?)?;
+        let quantity = match &e.quantity {
+            JournalQuantity::Finite(d) => amount(d)?,
+            other => bind(&other.msat()?)?,
+        };
         for decimal in [
             Some(&e.fiat_value),
             Some(&e.unit_cost),

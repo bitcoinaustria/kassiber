@@ -24,6 +24,7 @@ pub fn kind(value: &Value) -> &'static str {
         Value::Int(_) => "int",
         Value::Float(_) => "float",
         Value::Str(_) => "str",
+        Value::Bytes(_) => "bytes",
         Value::List(_) => "list",
         Value::Dict(_) => "dict",
         Value::Decimal(_) => "Decimal",
@@ -37,6 +38,7 @@ pub fn truth(value: &Value) -> bool {
         Value::Int(v) => *v != BigInt::from(0),
         Value::Float(v) => *v != 0.0,
         Value::Str(v) => v.code_points().next().is_some(),
+        Value::Bytes(v) => !v.is_empty(),
         Value::List(v) => !v.is_empty(),
         Value::Dict(v) => !v.is_empty(),
         Value::Decimal(v) => !v.is_zero(),
@@ -46,6 +48,7 @@ pub fn truth(value: &Value) -> bool {
 pub fn repr(value: &Value) -> String {
     match value {
         Value::Str(v) => kassiber_pytext::repr_py(v),
+        Value::Bytes(v) => kassiber_pyjson::bytes_repr(v),
         Value::List(v) => format!("[{}]", v.iter().map(repr).collect::<Vec<_>>().join(", ")),
         Value::Dict(v) => format!(
             "{{{}}}",
@@ -106,7 +109,7 @@ pub fn to_json(value: &Value) -> Option<serde_json::Value> {
             }
             Json::Object(map)
         }
-        Value::Decimal(_) => return None,
+        Value::Decimal(_) | Value::Bytes(_) => return None,
     })
 }
 
@@ -116,6 +119,14 @@ pub fn snapshot(value: &Value) -> Value {
             dict([("$float", Value::from(kassiber_pyjson::float_repr(*v)))])
         }
         Value::Decimal(v) => dict([("$decimal", Value::from(v.to_string()))]),
+        Value::Bytes(v) => dict([(
+            "$bytes",
+            Value::from(
+                v.iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect::<String>(),
+            ),
+        )]),
         Value::List(v) => Value::List(v.iter().map(snapshot).collect()),
         Value::Dict(v) => Value::Dict(v.iter().map(|(k, v)| (k.clone(), snapshot(v))).collect()),
         _ => value.clone(),

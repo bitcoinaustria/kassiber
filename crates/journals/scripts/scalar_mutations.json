@@ -98,5 +98,55 @@
       "lossless_scalar_decode_refusals_match_python"
     ],
     "rule": "Malformed raw JSON retains Python decoder refusal family and complete message."
+  },
+  {
+    "id": "JR-scalar-bytes-kind",
+    "file": "crates/journals/src/scalar.rs",
+    "find": "Value::Bytes(_) => \"bytes\",",
+    "replace": "Value::Bytes(_) => \"str\",",
+    "expect_failing": [
+      "byte_scalars_keep_python_identity_and_serialization_refusal"
+    ],
+    "rule": "BLOB values keep the Python bytes type."
+  },
+  {
+    "id": "JR-scalar-bytes-truth",
+    "file": "crates/journals/src/scalar.rs",
+    "find": "Value::Bytes(v) => !v.is_empty(),",
+    "replace": "Value::Bytes(_) => false,",
+    "expect_failing": [
+      "byte_scalars_keep_python_identity_and_serialization_refusal"
+    ],
+    "rule": "Nonempty BLOBs retain Python truth."
+  },
+  {
+    "id": "JR-scalar-bytes-repr",
+    "file": "crates/journals/src/scalar.rs",
+    "find": "Value::Bytes(v) => kassiber_pyjson::bytes_repr(v),",
+    "replace": "Value::Bytes(_) => String::new(),",
+    "expect_failing": [
+      "byte_scalars_keep_python_identity_and_serialization_refusal"
+    ],
+    "rule": "Byte representations retain escapes and raw identity."
+  },
+  {
+    "id": "JR-scalar-bytes-serde",
+    "file": "crates/journals/src/scalar.rs",
+    "find": "Value::Decimal(_) | Value::Bytes(_) => return None,",
+    "replace": "Value::Decimal(_) => return None,\n        Value::Bytes(_) => Json::Null,",
+    "expect_failing": [
+      "byte_scalars_keep_python_identity_and_serialization_refusal"
+    ],
+    "rule": "A raw BLOB cannot enter the serde carrier as null."
+  },
+  {
+    "id": "JR-scalar-bytes-snapshot",
+    "file": "crates/journals/src/scalar.rs",
+    "find": "Value::from(\n                v.iter()\n                    .map(|byte| format!(\"{byte:02x}\"))\n                    .collect::<String>(),\n            ),",
+    "replace": "Value::from(\"\"),",
+    "expect_failing": [
+      "byte_scalars_keep_python_identity_and_serialization_refusal"
+    ],
+    "rule": "Oracle byte snapshots retain every byte."
   }
 ]

@@ -233,6 +233,31 @@ pub enum PricingFacts<'a> {
     Borrowed([&'a Value; 12]),
     Owned(Box<[Value; 12]>),
 }
+impl PricingFacts<'_> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &Value> {
+        (0..12).map(|index| &self[index])
+    }
+}
+impl std::ops::Index<usize> for PricingFacts<'_> {
+    type Output = Value;
+    fn index(&self, index: usize) -> &Self::Output {
+        match self {
+            Self::Borrowed(values) => values[index],
+            Self::Owned(values) => &values[index],
+        }
+    }
+}
+impl std::ops::IndexMut<usize> for PricingFacts<'_> {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        if let Self::Borrowed(values) = self {
+            *self = Self::Owned(Box::new(values.map(Clone::clone)));
+        }
+        let Self::Owned(values) = self else {
+            unreachable!()
+        };
+        &mut values[index]
+    }
+}
 impl Serialize for PricingFacts<'_> {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         use serde::ser::SerializeMap;

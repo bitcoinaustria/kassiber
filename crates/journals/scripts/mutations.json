@@ -1602,8 +1602,8 @@
   {
     "id": "JP-typed-source-pricing",
     "file": "crates/journals/src/storage/calculation.rs",
-    "find": "|| source.provenance.pricing.0.iter().any(|v| !text(v))",
-    "replace": "|| false && source.provenance.pricing.0.iter().any(|v| !text(v))",
+    "find": "|| source.provenance.pricing.iter().any(|v| !text(v))",
+    "replace": "|| false && source.provenance.pricing.iter().any(|v| !text(v))",
     "expect_failing": [
       "typed_calculations_preserve_compact_bytes_and_all_dynamic_fallbacks"
     ],
@@ -2122,8 +2122,8 @@
   {
     "id": "JP-binding-refusal-order",
     "file": "crates/journals/src/persistence.rs",
-    "find": "let quantity = amount(&e.quantity)?;",
-    "replace": "let quantity = { decimal_bindings(Some(&e.fiat_value))?; amount(&e.quantity)? };",
+    "find": "let quantity = match &e.quantity {",
+    "replace": "decimal_bindings(Some(&e.fiat_value))?;\n        let quantity = match &e.quantity {",
     "expect_failing": [
       "binding_refusals_precede_decimal_formatting_and_roll_back_every_write"
     ],

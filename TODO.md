@@ -775,6 +775,11 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   unregistered probe results do not authorize production routing. The fresh
   four-book CPU record includes real native pre-build and 20 exact paired
   dumps; the 4× target remains open on the separate performance track.
+  The fourth continuation integrates the later renderer audit/native scalar
+  ledger and retained-row persistence tips, repairing their borrowed model
+  compatibility. Full lossless builder/joins/persistence handoff remains open;
+  its stage integration checkpoint does not register any journal route or
+  recertify the earlier complete-process campaigns.
 
 <!-- inherited from render@f1712c625; pending r10 verification -->
   ownership graph consumption is completed by the
