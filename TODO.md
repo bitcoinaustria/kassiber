@@ -861,16 +861,19 @@ Python.
   simulate ordered operations or validate/apply a plan. Production counts
   remain **26/29 CLI leaves and 25/28 daemon kinds**. Transfers-14 integrates
   accepted loader-9 and BLOB work, including their missing prerequisites;
-  only forty measured seed-dependent loader messages remain pending Python.
+  transfers-16 integrates the deterministic refusal fix, closing all forty
+  former seed-dependent message exceptions.
   Transfers-15 adds ordered mixed simulation, initial fingerprint prechecks,
   sibling-unpair baselines, refresh after intervening operations, RAM-only
   SQLite/SQLCipher planning and whole-artifact recomputing validation. These
-  services remain behind `test-harness`; atomic apply is still outstanding.
-  Finish the review assembler's lossless/refusal boundary, join artifact/effect
-  primitives to writer-locked apply/receipts before registering
-  all six CLI/daemon routes. Prove full DB/filed-impact parity, late rollback,
-  idempotent retries, caller-owned transactions, CLI/daemon envelopes and AI
-  once-only consent.
+  services remain behind `test-harness`. Transfers-16 adds writer-locked atomic
+  apply, historical retries, canonical journals, filed-impact resolutions and
+  receipts, with complete logical-row/authorship comparisons and late rollback
+  on SQLite/SQLCipher. The caller's commit choice and connection cache are
+  preserved. Finish the assembler's lossless/refusal closure and product
+  CLI/daemon envelopes, AI once-only consent and zero-fallback proofs before
+  registering all six routes. See the
+  [atomic checkpoint](docs/reference/rust-shell.md#atomic-review-apply-r5-transfers-16-partial).
   Retain readiness barriers rather than reading stale journals; see the
   [review adapter handoff](docs/reference/rust-shell.md#review-integration-handoff).
   The [R4-14 pairing library](docs/reference/rust-pairing.md) now supplies the

@@ -166,6 +166,7 @@ fn integer(value: &Value) -> Result<kassiber_pyjson::BigInt> {
 #[cfg(feature = "test-harness")]
 #[doc(hidden)]
 pub mod review_support {
+    pub fn parse_json(text: &str) -> super::Result<super::Value> { super::parse_json(text) }
     use super::*;
     pub fn value(row: &Value, key: &str) -> Value { super::value(row, key) }
     pub fn text(row: &Value, key: &str) -> String { super::text(row, key) }

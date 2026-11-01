@@ -3180,8 +3180,9 @@ seams; live callback integration remains pending. Counts stay **26/29 CLI
 leaves and 25/28 daemon kinds**. Normalized operations, artifacts and policy
 effects, planning/validation, atomic apply/receipts, journal and filed-impact
 storage, loader admission and CLI/daemon/AI consent parity remain open. R4-9
-owns its acceptance record; the integrated BLOB continuation leaves forty measured
-seed-dependent messages pending the Python fix.
+owns its acceptance record; at this checkpoint the integrated BLOB continuation
+left forty measured seed-dependent messages pending Python. The deterministic
+refusal fix integrated by transfers-16 closes all forty.
 Python product code and route registration are unchanged.
 
 ### R5 transfers: economic effects and artifact primitives (partial)
@@ -3211,13 +3212,14 @@ checkpoint closed no inherited lossless, refusal or explicitly pending exception
 
 Transfers-14 integrates accepted loader-9 and BLOB work with their missing
 prerequisites, retaining raw database admission alongside typed assembly and
-sharing their downstream stages. The BLOB gap is closed; forty measured
-seed-dependent loader messages remain pending Python. The review assembler's
+sharing their downstream stages. The BLOB gap is closed. Transfers-16 also
+integrates deterministic revision-reference refusals, closing all forty former
+seed-dependent loader exceptions. The review assembler's
 strict typed conversion still needs its own lossless/refusal closure. The
 [integration handoff](../reference/rust-shell.md#accepted-loader-integration-r5-transfers-14)
-records fresh verification separately from inherited campaign evidence. Ordered
-planning, atomic apply and all six route registrations remain pending; counts
-are unchanged.
+records fresh verification separately from inherited campaign evidence. At that
+checkpoint, ordered planning, atomic apply and all six route registrations
+remained pending; counts were unchanged.
 
 ### R5 transfers: ordered planning and validation (partial)
 
@@ -3233,11 +3235,39 @@ third-party package or runtime requirement changes.
 Complete Python oracles pin planning on plaintext/SQLCipher in autocommit and
 caller-read modes, plus recomputing validation on both bindings. Pending writers
 refuse and full source rows stay unchanged. See the [checkpoint](../reference/rust-shell.md#ordered-review-planning-and-validation-r5-transfers-15-partial)
-for named mutation evidence. Atomic apply, receipt/journal/filed-impact parity,
-caller transaction/cache restoration, assembler lossless/refusal closure and
-CLI/daemon/AI consent parity remain open. All six review routes remain
-unregistered; counts stay **26/29 CLI leaves and 25/28 daemon kinds**. The forty
-seed-dependent loader message exceptions and Python residual-fee refusal remain.
+for named mutation evidence. At that checkpoint, atomic apply,
+receipt/journal/filed-impact parity, caller transaction/cache restoration,
+assembler lossless/refusal closure and CLI/daemon/AI consent parity remained
+open. All six review routes remained unregistered; counts stayed **26/29 CLI
+leaves and 25/28 daemon kinds**. The determinism continuation integrated by
+transfers-16 closes the forty historical
+loader message exceptions; Python's residual-fee refusal remains unchanged.
+
+### R5 transfers: atomic review apply (partial)
+
+Transfers-16 starts at `7a3dd1540` and integrates the deterministic loader refusal
+from `aaf6216e3`. The unregistered apply service owns its writer reservation,
+nested savepoint, canonical before/after rebuild, journal persistence and durable
+receipt as one operation. Historical retries precede freshness checks; conflicting
+keys refuse. Explicit `commit=False` preserves the caller's pending edits and
+transaction, while failure rolls back the review and restores the cache. Late
+commit failure rolls back even after the operation's savepoint was released.
+
+The Python oracle compares 72 complete apply outcomes and all logical database
+rows with explicit generated-identity bijections on SQLite and SQLCipher. It
+includes metadata/component order, sibling unpairs, execution authorship,
+canonical journals and saved/filed-impact readiness. Named mutations pin these
+contracts; the [handoff](../reference/rust-shell.md#atomic-review-apply-r5-transfers-16-partial)
+records the verification and remaining work. The metadata writer now uses one
+grouped UPDATE, matching Python's chain-index trigger effects, and sibling-pair
+revisions validate their author source.
+
+Assembler lossless/refusal closure, product envelope/AI once-only consent parity
+and zero-fallback registration proofs remain required. All six review routes
+remain unregistered; counts stay **26/29 CLI leaves and 25/28 daemon kinds**.
+There are no retained seed-message exceptions. Python's residual-fee refusal and
+its existing repro remain unchanged. No dependencies or Python product behavior
+are changed beyond the explicitly requested deterministic loader fix.
 
 ### R5 Bitcoin sync: native fetch assembly checkpoint
 

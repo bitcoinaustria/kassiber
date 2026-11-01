@@ -1,3 +1,4 @@
+pub use crate::review_apply::{apply, Apply};
 //! Unregistered native review composition. Loader acceptance still gates routes.
 use crate::{review_effects, review_simulation, pipeline::{self, Prepared}, Refusal};
 use kassiber_transfers::{review_artifact, review_operations, review_support, Sources};
@@ -33,7 +34,7 @@ impl std::fmt::Display for Error {
 }
 impl std::error::Error for Error {}
 
-fn profile(conn: &Connection, scope: &Scope<'_>) -> Result<Value, Error> {
+pub(crate) fn profile(conn: &Connection, scope: &Scope<'_>) -> Result<Value, Error> {
     sql::rows(
         conn,
         "SELECT * FROM profiles WHERE id=? AND workspace_id=?",
@@ -44,11 +45,15 @@ fn profile(conn: &Connection, scope: &Scope<'_>) -> Result<Value, Error> {
     .ok_or_else(|| AppError::new("not_found", "Review profile was not found").into())
 }
 
-fn prepare(conn: &Connection, scope: &Scope<'_>, as_of: &str) -> Result<Prepared, Error> {
+pub(crate) fn prepare(
+    conn: &Connection,
+    scope: &Scope<'_>,
+    as_of: &str,
+) -> Result<Prepared, Error> {
     Ok(Prepared::load(conn, profile(conn, scope)?, as_of)?)
 }
 
-fn facts(
+pub(crate) fn facts(
     conn: &Connection,
     scope: &Scope<'_>,
     as_of: &str,
@@ -58,7 +63,7 @@ fn facts(
     Ok(review_simulation::Cases::from_state(&state))
 }
 
-fn derived_ids() -> impl FnMut() -> String {
+pub(crate) fn derived_ids() -> impl FnMut() -> String {
     let mut index = 0u64;
     move || {
         index += 1;

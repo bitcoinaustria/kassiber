@@ -20864,7 +20864,7 @@
           "subprocess"
         ],
         "group": "custody",
-        "reason": "regenerates unregistered review-case, operation, economic/policy-effect, artifact and complete ordered-plan/recomputing-validation vectors from current Python; pins complete digests, exact scalars, mixed operations, sibling/intervening-unpair baselines and refusal order while native SQLite/SQLCipher comparisons preserve source rows and caller transactions; does not claim atomic apply or route parity",
+        "reason": "regenerates unregistered review-case, operation, effects, artifact, ordered-plan/recomputing-validation and atomic-apply vectors from current Python; native SQLite/SQLCipher tests compare complete logical rows and receipts with declared UUID bijections, authorship, filed-impact readiness, historical retries and caller transaction/cache rollback; does not claim complete lossless/refusal closure or product route parity",
         "reviewed": true,
         "tests": 1
       },
@@ -20874,7 +20874,7 @@
           "subprocess"
         ],
         "group": "custody",
-        "reason": "regenerates unregistered review-case, operation, economic/policy-effect, artifact and complete ordered-plan/recomputing-validation vectors from current Python; pins complete digests, exact scalars, mixed operations, sibling/intervening-unpair baselines and refusal order while native SQLite/SQLCipher comparisons preserve source rows and caller transactions; does not claim atomic apply or route parity",
+        "reason": "regenerates unregistered review-case, operation, effects, artifact, ordered-plan/recomputing-validation and atomic-apply vectors from current Python; native SQLite/SQLCipher tests compare complete logical rows and receipts with declared UUID bijections, authorship, filed-impact readiness, historical retries and caller transaction/cache rollback; does not claim complete lossless/refusal closure or product route parity",
         "reviewed": true,
         "tests": 1
       },
@@ -20884,7 +20884,7 @@
           "subprocess"
         ],
         "group": "custody",
-        "reason": "regenerates unregistered review-case, operation, economic/policy-effect, artifact and complete ordered-plan/recomputing-validation vectors from current Python; pins complete digests, exact scalars, mixed operations, sibling/intervening-unpair baselines and refusal order while native SQLite/SQLCipher comparisons preserve source rows and caller transactions; does not claim atomic apply or route parity",
+        "reason": "regenerates unregistered review-case, operation, effects, artifact, ordered-plan/recomputing-validation and atomic-apply vectors from current Python; native SQLite/SQLCipher tests compare complete logical rows and receipts with declared UUID bijections, authorship, filed-impact readiness, historical retries and caller transaction/cache rollback; does not claim complete lossless/refusal closure or product route parity",
         "reviewed": true,
         "tests": 1
       },
@@ -20894,7 +20894,7 @@
           "subprocess"
         ],
         "group": "custody",
-        "reason": "regenerates unregistered review-case, operation, economic/policy-effect, artifact and complete ordered-plan/recomputing-validation vectors from current Python; pins complete digests, exact scalars, mixed operations, sibling/intervening-unpair baselines and refusal order while native SQLite/SQLCipher comparisons preserve source rows and caller transactions; does not claim atomic apply or route parity",
+        "reason": "regenerates unregistered review-case, operation, effects, artifact, ordered-plan/recomputing-validation and atomic-apply vectors from current Python; native SQLite/SQLCipher tests compare complete logical rows and receipts with declared UUID bijections, authorship, filed-impact readiness, historical retries and caller transaction/cache rollback; does not claim complete lossless/refusal closure or product route parity",
         "reviewed": true,
         "tests": 1
       },
@@ -20904,7 +20904,17 @@
           "subprocess"
         ],
         "group": "custody",
-        "reason": "regenerates unregistered review-case, operation, economic/policy-effect, artifact and complete ordered-plan/recomputing-validation vectors from current Python; pins complete digests, exact scalars, mixed operations, sibling/intervening-unpair baselines and refusal order while native SQLite/SQLCipher comparisons preserve source rows and caller transactions; does not claim atomic apply or route parity",
+        "reason": "regenerates unregistered review-case, operation, effects, artifact, ordered-plan/recomputing-validation and atomic-apply vectors from current Python; native SQLite/SQLCipher tests compare complete logical rows and receipts with declared UUID bijections, authorship, filed-impact readiness, historical retries and caller transaction/cache rollback; does not claim complete lossless/refusal closure or product route parity",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_review_atomic_apply_receipts_and_complete_rows_match_current_python": {
+        "disposition": "oracle",
+        "flags": [
+          "subprocess"
+        ],
+        "group": "custody",
+        "reason": "regenerates unregistered review-case, operation, effects, artifact, ordered-plan/recomputing-validation and atomic-apply vectors from current Python; native SQLite/SQLCipher tests compare complete logical rows and receipts with declared UUID bijections, authorship, filed-impact readiness, historical retries and caller transaction/cache rollback; does not claim complete lossless/refusal closure or product route parity",
         "reviewed": true,
         "tests": 1
       }

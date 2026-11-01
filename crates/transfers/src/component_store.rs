@@ -251,7 +251,10 @@ pub(super) fn activate(
             "expected_economic_term_count",
             (list(spec, "terms").len() as i64).into(),
         ),
-        ("authored_source", s(source)),
+        (
+            "authored_source",
+            super::component_rows::authored_source(&s(source))?,
+        ),
         ("notes", optional(&value(base, "notes"), "notes")?),
         (
             "change_reason",

@@ -9026,8 +9026,9 @@ typed and unported fields; sanitizing a warmed shared snapshot invalidates its
 cached transaction view. Quarantine detail iteration retains Python bytes
 iteration, while JSON storage still refuses unencodable bytes.
 
-The accepted loader's BLOB gap is closed. Its **40 measured seed-dependent
-reference messages** remain pending the Python determinism fix. Original branch
+The accepted loader's BLOB gap is closed. At transfers-14, **40 measured
+seed-dependent reference messages** remained pending Python. The deterministic
+refusal fix integrated by transfers-16 closes all forty. Original branch
 campaign/audit/timing records remain historical evidence for their own trees;
 they do not establish fresh exhaustive campaigns or performance acceptance for
 this merged branch. The loader catalogue retains all 308 original entries and
@@ -9086,9 +9087,10 @@ This is a loader-integration boundary. Continue the transfers-13 order:
    accepted raw loader. `Prepared::load` still converts and validates its raw
    snapshot through the inherited strict typed boundary; downstream fusion's
    infallible serialization assumptions also need refusal proof. The accepted
-   loader alone does not establish full review-workflow refusal parity. Preserve
-   the forty measured seed-message exceptions and the unchanged Python
-   residual-fee refusal/repro.
+   loader alone does not establish full review-workflow refusal parity. The
+   determinism continuation integrated by transfers-16 closes all forty former
+   seed-message exceptions. Preserve the unchanged Python residual-fee
+   refusal/repro.
 4. Prove database/envelope/authorship parity, AI once-only revalidated consent
    and product zero-fallback behavior before registering all six routes.
    Counts remain **26/29 CLI leaves and 25/28 daemon kinds**.
@@ -9170,12 +9172,108 @@ journal storage/filed-report impacts, durable receipts, caller-owned transaction
 and cache restoration, and late rollback on both database bindings. Then close
 the review assembler's inherited strict typed admission and downstream
 serialization/authoring-string refusal gaps, including refusal versus no-op
-ordering in delegated metadata services. Preserve the forty seed-dependent
-reference-message exceptions and unchanged Python residual-fee refusal/repro. Prove complete
-database/envelope/authorship parity, the AI's once-only revalidated consent and
+ordering in delegated metadata services. The deterministic-refusal continuation
+integrated by transfers-16 closes all forty former seed-dependent
+reference-message exceptions. Preserve the unchanged Python residual-fee
+refusal/repro. Prove complete database/envelope/authorship parity, the AI's
+once-only revalidated consent and
 zero-fallback execution before registering all six routes. Counts remain
 **26/29 CLI leaves and 25/28 daemon kinds**. No Python product code or route
 registration changes at this boundary.
+
+### Atomic review apply (R5 transfers-16, partial)
+
+Branch `t3code/r5-transfers-16` starts at `7a3dd1540`. Its first commit integrates
+`aaf6216e3`, preserving the transfer branch's later loader guards and reference
+records. Mixed revision references now refuse with code `validation` and the
+fixed message `Custody revision references contain incompatible types`. All
+forty historical seed-message exceptions are closed; none is carried forward.
+
+`review_workflow::apply` is implemented behind the existing `test-harness` gate.
+Portable artifact admission precedes writer acquisition. An autocommit caller
+gets `BEGIN IMMEDIATE`; every caller gets a nested savepoint and an explicit
+writer reservation before receipt lookup. A matching historical key/digest
+returns the original receipt before freshness or rebuilding, even after policy,
+observations or the input version change. Another digest on that key refuses.
+The writer reservation retains Python's existing chain-index trigger effects
+on historical retries; idempotency does not mean zero SQL statements.
+
+A fresh execution validates the input version and canonical before effects,
+runs the existing ordered metadata/component/unpair services, recomputes after
+effects, then calls the existing canonical journal writer. Pending saved/filed
+impacts resolve only when that stored journal is report-ready. The durable
+receipt includes the exact author, operation results, all affected anchors,
+proposed-operation summaries, processed timestamp and verified effects.
+`commit=False` leaves success pending, including when apply opened the enclosing
+transaction. Failure restores the operation savepoint without discarding earlier
+caller edits. Commit failure after savepoint release rolls back the enclosing
+transaction. The connection's cache size, synchronous level and spill setting
+are checked on both database bindings.
+
+The independent Python exporter freezes 72 complete outcomes, covering 18 plans
+and four author sources. It compares every logical table row, including audit,
+quantity, freshness, saved/filed-impact and receipt data on plaintext SQLite and
+SQLCipher. Each generated UUID has an explicit table/index bijection; economic
+amounts, author strings, timestamps, hashes and other fields are not masked.
+The exact clock is supplied only by the test harness. The exporter patches the
+filed-report resolution clock as well as the review/storage clocks.
+
+The full-row oracle exposed two native differences, now fixed: grouped metadata
+updates issued one statement per column and advanced chain-index triggers too
+many times; new sibling-pair revisions skipped authored-source validation. The
+shared Rust metadata writer now issues one UPDATE for the complete group, and
+the existing component author normalizer validates sibling revisions.
+
+The named apply regressions cover malformed admission before writer use, stale
+input versions and before/after effects, historical key conflicts, deferred
+caller writer reservation, successful pending writes, second-metadata failure,
+late journal/freshness/receipt failures, report-readiness barriers, commit failure
+after savepoint release, cache restoration and receipts after reopening both
+bindings. Mutation recipes and named killers live in
+[`review_apply_mutations.json`](../../crates/transfers/scripts/review_apply_mutations.json).
+
+Fresh verification passes **215 native tests** across journals, transactions
+and transfers, including all **72 transfer tests** and the nine apply
+regressions. All **281 Python tests** in the review-case, review-build, loader
+and BLOB oracle modules pass without skips. This includes six current review
+exporters and the fixed revision-reference refusal across eight hash seeds.
+All-target clippy and rustdoc for the three crates pass with warnings denied;
+workspace formatting and whitespace checks pass.
+
+All **19 apply mutation entries are killed** after their eight named unmutated
+witnesses pass. The initial writer-reservation recipe survived because adding
+`AND 0` still acquires SQLite's writer. The final recipe removes the whole
+reservation statement; a fresh baseline and targeted rerun kill it through
+`review_apply_reserves_writer_before_historical_lookup_for_deferred_callers`.
+The other eighteen kills remain unchanged. Applicability checks also pass for
+all 15 planning, 280 inherited transfer and 227 inherited transaction entries;
+those inherited catalogues are not claimed as fresh kill campaigns.
+
+The required classifier update records **5,811 tests in 359 modules**. The
+subsequent required CI preflight passes all **57 tests**. Logs and the
+machine-readable checkpoint summary remain under `target/r5-evidence/`; owned
+normal/mutation build trees and the private UV cache are removed after
+summarizing. Verification uses eight build jobs, offline Cargo, worktree-local
+target/intermediate/temp directories and one test job at a time. No background
+job remains at handoff. The full quality gate and exhaustive merged-tree
+storage/mutation campaigns are not rerun.
+
+This checkpoint completes atomic composition for the admitted review corpus.
+The remaining order is:
+
+1. Compose `pipeline::Prepared::load` through the accepted raw loader and
+   `kassiber_custody::run_loaded`, replacing its inherited `.typed()` and
+   `.validate()` admission. Close `compute::fuse`'s infallible serialization
+   assumptions and prove downstream serialization and authoring-string refusals,
+   including refusal versus no-op ordering in delegated metadata services. These
+   are unverified review-workflow boundaries even though the raw loader itself
+   is accepted. Keep Python's residual-fee refusal and existing repro unchanged.
+2. Prove CLI/daemon database, envelope and authorship parity, AI once-only
+   revalidated consent, and zero-fallback execution with named mutation kills.
+3. Register all six review routes, then update counts to 29/29 CLI leaves and
+   28/28 daemon kinds. Current counts remain **26/29 and 25/28**.
+
+No route, AI authority or third-party dependency changes occur at this boundary.
 
 ### Bitcoin native fetch assembly (R5)
 
