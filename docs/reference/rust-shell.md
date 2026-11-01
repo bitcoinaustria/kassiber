@@ -14331,3 +14331,35 @@ build trees are removed. Scratch/data roots stay under this worktree's
 `target/`, account `HOME` is preserved, and test jobs run serially. The full
 workspace runtime suite, Python/frontend quality gate and packaged/platform
 gates are not run.
+
+## Mirror traversal algorithms (R5, partial)
+
+`t3code/r5-privacy-mirror-analysis` starts at `3910d821d`.
+`analysis_index::traversal` queries an immutable captured `AnalysisIndex` without
+SQL, storage publication, provider access or Python fallback. It normalizes the
+query, resolves physical aliases without crossing ambiguous domains/instances,
+applies the observer projection before traversal, and returns bounded traces or
+up to three alternative paths with their shared inspection budget. Unknown
+amounts and timestamps remain visible. Stale/conflicting observations stop
+reachability; inspectable custody relations between selected endpoints retain
+their explicit status. Coverage, frontier overflow and pruning remain visible.
+Connectivity does not establish ownership, allocation, taint or accounting facts.
+
+The frozen Python corpus contains 216 cases over captured local snapshots,
+including a diamond graph, an 80-transaction chain, public projections, custody
+status overlays, ambiguous subjects, invalid arguments and isolated completeness
+barriers. Native tests compare canonical bytes; the retained oracle recomputes
+unchanged Python output. The test-only driver compares literal stdout under
+strict no-consent observation with offline mode off and on. These pure snapshot
+checks do not establish SQL sourcing, durable publication or report parity.
+
+All 20 traversal mutations are killed by
+`traversal_matches_python_captured_snapshots_byte_exact`, which also passes
+unmutated. Fixture mistakes and a redundant mutation found in the initial run
+were corrected; the retained logs include those failed attempts. Formatting,
+wallet production/test-harness all-target Clippy, all nine index tests and all
+four retained Python/native traversal checks pass without skips.
+Local summaries and logs live under `target/r5-analysis/`. Scratch roots remain
+inside this worktree, and the account `HOME` is preserved. Product Mirror
+registration, process/book handles, report composition and AI projections remain
+outside this boundary. No new dependency, schema or network route is introduced.
