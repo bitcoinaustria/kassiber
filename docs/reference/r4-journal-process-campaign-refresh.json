@@ -1,0 +1,189 @@
+{
+  "schema": "kassiber.r4-process-campaign-evidence.v1",
+  "date_utc": "2026-11-01",
+  "commit": "c14f2fa8ee19106af0d9c0c5bf3c0da6b4f33a8b",
+  "entry": "unregistered journal-process example with real native pre-build",
+  "compared": [
+    "ordered result JSON bytes",
+    "complete result or refusal",
+    "every application-table scalar and rowid, including REAL bits",
+    "ordered phases",
+    "complete durable UUID and lifecycle-clock tapes"
+  ],
+  "runs": {
+    "campaign-refresh-final": {
+      "manifest": {
+        "schema": "kassiber.r4-process-campaign.v1",
+        "binary": "0d881d04ab281c655ad62a01bff5bfac6328ce804ebcec0eed2aa6bc62ecedda",
+        "sources": "80fd97c840f182a88d372fe22057926af255f8c2ef2e84a6612153a8eb160683",
+        "seeds": 2000,
+        "operands": 25030,
+        "shard_size": 250,
+        "adapter": "Stored columns only; omitted derived fields are counted. Synthetic rate cache; no inferred ownership or legacy pair links."
+      },
+      "counts": {
+        "operands": 25030,
+        "books": 24000,
+        "permutations": 1030,
+        "matches": 25030,
+        "refusals": 1207
+      },
+      "suites": {
+        "evidence": {
+          "books": 2000,
+          "permutations": 58,
+          "matches": 2058,
+          "refusals": 71,
+          "relaxed_schema": 0,
+          "transactions": 4116,
+          "entries": 2059,
+          "quarantines": 1773
+        },
+        "components": {
+          "books": 2000,
+          "permutations": 312,
+          "matches": 2312,
+          "refusals": 104,
+          "relaxed_schema": 133,
+          "transactions": 9262,
+          "entries": 222,
+          "quarantines": 8595
+        },
+        "samourai": {
+          "books": 2000,
+          "permutations": 68,
+          "matches": 2068,
+          "refusals": 0,
+          "relaxed_schema": 0,
+          "transactions": 4679,
+          "entries": 244,
+          "quarantines": 4315
+        },
+        "recorded": {
+          "books": 2000,
+          "permutations": 92,
+          "matches": 2092,
+          "refusals": 319,
+          "relaxed_schema": 0,
+          "transactions": 4544,
+          "entries": 497,
+          "quarantines": 3274
+        },
+        "fanout": {
+          "books": 2000,
+          "permutations": 94,
+          "matches": 2094,
+          "refusals": 269,
+          "relaxed_schema": 0,
+          "transactions": 6550,
+          "entries": 0,
+          "quarantines": 5611
+        },
+        "graph": {
+          "books": 2000,
+          "permutations": 16,
+          "matches": 2016,
+          "refusals": 0,
+          "relaxed_schema": 0,
+          "transactions": 3024,
+          "entries": 252,
+          "quarantines": 2772
+        },
+        "pipeline": {
+          "books": 2000,
+          "permutations": 24,
+          "matches": 2024,
+          "refusals": 338,
+          "relaxed_schema": 0,
+          "transactions": 6244,
+          "entries": 1349,
+          "quarantines": 3205
+        },
+        "safety": {
+          "books": 2000,
+          "permutations": 78,
+          "matches": 2078,
+          "refusals": 106,
+          "relaxed_schema": 0,
+          "transactions": 4695,
+          "entries": 160,
+          "quarantines": 4323
+        },
+        "channels": {
+          "books": 2000,
+          "permutations": 64,
+          "matches": 2064,
+          "refusals": 0,
+          "relaxed_schema": 0,
+          "transactions": 5415,
+          "entries": 2902,
+          "quarantines": 2513
+        },
+        "native": {
+          "books": 2000,
+          "permutations": 110,
+          "matches": 2110,
+          "refusals": 0,
+          "relaxed_schema": 0,
+          "transactions": 4942,
+          "entries": 190,
+          "quarantines": 304
+        },
+        "reconciliation": {
+          "books": 2000,
+          "permutations": 50,
+          "matches": 2050,
+          "refusals": 0,
+          "relaxed_schema": 82,
+          "transactions": 8938,
+          "entries": 4018,
+          "quarantines": 5002
+        },
+        "gaps": {
+          "books": 2000,
+          "permutations": 64,
+          "matches": 2064,
+          "refusals": 0,
+          "relaxed_schema": 0,
+          "transactions": 62334,
+          "entries": 322,
+          "quarantines": 61948
+        }
+      },
+      "complete": true,
+      "failures": []
+    },
+    "recorded-refresh-final": {
+      "manifest": {
+        "schema": "kassiber.r4-process-campaign.v1",
+        "binary": "0d881d04ab281c655ad62a01bff5bfac6328ce804ebcec0eed2aa6bc62ecedda",
+        "sources": "754798dcebbda218ef59f832a36d155a5f0be27ad795a3fd0e87c4fee660887a",
+        "seeds": 2000,
+        "operands": 318,
+        "shard_size": 250,
+        "adapter": "Stored columns only; omitted derived fields are counted. Synthetic rate cache; no inferred ownership or legacy pair links."
+      },
+      "counts": {
+        "operands": 318,
+        "books": 159,
+        "permutations": 159,
+        "matches": 318,
+        "refusals": 0
+      },
+      "suites": {
+        "recorded": {
+          "books": 159,
+          "permutations": 159,
+          "matches": 318,
+          "refusals": 0,
+          "relaxed_schema": 0,
+          "transactions": 3622,
+          "entries": 2936,
+          "quarantines": 782
+        }
+      },
+      "complete": true,
+      "failures": []
+    }
+  }
+}

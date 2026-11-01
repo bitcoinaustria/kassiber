@@ -763,8 +763,10 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   The third continuation integrates the requested loader/BLOB, pre-build,
   render and persistence tips, adds resumable complete-process shards, and
   repairs network-refusal metadata and merged BLOB conversion defects. Its
-  seventeen frozen process books preserve every inherited record; generated
-  and retained-recording campaigns remain separate acceptance gates.
+  seventeen frozen process books preserve every inherited record. Fresh full
+  campaigns pass 25,030 generated comparisons and 318 retained-recording
+  comparisons, including ordered result bytes and exact refusals. The full
+  inherited census/shadow and mutation gates remain open.
   The test-only refresh coordinator now owns atomic pairing/rebuild commits,
   ordered result bytes, skipped-pairing refusals and WAL/cache restoration.
   Its 57 complete reference books cover both commits, skip-current and failure

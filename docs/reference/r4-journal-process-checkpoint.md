@@ -668,6 +668,32 @@ fixture record changes. Both disposable mutation trees are removed. This is
 selected evidence, not the complete inherited mutation catalog.
 Production scope resolution and every journal route remain unregistered.
 
+## Fresh complete-process campaigns after refresh composition
+
+At `c14f2fa8e`, the revised unregistered probe passes **25,030/25,030** generated
+comparisons: **24,000 books**, **1,030 permutations** and **1,207 exact refusals**.
+All twelve generators complete. The separate retained-recording replay passes
+**318/318** comparisons: **159 originals and 159 permutations**, with no
+refusals. Both runs compare ordered result JSON bytes as well as complete
+result/refusal values, every application-table scalar and rowid, REAL bits,
+ordered phases and complete UUID/lifecycle-clock tapes. There are no failures
+or exceptions. The accepted loader and refresh composition are included.
+
+The native binary SHA-256 is
+`0d881d04ab281c655ad62a01bff5bfac6328ce804ebcec0eed2aa6bc62ecedda`.
+The [aggregate evidence](r4-journal-process-campaign-refresh.json) retains the
+exact manifests, counts and per-suite totals without private recording names or
+operands. Generated shards and logs are under
+`target/r4-13/campaign-refresh-final/` and
+`target/r4-13/logs/campaign-refresh-final.log`; recorded evidence is under
+`target/r4-13/recorded-refresh-final/` and its matching log. All 101 generated
+shards and both recording shards are complete and resumable against their
+unchanged manifests. No verification process remains running after these runs.
+
+These campaigns certify the stored-book adapter and fixed source/binary above.
+They do not certify arbitrary malformed/lossless stage values, production scope,
+registered envelopes/events, or the full inherited census/shadow/mutation gates.
+
 ## Remaining integration work
 
 1. Bind the real `process_native` adapter to production scope resolution and
@@ -677,11 +703,10 @@ Production scope resolution and every journal route remain unregistered.
 2. Finish process/rendering acceptance gaps, including lossless stage values,
    exact refusals and the intended native boundaries. R4-9 is fully accepted
    with no pending exceptions; the process and R4-11 acceptance work remains.
-3. Finish resumable complete-process shards for the twelve generators
-   (24,000 books and 1,030 permutations), all 159 retained recordings and their
-   permutations. Finish integrated frozen, census/shadow, codec/rollback and
-   inherited mutation gates. The focused fixture checks above do not close
-   those campaigns; future route/refresh wiring needs its own named mutations.
+3. The complete generated and retained-recording process campaigns pass above.
+   Finish integrated frozen, census/shadow, codec/rollback and inherited mutation
+   gates. The selected 41 mutation kills do not close the full inherited
+   catalogs; future production route wiring needs its own named mutations.
 4. Register CLI `journals process` with and without `--auto-pair`, verify exact
    envelopes, routing and zero fallback, and commit that boundary. The native
    R4-14 stage and atomic refresh coordinator are composed through the test-only
