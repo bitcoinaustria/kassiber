@@ -4596,13 +4596,18 @@ def read_varint(payload, offset):
 def verify_electrum_transaction_id(raw_hex, txid, chain):
     """Bind every fetched raw transaction to its requested identity before use."""
     try:
+        payload = bytes.fromhex(raw_hex)
         if chain == "liquid":
             transaction = decode_liquid_transaction(raw_hex)
         else:
             from embit.transaction import Transaction
-            transaction = Transaction.parse(bytes.fromhex(raw_hex))
+            transaction = Transaction.parse(payload)
+        # Some parser reads pad truncated integer fields with zero. Require the
+        # complete wire representation, including witness, before trusting txid.
+        if transaction.serialize() != payload:
+            raise ValueError("Incomplete or noncanonical transaction encoding")
         actual = transaction.txid().hex()
-    except (ValueError, TypeError, IndexError, EOFError) as exc:
+    except Exception as exc:
         raise AppError("Electrum returned invalid transaction bytes", code="invalid_observation") from exc
     if actual.lower() != str(txid).lower():
         raise AppError("Electrum returned different transaction bytes", code="invalid_observation")

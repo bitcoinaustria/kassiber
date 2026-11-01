@@ -614,6 +614,9 @@ data; Liquid uses its native transaction identity. A mismatch refuses with
 `invalid_observation`. Bitcoin stored graph version 2 rebuilds earlier graphs
 on the next explicitly requested sync, so an unverified old cache cannot bypass
 this check. Opening a book or reading status does not initiate that refresh.
+Malformed, truncated, or trailing transaction bytes and parser failures also
+refuse with `invalid_observation`; complete serialization must match the bytes
+received before their transaction identity is used.
 
 Bitcoin compatibility Electrum treats the coinbase null outpoint (all-zero txid
 and output index `0xffffffff`) as issuance, with no previous transaction to

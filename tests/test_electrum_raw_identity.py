@@ -121,3 +121,39 @@ def test_old_unverified_graph_cache_cannot_bypass_raw_identity_check(monkeypatch
         sb.compatibility_electrum_records_for_wallet(BACKEND, _state(history_cache={requested: graph}))
     assert raised.value.code == "invalid_observation"
     assert ("blockchain.transaction.get", [requested]) in node.calls
+
+
+@pytest.mark.parametrize("chain", ["bitcoin", "liquid"])
+@pytest.mark.parametrize("damage", ["empty", "zero", "truncated", "trailing", "nonhex", "odd", "none"])
+def test_malformed_raw_payloads_always_raise_typed_invalid_observation(chain, damage):
+    if chain == "bitcoin":
+        tx = _coinbase()
+    else:
+        tx = LTransaction(vin=[LTransactionInput(b"\0" * 32, 0xffffffff, Script(b"\x01\x01"))],
+                          vout=[LTransactionOutput(b"\x01" * 32, 1000, Script(b"\x51"))])
+    raw = tx.serialize().hex()
+    damaged = {"empty": "", "zero": "00", "truncated": raw[:-2], "trailing": raw + "deadbeef",
+               "nonhex": "zz", "odd": raw[:-1], "none": None}[damage]
+    with pytest.raises(AppError) as raised:
+        sb.verify_electrum_transaction_id(damaged, tx.txid().hex(), chain)
+    assert raised.value.code == "invalid_observation"
+
+
+def test_every_truncated_bitcoin_prefix_is_rejected_even_when_parser_pads_locktime():
+    tx = _coinbase()
+    raw = tx.serialize()
+    for length in range(len(raw)):
+        with pytest.raises(AppError) as raised:
+            sb.verify_electrum_transaction_id(raw[:length].hex(), tx.txid().hex(), "bitcoin")
+        assert raised.value.code == "invalid_observation"
+
+
+@pytest.mark.parametrize("error", [RuntimeError, AssertionError])
+def test_parser_exceptions_are_mapped_at_the_observation_boundary(monkeypatch, error):
+    def invalid(_raw):
+        raise error("untrusted parser detail")
+    monkeypatch.setattr(Transaction, "parse", invalid)
+    with pytest.raises(AppError) as raised:
+        sb.verify_electrum_transaction_id(_coinbase().serialize().hex(), "11" * 32, "bitcoin")
+    assert raised.value.code == "invalid_observation"
+    assert "untrusted parser detail" not in str(raised.value)
