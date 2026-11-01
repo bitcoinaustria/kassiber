@@ -113,8 +113,9 @@ establish product routing or capability cutover. SOF mutations remain a frozen-c
 persistence foundation. The SOF reads continuation supplies the honest native debug
 contract; privacy's corrupt-marker diagnostic gap remains explicitly scoped.
 
-The loader addendum has fresh R9 verification pending below; its source acceptance
-is inherited from t3code/r4-9-loader-determinism@aaf6216e3; pending fresh r9 verification.
+The loader addendum passes a fresh combined R9 loader/BLOB oracle: **274 / 274 tests**, including the eight-seed revision refusals. Its full source acceptance and historical timing retain the scope of `t3code/r4-9-loader-determinism@aaf6216e3`; the remaining combined gates are tracked below.
+
+Hybrid parity exposed one interaction between the custody performance conversion and the loader BLOB continuation: owned finalization retained the private byte tag as a literal mapping in four live BLOB-note cases. Reserved-tag objects now use the shared lossless codec, while ordinary objects keep the owned conversion. The regression proves both native-byte identity and escaped literal-map identity; all 274 loader/BLOB cases then pass with zero writes and exact projection comparisons. A new `projection-owned-byte-identity` mutation pins the fix. No oracle was relaxed.
 
 ## Fresh R9 verification
 
@@ -130,18 +131,18 @@ at a time. Task-owned build trees must be summarized and removed at completion.
 | Locked environment | Passed, offline, CPython 3.11.17 |
 | Workspace formatting | Passed after compatibility fixes |
 | All-target workspace clippy `-D warnings` | Passed with journal harness/timing, binary, chain/wallet harnesses and network observer features |
-| Workspace tests | Final source-order stack: 1,889 passed across 143 harness results; zero failed or ignored, with all specified harness/observer features |
+| Workspace tests | Ordered stack before the owned-converter fix: 1,889 passed across 143 harness results; zero failed or ignored. Fresh post-fix workspace run pending; the new focused regression passes |
 | Binary / network-observer harness tests | 86 passed across nine harness results; zero failed or ignored |
-| Mutation catalog anchors | 6,543 recipes across 42 catalogs after determinism; the pre-addendum 6,541-anchor check passed, final catalog check and kills remain pending |
+| Mutation catalog anchors | All 6,543 integrated recipes across 42 catalogs apply with zero problems; the owned-converter fix adds one recipe (6,544 total), with final applicability and full kills pending |
 | Test classification | Regenerated 6,022 definitions; final contract check/preflight pending |
 | Custody generated/replay/focused lanes | 24,000 books + 1,030 permutations: 24,852 complete stage matches and 178 matching refusals; 159 archived requests + 159 permutations match. Focused census and shadow each pass 300 tests and 32 subtests, with 75 native-loader byte matches and one explained panic-hook skip |
 | Complete renderer campaign | 24,705 / 24,705 generated admitted cases and 318 / 318 archived cases match |
-| Slice/hybrid parity and no-fallback assertions | Pending fresh run |
+| Slice/hybrid parity and no-fallback assertions | In progress: 2,246 distinct nodes pass through the loader/BLOB suites. Four BLOB-note failures are corrected and the full 274-case loader/BLOB rerun passes; remaining modules pending |
 | Full mutation kills in resumable shards | Pending fresh run |
 | Combined journals process / custody CPU | Pending fresh run |
 
-The final workspace run uses the combined harness and observer features and
-passes all 1,889 tests in one uninterrupted run. The earlier run and its 73
+The saved pre-fix workspace run uses the combined harness and observer features and
+passes all 1,889 tests in one uninterrupted run. The owned-converter correction requires a fresh workspace result. The earlier run and its 73
 initial failures/rechecks remain historical receipts, rather than the final
 coverage claim. The all-target feature check had also exposed a freshness
 fixture with obsolete `AppError` fields; the fixture is adapted and clippy passes.
@@ -149,8 +150,7 @@ After saving the exact log hash and counts, 221 completed test executables were
 removed (4.988 GB unlinked), bringing the verification build tree to 7.3 GiB.
 Rebuilt debug fixtures, the hybrid candidate and optimized journal probes pass.
 The custody/render receipts above precede the late mixed-revision guard; the
-generated snapshots do not exercise SQLite revision loading. The final loader
-suite reruns the affected boundary. The owner will run full census and shadow shards afterwards; focused lanes
+generated snapshots do not exercise SQLite revision loading. The 274-case loader/BLOB suite reruns the affected boundary; the owned-converter fix also requires refreshed custody/render campaigns and native builds. The owner will run full census and shadow shards afterwards; focused lanes
 remain part of this integration's required work.
 
 ## Remaining verification

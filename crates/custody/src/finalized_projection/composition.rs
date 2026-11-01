@@ -469,11 +469,57 @@ fn into_python(value: Value) -> Result<Py, String> {
             .map(into_python)
             .collect::<Result<Vec<_>, _>>()
             .map(Py::List),
+        Value::Object(values)
+            if values.len() == 1
+                && (values.contains_key("$kassiber_bytes")
+                    || values.contains_key("$kassiber_dict")) =>
+        {
+            codec::from_json(&Value::Object(values))
+        }
         Value::Object(values) => values
             .into_iter()
             .map(|(key, value)| Ok((kassiber_pyjson::Key::Str(key.into()), into_python(value)?)))
             .collect::<Result<Vec<_>, _>>()
             .map(Py::Dict),
         value => codec::from_json(&value),
+    }
+}
+
+#[cfg(test)]
+mod owned_value_tests {
+    use super::*;
+    use kassiber_pyjson::{Key, Options};
+
+    #[test]
+    fn owned_finalization_preserves_bytes_and_literal_mapping_identity() {
+        for note in [
+            Py::Bytes(vec![]),
+            Py::Bytes(vec![255, 0]),
+            Py::Bytes(b"77".to_vec()),
+            Py::Dict(vec![(Key::from("$kassiber_bytes"), Py::from("ff00"))]),
+            Py::Dict(vec![(
+                Key::from("$kassiber_dict"),
+                Py::Dict(vec![(Key::from("$kassiber_bytes"), Py::from("ff00"))]),
+            )]),
+        ] {
+            let expected = Py::Dict(vec![(
+                Key::from("rows"),
+                Py::List(vec![Py::Dict(vec![(Key::from("note"), note.clone())])]),
+            )]);
+            let actual = into_python(codec::to_json(&expected)).unwrap();
+            assert_eq!(actual, expected);
+            let encoded = kassiber_pyjson::dumps(&actual, &Options::new());
+            if matches!(note, Py::Bytes(_)) {
+                assert_eq!(
+                    encoded.unwrap_err(),
+                    kassiber_pyjson::Error::BytesNotSerializable
+                );
+            } else {
+                assert_eq!(
+                    encoded.unwrap(),
+                    kassiber_pyjson::dumps(&expected, &Options::new()).unwrap()
+                );
+            }
+        }
     }
 }

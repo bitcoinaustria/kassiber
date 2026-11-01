@@ -23343,5 +23343,15 @@
       "borrowed_hash_preimages_match_python_values"
     ],
     "rule": "Unsigned hash quantities above i64 remain exact positive integers."
+  },
+  {
+    "id": "projection-owned-byte-identity",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "Value::Object(values)\n            if values.len() == 1",
+    "replace": "Value::Object(values)\n            if values.len() == 0",
+    "expect_failing": [
+      "owned_finalization_preserves_bytes_and_literal_mapping_identity"
+    ],
+    "rule": "Owned finalization restores native bytes and escaped literal mappings without converting one into the other."
   }
 ]
