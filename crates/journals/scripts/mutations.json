@@ -2031,9 +2031,9 @@
   },
   {
     "id": "JP-borrowed-entry-id",
-    "file": "crates/journals/src/persistence.rs",
-    "find": "0 => (&self.owned[0]).into(),",
-    "replace": "0 => (&self.owned[1]).into(),",
+    "file": "crates/journals/src/persistence/entries.rs",
+    "find": "0 => ValueRef::Text(self.plan.id.as_bytes()),",
+    "replace": "0 => ValueRef::Text(b\"wrong-id\"),",
     "expect_failing": [
       "journal_persistence_matches_complete_python_dumps"
     ],
@@ -2041,9 +2041,9 @@
   },
   {
     "id": "JP-borrowed-entry-metadata",
-    "file": "crates/journals/src/persistence.rs",
-    "find": "1..=8 => self.metadata[index - 1],",
-    "replace": "1..=8 => self.metadata[index],",
+    "file": "crates/journals/src/persistence/entries.rs",
+    "find": "1..=8 => self.plan.metadata[index - 1],",
+    "replace": "1..=8 => self.plan.metadata[index],",
     "expect_failing": [
       "journal_persistence_matches_complete_python_dumps"
     ],
@@ -2051,9 +2051,9 @@
   },
   {
     "id": "JP-borrowed-entry-numbers",
-    "file": "crates/journals/src/persistence.rs",
-    "find": "9..=21 => (&self.owned[index - 8]).into(),",
-    "replace": "9..=21 => (&self.owned[index - 9]).into(),",
+    "file": "crates/journals/src/persistence/entries.rs",
+    "find": "_ => (&self.bindings.get().expect(\"prepared changed entry\")[index - 10]).into(),",
+    "replace": "_ => (&self.bindings.get().expect(\"prepared changed entry\")[index - 11]).into(),",
     "expect_failing": [
       "journal_persistence_matches_complete_python_dumps"
     ],
@@ -2061,9 +2061,9 @@
   },
   {
     "id": "JP-borrowed-entry-tail",
-    "file": "crates/journals/src/persistence.rs",
-    "find": "22..=28 => self.metadata[index - 14],",
-    "replace": "22..=28 => self.metadata[index - 15],",
+    "file": "crates/journals/src/persistence/entries.rs",
+    "find": "22..=28 => self.plan.metadata[index - 14],",
+    "replace": "22..=28 => self.plan.metadata[index - 15],",
     "expect_failing": [
       "journal_persistence_matches_complete_python_dumps"
     ],
@@ -2492,8 +2492,8 @@
   {
     "id": "JP-removed-mixed-clock-identity",
     "file": "crates/journals/src/storage.rs",
-    "find": "if let Some(&index) = wanted.get(id) {",
-    "replace": "if let Some(&index) = wanted.get(id).or_else(|| wanted.values().next()) {",
+    "find": "} else {\n                    wanted.get(id).copied()\n                }",
+    "replace": "} else {\n                    wanted.get(id).copied().or_else(|| wanted.values().next().copied())\n                }",
     "expect_failing": [
       "removing_a_mixed_clock_sibling_keeps_the_survivors_rowid_and_creation_time"
     ],

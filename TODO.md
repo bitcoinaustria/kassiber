@@ -674,13 +674,14 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   before wiring production in R4-13. The unregistered service, complete dump
   oracle and caller-owned storage scopes are implemented. Independent borrowed
   read floors were repeated over five connections per driver and shape, with
-  exact dumps and load averages; a quiet-host repeat remains open. The latest
-  direct comparison probes matched 96 timed dumps but missed both generic SQLite
-  budgets; they were withdrawn. Their sources, measurements and a retained
-  mixed-clock removal regression are recorded in the checkpoint. Historical
-  negative-zero and retained-column witnesses remain. Corrected appended inputs
-  carry distinct raw identities and assert actual writes. A cheap unchanged
-  comparison and the full eight-cell budget gate remain open.
+  exact dumps and load averages. The closest direct comparison is now retained
+  under the owner's incremental optimization rule. Generic SQLite 20k baseline
+  and candidate minima improve, but their load ranges differ and both accepted
+  budgets remain open. The alternating native-baseline harness records a slower
+  single fresh 2k sample explicitly. Finish wide-decimal comparisons and the full
+  eight-cell budget gate, then the mutation audit and inherited campaigns.
+  Historical signed-zero, retained-column and mixed-clock witnesses remain.
+  Corrected appended inputs carry distinct raw identities and assert actual writes.
   R4-9's test-only loader now constructs the current custody records directly;
   generic 20k still takes 0.505 s CPU / 0.509 s wall against 0.30 s. It remains
   unaccepted pending the typed consumer boundary, full legacy fidelity and

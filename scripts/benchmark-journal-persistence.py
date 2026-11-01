@@ -5,6 +5,7 @@ Only target/ scratch books are written. Rendering and dump comparison are
 outside the timer; storage and COMMIT are inside, passive checkpoint outside.
 Every run starts from the same physical database. Five Python/Rust pairs
 alternate order by default; --runs allows exploratory measurements.
+--baseline-probe adds a second native binary to each alternating trial.
 """
 from contextlib import ExitStack
 from decimal import Decimal
@@ -47,6 +48,7 @@ def main():
     parser.add_argument('--out',type=Path,required=True)
     parser.add_argument('--modes',nargs='+',default=['fresh','unchanged','appended','changed'])
     parser.add_argument('--probe',type=Path,default=Path('target/release/examples/journal-persist'))
+    parser.add_argument('--baseline-probe',type=Path)
     parser.add_argument('--runs',type=int,default=5)
     parser.add_argument('--cipher',action='store_true',help='encrypt each disposable starting copy with a synthetic test key')
     args=parser.parse_args()
@@ -58,6 +60,8 @@ def main():
         python=sys.version,cpus=os.cpu_count(),probe_sha256=hashlib.sha256(args.probe.read_bytes()).hexdigest(),
         harness_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         sources={str(path):hashlib.sha256(path.read_bytes()).hexdigest() for path in sorted(Path('crates/journals/src').rglob('*.rs'))})
+    if args.baseline_probe:
+        manifest['baseline_probe_sha256']=hashlib.sha256(args.baseline_probe.read_bytes()).hexdigest()
     (out/'environment.json').write_text(json.dumps(manifest,indent=2)+'\n')
     passphrase='synthetic-test-only' if args.cipher else None
     def connect(root): return open_db(root,passphrase=passphrase)
@@ -128,8 +132,12 @@ def main():
         if passphrase: vector['passphrase']=passphrase
         request.write_text(json.dumps(dict(vector,expected=expected),separators=(',',':')))
         floor_request.write_text(json.dumps(dict(name=mode,database=str(floor/'kassiber.sqlite3'),passphrase=passphrase,floor=recorder.batches,expected=expected),separators=(',',':')))
-        trials=[];probe=subprocess.Popen([str(args.probe.resolve())],stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True)
-        def rust(path,dest):
+        trials=[]
+        probes={'rust':subprocess.Popen([str(args.probe.resolve())],stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True)}
+        if args.baseline_probe:
+            probes['baseline']=subprocess.Popen([str(args.baseline_probe.resolve())],stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True)
+        def rust(path,dest,engine='rust'):
+            probe=probes[engine]
             if dest.exists(): shutil.rmtree(dest)
             shutil.copytree(base,dest)
             load=os.getloadavg()[0];probe.stdin.write(str(path)+'\n');probe.stdin.flush()
@@ -158,14 +166,16 @@ def main():
             runs=args.runs
             for run in range(runs):
                 pair={}
-                for engine in (['python','rust'] if run%2==0 else ['rust','python']):
-                    pair[engine]=py() if engine=='python' else rust(request,native)
+                engines=['python',*probes]
+                for engine in (engines if run%2==0 else engines[::-1]):
+                    pair[engine]=py() if engine=='python' else rust(request,native,engine)
                 pair['floor']=rust(floor_request,floor);trials.append(pair)
                 print(mode,run,pair,flush=True)
         finally:
-            probe.stdin.close();probe.wait(timeout=60)
-        best={engine:min(t[engine]['cpu_seconds'] for t in trials) for engine in ('python','rust','floor')}
-        best_wall={engine:min(t[engine]['seconds'] for t in trials) for engine in ('python','rust','floor')}
+            for probe in probes.values():
+                probe.stdin.close();probe.wait(timeout=60)
+        best={engine:min(t[engine]['cpu_seconds'] for t in trials) for engine in ('python',*probes,'floor')}
+        best_wall={engine:min(t[engine]['seconds'] for t in trials) for engine in ('python',*probes,'floor')}
         results.append(dict(mode=mode,transactions=count,appended_transactions=len(appended_ids),activity=activity,
             entries=len(expected['journal_entries']['rows']),postings=len(expected['journal_quantity_postings']['rows']),
             best=best,best_wall=best_wall,trials=trials,over_floor=best['rust']-best['floor']))

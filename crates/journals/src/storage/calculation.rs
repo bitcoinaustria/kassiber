@@ -5,6 +5,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt::Write;
 use std::sync::Arc;
+pub(crate) mod compare;
 
 #[derive(Hash, PartialEq, Eq)]
 struct SourceKey<'a> {

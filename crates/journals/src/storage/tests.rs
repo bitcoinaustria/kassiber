@@ -303,10 +303,37 @@ fn processing_marker_refuses_datetime_overflow() {
 #[test]
 fn typed_calculations_preserve_compact_bytes_and_all_dynamic_fallbacks() {
     fn check(c: &crate::Calculation) {
+        let encoded = encode_typed_calculation(c).unwrap();
         assert_eq!(
-            encode_typed_calculation(c).unwrap(),
+            encoded,
             encode_calculation(&serde_json::to_value(c).unwrap()).unwrap()
         );
+        let mut sources = compare::Sources::default();
+        let prepared = sources
+            .prepare(Some(c), &mut CalculationEncoder::default())
+            .unwrap();
+        fn cell(s: Option<&str>) -> ValueRef<'_> {
+            s.map_or(ValueRef::Null, |s| ValueRef::Text(s.as_bytes()))
+        }
+        assert!(prepared.matches(
+            &sources,
+            cell(encoded.0.as_deref()),
+            cell(encoded.1.as_deref())
+        ));
+        for compact in [false, true] {
+            let mut changed = encoded.clone();
+            let text = if compact {
+                &mut changed.1
+            } else {
+                &mut changed.0
+            };
+            *text = Some(format!(" {}", text.as_deref().unwrap_or("")));
+            assert!(!prepared.matches(
+                &sources,
+                cell(changed.0.as_deref()),
+                cell(changed.1.as_deref())
+            ));
+        }
     }
     let cases: Value = serde_json::from_str(include_str!("../../tests/data/render.json")).unwrap();
     let mut compared = 0;
@@ -467,8 +494,17 @@ fn typed_calculation_source_dictionary_preserves_order_and_deduplicates_large_in
     let encoded = encode_typed_calculation(&calculation).unwrap();
     assert_eq!(
         encoded,
-        encode_calculation(&serde_json::to_value(calculation).unwrap()).unwrap()
+        encode_calculation(&serde_json::to_value(&calculation).unwrap()).unwrap()
     );
+    let mut sources = compare::Sources::default();
+    let prepared = sources
+        .prepare(Some(&calculation), &mut CalculationEncoder::default())
+        .unwrap();
+    assert!(prepared.matches(
+        &sources,
+        ValueRef::Null,
+        ValueRef::Text(encoded.1.as_ref().unwrap().as_bytes())
+    ));
     let compact: Value = serde_json::from_str(encoded.1.as_ref().unwrap()).unwrap();
     assert_eq!(array(&compact[3]).len(), 4096);
     for (index, fragment) in array(&compact[4]).iter().enumerate() {

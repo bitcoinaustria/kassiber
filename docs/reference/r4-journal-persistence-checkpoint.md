@@ -35,6 +35,54 @@ This profile locates work and does not establish five-pair acceptance.
 binds every floor trial, load average, book manifest, source and binary hash,
 complete-dump hash and the separate baseline profile. No acceptance is claimed.
 
+## Retained comparison continuation from `9730f9e4b`
+
+The owner now requires byte-exact measured improvements to remain committed
+while the remaining budgets are closed. The closest direct/indexed archive
+(`37795f9fda326592577080861e78e8f159fc398eba8927022b5261d1ff2a0856`)
+is restored, including lazy final bindings, borrowed comparisons and ordered
+retained scans with the mixed-clock identity fallback. Production Python and
+command registration remain unchanged. **R4-12 acceptance is still open.**
+
+Five alternating Python/native pairs per generic SQLite 20k mode match all
+30 complete timed dumps. A separate five-pair baseline run also matches all
+30. Independent process-CPU minima, in seconds:
+
+| Generic SQLite 20k | Baseline `51bd20498` | Retained comparison | Retained write floor |
+| --- | ---: | ---: | ---: |
+| unchanged | 0.488894 | 0.435818 | 0.000896 |
+| fresh | 1.161836 | 0.980358 | 0.739985 |
+
+These sequential runs have different load ranges: baseline unchanged
+44.99–62.41 and fresh 57.60–70.12, comparison unchanged 43.13–46.19 and fresh
+38.13–41.29. They locate improvements but do not isolate their magnitude from
+contention. The retained fresh cell exceeds its write-floor + 0.15 allowance
+by 0.090373 seconds; unchanged also remains above the accepted read-floor
+allowance. No budget acceptance follows from these measurements.
+
+The benchmark now accepts `--baseline-probe` to alternate a saved native
+baseline with the candidate and Python on identical physical copies in each
+trial. Its first generic SQLite 2k pair matches eight complete dumps. Candidate
+versus baseline CPU is 0.045574 versus 0.061908 unchanged, and 0.170861 versus
+0.145433 fresh, at load 58.05–59.81. This single fresh sample is slower and is
+retained explicitly; it does not establish a repeatable regression or a speedup.
+
+All 61 journal tests pass, including both physical-driver crash recovery,
+complete dumps, every-write refusal/unwind rollback, all five signed-zero
+rewrites and the retained mixed-clock removal witness. Additional checks run
+the typed comparison against every calculation fallback and the 4,096-source
+dictionary. All 65 Python render/storage oracle and storage-format checks pass;
+workspace formatting passes. Five moved mutation anchors retain their existing IDs; all 182
+recipes apply, but their final kills and the exhaustive branch audit remain
+open. The wide-coefficient comparison still uses the canonical formatter and
+must be replaced in the next boundary.
+
+The [retained comparison record](r4-journal-persistence-retained-comparison-measurements.json)
+binds source and binary hashes, all timing samples and loads, the separate
+baseline provenance, paired 2k trial and verification logs. The other 20k
+shapes/drivers, appended/changed matrix, full 2k matrix, inherited R4 campaigns
+and integrated R4-13 contracts have not been rerun at this boundary.
+
 ## Direct comparison continuation (withdrawn)
 
 **R4-12 remains unaccepted.** Four generic SQLite comparison variants matched

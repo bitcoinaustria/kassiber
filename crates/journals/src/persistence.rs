@@ -6,6 +6,7 @@ use kassiber_store::rusqlite::types::ValueRef;
 use kassiber_store::rusqlite::{self, params, params_from_iter, types::Value as Sql, Connection};
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
+mod entries;
 mod filed;
 mod quantity;
 mod quarantine;
@@ -80,24 +81,26 @@ fn real(d: &JournalDecimal) -> Sql {
     Sql::Real(d.0.to_string().parse().expect("Decimal float spelling"))
 }
 fn amount(d: &JournalDecimal) -> Result<Sql, Refusal> {
+    if let Some(n) =
+        d.0.coefficient_u128()
+            .filter(|n| *n <= u128::from(u64::MAX))
+    {
+        let shift = d.0.exponent() + 11;
+        if (-19..=19).contains(&shift) {
+            let magnitude = if shift >= 0 {
+                n * 10u128.pow(shift as u32)
+            } else {
+                let divisor = 10u128.pow((-shift) as u32);
+                n / divisor + u128::from(n % divisor >= divisor / 2)
+            };
+            if let Ok(n) = i64::try_from(magnitude) {
+                return Ok(Sql::Integer(if d.0.is_sign_negative() { -n } else { n }));
+            }
+        }
+    }
     bind(&msat(&d.0)?)
 }
 
-struct EntryBindings<'a> {
-    metadata: [ValueRef<'a>; 15],
-    owned: [Sql; 14],
-}
-impl storage::BindingRow<29> for EntryBindings<'_> {
-    fn cell(&self, index: usize) -> ValueRef<'_> {
-        match index {
-            0 => (&self.owned[0]).into(),
-            1..=8 => self.metadata[index - 1],
-            9..=21 => (&self.owned[index - 8]).into(),
-            22..=28 => self.metadata[index - 14],
-            _ => unreachable!("entry column"),
-        }
-    }
-}
 fn decimal_bindings(d: Option<&JournalDecimal>) -> Result<(Sql, Sql), Refusal> {
     let Some(d) = d else {
         return Ok((Sql::Null, Sql::Null));
@@ -254,9 +257,15 @@ fn store<O: storage::WriteObserver>(
         .query_map([&pid], |r| Ok((r.get(0)?, (r.get(1)?, r.get(2)?))))?
         .collect::<rusqlite::Result<_>>()?;
     writer.observer.phase("entries_prepare");
+    let retained: bool = writer.conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM journal_entries WHERE profile_id=?)",
+        [&pid],
+        |r| r.get(0),
+    )?;
     let mut ordinals = HashMap::new();
     let mut rows = Vec::with_capacity(state.entries.len());
-    let mut calculations = storage::CalculationEncoder::default();
+    let calculations = std::cell::RefCell::new(storage::CalculationEncoder::default());
+    let mut comparisons = storage::compare::Sources::default();
     for e in &state.entries {
         let key = (
             quantity::key(&e.transaction_id),
@@ -267,12 +276,14 @@ fn store<O: storage::WriteObserver>(
         let ordinal = ordinals.entry(key.clone()).or_insert(0usize);
         let id = storage::journal_entry_id(&pid, &key.0, &key.1, key.2, key.3, *ordinal)?;
         *ordinal += 1;
-        let (legacy, compact) = e
-            .calculation
-            .as_ref()
-            .map(|calculation| calculations.encode(calculation))
-            .transpose()?
-            .unwrap_or((None, None));
+        let calculation = if retained {
+            comparisons.prepare(e.calculation.as_ref(), &mut calculations.borrow_mut())?
+        } else if let Some(calculation) = &e.calculation {
+            let (legacy, compact) = calculations.borrow_mut().encode(calculation)?;
+            storage::compare::Prepared::Fallback(legacy, compact)
+        } else {
+            storage::compare::Prepared::Absent
+        };
         let (source, quality) = pricing
             .get(key.0.as_ref())
             .unwrap_or(&(Sql::Null, Sql::Null));
@@ -299,31 +310,35 @@ fn store<O: storage::WriteObserver>(
             ValueRef::Text(at.as_bytes()),
         ];
         let quantity = bind(&e.quantity.msat()?)?;
-        let (fiat, fiat_exact) = decimal_bindings(Some(&e.fiat_value))?;
-        let (unit, unit_exact) = decimal_bindings(Some(&e.unit_cost))?;
-        let (basis, basis_exact) = decimal_bindings(e.cost_basis.as_ref())?;
-        let (proceeds, proceeds_exact) = decimal_bindings(e.proceeds.as_ref())?;
-        let (gain, gain_exact) = decimal_bindings(e.gain_loss.as_ref())?;
-        rows.push(EntryBindings {
+        for decimal in [
+            Some(&e.fiat_value),
+            Some(&e.unit_cost),
+            e.cost_basis.as_ref(),
+            e.proceeds.as_ref(),
+            e.gain_loss.as_ref(),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            entries::validate(decimal)?;
+        }
+        rows.push(entries::Plan {
+            id,
             metadata,
-            owned: [
-                t(id),
-                quantity,
-                fiat,
-                unit,
-                basis,
-                proceeds,
-                gain,
-                fiat_exact,
-                unit_exact,
-                basis_exact,
-                proceeds_exact,
-                gain_exact,
-                opt(legacy),
-                opt(compact),
-            ],
+            quantity,
+            entry: e,
+            calculation,
         });
     }
+    let rows: Vec<_> = rows
+        .into_iter()
+        .map(|plan| entries::Row {
+            plan,
+            sources: &comparisons,
+            encoder: &calculations,
+            bindings: std::cell::OnceCell::new(),
+        })
+        .collect();
     writer.observer.phase("entries_write");
     storage::replace_entry_bindings(writer.conn, &pid, &rows, writer.observer)?;
     writer.observer.phase("small_tables");

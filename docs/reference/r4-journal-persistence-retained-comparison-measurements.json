@@ -1,0 +1,2223 @@
+{
+  "base_commit": "9730f9e4b",
+  "accepted": false,
+  "disposition": "Retain the closest exact direct comparison; continue optimizing at verified commit boundaries. No R4-12 acceptance is claimed.",
+  "budgets": {
+    "unchanged": "borrowed read floor + 0.15 process CPU seconds",
+    "fresh": "prepared DML write floor + 0.15 process CPU seconds"
+  },
+  "archive": {
+    "path": "target/indexed-source/sources.tar.gz",
+    "sha256": "37795f9fda326592577080861e78e8f159fc398eba8927022b5261d1ff2a0856",
+    "prior_path": "/home/tg/.t3/worktrees/kassiber/t3-03f0ab1a/target/direct-indexed-archive/sources.tar.gz"
+  },
+  "measurements": {
+    "baseline-comparison": {
+      "environment": {
+        "book": {
+          "schema": "kassiber.journals-bench-book.v1",
+          "kind": "generic",
+          "transactions": 20000,
+          "seed": 1,
+          "csv_sha256": {
+            "book.csv": "7b09f4fd1d6fc465734d1c30db1e8ca2445577932c2fd924ab593106172cf6b1"
+          },
+          "pegs": 0,
+          "pegs_paired": 0,
+          "journals": {
+            "entries_created": 20000,
+            "quarantined": 0,
+            "cross_asset_pairs": 0,
+            "processed_transactions": 20000
+          },
+          "built_by": "32767d331e7be68c1efba00f9811f501d8a5f76f",
+          "build_seconds": 37.0,
+          "source": "copied historical synthetic book; CSV digests checked against the continuation record",
+          "normalized_by": "51bd20498 Python capture with fixed persistence clock"
+        },
+        "runs": 5,
+        "python": "3.11.17 (main, Oct 21 2026, 17:46:53) [Clang 23.1.3 ]",
+        "cpus": 48,
+        "probe_sha256": "f43dd2d6a001e0a7d3e3b792cea6ef583803776b673fa55b2e004ed426b63448",
+        "harness_sha256": "b9cb682b6e652362756528a4cedf38713774d70833ce1c1c5300a14a3c3a6bbc",
+        "sources": {
+          "crates/journals/src/boundary/joins.rs": "58b06db41921c470886b1cd1e190f506d6fd9175645c58321340fc6dd464c68e",
+          "crates/journals/src/boundary.rs": "2ddc678761e48f07a4277b2c20622a94a631f2c7c3725eefa32370a71abd878d",
+          "crates/journals/src/compute.rs": "b50c57224fc536c3df0fdff7d4d465d396aed6f717c158fb668f0fee0d507102",
+          "crates/journals/src/lib.rs": "f3d8fc2ab7257405c56545dda5d0bf7b3c24d90be78b8ccdc219feda380a576d",
+          "crates/journals/src/loader/direct.rs": "6f4ff944e2dd1a053ae54807ad510094ffa7c6c72c7c97b25cb5b2a4b876b999",
+          "crates/journals/src/loader/ownership.rs": "e9fd153c3ddbc0b7ad836c280e2219d8c0285e46e80f457fb5039003d250c2c8",
+          "crates/journals/src/loader/receipts.rs": "08b0978e2fed949d12af142596d9c91f1e39436d6dd2665e62e374af69bb4453",
+          "crates/journals/src/loader/tests.rs": "c32901ad80222bb09c20979247c37cebc1801dfd26dfc5cddc430c7bc034b804",
+          "crates/journals/src/loader/worklist.rs": "64670923212f75666cf0496da7e4ff7a9073e85e382d715bdebf05776a5d3516",
+          "crates/journals/src/loader.rs": "42698dcb84c9f0aba04eef10a14ecdb2e8b0497960f8bdd4d48dd7a17c762465",
+          "crates/journals/src/model.rs": "68f10bb6e44e1283ccf887606562fd908ad764848e7a4f3fdbe5e2f196239f8b",
+          "crates/journals/src/persistence/entries.rs": "a1ae95bddcf824b3caaa90be48638e417328ee065f6baeff08aeeb2bf2f74ceb",
+          "crates/journals/src/persistence/filed.rs": "24206d69912e8b067199a1f42a3ba1ba257ed40ff99e1569d0dc9d4d3ff94432",
+          "crates/journals/src/persistence/quantity.rs": "947e1c3927fc943f0eb187604e82e06a37ded17ccbf617d51358abbdd0a4a094",
+          "crates/journals/src/persistence/quarantine.rs": "c9cb06f5e0b8ab54fc47c20d9b4f7dc63a54379444e864fb450d0ef2f8235c0d",
+          "crates/journals/src/persistence.rs": "d9b90aa760f761c365fa1fe89335480a5553d371a79934cb5b730c8ab2947513",
+          "crates/journals/src/render.rs": "afac4610917b0ed8ef320385b7f80ca5cb28bd69187e9c00b5dac5b998550d45",
+          "crates/journals/src/storage/calculation/compare.rs": "710b4e6bb35fcae468e7f29ca7d4227965aa9e1fdff1e603d89bc927d16af45f",
+          "crates/journals/src/storage/calculation.rs": "9ccbf092810fec1392096f9c6e4df6c8202af46c5458eb00c3828b7b9a1bce44",
+          "crates/journals/src/storage/tests.rs": "8120fcb819da5d8ef5f65052f0a95863683a557eb8ec90549764e8296bbd468c",
+          "crates/journals/src/storage.rs": "e386a1a1953d741be5f695c888f6cdcaf8605b244ced1b048188f50b04ec2d1d"
+        }
+      },
+      "measurements": [
+        {
+          "mode": "unchanged",
+          "transactions": 20000,
+          "appended_transactions": 0,
+          "activity": {
+            "journal_entries": {
+              "insert": 0,
+              "delete": 0
+            },
+            "journal_quantity_postings": {
+              "insert": 0,
+              "delete": 0
+            }
+          },
+          "entries": 20000,
+          "postings": 40000,
+          "best": {
+            "python": 1.4786619630000004,
+            "rust": 0.48889400000000016,
+            "floor": 0.000992000000000104
+          },
+          "best_wall": {
+            "python": 1.4994083250057884,
+            "rust": 0.535181172,
+            "floor": 0.131605284
+          },
+          "trials": [
+            {
+              "python": {
+                "seconds": 1.727701605996117,
+                "cpu_seconds": 1.7069567140000004,
+                "load1": 44.98876953125
+              },
+              "rust": {
+                "seconds": 0.614735731,
+                "cpu_seconds": 0.5471719999999998,
+                "phases": {
+                  "begin": {
+                    "cpu": 2.0000000000131024e-05,
+                    "wall": 2.27e-05
+                  },
+                  "commit": {
+                    "cpu": 0.0007019999999995363,
+                    "wall": 0.060966407
+                  },
+                  "complete": {
+                    "cpu": 0.019692000000000043,
+                    "wall": 0.019883775
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.14022100000000037,
+                    "wall": 0.141699165
+                  },
+                  "entries_write": {
+                    "cpu": 0.09455899999999984,
+                    "wall": 0.097433143
+                  },
+                  "filed": {
+                    "cpu": 0.00013500000000021828,
+                    "wall": 0.000129943
+                  },
+                  "pricing": {
+                    "cpu": 0.02476300000000009,
+                    "wall": 0.025002662
+                  },
+                  "quantity": {
+                    "cpu": 0.00386199999999981,
+                    "wall": 0.003904038
+                  },
+                  "quantity_other": {
+                    "cpu": 0.021274000000000015,
+                    "wall": 0.021474565
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.04142800000000024,
+                    "wall": 0.041771709
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.01944900000000027,
+                    "wall": 0.019637708
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.17292599999999947,
+                    "wall": 0.174554192
+                  },
+                  "setup": {
+                    "cpu": 0.0003929999999998657,
+                    "wall": 0.0003885
+                  },
+                  "small_tables": {
+                    "cpu": 0.007728999999999875,
+                    "wall": 0.007775443
+                  }
+                },
+                "load1": 47.39208984375
+              },
+              "floor": {
+                "seconds": 0.330845049,
+                "cpu_seconds": 0.001282999999999923,
+                "phases": null,
+                "load1": 47.60107421875
+              }
+            },
+            {
+              "rust": {
+                "seconds": 0.535181172,
+                "cpu_seconds": 0.48889400000000016,
+                "phases": {
+                  "begin": {
+                    "cpu": 2.1000000000270802e-05,
+                    "wall": 2.875e-05
+                  },
+                  "commit": {
+                    "cpu": 0.001758999999999844,
+                    "wall": 0.043199074
+                  },
+                  "complete": {
+                    "cpu": 0.017070999999999614,
+                    "wall": 0.017233058
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.1126870000000002,
+                    "wall": 0.113659158
+                  },
+                  "entries_write": {
+                    "cpu": 0.08066300000000037,
+                    "wall": 0.081385734
+                  },
+                  "filed": {
+                    "cpu": 0.0001340000000000785,
+                    "wall": 0.000128814
+                  },
+                  "pricing": {
+                    "cpu": 0.025576000000000043,
+                    "wall": 0.025797952
+                  },
+                  "quantity": {
+                    "cpu": 0.0032160000000001077,
+                    "wall": 0.003245041
+                  },
+                  "quantity_other": {
+                    "cpu": 0.020175000000000054,
+                    "wall": 0.020322325
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.06394399999999933,
+                    "wall": 0.065069718
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.02461900000000039,
+                    "wall": 0.024877628
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.13166100000000025,
+                    "wall": 0.132750712
+                  },
+                  "setup": {
+                    "cpu": 0.00034699999999965314,
+                    "wall": 0.000343118
+                  },
+                  "small_tables": {
+                    "cpu": 0.007000999999999813,
+                    "wall": 0.007051865
+                  }
+                },
+                "load1": 47.15234375
+              },
+              "python": {
+                "seconds": 1.6349565169948619,
+                "cpu_seconds": 1.6186131859999975,
+                "load1": 47.15234375
+              },
+              "floor": {
+                "seconds": 0.131605284,
+                "cpu_seconds": 0.000992000000000104,
+                "phases": null,
+                "load1": 47.30078125
+              }
+            },
+            {
+              "python": {
+                "seconds": 1.4994083250057884,
+                "cpu_seconds": 1.4786619630000004,
+                "load1": 48.71826171875
+              },
+              "rust": {
+                "seconds": 0.868241986,
+                "cpu_seconds": 0.7921859999999992,
+                "phases": {
+                  "begin": {
+                    "cpu": 2.0999999998494445e-05,
+                    "wall": 2.3401e-05
+                  },
+                  "commit": {
+                    "cpu": 0.0010449999999995185,
+                    "wall": 0.060795793
+                  },
+                  "complete": {
+                    "cpu": 0.027649000000000257,
+                    "wall": 0.027919235
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.21674400000000027,
+                    "wall": 0.22677968
+                  },
+                  "entries_write": {
+                    "cpu": 0.18645199999999917,
+                    "wall": 0.189040042
+                  },
+                  "filed": {
+                    "cpu": 0.0003119999999992018,
+                    "wall": 0.000300437
+                  },
+                  "pricing": {
+                    "cpu": 0.04233900000000013,
+                    "wall": 0.042744584
+                  },
+                  "quantity": {
+                    "cpu": 0.003346999999999767,
+                    "wall": 0.003383824
+                  },
+                  "quantity_other": {
+                    "cpu": 0.03254100000000015,
+                    "wall": 0.032841957
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.05281300000000044,
+                    "wall": 0.053277465
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.019418999999999187,
+                    "wall": 0.019602998
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.19501200000000019,
+                    "wall": 0.196822006
+                  },
+                  "setup": {
+                    "cpu": 0.0003260000000011587,
+                    "wall": 0.000320508
+                  },
+                  "small_tables": {
+                    "cpu": 0.014143000000000683,
+                    "wall": 0.014269765
+                  }
+                },
+                "load1": 51.9443359375
+              },
+              "floor": {
+                "seconds": 0.220116895,
+                "cpu_seconds": 0.0017919999999982394,
+                "phases": null,
+                "load1": 52.4296875
+              }
+            },
+            {
+              "rust": {
+                "seconds": 0.832201889,
+                "cpu_seconds": 0.6857940000000013,
+                "phases": {
+                  "begin": {
+                    "cpu": 2.800000000036107e-05,
+                    "wall": 2.9631e-05
+                  },
+                  "commit": {
+                    "cpu": 0.0015099999999996783,
+                    "wall": 0.136849214
+                  },
+                  "complete": {
+                    "cpu": 0.0286369999999998,
+                    "wall": 0.029038552
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.17258999999999958,
+                    "wall": 0.175827553
+                  },
+                  "entries_write": {
+                    "cpu": 0.12570499999999996,
+                    "wall": 0.126983788
+                  },
+                  "filed": {
+                    "cpu": 0.0002550000000027808,
+                    "wall": 0.000252166
+                  },
+                  "pricing": {
+                    "cpu": 0.03377300000000005,
+                    "wall": 0.0341717
+                  },
+                  "quantity": {
+                    "cpu": 0.006157000000001744,
+                    "wall": 0.006715227
+                  },
+                  "quantity_other": {
+                    "cpu": 0.028210999999998876,
+                    "wall": 0.028852667
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.0681769999999986,
+                    "wall": 0.069730375
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.027152000000000953,
+                    "wall": 0.027415292
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.1834530000000001,
+                    "wall": 0.186012617
+                  },
+                  "setup": {
+                    "cpu": 0.0004219999999968138,
+                    "wall": 0.000422951
+                  },
+                  "small_tables": {
+                    "cpu": 0.009688000000000585,
+                    "wall": 0.009769812
+                  }
+                },
+                "load1": 52.4296875
+              },
+              "python": {
+                "seconds": 2.123874386015814,
+                "cpu_seconds": 2.027417131,
+                "load1": 54.7177734375
+              },
+              "floor": {
+                "seconds": 0.363416979,
+                "cpu_seconds": 0.16941000000000273,
+                "phases": null,
+                "load1": 56.4658203125
+              }
+            },
+            {
+              "python": {
+                "seconds": 3.6009132899926044,
+                "cpu_seconds": 3.327067279000005,
+                "load1": 56.4658203125
+              },
+              "rust": {
+                "seconds": 0.842041852,
+                "cpu_seconds": 0.7906230000000001,
+                "phases": {
+                  "begin": {
+                    "cpu": 3.0999999999892225e-05,
+                    "wall": 3.4271e-05
+                  },
+                  "commit": {
+                    "cpu": 0.001066999999999041,
+                    "wall": 0.012304636
+                  },
+                  "complete": {
+                    "cpu": 0.027753000000000583,
+                    "wall": 0.028760455
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.19439099999999954,
+                    "wall": 0.218853593
+                  },
+                  "entries_write": {
+                    "cpu": 0.1518460000000026,
+                    "wall": 0.161034125
+                  },
+                  "filed": {
+                    "cpu": 0.00023399999999895726,
+                    "wall": 0.000220396
+                  },
+                  "pricing": {
+                    "cpu": 0.03295800000000071,
+                    "wall": 0.033605066
+                  },
+                  "quantity": {
+                    "cpu": 0.007044000000000494,
+                    "wall": 0.007208949
+                  },
+                  "quantity_other": {
+                    "cpu": 0.030631999999997106,
+                    "wall": 0.030918109
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.08705699999999794,
+                    "wall": 0.087916667
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.04091500000000181,
+                    "wall": 0.041956704
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.20547300000000135,
+                    "wall": 0.207812798
+                  },
+                  "setup": {
+                    "cpu": 0.000560000000000116,
+                    "wall": 0.000562234
+                  },
+                  "small_tables": {
+                    "cpu": 0.01063699999999912,
+                    "wall": 0.010727117
+                  }
+                },
+                "load1": 60.69921875
+              },
+              "floor": {
+                "seconds": 0.686447382,
+                "cpu_seconds": 0.0010580000000004475,
+                "phases": null,
+                "load1": 62.4052734375
+              }
+            }
+          ],
+          "over_floor": 0.48790200000000006
+        },
+        {
+          "mode": "fresh",
+          "transactions": 20000,
+          "appended_transactions": 0,
+          "activity": {
+            "journal_entries": {
+              "insert": 20000,
+              "delete": 0
+            },
+            "journal_quantity_postings": {
+              "insert": 40000,
+              "delete": 0
+            }
+          },
+          "entries": 20000,
+          "postings": 40000,
+          "best": {
+            "python": 1.7200072679999892,
+            "rust": 1.161836000000001,
+            "floor": 0.7126950000000001
+          },
+          "best_wall": {
+            "python": 1.8217156989849173,
+            "rust": 1.218629033,
+            "floor": 1.02826091
+          },
+          "trials": [
+            {
+              "python": {
+                "seconds": 3.4342460820043925,
+                "cpu_seconds": 3.2883602600000046,
+                "load1": 68.9150390625
+              },
+              "rust": {
+                "seconds": 1.607367511,
+                "cpu_seconds": 1.2540430000000002,
+                "phases": {
+                  "begin": {
+                    "cpu": 2.5999999999637424e-05,
+                    "wall": 2.734e-05
+                  },
+                  "commit": {
+                    "cpu": 0.281037,
+                    "wall": 0.623347161
+                  },
+                  "complete": {
+                    "cpu": 0.02713700000000019,
+                    "wall": 0.027420982
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.17093399999999992,
+                    "wall": 0.173737351
+                  },
+                  "entries_write": {
+                    "cpu": 0.29163099999999975,
+                    "wall": 0.294515214
+                  },
+                  "filed": {
+                    "cpu": 0.0003169999999999007,
+                    "wall": 0.000317048
+                  },
+                  "pricing": {
+                    "cpu": 0.029205000000000148,
+                    "wall": 0.029522744
+                  },
+                  "quantity": {
+                    "cpu": 0.0044520000000001225,
+                    "wall": 0.004494662
+                  },
+                  "quantity_other": {
+                    "cpu": 0.02381499999999992,
+                    "wall": 0.024047538
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.06464500000000006,
+                    "wall": 0.065312524
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.02403299999999975,
+                    "wall": 0.024290074
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.3270200000000001,
+                    "wall": 0.330346765
+                  },
+                  "setup": {
+                    "cpu": 0.000456000000000234,
+                    "wall": 0.000459831
+                  },
+                  "small_tables": {
+                    "cpu": 0.00929800000000025,
+                    "wall": 0.009390073
+                  }
+                },
+                "load1": 70.123046875
+              },
+              "floor": {
+                "seconds": 1.5026178049999999,
+                "cpu_seconds": 1.071383,
+                "phases": null,
+                "load1": 69.1396484375
+              }
+            },
+            {
+              "rust": {
+                "seconds": 2.120180812,
+                "cpu_seconds": 1.5351309999999998,
+                "phases": {
+                  "begin": {
+                    "cpu": 3.300000000017178e-05,
+                    "wall": 3.4821e-05
+                  },
+                  "commit": {
+                    "cpu": 0.30229199999999956,
+                    "wall": 0.844476889
+                  },
+                  "complete": {
+                    "cpu": 0.029016000000000375,
+                    "wall": 0.029276438
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.20183399999999985,
+                    "wall": 0.206162476
+                  },
+                  "entries_write": {
+                    "cpu": 0.39593900000000026,
+                    "wall": 0.416219561
+                  },
+                  "filed": {
+                    "cpu": 0.0002949999999994901,
+                    "wall": 0.000286887
+                  },
+                  "pricing": {
+                    "cpu": 0.04260900000000056,
+                    "wall": 0.043167503
+                  },
+                  "quantity": {
+                    "cpu": 0.006123999999999796,
+                    "wall": 0.006205834
+                  },
+                  "quantity_other": {
+                    "cpu": 0.03755199999999981,
+                    "wall": 0.038101168
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.07462999999999909,
+                    "wall": 0.07559276
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.030115000000000336,
+                    "wall": 0.030552309
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.39927899999999994,
+                    "wall": 0.414377444
+                  },
+                  "setup": {
+                    "cpu": 0.0005380000000005936,
+                    "wall": 0.000541613
+                  },
+                  "small_tables": {
+                    "cpu": 0.014846000000000359,
+                    "wall": 0.015029974
+                  }
+                },
+                "load1": 67.44677734375
+              },
+              "python": {
+                "seconds": 2.153658244991675,
+                "cpu_seconds": 1.9860654350000004,
+                "load1": 67.25048828125
+              },
+              "floor": {
+                "seconds": 1.250164717,
+                "cpu_seconds": 0.8352389999999996,
+                "phases": null,
+                "load1": 66.98974609375
+              }
+            },
+            {
+              "python": {
+                "seconds": 2.223659339011647,
+                "cpu_seconds": 2.119969089999998,
+                "load1": 65.708984375
+              },
+              "rust": {
+                "seconds": 1.218629033,
+                "cpu_seconds": 1.161836000000001,
+                "phases": {
+                  "begin": {
+                    "cpu": 1.8000000000739647e-05,
+                    "wall": 1.943e-05
+                  },
+                  "commit": {
+                    "cpu": 0.28240599999999816,
+                    "wall": 0.320804667
+                  },
+                  "complete": {
+                    "cpu": 0.026175999999999533,
+                    "wall": 0.026504001
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.12767499999999998,
+                    "wall": 0.128923403
+                  },
+                  "entries_write": {
+                    "cpu": 0.33434700000000106,
+                    "wall": 0.347330281
+                  },
+                  "filed": {
+                    "cpu": 0.00029100000000070736,
+                    "wall": 0.000280488
+                  },
+                  "pricing": {
+                    "cpu": 0.024215999999999127,
+                    "wall": 0.024463483
+                  },
+                  "quantity": {
+                    "cpu": 0.0033320000000003347,
+                    "wall": 0.003366088
+                  },
+                  "quantity_other": {
+                    "cpu": 0.019915000000001015,
+                    "wall": 0.020105165
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.03725599999999929,
+                    "wall": 0.037548423
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.017129000000000616,
+                    "wall": 0.017312274
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.27798199999999795,
+                    "wall": 0.280677202
+                  },
+                  "setup": {
+                    "cpu": 0.00031900000000106843,
+                    "wall": 0.000315009
+                  },
+                  "small_tables": {
+                    "cpu": 0.010742000000000473,
+                    "wall": 0.010868896
+                  }
+                },
+                "load1": 63.97021484375
+              },
+              "floor": {
+                "seconds": 1.135918637,
+                "cpu_seconds": 0.8941480000000013,
+                "phases": null,
+                "load1": 62.45068359375
+              }
+            },
+            {
+              "rust": {
+                "seconds": 1.426104021,
+                "cpu_seconds": 1.1937979999999975,
+                "phases": {
+                  "begin": {
+                    "cpu": 2.5000000000829914e-05,
+                    "wall": 2.582e-05
+                  },
+                  "commit": {
+                    "cpu": 0.275188,
+                    "wall": 0.487019853
+                  },
+                  "complete": {
+                    "cpu": 0.013864000000001653,
+                    "wall": 0.013972336
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.1521240000000006,
+                    "wall": 0.157580607
+                  },
+                  "entries_write": {
+                    "cpu": 0.30554400000000115,
+                    "wall": 0.308827561
+                  },
+                  "filed": {
+                    "cpu": 0.00013399999999919032,
+                    "wall": 0.000135594
+                  },
+                  "pricing": {
+                    "cpu": 0.02753500000000031,
+                    "wall": 0.028777246
+                  },
+                  "quantity": {
+                    "cpu": 0.003906000000000631,
+                    "wall": 0.003948464
+                  },
+                  "quantity_other": {
+                    "cpu": 0.022852000000000317,
+                    "wall": 0.023616166
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.04651099999999886,
+                    "wall": 0.047241723
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.01799100000000209,
+                    "wall": 0.01823045
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.3214259999999989,
+                    "wall": 0.329911863
+                  },
+                  "setup": {
+                    "cpu": 0.0003189999999975157,
+                    "wall": 0.000313979
+                  },
+                  "small_tables": {
+                    "cpu": 0.006347999999999132,
+                    "wall": 0.006387125
+                  }
+                },
+                "load1": 61.45361328125
+              },
+              "python": {
+                "seconds": 1.8217156989849173,
+                "cpu_seconds": 1.7200072679999892,
+                "load1": 59.5751953125
+              },
+              "floor": {
+                "seconds": 1.02826091,
+                "cpu_seconds": 0.7126950000000001,
+                "phases": null,
+                "load1": 58.08740234375
+              }
+            },
+            {
+              "python": {
+                "seconds": 2.236177746002795,
+                "cpu_seconds": 1.986669797999994,
+                "load1": 58.08740234375
+              },
+              "rust": {
+                "seconds": 1.654960523,
+                "cpu_seconds": 1.2733109999999996,
+                "phases": {
+                  "begin": {
+                    "cpu": 3.2000000004472895e-05,
+                    "wall": 3.3711e-05
+                  },
+                  "commit": {
+                    "cpu": 0.2678720000000041,
+                    "wall": 0.630457011
+                  },
+                  "complete": {
+                    "cpu": 0.020177999999994256,
+                    "wall": 0.0204069
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.15780600000000078,
+                    "wall": 0.161251144
+                  },
+                  "entries_write": {
+                    "cpu": 0.32384400000000113,
+                    "wall": 0.331446095
+                  },
+                  "filed": {
+                    "cpu": 0.00015000000000497948,
+                    "wall": 0.000142444
+                  },
+                  "pricing": {
+                    "cpu": 0.028607999999998412,
+                    "wall": 0.028836504
+                  },
+                  "quantity": {
+                    "cpu": 0.004007999999998901,
+                    "wall": 0.004051627
+                  },
+                  "quantity_other": {
+                    "cpu": 0.020597000000002197,
+                    "wall": 0.020830812
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.05706499999999437,
+                    "wall": 0.057548194
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.026332000000003575,
+                    "wall": 0.026613879
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.35791900000000254,
+                    "wall": 0.364280177
+                  },
+                  "setup": {
+                    "cpu": 0.0004849999999976262,
+                    "wall": 0.000479013
+                  },
+                  "small_tables": {
+                    "cpu": 0.008379999999995391,
+                    "wall": 0.008449394
+                  }
+                },
+                "load1": 57.599609375
+              },
+              "floor": {
+                "seconds": 1.103410288,
+                "cpu_seconds": 0.9280139999999975,
+                "phases": null,
+                "load1": 58.1923828125
+              }
+            }
+          ],
+          "over_floor": 0.4491410000000009
+        }
+      ]
+    },
+    "retained-indexed": {
+      "environment": {
+        "book": {
+          "schema": "kassiber.journals-bench-book.v1",
+          "kind": "generic",
+          "transactions": 20000,
+          "seed": 1,
+          "csv_sha256": {
+            "book.csv": "7b09f4fd1d6fc465734d1c30db1e8ca2445577932c2fd924ab593106172cf6b1"
+          },
+          "pegs": 0,
+          "pegs_paired": 0,
+          "journals": {
+            "entries_created": 20000,
+            "quarantined": 0,
+            "cross_asset_pairs": 0,
+            "processed_transactions": 20000
+          },
+          "built_by": "32767d331e7be68c1efba00f9811f501d8a5f76f",
+          "build_seconds": 37.0,
+          "source": "copied historical synthetic book; CSV digests checked against the continuation record",
+          "normalized_by": "51bd20498 Python capture with fixed persistence clock"
+        },
+        "runs": 5,
+        "python": "3.11.17 (main, Oct 21 2026, 17:46:53) [Clang 23.1.3 ]",
+        "cpus": 48,
+        "probe_sha256": "6ac9f70fca48ca3417689f71e2cfd217305b6169e5218bddcdeac094f8c8d7e9",
+        "harness_sha256": "b9cb682b6e652362756528a4cedf38713774d70833ce1c1c5300a14a3c3a6bbc",
+        "sources": {
+          "crates/journals/src/boundary/joins.rs": "58b06db41921c470886b1cd1e190f506d6fd9175645c58321340fc6dd464c68e",
+          "crates/journals/src/boundary.rs": "2ddc678761e48f07a4277b2c20622a94a631f2c7c3725eefa32370a71abd878d",
+          "crates/journals/src/compute.rs": "b50c57224fc536c3df0fdff7d4d465d396aed6f717c158fb668f0fee0d507102",
+          "crates/journals/src/lib.rs": "f3d8fc2ab7257405c56545dda5d0bf7b3c24d90be78b8ccdc219feda380a576d",
+          "crates/journals/src/loader/direct.rs": "6f4ff944e2dd1a053ae54807ad510094ffa7c6c72c7c97b25cb5b2a4b876b999",
+          "crates/journals/src/loader/ownership.rs": "e9fd153c3ddbc0b7ad836c280e2219d8c0285e46e80f457fb5039003d250c2c8",
+          "crates/journals/src/loader/receipts.rs": "08b0978e2fed949d12af142596d9c91f1e39436d6dd2665e62e374af69bb4453",
+          "crates/journals/src/loader/tests.rs": "c32901ad80222bb09c20979247c37cebc1801dfd26dfc5cddc430c7bc034b804",
+          "crates/journals/src/loader/worklist.rs": "64670923212f75666cf0496da7e4ff7a9073e85e382d715bdebf05776a5d3516",
+          "crates/journals/src/loader.rs": "42698dcb84c9f0aba04eef10a14ecdb2e8b0497960f8bdd4d48dd7a17c762465",
+          "crates/journals/src/model.rs": "68f10bb6e44e1283ccf887606562fd908ad764848e7a4f3fdbe5e2f196239f8b",
+          "crates/journals/src/persistence/entries.rs": "a1ae95bddcf824b3caaa90be48638e417328ee065f6baeff08aeeb2bf2f74ceb",
+          "crates/journals/src/persistence/filed.rs": "24206d69912e8b067199a1f42a3ba1ba257ed40ff99e1569d0dc9d4d3ff94432",
+          "crates/journals/src/persistence/quantity.rs": "947e1c3927fc943f0eb187604e82e06a37ded17ccbf617d51358abbdd0a4a094",
+          "crates/journals/src/persistence/quarantine.rs": "c9cb06f5e0b8ab54fc47c20d9b4f7dc63a54379444e864fb450d0ef2f8235c0d",
+          "crates/journals/src/persistence.rs": "d9b90aa760f761c365fa1fe89335480a5553d371a79934cb5b730c8ab2947513",
+          "crates/journals/src/render.rs": "afac4610917b0ed8ef320385b7f80ca5cb28bd69187e9c00b5dac5b998550d45",
+          "crates/journals/src/storage/calculation/compare.rs": "710b4e6bb35fcae468e7f29ca7d4227965aa9e1fdff1e603d89bc927d16af45f",
+          "crates/journals/src/storage/calculation.rs": "9ccbf092810fec1392096f9c6e4df6c8202af46c5458eb00c3828b7b9a1bce44",
+          "crates/journals/src/storage/tests.rs": "92effe33cac9087c6358f02116b5ee3d029176980763d4189c90980f1b14eae7",
+          "crates/journals/src/storage.rs": "e386a1a1953d741be5f695c888f6cdcaf8605b244ced1b048188f50b04ec2d1d"
+        }
+      },
+      "measurements": [
+        {
+          "mode": "unchanged",
+          "transactions": 20000,
+          "appended_transactions": 0,
+          "activity": {
+            "journal_entries": {
+              "insert": 0,
+              "delete": 0
+            },
+            "journal_quantity_postings": {
+              "insert": 0,
+              "delete": 0
+            }
+          },
+          "entries": 20000,
+          "postings": 40000,
+          "best": {
+            "python": 1.2642344380000026,
+            "rust": 0.43581800000000115,
+            "floor": 0.0008959999999991197
+          },
+          "best_wall": {
+            "python": 1.2789235009986442,
+            "rust": 0.464778008,
+            "floor": 0.038836397
+          },
+          "trials": [
+            {
+              "python": {
+                "seconds": 1.568693166016601,
+                "cpu_seconds": 1.5521090860000015,
+                "load1": 44.98974609375
+              },
+              "rust": {
+                "seconds": 0.773496232,
+                "cpu_seconds": 0.5935779999999999,
+                "phases": {
+                  "begin": {
+                    "cpu": 2.2000000000188535e-05,
+                    "wall": 2.478e-05
+                  },
+                  "commit": {
+                    "cpu": 0.0009079999999999089,
+                    "wall": 0.170631608
+                  },
+                  "complete": {
+                    "cpu": 0.005315000000000403,
+                    "wall": 0.005355193
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.09432699999999983,
+                    "wall": 0.095918737
+                  },
+                  "entries_write": {
+                    "cpu": 0.19593799999999995,
+                    "wall": 0.200822678
+                  },
+                  "filed": {
+                    "cpu": 0.0001389999999998892,
+                    "wall": 0.000140764
+                  },
+                  "pricing": {
+                    "cpu": 0.03447099999999992,
+                    "wall": 0.034861048
+                  },
+                  "quantity": {
+                    "cpu": 0.004219000000000195,
+                    "wall": 0.004289366
+                  },
+                  "quantity_other": {
+                    "cpu": 0.02305500000000027,
+                    "wall": 0.023266219
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.059339999999999726,
+                    "wall": 0.060042494
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.02658499999999986,
+                    "wall": 0.027225868
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.1421960000000002,
+                    "wall": 0.143753128
+                  },
+                  "setup": {
+                    "cpu": 0.00037499999999979217,
+                    "wall": 0.00037072
+                  },
+                  "small_tables": {
+                    "cpu": 0.006672000000000011,
+                    "wall": 0.006717507
+                  }
+                },
+                "load1": 46.19189453125
+              },
+              "floor": {
+                "seconds": 0.080411292,
+                "cpu_seconds": 0.001064000000000398,
+                "phases": null,
+                "load1": 46.09619140625
+              }
+            },
+            {
+              "rust": {
+                "seconds": 0.464778008,
+                "cpu_seconds": 0.4398219999999995,
+                "phases": {
+                  "begin": {
+                    "cpu": 2.0000000000131024e-05,
+                    "wall": 2.185e-05
+                  },
+                  "commit": {
+                    "cpu": 0.0006459999999997024,
+                    "wall": 0.021150896
+                  },
+                  "complete": {
+                    "cpu": 0.0048840000000005546,
+                    "wall": 0.004929292
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.07149699999999992,
+                    "wall": 0.072242637
+                  },
+                  "entries_write": {
+                    "cpu": 0.15106999999999982,
+                    "wall": 0.152614958
+                  },
+                  "filed": {
+                    "cpu": 0.00013199999999979894,
+                    "wall": 0.000136074
+                  },
+                  "pricing": {
+                    "cpu": 0.018231000000000108,
+                    "wall": 0.018410458
+                  },
+                  "quantity": {
+                    "cpu": 0.004035000000000011,
+                    "wall": 0.004076032
+                  },
+                  "quantity_other": {
+                    "cpu": 0.017379000000000033,
+                    "wall": 0.017544037
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.03793500000000005,
+                    "wall": 0.038296913
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.0190450000000002,
+                    "wall": 0.019262379
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.107545,
+                    "wall": 0.108584093
+                  },
+                  "setup": {
+                    "cpu": 0.0003279999999996619,
+                    "wall": 0.000324698
+                  },
+                  "small_tables": {
+                    "cpu": 0.007052999999999976,
+                    "wall": 0.007116907
+                  }
+                },
+                "load1": 46.09619140625
+              },
+              "python": {
+                "seconds": 1.2789235009986442,
+                "cpu_seconds": 1.2642344380000026,
+                "load1": 45.52783203125
+              },
+              "floor": {
+                "seconds": 0.063083071,
+                "cpu_seconds": 0.0008959999999991197,
+                "phases": null,
+                "load1": 44.7646484375
+              }
+            },
+            {
+              "python": {
+                "seconds": 2.3987957830249798,
+                "cpu_seconds": 2.3443123519999958,
+                "load1": 44.7646484375
+              },
+              "rust": {
+                "seconds": 0.495871062,
+                "cpu_seconds": 0.46032399999999996,
+                "phases": {
+                  "begin": {
+                    "cpu": 2.5000000000829914e-05,
+                    "wall": 2.7711e-05
+                  },
+                  "commit": {
+                    "cpu": 0.0008369999999988664,
+                    "wall": 0.029088734
+                  },
+                  "complete": {
+                    "cpu": 0.005695000000001116,
+                    "wall": 0.005740283
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.058863999999999805,
+                    "wall": 0.05944256
+                  },
+                  "entries_write": {
+                    "cpu": 0.1485990000000008,
+                    "wall": 0.150015943
+                  },
+                  "filed": {
+                    "cpu": 0.00014399999999881175,
+                    "wall": 0.000136933
+                  },
+                  "pricing": {
+                    "cpu": 0.02243499999999976,
+                    "wall": 0.023422203
+                  },
+                  "quantity": {
+                    "cpu": 0.0036839999999997985,
+                    "wall": 0.003707822
+                  },
+                  "quantity_other": {
+                    "cpu": 0.020203999999999667,
+                    "wall": 0.020453139
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.058074999999998766,
+                    "wall": 0.059907731
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.01949100000000037,
+                    "wall": 0.019654069
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.11480000000000068,
+                    "wall": 0.116692524
+                  },
+                  "setup": {
+                    "cpu": 0.00038900000000019475,
+                    "wall": 0.0003928
+                  },
+                  "small_tables": {
+                    "cpu": 0.007058000000000675,
+                    "wall": 0.007116667
+                  }
+                },
+                "load1": 45.50439453125
+              },
+              "floor": {
+                "seconds": 0.271369734,
+                "cpu_seconds": 0.0021199999999996777,
+                "phases": null,
+                "load1": 44.5029296875
+              }
+            },
+            {
+              "rust": {
+                "seconds": 0.751337449,
+                "cpu_seconds": 0.5618610000000004,
+                "phases": {
+                  "begin": {
+                    "cpu": 2.6999999999333113e-05,
+                    "wall": 2.8171e-05
+                  },
+                  "commit": {
+                    "cpu": 0.0014150000000014984,
+                    "wall": 0.181611719
+                  },
+                  "complete": {
+                    "cpu": 0.0047749999999986414,
+                    "wall": 0.00481064
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.08327799999999996,
+                    "wall": 0.084098803
+                  },
+                  "entries_write": {
+                    "cpu": 0.18404699999999963,
+                    "wall": 0.189924297
+                  },
+                  "filed": {
+                    "cpu": 0.0001239999999995689,
+                    "wall": 0.000120883
+                  },
+                  "pricing": {
+                    "cpu": 0.02695100000000039,
+                    "wall": 0.027167756
+                  },
+                  "quantity": {
+                    "cpu": 0.003765999999998826,
+                    "wall": 0.003804974
+                  },
+                  "quantity_other": {
+                    "cpu": 0.029116999999999393,
+                    "wall": 0.029379472
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.04992899999999878,
+                    "wall": 0.050376184
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.020224000000002462,
+                    "wall": 0.020393298
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.15006400000000042,
+                    "wall": 0.151375907
+                  },
+                  "setup": {
+                    "cpu": 0.00038200000000188084,
+                    "wall": 0.00038265
+                  },
+                  "small_tables": {
+                    "cpu": 0.0077390000000008285,
+                    "wall": 0.007784914
+                  }
+                },
+                "load1": 44.5029296875
+              },
+              "python": {
+                "seconds": 2.492834689997835,
+                "cpu_seconds": 2.3874835889999986,
+                "load1": 43.58154296875
+              },
+              "floor": {
+                "seconds": 0.076135735,
+                "cpu_seconds": 0.001981999999998152,
+                "phases": null,
+                "load1": 43.13427734375
+              }
+            },
+            {
+              "python": {
+                "seconds": 2.107923148025293,
+                "cpu_seconds": 2.0884057240000047,
+                "load1": 44.48486328125
+              },
+              "rust": {
+                "seconds": 0.558211942,
+                "cpu_seconds": 0.43581800000000115,
+                "phases": {
+                  "begin": {
+                    "cpu": 2.9000000001389026e-05,
+                    "wall": 3.119e-05
+                  },
+                  "commit": {
+                    "cpu": 0.0006769999999995946,
+                    "wall": 0.11895678
+                  },
+                  "complete": {
+                    "cpu": 0.004871999999998877,
+                    "wall": 0.004916023
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.05982699999999852,
+                    "wall": 0.060427164
+                  },
+                  "entries_write": {
+                    "cpu": 0.1385580000000033,
+                    "wall": 0.139939532
+                  },
+                  "filed": {
+                    "cpu": 0.00014799999999937086,
+                    "wall": 0.000140953
+                  },
+                  "pricing": {
+                    "cpu": 0.02402800000000127,
+                    "wall": 0.024225693
+                  },
+                  "quantity": {
+                    "cpu": 0.0032919999999982963,
+                    "wall": 0.003327383
+                  },
+                  "quantity_other": {
+                    "cpu": 0.020453999999997308,
+                    "wall": 0.020668455
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.04656800000000061,
+                    "wall": 0.046924187
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.019311000000001854,
+                    "wall": 0.019492996
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.10984900000000053,
+                    "wall": 0.110851879
+                  },
+                  "setup": {
+                    "cpu": 0.00035600000000002296,
+                    "wall": 0.000350408
+                  },
+                  "small_tables": {
+                    "cpu": 0.007827999999999946,
+                    "wall": 0.007895707
+                  }
+                },
+                "load1": 44.20556640625
+              },
+              "floor": {
+                "seconds": 0.038836397,
+                "cpu_seconds": 0.0013930000000001996,
+                "phases": null,
+                "load1": 44.20556640625
+              }
+            }
+          ],
+          "over_floor": 0.43492200000000203
+        },
+        {
+          "mode": "fresh",
+          "transactions": 20000,
+          "appended_transactions": 0,
+          "activity": {
+            "journal_entries": {
+              "insert": 20000,
+              "delete": 0
+            },
+            "journal_quantity_postings": {
+              "insert": 40000,
+              "delete": 0
+            }
+          },
+          "entries": 20000,
+          "postings": 40000,
+          "best": {
+            "python": 1.4481330759999906,
+            "rust": 0.980357999999999,
+            "floor": 0.7399850000000043
+          },
+          "best_wall": {
+            "python": 1.4936793629894964,
+            "rust": 1.03778967,
+            "floor": 0.831863267
+          },
+          "trials": [
+            {
+              "python": {
+                "seconds": 2.0008136759861372,
+                "cpu_seconds": 1.9415242760000098,
+                "load1": 41.2919921875
+              },
+              "rust": {
+                "seconds": 1.169853089,
+                "cpu_seconds": 1.1140210000000002,
+                "phases": {
+                  "begin": {
+                    "cpu": 1.7999999999851468e-05,
+                    "wall": 1.9421e-05
+                  },
+                  "commit": {
+                    "cpu": 0.26371900000000004,
+                    "wall": 0.31190816
+                  },
+                  "complete": {
+                    "cpu": 0.018336999999999826,
+                    "wall": 0.01848296
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.13092199999999998,
+                    "wall": 0.132182839
+                  },
+                  "entries_write": {
+                    "cpu": 0.3047930000000001,
+                    "wall": 0.30747095
+                  },
+                  "filed": {
+                    "cpu": 0.000172000000000061,
+                    "wall": 0.000165764
+                  },
+                  "pricing": {
+                    "cpu": 0.024859999999999882,
+                    "wall": 0.025086894
+                  },
+                  "quantity": {
+                    "cpu": 0.003481999999999985,
+                    "wall": 0.003519698
+                  },
+                  "quantity_other": {
+                    "cpu": 0.020675999999999917,
+                    "wall": 0.02087017
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.04559899999999972,
+                    "wall": 0.045972513
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.01978900000000028,
+                    "wall": 0.019964967
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.27220600000000017,
+                    "wall": 0.274627223
+                  },
+                  "setup": {
+                    "cpu": 0.0003660000000000885,
+                    "wall": 0.000362479
+                  },
+                  "small_tables": {
+                    "cpu": 0.00904600000000011,
+                    "wall": 0.009111707
+                  }
+                },
+                "load1": 40.9482421875
+              },
+              "floor": {
+                "seconds": 0.913176972,
+                "cpu_seconds": 0.8349159999999998,
+                "phases": null,
+                "load1": 40.2314453125
+              }
+            },
+            {
+              "rust": {
+                "seconds": 1.061230066,
+                "cpu_seconds": 1.020372,
+                "phases": {
+                  "begin": {
+                    "cpu": 2.200000000129876e-05,
+                    "wall": 2.3611e-05
+                  },
+                  "commit": {
+                    "cpu": 0.23819000000000123,
+                    "wall": 0.270916361
+                  },
+                  "complete": {
+                    "cpu": 0.017547999999999675,
+                    "wall": 0.017747791
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.12399300000000046,
+                    "wall": 0.125822941
+                  },
+                  "entries_write": {
+                    "cpu": 0.27481000000000044,
+                    "wall": 0.277915755
+                  },
+                  "filed": {
+                    "cpu": 0.00017399999999945237,
+                    "wall": 0.000169025
+                  },
+                  "pricing": {
+                    "cpu": 0.023545999999999623,
+                    "wall": 0.023744831
+                  },
+                  "quantity": {
+                    "cpu": 0.0031199999999991235,
+                    "wall": 0.003138408
+                  },
+                  "quantity_other": {
+                    "cpu": 0.01733899999999977,
+                    "wall": 0.017466374
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.04770700000000083,
+                    "wall": 0.048073555
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.017222000000000293,
+                    "wall": 0.017369492
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.24788999999999994,
+                    "wall": 0.249890638
+                  },
+                  "setup": {
+                    "cpu": 0.0003609999999998337,
+                    "wall": 0.000356919
+                  },
+                  "small_tables": {
+                    "cpu": 0.008417999999998926,
+                    "wall": 0.008487451
+                  }
+                },
+                "load1": 39.65234375
+              },
+              "python": {
+                "seconds": 2.458614873990882,
+                "cpu_seconds": 2.4208968880000015,
+                "load1": 40.9619140625
+              },
+              "floor": {
+                "seconds": 0.986504546,
+                "cpu_seconds": 0.8900410000000001,
+                "phases": null,
+                "load1": 40.9619140625
+              }
+            },
+            {
+              "python": {
+                "seconds": 1.4936793629894964,
+                "cpu_seconds": 1.4481330759999906,
+                "load1": 40.64453125
+              },
+              "rust": {
+                "seconds": 1.03778967,
+                "cpu_seconds": 0.980357999999999,
+                "phases": {
+                  "begin": {
+                    "cpu": 1.9000000001767603e-05,
+                    "wall": 2.031e-05
+                  },
+                  "commit": {
+                    "cpu": 0.24529899999999927,
+                    "wall": 0.29014955
+                  },
+                  "complete": {
+                    "cpu": 0.014223000000001207,
+                    "wall": 0.014362827
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.11838399999999893,
+                    "wall": 0.12341213
+                  },
+                  "entries_write": {
+                    "cpu": 0.2522190000000002,
+                    "wall": 0.254475501
+                  },
+                  "filed": {
+                    "cpu": 0.0001319999999971344,
+                    "wall": 0.000127333
+                  },
+                  "pricing": {
+                    "cpu": 0.02307300000000012,
+                    "wall": 0.023259769
+                  },
+                  "quantity": {
+                    "cpu": 0.0029879999999984364,
+                    "wall": 0.003031656
+                  },
+                  "quantity_other": {
+                    "cpu": 0.016647999999999996,
+                    "wall": 0.016783568
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.03881099999999904,
+                    "wall": 0.039111503
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.015581000000000955,
+                    "wall": 0.015731101
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.24626200000000154,
+                    "wall": 0.250519383
+                  },
+                  "setup": {
+                    "cpu": 0.000280000000000058,
+                    "wall": 0.000276697
+                  },
+                  "small_tables": {
+                    "cpu": 0.006408000000000413,
+                    "wall": 0.006451171
+                  }
+                },
+                "load1": 40.83349609375
+              },
+              "floor": {
+                "seconds": 0.831863267,
+                "cpu_seconds": 0.7487759999999994,
+                "phases": null,
+                "load1": 40.83349609375
+              }
+            },
+            {
+              "rust": {
+                "seconds": 1.08517431,
+                "cpu_seconds": 0.9863459999999975,
+                "phases": {
+                  "begin": {
+                    "cpu": 1.9000000001767603e-05,
+                    "wall": 2.0681e-05
+                  },
+                  "commit": {
+                    "cpu": 0.22273799999999966,
+                    "wall": 0.31109102
+                  },
+                  "complete": {
+                    "cpu": 0.013460000000002026,
+                    "wall": 0.013586658
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.11859099999999856,
+                    "wall": 0.119768689
+                  },
+                  "entries_write": {
+                    "cpu": 0.28349199999999897,
+                    "wall": 0.289177465
+                  },
+                  "filed": {
+                    "cpu": 0.00017000000000066962,
+                    "wall": 0.000163394
+                  },
+                  "pricing": {
+                    "cpu": 0.027069000000000898,
+                    "wall": 0.027575536
+                  },
+                  "quantity": {
+                    "cpu": 0.003011000000000763,
+                    "wall": 0.003041976
+                  },
+                  "quantity_other": {
+                    "cpu": 0.016044000000000835,
+                    "wall": 0.016159653
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.03900499999999951,
+                    "wall": 0.039386619
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.016366000000001435,
+                    "wall": 0.016515391
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.23911599999999922,
+                    "wall": 0.241296493
+                  },
+                  "setup": {
+                    "cpu": 0.00027799999999800207,
+                    "wall": 0.000274397
+                  },
+                  "small_tables": {
+                    "cpu": 0.00695699999999988,
+                    "wall": 0.007031586
+                  }
+                },
+                "load1": 39.4853515625
+              },
+              "python": {
+                "seconds": 1.6207008819910698,
+                "cpu_seconds": 1.5645679649999948,
+                "load1": 38.8857421875
+              },
+              "floor": {
+                "seconds": 0.908225895,
+                "cpu_seconds": 0.8384599999999978,
+                "phases": null,
+                "load1": 38.494140625
+              }
+            },
+            {
+              "python": {
+                "seconds": 1.6384403730044141,
+                "cpu_seconds": 1.5978574920000028,
+                "load1": 38.494140625
+              },
+              "rust": {
+                "seconds": 1.147647312,
+                "cpu_seconds": 0.9979669999999992,
+                "phases": {
+                  "begin": {
+                    "cpu": 1.8000000000739647e-05,
+                    "wall": 2.015e-05
+                  },
+                  "commit": {
+                    "cpu": 0.24024599999999907,
+                    "wall": 0.382796583
+                  },
+                  "complete": {
+                    "cpu": 0.020823000000000036,
+                    "wall": 0.021055364
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.10573199999999972,
+                    "wall": 0.106662384
+                  },
+                  "entries_write": {
+                    "cpu": 0.31158399999999986,
+                    "wall": 0.314759741
+                  },
+                  "filed": {
+                    "cpu": 0.00024900000000016576,
+                    "wall": 0.000237316
+                  },
+                  "pricing": {
+                    "cpu": 0.019842999999998057,
+                    "wall": 0.019986787
+                  },
+                  "quantity": {
+                    "cpu": 0.003520000000001744,
+                    "wall": 0.003565868
+                  },
+                  "quantity_other": {
+                    "cpu": 0.017120999999999498,
+                    "wall": 0.017253989
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.035478999999998706,
+                    "wall": 0.035824982
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.015495999999998844,
+                    "wall": 0.015634039
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.21696600000000288,
+                    "wall": 0.218755112
+                  },
+                  "setup": {
+                    "cpu": 0.0003299999999981651,
+                    "wall": 0.000326339
+                  },
+                  "small_tables": {
+                    "cpu": 0.010530000000002815,
+                    "wall": 0.010649735
+                  }
+                },
+                "load1": 38.1337890625
+              },
+              "floor": {
+                "seconds": 0.970678679,
+                "cpu_seconds": 0.7399850000000043,
+                "phases": null,
+                "load1": 38.20361328125
+              }
+            }
+          ],
+          "over_floor": 0.24037299999999462
+        }
+      ]
+    },
+    "indexed-paired-2000": {
+      "environment": {
+        "book": {
+          "schema": "kassiber.journals-bench-book.v1",
+          "kind": "generic",
+          "transactions": 2000,
+          "seed": 1,
+          "csv_sha256": {
+            "book.csv": "11b9ae7166f9ca46e8eea1fe82465380d70d6f194cd215649a2ab31647aa1352"
+          },
+          "pegs": 0,
+          "source": "copied historical synthetic book; CSV digests checked against the continuation record",
+          "built_by": "reused synthetic corpus; source CSVs exactly match current generator",
+          "normalized_by": "51bd20498 Python capture with fixed persistence clock"
+        },
+        "runs": 1,
+        "python": "3.11.17 (main, Oct 21 2026, 17:46:53) [Clang 23.1.3 ]",
+        "cpus": 48,
+        "probe_sha256": "6ac9f70fca48ca3417689f71e2cfd217305b6169e5218bddcdeac094f8c8d7e9",
+        "harness_sha256": "013ac1498d7bdb362d80392de6e2ef27f37cfe96f7d980bcf315fac42058fa9f",
+        "sources": {
+          "crates/journals/src/boundary/joins.rs": "58b06db41921c470886b1cd1e190f506d6fd9175645c58321340fc6dd464c68e",
+          "crates/journals/src/boundary.rs": "2ddc678761e48f07a4277b2c20622a94a631f2c7c3725eefa32370a71abd878d",
+          "crates/journals/src/compute.rs": "b50c57224fc536c3df0fdff7d4d465d396aed6f717c158fb668f0fee0d507102",
+          "crates/journals/src/lib.rs": "f3d8fc2ab7257405c56545dda5d0bf7b3c24d90be78b8ccdc219feda380a576d",
+          "crates/journals/src/loader/direct.rs": "6f4ff944e2dd1a053ae54807ad510094ffa7c6c72c7c97b25cb5b2a4b876b999",
+          "crates/journals/src/loader/ownership.rs": "e9fd153c3ddbc0b7ad836c280e2219d8c0285e46e80f457fb5039003d250c2c8",
+          "crates/journals/src/loader/receipts.rs": "08b0978e2fed949d12af142596d9c91f1e39436d6dd2665e62e374af69bb4453",
+          "crates/journals/src/loader/tests.rs": "c32901ad80222bb09c20979247c37cebc1801dfd26dfc5cddc430c7bc034b804",
+          "crates/journals/src/loader/worklist.rs": "64670923212f75666cf0496da7e4ff7a9073e85e382d715bdebf05776a5d3516",
+          "crates/journals/src/loader.rs": "42698dcb84c9f0aba04eef10a14ecdb2e8b0497960f8bdd4d48dd7a17c762465",
+          "crates/journals/src/model.rs": "68f10bb6e44e1283ccf887606562fd908ad764848e7a4f3fdbe5e2f196239f8b",
+          "crates/journals/src/persistence/entries.rs": "a1ae95bddcf824b3caaa90be48638e417328ee065f6baeff08aeeb2bf2f74ceb",
+          "crates/journals/src/persistence/filed.rs": "24206d69912e8b067199a1f42a3ba1ba257ed40ff99e1569d0dc9d4d3ff94432",
+          "crates/journals/src/persistence/quantity.rs": "947e1c3927fc943f0eb187604e82e06a37ded17ccbf617d51358abbdd0a4a094",
+          "crates/journals/src/persistence/quarantine.rs": "c9cb06f5e0b8ab54fc47c20d9b4f7dc63a54379444e864fb450d0ef2f8235c0d",
+          "crates/journals/src/persistence.rs": "d9b90aa760f761c365fa1fe89335480a5553d371a79934cb5b730c8ab2947513",
+          "crates/journals/src/render.rs": "afac4610917b0ed8ef320385b7f80ca5cb28bd69187e9c00b5dac5b998550d45",
+          "crates/journals/src/storage/calculation/compare.rs": "710b4e6bb35fcae468e7f29ca7d4227965aa9e1fdff1e603d89bc927d16af45f",
+          "crates/journals/src/storage/calculation.rs": "9ccbf092810fec1392096f9c6e4df6c8202af46c5458eb00c3828b7b9a1bce44",
+          "crates/journals/src/storage/tests.rs": "8120fcb819da5d8ef5f65052f0a95863683a557eb8ec90549764e8296bbd468c",
+          "crates/journals/src/storage.rs": "e386a1a1953d741be5f695c888f6cdcaf8605b244ced1b048188f50b04ec2d1d"
+        },
+        "baseline_probe_sha256": "f43dd2d6a001e0a7d3e3b792cea6ef583803776b673fa55b2e004ed426b63448"
+      },
+      "measurements": [
+        {
+          "mode": "unchanged",
+          "transactions": 2000,
+          "appended_transactions": 0,
+          "activity": {
+            "journal_entries": {
+              "insert": 0,
+              "delete": 0
+            },
+            "journal_quantity_postings": {
+              "insert": 0,
+              "delete": 0
+            }
+          },
+          "entries": 2000,
+          "postings": 4000,
+          "best": {
+            "python": 0.17604624499999932,
+            "rust": 0.045573999999999976,
+            "baseline": 0.06190799999999999,
+            "floor": 0.033208000000000015
+          },
+          "best_wall": {
+            "python": 0.18019845700473525,
+            "rust": 0.096023438,
+            "baseline": 0.101143225,
+            "floor": 0.128795248
+          },
+          "trials": [
+            {
+              "python": {
+                "seconds": 0.18019845700473525,
+                "cpu_seconds": 0.17604624499999932,
+                "load1": 59.8115234375
+              },
+              "rust": {
+                "seconds": 0.096023438,
+                "cpu_seconds": 0.045573999999999976,
+                "phases": {
+                  "begin": {
+                    "cpu": 2.6999999999999247e-05,
+                    "wall": 2.7481e-05
+                  },
+                  "commit": {
+                    "cpu": 0.0008559999999999679,
+                    "wall": 0.050905993
+                  },
+                  "complete": {
+                    "cpu": 0.00042400000000003546,
+                    "wall": 0.000421452
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.006457999999999964,
+                    "wall": 0.006529998
+                  },
+                  "entries_write": {
+                    "cpu": 0.014925000000000022,
+                    "wall": 0.015041082
+                  },
+                  "filed": {
+                    "cpu": 0.00013199999999996548,
+                    "wall": 0.000130283
+                  },
+                  "pricing": {
+                    "cpu": 0.0021990000000000065,
+                    "wall": 0.002212403
+                  },
+                  "quantity": {
+                    "cpu": 0.00045800000000001395,
+                    "wall": 0.000456713
+                  },
+                  "quantity_other": {
+                    "cpu": 0.0018790000000000195,
+                    "wall": 0.001900675
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.004123999999999989,
+                    "wall": 0.00416947
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.002244999999999997,
+                    "wall": 0.002265025
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.010436,
+                    "wall": 0.010512252
+                  },
+                  "setup": {
+                    "cpu": 0.0003479999999999872,
+                    "wall": 0.00035531
+                  },
+                  "small_tables": {
+                    "cpu": 0.0010430000000000161,
+                    "wall": 0.001049781
+                  }
+                },
+                "load1": 59.8115234375
+              },
+              "baseline": {
+                "seconds": 0.101143225,
+                "cpu_seconds": 0.06190799999999999,
+                "phases": {
+                  "begin": {
+                    "cpu": 2.0999999999993246e-05,
+                    "wall": 2.1841e-05
+                  },
+                  "commit": {
+                    "cpu": 0.0007160000000000499,
+                    "wall": 0.039294059
+                  },
+                  "complete": {
+                    "cpu": 0.0018169999999999575,
+                    "wall": 0.001833033
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.017824000000000007,
+                    "wall": 0.018011607
+                  },
+                  "entries_write": {
+                    "cpu": 0.010948000000000013,
+                    "wall": 0.011063228
+                  },
+                  "filed": {
+                    "cpu": 0.00016900000000003024,
+                    "wall": 0.000166695
+                  },
+                  "pricing": {
+                    "cpu": 0.0028590000000000004,
+                    "wall": 0.002887153
+                  },
+                  "quantity": {
+                    "cpu": 0.0005940000000000112,
+                    "wall": 0.000602747
+                  },
+                  "quantity_other": {
+                    "cpu": 0.0024170000000000025,
+                    "wall": 0.00244001
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.005616999999999983,
+                    "wall": 0.005680274
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.0026660000000000017,
+                    "wall": 0.002689317
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.014911000000000008,
+                    "wall": 0.015069843
+                  },
+                  "setup": {
+                    "cpu": 0.0003130000000000077,
+                    "wall": 0.000309519
+                  },
+                  "small_tables": {
+                    "cpu": 0.0010159999999999614,
+                    "wall": 0.001020959
+                  }
+                },
+                "load1": 59.8115234375
+              },
+              "floor": {
+                "seconds": 0.128795248,
+                "cpu_seconds": 0.033208000000000015,
+                "phases": null,
+                "load1": 59.8115234375
+              }
+            }
+          ],
+          "over_floor": 0.01236599999999996
+        },
+        {
+          "mode": "fresh",
+          "transactions": 2000,
+          "appended_transactions": 0,
+          "activity": {
+            "journal_entries": {
+              "insert": 2000,
+              "delete": 0
+            },
+            "journal_quantity_postings": {
+              "insert": 4000,
+              "delete": 0
+            }
+          },
+          "entries": 2000,
+          "postings": 4000,
+          "best": {
+            "python": 0.16510158799999886,
+            "rust": 0.17086099999999999,
+            "baseline": 0.14543300000000003,
+            "floor": 0.10402299999999987
+          },
+          "best_wall": {
+            "python": 0.16805666001164354,
+            "rust": 0.202250459,
+            "baseline": 0.253403136,
+            "floor": 0.572032368
+          },
+          "trials": [
+            {
+              "python": {
+                "seconds": 0.16805666001164354,
+                "cpu_seconds": 0.16510158799999886,
+                "load1": 58.04931640625
+              },
+              "rust": {
+                "seconds": 0.202250459,
+                "cpu_seconds": 0.17086099999999999,
+                "phases": {
+                  "begin": {
+                    "cpu": 3.599999999998049e-05,
+                    "wall": 3.7601e-05
+                  },
+                  "commit": {
+                    "cpu": 0.03236599999999995,
+                    "wall": 0.061998818
+                  },
+                  "complete": {
+                    "cpu": 0.004843000000000042,
+                    "wall": 0.00490393
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.024465000000000015,
+                    "wall": 0.024751949
+                  },
+                  "entries_write": {
+                    "cpu": 0.04679799999999995,
+                    "wall": 0.04744712
+                  },
+                  "filed": {
+                    "cpu": 0.00028799999999995496,
+                    "wall": 0.000275458
+                  },
+                  "pricing": {
+                    "cpu": 0.005122000000000015,
+                    "wall": 0.005180429
+                  },
+                  "quantity": {
+                    "cpu": 0.0007010000000000072,
+                    "wall": 0.00071669
+                  },
+                  "quantity_other": {
+                    "cpu": 0.004303000000000001,
+                    "wall": 0.004340825
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.009699000000000013,
+                    "wall": 0.009817271
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.004581999999999975,
+                    "wall": 0.004643323
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.034744,
+                    "wall": 0.035103837
+                  },
+                  "setup": {
+                    "cpu": 0.00046000000000001595,
+                    "wall": 0.000455422
+                  },
+                  "small_tables": {
+                    "cpu": 0.002411000000000052,
+                    "wall": 0.002436389
+                  }
+                },
+                "load1": 58.04931640625
+              },
+              "baseline": {
+                "seconds": 0.253403136,
+                "cpu_seconds": 0.14543300000000003,
+                "phases": {
+                  "begin": {
+                    "cpu": 3.199999999997649e-05,
+                    "wall": 3.5321e-05
+                  },
+                  "commit": {
+                    "cpu": 0.032797999999999994,
+                    "wall": 0.126110395
+                  },
+                  "complete": {
+                    "cpu": 0.003481000000000012,
+                    "wall": 0.00350582
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.020306999999999964,
+                    "wall": 0.020603131
+                  },
+                  "entries_write": {
+                    "cpu": 0.03691,
+                    "wall": 0.046499243
+                  },
+                  "filed": {
+                    "cpu": 0.00020999999999998797,
+                    "wall": 0.000216357
+                  },
+                  "pricing": {
+                    "cpu": 0.003622000000000014,
+                    "wall": 0.003650905
+                  },
+                  "quantity": {
+                    "cpu": 0.0007809999999999762,
+                    "wall": 0.000788373
+                  },
+                  "quantity_other": {
+                    "cpu": 0.003132999999999997,
+                    "wall": 0.003209702
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.008244000000000029,
+                    "wall": 0.00836003
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.003284000000000009,
+                    "wall": 0.006734023
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.030179999999999985,
+                    "wall": 0.031162474
+                  },
+                  "setup": {
+                    "cpu": 0.0005200000000000204,
+                    "wall": 0.000514185
+                  },
+                  "small_tables": {
+                    "cpu": 0.0018920000000000048,
+                    "wall": 0.001906925
+                  }
+                },
+                "load1": 58.04931640625
+              },
+              "floor": {
+                "seconds": 0.572032368,
+                "cpu_seconds": 0.10402299999999987,
+                "phases": null,
+                "load1": 58.04931640625
+              }
+            }
+          ],
+          "over_floor": 0.06683800000000012
+        }
+      ]
+    }
+  },
+  "baseline_provenance": {
+    "binary": "target/journal-persist-baseline",
+    "sha256": "f43dd2d6a001e0a7d3e3b792cea6ef583803776b673fa55b2e004ed426b63448",
+    "source_commit": "51bd20498",
+    "note": "The baseline binary SHA-256 matches the preceding continuation record. Its environment.sources field describes the candidate checkout observed by the common harness, not the baseline binary source."
+  },
+  "source_hashes": {
+    "crates/journals/src/boundary/joins.rs": "58b06db41921c470886b1cd1e190f506d6fd9175645c58321340fc6dd464c68e",
+    "crates/journals/src/boundary.rs": "2ddc678761e48f07a4277b2c20622a94a631f2c7c3725eefa32370a71abd878d",
+    "crates/journals/src/compute.rs": "b50c57224fc536c3df0fdff7d4d465d396aed6f717c158fb668f0fee0d507102",
+    "crates/journals/src/lib.rs": "f3d8fc2ab7257405c56545dda5d0bf7b3c24d90be78b8ccdc219feda380a576d",
+    "crates/journals/src/loader/direct.rs": "6f4ff944e2dd1a053ae54807ad510094ffa7c6c72c7c97b25cb5b2a4b876b999",
+    "crates/journals/src/loader/ownership.rs": "e9fd153c3ddbc0b7ad836c280e2219d8c0285e46e80f457fb5039003d250c2c8",
+    "crates/journals/src/loader/receipts.rs": "08b0978e2fed949d12af142596d9c91f1e39436d6dd2665e62e374af69bb4453",
+    "crates/journals/src/loader/tests.rs": "c32901ad80222bb09c20979247c37cebc1801dfd26dfc5cddc430c7bc034b804",
+    "crates/journals/src/loader/worklist.rs": "64670923212f75666cf0496da7e4ff7a9073e85e382d715bdebf05776a5d3516",
+    "crates/journals/src/loader.rs": "42698dcb84c9f0aba04eef10a14ecdb2e8b0497960f8bdd4d48dd7a17c762465",
+    "crates/journals/src/model.rs": "68f10bb6e44e1283ccf887606562fd908ad764848e7a4f3fdbe5e2f196239f8b",
+    "crates/journals/src/persistence/entries.rs": "a1ae95bddcf824b3caaa90be48638e417328ee065f6baeff08aeeb2bf2f74ceb",
+    "crates/journals/src/persistence/filed.rs": "24206d69912e8b067199a1f42a3ba1ba257ed40ff99e1569d0dc9d4d3ff94432",
+    "crates/journals/src/persistence/quantity.rs": "947e1c3927fc943f0eb187604e82e06a37ded17ccbf617d51358abbdd0a4a094",
+    "crates/journals/src/persistence/quarantine.rs": "c9cb06f5e0b8ab54fc47c20d9b4f7dc63a54379444e864fb450d0ef2f8235c0d",
+    "crates/journals/src/persistence.rs": "d9b90aa760f761c365fa1fe89335480a5553d371a79934cb5b730c8ab2947513",
+    "crates/journals/src/render.rs": "afac4610917b0ed8ef320385b7f80ca5cb28bd69187e9c00b5dac5b998550d45",
+    "crates/journals/src/storage/calculation/compare.rs": "710b4e6bb35fcae468e7f29ca7d4227965aa9e1fdff1e603d89bc927d16af45f",
+    "crates/journals/src/storage/calculation.rs": "9ccbf092810fec1392096f9c6e4df6c8202af46c5458eb00c3828b7b9a1bce44",
+    "crates/journals/src/storage/tests.rs": "8120fcb819da5d8ef5f65052f0a95863683a557eb8ec90549764e8296bbd468c",
+    "crates/journals/src/storage.rs": "e386a1a1953d741be5f695c888f6cdcaf8605b244ced1b048188f50b04ec2d1d"
+  },
+  "pydecimal_sha256": "f1de81fb38e24b1ebcb8b8a14bc4a6a07d0c117c3da6b2ce4f27c32c394ce63b",
+  "benchmark_harness_sha256": "013ac1498d7bdb362d80392de6e2ef27f37cfe96f7d980bcf315fac42058fa9f",
+  "exact_timed_dumps": 68,
+  "scope": "Generic SQLite 20k fresh/unchanged only, five Python/native alternating pairs for each binary; one alternating native-baseline generic SQLite 2k pair per mode. Other shapes/drivers, appended/changed, full 2k, exhaustive mutations, inherited campaigns and integrated R4-13 remain open.",
+  "limitations": [
+    "Sequential 20k baseline and candidate runs have different machine loads; their independent minima do not isolate the source change from contention.",
+    "The one-pair 2k fresh candidate sample is slower than its baseline; no repeatable regression or speedup is claimed for that cell.",
+    "Wide coefficients still use the canonical formatter in this restored boundary."
+  ],
+  "verification": {
+    "indexed-tests": {
+      "path": "target/evidence/indexed-tests.log",
+      "sha256": "4a62bb184706a1ace0b0ea99cab9e4134311b195b6cd7c483207ca7090eb3865",
+      "tail": "_rebuilds_replace_small_tables_and_keep_sealed_resolutions ... ok\ntest sqlcipher_delete_full_preserves_complete_dumps_and_cache_settings ... ok\ntest synthetic_quarantines_are_filtered_before_readiness ... ok\ntest typed_entry_negative_zero_forces_rewrites_in_all_five_real_columns ... ok\ntest wal_checkpoint_waits_for_commit_and_retains_active_readers ... ok\n\ntest result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 31.93s\n\n   Doc-tests kassiber_journals\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n"
+    },
+    "indexed-comparison-tests": {
+      "path": "target/evidence/indexed-comparison-tests.log",
+      "sha256": "3675f09afff5bb3af2d553d460677e9b8a68b25b5b471033cd0e58d4e3dac563",
+      "tail": "   Compiling kassiber-journals v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-33346149/crates/journals)\n    Finished `release` profile [optimized] target(s) in 9.06s\n     Running unittests src/lib.rs (target/build/release/deps/kassiber_journals-ca160839e3966d7c)\n\nrunning 2 tests\ntest storage::tests::typed_calculation_source_dictionary_preserves_order_and_deduplicates_large_inputs ... ok\ntest storage::tests::typed_calculations_preserve_compact_bytes_and_all_dynamic_fallbacks ... ok\n\ntest result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 33 filtered out; finished in 0.99s\n\n"
+    },
+    "indexed-python": {
+      "path": "target/evidence/indexed-python.log",
+      "sha256": "3bea4563f861b78de60bf3a783941ee891d99ee32cc509f30ebaf98b1a109e5b",
+      "passed": 65,
+      "tail": ".................................................................        [100%]\n65 passed in 103.26s (0:01:43)\n"
+    },
+    "indexed-format": {
+      "path": "target/evidence/indexed-format.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tail": ""
+    }
+  },
+  "mutation_applicability": {
+    "recipes": 182,
+    "bad_anchors": [],
+    "final_kills_run": false
+  },
+  "manual_second_review": "Reviewed archive/source identity, direct coefficient and compact byte comparisons, typed NULL/TEXT/BLOB handling, signed-zero behavior, timestamp-group retention and mixed-clock fallback. No P1/P2 finding. Full branch mutation audit remains open."
+}

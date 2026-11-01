@@ -11,6 +11,7 @@ use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 
 mod calculation;
+pub(crate) use calculation::compare;
 #[cfg(test)]
 pub(crate) use calculation::encode as encode_typed_calculation;
 pub(crate) use calculation::Encoder as CalculationEncoder;
@@ -37,9 +38,17 @@ impl ToSql for CellParam<'_> {
 }
 
 pub(crate) trait BindingRow<const N: usize> {
+    type Error: From<rusqlite::Error>;
     fn cell(&self, index: usize) -> ValueRef<'_>;
+    fn matches(&self, old: &rusqlite::Row<'_>, reals: &[usize]) -> Result<bool, Self::Error> {
+        Ok(same_row(old, self, reals)?)
+    }
+    fn prepare(&self) -> Result<(), Self::Error> {
+        Ok(())
+    }
 }
 impl<const N: usize, T: Cell> BindingRow<N> for [T; N] {
+    type Error = rusqlite::Error;
     fn cell(&self, index: usize) -> ValueRef<'_> {
         self[index].value_ref()
     }
@@ -347,12 +356,17 @@ pub fn encode_calculation(value: &Value) -> Result<(Option<String>, Option<Strin
     }
 }
 
-fn same_row<const N: usize, T: BindingRow<N>>(
+fn same_row<const N: usize, T: BindingRow<N> + ?Sized>(
     old: &rusqlite::Row<'_>,
     new: &T,
     reals: &[usize],
 ) -> rusqlite::Result<bool> {
     for index in 0..N - 1 {
+        let index = if N == 12 {
+            [9, 10, 4, 3, 8, 7, 6, 5, 1, 2, 0][index]
+        } else {
+            index
+        };
         let prior = old.get_ref(index)?;
         let value = new.cell(index);
         if prior != value {
@@ -389,9 +403,8 @@ fn replace<const N: usize, T: BindingRow<N>>(
     reals: &[usize],
     tie: Option<usize>,
     observer: &mut impl WriteObserver,
-) -> rusqlite::Result<()> {
+) -> Result<(), T::Error> {
     let names = columns.join(", ");
-    let mut select = conn.prepare(&format!("SELECT {names} FROM {table} WHERE profile_id = ?"))?;
     let wanted: HashMap<&str, usize> = rows
         .iter()
         .enumerate()
@@ -404,24 +417,89 @@ fn replace<const N: usize, T: BindingRow<N>>(
         })
         .collect::<rusqlite::Result<_>>()?;
     if wanted.len() != rows.len() {
-        return Err(rusqlite::Error::InvalidQuery);
+        return Err(rusqlite::Error::InvalidQuery.into());
     }
+    let time_column = if N == 29 { 6 } else { 5 };
+    let mut ordered = rows
+        .iter()
+        .enumerate()
+        .map(|(index, row)| {
+            Some((
+                if N == 12 {
+                    ""
+                } else {
+                    row.cell(time_column).as_str().ok()?
+                },
+                row.cell(0).as_str().ok()?,
+                index,
+            ))
+        })
+        .collect::<Option<Vec<_>>>();
+    if let Some(ordered) = &mut ordered {
+        ordered.sort_unstable_by(|a, b| (a.0, a.1).cmp(&(b.0, b.1)));
+    }
+    let order = if ordered.is_some() {
+        if N == 12 {
+            format!(" ORDER BY {}", columns[0])
+        } else {
+            format!(
+                " ORDER BY {}, {}, {}",
+                columns[time_column],
+                columns[N - 1],
+                columns[0]
+            )
+        }
+    } else {
+        String::new()
+    };
+    let mut select = conn.prepare(&format!(
+        "SELECT {names} FROM {table} WHERE profile_id = ?{order}"
+    ))?;
+    let mut position = 0;
     let mut changed = vec![true; rows.len()];
     let mut existing_order = Vec::new();
     let mut stamps = HashMap::<&str, (String, bool)>::new();
     {
         let mut existing = select.query([profile])?;
         while let Some(old) = existing.next()? {
-            let id = old.get_ref(0)?.as_str()?;
-            if let Some(&index) = wanted.get(id) {
+            let id = old.get_ref(0)?.as_str().map_err(rusqlite::Error::from)?;
+            let matched = if let (Some(ordered), Ok(time)) = (
+                &ordered,
+                if N == 12 {
+                    Ok("")
+                } else {
+                    old.get_ref(time_column)?.as_str()
+                },
+            ) {
+                while position < ordered.len()
+                    && (ordered[position].0, ordered[position].1) < (time, id)
+                {
+                    position += 1;
+                }
+                if position < ordered.len()
+                    && (ordered[position].0, ordered[position].1) == (time, id)
+                {
+                    let index = ordered[position].2;
+                    position += 1;
+                    Some(index)
+                } else {
+                    wanted.get(id).copied()
+                }
+            } else {
+                wanted.get(id).copied()
+            };
+            if let Some(index) = matched {
                 let new = &rows[index];
-                changed[index] = !same_row(old, new, reals)?;
+                changed[index] = !new.matches(old, reals)?;
                 if let Some(tie) = tie {
                     let time = new
                         .cell(tie)
                         .as_str()
                         .map_err(|_| rusqlite::Error::InvalidQuery)?;
-                    let created = old.get_ref(N - 1)?.as_str()?;
+                    let created = old
+                        .get_ref(N - 1)?
+                        .as_str()
+                        .map_err(rusqlite::Error::from)?;
                     match stamps.entry(time) {
                         std::collections::hash_map::Entry::Vacant(entry) => {
                             entry.insert((created.into(), false));
@@ -458,6 +536,11 @@ fn replace<const N: usize, T: BindingRow<N>>(
         );
         for (index, row) in rows.iter().enumerate() {
             changed[index] = dirty_times.contains(row.cell(tie).as_str().expect("validated time"));
+        }
+    }
+    for (index, row) in rows.iter().enumerate() {
+        if changed[index] {
+            row.prepare()?;
         }
     }
     let mut delete = conn.prepare(&format!(
@@ -497,12 +580,12 @@ pub fn replace_journal_entries(
     replace_entry_bindings(conn, profile, rows, observer)
 }
 
-pub(crate) fn replace_entry_bindings(
+pub(crate) fn replace_entry_bindings<T: BindingRow<29>>(
     conn: &Connection,
     profile: &str,
-    rows: &[impl BindingRow<29>],
+    rows: &[T],
     observer: &mut impl WriteObserver,
-) -> rusqlite::Result<()> {
+) -> Result<(), T::Error> {
     replace(
         conn,
         profile,
