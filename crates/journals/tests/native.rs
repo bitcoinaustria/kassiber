@@ -40,7 +40,7 @@ fn native_ledger_matches_python_consumption_and_scalars() {
         let result = native::read_ledger(
             field(case, "profile"),
             projection,
-            list(field(case, "wallets")),
+            field(field(case, "custody"), "wallet_refs_by_id"),
             list(field(field(case, "custody"), "direct_payout_records")),
             field(case, "response"),
             || {

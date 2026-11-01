@@ -636,7 +636,7 @@ impl Ledger {
 pub fn read_ledger(
     profile: &Value,
     projection: &Value,
-    wallets: &[Value],
+    wallet_refs: &Value,
     payouts: &[Value],
     response: &Value,
     mut ids: impl FnMut() -> String,
@@ -687,8 +687,14 @@ pub fn read_ledger(
             set(row, k, v);
         }
     }
+    let Value::Dict(wallet_refs) = wallet_refs else {
+        return Err(error(
+            "AttributeError",
+            format!("'{}' object has no attribute 'values'", kind(wallet_refs)),
+        ));
+    };
     let mut labels = HashMap::new();
-    for wallet in wallets {
+    for (_, wallet) in wallet_refs {
         let label = get(wallet, "label")?;
         if !matches!(label, Value::Null) && !is(label, "") {
             labels.insert(text(label), wallet);
@@ -697,7 +703,7 @@ pub fn read_ledger(
     let raw_audits = iterable(required(response, "intra_audit")?)?;
     let audits = raw_audits
         .iter()
-        .map(|a| audit(projection, wallets, a))
+        .map(|a| audit(projection, wallet_refs, a))
         .collect::<Result<Vec<_>>>()?;
     let method = field(profile, "gains_algorithm");
     let method = if matches!(method, Value::Null) {
@@ -736,7 +742,7 @@ pub fn read_ledger(
     })
 }
 
-fn audit(projection: &Value, wallets: &[Value], value: &Value) -> Result<Value> {
+fn audit(projection: &Value, wallets: &[(Key, Value)], value: &Value) -> Result<Value> {
     let pairs = iterable(required(projection, "intra_pairs")?)?;
     let pair = at(&pairs, required(value, "pair")?).map_err(|mut err| {
         if is(field(&err.0, "family"), "IndexError")
@@ -757,7 +763,8 @@ fn audit(projection: &Value, wallets: &[Value], value: &Value) -> Result<Value> 
         hashable(id)?;
         wallets
             .iter()
-            .find(|w| equal(field(w, "id"), id))
+            .find(|(key, _)| key_equal(&scalar::key_value(key), id))
+            .map(|(_, wallet)| wallet)
             .ok_or_else(|| error("KeyError", repr(id)))
     };
     let from = wallet(out)?;
@@ -855,6 +862,10 @@ fn equal(a: &Value, b: &Value) -> bool {
     }
 }
 
+fn key_equal(a: &Value, b: &Value) -> bool {
+    matches!((a, b), (Value::Float(a), Value::Float(b)) if a.is_nan() && b.is_nan()) || equal(a, b)
+}
+
 fn holdings(values: &Value, reader: &Reader<'_>) -> Result<(Value, Value)> {
     type Pairs = Vec<(Vec<Value>, (Decimal, Decimal))>;
     fn add(pairs: &mut Pairs, key: Vec<Value>, quantity: &Decimal, basis: &Decimal) -> Result<()> {
@@ -863,7 +874,7 @@ fn holdings(values: &Value, reader: &Reader<'_>) -> Result<(Value, Value)> {
         }
         let index = pairs
             .iter()
-            .position(|(k, _)| k.iter().zip(&key).all(|(a, b)| equal(a, b)))
+            .position(|(k, _)| k.iter().zip(&key).all(|(a, b)| key_equal(a, b)))
             .unwrap_or(pairs.len());
         if index == pairs.len() {
             pairs.push((key, (Decimal::zero(), Decimal::zero())));
@@ -1306,7 +1317,7 @@ fn mapping(value: &Value) -> Result<Value> {
         };
         if let Some((_, value)) = result
             .iter_mut()
-            .find(|(k, _)| equal(&scalar::key_value(k), &pair[0]))
+            .find(|(k, _)| key_equal(&scalar::key_value(k), &pair[0]))
         {
             *value = pair[1].clone();
         } else {

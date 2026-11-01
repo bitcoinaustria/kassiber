@@ -21,7 +21,6 @@ fn run(v: &Value, timing_only: bool) -> Value {
     let result = native::build(
         field(v, "profile"),
         field(v, "custody"),
-        list(field(v, "wallets")),
         field(v, "response"),
         || {
             let Value::Str(id) = tape.get(consumed).expect("declared UUID tape exhausted") else {
@@ -93,8 +92,42 @@ fn main() {
 }
 
 #[cfg(test)]
+#[path = "../tests/support/fidelity.rs"]
+mod fidelity;
+
+#[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn nonfinite_probe_matches_python_states_refusals_and_uuid_consumption() {
+        let cases = fidelity::cases(include_str!("../tests/data/render-nonfinite.json"));
+        assert_eq!(cases.len(), 1776);
+        for case in cases {
+            let expected = native::field(&case, "expected");
+            for timing_only in [false, true] {
+                let reply = run(&case, timing_only);
+                let name = scalar::repr(native::field(&case, "name"));
+                assert_eq!(
+                    native::field(&reply, "entry_ids_consumed"),
+                    &Value::from(list(native::field(&case, "entry_ids")).len()),
+                    "{name}"
+                );
+                let key = if matches!(native::field(expected, "state"), Value::Null) {
+                    "error"
+                } else {
+                    "state"
+                };
+                if !timing_only || key == "error" {
+                    assert_eq!(
+                        scalar::encode(native::field(&reply, key)).unwrap(),
+                        scalar::encode(native::field(expected, key)).unwrap(),
+                        "{name}"
+                    );
+                }
+            }
+        }
+    }
 
     #[test]
     fn lossless_probe_matches_python_states_refusals_and_uuid_consumption() {

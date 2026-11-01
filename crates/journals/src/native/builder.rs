@@ -75,14 +75,13 @@ impl State<'_> {
 pub fn build<'a>(
     profile: &Value,
     custody: &'a Value,
-    wallets: &[Value],
     response: &Value,
     ids: impl FnMut() -> String,
 ) -> Result<State<'a>> {
     let ledger = read_ledger(
         profile,
         required(custody, "finalized_tax_projection")?,
-        wallets,
+        required(custody, "wallet_refs_by_id")?,
         &iterable(required(custody, "direct_payout_records")?)?,
         response,
         ids,
@@ -177,7 +176,7 @@ fn differences(c: &Value, holdings: &Value) -> Result<Value> {
         .iter()
         .map(|o| (text(field(o, "quantity_hash")), o))
         .collect();
-    let mut canonical = BTreeMap::<_, BigInt>::new();
+    let mut canonical = BTreeMap::<_, Value>::new();
     let mut named = BTreeMap::<_, BTreeSet<PyStr>>::new();
     for posting in items(required(projection, "postings")?) {
         if !is(field(posting, "location_kind"), "wallet") {
@@ -188,16 +187,26 @@ fn differences(c: &Value, holdings: &Value) -> Result<Value> {
             text(required(posting, "asset")?),
         );
         let amount = required(posting, "amount_msat")?;
-        let Value::Int(amount) = amount else {
-            return Err(error(
-                "TypeError",
-                format!(
-                    "unsupported operand type(s) for +: 'int' and '{}'",
-                    kind(amount)
-                ),
-            ));
-        };
-        *canonical.entry(key.clone()).or_default() += amount;
+        let total = canonical
+            .entry(key.clone())
+            .or_insert_with(|| Value::from(0));
+        match (&mut *total, amount) {
+            (Value::Int(total), Value::Int(amount)) => *total += amount,
+            (Value::Int(total), Value::Bool(amount)) => *total += BigInt::from(u8::from(*amount)),
+            (Value::Int(_) | Value::Float(_), Value::Float(_) | Value::Int(_) | Value::Bool(_)) => {
+                *total = Value::Float(float(total)? + float(amount)?);
+            }
+            _ => {
+                return Err(error(
+                    "TypeError",
+                    format!(
+                        "unsupported operand type(s) for +: '{}' and '{}'",
+                        kind(total),
+                        kind(amount)
+                    ),
+                ));
+            }
+        }
         if let Some(observation) = observations.get(&text(field(posting, "observation_hash"))) {
             if let Some(reason) = reasons.get(&text(field(observation, "transaction_id"))) {
                 named.entry(key).or_default().insert(reason.clone());
@@ -207,9 +216,12 @@ fn differences(c: &Value, holdings: &Value) -> Result<Value> {
     let keys: BTreeSet<_> = canonical.keys().chain(current.keys()).cloned().collect();
     let mut result = vec![];
     for key in keys {
-        let a = canonical.get(&key).cloned().unwrap_or_default();
+        let a = canonical
+            .get(&key)
+            .cloned()
+            .unwrap_or_else(|| Value::from(0));
         let b = current.get(&key).cloned().unwrap_or_default();
-        if a == b {
+        if equal(&a, &Value::Int(b.clone())) {
             continue;
         }
         let reason = named
@@ -221,7 +233,7 @@ fn differences(c: &Value, holdings: &Value) -> Result<Value> {
             ("$type", Value::from("WalletBalanceDifference")),
             ("wallet_id", Value::Str(key.0)),
             ("asset", Value::Str(key.1)),
-            ("canonical_msat", Value::Int(a)),
+            ("canonical_msat", a),
             ("current_msat", Value::Int(b)),
             ("reason", reason.map(Value::Str).unwrap_or(Value::Null)),
         ]));

@@ -711,8 +711,12 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   which compares 1,435 complete outcomes. The
   [lossless probe handoff](docs/reference/r4-journal-render-scalar-checkpoint.md#lossless-probe-handoff-continuation)
   closes all four actual-surrogate repros and matches all 1,435 cases through
-  fresh and cached executable reads. Complete nonfinite/lazy/shape/refusal/UUID
-  campaigns and final acceptance remain open. Python retains production authority.
+  fresh and cached executable reads. The
+  [nonfinite response continuation](docs/reference/r4-journal-render-scalar-checkpoint.md#nonfinite-response-and-diagnostic-continuation-partial)
+  adds 1,776 builder/ledger outcomes and repairs diagnostic float sums, wallet
+  mapping lookup and JSON NaN holding-key identity. Complete custody/Austrian
+  nonfinite coverage, successful lazy decoding, shape/refusal/UUID campaigns
+  and final acceptance remain open. Python retains production authority.
 - [ ] R4-13 to R4-16: CLI and daemon commands, automatic pairing, the
   freshness journal job and the authority switch.
 

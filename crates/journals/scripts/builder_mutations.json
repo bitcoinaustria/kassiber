@@ -12,8 +12,8 @@
   {
     "id": "JR-builder-canonical-amount",
     "file": "crates/journals/src/native/builder.rs",
-    "find": "*canonical.entry(key.clone()).or_default() += amount;",
-    "replace": "*canonical.entry(key.clone()).or_default() -= amount;",
+    "find": "(Value::Int(total), Value::Int(amount)) => *total += amount,",
+    "replace": "(Value::Int(total), Value::Int(amount)) => *total -= amount,",
     "expect_failing": [
       "native_builder_matches_python_states_refusals_and_uuid_tapes"
     ],

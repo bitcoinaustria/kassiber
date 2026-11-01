@@ -30,7 +30,6 @@ fn native_builder_matches_python_states_refusals_and_uuid_tapes() {
             let result = native::build(
                 field(case, "profile"),
                 field(case, "custody"),
-                list(field(case, "wallets")),
                 field(case, "response"),
                 || {
                     let id = ids

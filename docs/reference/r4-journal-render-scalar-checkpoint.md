@@ -453,3 +453,99 @@ cargo build --offline --locked --release -p kassiber-journals --example journal-
 uv run --locked python scripts/check-journal-render-boundary.py --probe PROBE --output target/r4-fidelity-4/probe-boundary
 uv run --locked python scripts/check-journal-render-corpus.py --probe PROBE --output target/r4-fidelity-4/probe-corpus
 ```
+
+## Nonfinite response and diagnostic continuation (partial)
+
+This local continuation starts at `ca670ce31` on
+`t3code/r4-11-render-fidelity-5`. **R4-11 remains unaccepted.** It expands
+nonfinite consumption evidence and repairs the differences found in that
+campaign. It does not certify the complete remaining fidelity or acceptance
+work.
+
+`render-nonfinite.json` adds **1,776** immutable Python-derived cases: **537**
+successful builder states and **1,239** refusals. Each case also records the
+intermediate ledger result and its own UUID consumption, so audit-only fields
+are compared even though the builder omits them. Shared base operands and
+ordered replacement patches avoid repeating complete books. The patches own
+their captured operands; modifying a later witness cannot alter an earlier
+case. The Python regeneration test rebuilds this corpus from the unchanged
+reference. Order-only mapping replacements are retained even when Python
+mapping equality ignores their order. A separate method-coercion witness
+survives compact capture and matches the native state and exact UUID tape.
+
+Both ordinary and generic transfer books replace every existing response node
+with raw NaN and positive/negative infinity. Additional witnesses cover ignored
+fields in each stage, error short-circuiting at all eight failure stages,
+recursive raw and typed quarantine details, carry overlays, ignored holdings,
+profile identifiers/methods, pricing provenance, wallet fields, pass-through
+custody metadata, payouts, suspense, loan/channel explanations and canonical
+postings. Posting sequences include opposing infinities, later integer or
+invalid operands, and wide-integer-to-float overflow. Input nonfinite floats
+remain actual raw tokens, distinct from snapshot tags and literal user objects.
+
+The initial executable replay found twelve distinct differences. Diagnostic
+posting sums now retain Python numeric behavior, including nonfinite totals
+and exact coercion refusals, while ordinary integer totals stay arbitrary-width
+integers. Audit wallet lookup now uses the original mapping key rather than a
+wallet's embedded `id`. The native ledger accepts that mapping directly, and
+the native builder reads it from custody instead of accepting a second wallet
+list. Repeated JSON NaN keys retain the identity behavior of CPython's shared
+decoder constant when holdings tuple keys merge; numeric comparisons still
+treat NaN as unequal. This certifies serialized JSON NaN operands, not a new
+general Python object-identity model.
+
+No product route, Python accounting behavior, dependency, storage format or
+external I/O changes. The inherited seven render corpora remain unchanged.
+No Python reference bug is identified.
+
+### Verification and retained evidence
+
+All **50** all-feature release journal tests pass, including complete ledger
+and builder comparisons for the 1,776 new cases and normal/timing-only probe
+comparisons. The inherited corpora still pass. The executable matches all
+**6,422 replies** across **3,211 cases**, after both fresh decoding and cached
+reads. All ten boundary repros match. All **eight** Python oracle/capture tests
+pass, including deterministic reconstruction of the new corpus. Workspace
+formatting and scoped all-target/all-feature release clippy for custody and
+journals pass with `-D warnings`.
+
+All **eight new recipes** in `nonfinite_mutations.json` are killed by
+`nonfinite_operands_match_python_consumption_and_uuid_tapes`. The existing
+`JR-builder-canonical-amount` recipe moves to the equivalent integer addition
+arm and is killed again by
+`native_builder_matches_python_states_refusals_and_uuid_tapes`. The accepted
+run has two passing unmutated baselines, nine named kills, no survivors and
+no compiler failures. All **346** renderer/persistence/branch/scalar/native/
+builder/graph/probe/nonfinite recipes apply; only these nine are executed for
+new kill evidence. The required classifier update leaves the inventory
+unchanged, and the required CI preflight passes all **57 tests**.
+
+During corpus development, reusing a mutable response exposed a test-generator
+alias: adding a later typed-detail witness changed an earlier patch operand.
+Owning a deep copy of every replacement fixes the capture artifact. The
+accepted corpus is regenerated and checked afterward; that discovery failure
+is not accepted fidelity or mutation evidence.
+
+`target/r4-fidelity-5/verification-index.json` binds source, fixture, recipe,
+executable and passing-log hashes to the accepted mutation summaries and probe
+replies. The mutation summary also verifies that the original worktree's
+source did not change during execution. Mutation and verification build trees
+are removed after summarizing; the executable, logs and summaries remain local.
+No background job remains at handoff. No push, PR or external comment is made.
+
+### Remaining work at this boundary
+
+The response-node sweep covers the two declared book templates. A complete
+custody/shape sweep, Austrian optional audit/flow shapes, non-string mapping
+keys and other combinations are still required before calling the full
+nonfinite requirement finished. Successful lazy decoding still needs its
+dedicated campaign. Arbitrary shapes, wallet mapping/order, cumulative
+arithmetic, competing refusal order and UUID generation remain open.
+
+Acceptance still requires all renderer/persistence/custody mutation shards,
+resumable with each build tree removed after summarizing; all 25,030 inputs;
+fresh census, shadow and recording campaigns; typed loader/custody integration;
+integrated SQLite/SQLCipher campaigns; the repository gate; paired CPU checks
+against `8a9492199` meeting 0.15 s on both 20k books; and an acceptance record.
+Focused fixture persistence tests and the new mutations do not replace those
+gates. No timing or full acceptance campaign is claimed here.

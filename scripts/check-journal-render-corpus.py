@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 from collections import Counter
+from copy import deepcopy
 import json
 from pathlib import Path
 import subprocess
@@ -10,7 +11,23 @@ CORPORA = [ROOT / 'crates/journals/tests/data' / name for name in (
     'render.json', 'render-legacy-floats.json', 'render-response-refusals.json',
     'render-scalar-coercions.json', 'render-branches.json',
     'render-native-builder.json', 'render-native-graph.json',
+    'render-nonfinite.json',
 )]
+
+
+def cases(document):
+    if isinstance(document, list):
+        return document
+    result = []
+    for case in document['cases']:
+        inputs = deepcopy(document['bases'][case['base']])
+        for path, value in case['patches']:
+            parent = inputs
+            for key in path[:-1]:
+                parent = parent[key]
+            parent[path[-1]] = value
+        result.append(dict(inputs, **case))
+    return result
 
 
 def main():
@@ -28,7 +45,7 @@ def main():
                           text=True, bufsize=1) as child:
         for corpus in args.corpus or CORPORA:
             totals = Counter()
-            for case in json.loads(corpus.read_text()):
+            for case in cases(json.loads(corpus.read_text())):
                 path = args.output / f'current-{count % 2}.json'
                 path.touch(mode=0o600, exist_ok=True)
                 path.chmod(0o600)

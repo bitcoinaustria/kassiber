@@ -12,9 +12,11 @@ from tests.rust_port.journal_render_vectors import PATH, vectors, machine_msat_v
 from tests.rust_port.journal_native_builder_vectors import PATH as BUILDER_PATH, vectors as builder_vectors
 from tests.rust_port.journal_native_graph_vectors import PATH as GRAPH_PATH, vectors as graph_vectors
 from tests.rust_port.journal_native_vectors import PATH as NATIVE_PATH, vectors as native_vectors
+from tests.rust_port.journal_nonfinite_vectors import PATH as NONFINITE_PATH, vectors as nonfinite_vectors
 
 
 def test_render_vectors_rebuild_from_python_build():
+    assert json.dumps(json.loads(NONFINITE_PATH.read_text()), sort_keys=True, ensure_ascii=True) == json.dumps(nonfinite_vectors(), sort_keys=True, ensure_ascii=True)
     assert json.dumps(json.loads(GRAPH_PATH.read_text()), sort_keys=True, ensure_ascii=True) == json.dumps(graph_vectors(), sort_keys=True, ensure_ascii=True)
     assert json.dumps(json.loads(BUILDER_PATH.read_text()), sort_keys=True, ensure_ascii=True) == json.dumps(builder_vectors(), sort_keys=True, ensure_ascii=True)
     assert json.loads(NATIVE_PATH.read_text()) == native_vectors()
