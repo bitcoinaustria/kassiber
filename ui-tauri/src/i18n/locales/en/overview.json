@@ -394,6 +394,7 @@
     },
     "incomplete": "Estimate incomplete: no usable FMV quote for {{assets}}."
   },
+  "exitTaxDepartureTimezone": "Departure timezone: {{timezone}}",
   "exitTaxReadiness": {
     "title": "This estimate is incomplete.",
     "journals": "Journals are not processed yet.",

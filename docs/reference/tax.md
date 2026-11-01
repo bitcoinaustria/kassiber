@@ -364,6 +364,8 @@ a departure supplied with a time and offset is converted to the jurisdiction's
 civil day first. The exclusive cutoff is the next midnight in that timezone,
 converted to UTC for inventory, cached quotes and transaction quotes together.
 PDF and XLSX drafts stamp `departureTimezone` as well as the departure date.
+The desktop takes its default departure date from the core and displays that
+timezone; clearing the date asks the core for today's civil day again.
 This replaces the earlier open timezone question with the owner's decision.
 
 For departure 2024-12-31, a receipt at 2025-01-01 00:30 Europe/Vienna

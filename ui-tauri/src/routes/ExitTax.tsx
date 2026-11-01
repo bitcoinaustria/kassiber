@@ -80,30 +80,28 @@ const DESTINATION_OPTIONS: Array<{ value: ExitTaxDestination; label: string }> =
   { value: "third_country", label: "Third country (non-EU/EEA)" },
 ];
 
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
 function basename(path: string): string {
   const parts = path.split(/[\\/]/);
   return parts[parts.length - 1] || path;
 }
 
 export function ExitTax() {
+  const { t } = useTranslation("overview");
   const hideSensitive = useUiStore((state) => state.hideSensitive);
-  const [departureDate, setDepartureDate] = useState<string>(todayIso());
+  const [departureDate, setDepartureDate] = useState<string>("");
   const [destination, setDestination] = useState<ExitTaxDestination>("eu_eea");
   const [activeExport, setActiveExport] = useState<ExportFormat | null>(null);
   const [exportStatus, setExportStatus] = useState<ExitTaxExportStatus | null>(null);
 
   const preview = useDaemon<ExitTaxReport>("ui.reports.exit_tax_preview", {
-    departure_date: departureDate,
+    departure_date: departureDate || undefined,
     destination,
   });
   const exportPdf = useDaemonMutation("ui.reports.export_exit_tax_pdf");
   const exportXlsx = useDaemonMutation("ui.reports.export_exit_tax_xlsx");
 
   const report = preview.data?.data;
+  const resolvedDepartureDate = departureDate || report?.departureDate || "";
   const ccy = report?.fiatCurrency ?? "EUR";
 
   const fmtMoney = useMemo(() => {
@@ -125,7 +123,7 @@ export function ExitTax() {
     setActiveExport(format);
     const mutation = format === "pdf" ? exportPdf : exportXlsx;
     mutation.mutate(
-      { departure_date: departureDate, destination },
+      { departure_date: resolvedDepartureDate, destination },
       {
         onSuccess: async (envelope) => {
           const payload = (envelope.data ?? {}) as {
@@ -177,11 +175,16 @@ export function ExitTax() {
           <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
             Departure date
             <DatePicker
-              value={departureDate}
-              onChange={(next) => setDepartureDate(next || todayIso())}
+              value={resolvedDepartureDate}
+              onChange={setDepartureDate}
               className={cn(pageHeaderActionClassName, "w-[180px]")}
             />
           </label>
+          {report ? (
+            <p className="text-xs text-muted-foreground">
+              {t("exitTaxDepartureTimezone", { timezone: report.departureTimezone })}
+            </p>
+          ) : null}
           <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
             Destination
             <Select

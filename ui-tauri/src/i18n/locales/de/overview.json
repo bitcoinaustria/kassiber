@@ -394,6 +394,7 @@
     },
     "incomplete": "Schätzung unvollständig: kein verwendbarer Marktwertkurs für {{assets}}."
   },
+  "exitTaxDepartureTimezone": "Zeitzone des Wegzugs: {{timezone}}",
   "exitTaxReadiness": {
     "title": "Diese Schätzung ist unvollständig.",
     "journals": "Die Journale wurden noch nicht verarbeitet.",
