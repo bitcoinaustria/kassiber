@@ -7,6 +7,8 @@ use kassiber_pydecimal::{Context, Decimal, Rounding};
 use kassiber_pyjson::BigInt;
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
+use std::ops::Deref;
+use std::rc::Rc;
 use std::str::FromStr;
 
 pub(crate) mod ownership;
@@ -79,7 +81,23 @@ pub(crate) fn parse(raw: &Value) -> Result<Option<Value>, String> {
 }
 // Transfer identity predicates stringify nonfinite Python scalars. Preserve
 // their presence instead of turning them into null during outer JSON conversion.
-fn transfer_value(value: &Value) -> Value {
+pub(crate) enum TransferValue<'a> {
+    Borrowed(&'a Value),
+    Shared(Rc<Value>),
+}
+
+impl Deref for TransferValue<'_> {
+    type Target = Value;
+
+    fn deref(&self) -> &Value {
+        match self {
+            Self::Borrowed(value) => value,
+            Self::Shared(value) => value,
+        }
+    }
+}
+
+fn transfer_value(value: &Value) -> TransferValue<'_> {
     fn decoded(value: &kassiber_pyjson::Value) -> Value {
         use kassiber_pyjson::Value as Py;
         match value {
@@ -101,22 +119,26 @@ fn transfer_value(value: &Value) -> Value {
         }
     }
     match value.as_str() {
-        Some(s) => codec::memo(codec::Memo::Transfer, s, || {
+        Some(s) => TransferValue::Shared(codec::memo_shared(codec::Memo::Transfer, s, || {
             codec::loads(s)
                 .ok()
                 .as_ref()
                 .map(decoded)
                 .unwrap_or_else(|| value.clone())
-        }),
-        None => value.clone(),
+        })),
+        None => TransferValue::Borrowed(value),
     }
 }
 pub fn transfer_object(value: &Value) -> Value {
+    (*transfer_object_ref(value)).clone()
+}
+
+pub(crate) fn transfer_object_ref(value: &Value) -> TransferValue<'_> {
     let value = transfer_value(value);
     if value.is_object() {
         value
     } else {
-        json!({})
+        TransferValue::Shared(Rc::new(json!({})))
     }
 }
 
@@ -227,25 +249,24 @@ fn physical_scope(row: &Value) -> Scope {
     {
         return None;
     }
-    let raw = transfer_object(&row["raw_json"]);
-    let config = transfer_object(if truth(&row["config_json"]) {
+    let raw = transfer_object_ref(&row["raw_json"]);
+    let config = transfer_object_ref(if truth(&row["config_json"]) {
         &row["config_json"]
     } else {
         &row["wallet_config_json"]
     });
     let decoded = transfer_value(&row["raw_json"]);
-    let mut maps = vec![raw.clone()];
+    let mut maps = vec![&*raw];
     maps.extend(
         decoded
             .as_array()
             .into_iter()
             .flatten()
-            .filter(|v| v.is_object())
-            .cloned(),
+            .filter(|v| v.is_object()),
     );
     for key in ["tx", "ownership_graph"] {
         if raw[key].is_object() {
-            maps.push(raw[key].clone());
+            maps.push(&raw[key]);
         }
     }
     let mut txids = BTreeSet::new();
@@ -275,7 +296,7 @@ fn physical_scope(row: &Value) -> Scope {
             ["txid", "transaction_hash", "onchain_txid"].contains(&kind.as_str())
         } else {
             maps.iter()
-                .filter_map(Value::as_object)
+                .filter_map(|v| v.as_object())
                 .flat_map(|m| m.iter())
                 .any(|(k, v)| {
                     let name: String = k
@@ -318,7 +339,7 @@ fn physical_scope(row: &Value) -> Scope {
     {
         return None;
     }
-    for payload in maps.iter().chain(std::iter::once(&config)) {
+    for payload in maps.iter().copied().chain(std::iter::once(&*config)) {
         let c = text(&payload["chain"]);
         if !c.py_strip().is_empty() {
             let c = evidence::chain(&c.py_strip().py_lower()).ok()?;
@@ -343,7 +364,7 @@ fn physical_scope(row: &Value) -> Scope {
     if (asset == "BTC" && chain != "bitcoin") || (asset == "LBTC" && chain != "liquid") {
         return None;
     }
-    for payload in maps.iter().chain(std::iter::once(&config)) {
+    for payload in maps.iter().copied().chain(std::iter::once(&*config)) {
         if !text(&payload["network"]).py_strip().is_empty() {
             networks.insert(evidence::network(&chain, &payload["network"]).ok()?);
         }
@@ -358,7 +379,7 @@ fn physical_scope(row: &Value) -> Scope {
     let identity = if chain == "liquid" {
         let mut ids = BTreeSet::new();
         let mut displays = BTreeSet::new();
-        for payload in &maps {
+        for payload in maps.iter().copied() {
             for component in
                 std::iter::once(payload).chain(payload.get("component").filter(|v| v.is_object()))
             {
@@ -955,6 +976,33 @@ pub fn reconcile_receipts(rows: &[Value], snapshot: &Snapshot) -> Result<Value, 
 #[cfg(test)]
 mod semantic_tests {
     use super::*;
+
+    #[test]
+    fn embedded_json_readers_keep_conversion_and_mutation_isolation() {
+        let encoded = json!(r#"{"chain":NaN,"network":Infinity,"tx":{"txid":"sample"}}"#);
+        for transfer_first in [false, true] {
+            codec::clear_memos();
+            if transfer_first {
+                assert_eq!(transfer_object(&encoded)["chain"], "nan");
+            } else {
+                assert!(codec::object(&encoded)["chain"].is_null());
+            }
+            assert!(codec::object(&encoded)["network"].is_null());
+            assert_eq!(transfer_object(&encoded)["network"], "inf");
+            let mut owned = transfer_object(&encoded);
+            owned["tx"]["txid"] = json!("changed");
+            assert_eq!(transfer_object(&encoded)["tx"]["txid"], "sample");
+            let mut owned = codec::object(&encoded);
+            owned["tx"]["txid"] = json!("changed");
+            assert_eq!(codec::object(&encoded)["tx"]["txid"], "sample");
+        }
+        let original = json!({"tx":{"txid":"sample"}});
+        let mut owned = transfer_object(&original);
+        owned["tx"]["txid"] = json!("changed");
+        assert_eq!(original["tx"]["txid"], "sample");
+        codec::clear_memos();
+    }
+
     #[test]
     fn cpython_onchain_scopes() {
         let vectors: Vec<Value> = serde_json::from_str(include_str!(

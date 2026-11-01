@@ -3,6 +3,7 @@
 use kassiber_pyjson::{BigInt, Key, Options, PyStr, Value as Py};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
+use std::rc::Rc;
 use std::str::FromStr;
 
 /// Arrays at least this long convert their items concurrently, in order.
@@ -646,15 +647,19 @@ pub(crate) enum Memo {
 }
 
 thread_local! {
-    static MEMOS: std::cell::RefCell<[std::collections::HashMap<String, Value>; 2]> =
+    static MEMOS: std::cell::RefCell<[std::collections::HashMap<String, Rc<Value>>; 2]> =
         std::cell::RefCell::new([std::collections::HashMap::new(), std::collections::HashMap::new()]);
 }
 
 pub(crate) fn memo(kind: Memo, text: &str, convert: impl FnOnce() -> Value) -> Value {
+    memo_shared(kind, text, convert).as_ref().clone()
+}
+
+pub(crate) fn memo_shared(kind: Memo, text: &str, convert: impl FnOnce() -> Value) -> Rc<Value> {
     if let Some(hit) = MEMOS.with(|m| m.borrow()[kind as usize].get(text).cloned()) {
         return hit;
     }
-    let value = convert();
+    let value = Rc::new(convert());
     MEMOS.with(|m| m.borrow_mut()[kind as usize].insert(text.to_owned(), value.clone()));
     value
 }

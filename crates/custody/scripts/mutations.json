@@ -22894,24 +22894,24 @@
     "rule": "The SQL worklist permits at most 25 percent excess return."
   },
   {
-    "id": "R7-price-exponent",
-    "file": "crates/custody/src/finalized_projection/money.rs",
-    "find": "number.exponent().unsigned_abs() > 308",
     "replace": "false",
     "expect_failing": [
-      "projection_base_row_vectors"
+      "finalized_prices_keep_exact_exponent_bound"
     ],
-    "rule": "Nonzero prices retain the Python decimal exponent bound."
+    "rule": "Nonzero prices retain the Python decimal exponent bound.",
+    "file": "crates/custody/src/finalized_projection/money.rs",
+    "id": "R7-price-exponent",
+    "find": "number.exponent().unsigned_abs() > 308"
   },
   {
-    "id": "R7-price-floor",
-    "file": "crates/custody/src/finalized_projection/money.rs",
-    "find": "number.copy_abs() < Decimal::from_str(\"1e-13\").unwrap()",
     "replace": "false",
     "expect_failing": [
-      "projection_base_row_vectors"
+      "finalized_prices_keep_exact_precision_floor"
     ],
-    "rule": "Nonzero prices cannot disappear below ledger precision."
+    "rule": "Nonzero prices cannot disappear below ledger precision.",
+    "file": "crates/custody/src/finalized_projection/money.rs",
+    "id": "R7-price-floor",
+    "find": "number.copy_abs() < Decimal::from_str(\"1e-13\").unwrap()"
   },
   {
     "id": "R7-payout-split",
@@ -23353,5 +23353,15 @@
       "owned_finalization_preserves_bytes_and_literal_mapping_identity"
     ],
     "rule": "Owned finalization restores native bytes and escaped literal mappings without converting one into the other."
+  },
+  {
+    "id": "transfer-memo-kind-isolation",
+    "file": "crates/custody/src/graph.rs",
+    "find": "codec::memo_shared(codec::Memo::Transfer, s, || {",
+    "replace": "codec::memo_shared(codec::Memo::Object, s, || {",
+    "expect_failing": [
+      "embedded_json_readers_keep_conversion_and_mutation_isolation"
+    ],
+    "rule": "Shared transfer parses retain nonfinite identity separately from generic object conversions."
   }
 ]

@@ -26,6 +26,38 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn finalized_prices_keep_exact_exponent_bound() {
+        for sign in ["", "-"] {
+            let accepted = json!(format!("{sign}1.{}", "0".repeat(308)));
+            let refused = json!(format!("{sign}1.{}", "0".repeat(309)));
+            assert!(Money::finite(&accepted).is_ok());
+            assert_eq!(Money::finite(&refused).err().as_deref(), Some("AppError"));
+        }
+        for zero in ["0e-999", "-0e-999", "0e999"] {
+            assert_eq!(Money::finite(&json!(zero)).unwrap().fixed().unwrap(), "0");
+        }
+    }
+
+    #[test]
+    fn finalized_prices_keep_exact_precision_floor() {
+        for accepted in ["1e-13", "-1e-13", "0", "-0"] {
+            assert!(Money::finite(&json!(accepted)).is_ok(), "{accepted}");
+        }
+        for refused in [
+            "1e-14",
+            "-1e-14",
+            "0.000000000000099999999999999999999999999999999",
+            "-0.000000000000099999999999999999999999999999999",
+        ] {
+            assert_eq!(
+                Money::finite(&json!(refused)).err().as_deref(),
+                Some("AppError"),
+                "{refused}"
+            );
+        }
+    }
 }
 
 fn error(e: DecimalError) -> String {

@@ -81,8 +81,8 @@ pub fn scope(row: &Value) -> Result<(String, String), Error> {
 }
 
 pub(crate) fn scope_fields<'a>(row: impl Fn(&str) -> &'a Value) -> Result<(String, String), Error> {
-    let raw = crate::graph::transfer_object(row("raw_json"));
-    let config = crate::graph::transfer_object(if truth(row("config_json")) {
+    let raw = crate::graph::transfer_object_ref(row("raw_json"));
+    let config = crate::graph::transfer_object_ref(if truth(row("config_json")) {
         row("config_json")
     } else {
         row("wallet_config_json")
@@ -136,7 +136,7 @@ pub fn txid(value: &Value) -> Option<String> {
 }
 
 pub fn event_key(row: &Value) -> Result<EventKey, Error> {
-    let raw = crate::graph::transfer_object(&row["raw_json"]);
+    let raw = crate::graph::transfer_object_ref(&row["raw_json"]);
     let (chain, network) = scope(row)?;
     let raw_ordered = if let Some(s) = row["raw_json"].as_str() {
         codec::loads(s).unwrap_or(Py::Null)
@@ -722,7 +722,7 @@ fn canonical_event(
             json!({"errors":errors}),
         )));
     }
-    let mut slots: BTreeMap<(String, String, String), Vec<Value>> = BTreeMap::new();
+    let mut slots: BTreeMap<(String, String, String), Vec<&Value>> = BTreeMap::new();
     for observation in &observations {
         slots
             .entry((
@@ -731,7 +731,7 @@ fn canonical_event(
                 text(&observation["asset"]),
             ))
             .or_default()
-            .push(observation.clone());
+            .push(observation);
     }
     let mut contradictions = Vec::new();
     for ((wallet, direction, asset), items) in &slots {
@@ -758,7 +758,7 @@ fn canonical_event(
             json!({"contradictory_slots":contradictions}),
         )));
     }
-    let legs: Vec<Value> = slots
+    let legs: Vec<&Value> = slots
         .values()
         .map(|items| {
             items
@@ -770,8 +770,8 @@ fn canonical_event(
                         text(&i["transaction_id"]),
                     )
                 })
+                .copied()
                 .unwrap()
-                .clone()
         })
         .collect();
     let mut aliases = Vec::new();
