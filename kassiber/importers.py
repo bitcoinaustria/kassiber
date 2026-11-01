@@ -3617,9 +3617,9 @@ def _read_generic_ledger_csv(file_path):
     except csv.Error:
         dialect = None
     reader = (
-        csv.reader(io.StringIO(text), dialect)
+        csv.reader(io.StringIO(text, newline=""), dialect)
         if dialect is not None
-        else csv.reader(io.StringIO(text))
+        else csv.reader(io.StringIO(text, newline=""))
     )
     return [list(row) for row in reader]
 
