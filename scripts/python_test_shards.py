@@ -246,6 +246,8 @@ _SHADOW_EXTRA_MODULES = frozenset(
         # `kassiber.core.review_workflow` builds the ledger for its previews.
         "test_review_cli_ai",
         "test_review_workflow",
+        # Its Rust vector exporters call the Python review service in children.
+        "test_rust_review_cases",
         # The daemon processes stale journals before its AI read tools and
         # its `_DIRECT_AUTO_JOURNAL_REFRESH_KINDS` reads
         # (`daemon_freshness._auto_maintain_for_read`).

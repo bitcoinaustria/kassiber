@@ -339,6 +339,7 @@ class TaxShadowOverlayContractTest(unittest.TestCase):
             "test_custody_lineage_flagship",
             "test_report_explanation_carry",
             "test_custody_native_transitions",
+            "test_rust_review_cases",
         ):
             with self.subTest(module=module):
                 self.assertIn(module, names)
