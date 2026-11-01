@@ -1654,7 +1654,7 @@
     "id": "rates-before-components",
     "file": "crates/custody/src/lib.rs",
     "find": "gates::require_rates(snapshot)",
-    "replace": "gates::require_accounting(snapshot)",
+    "replace": "Ok::<(), (&'static str, String)>(())",
     "expect_failing": [
       "components_refusal_rate_exact"
     ],
@@ -23036,7 +23036,7 @@
   {
     "id": "R4-network-inventory-type",
     "file": "crates/custody/src/gates/network.rs",
-    "find": "return Err((\n            \"custody_snapshot_invalid\",\n            \"missing network observations\".into(),\n        ));",
+    "find": "return Err(crate::Refusal::new(\n            \"components\",\n            \"custody_snapshot_invalid\",\n            \"missing network observations\",\n        ));",
     "replace": "return Ok(());",
     "expect_failing": [
       "typed_network_containers_wait_for_accounting_admission"

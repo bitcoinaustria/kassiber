@@ -19,13 +19,30 @@ from tests.rust_port.journal_prebuild_oracle import ROOT, CLOCK, seed, rate
 PATH = ROOT / 'crates/journals/tests/data/prebuild-campaign.json'
 
 
-@lru_cache(maxsize=1)
-def template():
+@lru_cache(maxsize=2)
+def template(relaxed=False):
     conn = sqlite3.connect(':memory:')
     seed(conn)
     triggers = conn.execute("SELECT name,sql FROM sqlite_master WHERE type='trigger'").fetchall()
     for name, _ in triggers:
         conn.execute(f'DROP TRIGGER "{name}"')
+    if relaxed:
+        # Malformed snapshot witnesses may violate the current physical schema.
+        # Preserve their values instead of inventing valid economic terms or
+        # changing duplicate ordinals. Both runtimes receive this same schema.
+        for table in ('custody_component_legs', 'custody_component_allocations',
+                      'custody_component_economic_terms', 'custody_component_evidence_commitments'):
+            columns = conn.execute(f'PRAGMA table_info("{table}")').fetchall()
+            fields = []
+            for _, name, kind, _, default, primary in columns:
+                field = f'"{name}" {kind}'
+                if primary:
+                    field += ' PRIMARY KEY'
+                if default is not None:
+                    field += ' DEFAULT ' + default
+                fields.append(field)
+            conn.execute(f'DROP TABLE "{table}"')
+            conn.execute(f'CREATE TABLE "{table}" ({",".join(fields)})')
     for table in ('wallets', 'profiles', 'workspaces'):
         conn.execute(f'DELETE FROM {table}')
     conn.commit()
@@ -34,18 +51,18 @@ def template():
     return image, triggers
 
 
-def materialize(snapshot):
+def materialize(snapshot, *, relaxed=False):
     conn = sqlite3.connect(':memory:')
     conn.row_factory = sqlite3.Row
     try:
-        return _materialize(conn, snapshot)
+        return _materialize(conn, snapshot, relaxed=relaxed)
     except BaseException:
         conn.close()
         raise
 
 
-def _materialize(conn, snapshot):
-    image, triggers = template()
+def _materialize(conn, snapshot, *, relaxed=False):
+    image, triggers = template(relaxed)
     conn.deserialize(image)
     conn.execute('PRAGMA foreign_keys=OFF')
     conn.execute('PRAGMA ignore_check_constraints=ON')

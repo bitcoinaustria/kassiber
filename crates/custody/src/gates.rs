@@ -112,10 +112,11 @@ fn evidence(row: &Value) -> (Option<String>, Option<String>, bool) {
         valid && instances.len() <= 1,
     )
 }
-pub fn require_accounting(snapshot: &Snapshot) -> Result<(), Error> {
+pub fn require_accounting(snapshot: &Snapshot) -> Result<(), crate::Refusal> {
     network::require(snapshot)?;
     let original = snapshot.profile.get("tax_country").unwrap_or(&Value::Null);
     require_tax_country(original)
+        .map_err(|(code, message)| crate::Refusal::new("components", code, message))
 }
 
 pub(crate) fn require_tax_country(original: &Value) -> Result<(), Error> {

@@ -948,6 +948,16 @@ ephemeral; they are neither product logs nor redacted diagnostics. Only syntheti
 scenario operands are checked in. The plugin is never installed by the product,
 daemon or AI, and grants no network consent.
 
+The explicit R4-13 `scripts/check-journal-process-campaign.py` runner likewise
+uses complete stored-book operands through the unregistered native process
+probe. Its incremental comparison records, source/binary manifest and private
+failure operands are written only beneath the worktree's `target/` directory,
+with mode-0700 directories and mode-0600 files. Failure operands can include
+private book facts and must remain ephemeral. They are test fixtures, not
+product logs, diagnostics or AI projections. The runner denies native socket
+syscalls and patches reference network entry points; it grants no egress or
+accounting authority and installs no product hook.
+
 The experimental R4-9 test-only `KASSIBER_TEST_CUSTODY_LOADER_BIN` hook adds a
 native snapshot byte comparison to custody census/shadow runs when explicitly
 set. It sends a complete `iterdump` of the caller's current connection through

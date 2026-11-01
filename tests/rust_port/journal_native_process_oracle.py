@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 from contextlib import ExitStack
 from dataclasses import replace
+from copy import deepcopy
 import itertools
 import json
 import sqlite3
@@ -37,6 +38,33 @@ def inputs():
             row[data['columns'].index('gains_algorithm')] = 'invalid-method'
     broken['profile']['gains_algorithm'] = 'invalid-method'
     cases.append(broken)
+    for payload in (b'{}', b'', b'\xff\0'):
+        binary_config = deepcopy(dict(name='blob-config-' + payload.hex(),
+                                      before=fresh['before'], profile=fresh['record']['profile']))
+        wallets = binary_config['before']['wallets']
+        for row in wallets['rows']:
+            row[wallets['columns'].index('config_json')] = {'$bytes': payload.hex()}
+        cases.append(binary_config)
+    for mode in ('conflicted', 'mixed', 'binding-mismatch'):
+        network = deepcopy(dict(name='network-' + mode, before=fresh['before'],
+                                profile=fresh['record']['profile']))
+        wallets = network['before']['wallets']
+        for row in wallets['rows']:
+            row[wallets['columns'].index('config_json')] = (
+                '{"chain":"unsupported"}' if mode == 'conflicted' else '{}')
+        transactions = network['before']['transactions']
+        for index, row in enumerate(transactions['rows']):
+            row[transactions['columns'].index('raw_json')] = json.dumps(dict(
+                chain='bitcoin', network='main' if index == 0 or mode != 'mixed' else 'test'))
+        if mode == 'binding-mismatch':
+            binding = network['before']['book_network_bindings']
+            values = dict(_rowid_=1, profile_id=network['profile']['id'],
+                          environment_id='binding-test', environment='test', revision=1,
+                          chain_instance_id=None, domains_json='[]',
+                          acknowledgements_json='[]', inventory_digest='synthetic',
+                          created_at=CLOCK)
+            binding['rows'] = [[values.get(column) for column in binding['columns']]]
+        cases.append(network)
     for filename in ('persistence.json', 'persistence-stages.json'):
         for case in json.loads((PATH.parent / filename).read_text()):
             if case['name'] == 'filed-change' or 'retraction_inbox' in case['name']:
@@ -45,11 +73,12 @@ def inputs():
     return cases
 
 
-def capture(case):
-    conn = sqlite3.connect(':memory:')
+def capture(case, *, connection=None):
+    conn = connection if connection is not None else sqlite3.connect(':memory:')
     conn.row_factory = sqlite3.Row
     try:
-        restore(conn, case['before'])
+        if connection is None:
+            restore(conn, case['before'])
         before = dump(conn)
         profile = case['profile']
         ids, ticks, phases = [], [], []
@@ -108,7 +137,8 @@ def capture(case):
         return dict(case, before=before, expected=expected, result=result, error=error,
                     ids=ids, ticks=ticks, phases=phases, clock=CLOCK)
     finally:
-        conn.close()
+        if connection is None:
+            conn.close()
 
 
 def vectors():

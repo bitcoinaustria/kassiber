@@ -27,8 +27,8 @@ pub(super) fn rows(conn: &Connection, sql: &str, args: impl Params) -> Result<Ve
                 }
                 ValueRef::Text(s) => json!(std::str::from_utf8(s)
                     .map_err(|_| Refusal::new("ValueError", "invalid UTF-8"))?),
-                ValueRef::Blob(_) => {
-                    return Err(Refusal::new("TypeError", "unexpected binary source field"))
+                ValueRef::Blob(value) => {
+                    kassiber_custody::codec::to_json(&kassiber_pyjson::Value::Bytes(value.to_vec()))
                 }
             };
             fields.insert(name.clone(), v);

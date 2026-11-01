@@ -542,7 +542,7 @@
   {
     "id": "JL-receipt-accounting-precedence",
     "file": "crates/custody/src/lib.rs",
-    "find": "    gates::require_accounting(&typed)\n        .map_err(|(code, message)| Refusal::new(\"components\", code, message))?;\n    components::compute(snapshot)",
+    "find": "    gates::require_accounting(&typed)?;\n    components::compute(snapshot)",
     "replace": "    components::compute(snapshot)",
     "expect_failing": [
       "native_loader_preserves_receipt_error_precedence"
@@ -1672,12 +1672,12 @@
   {
     "id": "JL-integer-string",
     "file": "crates/journals/src/loader/ownership.rs",
-    "find": "Value::Str(value) => value\n            .as_str()\n            .and_then(|value| kassiber_pytext::parse_int(value).ok()),",
     "replace": "Value::Str(_) => None,",
     "expect_failing": [
       "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
     ],
-    "rule": "Preserve exact ownership source normalization, identity, deduplication and network scope."
+    "rule": "Preserve exact ownership source normalization, identity, deduplication and network scope.",
+    "find": "Value::Str(value) => value\n            .as_str()\n            .and_then(|value| kassiber_pytext::parse_int(value).ok()),"
   },
   {
     "id": "JL-script-space",

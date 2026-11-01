@@ -956,7 +956,12 @@ mod byte_wire_tests {
             snapshot.transactions =
                 vec![serde_json::from_value(serde_json::json!({"note":literal})).unwrap()];
             let encoded = serde_json::to_string(&snapshot).unwrap();
-            let decoded = crate::parse(&encoded).unwrap().stages();
+            let typed = crate::parse(&encoded).unwrap();
+            let decoded = typed.stages();
+            assert_eq!(
+                typed.text().unwrap(),
+                kassiber_pyjson::dumps(&loads(&encoded).unwrap(), &Options::new()).unwrap()
+            );
             let expected = Py::Dict(vec![(Key::from(key), Py::from("ff00"))]);
             assert_eq!(
                 from_json(&decoded.transactions[0]["note"]).unwrap(),

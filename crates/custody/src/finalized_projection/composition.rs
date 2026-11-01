@@ -458,6 +458,9 @@ pub(super) fn evaluate_with_rows(
 // storage into the existing Python-value output instead of copying that tree
 // and then immediately destroying the original. Scalar admission stays shared.
 fn into_python(value: Value) -> Result<Py, String> {
+    if codec::raw_bytes(&value).is_some() || codec::escaped_dict(&value).is_some() {
+        return codec::from_json(&value);
+    }
     match value {
         Value::String(value) => Ok(Py::Str(value.into())),
         Value::Number(value) => match value.as_i64() {

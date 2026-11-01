@@ -287,6 +287,8 @@ fn custody_error(error: kassiber_custody::Refusal) -> Refusal {
         _ => "AppError",
     };
     let mut refusal = Refusal::new(family, error.message);
+    refusal.hint = error.hint;
+    refusal.details = error.details;
     if family == "AppError" {
         refusal.code = Some(error.code);
     }
@@ -437,6 +439,7 @@ fn stage_value(value: &kassiber_pyjson::Value) -> Result<Value, Refusal> {
         }
         Py::Float(v) => json!(v),
         Py::Decimal(v) => json!({"$decimal":v.to_string()}),
+        Py::Bytes(_) => codec::to_json(value),
         Py::Str(v) => json!(v.as_str().ok_or_else(|| Refusal::new(
             "NotImplementedError",
             "R4-11 surrogate stage transport is not integrated"

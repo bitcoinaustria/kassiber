@@ -250,7 +250,7 @@ impl BookSnapshot {
     /// The only full-row conversion: after typed admission, at the boundary to
     /// the unported stages. There is no cached second transaction row view.
     pub fn stages(&self) -> StageSnapshot {
-        StageSnapshot {
+        let mut snapshot = StageSnapshot {
             schema_version: self.schema_version,
             operation: self.operation.clone(),
             as_of: self.as_of.clone(),
@@ -288,7 +288,9 @@ impl BookSnapshot {
                     .map(WorklistRow::record)
                     .collect(),
             },
-        }
+        };
+        snapshot.escape_wire_tags();
+        snapshot
     }
     pub fn validate(&self) -> Result<(), String> {
         if self.schema_version != 1 || self.operation != "custody" {

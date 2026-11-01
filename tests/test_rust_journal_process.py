@@ -197,6 +197,34 @@ def test_native_real_prebuild_replays_complete_books_and_clock_uuid_tapes(prepar
 
 
 @pytest.mark.parametrize('cipher', [False, True])
+@pytest.mark.parametrize('table,column,payload', [
+    ('transactions', 'note', b'\xff\0'),
+    ('transactions', 'note', b''),
+    ('transactions', 'raw_json', b'{"chain":"bitcoin","network":"main"}'),
+    ('wallets', 'config_json', b'{}'),
+])
+def test_native_real_prebuild_preserves_blob_consumers_without_v1_encoding(
+        prepared_book_root, cipher, table, column, payload):
+    from tests.rust_port.journal_native_process_oracle import capture
+    conn = _book(prepared_book_root / 'python')
+    try:
+        conn.execute(f'UPDATE "{table}" SET "{column}"=?', (payload,))
+        conn.commit()
+        profile = dict(conn.execute("SELECT * FROM profiles WHERE id='p'").fetchone())
+        case = capture(dict(name=f'blob-{table}-{column}', profile=profile), connection=conn)
+        actual = _native_replay(prepared_book_root, case, cipher)
+        assert actual['ok'] == (case['error'] is None)
+        assert scalar_exact(actual.get('payload') if actual['ok'] else actual['refusal'],
+                            case['result'] if case['error'] is None else case['error'])
+        assert scalar_exact(actual['dump'], case['expected'])
+        assert [{'phase': p['phase']} for p in actual['phases']] == case['phases']
+        assert actual['clock_reads'] == len(case['ticks'])
+        assert actual['uuid_reads'] == len(case['ids'])
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize('cipher', [False, True])
 @pytest.mark.parametrize('write', [1, 8])
 def test_native_real_prebuild_storage_failure_reverts_every_active_stage(prepared_book_root, cipher, write):
     case = next(case for case in _native_vectors() if case['name'] == 'all-stages')

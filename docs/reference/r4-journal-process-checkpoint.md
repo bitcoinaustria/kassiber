@@ -516,6 +516,87 @@ eight build jobs, locked Python 3.11 and disposable roots under `target/`.
 The required classification update passes without inventory changes; CI
 preflight passes **57 tests**. The final workspace formatting check passes.
 
+<!-- inherited from process@684c76bad; pending r10 verification -->
+## Third continuation: merged stages and process campaigns
+
+The local `t3code/r4-13-journals-process-3` continuation starts at
+`98402b6b4`. It imports these newer stage handoffs before changing orchestration:
+
+| Stage tip | Local integration |
+| --- | --- |
+| Loader `e15900677` | `9ac6c43ed` |
+| Loader BLOB `d03c0b9a1` | `bb4fe55d8` |
+| Pre-build `9e8979d30` | `0fafafe99` |
+| Renderer `4656ef30e` | `388e9b492`, `9190704c9` |
+| Persistence `51bd20498` | `3d3bbfe0c` |
+| Pairing `c47450757` | Already inherited as `658e91260` |
+
+All 76 loader vectors from loader-9 and all 66 from its BLOB continuation are
+retained unchanged. The pre-build campaign, renderer, persistence and pairing
+fixture files are byte-identical to the requested stage tips. Merge repairs
+adapt the typed `JournalMsat` and shared source representation to persistence;
+they do not regenerate expected dumps. The JSON snapshot adapter escapes
+reserved scalar tag maps in its stage view, retaining the original typed wire
+for v1 round trips. Native SQLite bytes retain their separate consuming policy.
+
+`scripts/check-journal-process-campaign.py` executes the real native pre-build,
+loader, custody, ledger, renderer and persistence through the unregistered
+`journal-process` example. It compares outcomes, complete refusals, every
+application-table scalar and rowid (including REAL bits), progress phases and
+the complete durable UUID and lifecycle-clock tapes. Native socket syscalls
+are denied; reference network entry points raise before any request.
+
+The generator adapter imports physical stored columns and counts omitted
+derived fields. It never infers ownership inventory, receipt authority or
+legacy pairing links from a snapshot verdict. A malformed component witness
+that cannot fit the current physical constraints is replayed with the same
+explicit relaxed table schema in both runtimes; its original values and
+duplicate ordinals remain intact. These are stored-book process comparisons,
+not a claim that the reconstructed book recreates every original snapshot-only
+fact. Fresh full-book recordings remain a separate gate.
+
+Campaign output is confined to the worktree's `target/` directory. Mode-0600
+JSONL shards append and synchronize each comparison; mode-0700 directories
+also hold any complete private failure operands. A manifest binds the binary,
+source, corpus and shard layout. A resumed run refuses changed evidence and
+skips only already logged indices. Use the same output directory and shard
+layout to resume; use a new directory after a source or binary change.
+
+The initial generated run found a complete-refusal mismatch at operand 6,454:
+native processing rolled back correctly but dropped the network-review hint
+and details. Accounting admission now retains those attributes through the
+loader's refusal-precedence path and the process adapter. The v1 custody error
+document keeps its original three-field shape. Three added complete-process
+books pin conflicted, mixed and binding-mismatch histories separately.
+
+Focused merged verification also exposed two BLOB defects. The optimized
+finalized-projection conversion treated private byte tags as ordinary maps;
+it now uses the shared scalar conversion before moving ordinary containers.
+Pre-build source reads rejected BLOB configuration before its consumers could
+apply their existing policy; those reads now retain native byte identity.
+Three additional complete-process books cover empty, binary and JSON-looking
+wallet configuration. All eleven inherited complete-process records and their
+base remain unchanged; the expanded oracle has seventeen books. No Python
+product behavior was changed.
+
+The fresh native custody/journal run passes **744 tests across 24 targets**.
+The first focused Python run passed 316 tests and exposed the six BLOB
+failures above; the repaired BLOB replay passes **51 tests**, including SQLite
+and SQLCipher process comparisons. Formatting passes. Static applicability
+passes for all **2,909 recipes** in the four affected catalogs; executable
+mutation kills and complete campaign results are recorded separately below.
+
+Before the later loader-determinism addendum, the fresh generated campaign
+passes **25,030/25,030 operands**: **24,000 books**, **1,030 permutations** and
+**1,207 exact refusals**. Every result, logical dump, phase and lifecycle tape
+matches. Its binary SHA-256 is
+`6baaeaa0aa6282bdca71574d844b0ae558214b7002c9d3eb3569afea1ee4a8f0`;
+source fingerprint is
+`30950407210014ec0020f9329335777af3bd8c51c98af3371c889e7a60227035`.
+The 101 private shards and aggregate are under `target/r4-13/campaign-c/`;
+progress is in `target/r4-13/logs/campaign-c.log`. This evidence belongs to
+that source and binary, not the subsequent accepted loader integration.
+
 ## Remaining integration work
 
 1. Bind the real `process_native` adapter to production scope resolution and
@@ -525,7 +606,7 @@ preflight passes **57 tests**. The final workspace formatting check passes.
 2. Finish inherited R4-9/R4-11 acceptance gaps, including lossless stage values,
    exact refusals and the intended native boundaries. The committed handoffs
    listed above are imported; their open acceptance work remains open.
-3. Add/run resumable complete-process shards for the twelve generators
+3. Finish resumable complete-process shards for the twelve generators
    (24,000 books and 1,030 permutations), all 159 retained recordings and their
    permutations. Finish integrated frozen, census/shadow, codec/rollback and
    inherited mutation gates. The focused fixture checks above do not close

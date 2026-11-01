@@ -451,7 +451,7 @@
   },
   {
     "id": "JB-snapshot-wire-tag-guard",
-    "file": "crates/custody/src/lib.rs",
+    "file": "crates/custody/src/snapshot/book.rs",
     "find": "snapshot.escape_wire_tags();",
     "replace": "();",
     "expect_failing": [

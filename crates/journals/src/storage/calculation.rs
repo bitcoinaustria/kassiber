@@ -1,4 +1,4 @@
-use super::{exact_integer_text, integer, text};
+use super::{exact_integer_text as dynamic_exact_integer_text, integer, text};
 use crate::{model::*, Refusal};
 use kassiber_pyjson::{dumps_str_into, Options};
 use serde_json::Value;
@@ -65,9 +65,21 @@ fn scalar(value: &Value, out: &mut String, options: &Options) -> Option<()> {
     }
     Some(())
 }
-fn optional(value: &Option<std::borrow::Cow<'_, str>>, out: &mut String, options: &Options) {
+fn msat(value: &JournalMsat, out: &mut String, options: &Options) -> Option<()> {
+    match value {
+        JournalMsat::Small(value) => write!(out, "{value}").ok(),
+        JournalMsat::Wide(value) => scalar(value, out, options),
+    }
+}
+fn exact_integer_text(value: &JournalMsat, exact: Option<&str>) -> bool {
+    match value {
+        JournalMsat::Small(value) => exact == Some(value.to_string().as_str()),
+        JournalMsat::Wide(value) => dynamic_exact_integer_text(value, exact),
+    }
+}
+fn optional(value: &Option<impl AsRef<str>>, out: &mut String, options: &Options) {
     if let Some(value) = value {
-        dumps_str_into(value, options, out);
+        dumps_str_into(value.as_ref(), options, out);
     } else {
         out.push_str("null");
     }
@@ -96,7 +108,7 @@ fn source(source: &Source, options: &Options) -> Option<String> {
         dumps_str_into(value, options, &mut out);
     }
     out.push(',');
-    scalar(&source.crypto_fee_msat.value(), &mut out, options)?;
+    msat(&source.crypto_fee_msat, &mut out, options)?;
     for index in [0, 5, 1, 2, 9, 10, 11, 8, 7, 4, 3, 6] {
         out.push(',');
         scalar(&source.provenance.pricing.0[index], &mut out, options)?;
@@ -133,7 +145,7 @@ fn compact<'a>(calculation: &'a Calculation, encoder: &mut Encoder<'a>) -> Optio
             fragments.push(',');
         }
         fragments.push('[');
-        scalar(&fragment.quantity_msat.value(), &mut fragments, &options)?;
+        msat(&fragment.quantity_msat, &mut fragments, &options)?;
         for value in [
             &fragment.cost_basis_exact,
             &fragment.proceeds_exact,
@@ -154,7 +166,7 @@ fn compact<'a>(calculation: &'a Calculation, encoder: &mut Encoder<'a>) -> Optio
         optional(&fragment.acquisition_basis_exact, &mut fragments, &options);
         fragments.push(',');
         if let Some(quantity) = &fragment.acquisition_quantity_msat {
-            scalar(&quantity.value(), &mut fragments, &options)?;
+            msat(quantity, &mut fragments, &options)?;
         } else {
             fragments.push_str("null");
         }

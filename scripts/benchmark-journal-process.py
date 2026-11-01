@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Compare the unregistered R4-13 prepared pipeline on disposable book copies.
+"""Compare the unregistered R4-13 pipeline on disposable book copies.
 
-This measures the prepared-book probe, not registered CLI/daemon acceptance.
+This measures a test-only probe, not registered CLI/daemon acceptance.
 Each pair compares every persisted scalar, including REAL bits, outside timing.
 """
 import argparse
@@ -63,6 +63,7 @@ def worker(spec):
                 stack.enter_context(patch.object(module, 'now_iso', lambda: CLOCK))
             stack.enter_context(patch.object(custody_journal, 'store_ledger_state', store))
             stack.enter_context(patch.object(custody_journal, 'build_ledger_state', build))
+            stack.enter_context(patch.object(custody_journal, 'custody_build_clock', return_value=CLOCK))
             payload = handlers.process_journals(conn, profile['workspace_id'], profile['id'], progress_observer=progress)
         assert payload['auto_priced'] == 0 and not payload.get('source_overlap_repair')
         assert not payload.get('custody_pair_evidence_repairs')
@@ -96,6 +97,7 @@ def main():
     parser.add_argument('--baseline-binary', type=Path)
     parser.add_argument('--output', type=Path)
     parser.add_argument('--pairs', type=int, default=5)
+    parser.add_argument('--native-prebuild', action='store_true', help='Run the real ordered pre-build stage in the native process')
     args = parser.parse_args()
     if args.worker:
         print(json.dumps(worker(json.load(sys.stdin))))
@@ -111,6 +113,7 @@ def main():
     from tests.test_rust_journal_process import scalar_exact
     records = []
     measurement = dict(schema='kassiber.journal-process-prepared-bench.v1',
+                       native_prebuild=args.native_prebuild,
                        registered_command=False, acceptance='open', date=CLOCK[:10],
                        python_version=sys.version, trials_per_book=args.pairs,
                        native_binary_sha256=hashlib.sha256(args.binary.read_bytes()).hexdigest(),
@@ -149,6 +152,9 @@ def main():
             requests = {'python': {'root': str(roots['python'])},
                         'rust': dict(database=str(roots['rust']/'kassiber.sqlite3'),
                                      prepared_noop=True, clock=CLOCK, profile=warm['profile'], ids=warm['ids'])}
+            if args.native_prebuild:
+                requests['rust'].pop('prepared_noop')
+                requests['rust']['native_prebuild'] = True
             if args.baseline_binary:
                 requests['baseline'] = dict(requests['rust'], database=str(roots['baseline']/'kassiber.sqlite3'))
             outputs = {}

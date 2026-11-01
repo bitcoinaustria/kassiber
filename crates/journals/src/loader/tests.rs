@@ -783,6 +783,46 @@ fn native_loader_blob_conversions_preserve_bytes_and_consuming_policy() {
 }
 
 #[test]
+fn native_loader_blob_projection_retains_byte_identity() {
+    let Value::List(cases) =
+        kassiber_pytext::loads(include_str!("../../tests/data/loader.json")).unwrap()
+    else {
+        panic!("cases")
+    };
+    let case = cases
+        .iter()
+        .find(|case| text(get(case, "name")) == "config-0")
+        .unwrap();
+    for bytes in [vec![], vec![255, 0], b"77".to_vec()] {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(&text(get(case, "sql"))).unwrap();
+        conn.execute("UPDATE transactions SET note=?", [&bytes])
+            .unwrap();
+        conn.execute_batch("BEGIN IMMEDIATE").unwrap();
+        let snapshot = load(
+            &conn,
+            get(case, "profile").clone(),
+            &text(get(case, "as_of")),
+        )
+        .unwrap();
+        let projection = snapshot.project().unwrap().finalized_projection.unwrap();
+        let Value::List(rows) = get(&projection, "rows") else {
+            panic!("projection rows")
+        };
+        assert!(!rows.is_empty());
+        for row in rows {
+            assert_eq!(get(row, "note"), &Value::Bytes(bytes.clone()));
+        }
+        assert!(matches!(
+            snapshot.v1(),
+            Err(Error::Json(kassiber_pyjson::Error::BytesNotSerializable))
+        ));
+        assert!(!conn.is_autocommit());
+        conn.execute_batch("ROLLBACK").unwrap();
+    }
+}
+
+#[test]
 fn native_loader_blob_revision_references_bind_and_refuse_before_output() {
     let Value::List(cases) =
         kassiber_pytext::loads(include_str!("../../tests/data/loader.json")).unwrap()

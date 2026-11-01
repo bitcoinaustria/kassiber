@@ -148,27 +148,32 @@ pub(super) fn evidence(row: &NetworkRow) -> Evidence {
         valid && instances.len() <= 1,
     )
 }
-pub(super) fn require(snapshot: &BookSnapshot) -> Result<(), super::Error> {
+pub(super) fn require(snapshot: &BookSnapshot) -> Result<(), crate::Refusal> {
     let Some(NetworkObject::Object(facts)) = &*snapshot.book_network else {
         return if snapshot.book_network.is_none() {
             Ok(())
         } else {
-            Err((
+            Err(crate::Refusal::new(
+                "components",
                 "custody_snapshot_invalid",
-                "missing network observations".into(),
+                "missing network observations",
             ))
         };
     };
     let Some(NetworkArray::Array(observations)) = &facts.observations else {
-        return Err((
+        return Err(crate::Refusal::new(
+            "components",
             "custody_snapshot_invalid",
-            "missing network observations".into(),
+            "missing network observations",
         ));
     };
-    let references = facts.references.as_array().ok_or((
-        "custody_snapshot_invalid",
-        "missing network references".into(),
-    ))?;
+    let references = facts.references.as_array().ok_or_else(|| {
+        crate::Refusal::new(
+            "components",
+            "custody_snapshot_invalid",
+            "missing network references",
+        )
+    })?;
     let mut environments = BTreeSet::new();
     let mut instances = BTreeSet::new();
     let mut conflict = false;
@@ -219,9 +224,10 @@ pub(super) fn require(snapshot: &BookSnapshot) -> Result<(), super::Error> {
         add(evidence(&row), true);
     }
     if conflict || environments.len() > 1 || instances.len() > 1 {
-        return Err((
-            "book_network_review_required",
-            "This book contains incompatible network histories".into(),
+        let state = if conflict { "conflicted" } else { "mixed" };
+        return Err(review_refusal(
+            "This book contains incompatible network histories",
+            json!({"state":state}),
         ));
     }
     let binding = &facts.binding;
@@ -233,12 +239,22 @@ pub(super) fn require(snapshot: &BookSnapshot) -> Result<(), super::Error> {
                 .iter()
                 .any(|i| Some(i.as_str()) != binding["chain_instance_id"].as_str()))
     {
-        return Err((
-            "book_network_review_required",
-            "Book observations no longer match its network binding".into(),
+        return Err(review_refusal(
+            "Book observations no longer match its network binding",
+            json!({}),
         ));
     }
     Ok(())
+}
+
+fn review_refusal(message: &str, details: serde_json::Value) -> crate::Refusal {
+    let mut refusal = crate::Refusal::new("components", "book_network_review_required", message);
+    refusal.hint = Some(
+        "Review the active book's network in Settings. Existing history cannot be relabeled."
+            .into(),
+    );
+    refusal.details = details;
+    refusal
 }
 
 #[cfg(test)]
@@ -324,23 +340,26 @@ mod inventory_tests {
             .as_array_mut()
             .unwrap()
             .push(json!({"wallet_id":"wallet","raw_json":{"chain":"bitcoin","network":"regtest"}}));
+        let conflict = require(&snapshot(conflict)).unwrap_err();
+        assert_eq!(conflict.details, json!({"state":"mixed"}));
         assert_eq!(
-            require(&snapshot(conflict)).unwrap_err().1,
+            conflict.message,
             "This book contains incompatible network histories"
         );
         let mut binding = clean.clone();
         binding["binding"] = json!({"environment":"test","chain_instance_id":null});
         assert_eq!(
-            require(&snapshot(binding)).unwrap_err().1,
+            require(&snapshot(binding)).unwrap_err().message,
             "Book observations no longer match its network binding"
         );
         let mut missing = clean.clone();
         missing.as_object_mut().unwrap().remove("references");
         assert_eq!(
             require(&snapshot(missing)).unwrap_err(),
-            (
+            crate::Refusal::new(
+                "components",
                 "custody_snapshot_invalid",
-                "missing network references".into()
+                "missing network references"
             )
         );
         let epoch = json!({"table":"wallet_policy_epochs","private_material_present":false,"source_present":false,"chain":"bitcoin","network":"regtest"});

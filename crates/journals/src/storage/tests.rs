@@ -1,5 +1,10 @@
 use super::*;
-use crate::array;
+use crate::{array, model::JournalMsat};
+use std::sync::Arc;
+
+fn msat(value: Value) -> JournalMsat {
+    JournalMsat::Wide(Box::new(value))
+}
 
 fn same<const N: usize>(old: &[Sql; N], new: &[Sql; N], reals: &[usize]) -> bool {
     let c = Connection::open_in_memory().unwrap();

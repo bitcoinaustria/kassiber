@@ -20084,6 +20084,20 @@
         "reviewed": true,
         "tests": 1
       },
+      "test_native_real_prebuild_preserves_blob_consumers_without_v1_encoding": {
+        "disposition": "oracle",
+        "flags": [
+          "mock",
+          "mock-internal",
+          "sql",
+          "sql-seed",
+          "subprocess"
+        ],
+        "group": "journals",
+        "reason": "compares actual BLOB notes and JSON consumers through full native processing on SQLite/SQLCipher with Python payload/refusal, complete dumps and callback tapes; a v1 serialization refusal does not replace processing behavior",
+        "reviewed": true,
+        "tests": 1
+      },
       "test_native_real_prebuild_storage_failure_reverts_every_active_stage": {
         "disposition": "oracle",
         "flags": [
@@ -26978,6 +26992,26 @@
         "flags": [],
         "group": "journals",
         "reason": "validates branch mutation applicability, distinct identities and named native kill tests",
+        "reviewed": true,
+        "tests": 1
+      }
+    },
+    "tests/test_journal_process_campaign.py": {
+      "test_process_campaign_covers_every_generated_book_and_permutation_without_materializing": {
+        "disposition": "oracle",
+        "flags": [],
+        "group": "journals",
+        "reason": "counts every full-process generated operand and verifies durable shard resumption and build-fingerprint refusal through the unregistered native process probe",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_process_campaign_resumes_exact_evidence_and_refuses_changed_manifest": {
+        "disposition": "oracle",
+        "flags": [
+          "subprocess"
+        ],
+        "group": "journals",
+        "reason": "counts every full-process generated operand and verifies durable shard resumption and build-fingerprint refusal through the unregistered native process probe",
         "reviewed": true,
         "tests": 1
       }

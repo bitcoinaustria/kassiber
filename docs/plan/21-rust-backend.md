@@ -2649,6 +2649,14 @@ Python retains production journal authority, and the native loader remains
 behind `test-harness` until its separate integration/authority gates. Shipped
 Python was audited separately and is unaffected by the port-branch reference fix.
 
+<!-- inherited from process@684c76bad; pending r10 verification -->
+Loader-8's paired 20k CPU totals including admission remain 0.288331 s generic
+and 0.428645 s multi-wallet, both within 5% of loader-7. Those timings and the
+16,384-case non-BLOB audit are inherited unchanged; the final campaign results
+above belong to loader-9. The BLOB continuation closes the 4,446 storage
+gaps and extends the pending message set to forty; merged verification is
+recorded in the R4-13 checkpoint.
+
 ### R4-0 integrated stack
 
 The local `t3code/rust-backend-r6` stack integrates the R2 custody, projection

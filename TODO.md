@@ -752,6 +752,21 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   Integrate real R4-10 pre-build, close full-pipeline parity/mutation and speed
   gates, then register CLI and daemon in separate verified commits. Reconcile
   the desktop daemon's pairing default with R4-14 before changing its route;
+
+<!-- inherited from process@684c76bad; pending r10 verification -->
+  The continuation imports complete R4-10 pre-build, R4-14 pairing, renderer
+  boundary hardening and persistence recovery. Its real pre-build adapter retains
+  profile reload and distinct repair/build/store/filed-report clocks; complete
+  process vectors include active repairs and late rollback. Bind production
+  scope resolution, finish lossless-stage and full-pipeline parity/mutation gates,
+  then register CLI and daemon in separate verified commits.
+  The third continuation integrates the requested loader/BLOB, pre-build,
+  render and persistence tips, adds resumable complete-process shards, and
+  repairs network-refusal metadata and merged BLOB conversion defects. Its
+  seventeen frozen process books preserve every inherited record; generated
+  and retained-recording campaigns remain separate acceptance gates.
+  Wire the imported R4-14 stage into refresh while preserving desktop pairing
+  and scoped AI no-pairing behavior. Track speed acceptance separately;
   prepared-book probe results do not authorize production routing.
 
 <!-- inherited from render@f1712c625; pending r10 verification -->

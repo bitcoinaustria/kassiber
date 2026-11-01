@@ -31,6 +31,13 @@ Journal route activation remains with R4-13/R4-15/R4-16.
 Those CPU measurements are inherited from t3code/r4-14-auto-pair@c47450757.
 The R9 workspace passes the integrated pairing stage tests; combined CPU and
 mutation results are tracked in the [R9 audit](rust-backend-r9-integration.md#fresh-r9-verification).
+
+<!-- inherited from process@684c76bad; pending r10 verification -->
+R4-9's [test-only loader acceptance](r4-native-loader-checkpoint.md#loader-9-acceptance)
+closes its exhaustive branch map, 308 loader and 2,292 custody mutations,
+and stage generated/recorded gates. The BLOB continuation closes its storage
+class; forty seed-dependent messages remain pending the Python determinism
+fix. These are stage records; merged full-process gates remain R4-13 work.
 R4-13 has a [test-only composition checkpoint](r4-journal-process-checkpoint.md):
 real ordered R4-10 repairs/pricing through native load and persistence with
 transactional rollback and progress, and no CLI or daemon registration. Its

@@ -4798,5 +4798,65 @@
       "reused_insert_bindings_match_full_binds_for_every_scalar_transition"
     ],
     "rule": "Reused REAL bindings must distinguish positive and negative zero exactly as full binds do."
+  },
+  {
+    "id": "JPROCESS-finalized-byte-scalars",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "if codec::raw_bytes(&value).is_some() || codec::escaped_dict(&value).is_some() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "native_loader_blob_projection_retains_byte_identity"
+    ],
+    "rule": "Keep byte scalars native through the optimized finalized projection conversion."
+  },
+  {
+    "id": "JPROCESS-source-blob",
+    "file": "crates/journals/src/prebuild/sources.rs",
+    "find": "ValueRef::Blob(value) => {\n                    kassiber_custody::codec::to_json(&kassiber_pyjson::Value::Bytes(value.to_vec()))\n                }",
+    "replace": "ValueRef::Blob(_) => return Err(Refusal::new(\"TypeError\", \"unexpected binary source field\")),",
+    "expect_failing": [
+      "native_process_real_prebuild_matches_complete_python_books_and_lifecycle_tapes"
+    ],
+    "rule": "Preserve stored BLOB source values for their individual consuming policies."
+  },
+  {
+    "id": "JPROCESS-network-hint",
+    "file": "crates/journals/src/process.rs",
+    "find": "refusal.hint = error.hint;",
+    "replace": "refusal.hint = None;",
+    "expect_failing": [
+      "native_process_real_prebuild_matches_complete_python_books_and_lifecycle_tapes"
+    ],
+    "rule": "Forward the network review hint through the full journal refusal."
+  },
+  {
+    "id": "JPROCESS-network-details",
+    "file": "crates/journals/src/process.rs",
+    "find": "refusal.details = error.details;",
+    "replace": "refusal.details = Value::Null;",
+    "expect_failing": [
+      "native_process_real_prebuild_matches_complete_python_books_and_lifecycle_tapes"
+    ],
+    "rule": "Forward the exact network review state or empty binding details."
+  },
+  {
+    "id": "JPROCESS-network-state",
+    "file": "crates/custody/src/gates/network.rs",
+    "find": "let state = if conflict { \"conflicted\" } else { \"mixed\" };",
+    "replace": "let state = \"mixed\";",
+    "expect_failing": [
+      "native_process_real_prebuild_matches_complete_python_books_and_lifecycle_tapes"
+    ],
+    "rule": "Distinguish conflicting evidence from multiple valid network histories."
+  },
+  {
+    "id": "JPROCESS-network-binding-details",
+    "file": "crates/custody/src/gates/network.rs",
+    "find": "\"Book observations no longer match its network binding\",\n            json!({}),",
+    "replace": "\"Book observations no longer match its network binding\",\n            serde_json::Value::Null,",
+    "expect_failing": [
+      "native_process_real_prebuild_matches_complete_python_books_and_lifecycle_tapes"
+    ],
+    "rule": "A binding mismatch preserves Python's empty details object."
   }
 ]

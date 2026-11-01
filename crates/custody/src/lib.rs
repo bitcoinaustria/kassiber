@@ -29,12 +29,15 @@ pub const STAGES: [&str; 7] = [
 ];
 
 /// A refused custody operation: the refusing stage, a stable code and its
-/// message. No stage result accompanies it.
+/// message. Native callers also retain application hint/details; the v1 JSON
+/// refusal document keeps its established three-field error shape.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Refusal {
     pub stage: &'static str,
     pub code: String,
     pub message: String,
+    pub hint: Option<String>,
+    pub details: serde_json::Value,
 }
 
 impl Refusal {
@@ -43,6 +46,8 @@ impl Refusal {
             stage,
             code: code.into(),
             message: message.into(),
+            hint: None,
+            details: serde_json::Value::Null,
         }
     }
 
@@ -103,9 +108,8 @@ pub fn parse(request: &str) -> Result<snapshot::BookSnapshot, Refusal> {
     let _span = timing::span("parse");
     serde_json::from_str::<snapshot::BookSnapshot>(request)
         .map_err(|e| e.to_string())
-        .and_then(|mut snapshot| {
+        .and_then(|snapshot| {
             snapshot.validate()?;
-            snapshot.escape_wire_tags();
             Ok(snapshot)
         })
         .map_err(|message| Refusal::new("snapshot", "custody_snapshot_invalid", message))
@@ -117,8 +121,7 @@ pub fn receipt_source_error_precedence(snapshot: &snapshot::Snapshot) -> Result<
     let typed = snapshot
         .typed()
         .map_err(|message| Refusal::new("snapshot", "custody_snapshot_invalid", message))?;
-    gates::require_accounting(&typed)
-        .map_err(|(code, message)| Refusal::new("components", code, message))?;
+    gates::require_accounting(&typed)?;
     components::compute(snapshot)
         .map_err(|error| Refusal::new("components", error.code, error.message))?;
     Ok(())
@@ -138,8 +141,7 @@ pub fn run(snapshot: &snapshot::BookSnapshot, finalized: bool) -> Result<Stages,
     let _memos = Memos;
     let admission = timing::span("admission");
     let gate = timing::span("admission.accounting");
-    gates::require_accounting(snapshot)
-        .map_err(|(code, message)| Refusal::new("components", code, message))?;
+    gates::require_accounting(snapshot)?;
     drop(gate);
     let gate = timing::span("admission.confirmation");
     // Python captures confirmation provenance before rates and channel
@@ -180,8 +182,7 @@ pub fn run_loaded(snapshot: &snapshot::Snapshot, finalized: bool) -> Result<Stag
     let typed = snapshot
         .typed()
         .map_err(|message| Refusal::new("snapshot", "custody_snapshot_invalid", message))?;
-    gates::require_accounting(&typed)
-        .map_err(|(code, message)| Refusal::new("components", code, message))?;
+    gates::require_accounting(&typed)?;
     let projection_rows = finalized_projection::runtime::typed_confirmations(&typed)
         .map_err(|code| Refusal::code("components", code))?;
     gates::require_rates(&typed)

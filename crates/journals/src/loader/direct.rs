@@ -481,6 +481,8 @@ pub fn load_read_snapshot(
                         "AppError"
                     };
                 let mut refusal = crate::Refusal::new(family, prior.message);
+                refusal.hint = prior.hint;
+                refusal.details = prior.details;
                 if family == "AppError" {
                     refusal.code = Some(prior.code);
                 }

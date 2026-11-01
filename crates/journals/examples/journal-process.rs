@@ -152,7 +152,11 @@ fn run(v: &Value) -> Result<(), Box<dyn std::error::Error>> {
     }
     c.execute_batch("PRAGMA foreign_keys=ON; PRAGMA temp_store=MEMORY; PRAGMA cache_size=-16000")?;
     if v["database"].is_null() {
-        support::load(&c, &v["before"]);
+        if let Some(schema) = v["schema"].as_array() {
+            support::load_schema(&c, &v["before"], schema);
+        } else {
+            support::load(&c, &v["before"]);
+        }
     }
     let sources = Tapes {
         ids: RefCell::new(v["ids"].as_array().ok_or("UUID tape required")?.iter()),
