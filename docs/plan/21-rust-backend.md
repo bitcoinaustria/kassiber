@@ -4100,3 +4100,30 @@ and five ordinary daemon sessions. Combined routing is 48 CLI invocations and
 remains 154 CLI leaves (22 reports), with 15 report daemon kinds plus two
 transaction exports. Mirror, PSBT and the legacy scorer remain unregistered;
 AI projections remain Python. No egress or persistence authority is added.
+
+### R5 privacy: bounded PSBT parser prerequisite (partial)
+
+`t3code/r5-privacy-psbt` starts at `3291f143a` and adds the native shared
+PSBT v0/v2 decoder, transient inventory structure adapter and redacted public
+analysis. It preserves framing, byte/count limits, required-locktime resolution,
+zero sequences, supplied-UTXO hashes/indices/amounts/scripts and signature
+encoding checks. Bitcoin parsing reuses existing workspace dependencies.
+No schema, lockfile, egress or spending authority is added.
+
+The [parser checkpoint](../reference/rust-shell.md#psbt-parser-prerequisite-r5-privacy-psbt-partial)
+records 1,821 unchanged-Python vectors, complete 112-table primitive read
+invariants, named mutations and the retained embedded-decoder reference bug.
+The JSON driver exercises both offline-switch states with no network consent
+or fallback path. These are parser proofs; they do not accept a book-service
+or transport route. Product inventory remains 154 CLI leaves (22 reports),
+15 report daemon kinds plus two transaction exports, with zero newly accepted
+PSBT or legacy-scorer product reads. Inventory/linkage overlays, report
+redaction, CLI/file/daemon acceptance and registration remain outstanding, as
+does the separate legacy scorer. Mirror remains the parallel worker's scope.
+
+All 39 parser mutations are killed by six named native selections; compiler
+errors and empty selections are not accepted as kills. The retained Python
+oracle runs five cases, including both offline-switch states. The helper used
+by the required preflight preserves account `HOME` and passes an explicit
+disposable data root. The classifier now records 5,716 definitions, including
+four retained PSBT oracle definitions. No product served-by count changes.

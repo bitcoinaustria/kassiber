@@ -17,6 +17,7 @@ pub mod composition;
 mod derive;
 mod lifecycle;
 mod network;
+pub mod psbt;
 pub use lifecycle::{execute, execute_with_creation_identity, CreationIdentity, Operation};
 pub mod descriptors;
 pub mod fetch;

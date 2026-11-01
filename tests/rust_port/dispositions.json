@@ -20641,6 +20641,12 @@
         "tests": 1
       }
     },
+    "tests/test_rust_psbt.py": {
+      "test_psbt_frozen_vectors_match_unchanged_python": {"disposition": "oracle", "flags": [], "group": "chain-sync", "reason": "compares unchanged Python PSBT v0/v2 decoding, bounded framing, UTXO evidence, locks and redacted public analysis with a native guarded JSON driver; preserves complete 112-table reads without registering report or chain-analysis routes, and retains an uncaught embedded-decoder reference-error reproduction", "reviewed": true, "tests": 1},
+      "test_psbt_embedded_truncation_reproduces_reference_runtime_error": {"disposition": "oracle", "flags": [], "group": "chain-sync", "reason": "compares unchanged Python PSBT v0/v2 decoding, bounded framing, UTXO evidence, locks and redacted public analysis with a native guarded JSON driver; preserves complete 112-table reads without registering report or chain-analysis routes, and retains an uncaught embedded-decoder reference-error reproduction", "reviewed": true, "tests": 1},
+      "test_psbt_mutation_catalog_stays_applicable": {"disposition": "oracle", "flags": ["subprocess"], "group": "chain-sync", "reason": "compares unchanged Python PSBT v0/v2 decoding, bounded framing, UTXO evidence, locks and redacted public analysis with a native guarded JSON driver; preserves complete 112-table reads without registering report or chain-analysis routes, and retains an uncaught embedded-decoder reference-error reproduction", "reviewed": true, "tests": 1},
+      "test_psbt_native_bytes_all_tables_without_network_consent": {"disposition": "oracle", "flags": ["sql", "subprocess"], "group": "chain-sync", "reason": "compares unchanged Python PSBT v0/v2 decoding, bounded framing, UTXO evidence, locks and redacted public analysis with a native guarded JSON driver; preserves complete 112-table reads without registering report or chain-analysis routes, and retains an uncaught embedded-decoder reference-error reproduction", "reviewed": true, "tests": 1}
+    },
     "tests/test_rust_rates_candidate.py": {
       "test_all_six_cli_leaves_are_served_by_rust": {
         "disposition": "oracle",

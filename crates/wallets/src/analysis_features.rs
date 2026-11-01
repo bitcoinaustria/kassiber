@@ -35,7 +35,7 @@ fn bytes(value: &Value) -> Option<Vec<u8>> {
     Some(out)
 }
 
-fn kind(script: Option<&[u8]>) -> &'static str {
+pub(crate) fn kind(script: Option<&[u8]>) -> &'static str {
     let Some(s) = script else { return "unknown" };
     if s.len() == 25 && s.starts_with(&[0x76, 0xa9, 0x14]) && s.ends_with(&[0x88, 0xac]) {
         "p2pkh"

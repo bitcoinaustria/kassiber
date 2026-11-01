@@ -1,0 +1,392 @@
+[
+  {
+    "id": "psbt-r5-compact-canonical",
+    "file": "crates/wallets/src/psbt.rs",
+    "find": "if canonical && n < minimum {",
+    "replace": "if false && canonical && n < minimum {",
+    "expect_failing": [
+      "psbt_framing_and_transport_errors_match_python_without_payloads"
+    ],
+    "rule": "Canonical CompactSize framing is required."
+  },
+  {
+    "id": "psbt-r5-duplicate-map-key",
+    "file": "crates/wallets/src/psbt.rs",
+    "find": "if !seen.insert(key) {",
+    "replace": "if !seen.insert(key) && false {",
+    "expect_failing": [
+      "psbt_framing_and_transport_errors_match_python_without_payloads"
+    ],
+    "rule": "Duplicate map keys are refused."
+  },
+  {
+    "id": "psbt-r5-map-entry-limit",
+    "file": "crates/wallets/src/psbt.rs",
+    "find": "entries.len() >= 10_000",
+    "replace": "entries.len() >= 10_001",
+    "expect_failing": [
+      "psbt_size_count_and_map_limits_refuse_before_unbounded_parsing"
+    ],
+    "rule": "Map counts are bounded."
+  },
+  {
+    "id": "psbt-r5-singleton-key-data",
+    "file": "crates/wallets/src/psbt.rs",
+    "find": "singleton.contains(&kind) && key.len() != 1",
+    "replace": "singleton.contains(&kind) && key.len() != 1 && false",
+    "expect_failing": [
+      "psbt_framing_and_transport_errors_match_python_without_payloads"
+    ],
+    "rule": "Singleton fields cannot have key data."
+  },
+  {
+    "id": "psbt-r5-v0-forbidden-fields",
+    "file": "crates/wallets/src/psbt.rs",
+    "find": "version == 0 && v2_only.contains(&kind)",
+    "replace": "version == 0 && v2_only.contains(&kind) && false",
+    "expect_failing": [
+      "psbt_framing_and_transport_errors_match_python_without_payloads"
+    ],
+    "rule": "V0 excludes v2 fields."
+  },
+  {
+    "id": "psbt-r5-pubkey-encoding",
+    "file": "crates/wallets/src/psbt.rs",
+    "find": "bitcoin::PublicKey::from_slice(&key[1..]).is_err()",
+    "replace": "bitcoin::PublicKey::from_slice(&key[1..]).is_err() && false",
+    "expect_failing": [
+      "psbt_redacted_analysis_signatures_and_final_sizes_match_python"
+    ],
+    "rule": "Public keys encode curve points."
+  },
+  {
+    "id": "psbt-r5-derivation-length",
+    "file": "crates/wallets/src/psbt.rs",
+    "find": "value.len() < 4 || value.len() % 4 != 0",
+    "replace": "value.len() < 4 || value.len() % 4 != 0 && false",
+    "expect_failing": [
+      "psbt_redacted_analysis_signatures_and_final_sizes_match_python"
+    ],
+    "rule": "Derivations encode whole path words."
+  },
+  {
+    "id": "psbt-r5-text-limit",
+    "file": "crates/wallets/src/psbt.rs",
+    "find": "text.chars().count() > MAX_PSBT_BYTES * 3",
+    "replace": "text.chars().count() > MAX_PSBT_BYTES * 3 + 1",
+    "expect_failing": [
+      "psbt_size_count_and_map_limits_refuse_before_unbounded_parsing"
+    ],
+    "rule": "Text is bounded before decoding."
+  },
+  {
+    "id": "psbt-r5-binary-limit",
+    "file": "crates/wallets/src/psbt.rs",
+    "find": "if raw.len() > MAX_PSBT_BYTES {",
+    "replace": "if raw.len() > MAX_PSBT_BYTES + 1 {",
+    "expect_failing": [
+      "psbt_size_count_and_map_limits_refuse_before_unbounded_parsing"
+    ],
+    "rule": "Binary data is bounded before parsing."
+  },
+  {
+    "id": "psbt-r5-binary-text-limit",
+    "file": "crates/wallets/src/psbt.rs",
+    "find": "raw.len() > MAX_PSBT_BYTES * 3",
+    "replace": "raw.len() > MAX_PSBT_BYTES * 3 + 1",
+    "expect_failing": [
+      "psbt_size_count_and_map_limits_refuse_before_unbounded_parsing"
+    ],
+    "rule": "Byte text is bounded before ASCII decoding."
+  },
+  {
+    "id": "psbt-r5-empty-stream-reference-error",
+    "file": "crates/wallets/src/psbt.rs",
+    "find": "\"Can't read one byte from the stream\"",
+    "replace": "\"Embedded stream is empty\"",
+    "expect_failing": [
+      "psbt_utxo_hashes_amounts_and_script_bindings_match_python"
+    ],
+    "rule": "Preserve uncaught embedded reference refusal text without payloads."
+  },
+  {
+    "id": "psbt-r5-magic",
+    "file": "crates/wallets/src/psbt.rs",
+    "find": "r.take(5)? != b\"psbt\\xff\"",
+    "replace": "r.take(5)? != b\"psbt\\xfe\"",
+    "expect_failing": [
+      "psbt_bip174_bip370_vectors_match_python_and_all_112_tables"
+    ],
+    "rule": "Magic bytes are exact."
+  },
+  {
+    "id": "psbt-r5-supported-versions",
+    "file": "crates/wallets/src/psbt.rs",
+    "find": "![0, 2].contains(&version)",
+    "replace": "![0, 1, 2].contains(&version)",
+    "expect_failing": [
+      "psbt_framing_and_transport_errors_match_python_without_payloads"
+    ],
+    "rule": "Only versions zero and two are supported."
+  },
+  {
+    "id": "psbt-r5-unsigned-clean",
+    "file": "crates/wallets/src/psbt.rs",
+    "find": "tx.inputs.iter().any(|i| !i.script.is_empty())",
+    "replace": "tx.inputs.iter().any(|i| !i.script.is_empty()) && false",
+    "expect_failing": [
+      "psbt_bip174_bip370_vectors_match_python_and_all_112_tables"
+    ],
+    "rule": "The unsigned transaction is script-free."
+  },
+  {
+    "id": "psbt-r5-unsigned-leg-limit",
+    "file": "crates/wallets/src/psbt.rs",
+    "find": "unsigned && ni > MAX_LEGS",
+    "replace": "unsigned && ni > MAX_LEGS + 1",
+    "expect_failing": [
+      "psbt_size_count_and_map_limits_refuse_before_unbounded_parsing"
+    ],
+    "rule": "Unsigned leg counts are bounded."
+  },
+  {
+    "id": "psbt-r5-trailing-maps",
+    "file": "crates/wallets/src/psbt.rs",
+    "find": "return Err(invalid(\"trailing_bytes_or_extra_maps\"));",
+    "replace": "return Err(invalid(\"invalid_magic\"));",
+    "expect_failing": [
+      "psbt_framing_and_transport_errors_match_python_without_payloads"
+    ],
+    "rule": "Payload framing consumes exactly its maps."
+  },
+  {
+    "id": "psbt-r5-v2-sequence-zero",
+    "file": "crates/wallets/src/psbt.rs",
+    "find": "number(row, 0x10, 4, false)?.unwrap_or(0xffff_ffff)",
+    "replace": "number(row, 0x10, 4, false)?.filter(|n| *n != 0).unwrap_or(0xffff_ffff)",
+    "expect_failing": [
+      "psbt_v2_locktime_sequences_and_fields_match_python"
+    ],
+    "rule": "Explicit zero sequences are preserved."
+  },
+  {
+    "id": "psbt-r5-v2-required-time",
+    "file": "crates/wallets/src/psbt.rs",
+    "find": "t.is_some_and(|n| n < 500_000_000)",
+    "replace": "t.is_some_and(|n| n < 500_000_000) && false",
+    "expect_failing": [
+      "psbt_v2_locktime_sequences_and_fields_match_python"
+    ],
+    "rule": "Required time locks use their domain."
+  },
+  {
+    "id": "psbt-r5-v2-required-height",
+    "file": "crates/wallets/src/psbt.rs",
+    "find": "h.is_some_and(|n| n == 0 || n >= 500_000_000)",
+    "replace": "h.is_some_and(|n| n >= 500_000_000)",
+    "expect_failing": [
+      "psbt_v2_locktime_sequences_and_fields_match_python"
+    ],
+    "rule": "Required height zero is invalid."
+  },
+  {
+    "id": "psbt-r5-v2-incompatible-locks",
+    "file": "crates/wallets/src/psbt.rs",
+    "find": "if !allow_time && !allow_height {",
+    "replace": "if !allow_time && !allow_height && false {",
+    "expect_failing": [
+      "psbt_v2_locktime_sequences_and_fields_match_python"
+    ],
+    "rule": "Required lock domains must be compatible."
+  },
+  {
+    "id": "psbt-r5-v2-height-preference",
+    "file": "crates/wallets/src/psbt.rs",
+    "find": "if allow_height && height != 0 {",
+    "replace": "if false && allow_height && height != 0 {",
+    "expect_failing": [
+      "psbt_v2_locktime_sequences_and_fields_match_python"
+    ],
+    "rule": "Compatible height requirements take priority."
+  },
+  {
+    "id": "psbt-r5-v2-lock-maximum",
+    "file": "crates/wallets/src/psbt.rs",
+    "find": "time = time.max(t.unwrap_or(0));",
+    "replace": "time = t.unwrap_or(0);",
+    "expect_failing": [
+      "psbt_v2_locktime_sequences_and_fields_match_python"
+    ],
+    "rule": "Resolve required times by maximum."
+  },
+  {
+    "id": "psbt-r5-duplicate-outpoint",
+    "file": "crates/wallets/src/psbt.rs",
+    "find": "points.len() != tx.inputs.len()",
+    "replace": "points.len() != tx.inputs.len() && false",
+    "expect_failing": [
+      "psbt_v2_locktime_sequences_and_fields_match_python"
+    ],
+    "rule": "Input outpoints are unique."
+  },
+  {
+    "id": "psbt-r5-prevout-hash",
+    "file": "crates/wallets/src/psbt.rs",
+    "find": "bitcoin_tx.compute_txid().as_byte_array() != input.txid",
+    "replace": "bitcoin_tx.compute_txid().as_byte_array() != input.txid && false",
+    "expect_failing": [
+      "psbt_utxo_hashes_amounts_and_script_bindings_match_python"
+    ],
+    "rule": "Previous transactions bind their stripped hash."
+  },
+  {
+    "id": "psbt-r5-witness-amount-range",
+    "file": "crates/wallets/src/psbt.rs",
+    "find": "if out.amount > MAX_MONEY {",
+    "replace": "if out.amount > MAX_MONEY && false {",
+    "expect_failing": [
+      "psbt_utxo_hashes_amounts_and_script_bindings_match_python"
+    ],
+    "rule": "Witness amounts obey MAX_MONEY."
+  },
+  {
+    "id": "psbt-r5-conflicting-utxos",
+    "file": "crates/wallets/src/psbt.rs",
+    "find": "if a.amount != b.amount || a.script != b.script {",
+    "replace": "if a.amount != b.amount {",
+    "expect_failing": [
+      "psbt_utxo_hashes_amounts_and_script_bindings_match_python"
+    ],
+    "rule": "Supplied UTXOs agree on scripts and amounts."
+  },
+  {
+    "id": "psbt-r5-redeem-binding",
+    "file": "crates/wallets/src/psbt.rs",
+    "find": "hash160::Hash::hash(redeem).as_byte_array() != &out.script[2..22]",
+    "replace": "hash160::Hash::hash(redeem).as_byte_array() != &out.script[2..22] && false",
+    "expect_failing": [
+      "psbt_utxo_hashes_amounts_and_script_bindings_match_python"
+    ],
+    "rule": "Redeem scripts bind the outer P2SH hash."
+  },
+  {
+    "id": "psbt-r5-witness-script-binding",
+    "file": "crates/wallets/src/psbt.rs",
+    "find": "sha256::Hash::hash(script).as_byte_array() != &effective[2..]",
+    "replace": "sha256::Hash::hash(script).as_byte_array() != &effective[2..] && false",
+    "expect_failing": [
+      "psbt_utxo_hashes_amounts_and_script_bindings_match_python"
+    ],
+    "rule": "Witness scripts bind the effective P2WSH hash."
+  },
+  {
+    "id": "psbt-r5-witness-template",
+    "file": "crates/wallets/src/psbt.rs",
+    "find": "![\"p2sh\", \"p2wpkh\", \"p2wsh\", \"p2tr\", \"witness_unknown\"].contains(&kind(out.script))",
+    "replace": "![\"p2sh\", \"p2wpkh\", \"p2wsh\", \"p2tr\", \"witness_unknown\", \"p2pkh\"].contains(&kind(out.script))",
+    "expect_failing": [
+      "psbt_utxo_hashes_amounts_and_script_bindings_match_python"
+    ],
+    "rule": "Witness-only evidence cannot authenticate legacy scripts."
+  },
+  {
+    "id": "psbt-r5-network-selection",
+    "file": "crates/wallets/src/psbt.rs",
+    "find": "![\"main\", \"test\", \"signet\", \"regtest\"].contains(&network)",
+    "replace": "![\"main\", \"test\", \"signet\", \"regtest\", \"auto\"].contains(&network)",
+    "expect_failing": [
+      "psbt_redacted_analysis_signatures_and_final_sizes_match_python"
+    ],
+    "rule": "The caller selects an explicit Bitcoin network."
+  },
+  {
+    "id": "psbt-r5-signature-sighash",
+    "file": "crates/wallets/src/psbt.rs",
+    "find": "sighash.is_some_and(|s| observed[\"sighash\"].as_u64() != Some(s))",
+    "replace": "sighash.is_some_and(|s| observed[\"sighash\"].as_u64() != Some(s)) && false",
+    "expect_failing": [
+      "psbt_redacted_analysis_signatures_and_final_sizes_match_python"
+    ],
+    "rule": "Partial signatures agree with declared sighash."
+  },
+  {
+    "id": "psbt-r5-final-size-rounding",
+    "file": "crates/wallets/src/psbt.rs",
+    "find": "Some((base * 4 + extra.len()).div_ceil(4))",
+    "replace": "Some((base * 4 + extra.len()) / 4)",
+    "expect_failing": [
+      "psbt_redacted_analysis_signatures_and_final_sizes_match_python"
+    ],
+    "rule": "Witness weight rounds up to vbytes."
+  },
+  {
+    "id": "psbt-r5-fee-precision",
+    "file": "crates/wallets/src/psbt.rs",
+    "find": "prec: 32,",
+    "replace": "prec: 28,",
+    "expect_failing": [
+      "psbt_redacted_analysis_signatures_and_final_sizes_match_python"
+    ],
+    "rule": "Fee rates use the application decimal context."
+  },
+  {
+    "id": "psbt-r5-content-commitment",
+    "file": "crates/wallets/src/psbt.rs",
+    "find": "sha256::Hash::hash(data).to_string()",
+    "replace": "sha256::Hash::hash(b\"\").to_string()",
+    "expect_failing": [
+      "psbt_redacted_analysis_signatures_and_final_sizes_match_python"
+    ],
+    "rule": "Decoded bytes including discarded metadata bind the commitment."
+  },
+  {
+    "id": "psbt-r5-utxo-authority",
+    "file": "crates/wallets/src/psbt.rs",
+    "find": "\"amounts_chain_verified\":false",
+    "replace": "\"amounts_chain_verified\":true",
+    "expect_failing": [
+      "psbt_redacted_analysis_signatures_and_final_sizes_match_python"
+    ],
+    "rule": "Supplied UTXOs do not prove chain membership."
+  },
+  {
+    "id": "psbt-r5-signature-authority",
+    "file": "crates/wallets/src/psbt.rs",
+    "find": "\"signatures_verified\":false",
+    "replace": "\"signatures_verified\":true",
+    "expect_failing": [
+      "psbt_redacted_analysis_signatures_and_final_sizes_match_python"
+    ],
+    "rule": "Encoding observations do not verify signatures."
+  },
+  {
+    "id": "psbt-r5-global-metadata-discard",
+    "file": "crates/wallets/src/psbt.rs",
+    "find": "p.globals.iter().any(|(k,_)| k[0] == 1)",
+    "replace": "p.globals.iter().any(|(k,_)| k[0] == 2)",
+    "expect_failing": [
+      "psbt_redacted_analysis_signatures_and_final_sizes_match_python"
+    ],
+    "rule": "Global xpub metadata is projected only as presence."
+  },
+  {
+    "id": "psbt-r5-discontinuous-padding",
+    "file": "crates/wallets/src/psbt.rs",
+    "find": "if padded {",
+    "replace": "if false && padded {",
+    "expect_failing": [
+      "psbt_framing_and_transport_errors_match_python_without_payloads"
+    ],
+    "rule": "Strict Base64 refuses alphabet characters after padding, including padding after a complete quantum."
+  },
+  {
+    "id": "psbt-r5-decoded-transport-limit",
+    "file": "crates/wallets/src/psbt.rs",
+    "find": "if data.len() > MAX_PSBT_BYTES {",
+    "replace": "if data.len() > MAX_PSBT_BYTES + 1 {",
+    "expect_failing": [
+      "psbt_size_count_and_map_limits_refuse_before_unbounded_parsing"
+    ],
+    "rule": "Decoded text obeys the binary payload bound even when its encoded transport is within the text limit."
+  }
+]

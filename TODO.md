@@ -555,6 +555,13 @@ registers them; exit-tax preserves its reference no-registration boundary.
   see the [feature checkpoint](docs/reference/rust-shell.md#public-feature-primitives-r5-privacy-continuation-partial).
 - [ ] Port the separate legacy `ui.privacy_hygiene.snapshot` scorer; the
   configuration report and shared public features do not replace that contract.
+- [x] Port the shared bounded PSBT v0/v2 parser, supplied-UTXO/script validation,
+  required-locktime resolution and redacted public analysis as a native
+  prerequisite. The transient script-bearing inventory adapter is local-only.
+  Frozen Python vectors, complete 112-table reads and named mutations verify
+  this boundary; product inventory/linkage overlays, CLI/file/daemon acceptance
+  and registration remain outstanding. See the
+  [PSBT parser checkpoint](docs/reference/rust-shell.md#psbt-parser-prerequisite-r5-privacy-psbt-partial).
 - [x] Port full-report, Austrian bundle and transaction CSV artifacts, saved
   export registration and their daemon kinds. Preserve
   sealed summaries, hashes and phase-4 append-only impact history.

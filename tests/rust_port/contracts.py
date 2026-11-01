@@ -89,7 +89,7 @@ def commands_describe() -> bytes:
         })
         # The catalog pins the Python reference, never a configured candidate.
         result = cli_runner.run(
-            ["--machine", "commands", "describe"], reference=True,
+            ["--machine", "--data-root", str(root / "data"), "commands", "describe"], reference=True,
             cwd=ROOT, env=env, capture_output=True, check=True, timeout=60,
         )
         assert not result.stderr, result.stderr.decode("utf-8", errors="replace")

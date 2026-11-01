@@ -13483,3 +13483,102 @@ four feature-oracle tests without skips. The required classifier update and
 tests without skips. The classifier retains 5,712 definitions. Verification is
 Linux-only; the full workspace test run, full Python/frontend quality gate and
 packaged/platform gates are not run. No push-ready claim is made.
+
+## PSBT parser prerequisite (R5 privacy PSBT, partial)
+
+`t3code/r5-privacy-psbt` starts at `3291f143a`. The native
+`kassiber-wallets::psbt` now provides the shared v0/v2 decoder, the transient
+inventory structure projection, and redacted public analysis. This is a parser
+checkpoint, not acceptance of `reports.psbt-privacy` or a chain-analysis route.
+The parallel Mirror worker owns the shared observation/linkage prerequisites.
+
+Binary, Base64 and hex inputs share the decoded-byte commitment. Text whitespace
+and Base64 padding follow Python. Parsing bounds decoded payloads to 2 MiB,
+text to three times that many characters, byte-encoded text to three times that
+many bytes, unsigned transaction legs to 4,096, and individual maps to 10,000 entries.
+Borrowed map slices and checked offsets avoid allocations from attacker-chosen
+lengths. Embedded transaction and witness loops consume bytes or refuse.
+Unknown and proprietary map contents exist only during the call.
+
+The decoder preserves canonical framing, singleton/version restrictions,
+construction-stage zero-input v0 transactions, explicit zero sequences, BIP370
+required-locktime compatibility/maximum resolution, duplicate-outpoint refusals,
+monetary limits, non-witness transaction hashes, prevout indices and supplied
+amount/script consistency. It validates supplied redeem/witness script bindings,
+public-key/derivation encodings and partial-signature encodings/sighash agreement.
+Existing workspace Bitcoin consensus parsing and hashing validate non-witness
+UTXOs; no dependency, lockfile or schema changes are introduced.
+
+The existing public-feature extractor/rules consume a transient categorical
+adapter. Analysis exposes amounts, evidence categories and metadata-presence
+flags, without scripts, keys, xpubs, derivations, stacks or proprietary values.
+Final vsize requires every input's supplied final stack; exact rates use the
+application's 32-digit decimal context. Supplied UTXOs remain unverified for
+chain membership and unspentness. Signatures are encoding observations only.
+`decode_structure` deliberately returns scripts for the local inventory matcher;
+that internal result must never enter storage or AI disclosure. This module has
+no connection, endpoint, file-path, signing, finalizing or broadcasting API.
+
+The frozen unchanged-Python corpus has 1,821 vectors:
+
+| Boundary | Cases | Named mutation killer | Mutations |
+| --- | ---: | --- | ---: |
+| BIP174/370 and BIP78 inputs | 170 | `psbt_bip174_bip370_vectors_match_python_and_all_112_tables` | 2 |
+| Framing and text/binary transports | 686 | `psbt_framing_and_transport_errors_match_python_without_payloads` | 7 |
+| V2 fields, sequences and required locks | 581 | `psbt_v2_locktime_sequences_and_fields_match_python` | 7 |
+| Supplied UTXOs and script bindings | 189 | `psbt_utxo_hashes_amounts_and_script_bindings_match_python` | 7 |
+| Redacted features, signatures and final sizes | 195 | `psbt_redacted_analysis_signatures_and_final_sizes_match_python` | 10 |
+| Payload, leg and map limits | Native boundary cases | `psbt_size_count_and_map_limits_refuse_before_unbounded_parsing` | 6 |
+
+Native tests compare canonical result/error bytes and complete sorted rows in
+all 112 seeded tables around the pure reads. The guarded JSON fixture driver
+also compares every vector with unchanged Python, with the product offline
+switch both off and on and without network consent. The database is not passed
+to this pure driver; these table comparisons are primitive evidence, not
+book-service/transport acceptance. The driver has no fallback dispatch and its
+attempt ledger remains empty under the strict observer, including loopback.
+
+Python's embedded embit decoder has an existing uncaught-error bug: empty
+CompactSize reads in truncated non-witness UTXOs, witness UTXOs and final
+witnesses can raise `RuntimeError("Can't read one byte from the stream")`.
+The checked-in `repro_python_psbt_embedded_truncation.py` reproduces it. Seventy-one
+corpus cases retain that failure as an `internal_error` with the same message,
+null details and no raw payload; Rust returns an error rather than panicking.
+Python remains unchanged. V0 individual-leg round trips also preserve refusal
+precedence when noncanonical script lengths precede truncated fixed fields.
+
+Native product inventory remains 154 CLI leaves (22 reports) and 15 report daemon
+kinds plus two transaction exports. This checkpoint registers no CLI/daemon
+kind: PSBT and legacy-scorer product served-by counts remain zero. The reduced
+PSBT report still requires the inventory/linkage overlay, process/book-bound
+redaction, CLI/file/daemon byte and all-table comparisons, routing proof and
+registration. The separate legacy `ui.privacy_hygiene.snapshot` scorer remains
+unported. Proposal comparison, BIP78 verification and conditional entropy are
+also outside this parser checkpoint. No signing or spending-key authority is
+introduced, and no new egress path or AI projection is added.
+
+The 39 recipes in `crates/wallets/scripts/psbt_mutations.json` all apply and
+are killed by the named tests above. All six unmutated selections pass. The
+scratch checker requires a real failing selection: compiler errors and empty
+selections count as no kills. The final campaign replays all 38 original
+recipes after the Clippy changes; a separate serial run verifies the added
+decoded-text limit recipe against the final native boundary test. The inherited
+47 public-feature recipes retain their earlier kill evidence; their applicability
+is checked after making the script-category helper visible within the crate.
+
+`target/r5-psbt/mutation-summary.json` maps each recipe to its named killer;
+`verification-summary.json` and the adjacent command logs retain local evidence.
+Owned verification/mutation build trees and disposable test roots are removed
+after summarizing. The catalog preflight helper preserves account `HOME` and
+passes an explicit disposable `--data-root`; its strict socket audit remains
+armed. This is a test-infrastructure correction, with no Python product changes.
+
+Rust 1.99.1 offline/locked verification passes workspace formatting, production
+and test-harness workspace/all-target Clippy with `-D warnings`, all 161 wallet
+library tests using their owned loopback fixtures, and the six final PSBT tests.
+Locked Python 3.11.17 passes all five retained PSBT oracle cases without skips.
+The required classifier update records 5,716 definitions, and
+`python scripts/python_test_shards.py run preflight --ci` passes all 57 tests
+without skips. Verification is Linux-only; the full workspace test suite, full
+Python/frontend quality gate and packaged/platform gates are not run. This
+partial parser checkpoint makes no push-ready claim.

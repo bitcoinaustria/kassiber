@@ -441,3 +441,5 @@ REVIEWS["tests/test_rust_document_cli.py"] = {"*": {
     "disposition": "oracle", "group": "imports",
     "reason": "Runs Python, raw native and hybrid document CLI processes with terminal stdin, compares exact exit/stdout/stderr, complete typed books, outgoing provider requests and managed source files on SQLite/SQLCipher, and asserts every hybrid document call is served in Rust.",
 }}
+
+REVIEWS["tests/test_rust_psbt.py"] = {"*": {"disposition": "oracle", "group": "chain-sync", "reason": "compares unchanged Python PSBT v0/v2 decoding, bounded framing, UTXO evidence, locks and redacted public analysis with a native guarded JSON driver; preserves complete 112-table reads without registering report or chain-analysis routes, and retains an uncaught embedded-decoder reference-error reproduction"}}
