@@ -180,13 +180,13 @@ pub fn stage_with_confirmations(
             self.0.contains_key(id)
         }
 
-        fn copy(&self, id: &str) -> Value {
+        fn projected(&self, id: &str) -> super::row::FinalizedRow<'_> {
             let Some((row, confirmation)) = self.0.get(id) else {
-                return Value::Null;
+                return super::row::FinalizedRow::borrowed(&Value::Null);
             };
-            let mut row = (*row).clone();
-            row["_closed_confirmation_observation"] = confirmation.clone();
-            row
+            let mut projected = super::row::FinalizedRow::borrowed(row);
+            projected["_closed_confirmation_observation"] = confirmation.clone();
+            projected
         }
     }
     let mut rows = std::collections::HashMap::with_capacity(captured.len());
@@ -281,7 +281,14 @@ fn stage_with_row_source(
     input.insert("eligible".into(), Value::Array(eligible));
     input.insert(
         "events".into(),
-        records(stored::get(canonical, "events"), event)?,
+        records(
+            stored::get(canonical, "events"),
+            if matches!(stored::get(eligibility, "pool_barriers"), Py::List(barriers) if barriers.is_empty()) {
+                |_| Value::Null
+            } else {
+                event
+            },
+        )?,
     );
     input.insert(
         "pool_barriers".into(),

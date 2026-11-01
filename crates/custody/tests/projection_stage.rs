@@ -273,3 +273,70 @@ fn projection_unknown_surrogate_blocker_is_irrelevant() {
         .unwrap()
         .contains("\\ud800"));
 }
+
+#[test]
+fn projection_unused_event_fields_still_require_exact_admission() {
+    let cases: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/custody_projection_adapter.json"
+    ))
+    .unwrap();
+    let case = cases
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["case"] == "ordinary_rows")
+        .unwrap();
+    let snapshot: Snapshot = serde_json::from_value(case["input"].clone()).unwrap();
+    let interpreter = codec::from_json(&case["interpretation"]).unwrap();
+    for events in [
+        r#"{"events":[{"unused":"\ud800"}]}"#,
+        r#"{"events":[{"unused":NaN}]}"#,
+    ] {
+        let mut quantity = codec::from_json(&case["quantity"]).unwrap();
+        let Py::Dict(entries) = &mut quantity else {
+            panic!("quantity")
+        };
+        entries
+            .iter_mut()
+            .find(|(key, _)| *key == Key::Str("canonical_input".into()))
+            .unwrap()
+            .1 = codec::loads(events).unwrap();
+        assert_eq!(
+            runtime::stage(&snapshot, &quantity, &interpreter).unwrap_err(),
+            "ValueError"
+        );
+    }
+}
+
+#[test]
+fn projection_receipts_before_barrier_keep_event_order() {
+    let cases: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/custody_projection_adapter.json"
+    ))
+    .unwrap();
+    let case = cases
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["case"] == "barrier_held_receipt")
+        .unwrap();
+    let snapshot: Snapshot = serde_json::from_value(case["input"].clone()).unwrap();
+    let interpreter = codec::from_json(&case["interpretation"]).unwrap();
+    let mut quantity = case["quantity"].clone();
+    quantity["tax_eligibility"]["pool_barriers"][0][1][0] =
+        serde_json::json!("3000-01-01T00:00:00Z");
+    let result = runtime::stage(
+        &snapshot,
+        &codec::from_json(&quantity).unwrap(),
+        &interpreter,
+    )
+    .unwrap();
+    let Py::List(rows) = get(&result, "rows") else {
+        panic!("rows")
+    };
+    assert_eq!(rows.len(), 3);
+    assert!(rows
+        .iter()
+        .any(|row| get(row, "journal_transaction_id") == &Py::Str("other".into())));
+    assert_eq!(get(&result, "quarantines"), &Py::List(vec![]));
+}

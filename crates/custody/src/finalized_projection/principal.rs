@@ -8,16 +8,16 @@ pub fn slice_row(
     side: &str,
     fee: &BigInt,
 ) -> Result<Value, Error> {
-    slice_row_with_rows(observation, quantity, rows, side, fee)
+    slice_row_with_rows(observation, quantity, rows, side, fee).map(row::FinalizedRow::into_json)
 }
 
-pub(super) fn slice_row_with_rows(
+pub(super) fn slice_row_with_rows<'a>(
     observation: &Value,
     quantity: &Value,
-    rows: &dyn Rows,
+    rows: &'a dyn Rows,
     side: &str,
     fee: &BigInt,
-) -> Result<Value, Error> {
+) -> Result<row::FinalizedRow<'a>, Error> {
     let mut base = base_row_with_rows(observation, rows)?;
     let original = if codec::truth(&base["amount"]) {
         &base["amount"]

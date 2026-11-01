@@ -120,6 +120,20 @@ fn projection_reviewed_conversion_vectors() {
 }
 
 #[test]
+fn projection_without_reviewed_conversions_keeps_existing_pairs() {
+    let input = serde_json::json!({
+        "op":"conversions",
+        "rows":[],
+        "pairs":[{"pair_id":"existing","out_id":"source","in_id":"target","policy":"carrying-value"}],
+        "reviewed":[],
+    });
+    assert_eq!(
+        finalized_projection::primitive(&input),
+        serde_json::json!({"expected":input["pairs"]})
+    );
+}
+
+#[test]
 fn projection_quarantine_composition_vectors() {
     let cases: Value = serde_json::from_str(include_str!(
         "../../../tests/fixtures/custody_projection_quarantines.json"

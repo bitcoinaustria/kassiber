@@ -164,9 +164,9 @@ impl<'a> Quarantines<'a> {
             true,
         )
     }
-    pub(super) fn finish(
+    pub(super) fn finish<R: super::row::Fields>(
         &mut self,
-        rows: &[Value],
+        rows: &[R],
         receipts: &[Value],
         observations: &BTreeMap<String, &Value>,
     ) -> Result<(), String> {
@@ -232,9 +232,12 @@ impl<'a> Quarantines<'a> {
             }
             self.insert(&id, &reason, detail, false)?;
         }
+        if receipts.is_empty() {
+            return Ok(());
+        }
         let projected: BTreeSet<_> = rows
             .iter()
-            .map(|r| text(&r["journal_transaction_id"]))
+            .map(|r| text(r.field("journal_transaction_id")))
             .collect();
         let quarantined: BTreeSet<PyStr> = self.records.keys().map(|k| k.0.clone()).collect();
         for hash in receipts {

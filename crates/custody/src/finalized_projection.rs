@@ -12,6 +12,7 @@ mod money;
 mod payouts;
 mod principal;
 mod quarantines;
+mod row;
 pub mod runtime;
 pub use fees::FeeAllocation;
 pub use principal::slice_row;
@@ -64,15 +65,22 @@ fn text(value: &Value) -> String {
 
 /// Python's constructors deliberately validate rows before move-pair references.
 pub fn validate(rows: &[Value], pairs: &[Value]) -> Result<(), (&'static str, &'static str)> {
+    validate_rows(rows, pairs)
+}
+
+fn validate_rows<R: row::Fields>(
+    rows: &[R],
+    pairs: &[Value],
+) -> Result<(), (&'static str, &'static str)> {
     let mut ids: BTreeSet<String> = BTreeSet::new();
     for row in rows {
-        if !codec::truth(&row["custody_finalized_tax_projection"]) {
+        if !codec::truth(row.field("custody_finalized_tax_projection")) {
             return Err((
                 "TypeError",
                 "tax engines accept only finalized custody projection rows",
             ));
         }
-        let id = text(&row["id"]);
+        let id = text(row.field("id"));
         if id.is_empty() || !ids.insert(id) {
             return Err((
                 "ValueError",
@@ -158,11 +166,11 @@ fn chain_order(row: &Value) -> Result<Value, String> {
     )
 }
 
-pub(super) trait Rows {
+trait Rows {
     fn get(&self, id: &str) -> Option<&Value>;
 
-    fn copy(&self, id: &str) -> Value {
-        self.get(id).cloned().unwrap_or(Value::Null)
+    fn projected(&self, id: &str) -> row::FinalizedRow<'_> {
+        row::FinalizedRow::borrowed(self.row(id))
     }
 
     fn row(&self, id: &str) -> &Value {
@@ -181,10 +189,13 @@ impl Rows for Value {
 }
 
 pub fn base_row(observation: &Value, rows: &Value) -> Result<Value, Error> {
-    base_row_with_rows(observation, rows)
+    base_row_with_rows(observation, rows).map(row::FinalizedRow::into_json)
 }
 
-fn base_row_with_rows(observation: &Value, rows: &dyn Rows) -> Result<Value, Error> {
+fn base_row_with_rows<'a>(
+    observation: &Value,
+    rows: &'a dyn Rows,
+) -> Result<row::FinalizedRow<'a>, Error> {
     let id = text(&observation["transaction_id"]);
     let id = if rows.nonempty(&id) {
         id
@@ -192,9 +203,9 @@ fn base_row_with_rows(observation: &Value, rows: &dyn Rows) -> Result<Value, Err
         text(&observation["anchor_transaction_id"])
     };
     let mut result = if rows.nonempty(&id) {
-        rows.copy(&id)
+        rows.projected(&id)
     } else {
-        json!({})
+        row::FinalizedRow::borrowed(&Value::Null)
     };
     for field in [
         "fiat_value",
@@ -210,7 +221,7 @@ fn base_row_with_rows(observation: &Value, rows: &dyn Rows) -> Result<Value, Err
             money::Money::finite_field(&result[field], &label)?;
         }
     }
-    result["custody_chain_order"] = chain_order(&result)?;
+    result["custody_chain_order"] = chain_order(rows.row(&id))?;
     for key in ["wallet_id", "asset", "direction", "occurred_at"] {
         result[key] = observation[key].clone();
     }
@@ -230,15 +241,15 @@ pub fn fee_row(
     rows: &Value,
     side: &str,
 ) -> Result<Value, Error> {
-    fee_row_with_rows(observation, amount, rows, side)
+    fee_row_with_rows(observation, amount, rows, side).map(row::FinalizedRow::into_json)
 }
 
-fn fee_row_with_rows(
+fn fee_row_with_rows<'a>(
     observation: &Value,
     amount: &BigInt,
-    rows: &dyn Rows,
+    rows: &'a dyn Rows,
     side: &str,
-) -> Result<Value, Error> {
+) -> Result<row::FinalizedRow<'a>, Error> {
     let mut base = base_row_with_rows(observation, rows)?;
     if codec::truth(&observation["authoritative_chain_observation"])
         && observation["fee_attribution"] == "exact"
@@ -252,7 +263,7 @@ fn fee_row_with_rows(
     ));
     base["journal_transaction_id"] = observation["anchor_transaction_id"].clone();
     base["amount"] = json!(0);
-    base["fee"] = serde_json::from_str(&amount.to_string()).expect("exact computed integer");
+    base["fee"] = number(amount);
     base["fiat_value"] = Value::Null;
     base["fiat_value_exact"] = Value::Null;
     base["amount_includes_fee"] = json!(false);
@@ -272,6 +283,12 @@ fn integer_big(v: &Value) -> Result<BigInt, String> {
     BigInt::from_str(&value.to_string()).map_err(|_| "ValueError".into())
 }
 fn number(n: &BigInt) -> Value {
+    if let Ok(n) = i64::try_from(n) {
+        return Value::from(n);
+    }
+    if let Ok(n) = u64::try_from(n) {
+        return Value::from(n);
+    }
     serde_json::from_str(&n.to_string()).expect("exact integer")
 }
 

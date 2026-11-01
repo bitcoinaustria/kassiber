@@ -120,6 +120,9 @@ fn orders(events: &Value) -> BTreeMap<String, Vec<String>> {
     result
 }
 fn held(o: &Value, v: &Value, orders: &BTreeMap<String, Vec<String>>) -> bool {
+    if array(&v["pool_barriers"]).is_empty() {
+        return false;
+    }
     let Some(b) = barrier(o, v) else {
         return false;
     };
@@ -129,7 +132,7 @@ fn held(o: &Value, v: &Value, orders: &BTreeMap<String, Vec<String>>) -> bool {
     let b: Vec<String> = array(&b).iter().map(string).collect();
     order[0] > b[0] || (order[0] == b[0] && *order != b)
 }
-fn privacy(row: &Value) -> bool {
+fn privacy(row: &row::FinalizedRow<'_>) -> bool {
     matches!(
         text(&row["privacy_boundary"])
             .py_strip()
@@ -158,6 +161,7 @@ pub(super) fn evaluate_with_rows(
 ) -> Result<Py, Error> {
     use super::fee_row_with_rows as fee_row;
     use super::principal::slice_row_with_rows as slice_row;
+    let selection_span = crate::timing::span("finalized.select");
     let finalize = v["op"] == "finalize";
     let payouts = if v["op"] == "compose" || finalize {
         payouts::valid(&v["payouts"], rows)?
@@ -343,7 +347,11 @@ pub(super) fn evaluate_with_rows(
             )?;
             let input = settlement[0].clone();
             cross.push(json!({"pair_id":format!("direct-payout:{}",string(&payout["id"])),"component_id":null,"kind":if codec::truth(&payout["kind"]) {payout["kind"].clone()} else {json!("direct-swap-payout")},"policy":"carrying-value","out_id":out["id"],"in_id":input["id"],"out_transaction_id":source["anchor_transaction_id"],"in_transaction_id":null,"out_asset":source["asset"],"in_asset":asset}));
-            projected.extend([out, input, settlement[1].clone()]);
+            projected.extend([
+                out,
+                row::FinalizedRow::owned(input),
+                row::FinalizedRow::owned(settlement[1].clone()),
+            ]);
             continue;
         }
         let mut row = slice_row(source, &d["source"], rows, "external", &fees.raw(source)?)?;
@@ -354,7 +362,7 @@ pub(super) fn evaluate_with_rows(
         }
         let amount =
             integer_big(&d["source"]["end_msat"])? - integer_big(&d["source"]["start_msat"])?;
-        projected.push(payouts::price(row, payout, &amount)?);
+        projected.push(payouts::price_row(row, payout, &amount)?);
     }
     // Index the complete decision population once, including unselected targets.
     // Re-scanning it for every receipt makes finalization quadratic.
@@ -421,34 +429,40 @@ pub(super) fn evaluate_with_rows(
     }
     projected.sort_by_cached_key(|r| (string(&r["occurred_at"]), string(&r["id"])));
     moves.sort_by_key(string);
+    drop(selection_span);
     if finalize {
         quarantines.finish(&projected, &barrier_receipts, &observations)?;
-        // The operand json! would build, with the rows lent rather than copied.
-        let mut operand = serde_json::Map::new();
-        operand.insert("rows".into(), Value::Array(projected));
-        operand.insert("pairs".into(), Value::Array(cross));
-        operand.insert("reviewed".into(), json!(array(&v["reviewed"])));
-        let mut operand = Value::Object(operand);
-        cross = super::conversions::evaluate(&operand)?
-            .as_array()
-            .expect("conversion array")
-            .clone();
-        let Value::Array(projected) = operand["rows"].take() else {
-            unreachable!("lent rows")
-        };
+        cross = super::conversions::evaluate_rows(&projected, cross, array(&v["reviewed"]))?;
         let quarantines = quarantines.sorted()?;
-        validate(&projected, &intra).map_err(|(family, _)| family.to_owned())?;
-        let mut result = serde_json::Map::new();
-        result.insert("$type".into(), json!("FinalizedTaxProjection"));
-        result.insert("rows".into(), Value::Array(projected));
-        result.insert("intra_pairs".into(), Value::Array(intra));
-        result.insert("cross_asset_pairs".into(), Value::Array(cross));
-        result.insert("selected_move_ids".into(), Value::Array(moves));
-        let mut result = into_python(Value::Object(result))?;
+        validate_rows(&projected, &intra).map_err(|(family, _)| family.to_owned())?;
+        let _span = crate::timing::span("finalized.emit");
+        let rows = projected
+            .into_iter()
+            .map(row::FinalizedRow::into_python)
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut result = Py::Dict(vec![
+            (
+                kassiber_pyjson::Key::Str("$type".into()),
+                Py::Str("FinalizedTaxProjection".into()),
+            ),
+            (
+                kassiber_pyjson::Key::Str("cross_asset_pairs".into()),
+                into_python(Value::Array(cross))?,
+            ),
+            (
+                kassiber_pyjson::Key::Str("intra_pairs".into()),
+                into_python(Value::Array(intra))?,
+            ),
+            (kassiber_pyjson::Key::Str("rows".into()), Py::List(rows)),
+            (
+                kassiber_pyjson::Key::Str("selected_move_ids".into()),
+                into_python(Value::Array(moves))?,
+            ),
+        ]);
         crate::graph::stored::put(&mut result, "quarantines", Py::List(quarantines));
         return Ok(result);
     }
-    validate(&projected, &intra).map_err(|(family, _)| family.to_owned())?;
+    validate_rows(&projected, &intra).map_err(|(family, _)| family.to_owned())?;
     Ok(codec::from_json(
         &json!({"rows":projected,"intra_pairs":intra,"cross_asset_pairs":cross,"selected_move_ids":moves,"barrier_held_receipts":barrier_receipts,"blocked_transaction_ids":closure["blocked"]}),
     )?)
@@ -457,7 +471,7 @@ pub(super) fn evaluate_with_rows(
 // The compiler owns its completed JSON tree. Move its strings and container
 // storage into the existing Python-value output instead of copying that tree
 // and then immediately destroying the original. Scalar admission stays shared.
-fn into_python(value: Value) -> Result<Py, String> {
+pub(super) fn into_python(value: Value) -> Result<Py, String> {
     if codec::raw_bytes(&value).is_some() || codec::escaped_dict(&value).is_some() {
         return codec::from_json(&value);
     }

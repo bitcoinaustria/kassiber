@@ -375,7 +375,15 @@ pub(super) fn settlement(obs: &Value, payout: &Value, rows: &dyn Rows) -> Result
     base["kind"] = json!("sell");
     Ok(json!([inbound, base]))
 }
-pub(super) fn price(mut row: Value, payout: &Value, amount: &BigInt) -> Result<Value, String> {
+pub(super) fn price(row: Value, payout: &Value, amount: &BigInt) -> Result<Value, String> {
+    price_row(row::FinalizedRow::owned(row), payout, amount).map(row::FinalizedRow::into_json)
+}
+
+pub(super) fn price_row<'a>(
+    mut row: row::FinalizedRow<'a>,
+    payout: &Value,
+    amount: &BigInt,
+) -> Result<row::FinalizedRow<'a>, String> {
     if !empty(&payout["payout_fiat_value"]) && amount > &BigInt::from(0) {
         let value = Money::finite(&payout["payout_fiat_value"])?;
         let rate = value.rate(amount)?;

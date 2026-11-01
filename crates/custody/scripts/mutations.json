@@ -20296,7 +20296,7 @@
   {
     "id": "projection-row-marker",
     "file": "crates/custody/src/finalized_projection.rs",
-    "find": "if !codec::truth(&row[\"custody_finalized_tax_projection\"]) {",
+    "find": "if !codec::truth(row.field(\"custody_finalized_tax_projection\")) {",
     "replace": "if false {",
     "expect_failing": [
       "projection_contract_vectors"
@@ -20466,7 +20466,7 @@
   {
     "id": "projection-base-order",
     "file": "crates/custody/src/finalized_projection.rs",
-    "find": "result[\"custody_chain_order\"] = chain_order(&result)?;",
+    "find": "result[\"custody_chain_order\"] = chain_order(rows.row(&id))?;",
     "replace": "result[\"custody_chain_order\"] = Value::Null;",
     "expect_failing": [
       "projection_fee_row_vectors"
@@ -20476,8 +20476,8 @@
   {
     "id": "projection-base-copy",
     "file": "crates/custody/src/finalized_projection.rs",
-    "find": "rows.copy(&id)",
-    "replace": "json!({})",
+    "find": "rows.projected(&id)",
+    "replace": "row::FinalizedRow::borrowed(&Value::Null)",
     "expect_failing": [
       "projection_base_row_vectors"
     ],
@@ -20566,8 +20566,8 @@
   {
     "id": "projection-fee-amount",
     "file": "crates/custody/src/finalized_projection.rs",
-    "find": "serde_json::from_str(&amount.to_string()).expect(\"exact computed integer\")",
-    "replace": "json!(1)",
+    "find": "base[\"fee\"] = number(amount);",
+    "replace": "base[\"fee\"] = json!(1);",
     "expect_failing": [
       "projection_fee_row_vectors"
     ],
@@ -21646,8 +21646,8 @@
   {
     "id": "projection4-row-anchor",
     "file": "crates/custody/src/finalized_projection/conversions.rs",
-    "find": "text(&row[\"journal_transaction_id\"])",
-    "replace": "text(&row[\"id\"])",
+    "find": "text(row.field(\"journal_transaction_id\"))",
+    "replace": "text(row.field(\"id\"))",
     "expect_failing": [
       "projection_reviewed_conversion_vectors"
     ],
@@ -21676,8 +21676,8 @@
   {
     "id": "projection4-row-amount",
     "file": "crates/custody/src/finalized_projection/conversions.rs",
-    "find": "integer_big(&row[\"amount\"])",
-    "replace": "integer_big(&row[\"fee\"])",
+    "find": "integer_big(row.field(\"amount\"))",
+    "replace": "integer_big(row.field(\"fee\"))",
     "expect_failing": [
       "projection_reviewed_conversion_vectors"
     ],
@@ -21686,8 +21686,8 @@
   {
     "id": "projection4-direction",
     "file": "crates/custody/src/finalized_projection/conversions.rs",
-    "find": "row[\"direction\"] == direction",
-    "replace": "row[\"direction\"] != direction",
+    "find": "row.field(\"direction\") == direction",
+    "replace": "row.field(\"direction\") != direction",
     "expect_failing": [
       "projection_reviewed_conversion_vectors"
     ],
@@ -21696,8 +21696,8 @@
   {
     "id": "projection4-out-asset",
     "file": "crates/custody/src/finalized_projection/conversions.rs",
-    "find": "&out[\"asset\"]",
-    "replace": "&input[\"asset\"]",
+    "find": "out.field(\"asset\")",
+    "replace": "input.field(\"asset\")",
     "expect_failing": [
       "projection_reviewed_conversion_vectors"
     ],
@@ -21706,8 +21706,8 @@
   {
     "id": "projection4-in-asset",
     "file": "crates/custody/src/finalized_projection/conversions.rs",
-    "find": "&input[\"asset\"]",
-    "replace": "&out[\"asset\"]",
+    "find": "input.field(\"asset\")",
+    "replace": "out.field(\"asset\")",
     "expect_failing": [
       "projection_reviewed_conversion_vectors"
     ],
@@ -21986,8 +21986,8 @@
   {
     "id": "projection6-receipt-anchor-field",
     "file": "crates/custody/src/finalized_projection/quarantines.rs",
-    "find": "text(&r[\"journal_transaction_id\"])",
-    "replace": "text(&r[\"id\"])",
+    "find": "text(r.field(\"journal_transaction_id\"))",
+    "replace": "text(r.field(\"id\"))",
     "expect_failing": [
       "projection_quarantine_composition_vectors"
     ],
@@ -22206,7 +22206,7 @@
   {
     "id": "projection8-events",
     "file": "crates/custody/src/finalized_projection/runtime.rs",
-    "find": "    input.insert(\n        \"events\".into(),\n        records(stored::get(canonical, \"events\"), event)?,\n    );",
+    "find": "    input.insert(\n        \"events\".into(),\n        records(\n            stored::get(canonical, \"events\"),\n            if matches!(stored::get(eligibility, \"pool_barriers\"), Py::List(barriers) if barriers.is_empty()) {\n                |_| Value::Null\n            } else {\n                event\n            },\n        )?,\n    );",
     "replace": "    input.insert(\"events\".into(), json!([]));",
     "expect_failing": [
       "projection_adapter_input_families"
@@ -23287,8 +23287,8 @@
   {
     "id": "projection-borrowed-confirmation",
     "file": "crates/custody/src/finalized_projection/runtime.rs",
-    "find": "row[\"_closed_confirmation_observation\"] = confirmation.clone();",
-    "replace": "row[\"_closed_confirmation_observation\"] = Value::Null;",
+    "find": "projected[\"_closed_confirmation_observation\"] = confirmation.clone();",
+    "replace": "projected[\"_closed_confirmation_observation\"] = Value::Null;",
     "expect_failing": [
       "projection_borrowed_rows_match_materialized_rows"
     ],
@@ -23363,6 +23363,106 @@
       "embedded_json_readers_keep_conversion_and_mutation_isolation"
     ],
     "rule": "Shared transfer parses retain nonfinite identity separately from generic object conversions."
+  },
+  {
+    "id": "projection-row-overlay-source",
+    "file": "crates/custody/src/finalized_projection/row.rs",
+    "find": "self.overrides.get(key).or_else(|| self.source.get(key))",
+    "replace": "self.source.get(key)",
+    "expect_failing": [
+      "finalized_borrowed_rows_preserve_overrides_and_source_bytes"
+    ],
+    "rule": "Generated projection fields override source fields without changing the source row."
+  },
+  {
+    "id": "projection-row-overlay-null",
+    "file": "crates/custody/src/finalized_projection/row.rs",
+    "find": "super::composition::into_python(overrides.next().unwrap().1)?",
+    "replace": "{ let _ = overrides.next(); codec::from_json(value)? }",
+    "expect_failing": [
+      "finalized_borrowed_rows_preserve_overrides_and_source_bytes"
+    ],
+    "rule": "An explicit generated null replaces a populated source field during direct output emission."
+  },
+  {
+    "id": "projection-row-overlay-new",
+    "file": "crates/custody/src/finalized_projection/row.rs",
+    "find": "let (name, value) = overrides.next().unwrap();",
+    "replace": "let (name, _) = overrides.next().unwrap(); let value = Value::Null;",
+    "expect_failing": [
+      "finalized_borrowed_rows_preserve_overrides_and_source_bytes"
+    ],
+    "rule": "Generated fields before an existing source key retain their values during ordered emission."
+  },
+  {
+    "id": "projection-row-overlay-tail",
+    "file": "crates/custody/src/finalized_projection/row.rs",
+    "find": "for (key, value) in overrides {",
+    "replace": "for (key, value) in overrides.take(0) {",
+    "expect_failing": [
+      "finalized_borrowed_rows_preserve_overrides_and_source_bytes"
+    ],
+    "rule": "Generated fields after the final source key remain in finalized output."
+  },
+  {
+    "id": "projection-row-overlay-missing",
+    "file": "crates/custody/src/finalized_projection/row.rs",
+    "find": "for (key, value) in overrides {\n            fields.push((",
+    "replace": "for (key, value) in overrides {\n            if source.is_none() { continue; }\n            fields.push((",
+    "expect_failing": [
+      "finalized_rows_without_source_keep_generated_fields"
+    ],
+    "rule": "A generated row without an observed source retains every generated field."
+  },
+  {
+    "id": "projection-empty-conversion-pairs",
+    "file": "crates/custody/src/finalized_projection/conversions.rs",
+    "find": "if reviewed.is_empty() {\n        return Ok(pairs);\n    }",
+    "replace": "if reviewed.is_empty() {\n        return Ok(Vec::new());\n    }",
+    "expect_failing": [
+      "projection_without_reviewed_conversions_keeps_existing_pairs"
+    ],
+    "rule": "Skipping an absent reviewed-conversion population preserves existing cross-asset pairs."
+  },
+  {
+    "id": "projection-empty-barriers",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "if array(&v[\"pool_barriers\"]).is_empty() {\n        return false;\n    }",
+    "replace": "if array(&v[\"pool_barriers\"]).is_empty() {\n        return true;\n    }",
+    "expect_failing": [
+      "projection_selected_composition_vectors"
+    ],
+    "rule": "An absent pool barrier cannot hold any receipt or fee."
+  },
+  {
+    "id": "projection-event-order-needed",
+    "file": "crates/custody/src/finalized_projection/runtime.rs",
+    "find": "Py::List(barriers) if barriers.is_empty()",
+    "replace": "Py::List(barriers) if !barriers.is_empty()",
+    "expect_failing": [
+      "projection_receipts_before_barrier_keep_event_order"
+    ],
+    "rule": "Event-order operands are materialized whenever a pool barrier needs receipt ordering."
+  },
+  {
+    "id": "projection-quarantine-receipts-needed",
+    "file": "crates/custody/src/finalized_projection/quarantines.rs",
+    "find": "if receipts.is_empty() {\n            return Ok(());\n        }",
+    "replace": "if !receipts.is_empty() {\n            return Ok(());\n        }",
+    "expect_failing": [
+      "projection_quarantine_composition_vectors"
+    ],
+    "rule": "Projected-anchor indexes may be skipped only when no held receipt needs a diagnostic."
+  },
+  {
+    "id": "projection-unused-events-exact",
+    "file": "crates/custody/src/finalized_projection/runtime.rs",
+    "find": "if !matches!(value, Py::List(_)) || !codec::lossless(value) {",
+    "replace": "if !matches!(value, Py::List(_)) {",
+    "expect_failing": [
+      "projection_unused_event_fields_still_require_exact_admission"
+    ],
+    "rule": "Unused event operands still receive the original complete exact-value admission before field selection."
   },
   {
     "id": "R4-evidence-alias-slot-index",
