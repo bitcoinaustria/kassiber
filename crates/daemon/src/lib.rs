@@ -215,11 +215,20 @@ pub fn serve(
 /// Why handling a request stopped short of a response.
 enum Failure {
     App(AppError),
+    Unhandled(AppError),
     Closed,
 }
 
 impl From<AppError> for Failure {
     fn from(error: AppError) -> Self {
+        Failure::App(error)
+    }
+}
+
+fn report_failure(kind: &str, error: AppError) -> Failure {
+    if kind == "ui.reports.privacy_hygiene" && error.code == "internal_error" {
+        Failure::Unhandled(error)
+    } else {
         Failure::App(error)
     }
 }
@@ -299,6 +308,20 @@ fn request_error_envelope(error: &AppError, request: &Value) -> Value {
         _ => None,
     });
     app_error_envelope(error, &RequestId::or_null(request), kind)
+}
+
+fn unhandled_error_envelope(error: &AppError, request_id: &RequestId) -> Value {
+    let mut record = app_error_envelope(error, request_id, None);
+    if let Value::Dict(fields) = &mut record {
+        if let Some((_, Value::Dict(fields))) =
+            fields.iter_mut().find(|(k, _)| *k == "error".into())
+        {
+            if let Some((_, debug)) = fields.iter_mut().find(|(k, _)| *k == "debug".into()) {
+                *debug = s("");
+            }
+        }
+    }
+    record
 }
 
 /// `_locked_envelope(scope, label, request_id)`.
@@ -485,6 +508,16 @@ impl Daemon {
                     self.rollback();
                     (Some(request_error_envelope(&error, &request)), false)
                 }
+                Ok(Err(Failure::Unhandled(error))) => {
+                    self.rollback();
+                    (
+                        Some(unhandled_error_envelope(
+                            &error,
+                            &RequestId::or_null(&request),
+                        )),
+                        false,
+                    )
+                }
                 Err(panic) => {
                     self.rollback();
                     let message = panic
@@ -647,7 +680,8 @@ impl Daemon {
             if let Some(locked) = self.open_lazily(&request_id)? {
                 return Ok((Some(locked), false));
             }
-            let payload = reports::execute(self.book_mut()?.as_mut(), &kind_text, args.as_ref())?;
+            let payload = reports::execute(self.book_mut()?.as_mut(), &kind_text, args.as_ref())
+                .map_err(|error| report_failure(&kind_text, error))?;
             return Ok((
                 Some(with_request_id(success(&kind_text, payload), &request_id)),
                 false,
@@ -1358,5 +1392,73 @@ mod source_funds_diagnostic_tests {
                 app_error_envelope(&error, &RequestId::or_null(&request), None)
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod diagnostic_tests {
+    use super::*;
+
+    #[test]
+    fn corrupt_marker_daemon_classifies_only_unhandled_hygiene_failures() {
+        for kind in [
+            "ui.reports.privacy_hygiene",
+            "ui.reports.summary",
+            "ui.reports.privacy_mirror",
+        ] {
+            for code in ["internal_error", "validation", "database_busy", "app_error"] {
+                let failure = report_failure(kind, AppError::new(code, "failure"));
+                assert_eq!(
+                    matches!(failure, Failure::Unhandled(_)),
+                    kind == "ui.reports.privacy_hygiene" && code == "internal_error"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn corrupt_marker_native_debug_preserves_every_non_debug_field() {
+        let error = AppError::new(
+            "internal_error",
+            "invalid literal for int() with base 10: 'bad'",
+        );
+        for id in [
+            RequestId::Missing,
+            RequestId::Value(Value::Null),
+            RequestId::Value(s("request")),
+        ] {
+            let mut expected = app_error_envelope(&error, &id, None);
+            let native = unhandled_error_envelope(&error, &id);
+            let Value::Dict(fields) = &mut expected else {
+                panic!()
+            };
+            let (_, Value::Dict(fields)) = fields
+                .iter_mut()
+                .find(|(k, _)| *k == "error".into())
+                .unwrap()
+            else {
+                panic!()
+            };
+            let (_, debug) = fields
+                .iter_mut()
+                .find(|(k, _)| *k == "debug".into())
+                .unwrap();
+            assert_eq!(*debug, Value::Null);
+            *debug = s("");
+            assert_eq!(native, expected);
+            assert_eq!(
+                kassiber_envelope::daemon_line(&native).unwrap(),
+                kassiber_envelope::daemon_line(&expected).unwrap()
+            );
+        }
+        let typed = app_error_envelope(
+            &AppError::new("validation", "typed refusal"),
+            &RequestId::Missing,
+            None,
+        );
+        assert_eq!(
+            get(get(&typed, "error").unwrap(), "debug"),
+            Some(&Value::Null)
+        );
     }
 }

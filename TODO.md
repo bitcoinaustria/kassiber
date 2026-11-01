@@ -460,9 +460,12 @@ registers them; exit-tax preserves its reference no-registration boundary.
   compares exact wire output and all 112 tables with zero in-scope hybrid
   fallback; see the
   [privacy checkpoint](docs/reference/rust-shell.md#privacy-hygiene-checkpoint-r5-reports-privacy-partial).
-- [ ] Close the configuration hygiene corrupt-marker daemon diagnostic gap:
-  typed errors match, but Python emits a traceback in stderr and `error.debug`
-  while Rust omits it. Full daemon wire acceptance remains incomplete.
+- [x] Close the configuration hygiene corrupt-marker daemon diagnostic gap
+  under plan 21's native diagnostic contract: unhandled debug strings are empty,
+  typed errors retain null, and every non-debug response byte matches Python.
+  Six sessions cover all three markers with and without `--debug`, preserving
+  all 112 tables with zero fallbacks; see the
+  [diagnostic checkpoint](docs/reference/rust-shell.md#corrupt-marker-daemon-diagnostics-r5-privacy-continuation).
 - [ ] Port Privacy Mirror and the reduced PSBT privacy report through their
   shared observation index, public-observer analytics, parser, categorical
   features and inventory overlays before registering CLI/daemon reads. Preserve

@@ -14,8 +14,8 @@ fn privacy_hygiene_frozen_oracle_matches_unchanged_python() {
 }
 
 #[test]
-fn privacy_hygiene_corrupt_daemon_marker_reproduces_reference_debug_gap() {
-    reference(DEBUG_GAP);
+fn privacy_hygiene_corrupt_daemon_markers_preserve_native_debug_contract() {
+    reference(NATIVE_DEBUG);
 }
 
 fn reference(script: &str) {
@@ -155,7 +155,7 @@ conn.close()
 print(json.dumps({'unchanged_python_cases': len(cases), 'tables_per_comparison': 112}, sort_keys=True))
 "#;
 
-const DEBUG_GAP: &str = r#"
+const NATIVE_DEBUG: &str = r#"
 import json, os
 from pathlib import Path
 import pytest
@@ -163,29 +163,45 @@ from tests.test_rust_report_exports import _book, _dump
 from kassiber.db import open_db
 
 root = Path(os.environ['KASSIBER_PRIVACY_SCRATCH'])
-with pytest.MonkeyPatch.context() as monkey:
-    data, _, env, call = _book(root, monkey, 'generic', 'FIFO')
-    assert call('--machine', 'status', reference=True).returncode == 0
-    conn = open_db(data)
-    conn.execute("UPDATE profiles SET journal_input_version='bad' WHERE id='p'")
-    conn.commit()
-    conn.close()
-    before = _dump(data, {})
-    assert len(before) == 112
-    wire = b'{"request_id":1,"kind":"ui.reports.privacy_hygiene"}\n'
-    expected = call('daemon', reference=True, wire=wire)
-    actual = call('daemon', wire=wire)
-    assert actual.returncode == expected.returncode == 0
-    expected_error = json.loads(expected.stdout.splitlines()[-1])['error']
-    actual_error = json.loads(actual.stdout.splitlines()[-1])['error']
-    assert expected_error['code'] == actual_error['code'] == 'internal_error'
-    assert expected_error['message'] == actual_error['message'] == "invalid literal for int() with base 10: 'bad'"
-    assert 'Traceback' in expected_error['debug']
-    assert b'Traceback' in expected.stderr
-    assert actual_error['debug'] is None
-    assert actual.stderr == b''
-    assert _dump(data, {}) == before
-    log = [json.loads(line) for line in Path(env['KASSIBER_HYBRID_LOG']).read_text().splitlines()]
-    assert len(log) == 1 and log[0]['served_by'] == 'rust', log
-print('Known gap reproduced: corrupt-marker daemon traceback/debug bytes differ; not a wire-parity pass.')
+sessions = 0
+for field in ('journal_input_version', 'last_processed_input_version', 'last_processed_tx_count'):
+    for flags in ((), ('--debug',)):
+        base = root / (field + ('-debug' if flags else '-ordinary'))
+        base.mkdir()
+        with pytest.MonkeyPatch.context() as monkey:
+            data, _, env, call = _book(base, monkey, 'generic', 'FIFO')
+            assert call('--machine', 'status', reference=True).returncode == 0
+            conn = open_db(data)
+            conn.execute(f"UPDATE profiles SET {field}='bad' WHERE id='p'")
+            conn.commit()
+            conn.close()
+            before = _dump(data, {})
+            assert len(before) == 112
+            wire = b'{"request_id":1,"kind":"ui.reports.privacy_hygiene","args":{"unknown":true}}\n{"request_id":2,"kind":"ui.reports.privacy_hygiene"}\n{"request_id":3,"kind":"ui.reports.privacy_hygiene","args":false}\n'
+            expected = call(*flags, 'daemon', reference=True, wire=wire)
+            actual = call(*flags, 'daemon', wire=wire)
+            assert actual.returncode == expected.returncode == 0
+            expected_lines = expected.stdout.splitlines(keepends=True)
+            actual_lines = actual.stdout.splitlines(keepends=True)
+            assert len(expected_lines) == len(actual_lines) == 4
+            for index in (1, 3):
+                assert actual_lines[index] == expected_lines[index]
+                assert json.loads(actual_lines[index])['error']['debug'] is None
+            expected_error = json.loads(expected_lines[2])['error']
+            actual_error = json.loads(actual_lines[2])['error']
+            assert expected_error['code'] == actual_error['code'] == 'internal_error'
+            assert expected_error['message'] == actual_error['message'] == "invalid literal for int() with base 10: 'bad'"
+            assert isinstance(expected_error['debug'], str) and 'ValueError' in expected_error['debug']
+            assert actual_error['debug'] == ''
+            debug_bytes = json.dumps(expected_error['debug'], ensure_ascii=False).encode()
+            assert expected_lines[2].count(debug_bytes) == 1
+            assert actual_lines[2] == expected_lines[2].replace(debug_bytes, b'""', 1)
+            assert expected.stderr.startswith(b'Traceback (most recent call last):\n')
+            assert expected.stderr.endswith(b"ValueError: invalid literal for int() with base 10: 'bad'\n")
+            assert actual.stderr == b''
+            assert _dump(data, {}) == before
+            log = [json.loads(line) for line in Path(env['KASSIBER_HYBRID_LOG']).read_text().splitlines()]
+            assert len(log) == 1 and log[0]['served_by'] == 'rust', log
+            sessions += 1
+print(json.dumps({'native_debug_sessions': sessions, 'hygiene_requests': sessions * 3, 'python_fallbacks': 0, 'tables_per_comparison': 112}, sort_keys=True))
 "#;

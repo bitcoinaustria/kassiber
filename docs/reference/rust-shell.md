@@ -12397,11 +12397,14 @@ and daemon session, with no report writes or in-scope hybrid fallback.
 | `reports.privacy-hygiene` | 48 | 0 |
 | Daemon sessions (40 hygiene requests) | 5 | 0 |
 
-The separate corrupt-marker diagnostic reproduction runs one additional native
-daemon session, excluded from the parity counts above. All three process/oracle
-tests pass, including the 208-case unchanged-Python oracle.
+The initial corrupt-marker diagnostic reproduction ran one additional native
+daemon session, excluded from the parity counts above. The
+[diagnostic continuation](#corrupt-marker-daemon-diagnostics-r5-privacy-continuation)
+replaces that reproduction with six accepted native-diagnostic sessions. All
+three process/oracle tests pass, including the 208-case unchanged-Python oracle.
 
-The report mutation catalog has 755 applicable entries. All 36 new
+At the initial checkpoint, the report mutation catalog had 755 applicable
+entries. All 36 new
 `privacy-r5-*` entries are killed by these named tests:
 
 | Named test | New mutations killed |
@@ -12447,12 +12450,11 @@ mise exec rust@1.99.1 uv@latest -- env CARGO_BUILD_JOBS=8 \
   --test privacy_reports -- --nocapture
 ```
 
-The corrupt-marker daemon case is an explicit acceptance gap. Typed code and
-message agree, but Python emits a traceback to stderr and `error.debug`; Rust
-emits no traceback and returns `debug: null`. The named
-`privacy_hygiene_corrupt_daemon_marker_reproduces_reference_debug_gap` test pins
-that difference. It is not counted as a raw-wire parity pass. No fabricated
-Python stack trace or diagnostic normalization hides the gap.
+At `4014edb6f`, corrupt-marker daemon failures retained an explicit acceptance
+gap: Rust returned `debug: null` where Python included a traceback string. The
+[diagnostic continuation](#corrupt-marker-daemon-diagnostics-r5-privacy-continuation)
+closes that gap with honest native diagnostics and exact non-debug response
+bytes. It does not claim raw Python traceback or stderr parity.
 
 Native inventory after this branch alone is 154 CLI leaves, including 22 report
 commands, and 15 report daemon kinds plus two transaction export kinds. AI
@@ -12485,8 +12487,9 @@ the shared v0/v2 parser, framing/UTXO/locktime checks, categorical features,
 inventory/linkage overlay, redaction and CLI/file/daemon input parity. Signing,
 broadcasting and spending keys stay outside the watch-only boundary. The
 separate legacy `ui.privacy_hygiene.snapshot` scorer is also unported; this
-checkpoint covers the configuration report only. Full corrupt-marker daemon
-diagnostic parity remains outstanding in addition to those two report families.
+checkpoint covers the configuration report only. The corrupt-marker diagnostic
+gap is closed by the native diagnostic continuation below.
+
 ## Lightning profitability preparation checkpoint (R5, incomplete)
 
 `t3code/r5-reports-lightning` starts at `9338364db`, the cross-check checkpoint.
@@ -13411,3 +13414,72 @@ and process/book-bound handles. PSBT still needs the shared v0/v2 parser,
 framing/UTXO/locktime validation, inventory/linkage overlay, redaction and
 CLI/file/daemon acceptance. The separate legacy scorer remains Python.
 Signing, broadcasting and spending keys remain outside this port.
+
+## Corrupt-marker daemon diagnostics (R5 privacy continuation)
+
+The configuration-hygiene daemon preserves Python's unhandled diagnostic field
+under plan 21's native runtime exception. An `internal_error` from
+`ui.reports.privacy_hygiene` returns `error.debug: ""`, an honest zero-frame native
+diagnostic. Python emits a sanitized traceback string for this unhandled daemon
+failure with or without global `--debug`, so Rust preserves a string in both
+modes. Typed refusals retain `debug: null`. This conversion does not change
+other daemon kinds or the existing CLI debug contract.
+
+The native helper reuses the ordered, redacted ordinary error envelope and
+changes only its existing debug value. It emits no stderr traceback, native
+frame paths or locals, and invents no Python frames. The request loop rolls
+back before returning the error and continues serving subsequent requests.
+There is no new egress, storage write, logging sink or AI disclosure.
+
+`privacy_hygiene_corrupt_daemon_markers_preserve_native_debug_contract` tests
+`journal_input_version`, `last_processed_input_version` and
+`last_processed_tx_count`, each with and without `--debug`. Every session sends
+a typed unknown-field refusal, an unhandled corrupt-marker read and a typed
+non-object refusal. The oracle replaces exactly the JSON-encoded Python debug
+string with the empty native string; every other response byte, including line
+endings, matches. Typed replies match without normalization. Python's traceback
+stderr is asserted separately; native stderr is empty. Ready handshakes remain
+excluded, as in the inherited report process oracle. Each session compares all
+112 database tables before and after and proves native hybrid routing.
+
+| Dedicated hygiene routing after this continuation | Rust | Python fallback |
+| --- | ---: | ---: |
+| `reports.privacy-hygiene` CLI calls | 48 | 0 |
+| Ordinary daemon sessions (40 requests) | 5 | 0 |
+| Corrupt-marker daemon sessions (18 requests) | 6 | 0 |
+
+All three hygiene process/oracle tests pass, including the unchanged 208-case
+service oracle. The report mutation catalog has 758 applicable entries; the
+three additions are killed by these named tests:
+
+| Mutation | Named killer |
+| --- | --- |
+| `privacy-r5-native-debug-presence` | `corrupt_marker_native_debug_preserves_every_non_debug_field` |
+| `privacy-r5-native-debug-kind` | `corrupt_marker_daemon_classifies_only_unhandled_hygiene_failures` |
+| `privacy-r5-native-debug-class` | `corrupt_marker_daemon_classifies_only_unhandled_hygiene_failures` |
+
+Both named selections pass unmutated. The unchanged shared scratch checker
+compiles each mutation and requires an actual failing named selection; build
+errors and empty selections count as no kills. All three are killed. The 755
+inherited report recipes retain their earlier evidence and are not rerun.
+`target/r5-privacy-2/mutation-summary.json` maps all 47 feature and three
+diagnostic mutations to their killers; command logs and
+`verification-summary.json` retain the local evidence. Owned verification and
+mutation build trees are removed after summarizing.
+
+Native inventory remains 154 CLI leaves (22 reports) and 15 report daemon kinds
+plus two transaction exports. Mirror, PSBT and the separate legacy scorer add
+zero accepted product reads and remain unregistered. Their shared feature
+prerequisite above is complete; their engine/parser/overlay and process
+acceptance remain outstanding. AI projections and all Python product files
+remain unchanged. No dependency, lockfile or schema changes are introduced.
+
+Local Rust 1.99.1 offline/locked checks pass workspace formatting, production
+and test-harness workspace/all-target Clippy with `-D warnings`, all 131 tests
+in the selected report/CLI/daemon targets, five feature tests and three hygiene
+process/oracle tests (139 Rust tests total). Locked Python 3.11.17 passes all
+four feature-oracle tests without skips. The required classifier update and
+`python scripts/python_test_shards.py run preflight --ci` pass all 57 preflight
+tests without skips. The classifier retains 5,712 definitions. Verification is
+Linux-only; the full workspace test run, full Python/frontend quality gate and
+packaged/platform gates are not run. No push-ready claim is made.

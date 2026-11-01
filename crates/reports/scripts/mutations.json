@@ -8531,6 +8531,36 @@
     "rule": "The daemon configuration privacy hygiene kind must reject unsupported arguments."
   },
   {
+    "id": "privacy-r5-native-debug-presence",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "*debug = s(\"\");\n            }",
+    "replace": "*debug = Value::Null;\n            }",
+    "expect_failing": [
+      "corrupt_marker_native_debug_preserves_every_non_debug_field"
+    ],
+    "rule": "Unhandled corrupt-marker errors retain a native empty debug string while typed refusals retain null."
+  },
+  {
+    "id": "privacy-r5-native-debug-kind",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "kind == \"ui.reports.privacy_hygiene\" && error.code == \"internal_error\"",
+    "replace": "kind == \"ui.reports.summary\" && error.code == \"internal_error\"",
+    "expect_failing": [
+      "corrupt_marker_daemon_classifies_only_unhandled_hygiene_failures"
+    ],
+    "rule": "Native unhandled conversion diagnostics are scoped to the accepted configuration-hygiene daemon kind."
+  },
+  {
+    "id": "privacy-r5-native-debug-class",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "kind == \"ui.reports.privacy_hygiene\" && error.code == \"internal_error\"",
+    "replace": "kind == \"ui.reports.privacy_hygiene\" && error.code != \"internal_error\"",
+    "expect_failing": [
+      "corrupt_marker_daemon_classifies_only_unhandled_hygiene_failures"
+    ],
+    "rule": "Typed hygiene refusals never gain an unhandled diagnostic string."
+  },
+  {
     "id": "lightning-open-threshold",
     "file": "crates/reports/src/lightning.rs",
     "find": "(\"coversOpenCost\", Value::Bool(earned >= self.open_cost_sat))",

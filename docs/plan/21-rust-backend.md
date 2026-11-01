@@ -3969,9 +3969,10 @@ records exact wire comparisons, every one of the 112 tables, native routing,
 named mutations and retained reference quirks. Native inventory increases to
 154 CLI leaves (22 reports), with 15 report daemon kinds plus two transaction
 exports. The parallel platform CSV worker's registrations are separate.
-Full daemon wire acceptance is still blocked by corrupt stored journal markers:
-typed errors match, but Rust omits Python's stderr and `error.debug` traceback.
-The checkpoint retains a named reproduction instead of normalizing the gap.
+The initial checkpoint retained a corrupt stored-journal-marker diagnostic gap.
+The [native diagnostic continuation](../reference/rust-shell.md#corrupt-marker-daemon-diagnostics-r5-privacy-continuation)
+closes it under the native runtime contract below: typed errors retain null,
+unhandled debug strings are empty, and every other response byte matches Python.
 
 This is a partial handoff. Privacy Mirror still needs the shared immutable
 Chain Analysis index, observer projection, clustering, patterns, attribution,
@@ -4078,3 +4079,24 @@ patterns, attribution, conditional entropy and process/book-bound handles still
 precede Mirror acceptance. PSBT still needs its v0/v2 parser, validation and
 inventory/linkage overlay. The separate legacy scorer and AI projections remain
 Python. No schema, lockfile or Python product code changes.
+
+### R5 privacy: corrupt-marker daemon diagnostics
+
+The configuration-hygiene daemon now preserves Python's debug-field presence
+for corrupt journal markers. Its native diagnostic is an empty string, with no
+invented Python traceback, frame paths or stderr trace. Python includes this
+field for these unhandled daemon errors with or without global `--debug`;
+typed argument refusals retain null in both modes. The conversion is scoped to
+`ui.reports.privacy_hygiene` internal errors. Other kinds and CLI diagnostics
+retain their existing contracts.
+
+The [diagnostic checkpoint](../reference/rust-shell.md#corrupt-marker-daemon-diagnostics-r5-privacy-continuation)
+records six sessions and 18 requests, all non-debug bytes including line endings,
+all 112 tables and zero hybrid fallbacks. Three mutations are killed by named
+native tests, bringing the report catalog to 758 applicable entries. The
+existing hygiene acceptance also passes: 208 service cases, 48 CLI invocations
+and five ordinary daemon sessions. Combined routing is 48 CLI invocations and
+11 daemon sessions carrying 58 hygiene requests, all native. Product inventory
+remains 154 CLI leaves (22 reports), with 15 report daemon kinds plus two
+transaction exports. Mirror, PSBT and the legacy scorer remain unregistered;
+AI projections remain Python. No egress or persistence authority is added.

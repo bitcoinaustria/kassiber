@@ -170,11 +170,18 @@ message.
 
 ## Tracebacks in error envelopes
 
-`internal_error` envelopes carry a sanitized traceback in `error.debug`:
+Python `internal_error` envelopes carry a sanitized traceback in `error.debug`:
 paths relativized (never absolute, never containing the home directory),
 secret-floor scrubbed, length-capped. The CLI sanitizes the envelope copy
 of `--debug` tracebacks the same way while keeping the raw traceback on
 the local stderr.
+
+The [native Rust diagnostic contract](rust-shell.md#diagnostics-service-slice-r5)
+uses an empty string when no bounded native frames are available. For
+[configuration-hygiene corrupt-marker daemon errors](rust-shell.md#corrupt-marker-daemon-diagnostics-r5-privacy-continuation),
+that string is present with or without global `--debug`, matching Python's
+field presence. Typed refusals retain null. Native stderr stays empty; Python
+tracebacks and native frame paths are never fabricated or serialized.
 
 The AI surface never sees `error.debug`. Error envelopes are not embedded
 in provider-bound content today, and `redact_tool_arguments`
