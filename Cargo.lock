@@ -1949,6 +1949,7 @@ dependencies = [
  "kassiber-pytext",
  "kassiber-setup",
  "kassiber-store",
+ "kassiber-transactions",
  "miniscript",
  "regex",
  "serde_json",

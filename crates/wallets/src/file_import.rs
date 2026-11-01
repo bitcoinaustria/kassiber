@@ -4,6 +4,7 @@ mod btcpay;
 mod bull;
 mod coinfinity;
 mod csv;
+pub mod document;
 mod exchange;
 mod generic_json;
 pub mod ledger;
@@ -60,10 +61,12 @@ pub enum Format {
     BtcpayJson,
     Ledger,
     Wasabi,
+    Document,
 }
 impl Format {
     fn name(self) -> &'static str {
         match self {
+            Self::Document => "document_import",
             Self::Wasabi => "wasabi_bundle",
             Self::Csv => "csv",
             Self::BtcpayCsv => "btcpay_csv",
@@ -85,6 +88,10 @@ impl Format {
     }
     fn load(self, file: &str) -> Result<Vec<csv::Row>, AppError> {
         match self {
+            Self::Document => Err(AppError::new(
+                "validation",
+                "Document imports require reviewed draft rows",
+            )),
             Self::CoinTracking | Self::Blockpit => tax_platform::load(file, self),
             Self::Wasabi => wasabi::load(file).and_then(|b| wasabi::rows(&b.records)),
             Self::Json => generic_json::load(file),
@@ -1502,7 +1509,14 @@ fn apply(
     let updated_count = updated.len() as i64;
     let mut result = vec![
         ("wallet", s(wallet.label.as_str())),
-        ("source", s(format!("file:{format}"))),
+        (
+            "source",
+            s(if request.format == Format::Document {
+                format.into()
+            } else {
+                format!("file:{format}")
+            }),
+        ),
         ("imported", Py::from(imported.len() as i64)),
         ("skipped", Py::from(skipped)),
         ("unchanged", Py::from(unchanged)),
@@ -1575,7 +1589,7 @@ fn apply(
             invalidated,
         )?;
     }
-    if !inserted_ids.is_empty() && request.format != Format::Wasabi {
+    if !inserted_ids.is_empty() && !matches!(request.format, Format::Wasabi | Format::Document) {
         let batch = ids.next(conn)?;
         conn.execute("INSERT INTO import_batches(id,workspace_id,profile_id,wallet_id,source_format,source_filename,column_map_json,imported_at,rows_inserted,rows_updated,rows_skipped) VALUES(?,?,?,?,?,?,?,?,?,?,?)",params![batch,workspace,profile,wallet.id,format,std::path::Path::new(&request.file).file_name().unwrap_or_default().to_string_lossy(),column_map.map(|map| config::stored_json(&map.raw)),ids.time(conn)?,inserted_ids.len() as i64,if request.format.evidence() || request.format.active() { updated_count } else { 0 },skipped]).map_err(database_error)?;
         for id in inserted_ids {
@@ -1585,6 +1599,12 @@ fn apply(
     }
     if request.format.evidence() || request.format.active() {
         result.push((request.format.provider().2, Py::from(records.len() as i64)));
+    }
+    if request.format == Format::Document {
+        if updated_count > 0 {
+            result.push(("updated", Py::from(updated_count)));
+        }
+        return Ok(dict(result));
     }
     result.push(("input_format", s(format)));
     let path = kassiber_paths::abspath(std::path::Path::new(&request.file))

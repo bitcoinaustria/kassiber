@@ -2446,7 +2446,38 @@ for served-by counts, mutation killers and verification.
 
 The CLI catalog contains 158 native entries. `ui.wallets.import_file` remains
 unregistered until native journal processing and shared daemon acceptance land.
-Document ingestion remains unimplemented; the bare-CR correction stays deferred.
+The document continuation below remains partial; the bare-CR correction stays deferred.
+
+### R5 document ingestion: reviewed core checkpoint (partial)
+
+`kassiber-wallets::file_import::document` normalizes OCR rows and reconstructs
+observations from the visible reviewed fields. It enforces exact integer msat,
+structural and confidence quarantine, source-bound stable identities and the
+source/aggregate evidence budgets. A stable local snapshot and one savepoint
+coordinate imported observations, journal invalidation and managed evidence;
+late failures roll back the database and remove copies. Evidence grants no
+ownership, custody, basis or tax authority. The implementation reuses the
+existing transaction attachment service and adds no third-party dependency.
+
+Python-derived frozen files cover 287 draft cases and 128 reviewed selections.
+The disposable-book driver compares core response bytes, all typed book tables
+and schema objects, and managed evidence on SQLite and SQLCipher. It explicitly
+asserts successful imports. Generic
+database failures retain the shared Rust store's redaction instead of Python's
+raw exception message; that difference is pinned and remains an acceptance gap.
+Native managed-digest failures also remove the copy that Python leaves orphaned;
+this storage difference has a native regression and an offline reference repro.
+Reference quirks, named mutation killers and verification are recorded in the
+[partial document checkpoint](../reference/rust-shell.md#reviewed-document-core-r5-partial).
+
+Completion still requires provider discovery/OCR transport,
+exact-action consent through `kassiber-net`, offline/no-egress fencing, bounded
+Poppler PDF inspection/rendering, interactive CLI review and CLI wire/full-book
+acceptance. Product served-by counts for document preview/import and the
+shared daemon importer are zero; the native catalog remains at 158 entries.
+`ui.wallets.import_file` stays unregistered until native `journals process`
+and shared daemon acceptance land. R6 document AI projections and session/token
+flows remain on Python. PDF report generation also remains Python.
 
 ## Risks
 

@@ -73,6 +73,7 @@ export KASSIBER_TEST_JOURNAL_PROCESS_BIN="$ROOT/target/release/examples/journal-
 run cargo build -p kassiber-wallets --example freshness_fixture --features test-harness --offline --locked
 run cargo build -p kassiber-wallets --example freshness_sync_fixture --features test-harness --offline --locked
 run cargo build -p kassiber-wallets --example graph_fixture --features test-harness --offline --locked
+run cargo build -p kassiber-wallets --example document_fixture --features test-harness --offline --locked
 run py crates/wallets/scripts/discovery_mutation_check.py --check
 run py crates/wallets/scripts/acquisition_mutation_check.py --check
 run py crates/wallets/scripts/observer_mutation_check.py --check

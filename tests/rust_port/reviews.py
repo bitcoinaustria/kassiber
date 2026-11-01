@@ -414,3 +414,8 @@ REVIEWS["tests/test_rust_samourai_import.py"] = {"*": {
     "disposition": "oracle", "group": "imports",
     "reason": "Frozen Python source files, raw CLI bytes and complete typed book dumps compare native Samourai ingestion on SQLite and SQLCipher; hybrid scenarios assert native routing, including refusals and group conflicts.",
 }}
+
+REVIEWS["tests/test_rust_document_ingestion.py"] = {"*": {
+    "disposition": "oracle", "group": "imports",
+    "reason": "compares frozen Python OCR draft and reviewed-row vectors, native core replies, every typed schema/table row and managed evidence bytes on SQLite/SQLCipher; retains Python as reference for the unregistered document core",
+}}

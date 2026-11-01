@@ -380,9 +380,17 @@ projections stay Python. Progress and remaining work for this slice:
   SQLite/SQLCipher raw-wire/full-book parity, source-group coordination,
   retained reference-bug repros and named mutation killers. See the Samourai
   checkpoint in plan 21.
-- [ ] Port document ingestion at core/CLI level with reviewed OCR rows,
-  source-digest binding, managed attachments, full-book/wire parity and named
-  mutation killers. An attachment grants neither ownership nor tax facts.
+- [x] Port the unregistered reviewed-document core: frozen OCR/review vectors,
+  source-digest binding, managed attachments, SQLite/SQLCipher full-book and core
+  response comparisons, rollback and named mutation killers. See the partial
+  [document checkpoint](docs/reference/rust-shell.md#reviewed-document-core-r5-partial).
+- [ ] Finish document ingestion at core/CLI level: gated provider discovery/OCR,
+  bounded Poppler PDF verification/rendering, interactive CLI review, native
+  registration and CLI wire/full-book/zero-fallback acceptance. Resolve the
+  documented database-error wire and managed-digest cleanup differences before
+  complete acceptance.
+  R6 AI tool projections stay Python. An attachment grants neither ownership
+  nor tax facts.
 - [ ] Complete the [shared file-import daemon parity follow-up](docs/reference/rust-shell.md#shared-file-import-daemon-parity-pending)
   after its native prerequisites land.
 - [ ] Port the remaining wallet commands after file-ingestion acceptance,

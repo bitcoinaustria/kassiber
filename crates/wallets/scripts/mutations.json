@@ -616,7 +616,7 @@
   {
     "id": "W-import-empty-batch",
     "file": "crates/wallets/src/file_import.rs",
-    "find": "if !inserted_ids.is_empty() && request.format != Format::Wasabi {",
+    "find": "if !inserted_ids.is_empty() && !matches!(request.format, Format::Wasabi | Format::Document) {",
     "replace": "if true {",
     "expect_failing": [
       "csv_import_dedupe_batch_membership_and_journal_invalidation"
@@ -7635,8 +7635,8 @@
   {
     "id": "W-wasabi-no-run",
     "file": "crates/wallets/src/file_import.rs",
-    "find": "if !inserted_ids.is_empty() && request.format != Format::Wasabi {",
-    "replace": "if !inserted_ids.is_empty() {",
+    "find": "if !inserted_ids.is_empty() && !matches!(request.format, Format::Wasabi | Format::Document) {",
+    "replace": "if !inserted_ids.is_empty() && request.format != Format::Document {",
     "expect_failing": [
       "wasabi_coordinator_preserves_review_notes_inventory_and_identities"
     ],
@@ -8241,5 +8241,275 @@
       "python_samourai_import_vectors"
     ],
     "rule": "JSON integer-limit and nesting failures retain their Python internal-error category and message."
+  },
+  {
+    "id": "W-document-msat-exact",
+    "file": "crates/wallets/src/file_import/document.rs",
+    "find": "shift >= 0\n        ||",
+    "replace": "true || shift >= 0\n        ||",
+    "expect_failing": [
+      "python_document_row_vectors"
+    ],
+    "rule": "Fractional msat must never be rounded into a valid observation."
+  },
+  {
+    "id": "W-document-msat-max",
+    "file": "crates/wallets/src/file_import/document.rs",
+    "find": "n > &\"92233720.36854775807\"",
+    "replace": "n > &\"92233720.36854775808\"",
+    "expect_failing": [
+      "python_document_row_vectors"
+    ],
+    "rule": "BTC amounts must fit the signed SQLite msat range."
+  },
+  {
+    "id": "W-document-decimal-budget",
+    "file": "crates/wallets/src/file_import/document.rs",
+    "find": "if len > 512 {",
+    "replace": "if len > 128 {",
+    "expect_failing": [
+      "python_document_row_vectors"
+    ],
+    "rule": "Decimal rendering retains the bounded Python length boundary."
+  },
+  {
+    "id": "W-document-ambiguous-separator",
+    "file": "crates/wallets/src/file_import/document.rs",
+    "find": "fractional.chars().count() == 3",
+    "replace": "fractional.chars().count() == 4",
+    "expect_failing": [
+      "python_document_row_vectors"
+    ],
+    "rule": "Ambiguous thousands/decimal separators remain quarantined."
+  },
+  {
+    "id": "W-document-fiat-finite",
+    "file": "crates/wallets/src/file_import/document.rs",
+    "find": "&& float(n) > 0.0",
+    "replace": "&& true",
+    "expect_failing": [
+      "python_document_row_vectors"
+    ],
+    "rule": "Populated fiat values cannot underflow to zero in SQLite REAL storage."
+  },
+  {
+    "id": "W-document-row-confidence",
+    "file": "crates/wallets/src/file_import/document/rows.rs",
+    "find": "if model_confidence < *threshold {",
+    "replace": "if false && model_confidence < *threshold {",
+    "expect_failing": [
+      "python_document_row_vectors"
+    ],
+    "rule": "Preview row confidence must be enforced."
+  },
+  {
+    "id": "W-document-cell-confidence",
+    "file": "crates/wallets/src/file_import/document.rs",
+    "find": "None => result.push(format!(\"missing_{key}_confidence\")),",
+    "replace": "None => (),",
+    "expect_failing": [
+      "python_document_review_vectors"
+    ],
+    "rule": "Every populated visible financial field needs cell confidence."
+  },
+  {
+    "id": "W-document-source-page",
+    "file": "crates/wallets/src/file_import/document/rows.rs",
+    "find": "if matches!(field(raw, \"source_region\"), Py::Dict(_)) && region == Py::Null {",
+    "replace": "if false && matches!(field(raw, \"source_region\"), Py::Dict(_)) && region == Py::Null {",
+    "expect_failing": [
+      "python_document_row_vectors"
+    ],
+    "rule": "A source page outside the reviewed range blocks the draft."
+  },
+  {
+    "id": "W-document-duplicate-order",
+    "file": "crates/wallets/src/file_import/document/rows.rs",
+    "find": "duplicates.sort_by(|a, b| a.0.cmp(&b.0));",
+    "replace": "duplicates.sort_by(|a, b| b.0.cmp(&a.0));",
+    "expect_failing": [
+      "python_document_row_vectors"
+    ],
+    "rule": "Duplicate ordinals are stable across OCR row reordering."
+  },
+  {
+    "id": "W-document-hidden-record",
+    "file": "crates/wallets/src/file_import/document.rs",
+    "find": "let id = rendered(field(row, \"id\"));",
+    "replace": "return Some(field(row, \"import_record\").clone());\n    let id = rendered(field(row, \"id\"));",
+    "expect_failing": [
+      "python_document_review_vectors"
+    ],
+    "rule": "Write validation rebuilds public fields instead of trusting hidden import_record."
+  },
+  {
+    "id": "W-document-structural-flags",
+    "file": "crates/wallets/src/file_import/document.rs",
+    "find": "if flags\n            .iter()",
+    "replace": "if flags\n            .iter().take(0)",
+    "expect_failing": [
+      "python_document_review_vectors"
+    ],
+    "rule": "Confidence overrides never bypass structural quarantine."
+  },
+  {
+    "id": "W-document-empty-selection",
+    "file": "crates/wallets/src/file_import/document/coordinator.rs",
+    "find": "if selected_row_ids\n            .is_some_and",
+    "replace": "if selected_row_ids.filter(|selected| !selected.is_empty())\n            .is_some_and",
+    "expect_failing": [
+      "python_document_review_vectors"
+    ],
+    "rule": "An explicit empty selection imports no rows."
+  },
+  {
+    "id": "W-document-confidence-override",
+    "file": "crates/wallets/src/file_import/document/coordinator.rs",
+    "find": "if !flags.is_empty() && !include_quarantined {",
+    "replace": "if false && !flags.is_empty() && !include_quarantined {",
+    "expect_failing": [
+      "python_document_review_vectors"
+    ],
+    "rule": "Confidence-only quarantined rows need an explicit override."
+  },
+  {
+    "id": "W-document-override-provenance",
+    "file": "crates/wallets/src/file_import/document/coordinator.rs",
+    "find": "set(&mut raw, \"confidence_override\", Py::Bool(true));",
+    "replace": "set(&mut raw, \"confidence_override\", Py::Bool(false));",
+    "expect_failing": [
+      "python_document_review_vectors"
+    ],
+    "rule": "An explicit confidence override remains visible in source provenance."
+  },
+  {
+    "id": "W-document-hash-binding",
+    "file": "crates/wallets/src/file_import/document/coordinator.rs",
+    "find": "if source_hash != expected {",
+    "replace": "if false && source_hash != expected {",
+    "expect_failing": [
+      "document_source_refusals_and_explicit_empty_selection_never_write"
+    ],
+    "rule": "Changed source bytes cannot be committed under a reviewed digest."
+  },
+  {
+    "id": "W-document-source-limit",
+    "file": "crates/wallets/src/file_import/document/files.rs",
+    "find": "if size > MAX_SOURCE {",
+    "replace": "if size > MAX_SOURCE + 1 {",
+    "expect_failing": [
+      "document_evidence_budget_and_source_limit_refuse_before_writes"
+    ],
+    "rule": "The local source byte budget is checked before copying."
+  },
+  {
+    "id": "W-document-evidence-budget",
+    "file": "crates/wallets/src/file_import/document/coordinator.rs",
+    "find": "if request.attach_evidence && projected > 512 * 1024 * 1024 {",
+    "replace": "if request.attach_evidence && projected > 1024 * 1024 * 1024 {",
+    "expect_failing": [
+      "document_evidence_budget_and_source_limit_refuse_before_writes"
+    ],
+    "rule": "Per-row evidence copies must obey the aggregate storage budget."
+  },
+  {
+    "id": "W-document-attachment-coordination",
+    "file": "crates/wallets/src/file_import/document/coordinator.rs",
+    "find": "if request.attach_evidence {",
+    "replace": "if false && request.attach_evidence {",
+    "expect_failing": [
+      "document_coordinator_dedupes_attaches_only_changes_and_preserves_authority"
+    ],
+    "rule": "Inserted and enriched observations receive managed source evidence."
+  },
+  {
+    "id": "W-document-atomic",
+    "file": "crates/wallets/src/file_import/document/coordinator.rs",
+    "find": "ROLLBACK TO SAVEPOINT document_import; RELEASE SAVEPOINT document_import",
+    "replace": "RELEASE SAVEPOINT document_import",
+    "expect_failing": [
+      "document_late_attachment_failure_rolls_back_every_write_and_copy"
+    ],
+    "rule": "Late evidence failure rolls back every imported row and readiness write."
+  },
+  {
+    "id": "W-document-copy-cleanup",
+    "file": "crates/wallets/src/file_import/document/coordinator.rs",
+    "find": "let _ = std::fs::remove_file(path);",
+    "replace": "let _ = std::fs::metadata(path);",
+    "expect_failing": [
+      "document_late_attachment_failure_rolls_back_every_write_and_copy"
+    ],
+    "rule": "Failed document imports remove every managed copy already created."
+  },
+  {
+    "id": "W-document-reference-no-run",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "!matches!(request.format, Format::Wasabi | Format::Document)",
+    "replace": "request.format != Format::Wasabi",
+    "expect_failing": [
+      "document_coordinator_dedupes_attaches_only_changes_and_preserves_authority"
+    ],
+    "rule": "Preserve the reference absence of document import batches until separately corrected."
+  },
+  {
+    "id": "W-document-attachment-context",
+    "file": "crates/wallets/src/file_import/document/coordinator.rs",
+    "find": "kassiber_setup::references::scope(conn, &Py::Null)?",
+    "replace": "kassiber_setup::references::scope(conn, &dict([(\"profile\", s(request.profile_id))]))?",
+    "expect_failing": [
+      "document_attachment_context_refusals_roll_back_but_unattached_rows_import"
+    ],
+    "rule": "Preserve the reference active attachment context and rollback on mismatched explicit imports."
+  },
+  {
+    "id": "W-document-row-id-unicode",
+    "file": "crates/wallets/src/file_import/document.rs",
+    "find": "kassiber_pytext::REGEX_DIGIT",
+    "replace": "r\"\\d\"",
+    "expect_failing": [
+      "python_document_review_vectors"
+    ],
+    "rule": "Reviewed row identities retain CPython 3.11 Unicode digit matching."
+  },
+  {
+    "id": "W-document-private-snapshot",
+    "file": "crates/wallets/src/file_import/document/files.rs",
+    "find": "path: stable,",
+    "replace": "path: path.to_path_buf(),",
+    "expect_failing": [
+      "document_snapshot_is_private_stable_and_removed_on_drop"
+    ],
+    "rule": "Imports read a private stable snapshot, not the mutable original source."
+  },
+  {
+    "id": "W-document-original-record",
+    "file": "crates/wallets/src/file_import/document/coordinator.rs",
+    "find": "original: Some(record.clone()),",
+    "replace": "original: None,",
+    "expect_failing": [
+      "document_metadata_binding_refusals_preserve_codepoints_and_roll_back"
+    ],
+    "rule": "Retain original reviewed code points until SQL binding; lone surrogates refuse rather than becoming replacement text."
+  },
+  {
+    "id": "W-document-managed-digest",
+    "file": "crates/wallets/src/file_import/document/coordinator.rs",
+    "find": "if field(&attachment, \"sha256\") != &s(&source_hash) {",
+    "replace": "if false && field(&attachment, \"sha256\") != &s(&source_hash) {",
+    "expect_failing": [
+      "document_managed_digest_failure_rolls_back_and_removes_the_copy"
+    ],
+    "rule": "Managed evidence must retain the reviewed source digest or fail atomically and remove the copy."
+  },
+  {
+    "id": "W-document-cleanup-path-boundary",
+    "file": "crates/wallets/src/file_import/document/coordinator.rs",
+    "find": "if let Some(path) = files::managed_path(&attachments_root, &relative) {",
+    "replace": "if let Some(path) = Some(attachments_root.join(&relative)) {",
+    "expect_failing": [
+      "document_cleanup_never_follows_untrusted_stored_paths"
+    ],
+    "rule": "Rollback cleanup validates untrusted stored paths and cannot unlink files outside managed evidence."
   }
 ]

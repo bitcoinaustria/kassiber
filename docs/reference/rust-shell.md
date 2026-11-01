@@ -3163,6 +3163,115 @@ remains a separate core/CLI slice; BTCPay files and generic ledger belong to the
 parallel importer branch. An attached document grants neither ownership nor tax
 facts.
 
+## Reviewed document core (R5, partial)
+
+The unregistered `kassiber-wallets::file_import::document` service ports OCR row
+normalization, confidence/structural quarantine and reviewed-row reconstruction.
+Only the visible reviewed fields supply observations; hidden `import_record`,
+ready/status flags and attached evidence cannot grant ownership, reviewed
+custody, basis or tax facts. Integer msat, finite positive fiat values, active
+book currency, stable duplicate ordinals and CPython 3.11 Unicode behavior are
+pinned by Python-derived vectors.
+
+The coordinator validates a local source, copies a bounded private snapshot,
+checks the preview digest and enforces the 25 MiB source, 500-row and 512 MiB
+aggregate evidence limits. Transaction writes, journal readiness invalidation
+and managed evidence share one savepoint. Late attachment failures roll back
+the database and remove tracked copies already made. Cleanup validates stored
+paths against the managed root, including parent and symlink escapes. It reuses
+`kassiber-transactions::attachments`; no third-party dependency is added.
+There is no HTTP client, provider lookup, PDF subprocess or product route in
+this checkpoint. Local source extension/size checks do not claim PDF-content
+verification.
+
+The frozen corpus contains 287 preview cases and 128 reviewed-row cases. The
+`test-harness`-only `document_fixture` driver compares core JSON response bytes,
+every typed table/schema object and managed file bytes with Python on SQLite
+and SQLCipher. Success assertions prevent a refusal-only replay from passing.
+Coordinator sequences cover priced and unpriced reimports, enrichment,
+confidence overrides, hidden-record tampering, explicit empty selection,
+source-hash refusals, optional evidence, active-context failures, outer rollback
+and a late second-attachment trigger. This is core-harness wire evidence;
+CLI envelopes, interactive prompts and native routing are still unverified.
+
+The retained Python quirks have an offline reproduction in
+`tests/rust_port/repro_document_reference.py`:
+
+- Reviewed reconstruction discards a model-supplied row id from provenance.
+- A structurally quarantined preview can retain a convenience `import_record`;
+  write reconstruction still refuses it.
+- Successful document imports record no import batch or batch rollback token.
+- Rolling back an outer transaction after a successful `commit=False` import
+  leaves orphan managed evidence, as in Python.
+- Identical supplied prices still count as updates and add fresh evidence.
+- Attachment hooks resolve active context even when the imported profile was
+  supplied explicitly; missing or different context refuses and rolls back.
+- A managed-digest mismatch rolls back database writes but leaves an untracked
+  evidence copy. The native failure path removes that copy instead.
+
+Generic database exceptions are an explicit wire gap: Rust retains the shared
+store's `internal_error: database operation failed`, while Python returns the
+raw exception message. The failure test pins each reply separately and compares
+the complete rolled-back books/files. It does not normalize the difference away
+or count it as byte parity. The managed-digest cleanup difference is also
+intentional and pinned by a native trigger test plus the Python reproduction;
+the complete importer still needs a separate reference correction or explicit
+resolution of these differences before acceptance.
+
+The wallet mutation catalog adds 27 entries to the inherited 740 (767 total).
+Each entry names its native killer in `crates/wallets/scripts/mutations.json`.
+
+| Mutations | Named killer |
+| --- | --- |
+| `W-document-msat-exact`, `W-document-msat-max`, `W-document-decimal-budget`, `W-document-ambiguous-separator`, `W-document-fiat-finite`, `W-document-row-confidence`, `W-document-source-page`, `W-document-duplicate-order` | `python_document_row_vectors` |
+| `W-document-cell-confidence`, `W-document-hidden-record`, `W-document-structural-flags`, `W-document-empty-selection`, `W-document-confidence-override`, `W-document-override-provenance`, `W-document-row-id-unicode` | `python_document_review_vectors` |
+| `W-document-hash-binding` | `document_source_refusals_and_explicit_empty_selection_never_write` |
+| `W-document-source-limit`, `W-document-evidence-budget` | `document_evidence_budget_and_source_limit_refuse_before_writes` |
+| `W-document-attachment-coordination`, `W-document-reference-no-run` | `document_coordinator_dedupes_attaches_only_changes_and_preserves_authority` |
+| `W-document-atomic`, `W-document-copy-cleanup` | `document_late_attachment_failure_rolls_back_every_write_and_copy` |
+| `W-document-attachment-context` | `document_attachment_context_refusals_roll_back_but_unattached_rows_import` |
+| `W-document-private-snapshot` | `document_snapshot_is_private_stable_and_removed_on_drop` |
+| `W-document-original-record` | `document_metadata_binding_refusals_preserve_codepoints_and_roll_back` |
+| `W-document-managed-digest` | `document_managed_digest_failure_rolls_back_and_removes_the_copy` |
+| `W-document-cleanup-path-boundary` | `document_cleanup_never_follows_untrusted_stored_paths` |
+
+All 767 recipes apply. The fresh audit passes thirteen named unmutated
+baselines and kills all 29 selected entries: the 27 document entries and the
+two inherited batch-recording recipes changed by the new format. There are no
+survivors or build errors; the other 738 entries retain their earlier kill
+evidence. The initial audit exposed missing coverage for fractional values
+above one msat; the corpus now pins 1.5 msat for both principal and fee.
+
+All 88 native file-import tests and 29 existing Python document regressions
+pass. The final expanded core replay passes five tests and 582 subtests on
+SQLite and SQLCipher, including successful imports, exact core response bytes
+and complete typed book/file comparisons. All seven offline reference
+reproductions pass. Formatting and strict workspace/all-targets and harness
+Clippy checks pass offline. The required locked classification update and all
+57 required CI preflight tests pass; the inventory contains 5,738 Python tests.
+The 58 known loopback sandbox tests remain an owner-run gate; no additional
+product test was sandbox-blocked. This checkpoint does not claim a full
+workspace quality gate. Verification logs are retained under
+`target/r5-document-artifacts/`; the mutation source copy and both build trees
+are removed after the audit.
+
+Provider discovery and OCR transport remain to be implemented through
+`kassiber-net` with exact-action consent and offline/no-egress fencing. Test
+them only against disposable loopback fake providers. Bounded Poppler input
+inspection/rendering and interactive CLI review also remain. The CLI catalog
+stays at 158 entries. No complete document importer or zero-fallback product
+acceptance is claimed.
+
+| Product route | Rust-served calls | Native registration |
+| --- | ---: | --- |
+| `wallets preview-document` | 0 | Pending |
+| `wallets import-document` | 0 | Pending |
+| `ui.wallets.import_file` | 0 | Pending native `journals process` and shared daemon acceptance |
+
+R6 AI tool projections, redacted daemon sessions and opaque document-token
+flows stay on Python. PDF report generation stays Python. The existing Python
+provider/consent behavior is unchanged.
+
 ## Daemon
 
 `kassiber [--data-root PATH] daemon` bootstraps the selected project, then

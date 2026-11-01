@@ -18453,6 +18453,10 @@
         "tests": 1
       }
     },
+    "tests/test_rust_document_ingestion.py": {
+      "DocumentIngestionReferenceTest": {"disposition": "oracle", "flags": [], "group": "imports", "reason": "compares frozen Python OCR draft and reviewed-row vectors, native core replies, every typed schema/table row and managed evidence bytes on SQLite/SQLCipher; retains Python as reference for the unregistered document core", "reviewed": true, "tests": 1},
+      "RustDocumentIngestionTest": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "sql-seed", "subprocess"], "group": "imports", "reason": "compares frozen Python OCR draft and reviewed-row vectors, native core replies, every typed schema/table row and managed evidence bytes on SQLite/SQLCipher; retains Python as reference for the unregistered document core", "reviewed": true, "tests": 4}
+    },
     "tests/test_rust_document_services.py": {
       "RustDocumentServicesTest": {
         "disposition": "oracle",

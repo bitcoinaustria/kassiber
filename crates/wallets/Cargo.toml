@@ -52,6 +52,10 @@ required-features = ["test-harness"]
 name = "sync_fixture"
 required-features = ["test-harness"]
 
+[[example]]
+name = "document_fixture"
+required-features = ["test-harness"]
+
 [dependencies]
 kassiber-chain = { path = "../chain" }
 kassiber-net = { path = "../net" }
@@ -63,6 +67,8 @@ kassiber-custody = { path = "../custody" }
 kassiber-paths = { path = "../paths" }
 kassiber-store = { path = "../store" }
 kassiber-setup = { path = "../setup" }
+# Reuse managed evidence storage and its validator; do not add a blob store.
+kassiber-transactions = { path = "../transactions" }
 # Audited descriptor grammars, BIP32, script construction and confidential
 # address cryptography cannot be safely replaced with standard-library code.
 bitcoin = "0.32"

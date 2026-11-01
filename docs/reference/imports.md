@@ -677,8 +677,10 @@ remain authoritative in the daemon session; import sends only the token and
 selected ready-row ids. Neither renderer-supplied drafts nor hidden import
 records are trusted on the write path. Fiat-only/generic amounts and
 unparseable dates stay quarantined instead of being guessed as Bitcoin
-transactions. Stable source-and-row identities keep reordered OCR retries
-idempotent, while desktop success payloads omit source and managed-storage paths.
+transactions. Stable source-and-row identities preserve the same transaction
+identity across reordered OCR retries. A priced reimport can still count as an
+update and add another evidence copy, even when the supplied price is identical.
+Desktop success payloads omit source and managed-storage paths.
 
 Off-device AI providers are hard-disabled for this path even if they are
 configured for chat. URLs are also rejected: open Google Drive/Docs links in
@@ -688,10 +690,11 @@ the logged-in browser, download the PDF/image, and import the local file.
 
 File imports normally record a run (`import_batches`), so an import that
 mapped columns wrongly can be undone without deleting the connection.
-Wasabi bundle imports currently return before recording a run and therefore
-have no batch rollback token; the
+Wasabi bundle and document OCR imports currently return before recording a run
+and therefore have no batch rollback token; the
 [Rust parity checkpoint](rust-shell.md#wasabi-core-and-cli-ingestion-r5-continuation)
-records that retained reference bug.
+and [document checkpoint](rust-shell.md#reviewed-document-core-r5-partial)
+record these retained reference behaviors.
 
 For importers that record a run:
 
