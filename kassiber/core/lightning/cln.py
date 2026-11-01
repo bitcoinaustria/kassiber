@@ -684,7 +684,9 @@ def _channel_funding_outpoint(channel: Mapping[str, Any]) -> str | None:
     funding = channel.get("funding")
     if isinstance(funding, Mapping):
         txid = str_or_none(funding.get("txid") or funding.get("funding_txid"))
-        outnum = funding.get("output") or funding.get("outnum")
+        outnum = funding.get("output")
+        if outnum is None:
+            outnum = funding.get("outnum")
         if txid and outnum is not None:
             return f"{txid}:{outnum}"
     txid = str_or_none(channel.get("funding_txid"))
