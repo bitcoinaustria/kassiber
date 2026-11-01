@@ -294,6 +294,8 @@ def _journal_values(conn, profile_id) -> dict[str, dict[str, Decimal]]:
         bucket = values.setdefault(row["transaction_id"], {})
         key = {"income": "income", "disposal": "proceeds", "acquisition": "cost"}[row["entry_type"]]
         amount = dec(row["proceeds"] if key == "proceeds" else row["fiat_value"])
+        if not amount.is_finite():
+            raise AppError("Journal cash values must be finite", code="validation", retryable=False)
         bucket[key] = bucket.get(key, Decimal("0")) + amount
     return values
 

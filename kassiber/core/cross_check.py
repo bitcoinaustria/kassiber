@@ -166,7 +166,10 @@ def _decimal_cell(text: str) -> Decimal | None:
     else:
         cleaned = cleaned.replace(",", "")
     try:
-        return abs(Decimal(cleaned))
+        number = Decimal(cleaned)
+        if not number.is_finite():
+            raise AppError("Comparison values must be finite", code="validation", retryable=False)
+        return abs(number)
     except ArithmeticError:
         return None
 
@@ -326,6 +329,8 @@ def _book_rows(conn, profile, wallet_ids: set[str] | None, book_currency: str):
             value = dec(row["fiat_value"])
         else:
             value = None
+        if value is not None and not value.is_finite():
+            raise AppError("Stored comparison values must be finite", code="validation", retryable=False)
         rows.append(
             _BookRow(
                 id=row["id"],

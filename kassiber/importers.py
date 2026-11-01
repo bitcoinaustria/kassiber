@@ -3277,7 +3277,10 @@ def _generic_ledger_decimal_cell(value, field, row_label):
     if negative and not text.startswith("-"):
         text = "-" + text
     try:
-        return dec(text)
+        number = dec(text)
+        if not number.is_finite():
+            raise AppError("Amount must be finite", code="validation")
+        return number
     except AppError as exc:
         raise AppError(
             f"{row_label}: {field} is not a number ({value!r})",
