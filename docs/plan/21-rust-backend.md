@@ -3020,6 +3020,9 @@ adds native audit-float consumption, nonfinite transfer quantities and exact
 carried-rate coercion/refusals. Thirty-nine new witnesses supplement the
 unchanged 383-case corpus. Surrogate and malformed-response fidelity remain
 open, and fresh CPU pairs do not recertify both 20k budgets.
+The [controlled CPU comparison](../reference/r4-journal-render-boundary-checkpoint.md#eighth-continuation-controlled-cpu-comparison)
+reestablishes both 0.15 s budgets on unchanged native source in seven alternating
+pairs with exact state bytes. Fidelity, integration and full acceptance remain open.
 
 ### R5 pairing command checkpoint
 

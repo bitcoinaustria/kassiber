@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare renderer checkpoints on identical captured operands and five CPU pairs."""
+"""Compare renderer checkpoints on identical captured operands and alternating CPU pairs."""
 from __future__ import annotations
 
 import argparse
@@ -24,15 +24,18 @@ def main():
                         metavar=('LABEL', 'PATH'))
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--cpu', type=int)
+    parser.add_argument('--pairs', type=int, default=7)
     args = parser.parse_args()
     probes = [(label, Path(path).resolve()) for label, path in args.probe]
     if len(probes) < 2 or len({label for label, _ in probes}) != len(probes):
         parser.error('at least two probes with distinct labels are required')
     if args.cpu is not None and args.cpu not in os.sched_getaffinity(0):
         parser.error('--cpu must be in the current process affinity')
+    if args.pairs < 7:
+        parser.error('--pairs must be at least seven')
     args.output.mkdir(mode=0o700, parents=True, exist_ok=True)
     args.output.chmod(0o700)
-    metadata = dict(cpu=args.cpu, probes={label: dict(path=str(path), sha256=digest(path))
+    metadata = dict(cpu=args.cpu, pairs=args.pairs, probes={label: dict(path=str(path), sha256=digest(path))
                                         for label, path in probes}, operands={})
     summary = dict(metadata=metadata, books={})
     with (args.output / 'samples.jsonl').open('x', buffering=1) as log:
@@ -59,8 +62,9 @@ def main():
                         os.sched_setaffinity(child.pid, {args.cpu})
                     children.append((label, child))
                 try:
-                    for trial in range(1, 6):
-                        for label, child in children:
+                    for trial in range(1, args.pairs + 1):
+                        order = children if trial % 2 else list(reversed(children))
+                        for label, child in order:
                             load = os.getloadavg()
                             child.stdin.write(str(path) + '\n')
                             child.stdin.flush()

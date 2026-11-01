@@ -687,3 +687,82 @@ removed after saving the probes and summaries. No background job remains.
 Python product sources, dependencies, schema, routes and AI projections are
 unchanged. No Python reference bug has been identified. Python retains
 production accounting authority.
+
+## Eighth continuation: controlled CPU comparison
+
+This local continuation starts at `653dbbf8e` on `t3code/r4-11-render-8`.
+**R4-11 remains unaccepted.** The speed boundary is reverified; the native
+renderer is unchanged. Scalar fidelity and the remaining acceptance campaigns
+are still open.
+
+The comparison uses the seventh continuation's identical synthetic 20k
+operands and its retained `e723aacbf` probe. A fresh HEAD probe is built with
+Rust 1.99.1, offline Cargo, eight build jobs and `--release --features timing`.
+Its SHA-256 is identical to the seventh continuation's retained HEAD probe:
+`3f0e6b8134ee075133ed906194491cec4f5e0389a7298419172ee981ffafec72`.
+All build trees and temporary files are under this worktree's `target/`.
+The account `HOME` is unchanged.
+
+`scripts/compare-journal-render.py` now requires at least seven pairs, defaults
+to seven, and reverses executable order on even pairs. It records process CPU,
+wall time, all three load averages and executable/operand hashes. Each book
+passes the complete canonical-state byte comparison before
+the CPU trials. CPU 0 is fixed before measuring. No build or other test job in
+this worktree runs during the controlled comparison. Response decoding,
+canonical serialization, persistence and state destruction remain outside the
+measured span; all field selection stays inside it.
+
+The first exploratory seven-pair run overlapped this worktree's compilation.
+It is retained in `target/r4-render-8/paired-baseline/` and does not certify the
+speed boundary. The subsequent controlled comparison is retained in
+`target/r4-render-8/paired-head/`:
+
+| Book | `e723aacbf` best CPU (s) | HEAD best CPU (s) | Load 1m range |
+| --- | ---: | ---: | ---: |
+| Generic 20k | 0.122163 | 0.121545 | 31.35–32.17 |
+| Multi-wallet 20k | 0.148610 | 0.146205 | 33.67–33.70 |
+
+Both HEAD books meet **0.15 s process CPU**. The unchanged old binary also
+meets both budgets in this run. Its earlier 0.258975 s multi-wallet result
+cannot be caused by the seventh continuation's fidelity changes. The new
+multi-wallet median is 0.149902 s versus 0.152460 s for the older binary;
+generic medians are 0.143453 s and 0.132910 s respectively. Individual samples
+vary, so these results establish the budget on this source and do not establish
+a consistent fidelity regression. Host variation remains material and the
+multi-wallet margin remains small. No fidelity check is removed or bypassed.
+
+The complete sample record, final verification results and source/probe/operand
+digests are indexed in `target/r4-render-8/verification-index.json`. Any further
+renderer or integration change needs a new CPU measurement.
+
+All **37 all-feature release journal tests** pass, including the current
+SQLite/SQLCipher dump and rollback fixtures. All **six Python oracle/capture
+tests** pass; deterministic regeneration preserves the 383-case original corpus
+and the 39 audit/carry witnesses. The required classifier update leaves the
+inventory unchanged and CI preflight passes **57 tests**. The current boundary
+repro still exits 1: surrogate decoding and malformed canonical-decimal refusal
+order differ, while nonfinite detail and malformed payout integers match.
+Those failures remain acceptance blockers. The verification build trees are
+deleted after summarizing; the retained probes and local evidence remain.
+
+Remaining work, in the requested order:
+
+1. Repair actual surrogate scalars and malformed canonical-decimal repros,
+   finish lossless profile/row/entry/provenance/join operands, raw nonfinite
+   stages and lazy response decoding, and match malformed-shape/refusal order
+   with exact UUID consumption. The current serde `String`/`Value` boundary
+   cannot represent lone surrogates; replacing them with a colliding sentinel
+   is not a valid repair. Eager `ledger_response()` decoding still precedes
+   Python's per-field consumption and UUID generation.
+2. Complete the branch audit for component exclusions, ambiguous script owners,
+   scope/txid filtering, amount tolerance and graph refusal propagation.
+3. Run all 110 renderer, 51 persistence and 2,327 custody mutation recipes in
+   resumable, source-bound shards; summarize and delete each build tree.
+4. Run all 25,030 generated inputs, full census/shadow lanes and fresh recordings
+   against the final source.
+5. Complete typed loader/custody integration, integrated SQLite/SQLCipher
+   campaigns and the repository quality gate, then repeat final integrated CPU
+   measurements and write the acceptance record.
+
+This speed checkpoint does not certify any of those outstanding gates. Python
+retains production accounting authority.

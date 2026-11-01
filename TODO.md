@@ -674,6 +674,9 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   persistence refuses nonfinite msat and restores every table. Eleven focused
   mutations are killed. Fresh CPU pairs do not recertify both 20k budgets;
   surrogate/decimal refusal fidelity, typed integration and full gates remain open.
+  The [controlled CPU comparison](docs/reference/r4-journal-render-boundary-checkpoint.md#eighth-continuation-controlled-cpu-comparison)
+  reestablishes both budgets on unchanged native source in seven alternating
+  pairs: 0.121545 s generic and 0.146205 s multi-wallet CPU, with exact state bytes.
   Python retains production authority.
 - [x] R4-14: expose the native automatic-pairing journal stage by reusing
   transfer suggestions, rules and bulk exact pairing. Pin repeated-pass and
