@@ -181,7 +181,40 @@ fn run(v: &Value) -> Result<(), Box<dyn std::error::Error>> {
             json!({"phase":phase,"wall":start.elapsed().as_secs_f64(),"cpu":cpu()-started_cpu}),
         );
     };
-    let result = if v["native_prebuild"] == true {
+    let result = if v["refresh"] == true {
+        let scope = kassiber_transfers::Scope {
+            workspace_id: v["profile"]["workspace_id"]
+                .as_str()
+                .ok_or("workspace required")?,
+            profile_id: v["profile"]["id"].as_str().ok_or("profile required")?,
+        };
+        // Both observers write to one ordered event sequence; their contracts
+        // differ because only the outer freshness observer may commit.
+        let phases = RefCell::new(&mut phases);
+        let mut observer = |phase| {
+            phases.borrow_mut().push(
+                json!({"phase":phase,"wall":start.elapsed().as_secs_f64(),"cpu":cpu()-started_cpu}),
+            )
+        };
+        process::refresh_native(
+            &c,
+            &scope,
+            |c| support::profile(c, scope.profile_id),
+            &sources,
+            process::RefreshOptions {
+                auto_pair: v["auto_pair"] == true,
+                skip_rebuild_when_current: v["skip_rebuild_when_current"] == true,
+                ..Default::default()
+            },
+            &mut observer,
+            &mut |phase| {
+                phases.borrow_mut().push(
+                json!({"phase":phase,"wall":start.elapsed().as_secs_f64(),"cpu":cpu()-started_cpu}),
+            )
+            },
+            &mut writes,
+        )
+    } else if v["native_prebuild"] == true {
         process::process_native(
             &c,
             |_| Ok(v["profile"].clone()),
@@ -217,7 +250,8 @@ fn run(v: &Value) -> Result<(), Box<dyn std::error::Error>> {
             return Ok(());
         }
     };
-    let mut reply = json!({"ok":true,"payload":result.payload,"phases":phases,
+    let payload_json = kassiber_pyjson::dumps(&result.ordered_payload, &Default::default())?;
+    let mut reply = json!({"ok":true,"payload":result.payload,"payload_json":payload_json,"phases":phases,
         "clock_reads":sources.clock_reads.get(),"build_clock_reads":sources.build_clock_reads.get(),"uuid_reads":sources.uuid_reads.get(),
         "wall_seconds":start.elapsed().as_secs_f64(),"cpu_seconds":cpu()-started_cpu});
     if v["dump"] == true {

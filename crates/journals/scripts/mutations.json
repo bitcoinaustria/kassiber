@@ -4858,5 +4858,125 @@
       "native_process_real_prebuild_matches_complete_python_books_and_lifecycle_tapes"
     ],
     "rule": "A binding mismatch preserves Python's empty details object."
+  },
+  {
+    "id": "JREFRESH-sqlite-refusal-family",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "ffi::SQLITE_CONSTRAINT | ffi::SQLITE_MISMATCH => \"IntegrityError\",",
+    "replace": "ffi::SQLITE_CONSTRAINT | ffi::SQLITE_MISMATCH => \"DatabaseError\",",
+    "expect_failing": [
+      "refresh_matches_complete_python_books_ordered_results_phases_and_tapes"
+    ],
+    "rule": "Retain the reference SQLite exception family after a failed second rebuild."
+  },
+  {
+    "id": "JREFRESH-application-error-code",
+    "file": "crates/journals/src/process/refresh.rs",
+    "find": "let application = error.family == \"AppError\";",
+    "replace": "let application = error.family == \"AppError\" && error.code.as_deref() != Some(\"internal_error\");",
+    "expect_failing": [
+      "skipped_pairing_retains_application_codes_even_for_internal_errors"
+    ],
+    "rule": "Preserve every AppError code and retry policy in the skipped-pairing summary."
+  },
+  {
+    "id": "JREFRESH-stale-first",
+    "file": "crates/journals/src/process/refresh.rs",
+    "find": "if options.auto_pair && !is_current(conn, profile_id)? {",
+    "replace": "if false && options.auto_pair && !is_current(conn, profile_id)? {",
+    "expect_failing": [
+      "refresh_matches_complete_python_books_ordered_results_phases_and_tapes"
+    ],
+    "rule": "Commit a stale projection before capturing pairing guards."
+  },
+  {
+    "id": "JREFRESH-pairing-rollback",
+    "file": "crates/journals/src/process/refresh.rs",
+    "find": "let _transaction = Transaction(conn);",
+    "replace": "let _transaction = ();",
+    "expect_failing": [
+      "refresh_pairing_panics_restore_the_entire_current_book"
+    ],
+    "rule": "A pairing panic restores autocommit and rolls back all pending work."
+  },
+  {
+    "id": "JREFRESH-failed-pairing-rollback",
+    "file": "crates/journals/src/process/refresh.rs",
+    "find": "conn.execute_batch(\"ROLLBACK\")?;",
+    "replace": "conn.execute_batch(\"SELECT 1\")?;",
+    "expect_failing": [
+      "refresh_matches_complete_python_books_ordered_results_phases_and_tapes"
+    ],
+    "rule": "A skipped pairing restores the idle connection before the rebuild."
+  },
+  {
+    "id": "JREFRESH-pairing-early-commit",
+    "file": "crates/journals/src/process/refresh.rs",
+    "find": "Ok(summary) => summary,",
+    "replace": "Ok(summary) => { conn.execute_batch(\"COMMIT\")?; summary },",
+    "expect_failing": [
+      "refresh_cancellation_rolls_back_pairs_and_keeps_only_the_first_commit"
+    ],
+    "rule": "Commit successful pairs only with the subsequent successful rebuild."
+  },
+  {
+    "id": "JREFRESH-cache-commit",
+    "file": "crates/journals/src/process/refresh.rs",
+    "find": "conn.execute_batch(\"COMMIT\")?;",
+    "replace": "conn.execute_batch(\"SELECT 1\")?;",
+    "expect_failing": [
+      "refresh_matches_complete_python_books_ordered_results_phases_and_tapes"
+    ],
+    "rule": "Retain the candidate-cache update when the first projection is reused."
+  },
+  {
+    "id": "JREFRESH-skip-current",
+    "file": "crates/journals/src/process/refresh.rs",
+    "find": "&& options.skip_rebuild_when_current",
+    "replace": "&& false && options.skip_rebuild_when_current",
+    "expect_failing": [
+      "refresh_matches_complete_python_books_ordered_results_phases_and_tapes"
+    ],
+    "rule": "Honor skip-current without consuming rebuild clocks or UUIDs."
+  },
+  {
+    "id": "JREFRESH-applied-pairs-rebuild",
+    "file": "crates/journals/src/process/refresh.rs",
+    "find": ".is_some_and(kassiber_envelope::truthy);",
+    "replace": ".is_some_and(|_| false);",
+    "expect_failing": [
+      "refresh_matches_complete_python_books_ordered_results_phases_and_tapes"
+    ],
+    "rule": "Applied pairs always force a rebuild even when skip-current is enabled."
+  },
+  {
+    "id": "JREFRESH-reuse-first-build",
+    "file": "crates/journals/src/process/refresh.rs",
+    "find": "if payload.is_some() && !pairs_applied && is_current(conn, profile_id)? {",
+    "replace": "if false && payload.is_some() && !pairs_applied && is_current(conn, profile_id)? {",
+    "expect_failing": [
+      "refresh_matches_complete_python_books_ordered_results_phases_and_tapes"
+    ],
+    "rule": "Reuse the first committed build when pairing leaves it current."
+  },
+  {
+    "id": "JPROCESS-result-insertion-order",
+    "file": "crates/journals/src/process.rs",
+    "find": "let ordered_payload = ordered::payload(&payload)?;",
+    "replace": "let ordered_payload = codec::from_json(&payload)?;",
+    "expect_failing": [
+      "refresh_matches_complete_python_books_ordered_results_phases_and_tapes"
+    ],
+    "rule": "Preserve insertion order through the complete journal result envelope."
+  },
+  {
+    "id": "JREFRESH-byte-marker-integer",
+    "file": "crates/journals/src/integer.rs",
+    "find": "if bytes.is_ascii() {",
+    "replace": "if false && bytes.is_ascii() {",
+    "expect_failing": [
+      "refresh_matches_complete_python_books_ordered_results_phases_and_tapes"
+    ],
+    "rule": "Coerce byte-valued legacy freshness markers exactly like Python integers."
   }
 ]

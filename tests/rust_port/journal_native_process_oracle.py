@@ -73,7 +73,7 @@ def inputs():
     return cases
 
 
-def capture(case, *, connection=None):
+def capture(case, *, connection=None, operation=None, additional_clocks=(), rollback_expected=True):
     conn = connection if connection is not None else sqlite3.connect(':memory:')
     conn.row_factory = sqlite3.Row
     try:
@@ -121,16 +121,18 @@ def capture(case, *, connection=None):
             stack.enter_context(patch('kassiber.core.filed_report_chain.now_iso', side_effect=clock))
             stack.enter_context(patch.object(custody_journal, 'custody_build_clock', return_value=CLOCK))
             stack.enter_context(patch.object(custody_journal, 'build_ledger_state', side_effect=build))
+            for target in additional_clocks:
+                stack.enter_context(patch(target, side_effect=clock))
             for target in ('socket.getaddrinfo', 'socket.socket.connect',
                            'socket.socket.connect_ex', 'socket.socket.sendto'):
                 stack.enter_context(patch(target, side_effect=AssertionError('process attempted network I/O')))
             try:
-                result = handlers.process_journals(
+                result = (operation or handlers.process_journals)(
                     conn, profile['workspace_id'], profile['id'], progress_observer=phases.append)
             except Exception as exc:
                 error = refusal(exc)
         expected = dump(conn)
-        if error is not None:
+        if error is not None and rollback_expected:
             assert expected == before, case['name']
         if case['name'] == 'build-refusal':
             assert error is not None and phases[-1] == {'phase': 'building'}, (error, phases)

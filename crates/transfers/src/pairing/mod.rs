@@ -7,8 +7,8 @@ mod service;
 
 pub use matcher::{finalize, suggest, Candidate, MatchOptions, Population};
 pub use service::{
-    apply_rules, auto_pair_before_journals, bulk_pair, suggestions, PairingOptions,
-    ProjectionGuards,
+    apply_rules, auto_pair_before_journals, auto_pair_before_journals_captured, bulk_pair,
+    suggestions, AutomaticPairingError, PairingOptions, ProjectionGuards,
 };
 
 use super::*;

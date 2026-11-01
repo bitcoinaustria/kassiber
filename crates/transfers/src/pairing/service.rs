@@ -728,6 +728,19 @@ pub fn auto_pair_before_journals(
     })
 }
 
+pub use crate::sql::CapturedError as AutomaticPairingError;
+
+/// Preserve ordinary SQLite failures separately from domain AppErrors so the
+/// refresh coordinator can reproduce Python's skipped-pairing summary exactly.
+/// This wrapper has the same pending-write and rollback contract as the entry.
+pub fn auto_pair_before_journals_captured(
+    c: &Connection,
+    scope: &Scope<'_>,
+    sources: &dyn Sources,
+) -> std::result::Result<Value, AutomaticPairingError> {
+    crate::sql::capture_sqlite(|| auto_pair_before_journals(c, scope, sources))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -49,6 +49,14 @@ probe providers, discover books, or change routing. The supplied `Sources`
 provides clocks and UUIDs; production uses `SystemSources`. The returned value
 has Python freshness's exact automatic-pairing summary shape.
 
+R4-13's unregistered `process::refresh_native` now coordinates this contract.
+Its captured entry, `auto_pair_before_journals_captured`, preserves SQLite
+exceptions separately from application refusals for the exact skipped-pairing
+summary. The ordinary pairing entry and its pending-write contract remain the
+same. Complete refresh books verify that a failed second rebuild rolls back
+pairs while retaining a successful earlier stale rebuild; see the
+[process checkpoint](r4-journal-process-checkpoint.md).
+
 Standalone `suggestions`, `apply_rules` and `bulk_pair` take `PairingOptions`.
 The two write methods accept optional captured `ProjectionGuards`; they also
 leave commit to the caller. `Population`/`suggest` expose the pure matcher for

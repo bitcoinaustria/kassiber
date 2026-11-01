@@ -81,6 +81,7 @@ def compare(child, case):
     checks = dict(outcome=actual.get('ok') == (case['error'] is None),
                   result=exact(actual.get('payload') if case['error'] is None else actual.get('refusal'),
                                case['result'] if case['error'] is None else case['error']),
+                  ordered_result=case['error'] is not None or actual.get('payload_json') == json.dumps(case['result']),
                   dump=exact(actual.get('dump'), case['expected']),
                   phases=[dict(phase=p['phase']) for p in actual.get('phases', [])] == case['phases'],
                   clocks=actual.get('clock_reads') == len(case['ticks']),

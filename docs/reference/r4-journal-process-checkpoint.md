@@ -289,8 +289,8 @@ only when that decoder refuses, retaining the original request's diagnostic
 column. This remains a partial R4-8 handoff and does **not** satisfy the design's
 no-JSON production-path gate.
 Floating NaN, surrogate strings and non-string stage keys at the renderer seam refuse
-explicitly pending lossless R4-11 integration. Other loader legacy-value and
-refusal limitations remain those in the loader checkpoint.
+explicitly pending lossless R4-11 integration. The accepted R4-9 loader has
+no pending exceptions; its acceptance does not close this renderer seam.
 
 ## Verification scope
 
@@ -526,6 +526,7 @@ The local `t3code/r4-13-journals-process-3` continuation starts at
 | --- | --- |
 | Loader `e15900677` | `9ac6c43ed` |
 | Loader BLOB `d03c0b9a1` | `bb4fe55d8` |
+| Accepted loader determinism `aaf6216e3` | `718c49640` |
 | Pre-build `9e8979d30` | `0fafafe99` |
 | Renderer `4656ef30e` | `388e9b492`, `9190704c9` |
 | Persistence `51bd20498` | `3d3bbfe0c` |
@@ -597,15 +598,85 @@ The 101 private shards and aggregate are under `target/r4-13/campaign-c/`;
 progress is in `target/r4-13/logs/campaign-c.log`. This evidence belongs to
 that source and binary, not the subsequent accepted loader integration.
 
+The subsequent owner-requested `aaf6216e3` is integrated as `718c49640`.
+The native loader and port-branch Python reference now reject mixed revision
+families with code `validation` and message
+`Custody revision references contain incompatible types`. All forty historical
+loader exceptions are closed; the accepted loader has no pending exceptions.
+Conflict resolution retains the newer process, pre-build, render and
+persistence work and regenerates the combined test inventory. The accepted
+loader integration again passes **744 native tests** and **57 preflight tests**.
+
+## Atomic automatic-pairing refresh continuation
+
+The unregistered `process::refresh_native` composes the real R4-14 entry with
+the complete journal pipeline. A stale projection commits before pairing;
+successful pairing and candidate-cache writes remain pending until the second
+rebuild commits. A failed or cancelled second rebuild rolls back those pending
+writes while retaining the first successful projection. No-pair reuse and
+`skip_rebuild_when_current` preserve their reference results and lifecycle tapes.
+The outer freshness callback runs only while the connection is idle, so a
+progress observer cannot accidentally commit pending pairs.
+
+One deferred WAL checkpoint spans both commits and remains deferred until the
+transport publishes its response. Cache and checkpoint settings restore exactly
+on success, refusal and panic. The ordinary process entry still refuses an
+ambient caller transaction before emitting progress; only the private refresh
+coordinator can join its reserved pairing transaction.
+
+The committed-result handle now includes the Python insertion-ordered payload,
+constructed before COMMIT. It preserves nested quantity counters, warnings,
+component blockers and source repair/warning fields. The test probe emits its
+serialized bytes alongside the parsed payload. Complete campaigns now compare
+those bytes as well as results/refusals, dumps, phases and tapes. This closes
+result ordering for the covered inputs; it does not close the separate
+lossless stage-value boundary.
+
+The new Python oracle freezes **57 complete refresh books**: eleven pairing
+scenarios across current/stale and skip-current variants, empty books, ordinary
+pairing-cache exceptions, second-rebuild trigger refusals, and legacy BLOB,
+float and invalid marker values. Existing process and stage dumps are unchanged.
+One additional trigger-backed book keeps freshness markers current after an
+applied pair and independently asserts they are current at rebuild entry. It
+pins the requirement to rebuild after applied pairs even in that state.
+Native refresh tests compare every table, result byte, refusal, phase, clock
+and UUID. Cancellation and pairing-panic tests prove rollback independently;
+a file-backed WAL test observes both commits and post-reply restoration.
+
+SQLite exception capture preserves ordinary failures separately from domain
+application errors when constructing skipped-pairing summaries. A real
+second-rebuild trigger failure retains Python's `IntegrityError` family and raw
+SQLite message. Byte-valued freshness markers use Python's integer grammar and
+retain exact invalid-byte representations. The accepted loader's mixed-type
+revision refusal remains unchanged.
+
+The broad native run passes **791 tests across 34 targets**. After the final
+coordinator review, **54 journal library tests and four refresh tests** pass,
+including exact application-error-code preservation and WAL restoration.
+The focused Python run passes **342 tests** across refresh, process, renderer,
+persistence, loader/BLOB and campaign harness modules. After adding the
+current-marker witness, the four native refresh tests and all five Python
+refresh cases pass again, including SQLite and SQLCipher. Journal and transfer
+all-target clippy passes with warnings denied; formatting and all **239**
+journal mutation anchors pass static checks.
+The selected executable campaign kills **41 compiled mutations** with fifteen
+passing baseline tests: twelve new refresh/order/refusal controls and 29
+inherited process, integer and persistence controls. Its first run killed 40
+and exposed the absent current-marker witness; after adding that book, the
+focused baseline passes and the remaining mutation is killed. No inherited
+fixture record changes. Both disposable mutation trees are removed. This is
+selected evidence, not the complete inherited mutation catalog.
+Production scope resolution and every journal route remain unregistered.
+
 ## Remaining integration work
 
 1. Bind the real `process_native` adapter to production scope resolution and
    `SystemSources` through the shared book service. Source repair/warning,
    legacy refresh/profile reload, cached pricing and lifecycle clocks are now
    composed; preserve the ordered source fields when emitting envelopes.
-2. Finish inherited R4-9/R4-11 acceptance gaps, including lossless stage values,
-   exact refusals and the intended native boundaries. The committed handoffs
-   listed above are imported; their open acceptance work remains open.
+2. Finish process/rendering acceptance gaps, including lossless stage values,
+   exact refusals and the intended native boundaries. R4-9 is fully accepted
+   with no pending exceptions; the process and R4-11 acceptance work remains.
 3. Finish resumable complete-process shards for the twelve generators
    (24,000 books and 1,030 permutations), all 159 retained recordings and their
    permutations. Finish integrated frozen, census/shadow, codec/rollback and
@@ -613,7 +684,8 @@ that source and binary, not the subsequent accepted loader integration.
    those campaigns; future route/refresh wiring needs its own named mutations.
 4. Register CLI `journals process` with and without `--auto-pair`, verify exact
    envelopes, routing and zero fallback, and commit that boundary. The native
-   R4-14 stage is imported; its refresh coordinator still needs integration.
+   R4-14 stage and atomic refresh coordinator are composed through the test-only
+   entry; their production scope and route integration remain.
 5. Register daemon processing only after reconciling the pairing contract and
    proving exact payload/event-stream parity, cancellation/scope and fallback
    behavior; commit separately. The current desktop kind accepts no arguments

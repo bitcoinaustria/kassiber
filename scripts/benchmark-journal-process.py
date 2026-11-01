@@ -114,7 +114,8 @@ def main():
     records = []
     measurement = dict(schema='kassiber.journal-process-prepared-bench.v1',
                        native_prebuild=args.native_prebuild,
-                       registered_command=False, acceptance='open', date=CLOCK[:10],
+                       registered_command=False, acceptance='open', date=time.strftime('%Y-%m-%d', time.gmtime()),
+                       oracle_clock=CLOCK,
                        python_version=sys.version, trials_per_book=args.pairs,
                        native_binary_sha256=hashlib.sha256(args.binary.read_bytes()).hexdigest(),
                        baseline_binary_sha256=(hashlib.sha256(args.baseline_binary.read_bytes()).hexdigest()
@@ -169,6 +170,7 @@ def main():
             for name in names[1:]:
                 assert outputs['python']['payload'] == outputs[name]['payload']
                 assert [p['phase'] for p in outputs['python']['phases']] == [p['phase'] for p in outputs[name]['phases']]
+            assert outputs['rust']['payload_json'] == json.dumps(outputs['python']['payload'])
             dumps = {}
             for name, root in roots.items():
                 with sqlite3.connect(root/'kassiber.sqlite3') as c:

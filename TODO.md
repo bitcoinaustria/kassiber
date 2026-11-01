@@ -765,8 +765,11 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   repairs network-refusal metadata and merged BLOB conversion defects. Its
   seventeen frozen process books preserve every inherited record; generated
   and retained-recording campaigns remain separate acceptance gates.
-  Wire the imported R4-14 stage into refresh while preserving desktop pairing
-  and scoped AI no-pairing behavior. Track speed acceptance separately;
+  The test-only refresh coordinator now owns atomic pairing/rebuild commits,
+  ordered result bytes, skipped-pairing refusals and WAL/cache restoration.
+  Its 57 complete reference books cover both commits, skip-current and failure
+  recovery. Bind it to production while preserving desktop pairing and scoped
+  AI no-pairing behavior. Track speed acceptance separately;
   prepared-book probe results do not authorize production routing.
 
 <!-- inherited from render@f1712c625; pending r10 verification -->

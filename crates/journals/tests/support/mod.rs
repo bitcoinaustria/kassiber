@@ -141,6 +141,36 @@ pub fn snapshot(c: &Connection) -> Value {
     Value::Object(out)
 }
 
+/// A live profile for the private process probe. Production uses setup's scope
+/// resolver, never the injected profile stored in an oracle request.
+#[allow(dead_code)]
+pub fn profile(c: &Connection, id: &str) -> Result<Value, Refusal> {
+    let mut statement = c.prepare("SELECT * FROM profiles WHERE id=?")?;
+    let names = statement
+        .column_names()
+        .into_iter()
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    let mut rows = statement.query([id])?;
+    let row = rows
+        .next()?
+        .ok_or_else(|| Refusal::from("oracle profile missing".to_owned()))?;
+    let mut values = serde_json::Map::new();
+    for (index, name) in names.into_iter().enumerate() {
+        let value = match row.get_ref(index)? {
+            ValueRef::Null => Value::Null,
+            ValueRef::Integer(n) => json!(n),
+            ValueRef::Real(n) => json!(n),
+            ValueRef::Text(text) => Value::String(std::str::from_utf8(text).unwrap().into()),
+            ValueRef::Blob(bytes) => {
+                kassiber_custody::codec::to_json(&kassiber_pyjson::Value::Bytes(bytes.to_vec()))
+            }
+        };
+        values.insert(name, value);
+    }
+    Ok(Value::Object(values))
+}
+
 #[derive(Default)]
 pub struct Writes {
     pub count: usize,

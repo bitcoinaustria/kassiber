@@ -5,6 +5,10 @@ use kassiber_store::rusqlite::Connection;
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
+mod ordered;
+mod refresh;
+pub use refresh::{refresh_native, RefreshOptions};
+
 /// The R4-10 seam is mandatory: no default may silently skip repairs or pricing.
 pub trait Prebuild {
     fn resolve(&mut self, conn: &Connection) -> Result<Value, Refusal>;
@@ -118,6 +122,8 @@ impl Prebuild for MissingPrebuild {
 /// consuming this handle; dropping it restores the prior checkpoint setting.
 pub struct Committed<'a> {
     pub payload: Value,
+    /// The transport value in Python insertion order, prepared before COMMIT.
+    pub ordered_payload: kassiber_pyjson::Value,
     checkpoint: storage::DeferredCheckpoint<'a>,
 }
 impl Committed<'_> {
@@ -163,16 +169,67 @@ fn process_with_clocks<'a>(
     progress: &mut impl FnMut(&'static str),
     writes: &mut impl storage::WriteObserver,
 ) -> Result<Committed<'a>, Refusal> {
+    require_idle(conn)?;
+    let checkpoint = storage::DeferredCheckpoint::enter(conn)?;
+    build_in_transaction(
+        conn,
+        prebuild,
+        Clocks {
+            build_clock,
+            now,
+            ids,
+        },
+        progress,
+        writes,
+        checkpoint,
+        true,
+    )
+}
+
+fn require_idle(conn: &Connection) -> Result<(), Refusal> {
     if !conn.is_autocommit() {
         return Err(Refusal::new(
             "RuntimeError",
             "journal processing requires an idle connection",
         ));
     }
+    Ok(())
+}
+
+struct Clocks<'a> {
+    build_clock: &'a mut dyn FnMut() -> Result<String, Refusal>,
+    now: &'a mut dyn FnMut() -> Result<String, Refusal>,
+    ids: &'a mut dyn FnMut() -> Result<String, Refusal>,
+}
+
+// Only the refresh coordinator may join its own pending pairing transaction.
+// Public plain processing continues to refuse an ambient caller transaction.
+fn build_in_transaction<'a>(
+    conn: &'a Connection,
+    prebuild: &mut impl Prebuild,
+    clocks: Clocks<'_>,
+    progress: &mut impl FnMut(&'static str),
+    writes: &mut impl storage::WriteObserver,
+    checkpoint: storage::DeferredCheckpoint<'a>,
+    reserve_writer: bool,
+) -> Result<Committed<'a>, Refusal> {
+    let Clocks {
+        build_clock,
+        mut now,
+        mut ids,
+    } = clocks;
     let cache = storage::RebuildCache::enter(conn)?;
-    let checkpoint = storage::DeferredCheckpoint::enter(conn)?;
-    progress("writer_wait");
-    conn.execute_batch("BEGIN IMMEDIATE")?;
+    if reserve_writer {
+        progress("writer_wait");
+        conn.execute_batch("BEGIN IMMEDIATE")?;
+    } else if conn.transaction_state(Some("main"))?
+        != kassiber_store::rusqlite::TransactionState::Write
+    {
+        return Err(Refusal::new(
+            "RuntimeError",
+            "journal refresh requires its reserved writer",
+        ));
+    }
     let _transaction = Transaction(conn);
     progress("preparing");
     let mut profile = prebuild.resolve(conn)?;
@@ -220,7 +277,7 @@ fn process_with_clocks<'a>(
     let span = crate::timing::span("persistence_commit");
     let stored_at = now()?;
     let stored = persistence::store_ledger_state_with_clock(
-        conn, &profile, &state, &stored_at, now, ids, writes,
+        conn, &profile, &state, &stored_at, &mut now, &mut ids, writes,
     )?;
     let mut quantity_counts = serde_json::to_value(&stored.quantity_counts)
         .map_err(|error| Refusal::new("ValueError", error.to_string()))?;
@@ -265,12 +322,14 @@ fn process_with_clocks<'a>(
     if stored.filed_report_impacts_resolved != 0 {
         payload["filed_report_impacts_resolved"] = json!(stored.filed_report_impacts_resolved);
     }
+    let ordered_payload = ordered::payload(&payload)?;
     conn.execute_batch("RELEASE journals_process; COMMIT")?;
     drop(span);
     progress("complete");
     cache.restore()?;
     Ok(Committed {
         payload,
+        ordered_payload,
         checkpoint,
     })
 }

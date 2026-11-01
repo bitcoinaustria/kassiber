@@ -14,22 +14,20 @@ pub use quarantine::{dedupe_quarantines, enrich_quarantine_detail};
 
 impl From<rusqlite::Error> for Refusal {
     fn from(e: rusqlite::Error) -> Self {
-        if let rusqlite::Error::SqliteFailure(code, Some(message)) = &e {
-            let family = match code.code {
-                rusqlite::ErrorCode::ConstraintViolation => "IntegrityError",
-                rusqlite::ErrorCode::TypeMismatch => "IntegrityError",
-                rusqlite::ErrorCode::TooBig => "DataError",
-                rusqlite::ErrorCode::OutOfMemory => "MemoryError",
-                rusqlite::ErrorCode::ApiMisuse => "ProgrammingError",
-                rusqlite::ErrorCode::InternalMalfunction
-                | rusqlite::ErrorCode::NotADatabase
-                | rusqlite::ErrorCode::DatabaseCorrupt => "DatabaseError",
+        if let rusqlite::Error::SqliteFailure(code, Some(message)) = e {
+            use rusqlite::ffi;
+            let family = match code.extended_code & 0xff {
+                ffi::SQLITE_CONSTRAINT | ffi::SQLITE_MISMATCH => "IntegrityError",
+                ffi::SQLITE_TOOBIG => "DataError",
+                ffi::SQLITE_INTERNAL | ffi::SQLITE_NOTFOUND => "InternalError",
+                ffi::SQLITE_MISUSE | ffi::SQLITE_RANGE => "ProgrammingError",
+                ffi::SQLITE_NOMEM => "MemoryError",
+                ffi::SQLITE_CORRUPT | ffi::SQLITE_NOTADB | ffi::SQLITE_AUTH => "DatabaseError",
                 _ => "OperationalError",
             };
-            Self::new(family, message)
-        } else {
-            Self::new("DatabaseError", e.to_string())
+            return Self::new(family, message);
         }
+        Self::new("DatabaseError", e.to_string())
     }
 }
 pub(super) fn borrowed(v: &Value) -> Result<rusqlite::types::ValueRef<'_>, Refusal> {

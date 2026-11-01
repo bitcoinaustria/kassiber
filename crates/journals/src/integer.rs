@@ -7,6 +7,20 @@ use serde_json::Value;
 /// applies only at the legacy diagnostic/compatibility seams, never to facts
 /// admitted as integer msat by custody or the tax engine.
 pub(crate) fn integer(value: &Value) -> Result<Value, Refusal> {
+    if let Some(bytes) = kassiber_custody::codec::raw_bytes(value) {
+        let parsed = if bytes.is_ascii() {
+            parse_int(std::str::from_utf8(&bytes).expect("ASCII bytes"))
+        } else {
+            Err(NumberError::Invalid)
+        };
+        let integer = parsed.map_err(|error| {
+            Refusal::new("ValueError", match error {
+                NumberError::Invalid => format!("invalid literal for int() with base 10: {}", kassiber_pyjson::bytes_repr(&bytes)),
+                NumberError::TooManyDigits(digits) => format!("Exceeds the limit (4300 digits) for integer string conversion: value has {digits} digits; use sys.set_int_max_str_digits() to increase the limit"),
+            })
+        })?;
+        return number(&integer.to_string());
+    }
     match value {
         Value::Bool(v) => Ok(Value::from(i64::from(*v))),
         Value::Number(n) => {
