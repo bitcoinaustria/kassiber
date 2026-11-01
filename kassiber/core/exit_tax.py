@@ -193,6 +193,10 @@ def _resolve_departure(departure_date: Optional[str], jurisdiction: str = "gener
         raw = str(departure_date).strip()
         hint = "Use a date (YYYY-MM-DD) or a date-time with an offset, e.g. 2025-01-01T12:00:00+01:00."
         try:
+            # fromisoformat also accepts compact dates and interprets a bare
+            # date plus Z as a naive midnight. Neither is a timed departure.
+            if len(raw) != 10 and "T" not in raw.upper() and " " not in raw:
+                raise ValueError("Expected YYYY-MM-DD or a date-time")
             instant = datetime.fromisoformat(raw.replace("Z", "+00:00"))
         except ValueError as exc:
             raise AppError("Invalid exit-tax departure date", code="validation", hint=hint) from exc
