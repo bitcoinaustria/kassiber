@@ -587,16 +587,14 @@ class LightningProfitabilityTest(unittest.TestCase):
             channels=(),
             routing=None,
         )
-        report = build_profitability_report(
-            connection_id="x",
-            connection_label="X",
-            connection_kind="lnd",
-            snapshot=snapshot,
-        )
-        payload = report.to_envelope_payload()
-        self.assertEqual(payload["windowLabel"], "No routing window reported")
-        self.assertEqual(payload["summary"]["routingRevenueSat"], 0)
-        self.assertEqual(payload["channels"], [])
+        with self.assertRaises(AppError) as raised:
+            build_profitability_report(
+                connection_id="x",
+                connection_label="X",
+                connection_kind="lnd",
+                snapshot=snapshot,
+            )
+        self.assertEqual(raised.exception.code, "lightning_routing_unavailable")
 
     def test_csv_rows_include_header_summary_and_channels(self) -> None:
         report = build_profitability_report(

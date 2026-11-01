@@ -195,7 +195,9 @@ encode the policy where they can:
 ### Profitability exports
 
 The operator CSV formats satoshi amounts as exact eight-place BTC strings,
-including values beyond floating-point integer precision.
+including values beyond floating-point integer precision. A missing routing
+window refuses the report with `lightning_routing_unavailable`; unavailable
+earnings are never represented as a successful zero summary.
 
 ### AI tool surface redaction
 
