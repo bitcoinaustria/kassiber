@@ -2338,6 +2338,17 @@ def normalize_binance_supplemental_autoinvest_record(record, index=0):
         _get_cell(sanitized, "base asset amount + symbol", "Base Asset Amount + Symbol"),
         "base asset amount",
     )
+    declared_base_asset = _currency_cell(_get_cell(sanitized, "base asset symbol", "Base Asset Symbol"))
+    if (
+        declared_base_asset and parsed_base_asset
+        and (base_asset is not None or canonical_bitcoin_asset(parsed_base_asset) is not None)
+        and (canonical_bitcoin_asset(declared_base_asset) or declared_base_asset)
+            != (canonical_bitcoin_asset(parsed_base_asset) or parsed_base_asset)
+    ):
+        raise AppError(
+            "Binance supplemental base asset symbols conflict",
+            code="validation", retryable=False,
+        )
     fee_amount, fee_asset = _binance_supplemental_fee(
         _get_cell(sanitized, "trading fee (in quote asset)", "Trading Fee")
     )
