@@ -347,3 +347,41 @@ fn prebuild_sources_wide_economic_fingerprints() {
         "wide-economic-i128",
     ]);
 }
+
+#[test]
+fn prebuild_sources_branch_input_witnesses() {
+    check(&[
+        "nested-scriptpubkey-fallback",
+        "integer-outputs",
+        "float-inputs",
+        "canonical-without-observed-row",
+        "all-canonical-observed-rows",
+        "comma-separated-addresses",
+        "boolean-addresses",
+        "float-addresses",
+        "blank-address-entries",
+        "deprecated-false-text",
+        "empty-wallet-label",
+        "empty-wallet-kind",
+        "unknown-chain-scope",
+        "invalid-even-script",
+        "inventory-without-scope",
+        "checkpoint-boolean-integer",
+        "checkpoint-real-integer",
+        "checkpoint-negative-integer",
+        "checkpoint-invalid-integer",
+        "checkpoint-merged-inventory",
+        "xpub-script-types",
+        "xpub-without-script-types",
+    ]);
+}
+
+#[test]
+fn prebuild_sources_unknown_projection_refuses() {
+    let invalid = json!({"unexpected":true});
+    for (repair, warning) in [(Some(&invalid), None), (None, Some(&invalid))] {
+        let error = source_overlap_result_fields(repair, warning).unwrap_err();
+        assert_eq!(error.family, "RuntimeError");
+        assert_eq!(error.message, "unknown source-overlap result projection");
+    }
+}

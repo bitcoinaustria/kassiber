@@ -206,3 +206,19 @@ fn prebuild_pricing_binary_numeric_refusals_and_special_values() {
         "infinite-real-quantity",
     ]);
 }
+
+#[test]
+fn prebuild_pricing_special_division_and_date_witnesses() {
+    check(&[
+        "value-derived-quiet-nan",
+        "value-derived-signaling-nan",
+        "value-derived-positive-infinity",
+        "value-derived-negative-infinity",
+        "invalid-date-separator",
+        "invalid-century-leap-day",
+        "invalid-four-century-leap-day",
+        "invalid-four-century-leap-hour",
+        "invalid-month-short-time",
+        "invalid-basic-hour",
+    ]);
+}

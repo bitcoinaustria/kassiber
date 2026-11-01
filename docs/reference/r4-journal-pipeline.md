@@ -982,6 +982,38 @@ R4-10 remains **unaccepted**. The 280 transfer/daemon and 2,327 custody recipes,
 remaining uncovered-region dispositions, whole-stage cache/CPU work, final
 campaign binding and acceptance record remain open.
 
+### R4-10 input witnesses and inherited transfer gate
+
+All **280 inherited transfer/daemon recipes** are killed: 276 Rust and four
+Python mutations, after all 44 named baseline selections pass. There are no
+survivors, build errors or selection errors. The [inherited gate record](r4-prebuild-inherited-mutations.json)
+binds the catalogues, source hashes and complete local logs. The 112 journal
+recipes remain verified separately; these are two completed gate runs.
+
+The frozen corpus adds 22 source and ten pricing inputs, with all 32 also
+captured through the ordered stage. They cover numeric iterable refusals,
+comma-separated and blank addresses, canonical-row edge cases, scope and wallet
+fallbacks, checkpoint merging, configured xpubs, special decimal division and
+leap-year refusal precedence. Every previous case and shared base is unchanged.
+There are now 75 source, 96 pricing, 58 legacy and 100 ordered cases; all
+**658 complete SQLite/SQLCipher file comparisons** pass under the socket guard.
+Native interface guards also reject missing scope/profile fields and absent
+writer reservations before callbacks or writes, retaining pending caller writes.
+
+All **114 release journal/transfer tests** pass. All **12 added mutations** are
+killed after four named baseline selections pass. Release all-target Clippy
+and formatting pass. The [branch record](r4-prebuild-branch-results.json) retains
+the exact vectors, mutation mappings and coverage export. Its 40-test coverage
+run raises source executable-line coverage to 349/358, overlap to 490/495 and
+pricing to 336/346. Stable instrumentation still emits no branch counters;
+the remaining 122 zero-count executable-region entries require explicit
+dispositions and are not a count of distinct untested branches. The isolated
+coverage build tree is removed after export.
+
+R4-10 remains **unaccepted**. The 2,327 custody recipes, remaining region audit,
+whole-stage cache/CPU work, final campaign binding and acceptance record stay open.
+The Python reference and product routing are unchanged.
+
 ## Performance budget
 
 The budget is for the Rust binary's `journals process` (no `--auto-pair`) on

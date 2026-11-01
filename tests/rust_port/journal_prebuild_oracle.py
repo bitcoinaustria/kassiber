@@ -164,6 +164,16 @@ def vectors():
         "positive-infinite-real-cache": ({}, {"rate_exact": None, "rate": float('inf')}),
         "negative-infinite-real-cache": ({}, {"rate_exact": None, "rate": float('-inf')}),
         "infinite-real-quantity": ({"amount": float('inf')}, {}),
+        "value-derived-quiet-nan": ({"fiat_value_exact": 'NaN12', "fiat_price_source": 'rates_cache'}, {"rate_exact": '', "rate": ''}),
+        "value-derived-signaling-nan": ({"fiat_value_exact": 'sNaN12', "fiat_price_source": 'rates_cache'}, {"rate_exact": '', "rate": ''}),
+        "value-derived-positive-infinity": ({"fiat_value_exact": 'Infinity', "fiat_price_source": 'rates_cache'}, {"rate_exact": '', "rate": ''}),
+        "value-derived-negative-infinity": ({"fiat_value_exact": '-Infinity', "fiat_price_source": 'rates_cache'}, {"rate_exact": '', "rate": ''}),
+        "invalid-date-separator": ({"occurred_at": '2025-01x01'}, {}),
+        "invalid-century-leap-day": ({"occurred_at": '1900-02-29'}, {}),
+        "invalid-four-century-leap-day": ({"occurred_at": '2000-02-30'}, {}),
+        "invalid-four-century-leap-hour": ({"occurred_at": '2000-02-29T25:00:00Z'}, {}),
+        "invalid-month-short-time": ({"occurred_at": '2025-13-01T12'}, {}),
+        "invalid-basic-hour": ({"occurred_at": '20000101T24'}, {}),
     }
     for name, (tx, cached) in cases.items():
         conn = sqlite3.connect(":memory:")

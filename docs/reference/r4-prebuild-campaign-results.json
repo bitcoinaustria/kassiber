@@ -17397,7 +17397,7 @@
     "custody": "not executed",
     "journals_killed": 112,
     "record": "r4-prebuild-inherited-mutations.json",
-    "transfer_daemon": "not executed"
+    "transfer_daemon": "all 280 killed; 44 baseline selections pass"
   },
   "initial_whole_stage_cpu": {
     "clock": "process CPU, stage only; five alternating Python/native pairs; real SQLite files; fixture loading, writer acquisition, dump verification and final rollback excluded",
@@ -17500,6 +17500,16 @@
     ],
     "status": "Both native 20k medians exceed target; profiling and optimization remain open",
     "target_seconds": 0.03
+  },
+  "input_branch_followup": {
+    "file_comparisons": 658,
+    "native_tests": 114,
+    "new_mutations_killed": 12,
+    "new_ordered_cases": 32,
+    "new_pricing_cases": 10,
+    "new_source_cases": 22,
+    "python_reference_unchanged": true,
+    "record": "r4-prebuild-branch-results.json"
   },
   "mutation_and_census": {
     "base_commit": "0ebdb9bbe",
@@ -18899,7 +18909,7 @@
   },
   "remaining": [
     "Complete the uncovered-region/branch witness and disposition audit",
-    "Execute inherited transfer/daemon (280) and custody (2327) mutation catalogues",
+    "Execute inherited custody (2327) mutation catalogue",
     "Profile whole-stage 20k process CPU, optimize caches, compare with 0.03 seconds and record a breakdown if missed",
     "Bind final whole-campaign gates to the final implementation and write the acceptance record"
   ],

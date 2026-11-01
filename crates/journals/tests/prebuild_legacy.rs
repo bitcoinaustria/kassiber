@@ -267,3 +267,25 @@ fn prebuild_legacy_wide_and_malformed_reviewed_amounts() {
         "resolved-issue-recurs",
     ]);
 }
+
+#[test]
+fn prebuild_legacy_missing_scope_refuses_before_callbacks_or_writes() {
+    for field in ["id", "workspace_id"] {
+        let c = fixture("two-groups");
+        let mut malformed = profile(&c);
+        malformed.as_object_mut().unwrap().remove(field);
+        c.execute_batch(
+            "BEGIN IMMEDIATE;INSERT INTO settings(key,value) VALUES('caller','retained')",
+        )
+        .unwrap();
+        let before = support::snapshot(&c);
+        let error = refresh_drifted_legacy_pair_components(&c, &malformed, &mut || {
+            panic!("invalid scope must not consume a clock tick")
+        })
+        .unwrap_err();
+        assert_eq!(error.family, "KeyError");
+        assert_eq!(error.message, field);
+        assert!(support::logical_equal(&support::snapshot(&c), &before));
+        assert!(!c.is_autocommit());
+    }
+}

@@ -607,11 +607,14 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   and domain-skip outcomes. Core shadow passes; census and report coverage
   completes across initial runs and exact continuations after recorder fixes.
   Three recorder/guard mutations and all 112 inherited journal mutations are
-  killed. Transfer/daemon and custody mutation execution, the branch audit and whole-stage cache/CPU acceptance remain open.
+  killed. All 280 transfer/daemon recipes also pass. Custody mutation execution,
+  the branch audit and whole-stage cache/CPU acceptance remain open.
   The [numeric branch follow-up](docs/reference/r4-journal-pipeline.md#r4-10-uncovered-numeric-paths)
   adds binary-number refusal and exact infinite-REAL dump witnesses, with 530
   file comparisons and 19 killed numeric/dump mutations. Remaining branch
-  dispositions, inherited gates and final campaign binding still block acceptance.
+  dispositions, inherited custody gates and final campaign binding still block
+  acceptance. A further 32 input witnesses pass 658 file comparisons and 12
+  additional mutations; 122 zero-count executable regions remain for audit.
 - [ ] Reject fractional legacy msat before Python's source-overlap fingerprint
   conversion can collapse distinct amounts. The disposable repro is
   `python -m tests.rust_port.repro_journal_fractional_source_overlap`;

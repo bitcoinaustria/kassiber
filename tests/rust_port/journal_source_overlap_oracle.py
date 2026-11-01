@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 from contextlib import ExitStack
+from copy import deepcopy
 from dataclasses import replace
 import json
 import sqlite3
@@ -180,6 +181,155 @@ def vectors():
             conn.execute("UPDATE wallets SET profile_id='other' WHERE id='duplicate'")
         output.append(capture(conn, name))
         conn.close()
+    output.extend(branch_vectors(output))
+    return output
+
+
+def branch_vectors(originals):
+    from tests.rust_port.journal_pipeline_oracle import restore
+
+    templates = {case['name']: case for case in originals}
+    recipes = (
+        ('nested-scriptpubkey-fallback', 'duplicate'),
+        ('integer-outputs', 'duplicate'),
+        ('float-inputs', 'outbound'),
+        ('canonical-without-observed-row', 'duplicate'),
+        ('all-canonical-observed-rows', 'duplicate'),
+        ('comma-separated-addresses', 'trim-partial'),
+        ('boolean-addresses', 'no-overlap'),
+        ('float-addresses', 'no-overlap'),
+        ('blank-address-entries', 'trim-empty'),
+        ('deprecated-false-text', 'duplicate'),
+        ('empty-wallet-label', 'trim-empty'),
+        ('empty-wallet-kind', 'address-only'),
+        ('unknown-chain-scope', 'address-only'),
+        ('invalid-even-script', 'invalid-inventory-script'),
+        ('inventory-without-scope', 'inventory-overlap'),
+        ('checkpoint-boolean-integer', 'checkpoint-horizon'),
+        ('checkpoint-real-integer', 'checkpoint-horizon'),
+        ('checkpoint-negative-integer', 'checkpoint-horizon'),
+        ('checkpoint-invalid-integer', 'checkpoint-horizon'),
+        ('checkpoint-merged-inventory', 'inventory-horizon'),
+        ('xpub-script-types', 'duplicate'),
+        ('xpub-without-script-types', 'duplicate'),
+    )
+    output = []
+    for name, template in recipes:
+        before = deepcopy(templates[template]['before'])
+
+        def records(table):
+            data = before[table]
+            return [dict(zip(data['columns'], row)) for row in data['rows']]
+
+        def replace(table, rows):
+            before[table]['rows'] = [
+                [row[column] for column in before[table]['columns']]
+                for row in rows
+            ]
+
+        wallets = records('wallets')
+        duplicate = next(row for row in wallets if row['id'] == 'duplicate')
+        canonical = next(row for row in wallets if row['id'] == 'canonical')
+        config = json.loads(duplicate['config_json'])
+        if name in {'nested-scriptpubkey-fallback', 'integer-outputs', 'float-inputs'}:
+            transactions = records('transactions')
+            for row in transactions:
+                raw = json.loads(row['raw_json'])
+                if name == 'nested-scriptpubkey-fallback':
+                    raw['vout'] = [dict(scriptPubKey=dict(scriptpubkey=raw['vout'][0]['scriptpubkey']))]
+                elif name == 'integer-outputs':
+                    raw['vout'] = 1
+                else:
+                    raw['vin'] = 1.5
+                row['raw_json'] = json.dumps(raw)
+            replace('transactions', transactions)
+        elif name == 'canonical-without-observed-row':
+            third = dict(duplicate, id='third', label='Third', _rowid_=max(row['_rowid_'] for row in wallets) + 1)
+            wallets.append(third)
+            transactions = [row for row in records('transactions') if row['id'] == 'exclude']
+            transactions.append(dict(transactions[0], id='third', wallet_id='third', fingerprint='third', _rowid_=3))
+            replace('transactions', transactions)
+        elif name == 'all-canonical-observed-rows':
+            duplicate['kind'] = canonical['kind']
+            first = config['addresses'][0]
+            canonical['config_json'] = json.dumps(dict(chain='bitcoin', network='mainnet', addresses=[first]))
+            config = dict(chain='bitcoin', network='mainnet', addresses=[ADDR_B])
+            peer = dict(duplicate, id='peer', label='Peer', kind='address',
+                        _rowid_=max(row['_rowid_'] for row in wallets) + 1)
+            peer['config_json'] = json.dumps(dict(config, addresses=[first, ADDR_B]))
+            wallets.append(peer)
+            transactions = records('transactions')
+            for row in transactions:
+                if row['wallet_id'] == 'duplicate':
+                    row['raw_json'] = json.dumps(dict(vout=[dict(scriptpubkey=_script(ADDR_B))]))
+            replace('transactions', transactions)
+        elif name == 'comma-separated-addresses':
+            config['addresses'] = ', '.join(config['addresses'])
+        elif name == 'boolean-addresses':
+            config['addresses'] = True
+        elif name == 'float-addresses':
+            config['addresses'] = 1.5
+        elif name == 'blank-address-entries':
+            config['addresses'] = ['', '  ', *config['addresses']]
+        elif name == 'deprecated-false-text':
+            config['deprecated'] = 'off'
+        elif name == 'empty-wallet-label':
+            duplicate['label'] = ''
+        elif name == 'empty-wallet-kind':
+            duplicate['kind'] = ''
+        elif name == 'unknown-chain-scope':
+            config.update(chain='unknown', network='unknown')
+            other = json.loads(canonical['config_json'])
+            other.update(chain='unknown', network='unknown')
+            canonical['config_json'] = json.dumps(other)
+        elif name in {'invalid-even-script', 'inventory-without-scope'}:
+            inventory = records('wallet_utxos')
+            for row in inventory:
+                if name == 'invalid-even-script':
+                    row['script_pubkey'] = 'zz'
+                else:
+                    row['chain'] = ''
+            replace('wallet_utxos', inventory)
+        elif name.startswith('xpub-'):
+            material = json.loads(canonical['config_json'])
+            descriptor = material.pop('descriptor')
+            material.pop('change_descriptor')
+            material['xpub'] = descriptor[descriptor.index('['):descriptor.rindex('/0/*')]
+            if name == 'xpub-script-types':
+                material['script_types'] = ['p2wpkh']
+            canonical['kind'] = 'xpub'
+            canonical['config_json'] = json.dumps(material)
+        elif name.startswith('checkpoint-'):
+            highest = {
+                'checkpoint-boolean-integer': True,
+                'checkpoint-real-integer': 5.75,
+                'checkpoint-negative-integer': '-2',
+                'checkpoint-invalid-integer': None,
+                'checkpoint-merged-inventory': 6,
+            }[name]
+            checkpoints = records('freshness_source_states')
+            if not checkpoints:
+                data = templates['checkpoint-horizon']['before']['freshness_source_states']
+                checkpoints = [dict(zip(data['columns'], row)) for row in data['rows']]
+            for row in checkpoints:
+                row['checkpoint_json'] = json.dumps(dict(highest_used={'0': highest}))
+            replace('freshness_source_states', checkpoints)
+            if name in {'checkpoint-boolean-integer', 'checkpoint-merged-inventory'}:
+                target = 3 if name == 'checkpoint-boolean-integer' else 8
+                config['addresses'] = [
+                    _descriptor_target(json.loads(canonical['config_json']), target).address
+                ]
+        else:
+            raise AssertionError(name)
+        duplicate['config_json'] = json.dumps(config)
+        replace('wallets', wallets)
+        conn = sqlite3.connect(':memory:')
+        conn.row_factory = sqlite3.Row
+        try:
+            restore(conn, before)
+            output.append(capture(conn, name))
+        finally:
+            conn.close()
     return output
 
 

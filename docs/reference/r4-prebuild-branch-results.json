@@ -2689,7 +2689,7 @@
     "isolated_build_tree_removed": true,
     "limit": "Zero-count region entries include generic instantiations and defensive paths. They are not counts of distinct branches; stable coverage emitted no branch counters. The remaining witness/disposition audit is open.",
     "raw_after": {
-      "path": "target/r4-10/coverage/regions.json",
+      "path": "target/r4-10/coverage/regions-after-binary.json",
       "sha256": "547b220ae16cb75c159e7e98953d3964ddbacd2e17c762c3cf796ba35e777aaa"
     },
     "raw_before": {
@@ -2712,6 +2712,1027 @@
     "network": "native process killed on socket/connect/send syscalls; guard self-test passed",
     "path": "target/r4-10/binary-files.json",
     "sha256": "d62ff0f60653345afdd2174ae2e907cb242d6b61e7e5c27efd28b8ff76757145"
+  },
+  "input_witness_followup": {
+    "base_commit": "2276ee81a",
+    "coverage": {
+      "branches_emitted": 0,
+      "files": [
+        {
+          "path": "crates/journals/src/prebuild.rs",
+          "source_sha256": "40221ca89b394394f4bd7ce90246b26d0a4e6e36899f483b7e1d026d575f68d8",
+          "summary": {
+            "branches": {
+              "count": 0,
+              "covered": 0,
+              "notcovered": 0,
+              "percent": 0
+            },
+            "functions": {
+              "count": 6,
+              "covered": 6,
+              "percent": 100
+            },
+            "instantiations": {
+              "count": 50,
+              "covered": 36,
+              "percent": 72
+            },
+            "lines": {
+              "count": 50,
+              "covered": 50,
+              "percent": 100
+            },
+            "mcdc": {
+              "count": 0,
+              "covered": 0,
+              "notcovered": 0,
+              "percent": 0
+            },
+            "regions": {
+              "count": 63,
+              "covered": 59,
+              "notcovered": 4,
+              "percent": 93.65079365079364
+            }
+          },
+          "zero_count_region_entries": [
+            {
+              "column": 44,
+              "line": 36,
+              "source": "if conn.transaction_state(Some(\"main\"))? != rusqlite::TransactionState::Write {"
+            },
+            {
+              "column": 53,
+              "line": 50,
+              "source": "conn.execute_batch(&format!(\"SAVEPOINT {name}\"))?;"
+            },
+            {
+              "column": 51,
+              "line": 56,
+              "source": "conn.execute_batch(&format!(\"RELEASE {name}\"))?;"
+            }
+          ]
+        },
+        {
+          "path": "crates/journals/src/prebuild/legacy.rs",
+          "source_sha256": "db348d2bfbbec09410747fc586ec7c14ee717e45709d3ca3738da0fc8f2a121a",
+          "summary": {
+            "branches": {
+              "count": 0,
+              "covered": 0,
+              "notcovered": 0,
+              "percent": 0
+            },
+            "functions": {
+              "count": 9,
+              "covered": 7,
+              "percent": 77.77777777777779
+            },
+            "instantiations": {
+              "count": 18,
+              "covered": 7,
+              "percent": 38.88888888888889
+            },
+            "lines": {
+              "count": 80,
+              "covered": 66,
+              "percent": 82.5
+            },
+            "mcdc": {
+              "count": 0,
+              "covered": 0,
+              "notcovered": 0,
+              "percent": 0
+            },
+            "regions": {
+              "count": 92,
+              "covered": 79,
+              "notcovered": 13,
+              "percent": 85.86956521739131
+            }
+          },
+          "zero_count_region_entries": [
+            {
+              "column": 5,
+              "line": 31,
+              "source": "fn uuid(&self, _: &Connection) -> Result<String, AppError> {"
+            },
+            {
+              "column": 9,
+              "line": 32,
+              "source": "Err(AppError::new("
+            },
+            {
+              "column": 5,
+              "line": 36,
+              "source": "}"
+            },
+            {
+              "column": 45,
+              "line": 76,
+              "source": "\"OperationalError\""
+            },
+            {
+              "column": 33,
+              "line": 81,
+              "source": "e => e.into(),"
+            },
+            {
+              "column": 38,
+              "line": 81,
+              "source": "e => e.into(),"
+            },
+            {
+              "column": 40,
+              "line": 81,
+              "source": "e => e.into(),"
+            },
+            {
+              "column": 14,
+              "line": 90,
+              "source": ")?"
+            },
+            {
+              "column": 28,
+              "line": 93,
+              "source": ".ok_or_else(|| {"
+            },
+            {
+              "column": 17,
+              "line": 94,
+              "source": "Refusal::new("
+            },
+            {
+              "column": 21,
+              "line": 95,
+              "source": "\"RuntimeError\","
+            },
+            {
+              "column": 13,
+              "line": 98,
+              "source": "})?"
+            },
+            {
+              "column": 15,
+              "line": 98,
+              "source": "})?"
+            }
+          ]
+        },
+        {
+          "path": "crates/journals/src/prebuild/overlap.rs",
+          "source_sha256": "2562efc2b1a336834212ae5c33ffc61778dd0ba654568b2698cfc995545d099c",
+          "summary": {
+            "branches": {
+              "count": 0,
+              "covered": 0,
+              "notcovered": 0,
+              "percent": 0
+            },
+            "functions": {
+              "count": 40,
+              "covered": 40,
+              "percent": 100
+            },
+            "instantiations": {
+              "count": 155,
+              "covered": 88,
+              "percent": 56.774193548387096
+            },
+            "lines": {
+              "count": 495,
+              "covered": 490,
+              "percent": 98.98989898989899
+            },
+            "mcdc": {
+              "count": 0,
+              "covered": 0,
+              "notcovered": 0,
+              "percent": 0
+            },
+            "regions": {
+              "count": 885,
+              "covered": 856,
+              "notcovered": 29,
+              "percent": 96.72316384180792
+            }
+          },
+          "zero_count_region_entries": [
+            {
+              "column": 557,
+              "line": 207,
+              "source": "let reviews = rows(conn, \"SELECT component.id AS component_id,term.legacy_source_id AS review_id,term.term_kind FROM custody_component_legs leg JOIN custody_components component ON component.id=leg.component_id LEFT JOIN custody_component_economic_terms term ON term.component_id=component.id AND (term.source_leg_id=leg.id OR term.target_leg_id=leg.id) WHERE component.profile_id=? AND component.state='active' AND COALESCE(leg.anchor_transaction_id,leg.transaction_id)=? ORDER BY component.created_at,component.id,term.ordinal LIMIT 1\", [profile,tx])?;"
+            },
+            {
+              "column": 46,
+              "line": 209,
+              "source": "let id = if truth(&r[\"review_id\"]) { &r[\"review_id\"] } else { &r[\"component_id\"] };"
+            },
+            {
+              "column": 218,
+              "line": 221,
+              "source": "let tx = rows(conn,\"SELECT t.id,t.wallet_id,t.external_id,t.occurred_at,t.excluded,w.label AS wallet_label FROM transactions t LEFT JOIN wallets w ON w.id=t.wallet_id WHERE t.profile_id=? AND t.id=?\",[profile,tx])?.remove(0);"
+            },
+            {
+              "column": 10,
+              "line": 228,
+              "source": ")?;"
+            },
+            {
+              "column": 179,
+              "line": 229,
+              "source": "let p = rows(conn, \"SELECT workspace_id,journal_input_version,last_processed_input_version,last_processed_at,last_processed_tx_count FROM profiles WHERE id=?\", [profile])?.remove(0);"
+            },
+            {
+              "column": 31,
+              "line": 232,
+              "source": "let field = identity()?;"
+            },
+            {
+              "column": 738,
+              "line": 233,
+              "source": "conn.execute(\"INSERT INTO transaction_edit_events(id,workspace_id,profile_id,transaction_id,wallet_id,transaction_external_id,transaction_occurred_at,source,reason,changed_at,journal_input_version,journal_input_version_after,last_processed_input_version,last_processed_at,last_processed_tx_count) VALUES(?,?,?,?,?,?,?,'cli',?,?,?,?,?,?,?)\",params![id,text(&p[\"workspace_id\"]),profile,text(&tx[\"id\"]),tx[\"wallet_id\"].as_str(),tx[\"external_id\"].as_str(),tx[\"occurred_at\"].as_str(),REASON,at,p[\"journal_input_version\"].as_i64().unwrap_or(0),p[\"journal_input_version\"].as_i64().unwrap_or(0)+1,p[\"last_processed_input_version\"].as_i64().unwrap_or(0),p[\"last_processed_at\"].as_str(),p[\"last_processed_tx_count\"].as_i64().unwrap_or(0)])?;"
+            },
+            {
+              "column": 175,
+              "line": 234,
+              "source": "conn.execute(\"INSERT INTO transaction_edit_fields(id,event_id,field,before_value,after_value,diff_json) VALUES(?,?,'excluded','false','true','{}')\",params![field,id])?;"
+            },
+            {
+              "column": 194,
+              "line": 235,
+              "source": "conn.execute(\"UPDATE profiles SET last_processed_at=NULL,last_processed_tx_count=0,journal_input_version=journal_input_version+1,ownership_review_counts_json=NULL WHERE id=?\",[profile])?;"
+            },
+            {
+              "column": 5,
+              "line": 237,
+              "source": "}"
+            },
+            {
+              "column": 6,
+              "line": 278,
+              "source": ")? {"
+            },
+            {
+              "column": 79,
+              "line": 284,
+              "source": "let (removed, kept): (Vec<_>, Vec<_>) = addresses(&row[\"config_json\"])?"
+            },
+            {
+              "column": 13,
+              "line": 288,
+              "source": "continue;"
+            },
+            {
+              "column": 9,
+              "line": 293,
+              "source": "}"
+            },
+            {
+              "column": 47,
+              "line": 296,
+              "source": "params![sources::stored_config(&c)?, id],"
+            },
+            {
+              "column": 10,
+              "line": 297,
+              "source": ")?;"
+            },
+            {
+              "column": 51,
+              "line": 303,
+              "source": "conn.execute(&sql, params_from_iter(args))?;"
+            },
+            {
+              "column": 54,
+              "line": 344,
+              "source": "if let Some(c) = conflict(conn, profile, &tx)? {"
+            },
+            {
+              "column": 35,
+              "line": 350,
+              "source": "let idx = index(conn, profile)?;"
+            },
+            {
+              "column": 41,
+              "line": 351,
+              "source": "let p = preview(conn, profile, &idx)?;"
+            },
+            {
+              "column": 45,
+              "line": 366,
+              "source": "let remaining = index(conn, profile)?.overlaps();"
+            },
+            {
+              "column": 38,
+              "line": 380,
+              "source": "let idx = index(conn, profile_id)?;"
+            },
+            {
+              "column": 135,
+              "line": 385,
+              "source": "let mut details = json!({\"overlap_count\":overlap[\"overlap_count\"],\"overlap\":overlap,\"repair_preview\":preview(conn,profile_id,&idx)?});"
+            },
+            {
+              "column": 48,
+              "line": 527,
+              "source": ".map(|(key, v)| Ok((key, project(v)?)))"
+            },
+            {
+              "column": 50,
+              "line": 528,
+              "source": ".collect::<Result<Vec<_>, Refusal>>()?;"
+            }
+          ]
+        },
+        {
+          "path": "crates/journals/src/prebuild/pipeline.rs",
+          "source_sha256": "cd84a30fbf91f4e817cb217daf42af5ac5252d85f56de111b45cc2ca4a87bd54",
+          "summary": {
+            "branches": {
+              "count": 0,
+              "covered": 0,
+              "notcovered": 0,
+              "percent": 0
+            },
+            "functions": {
+              "count": 10,
+              "covered": 9,
+              "percent": 90
+            },
+            "instantiations": {
+              "count": 77,
+              "covered": 36,
+              "percent": 46.75324675324675
+            },
+            "lines": {
+              "count": 83,
+              "covered": 81,
+              "percent": 97.59036144578313
+            },
+            "mcdc": {
+              "count": 0,
+              "covered": 0,
+              "notcovered": 0,
+              "percent": 0
+            },
+            "regions": {
+              "count": 110,
+              "covered": 99,
+              "notcovered": 11,
+              "percent": 90
+            }
+          },
+          "zero_count_region_entries": [
+            {
+              "column": 10,
+              "line": 21,
+              "source": ")?;"
+            },
+            {
+              "column": 72,
+              "line": 53,
+              "source": "let warning = source_overlap_warning(conn, id, repair.as_ref())?;"
+            },
+            {
+              "column": 36,
+              "line": 81,
+              "source": ".ok_or_else(|| Refusal::new(\"KeyError\", \"id\"))?,"
+            },
+            {
+              "column": 49,
+              "line": 81,
+              "source": ".ok_or_else(|| Refusal::new(\"KeyError\", \"id\"))?,"
+            },
+            {
+              "column": 67,
+              "line": 81,
+              "source": ".ok_or_else(|| Refusal::new(\"KeyError\", \"id\"))?,"
+            },
+            {
+              "column": 89,
+              "line": 109,
+              "source": "let prepared = prepare_journals(conn, profile, decimal_context, clock, identity)?;"
+            }
+          ]
+        },
+        {
+          "path": "crates/journals/src/prebuild/pricing.rs",
+          "source_sha256": "de86b8a369da7488b715a88d32b9ca166ec46126e18e5c76c4b2ccdddc68c748",
+          "summary": {
+            "branches": {
+              "count": 0,
+              "covered": 0,
+              "notcovered": 0,
+              "percent": 0
+            },
+            "functions": {
+              "count": 27,
+              "covered": 26,
+              "percent": 96.29629629629629
+            },
+            "instantiations": {
+              "count": 54,
+              "covered": 26,
+              "percent": 48.148148148148145
+            },
+            "lines": {
+              "count": 346,
+              "covered": 336,
+              "percent": 97.10982658959537
+            },
+            "mcdc": {
+              "count": 0,
+              "covered": 0,
+              "notcovered": 0,
+              "percent": 0
+            },
+            "regions": {
+              "count": 685,
+              "covered": 637,
+              "notcovered": 48,
+              "percent": 92.99270072992701
+            }
+          },
+          "zero_count_region_entries": [
+            {
+              "column": 93,
+              "line": 74,
+              "source": "Self::Finite(d) => Ok(Self::Finite(d.div(quantity, &context).map_err(arithmetic)?)),"
+            },
+            {
+              "column": 54,
+              "line": 84,
+              "source": "Self::Finite(d) => Ok(d.to_fixed_string()?),"
+            },
+            {
+              "column": 30,
+              "line": 93,
+              "source": ".map_err(|_| Refusal::new(\"OverflowError\", \"decimal float conversion failed\"))?,"
+            },
+            {
+              "column": 43,
+              "line": 93,
+              "source": ".map_err(|_| Refusal::new(\"OverflowError\", \"decimal float conversion failed\"))?,"
+            },
+            {
+              "column": 95,
+              "line": 93,
+              "source": ".map_err(|_| Refusal::new(\"OverflowError\", \"decimal float conversion failed\"))?,"
+            },
+            {
+              "column": 39,
+              "line": 186,
+              "source": "let separator = iso.get(end..)?.chars().next()?;"
+            },
+            {
+              "column": 55,
+              "line": 186,
+              "source": "let separator = iso.get(end..)?.chars().next()?;"
+            },
+            {
+              "column": 36,
+              "line": 188,
+              "source": "let rest = iso.get(start..)?;"
+            },
+            {
+              "column": 71,
+              "line": 215,
+              "source": "kassiber_pytext::iso_datetime(std::str::from_utf8(&corrected).ok()?)?;"
+            },
+            {
+              "column": 26,
+              "line": 250,
+              "source": "Sql::Integer(n) => n.to_string(),"
+            },
+            {
+              "column": 32,
+              "line": 250,
+              "source": "Sql::Integer(n) => n.to_string(),"
+            },
+            {
+              "column": 34,
+              "line": 250,
+              "source": "Sql::Integer(n) => n.to_string(),"
+            },
+            {
+              "column": 88,
+              "line": 270,
+              "source": "Sql::Real(n) if n.is_finite() => format!(\"{:.0}\", n.trunc()).parse::<Decimal>()?,"
+            },
+            {
+              "column": 22,
+              "line": 281,
+              "source": "_ => \"NoneType\","
+            },
+            {
+              "column": 33,
+              "line": 292,
+              "source": ".map_err(arithmetic)?,"
+            },
+            {
+              "column": 6,
+              "line": 306,
+              "source": ")?;"
+            },
+            {
+              "column": 29,
+              "line": 310,
+              "source": "id: r.get(0)?,"
+            },
+            {
+              "column": 38,
+              "line": 311,
+              "source": "occurred_at: r.get(1)?,"
+            },
+            {
+              "column": 39,
+              "line": 312,
+              "source": "confirmed_at: r.get(2)?,"
+            },
+            {
+              "column": 32,
+              "line": 313,
+              "source": "asset: r.get(3)?,"
+            },
+            {
+              "column": 33,
+              "line": 314,
+              "source": "amount: r.get(4)?,"
+            },
+            {
+              "column": 35,
+              "line": 315,
+              "source": "currency: r.get(5)?,"
+            },
+            {
+              "column": 31,
+              "line": 316,
+              "source": "rate: r.get(6)?,"
+            },
+            {
+              "column": 32,
+              "line": 317,
+              "source": "value: r.get(7)?,"
+            },
+            {
+              "column": 37,
+              "line": 318,
+              "source": "rate_exact: r.get(8)?,"
+            },
+            {
+              "column": 38,
+              "line": 319,
+              "source": "value_exact: r.get(9)?,"
+            },
+            {
+              "column": 11,
+              "line": 321,
+              "source": "})?"
+            },
+            {
+              "column": 47,
+              "line": 322,
+              "source": ".collect::<rusqlite::Result<Vec<_>>>()?;"
+            },
+            {
+              "column": 6,
+              "line": 331,
+              "source": ")?;"
+            },
+            {
+              "column": 26,
+              "line": 342,
+              "source": "_ => None,"
+            },
+            {
+              "column": 10,
+              "line": 345,
+              "source": ")?;"
+            },
+            {
+              "column": 106,
+              "line": 349,
+              "source": "ORDER BY timestamp DESC,CASE WHEN source='manual' THEN 0 ELSE 1 END ASC,fetched_at DESC LIMIT 1\")?;"
+            },
+            {
+              "column": 101,
+              "line": 352,
+              "source": "pricing_granularity=?,pricing_method=?,pricing_external_ref=?,pricing_quality=? WHERE id=?\")?;"
+            },
+            {
+              "column": 70,
+              "line": 372,
+              "source": "let mut cached_rows = lookup.query(params![pair, pricing_at])?;"
+            },
+            {
+              "column": 46,
+              "line": 373,
+              "source": "let Some(cached) = cached_rows.next()? else {"
+            },
+            {
+              "column": 32,
+              "line": 377,
+              "source": "pair: cached.get(0)?,"
+            },
+            {
+              "column": 37,
+              "line": 378,
+              "source": "timestamp: cached.get(1)?,"
+            },
+            {
+              "column": 32,
+              "line": 379,
+              "source": "rate: cached.get(2)?,"
+            },
+            {
+              "column": 38,
+              "line": 380,
+              "source": "rate_exact: cached.get(3)?,"
+            },
+            {
+              "column": 34,
+              "line": 381,
+              "source": "source: cached.get(4)?,"
+            },
+            {
+              "column": 38,
+              "line": 382,
+              "source": "fetched_at: cached.get(5)?,"
+            },
+            {
+              "column": 39,
+              "line": 383,
+              "source": "granularity: cached.get(6)?,"
+            },
+            {
+              "column": 34,
+              "line": 384,
+              "source": "method: cached.get(7)?,"
+            },
+            {
+              "column": 17,
+              "line": 403,
+              "source": "}"
+            },
+            {
+              "column": 38,
+              "line": 422,
+              "source": "let rate_exact = exact(&rate)?;"
+            },
+            {
+              "column": 40,
+              "line": 423,
+              "source": "let value_exact = exact(&value)?;"
+            },
+            {
+              "column": 25,
+              "line": 426,
+              "source": "real(&value)?,"
+            },
+            {
+              "column": 11,
+              "line": 440,
+              "source": "])?;"
+            }
+          ]
+        },
+        {
+          "path": "crates/journals/src/prebuild/sources.rs",
+          "source_sha256": "d34139e04e8257c78306cf7f1b066368283bb4e3aa6dd3b1407d02c93bc7563c",
+          "summary": {
+            "branches": {
+              "count": 0,
+              "covered": 0,
+              "notcovered": 0,
+              "percent": 0
+            },
+            "functions": {
+              "count": 46,
+              "covered": 45,
+              "percent": 97.82608695652173
+            },
+            "instantiations": {
+              "count": 98,
+              "covered": 49,
+              "percent": 50
+            },
+            "lines": {
+              "count": 358,
+              "covered": 349,
+              "percent": 97.48603351955308
+            },
+            "mcdc": {
+              "count": 0,
+              "covered": 0,
+              "notcovered": 0,
+              "percent": 0
+            },
+            "regions": {
+              "count": 783,
+              "covered": 755,
+              "notcovered": 28,
+              "percent": 96.42401021711366
+            }
+          },
+          "zero_count_region_entries": [
+            {
+              "column": 37,
+              "line": 9,
+              "source": "let mut stmt = conn.prepare(sql)?;"
+            },
+            {
+              "column": 38,
+              "line": 11,
+              "source": "let mut cursor = stmt.query(args)?;"
+            },
+            {
+              "column": 40,
+              "line": 13,
+              "source": "while let Some(row) = cursor.next()? {"
+            },
+            {
+              "column": 41,
+              "line": 16,
+              "source": "let v = match row.get_ref(i)? {"
+            },
+            {
+              "column": 34,
+              "line": 29,
+              "source": ".map_err(|_| Refusal::new(\"ValueError\", \"invalid UTF-8\"))?),"
+            },
+            {
+              "column": 47,
+              "line": 29,
+              "source": ".map_err(|_| Refusal::new(\"ValueError\", \"invalid UTF-8\"))?),"
+            },
+            {
+              "column": 78,
+              "line": 29,
+              "source": ".map_err(|_| Refusal::new(\"ValueError\", \"invalid UTF-8\"))?),"
+            },
+            {
+              "column": 28,
+              "line": 31,
+              "source": "return Err(Refusal::new(\"TypeError\", \"unexpected binary source field\"))"
+            },
+            {
+              "column": 14,
+              "line": 54,
+              "source": "_ => v.clone(),"
+            },
+            {
+              "column": 16,
+              "line": 54,
+              "source": "_ => v.clone(),"
+            },
+            {
+              "column": 14,
+              "line": 82,
+              "source": "_ => kassiber_custody::codec::from_json(raw).unwrap_or(Py::Null),"
+            },
+            {
+              "column": 49,
+              "line": 82,
+              "source": "_ => kassiber_custody::codec::from_json(raw).unwrap_or(Py::Null),"
+            },
+            {
+              "column": 54,
+              "line": 82,
+              "source": "_ => kassiber_custody::codec::from_json(raw).unwrap_or(Py::Null),"
+            },
+            {
+              "column": 64,
+              "line": 82,
+              "source": "_ => kassiber_custody::codec::from_json(raw).unwrap_or(Py::Null),"
+            },
+            {
+              "column": 22,
+              "line": 93,
+              "source": "_ => unreachable!(\"JSON keys are strings\"),"
+            },
+            {
+              "column": 9,
+              "line": 142,
+              "source": "}"
+            },
+            {
+              "column": 170,
+              "line": 181,
+              "source": "let counts: HashMap<String, i64> = rows(conn, \"SELECT wallet_id,COUNT(*) AS count FROM transactions WHERE profile_id=? AND excluded=0 GROUP BY wallet_id\", [profile])?"
+            },
+            {
+              "column": 134,
+              "line": 183,
+              "source": "let wallets = rows(conn, \"SELECT id,label,kind,config_json FROM wallets WHERE profile_id=? ORDER BY label ASC,id ASC\", [profile])?;"
+            },
+            {
+              "column": 193,
+              "line": 232,
+              "source": "let inventory = rows(conn, \"SELECT DISTINCT wallet_id,chain,network,address,script_pubkey,branch_label,branch_index,address_index,raw_json FROM wallet_utxos WHERE profile_id=?\", [profile])?;"
+            },
+            {
+              "column": 10,
+              "line": 253,
+              "source": ")?);"
+            },
+            {
+              "column": 228,
+              "line": 256,
+              "source": "for r in rows(conn, \"SELECT wallet_id,branch_index,MAX(address_index) AS max_index FROM wallet_utxos WHERE profile_id=? AND branch_index IS NOT NULL AND address_index IS NOT NULL GROUP BY wallet_id,branch_index\", [profile])? {"
+            },
+            {
+              "column": 184,
+              "line": 257,
+              "source": "if let (Some(b), Some(n)) = (integer(&r[\"branch_index\"]).and_then(|v| u32::try_from(v).ok()), integer(&r[\"max_index\"])) { maxes.insert((text(&r[\"wallet_id\"]), b), n.max(-1)); }"
+            },
+            {
+              "column": 159,
+              "line": 259,
+              "source": "for r in rows(conn, \"SELECT source_key,checkpoint_json FROM freshness_source_states WHERE profile_id=? AND source_key LIKE 'onchain_wallet:%'\", [profile])? {"
+            },
+            {
+              "column": 17,
+              "line": 289,
+              "source": "continue;"
+            },
+            {
+              "column": 18,
+              "line": 299,
+              "source": ")?);"
+            },
+            {
+              "column": 14,
+              "line": 328,
+              "source": "_ => 2,"
+            },
+            {
+              "column": 9,
+              "line": 343,
+              "source": "}"
+            }
+          ]
+        }
+      ],
+      "isolated_build_tree_removed": true,
+      "kind": "Executable regions and lines; region entries are not distinct branches",
+      "path": "target/r4-10/coverage/regions.json",
+      "sha256": "12f1fcabc4d9f24c93b8d29be2dddecba3c9f7953f3825ed45192558e09bbd43",
+      "tests_passed": 40,
+      "zero_count_region_entries": 122
+    },
+    "file_replay": {
+      "boundary": "ordered source repairs, drifted legacy pair refresh/profile reload, and cached pricing",
+      "full_dump_comparisons": 658,
+      "network": "native process killed on socket/connect/send syscalls; guard self-test passed",
+      "path": "target/r4-10/branch-files.json",
+      "sha256": "e0f34e3d501f5a86d99d6ef58866bc2d33d0e108d7db18e0b369e9e758b7a5a2"
+    },
+    "formatting": {
+      "path": "target/r4-10/branch-fmt.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "mutations": {
+      "baseline_selections": 4,
+      "catalog": {
+        "path": "crates/journals/scripts/prebuild_branch_mutations.json",
+        "sha256": "e17783f4fffb3cff337a40b21474e29c51613ab30862369c47b677274a7ff6e1"
+      },
+      "catalog_sha256": "e17783f4fffb3cff337a40b21474e29c51613ab30862369c47b677274a7ff6e1",
+      "elapsed_seconds": 50.43295631898218,
+      "log": {
+        "path": "target/r4-10/branch-mutations.log",
+        "sha256": "b15d198437e8cef25b1b9873b29d626069894a1c830301d4e2d3e815fe1124db"
+      },
+      "recipes": 12,
+      "result": 0,
+      "source_sha256": {
+        "crates/journals/src/prebuild/legacy.rs": "db348d2bfbbec09410747fc586ec7c14ee717e45709d3ca3738da0fc8f2a121a",
+        "crates/journals/src/prebuild/overlap.rs": "2562efc2b1a336834212ae5c33ffc61778dd0ba654568b2698cfc995545d099c",
+        "crates/journals/src/prebuild/pricing.rs": "de86b8a369da7488b715a88d32b9ca166ec46126e18e5c76c4b2ccdddc68c748",
+        "crates/journals/src/prebuild/sources.rs": "d34139e04e8257c78306cf7f1b066368283bb4e3aa6dd3b1407d02c93bc7563c"
+      }
+    },
+    "native_probe": {
+      "path": "target/cargo/release/examples/journal-prebuild",
+      "sha256": "789532a66f02cb9aefdb2e5a3af4d4ab866a2d5ca1cfbef932af1b74f2b8833d"
+    },
+    "native_scope_guards": "Missing profile fields and writer reservations refuse before callbacks/writes; complete pending caller writes survive",
+    "native_tests": {
+      "passed": 114,
+      "path": "target/r4-10/branch-native.log",
+      "sha256": "d60772d98fe108aae2f36ef7385d7de31ced2c26793350fe9c76c337240d6aa1"
+    },
+    "python_reference_unchanged": true,
+    "release_clippy": {
+      "path": "target/r4-10/branch-clippy.log",
+      "sha256": "40e3b4cae75af1d069692d1962b37e89b5d5fb98d8105ca9efe8082391657705"
+    },
+    "status": "Additional input witnesses verified; remaining audit and acceptance gates stay open",
+    "vectors": {
+      "pipeline": {
+        "cases": 100,
+        "new_cases": [
+          "pricing/value-derived-quiet-nan",
+          "pricing/value-derived-signaling-nan",
+          "pricing/value-derived-positive-infinity",
+          "pricing/value-derived-negative-infinity",
+          "pricing/invalid-date-separator",
+          "pricing/invalid-century-leap-day",
+          "pricing/invalid-four-century-leap-day",
+          "pricing/invalid-four-century-leap-hour",
+          "pricing/invalid-month-short-time",
+          "pricing/invalid-basic-hour",
+          "sources/nested-scriptpubkey-fallback",
+          "sources/integer-outputs",
+          "sources/float-inputs",
+          "sources/canonical-without-observed-row",
+          "sources/all-canonical-observed-rows",
+          "sources/comma-separated-addresses",
+          "sources/boolean-addresses",
+          "sources/float-addresses",
+          "sources/blank-address-entries",
+          "sources/deprecated-false-text",
+          "sources/empty-wallet-label",
+          "sources/empty-wallet-kind",
+          "sources/unknown-chain-scope",
+          "sources/invalid-even-script",
+          "sources/inventory-without-scope",
+          "sources/checkpoint-boolean-integer",
+          "sources/checkpoint-real-integer",
+          "sources/checkpoint-negative-integer",
+          "sources/checkpoint-invalid-integer",
+          "sources/checkpoint-merged-inventory",
+          "sources/xpub-script-types",
+          "sources/xpub-without-script-types"
+        ],
+        "path": "crates/journals/tests/data/prebuild-pipeline.json",
+        "previous_cases_unchanged": 68,
+        "sha256": "660a5d4476811c7f162084784f768c5407712341f2669aef876d748db92d7c91"
+      },
+      "pricing": {
+        "cases": 96,
+        "new_cases": [
+          "value-derived-quiet-nan",
+          "value-derived-signaling-nan",
+          "value-derived-positive-infinity",
+          "value-derived-negative-infinity",
+          "invalid-date-separator",
+          "invalid-century-leap-day",
+          "invalid-four-century-leap-day",
+          "invalid-four-century-leap-hour",
+          "invalid-month-short-time",
+          "invalid-basic-hour"
+        ],
+        "path": "crates/journals/tests/data/prebuild-pricing.json",
+        "previous_cases_unchanged": 86,
+        "sha256": "612902dc669af882481c18a09a3852b1265c520574ee204ba38334f1cfcfbc4f"
+      },
+      "sources": {
+        "cases": 75,
+        "new_cases": [
+          "nested-scriptpubkey-fallback",
+          "integer-outputs",
+          "float-inputs",
+          "canonical-without-observed-row",
+          "all-canonical-observed-rows",
+          "comma-separated-addresses",
+          "boolean-addresses",
+          "float-addresses",
+          "blank-address-entries",
+          "deprecated-false-text",
+          "empty-wallet-label",
+          "empty-wallet-kind",
+          "unknown-chain-scope",
+          "invalid-even-script",
+          "inventory-without-scope",
+          "checkpoint-boolean-integer",
+          "checkpoint-real-integer",
+          "checkpoint-negative-integer",
+          "checkpoint-invalid-integer",
+          "checkpoint-merged-inventory",
+          "xpub-script-types",
+          "xpub-without-script-types"
+        ],
+        "path": "crates/journals/tests/data/prebuild-sources.json",
+        "previous_cases_unchanged": 53,
+        "sha256": "fc3c23adbbccc3384e93c3d5b686099cb65b8f17dbff5f4209c22644c551a914"
+      }
+    },
+    "verification": {
+      "classifier_update": "passed; no inventory delta",
+      "manual_second_pass": "Verified all old operands/expectations/shared bases are identical; reviewed source-index fixtures, positive checkpoint witnesses, native scope guards, full-dump comparisons, complete kill logs and unchanged product/reference code",
+      "oracle_recheck": {
+        "path": "target/r4-10/branch-oracle-recheck.log",
+        "sha256": "f7f839c1332dbab8483b52dfa3303d5d7d58476dcd1e039ed4c53b386812662e"
+      },
+      "preflight": {
+        "passed": 57,
+        "path": "target/r4-10/branch-preflight.log",
+        "sha256": "b4598b4cf50a6ee3d6fd78be98564e3d4ecee5803d6053ce3f01e7892e92e0bd"
+      }
+    }
   },
   "mutations": {
     "catalog": {
@@ -2753,7 +3774,7 @@
   "python_reference_unchanged": true,
   "remaining": [
     "Complete the uncovered-region/branch witness and disposition audit",
-    "Execute inherited journal (112), transfer/daemon (280) and custody (2327) mutation catalogues",
+    "Execute inherited custody (2327) mutation catalogue",
     "Profile whole-stage 20k process CPU, optimize caches, compare with 0.03 seconds and record a breakdown if missed",
     "Bind final whole-campaign gates to the final implementation and write the acceptance record"
   ],

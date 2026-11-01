@@ -325,17 +325,71 @@ fn prebuild_pipeline_requires_a_reserved_writer_before_callbacks_or_continuation
         if deferred {
             c.execute_batch("BEGIN;SELECT * FROM profiles").unwrap();
         }
-        let result: Result<(Prepared, ()), Refusal> = with_prebuild(
-            &c,
-            &case["profile"],
-            context(),
-            &mut || unreachable!(),
-            &mut || unreachable!(),
-            |_| unreachable!("no continuation without writer"),
-        );
-        assert_eq!(result.unwrap_err().family, "RuntimeError");
+        let results = [
+            repair_journal_inputs(
+                &c,
+                &case["profile"],
+                &mut || unreachable!(),
+                &mut || unreachable!(),
+            )
+            .map(|_| ()),
+            prepare_journals(
+                &c,
+                &case["profile"],
+                context(),
+                &mut || unreachable!(),
+                &mut || unreachable!(),
+            )
+            .map(|_| ()),
+            with_prebuild::<()>(
+                &c,
+                &case["profile"],
+                context(),
+                &mut || unreachable!(),
+                &mut || unreachable!(),
+                |_| unreachable!("no continuation without writer"),
+            )
+            .map(|_| ()),
+        ];
+        for result in results {
+            assert_eq!(result.unwrap_err().family, "RuntimeError");
+        }
         if deferred {
             c.execute_batch("ROLLBACK").unwrap();
         }
+    }
+}
+
+#[test]
+fn prebuild_pipeline_missing_profile_fields_refuse_atomically() {
+    let v = vectors();
+    let empty = v["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|case| case["name"] == "empty")
+        .unwrap();
+    for field in ["id", "workspace_id", "fiat_currency"] {
+        let c = Connection::open_in_memory().unwrap();
+        support::load(&c, &expand(&v, empty, "before"));
+        let mut profile = empty["profile"].clone();
+        profile.as_object_mut().unwrap().remove(field);
+        c.execute_batch(
+            "BEGIN IMMEDIATE;INSERT INTO settings(key,value) VALUES('caller','retained')",
+        )
+        .unwrap();
+        let before = support::snapshot(&c);
+        let error = prepare_journals(
+            &c,
+            &profile,
+            context(),
+            &mut || panic!("missing profile field must not consume a tick"),
+            &mut || panic!("missing profile field must not consume an identity"),
+        )
+        .unwrap_err();
+        assert_eq!(error.family, "KeyError");
+        assert_eq!(error.message, field);
+        assert!(support::logical_equal(&support::snapshot(&c), &before));
+        assert!(!c.is_autocommit());
     }
 }

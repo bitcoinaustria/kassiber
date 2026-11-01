@@ -1,6 +1,19 @@
 {
   "checker_path": "tax-engine/scripts/mutation_check.py",
   "checker_sha256": "c82cd3b18ad04f02fea67131370b419d8b2149bb2eec1e11575c8232a2bf7935",
+  "continuation_verification": {
+    "classifier_update": "passed; no inventory delta",
+    "manual_second_pass": "Verified all old operands/expectations/shared bases are identical; reviewed source-index fixtures, positive checkpoint witnesses, native scope guards, full-dump comparisons, complete kill logs and unchanged product/reference code",
+    "oracle_recheck": {
+      "path": "target/r4-10/branch-oracle-recheck.log",
+      "sha256": "f7f839c1332dbab8483b52dfa3303d5d7d58476dcd1e039ed4c53b386812662e"
+    },
+    "preflight": {
+      "passed": 57,
+      "path": "target/r4-10/branch-preflight.log",
+      "sha256": "b4598b4cf50a6ee3d6fd78be98564e3d4ecee5803d6053ce3f01e7892e92e0bd"
+    }
+  },
   "execution": "One test process at a time; copied tracked worktree in target scratch; offline Cargo; eight build jobs",
   "implementation_commit": "b11068fe0c538e7a6a4055043f73e21447adb0a6",
   "invocation_path": "target/r4-10/run-inherited-mutations.py",
@@ -33,10 +46,57 @@
     "survivors": 0
   },
   "remaining": [
-    "Execute 280 transfer/daemon recipes",
     "Execute 2327 custody recipes"
   ],
   "schema": "kassiber.r4-prebuild-inherited-mutations.v1",
+  "transfers": {
+    "baseline_selections": 44,
+    "catalog_sha256": "4a6f2cf59bee5c7daae9877f221b2c785c86a473c0f6529e2628b70740a186d7",
+    "elapsed_seconds": 1116.9685715989908,
+    "errors": 0,
+    "group": "transfers",
+    "implementation_commit": "2276ee81adccfd820518d7c347dc88356d3f8bb7",
+    "killed": 280,
+    "log": {
+      "path": "target/r4-10/inherited-transfers.log",
+      "sha256": "8457efc4988fdc46caaebbec9445cf0f0564db98c950c51c4beb7dce3e2869fc"
+    },
+    "python_recipes": 4,
+    "recipes": 280,
+    "result": 0,
+    "rust_recipes": 276,
+    "source_sha256": {
+      "crates/custody/src/components/mod.rs": "d1cd3412e0b1fd0ace31f1dde80758a07a34a40b7e1a2fe2bef34b9e334dc6e8",
+      "crates/custody/src/components/review.rs": "8e079152f191a87d51c39206712c5205d8f15214ed5ed203e473ba78ac87507b",
+      "crates/daemon/src/transfers.rs": "0ea52fe21e550d93fbf39f744adf669931268fcfddefbcda8d43a0650f54651a",
+      "crates/pydecimal/src/price.rs": "f466f1d167d85e15b0890a790b9bfd35919c99b5c0b0d8f1fe3e14f2ae89f806",
+      "crates/transfers/src/component_reads.rs": "92e81bbf2622168c0fc64c5aeda854d42d8602ef918c5cccab9240a48ae8ca7d",
+      "crates/transfers/src/component_review.rs": "5a3bbbebb5bd56392851595ed0f17e5f51a732f09fd5fdb860dbf0b03cef85c5",
+      "crates/transfers/src/component_rows.rs": "f0402e73babb8485c94f2e9c822c98f55c88e04a9592f4bc174f3f1c16eb370d",
+      "crates/transfers/src/component_store.rs": "b499f7516b56c855927a8770b4a9b758240014b59ea1e341bc4f3cb6170e1514",
+      "crates/transfers/src/dismissals.rs": "ab4c90efddec62741a9f1b8bd53855f2f7c00f109df2b3f934eea94dbb7e95d2",
+      "crates/transfers/src/gap_candidates.rs": "c8d84b7e382507fe646bd5818591aa0160d9aa5b436a4f42351848186fed7d6a",
+      "crates/transfers/src/gap_review.rs": "a6234cf89e9d09a27f78c6886bc2561c3b1dca4974347ec0437ee5641d0536ec",
+      "crates/transfers/src/gap_review_store.rs": "62539ca1b39c78091c49c89500e9b8cb1ba9d3fcb9f70c530cec5ceb08a57fec",
+      "crates/transfers/src/gap_snapshot.rs": "2ffdcb068ccfea559b9e3e48969324281cb0c877fe09c711174d1335dd3d470a",
+      "crates/transfers/src/history.rs": "21acdc5c5b2650f2abdcb59ed67a938f5fcdfe81f3e2a324ec04bde76fdf91b8",
+      "crates/transfers/src/lib.rs": "017a826e6bc967c478b45cc615ea81ba00d1b51fedc03429354a06cdf8b82e22",
+      "crates/transfers/src/pair_authoring.rs": "a2d6fce3cd0e1083b64cc0425db2600d667bf4f9ec147be83a34e0d7a11b01a5",
+      "crates/transfers/src/pair_spec.rs": "aaaa5d8a2afcf0347131ff3dcfdf0606da7baf07e2a9b0e9261f5b03c473e950",
+      "crates/transfers/src/pairing/matcher.rs": "471e7f8cc6c2e99932f6412594b133af899ab6fd018cabc49826f68eefc5017f",
+      "crates/transfers/src/pairing/service.rs": "a55d8e7d365f071f34534605f1789e296dfacac3382025d6a91ca9623751a8e4",
+      "crates/transfers/src/pairing_commands.rs": "b13513de7c72f61220abb252e643b9a3e9a3b9bc8a3663c11941463c4e6f5773",
+      "crates/transfers/src/payout_create.rs": "e0ce16906e6789e4fdd871739d0139f6079ea1af800f602cb41946959fb0db63",
+      "crates/transfers/src/payout_delete.rs": "9998166c299ebac5ad7d367365d43b17cad5e0cf9ac5843ad92d1466ff3644cb",
+      "crates/transfers/src/records.rs": "953cf9631765feb3964c6157b8e811f96c2336220618d317ca7e75fe2df7278f",
+      "crates/transfers/src/rules.rs": "21e49ac66f0408446af6a252847c23d53f10f37e1a08cdcbb5340a0068b95c6e",
+      "crates/transfers/src/sql.rs": "5f2a8b2140d74df177581187adf0acffe6c14aa284bde9266f34a4f4a0ec1c5d",
+      "kassiber/core/custody_authored_migration.py": "6520ccddda667c05c3e23e98be0fd3bd2fa3f67fc72edf62c4ee31d9d4710f20",
+      "kassiber/core/custody_review_terms.py": "0ae720e524b9037ef09c902d4caee9e343205be353e2f521a4f362b17d22d07a"
+    },
+    "status": "passed",
+    "survivors": 0
+  },
   "verification": {
     "classifier_update": "passed; no inventory delta",
     "manual_second_pass": "Reviewed complete kill log, source/catalog bindings, summary-writer recovery, and staged docs; no product changes",
