@@ -49,13 +49,25 @@ pub struct Calculation {
     pub method: String,
     pub fragments: Vec<Fragment>,
 }
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, PartialEq, Eq, Hash)]
 #[serde(untagged)]
 pub enum JournalMsat {
     Small(i64),
     Wide(Box<Value>),
 }
+impl From<Value> for JournalMsat {
+    fn from(value: Value) -> Self {
+        Self::Wide(Box::new(value))
+    }
+}
 impl JournalMsat {
+    pub(crate) fn value(&self) -> std::borrow::Cow<'_, Value> {
+        match self {
+            Self::Small(n) => std::borrow::Cow::Owned(Value::from(*n)),
+            Self::Wide(n) => std::borrow::Cow::Borrowed(n),
+        }
+    }
+
     pub(crate) fn as_i64(&self) -> Option<i64> {
         match self {
             Self::Small(n) => Some(*n),

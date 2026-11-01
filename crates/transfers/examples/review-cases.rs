@@ -1,8 +1,9 @@
 //! Differential driver only; the product exposes no SQL or build dispatch.
 use kassiber_envelope::{dict, get, py_str, s};
+use kassiber_journals::review_workflow;
 use kassiber_pyjson::{dumps, Options, Value};
 use kassiber_store::rusqlite::Connection;
-use kassiber_transfers::{review_workflow, Scope};
+use kassiber_transfers::Scope;
 use std::io::{self, BufRead, Write};
 
 fn run(input: &Value) -> Result<Value, Box<dyn std::error::Error>> {

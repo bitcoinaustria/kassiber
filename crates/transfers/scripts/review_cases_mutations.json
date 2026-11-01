@@ -1,18 +1,22 @@
 [
   {
     "id": "RVC-native-live-connection",
-    "file": "crates/transfers/src/review_workflow.rs",
+    "file": "crates/journals/src/review_workflow.rs",
     "find": "let prepared = Prepared::load(live, profile.clone(), as_of)?;",
-    "replace": "let clone = kassiber_journals::pipeline::memory_snapshot(live, || Ok(\"synthetic-mutation-key\".into()))?; let _ = clone.execute_batch(\"BEGIN\"); let prepared = Prepared::load(&clone, profile.clone(), as_of)?;",
-    "expect_failing": ["native_review_cases_build_on_the_live_connection_and_preserve_pending_caller_edits"],
+    "replace": "let clone = crate::pipeline::memory_snapshot(live, || Ok(\"synthetic-mutation-key\".into()))?; let _ = clone.execute_batch(\"BEGIN\"); let prepared = Prepared::load(&clone, profile.clone(), as_of)?;",
+    "expect_failing": [
+      "native_review_cases_build_on_the_live_connection_and_preserve_pending_caller_edits"
+    ],
     "rule": "Case assembly reads the caller's live connection, including pending writer edits, without backup or transaction replacement."
   },
   {
     "id": "RVC-native-refusal-fields",
-    "file": "crates/transfers/src/review_workflow.rs",
+    "file": "crates/journals/src/review_workflow.rs",
     "find": "let prepared = Prepared::load(live, profile.clone(), as_of)?;",
     "replace": "let prepared = Prepared::load(live, profile.clone(), as_of).map_err(|error| AppError::new(\"internal_error\", error.message.clone()))?;",
-    "expect_failing": ["native_review_cases_refuse_cursors_before_loading_and_preserve_build_refusals"],
+    "expect_failing": [
+      "native_review_cases_refuse_cursors_before_loading_and_preserve_build_refusals"
+    ],
     "rule": "Assembler refusal families and attributes survive the case composition boundary intact."
   },
   {
@@ -20,7 +24,9 @@
     "file": "crates/transfers/src/review_cases.rs",
     "find": "fn decode(raw: &str) -> Option<Vec<u8>> {",
     "replace": "fn decode(raw: &str) -> Option<Vec<u8>> { if !raw.is_ascii() { return None; }",
-    "expect_failing": ["review_cases_match_python_pages_freshness_pair_evidence_and_receipts_without_writes"],
+    "expect_failing": [
+      "review_cases_match_python_pages_freshness_pair_evidence_and_receipts_without_writes"
+    ],
     "rule": "Review cursors decode UTF-8 bytes non-strictly, including ignored non-ASCII bytes."
   },
   {
@@ -28,7 +34,9 @@
     "file": "crates/transfers/src/review_cases.rs",
     "find": "let read = if conn.is_autocommit() {",
     "replace": "let read = if false && conn.is_autocommit() {",
-    "expect_failing": ["review_case_cursor_and_freshness_share_the_build_snapshot_during_concurrent_writes"],
+    "expect_failing": [
+      "review_case_cursor_and_freshness_share_the_build_snapshot_during_concurrent_writes"
+    ],
     "rule": "Cursor, build evidence and freshness must share one consistent read snapshot."
   },
   {
@@ -36,7 +44,9 @@
     "file": "crates/transfers/src/review_cases.rs",
     "find": "if !equal(version, scope) {",
     "replace": "if false && !equal(version, scope) {",
-    "expect_failing": ["review_cases_match_python_pages_freshness_pair_evidence_and_receipts_without_writes"],
+    "expect_failing": [
+      "review_cases_match_python_pages_freshness_pair_evidence_and_receipts_without_writes"
+    ],
     "rule": "An expired scope refuses before the canonical build or later cursor validation."
   },
   {
@@ -44,7 +54,9 @@
     "file": "crates/transfers/src/review_cases.rs",
     "find": "value(&profile, \"last_processed_at\"),",
     "replace": "Value::Null,",
-    "expect_failing": ["review_cases_match_python_pages_freshness_pair_evidence_and_receipts_without_writes"],
+    "expect_failing": [
+      "review_cases_match_python_pages_freshness_pair_evidence_and_receipts_without_writes"
+    ],
     "rule": "A journal rebuild expires a cursor even if input version stays unchanged."
   },
   {
@@ -52,7 +64,9 @@
     "file": "crates/transfers/src/review_cases.rs",
     "find": "let quarantines = build(conn, &profile)?;",
     "replace": "let quarantines: Vec<Value> = Vec::new(); let _ = build;",
-    "expect_failing": ["review_cases_match_python_pages_freshness_pair_evidence_and_receipts_without_writes"],
+    "expect_failing": [
+      "review_cases_match_python_pages_freshness_pair_evidence_and_receipts_without_writes"
+    ],
     "rule": "Cases come from the current canonical build, including unprocessed books."
   },
   {
@@ -60,7 +74,9 @@
     "file": "crates/transfers/src/review_cases.rs",
     "find": "&& !waiting.contains_key(*id)",
     "replace": "&& true",
-    "expect_failing": ["review_cases_match_python_pages_freshness_pair_evidence_and_receipts_without_writes"],
+    "expect_failing": [
+      "review_cases_match_python_pages_freshness_pair_evidence_and_receipts_without_writes"
+    ],
     "rule": "Rows with a named upstream root are counted on it instead of listed as separate cases."
   },
   {
@@ -68,7 +84,9 @@
     "file": "crates/transfers/src/review_cases.rs",
     "find": "if roots.is_empty() {",
     "replace": "if false && roots.is_empty() {",
-    "expect_failing": ["review_waiting_roots_match_python_chains_cycles_groups_and_ambiguous_timestamps"],
+    "expect_failing": [
+      "review_waiting_roots_match_python_chains_cycles_groups_and_ambiguous_timestamps"
+    ],
     "rule": "A downstream dependency chain resolves to its ultimate root without following cycles."
   },
   {
@@ -76,7 +94,9 @@
     "file": "crates/transfers/src/review_cases.rs",
     "find": "if matches.len() == 1 {",
     "replace": "if !matches.is_empty() {",
-    "expect_failing": ["review_waiting_roots_match_python_chains_cycles_groups_and_ambiguous_timestamps"],
+    "expect_failing": [
+      "review_waiting_roots_match_python_chains_cycles_groups_and_ambiguous_timestamps"
+    ],
     "rule": "An uncertain timestamp cannot choose between multiple roots of the same asset."
   },
   {
@@ -84,7 +104,9 @@
     "file": "crates/transfers/src/review_cases.rs",
     "find": "Value::List(keyed.into_iter().map(|(_, row)| row).collect()),",
     "replace": "Value::List(vec![]),",
-    "expect_failing": ["review_pair_fingerprints_bind_allocations_and_observations_but_ignore_note_only_revisions"],
+    "expect_failing": [
+      "review_pair_fingerprints_bind_allocations_and_observations_but_ignore_note_only_revisions"
+    ],
     "rule": "The pair fingerprint binds every allocation by the quantities and anchors it moves."
   },
   {
@@ -92,7 +114,9 @@
     "file": "crates/transfers/src/review_cases.rs",
     "find": "format!(\"{side}_full_amount_msat\")",
     "replace": "format!(\"{side}_amount_msat\")",
-    "expect_failing": ["review_pair_fingerprints_bind_allocations_and_observations_but_ignore_note_only_revisions"],
+    "expect_failing": [
+      "review_pair_fingerprints_bind_allocations_and_observations_but_ignore_note_only_revisions"
+    ],
     "rule": "Pair evidence displays the full observed leg separately from the reviewed allocated slice."
   },
   {
@@ -100,7 +124,9 @@
     "file": "crates/transfers/src/review_cases.rs",
     "find": "let receipts = if cursor.is_none() {",
     "replace": "let receipts = if true {",
-    "expect_failing": ["review_cases_match_python_pages_freshness_pair_evidence_and_receipts_without_writes"],
+    "expect_failing": [
+      "review_cases_match_python_pages_freshness_pair_evidence_and_receipts_without_writes"
+    ],
     "rule": "Historical receipt summaries occur only on the first page of an inspection."
   }
 ]

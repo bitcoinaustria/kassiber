@@ -1,11 +1,11 @@
 //! Economic commitments over the canonical review build, independent of row IDs.
-use crate::{review_operations, sql, value, Scope};
+use crate::{JournalEntryRow, JournalState};
 use kassiber_custody::codec;
 use kassiber_envelope::{dict, get, s, set, AppError};
-use kassiber_journals::{JournalEntryRow, JournalState};
 use kassiber_pydecimal::{Context, Decimal};
 use kassiber_pyjson::Value;
 use kassiber_store::rusqlite::Connection;
+use kassiber_transfers::{review_operations, sql, Scope};
 use std::collections::{BTreeMap, BTreeSet};
 
 type Result<T> = std::result::Result<T, AppError>;
@@ -213,7 +213,7 @@ fn acquisition(state: &JournalState<'_>, conn: &Connection, scope: &Scope<'_>) -
     )?
     .into_iter()
     .next()
-    .map(|row| value(&row, "value"))
+    .map(|row| get(&row, "value").cloned().unwrap_or(Value::Null))
     .unwrap_or(Value::Null);
     if !matches!(&identity, Value::Str(id) if id.as_str().is_some_and(|id| kassiber_store::valid_hex(id, 32)))
     {

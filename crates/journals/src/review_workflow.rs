@@ -1,9 +1,10 @@
 //! Unregistered native review composition. Loader acceptance still gates routes.
-use crate::{review_cases, review_effects, sql, Scope};
+use crate::review_effects;
+use crate::{pipeline::Prepared, Refusal};
 use kassiber_envelope::{dict, s, AppError};
-use kassiber_journals::{pipeline::Prepared, Refusal};
 use kassiber_pyjson::Value;
 use kassiber_store::rusqlite::Connection;
+use kassiber_transfers::{review_cases, sql, Scope};
 
 /// Keep reference exception families and attributes intact through composition.
 #[derive(Debug)]

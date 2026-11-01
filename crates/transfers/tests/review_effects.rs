@@ -1,12 +1,13 @@
 #![cfg(feature = "test-harness")]
 use kassiber_envelope::{dict, get, s};
+use kassiber_journals::review_effects;
 use kassiber_journals::{
     pipeline::Prepared, Holding, Holdings, JournalDecimal, JournalEntryRow, JournalState,
     QuarantineRow, TaxSummaryRow,
 };
 use kassiber_pyjson::Value as Py;
 use kassiber_store::rusqlite::{types::Value as Sql, Connection};
-use kassiber_transfers::{review_effects, review_operations::canonical, Scope};
+use kassiber_transfers::{review_operations::canonical, Scope};
 use serde_json::{json, Value};
 
 fn py(value: &Value) -> Py {
@@ -393,7 +394,7 @@ fn review_effects_join_live_native_builds_without_writes_or_transaction_changes(
                 let mode = conn.is_autocommit();
                 let tape = list(field(&build, "entry_ids"));
                 let mut ids = tape.iter();
-                let result = kassiber_transfers::review_workflow::inspect_effects(
+                let result = kassiber_journals::review_workflow::inspect_effects(
                     &conn,
                     &Scope {
                         workspace_id: "w",

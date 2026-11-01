@@ -33,12 +33,12 @@ pub fn clear_memos() {
 }
 
 pub fn journal_operands(
-    snapshot: &crate::snapshot::BookSnapshot,
+    snapshot: &crate::snapshot::Snapshot,
     stages: &crate::Stages,
 ) -> Result<(Value, Vec<Value>), String> {
     use crate::{codec, interpretation};
     use serde_json::json;
-    let raw = snapshot.stages();
+    let raw = snapshot;
     let exact = |value: &kassiber_pyjson::Value| -> Result<Value, String> {
         let converted = codec::to_json(value);
         if !codec::lossless(value)
@@ -57,12 +57,12 @@ pub fn journal_operands(
             .ok_or("journal build requires finalized custody projection")?,
     )?;
     let (ignored, accounting_ignored) = interpretation::gap_ignored_ids(
-        &raw,
+        raw,
         &stages.components,
         &stages.evidence,
         &stages.interpretation,
     )?;
-    let channels = interpretation::channels::compute(&raw)?;
+    let channels = interpretation::channels::compute(raw)?;
     let wallets: Vec<Value> = raw
         .wallets
         .iter()
@@ -95,7 +95,7 @@ pub fn journal_operands(
         eligible,
         &refs,
     )?;
-    let mut rows = raw.transactions.clone();
+    let mut rows = raw.rows().to_vec();
     for row in &mut rows {
         row["_closed_confirmation_observation"] = interpretation::capture_confirmation(row)?;
     }

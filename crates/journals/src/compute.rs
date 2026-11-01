@@ -5,7 +5,11 @@
 //! finalized projection, the profile and the wallets in exactly the JSON
 //! model `kassiber_custody::custody_with_fusion` reads from the request and
 //! response texts, so both build the same ledger request.
-use kassiber_custody::{codec, ledger_request, snapshot::BookSnapshot as Snapshot, timing};
+use kassiber_custody::{
+    codec, ledger_request,
+    snapshot::{BookSnapshot, Snapshot},
+    timing,
+};
 use serde_json::Value;
 
 pub use kassiber_custody::{Refusal, Stages};
@@ -37,8 +41,17 @@ pub fn compute(request: &str, finalized: bool) -> Result<Computed, Refusal> {
     compute_snapshot(snapshot, finalized)
 }
 
-pub fn compute_snapshot(snapshot: Snapshot, finalized: bool) -> Result<Computed, Refusal> {
+pub fn compute_snapshot(snapshot: BookSnapshot, finalized: bool) -> Result<Computed, Refusal> {
     let stages = kassiber_custody::run(&snapshot, finalized)?;
+    finish(snapshot.stages(), stages)
+}
+
+pub fn compute_loaded(snapshot: Snapshot, finalized: bool) -> Result<Computed, Refusal> {
+    let stages = kassiber_custody::run_loaded(&snapshot, finalized)?;
+    finish(snapshot, stages)
+}
+
+fn finish(snapshot: Snapshot, stages: Stages) -> Result<Computed, Refusal> {
     let fusion = match &stages.finalized_projection {
         Some(projection) => fuse(&snapshot, projection),
         None => Fusion::Skipped,

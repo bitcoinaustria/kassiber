@@ -25,6 +25,7 @@ fn list(v: Py) -> Result<Vec<Py>, Refusal> {
         Py::Int(n) if n == 0.into() => vec![],
         Py::Float(0.0) => vec![],
         Py::List(v) => v,
+        Py::Bytes(v) => v.into_iter().map(|b| Py::from(i64::from(b))).collect(),
         Py::Dict(v) => v
             .into_iter()
             .map(|(k, _)| match k {

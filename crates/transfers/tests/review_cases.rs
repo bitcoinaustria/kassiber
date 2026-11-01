@@ -1,8 +1,9 @@
 #![cfg(feature = "test-harness")]
 use kassiber_envelope::{dict, get, py_str, s, AppError};
+use kassiber_journals::review_workflow;
 use kassiber_pyjson::{dumps, Options, Value};
 use kassiber_store::rusqlite::{types::Value as SqlValue, Connection};
-use kassiber_transfers::{review_cases, review_workflow, Scope};
+use kassiber_transfers::{review_cases, Scope};
 use std::collections::BTreeMap;
 
 fn field<'a>(value: &'a Value, key: &str) -> &'a Value {

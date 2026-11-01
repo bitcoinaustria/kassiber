@@ -57,7 +57,8 @@ pub fn load_schema(c: &Connection, dump: &Value, schema: &Value) {
     let objects = schema
         .as_array()
         .unwrap_or_else(|| manifest["objects"].as_array().unwrap());
-    c.execute_batch("PRAGMA foreign_keys=OFF;PRAGMA ignore_check_constraints=ON;BEGIN").unwrap();
+    c.execute_batch("PRAGMA foreign_keys=OFF;PRAGMA ignore_check_constraints=ON;BEGIN")
+        .unwrap();
     for o in objects.iter().filter(|o| o[0] == "table") {
         c.execute_batch(o[3].as_str().unwrap()).unwrap();
     }

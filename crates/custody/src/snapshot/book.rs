@@ -182,6 +182,63 @@ book! {
 }
 
 impl BookSnapshot {
+    pub(crate) fn escape_wire_tags(&mut self) {
+        self.profile.value.escape_wire_tags();
+        if let Some(NetworkObject::Object(network)) = &mut self.book_network.value {
+            crate::codec::escape_wire_tags(&mut network.binding);
+            crate::codec::escape_wire_tags(&mut network.references);
+            if let Some(NetworkArray::Array(rows)) = &mut network.observations {
+                for row in rows {
+                    if let NetworkObject::Object(row) = row {
+                        row.escape_wire_tags();
+                    }
+                }
+            }
+        }
+        self.wallets
+            .iter_mut()
+            .for_each(WalletRef::escape_wire_tags);
+        self.transactions
+            .iter_mut()
+            .for_each(TxRow::escape_wire_tags);
+        self.rate_rows
+            .iter_mut()
+            .for_each(RateRow::escape_wire_tags);
+        self.gap_worklist
+            .rows
+            .iter_mut()
+            .for_each(WorklistRow::escape_wire_tags);
+        for rows in [
+            &mut self.anchor_wallets.value,
+            &mut self.revision_headers.value,
+            &mut self.receipt_sources.value,
+            &mut self.channel_records.value,
+            &mut self.loan_legs.value,
+            &mut self.evidence_snapshots.value,
+            &mut self.migration_issues.value,
+            &mut self.gap_reviews.value,
+            &mut self.pair_dismissals.value,
+        ] {
+            rows.iter_mut().for_each(Record::escape_wire_tags);
+        }
+        for component in &mut self.components.value {
+            component.header.escape_wire_tags();
+            for rows in [
+                &mut component.legs,
+                &mut component.allocations,
+                &mut component.economic_terms,
+                &mut component.commitments,
+            ] {
+                rows.iter_mut().for_each(Record::escape_wire_tags);
+            }
+        }
+        self.owned_index
+            .value
+            .iter_mut()
+            .chain(self.anchors.value.values_mut())
+            .for_each(crate::codec::escape_wire_tags);
+    }
+
     /// CPython's v1 request text. This reconstructs the typed columns, their
     /// presence and order; only not-yet-ported fields use their retained wire.
     pub fn text(&self) -> Result<String, String> {
@@ -221,6 +278,7 @@ impl BookSnapshot {
             migration_issues: (*self.migration_issues).clone(),
             gap_reviews: (*self.gap_reviews).clone(),
             pair_dismissals: (*self.pair_dismissals).clone(),
+            rows: Default::default(),
             gap_worklist: GapWorklist {
                 large_book: self.gap_worklist.large_book,
                 rows: self

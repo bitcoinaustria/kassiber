@@ -22,13 +22,13 @@ pub mod review_artifact;
 #[cfg(any(test, feature = "test-harness"))]
 pub mod review_cases;
 #[cfg(feature = "test-harness")]
-pub mod review_effects;
-#[cfg(feature = "test-harness")]
 pub mod review_operations;
-#[cfg(feature = "test-harness")]
-pub mod review_workflow;
 mod rules;
+#[cfg(not(feature = "test-harness"))]
 mod sql;
+#[cfg(feature = "test-harness")]
+#[doc(hidden)]
+pub mod sql;
 
 use kassiber_envelope::{dict, get, py_str, AppError};
 use kassiber_pyjson::Value;

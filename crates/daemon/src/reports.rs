@@ -3,12 +3,16 @@ use kassiber_envelope::{dict, get, s, type_name, AppError};
 use kassiber_pyjson::Value;
 use kassiber_runtime::store::Book;
 pub const KINDS: &[&str] = &[
+    "ui.transactions.export_csv",
+    "ui.transactions.export_xlsx",
+    "ui.transactions.export_platform_csv",
     "ui.reports.explain_capital_gain",
     "ui.reports.summary",
     "ui.reports.balance_sheet",
     "ui.reports.portfolio_summary",
     "ui.reports.tax_summary",
     "ui.reports.balance_history",
+    "ui.reports.privacy_hygiene",
     "ui.reports.exit_tax_preview",
     "ui.reports.export_csv",
     "ui.reports.export_xlsx",
@@ -16,18 +20,14 @@ pub const KINDS: &[&str] = &[
     "ui.reports.export_austrian_e1kv_xlsx",
     "ui.reports.export_austrian_e1kv_csv",
     "ui.reports.export_exit_tax_xlsx",
-    "ui.transactions.export_csv",
-    "ui.transactions.export_xlsx",
-    "ui.reports.cross_check",
-    "ui.reports.export_cross_check",
     "ui.reports.export_year_handoff",
-    "ui.transactions.export_platform_csv",
-    "ui.reports.privacy_hygiene",
+    "ui.reports.export_cross_check",
+    "ui.source_funds.cases.list",
     "ui.source_funds.sources.list",
     "ui.source_funds.links.list",
-    "ui.source_funds.cases.list",
-    "ui.source_funds.recipients.list",
     "ui.source_funds.evidence.list",
+    "ui.source_funds.recipients.list",
+    "ui.reports.cross_check",
 ];
 pub fn execute(book: &mut dyn Book, kind: &str, raw: Option<&Value>) -> Result<Value, AppError> {
     if kind.starts_with("ui.source_funds.") {
@@ -635,6 +635,7 @@ mod tests {
                 "ui.reports.portfolio_summary",
                 "ui.reports.tax_summary",
                 "ui.reports.balance_history",
+                "ui.reports.privacy_hygiene",
                 "ui.reports.exit_tax_preview",
                 "ui.reports.export_csv",
                 "ui.reports.export_xlsx",
@@ -642,9 +643,9 @@ mod tests {
                 "ui.reports.export_austrian_e1kv_xlsx",
                 "ui.reports.export_austrian_e1kv_csv",
                 "ui.reports.export_exit_tax_xlsx",
-                "ui.reports.cross_check",
-                "ui.reports.export_cross_check",
                 "ui.reports.export_year_handoff",
+                "ui.reports.export_cross_check",
+                "ui.reports.cross_check",
             ]
         );
     }
@@ -678,5 +679,4 @@ mod tests {
         assert!(!KINDS.contains(&"ui.reports.privacy_mirror"));
         assert!(!KINDS.contains(&"ui.reports.psbt_privacy"));
     }
-
 }

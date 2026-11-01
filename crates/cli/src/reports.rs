@@ -596,5 +596,4 @@ mod tests {
         assert!(!COMMANDS.contains(&"reports.privacy-mirror"));
         assert!(!COMMANDS.contains(&"reports.psbt-privacy"));
     }
-
 }

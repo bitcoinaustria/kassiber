@@ -114,10 +114,9 @@ pub fn supported_kinds() -> Vec<&'static str> {
             .contains(k)
     }));
     kinds.extend(
-        reports::KINDS
-            .iter()
-            .copied()
-            .filter(|k| k.starts_with("ui.reports.")),
+        reports::KINDS.iter().copied().filter(|k| {
+            !k.starts_with("ui.transactions.export_") && *k != "ui.reports.cross_check"
+        }),
     );
     kinds.extend(documents::KINDS);
     kinds.extend(transfers::KINDS);
@@ -167,6 +166,7 @@ pub fn supported_kinds() -> Vec<&'static str> {
         ]
         .contains(k)
     }));
+    kinds.push("ui.reports.cross_check");
     kinds.extend(
         wallets::KINDS
             .iter()

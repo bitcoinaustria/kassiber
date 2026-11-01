@@ -48,7 +48,7 @@ type Result<T> = std::result::Result<T, Error>;
 fn app_refusal(error: kassiber_envelope::AppError) -> Error {
     let mut refusal = crate::Refusal::new("AppError", error.message);
     refusal.code = Some(error.code);
-    refusal.hint = error.hint;
+    refusal.hint = error.hint.map(String::from);
     refusal.details = error
         .details
         .as_ref()

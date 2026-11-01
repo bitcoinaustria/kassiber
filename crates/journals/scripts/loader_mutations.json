@@ -1552,7 +1552,7 @@
   {
     "id": "JL-app-hint",
     "file": "crates/journals/src/loader.rs",
-    "find": "refusal.hint = error.hint;",
+    "find": "refusal.hint = error.hint.map(String::from);",
     "replace": "refusal.hint = None;",
     "expect_failing": [
       "native_loader_refusal_attributes_and_display_keep_private_values_out"

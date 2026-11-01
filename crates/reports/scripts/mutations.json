@@ -7273,8 +7273,8 @@
   {
     "id": "cross-daemon-registration",
     "file": "crates/daemon/src/reports.rs",
-    "find": "    \"ui.reports.export_cross_check\",\n",
-    "replace": "",
+    "find": "    \"ui.reports.export_cross_check\",\n    \"ui.source_funds.cases.list\",",
+    "replace": "    \"ui.source_funds.cases.list\",",
     "expect_failing": [
       "cross_check_daemon_preserves_uploaded_bytes_and_registration"
     ],
@@ -8093,8 +8093,8 @@
   {
     "id": "platform-daemon-registration",
     "file": "crates/daemon/src/reports.rs",
-    "find": "    \"ui.reports.export_year_handoff\",\n    \"ui.transactions.export_platform_csv\",",
-    "replace": "    \"ui.reports.export_year_handoff\",\n    \"ui.transactions.export_platform_csv_WRONG\",",
+    "find": "    \"ui.transactions.export_xlsx\",\n    \"ui.transactions.export_platform_csv\",",
+    "replace": "    \"ui.transactions.export_xlsx\",\n    \"ui.transactions.export_platform_csv_WRONG\",",
     "expect_failing": [
       "platform_csv_daemon_kind_is_registered"
     ],
@@ -8513,8 +8513,8 @@
   {
     "id": "privacy-r5-daemon-registered",
     "file": "crates/daemon/src/reports.rs",
-    "find": "    \"ui.reports.privacy_hygiene\",",
-    "replace": "    \"ui.reports.privacy_hygiene_omitted\",",
+    "find": "    \"ui.reports.balance_history\",\n    \"ui.reports.privacy_hygiene\",",
+    "replace": "    \"ui.reports.balance_history\",\n    \"ui.reports.privacy_hygiene_omitted\",",
     "expect_failing": [
       "privacy_hygiene_daemon_rejects_unknown_fields_and_non_objects"
     ],
@@ -8943,8 +8943,8 @@
   {
     "id": "sof-list-cli-registration",
     "file": "crates/cli/src/reports.rs",
-    "find": "\"reports.cross-check\",\n    \"source-funds.sources.list\",",
-    "replace": "\"reports.cross-check\",",
+    "find": "    \"reports.privacy-hygiene\",\n    \"source-funds.sources.list\",",
+    "replace": "    \"reports.privacy-hygiene\",",
     "expect_failing": [
       "source_funds_stored_cli_forwards_scope_filters_and_registers_only_lists"
     ],
@@ -8953,8 +8953,8 @@
   {
     "id": "sof-list-catalog-registration",
     "file": "crates/cli/src/describe.rs",
-    "find": "\"reports.cross-check\",\n    \"source-funds.sources.list\",",
-    "replace": "\"reports.cross-check\",",
+    "find": "    \"source-funds.sources.list\",\n",
+    "replace": "",
     "expect_failing": [
       "source_funds_stored_cli_forwards_scope_filters_and_registers_only_lists"
     ],
@@ -8963,8 +8963,8 @@
   {
     "id": "sof-list-daemon-registration",
     "file": "crates/daemon/src/reports.rs",
-    "find": "\"ui.reports.export_cross_check\",\n    \"ui.source_funds.sources.list\",",
-    "replace": "\"ui.reports.export_cross_check\",",
+    "find": "    \"ui.source_funds.cases.list\",\n    \"ui.source_funds.sources.list\",",
+    "replace": "    \"ui.source_funds.cases.list\",",
     "expect_failing": [
       "source_funds_stored_daemon_preserves_arguments_and_registers_only_lists"
     ],

@@ -65,6 +65,10 @@ fn stage_error(error: kassiber_custody::Refusal) -> Refusal {
 impl Prepared {
     pub fn from_snapshot(snapshot: BookSnapshot) -> Result<Self, Refusal> {
         let computed = crate::compute_snapshot(snapshot, true).map_err(stage_error)?;
+        Self::from_computed(computed)
+    }
+
+    fn from_computed(computed: Computed) -> Result<Self, Refusal> {
         let (mut custody, wallets) = kassiber_custody::journal_support::journal_operands(
             &computed.snapshot,
             &computed.stages,
@@ -84,7 +88,10 @@ impl Prepared {
 
     pub fn load(conn: &Connection, profile: Py, as_of: &str) -> Result<Self, Refusal> {
         let loaded = loader::load_read_snapshot(conn, profile, as_of).map_err(load_error)?;
-        Self::from_snapshot(loaded.into_custody().map_err(load_error)?)
+        Self::from_computed(
+            crate::compute::compute_loaded(loaded.into_custody().map_err(load_error)?, true)
+                .map_err(stage_error)?,
+        )
     }
 
     pub fn render(&self, ids: impl FnMut() -> String) -> Result<JournalState<'_>, Refusal> {
@@ -156,10 +163,9 @@ fn decimal(value: &Value) -> Result<Decimal, Refusal> {
     })
 }
 
-fn rates(rows: &[kassiber_custody::snapshot::RateRow]) -> Result<Value, Refusal> {
+fn rates(rows: &[kassiber_custody::snapshot::Record]) -> Result<Value, Refusal> {
     let mut rates = serde_json::Map::new();
     for row in rows {
-        let row = row.record();
         let asset = codec::pystr(&row["asset"]);
         if rates.contains_key(&asset) {
             continue;
@@ -220,7 +226,7 @@ mod tests {
 
     #[test]
     fn review_rates_and_warnings_preserve_reference_precedence_and_exactness() {
-        let rows: Vec<kassiber_custody::snapshot::RateRow> = serde_json::from_value(json!([
+        let rows: Vec<kassiber_custody::snapshot::Record> = serde_json::from_value(json!([
             {"asset":"BTC", "fiat_rate": null, "fiat_value": null, "amount": 0},
             {"asset":"BTC", "fiat_rate_exact":"12345.678900", "fiat_rate":1.5, "amount":2},
             {"asset":"BTC", "fiat_rate_exact":"99", "amount":2},

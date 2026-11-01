@@ -328,6 +328,7 @@ impl Daemon {
             response: app_error_envelope(
                 &AppError::new("internal_error", "Freshness worker panicked"),
                 &RequestId::Value(kassiber_envelope::s(active.id.as_str())),
+                None,
             ),
             closing: None,
             graph_grants: vec![],
@@ -494,7 +495,7 @@ impl Daemon {
                     }
                     Err(error) => {
                         let _ = book.rollback();
-                        app_error_envelope(&error, &progress_id)
+                        app_error_envelope(&error, &progress_id, Some(&kind))
                     }
                 };
                 Finished {

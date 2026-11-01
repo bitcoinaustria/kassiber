@@ -26,6 +26,26 @@ pub enum SqlValue {
 }
 
 impl SqlValue {
+    fn escape_wire_tags(&mut self) {
+        match self {
+            Self::Array(values) => values.iter_mut().for_each(Self::escape_wire_tags),
+            Self::Object(values) => {
+                values
+                    .iter_mut()
+                    .for_each(|(_, value)| value.escape_wire_tags());
+                if values.len() == 1
+                    && matches!(values[0].0.as_ref(), "$kassiber_bytes" | "$kassiber_dict")
+                {
+                    *values = vec![(
+                        "$kassiber_dict".into(),
+                        Self::Object(std::mem::take(values)),
+                    )];
+                }
+            }
+            _ => (),
+        }
+    }
+
     pub fn json(&self) -> Value {
         match self {
             Self::Null => Value::Null,
@@ -278,6 +298,11 @@ macro_rules! row {
             }
         }
         impl $name {
+            pub(super) fn escape_wire_tags(&mut self) {
+                $(if let Some(value) = &mut self.$field.0 { value.escape_wire_tags(); })*
+                self.extra.iter_mut().for_each(|(_, value)| value.escape_wire_tags());
+            }
+
             /// Explicit adapter for a neighbour whose rows are not typed yet.
             pub fn record(&self) -> Record {
                 let mut row = serde_json::Map::new();

@@ -536,7 +536,7 @@ pub fn inspect(
 }
 
 /// Retain the assembler's full refusal without flattening it into AppError.
-pub(crate) fn inspect_with_error<E: From<AppError>>(
+pub fn inspect_with_error<E: From<AppError>>(
     conn: &Connection,
     scope: &Scope<'_>,
     args: &Value,

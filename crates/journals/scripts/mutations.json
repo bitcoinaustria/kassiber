@@ -1582,8 +1582,8 @@
   {
     "id": "JP-typed-quantity",
     "file": "crates/journals/src/storage/calculation.rs",
-    "find": "if !exact_integer_text(&fragment.quantity_msat, Some(&fragment.quantity_msat_exact))",
-    "replace": "if false && !exact_integer_text(&fragment.quantity_msat, Some(&fragment.quantity_msat_exact))",
+    "find": "if !exact_integer_text(\n            &fragment.quantity_msat.value(),\n            Some(&fragment.quantity_msat_exact),\n        )",
+    "replace": "if false && !exact_integer_text(\n            &fragment.quantity_msat.value(),\n            Some(&fragment.quantity_msat_exact),\n        )",
     "expect_failing": [
       "typed_calculations_preserve_compact_bytes_and_all_dynamic_fallbacks"
     ],

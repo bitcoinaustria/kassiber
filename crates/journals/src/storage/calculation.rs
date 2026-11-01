@@ -12,7 +12,7 @@ struct SourceKey<'a> {
     asset: &'a str,
     spot: &'a str,
     fiat_fee: &'a str,
-    crypto_fee: &'a Value,
+    crypto_fee: &'a JournalMsat,
     crypto_fee_exact: &'a str,
 }
 
@@ -64,7 +64,7 @@ fn scalar(value: &Value, out: &mut String, options: &Options) -> Option<()> {
     }
     Some(())
 }
-fn optional(value: &Option<String>, out: &mut String, options: &Options) {
+fn optional(value: &Option<std::borrow::Cow<'_, str>>, out: &mut String, options: &Options) {
     if let Some(value) = value {
         dumps_str_into(value, options, out);
     } else {
@@ -73,7 +73,10 @@ fn optional(value: &Option<String>, out: &mut String, options: &Options) {
 }
 fn source(source: &Source, options: &Options) -> Option<String> {
     if !text(&source.provenance.transaction_id)
-        || !exact_integer_text(&source.crypto_fee_msat, Some(&source.crypto_fee_msat_exact))
+        || !exact_integer_text(
+            &source.crypto_fee_msat.value(),
+            Some(&source.crypto_fee_msat_exact),
+        )
         || source.provenance.pricing.0.iter().any(|v| !text(v))
     {
         return None;
@@ -92,7 +95,7 @@ fn source(source: &Source, options: &Options) -> Option<String> {
         dumps_str_into(value, options, &mut out);
     }
     out.push(',');
-    scalar(&source.crypto_fee_msat, &mut out, options)?;
+    scalar(&source.crypto_fee_msat.value(), &mut out, options)?;
     for index in [0, 5, 1, 2, 9, 10, 11, 8, 7, 4, 3, 6] {
         out.push(',');
         scalar(&source.provenance.pricing.0[index], &mut out, options)?;
@@ -110,7 +113,10 @@ fn compact<'a>(calculation: &'a Calculation, encoder: &mut Encoder<'a>) -> Optio
     let mut fragments = String::with_capacity(calculation.fragments.len() * 256);
     fragments.push('[');
     for (index, fragment) in calculation.fragments.iter().enumerate() {
-        if !exact_integer_text(&fragment.quantity_msat, Some(&fragment.quantity_msat_exact)) {
+        if !exact_integer_text(
+            &fragment.quantity_msat.value(),
+            Some(&fragment.quantity_msat_exact),
+        ) {
             return None;
         }
         match (
@@ -118,14 +124,15 @@ fn compact<'a>(calculation: &'a Calculation, encoder: &mut Encoder<'a>) -> Optio
             &fragment.acquisition_quantity_msat_exact,
         ) {
             (None, None) => {}
-            (Some(quantity), Some(exact)) if exact_integer_text(quantity, Some(exact)) => {}
+            (Some(quantity), Some(exact)) if exact_integer_text(&quantity.value(), Some(exact)) => {
+            }
             _ => return None,
         }
         if index > 0 {
             fragments.push(',');
         }
         fragments.push('[');
-        scalar(&fragment.quantity_msat, &mut fragments, &options)?;
+        scalar(&fragment.quantity_msat.value(), &mut fragments, &options)?;
         for value in [
             &fragment.cost_basis_exact,
             &fragment.proceeds_exact,
@@ -146,7 +153,7 @@ fn compact<'a>(calculation: &'a Calculation, encoder: &mut Encoder<'a>) -> Optio
         optional(&fragment.acquisition_basis_exact, &mut fragments, &options);
         fragments.push(',');
         if let Some(quantity) = &fragment.acquisition_quantity_msat {
-            scalar(quantity, &mut fragments, &options)?;
+            scalar(&quantity.value(), &mut fragments, &options)?;
         } else {
             fragments.push_str("null");
         }

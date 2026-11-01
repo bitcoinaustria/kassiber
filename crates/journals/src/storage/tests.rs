@@ -315,8 +315,8 @@ fn typed_calculations_preserve_compact_bytes_and_all_dynamic_fallbacks() {
                     2 => c.fragments.clear(),
                     3 => c.fragments.extend(c.fragments.clone()),
                     _ if c.fragments.is_empty() => continue,
-                    4 => c.fragments[0].quantity_msat = json!(true),
-                    5 => c.fragments[0].quantity_msat = json!(1.0),
+                    4 => c.fragments[0].quantity_msat = json!(true).into(),
+                    5 => c.fragments[0].quantity_msat = json!(1.0).into(),
                     6 => c.fragments[0].quantity_msat_exact = "wrong".into(),
                     7 => {
                         c.fragments[0].acquisition_quantity_msat = None;
@@ -326,43 +326,61 @@ fn typed_calculations_preserve_compact_bytes_and_all_dynamic_fallbacks() {
                         c.fragments[0].acquisition_quantity_msat = None;
                         c.fragments[0].acquisition_quantity_msat_exact = Some("0".into());
                     }
-                    9 => c.fragments[0].acquisition_quantity_msat = Some(json!(true)),
-                    10 => c.fragments[0].event.crypto_fee_msat_exact = "wrong".into(),
-                    11 => c.fragments[0].event.crypto_fee_msat = json!(false),
+                    9 => c.fragments[0].acquisition_quantity_msat = Some(json!(true).into()),
+                    10 => {
+                        std::sync::Arc::make_mut(&mut c.fragments[0].event).crypto_fee_msat_exact =
+                            "wrong".into()
+                    }
+                    11 => {
+                        std::sync::Arc::make_mut(&mut c.fragments[0].event).crypto_fee_msat =
+                            json!(false).into()
+                    }
                     12 => {
-                        std::sync::Arc::make_mut(&mut c.fragments[0].event.provenance)
-                            .transaction_id = json!(1)
+                        std::sync::Arc::make_mut(
+                            &mut std::sync::Arc::make_mut(&mut c.fragments[0].event).provenance,
+                        )
+                        .transaction_id = json!(1)
                     }
                     13 => {
-                        std::sync::Arc::make_mut(&mut c.fragments[0].event.provenance)
-                            .pricing
-                            .0[0] = json!(true)
+                        std::sync::Arc::make_mut(
+                            &mut std::sync::Arc::make_mut(&mut c.fragments[0].event).provenance,
+                        )
+                        .pricing
+                        .0[0] = json!(true)
                     }
                     14 => c.fragments[0].lot = None,
                     17 => {
-                        std::sync::Arc::make_mut(&mut c.fragments[0].event.provenance)
-                            .pricing
-                            .0[0] = json!(1)
+                        std::sync::Arc::make_mut(
+                            &mut std::sync::Arc::make_mut(&mut c.fragments[0].event).provenance,
+                        )
+                        .pricing
+                        .0[0] = json!(1)
                     }
                     18 => {
                         let mut positive = c.fragments[0].clone();
                         positive.lot = None;
-                        positive.event.crypto_fee_msat = json!(0);
-                        positive.event.crypto_fee_msat_exact = "0".into();
+                        std::sync::Arc::make_mut(&mut positive.event).crypto_fee_msat =
+                            json!(0).into();
+                        std::sync::Arc::make_mut(&mut positive.event).crypto_fee_msat_exact =
+                            "0".into();
                         let mut negative = positive.clone();
-                        negative.event.crypto_fee_msat = serde_json::from_str("-0").unwrap();
-                        negative.event.crypto_fee_msat_exact = "-0".into();
+                        std::sync::Arc::make_mut(&mut negative.event).crypto_fee_msat =
+                            serde_json::from_str::<Value>("-0").unwrap().into();
+                        std::sync::Arc::make_mut(&mut negative.event).crypto_fee_msat_exact =
+                            "-0".into();
                         c.fragments = vec![negative, positive];
                     }
                     16 => {
-                        c.fragments[0].acquisition_quantity_msat = Some(Value::Null);
+                        c.fragments[0].acquisition_quantity_msat = Some(Value::Null.into());
                         c.fragments[0].acquisition_quantity_msat_exact = None;
                     }
                     15 => {
                         let f = &mut c.fragments[0];
-                        f.quantity_msat =
-                            serde_json::from_str("999999999999999999999999999999999999999")
-                                .unwrap();
+                        f.quantity_msat = serde_json::from_str::<Value>(
+                            "999999999999999999999999999999999999999",
+                        )
+                        .unwrap()
+                        .into();
                         f.quantity_msat_exact = f.quantity_msat.to_string();
                     }
                     _ => unreachable!(),
@@ -405,11 +423,11 @@ fn typed_calculation_source_dictionary_preserves_order_and_deduplicates_large_in
             asset: "BTC".into(),
             spot_price_exact: "30000".into(),
             fiat_fee_exact: "0".into(),
-            crypto_fee_msat: json!(0),
+            crypto_fee_msat: json!(0).into(),
             crypto_fee_msat_exact: "0".into(),
         };
         calculation.fragments.push(Fragment {
-            quantity_msat: json!(1),
+            quantity_msat: json!(1).into(),
             quantity_msat_exact: "1".into(),
             cost_basis_exact: "1".into(),
             proceeds_exact: "2".into(),
@@ -419,8 +437,8 @@ fn typed_calculation_source_dictionary_preserves_order_and_deduplicates_large_in
             acquisition_basis_exact: None,
             acquisition_quantity_msat: None,
             acquisition_quantity_msat_exact: None,
-            event: source.clone(),
-            lot: Some(source),
+            event: source.clone().into(),
+            lot: Some(source.into()),
         });
     }
     calculation.fragments.extend(calculation.fragments.clone());
@@ -463,17 +481,17 @@ fn shared_calculation_encoder_keeps_every_source_operand_and_refusal() {
     let mut calculations = vec![calculation.clone()];
     for mode in 0..9 {
         let mut next = calculation.clone();
-        let source = &mut next.fragments[0].event;
+        let source = Arc::make_mut(&mut next.fragments[0].event);
         match mode {
             0 => source.asset = "LBTC".into(),
             1 => source.spot_price_exact = "123.4500".into(),
             2 => source.fiat_fee_exact = "12".into(),
             3 => {
-                source.crypto_fee_msat = json!(7);
+                source.crypto_fee_msat = json!(7).into();
                 source.crypto_fee_msat_exact = "7".into();
             }
             4 => source.crypto_fee_msat_exact = "mismatch".into(),
-            5 => source.crypto_fee_msat = json!(true),
+            5 => source.crypto_fee_msat = json!(true).into(),
             6 => Arc::make_mut(&mut source.provenance).pricing.0[0] = json!(true),
             7 => Arc::make_mut(&mut source.provenance).transaction_id = json!(42),
             8 => Arc::make_mut(&mut source.provenance).occurred_at = "other".into(),

@@ -470,14 +470,7 @@ pub fn load_read_snapshot(
         false,
     )?;
     snapshot.gap_worklist = gap_worklist;
-    let sources = match receipts::load(
-        conn,
-        &profile_id,
-        snapshot
-            .transactions
-            .iter()
-            .map(|row| row.as_object().expect("native transaction row")),
-    ) {
+    let sources = match receipts::load(conn, &profile_id, snapshot.transactions.iter()) {
         Ok(sources) => sources,
         Err(error) => {
             if let Err(prior) = kassiber_custody::receipt_source_error_precedence(&snapshot) {

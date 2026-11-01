@@ -84,13 +84,20 @@ pub fn build_operands<'a>(
     let span = kassiber_custody::timing::span("render");
     let ledger = render_ledger(&input, response, ids)?;
     drop(span);
-    finish(c, ledger)
+    finish_operands(c, ledger)
 }
 
 /// Complete the diagnostic joins and pass-through state after native ledger
 /// rendering. The caller retains custody operands through persistence. Neither
 /// this stage nor `render_ledger` performs SQL or generates clock/UUID values.
 pub fn finish(c: &Value, ledger: LedgerState) -> Result<JournalState<'_>, Refusal> {
+    finish_operands(&RenderOperands::from_json(c), ledger)
+}
+
+pub fn finish_operands<'a>(
+    c: &RenderOperands<'a>,
+    ledger: LedgerState,
+) -> Result<JournalState<'a>, Refusal> {
     let span = kassiber_custody::timing::span("balance_comparison");
     let quantity_differences = joins::differences(c, &ledger.wallet_holdings)?;
     drop(span);

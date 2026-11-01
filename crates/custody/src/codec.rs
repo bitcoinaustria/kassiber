@@ -945,16 +945,18 @@ mod byte_wire_tests {
     use super::*;
     #[test]
     fn json_snapshot_cannot_forge_internal_byte_scalars() {
-        let mut snapshot = crate::snapshot::Snapshot::default();
-        snapshot.schema_version = 1;
-        snapshot.operation = "custody".into();
-        snapshot.as_of = "now".into();
+        let mut snapshot = crate::snapshot::Snapshot {
+            schema_version: 1,
+            operation: "custody".into(),
+            as_of: "now".into(),
+            ..Default::default()
+        };
         for key in ["$kassiber_bytes", "$kassiber_dict"] {
             let literal = serde_json::json!({key:"ff00"});
             snapshot.transactions =
                 vec![serde_json::from_value(serde_json::json!({"note":literal})).unwrap()];
             let encoded = serde_json::to_string(&snapshot).unwrap();
-            let decoded = crate::parse(&encoded).unwrap();
+            let decoded = crate::parse(&encoded).unwrap().stages();
             let expected = Py::Dict(vec![(Key::from(key), Py::from("ff00"))]);
             assert_eq!(
                 from_json(&decoded.transactions[0]["note"]).unwrap(),
