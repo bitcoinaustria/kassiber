@@ -62,6 +62,11 @@ the normalized cache; older entries that lost their input identity require an
 explicit lookup to recover it. In-memory ownership bundles are scoped to the
 open database connection, including when copied books share profile IDs.
 
+Electrum detail lookups verify each raw transaction's computed txid before
+using or caching it, including Bitcoin parents and Liquid transactions. A
+mismatched response is refused as `invalid_observation`. Older graph-cache
+entries require an explicit lookup to regain this validation.
+
 Ownership in transaction diagrams requires locally matched scripts or exact
 outpoints within the same chain and network. An unmatched leg stays unknown;
 an amount match is only a possible receipt. A return to an input-owning wallet
