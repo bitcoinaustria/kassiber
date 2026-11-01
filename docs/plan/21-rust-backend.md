@@ -2419,8 +2419,34 @@ tests. The earlier workspace audit records 1,502 passes and the 58 known
 sandbox loopback denials; final shared-error, inventory and refusal-order changes
 have focused verification recorded in the shell checkpoint.
 
-Samourai and document ingestion remain unimplemented on this branch. BTCPay
-files and generic ledger remain assigned to the parallel importer worker.
+The subsequent Samourai checkpoint supersedes that importer's pending state.
+Document ingestion remains separate; BTCPay files and generic ledger remain
+assigned to the parallel importer worker.
+
+### R5 file-import continuation: Samourai core/CLI checkpoint
+
+Native `wallets import-samourai` creates watch-only source groups and descriptor
+children from public account keys or explicit descriptors, with the same core
+entry point for inline public payloads. Account maps, networks, origins, gaps,
+safe provenance, private-material refusals and redacted
+wallet replies match Python. Group creation is atomic and does not create
+observations, ownership evidence, custody decisions or tax inputs.
+
+There are 544 frozen Python-derived files, including twenty-six supplemental
+cases, and complete SLIP132 plan/address/fingerprint comparisons. Every file has raw
+CLI wire and complete typed book-dump parity on SQLite and SQLCipher. Native
+coordinator triggers cover late-child rollback; hybrid scenarios require native
+routing and exact whole-book state after each invocation. The checkpoint
+retains Python's synthesized-branch acceptance, unchecked explicit script
+declarations, whitespace round references, SLIP132 network-family exception,
+ignored xpub labels, differing parent/child minimum gaps and absent
+import-run/readiness invalidation with an offline reproduction. See the
+[Samourai checkpoint](../reference/rust-shell.md#samourai-core-and-cli-ingestion-r5-continuation)
+for served-by counts, mutation killers and verification.
+
+The CLI catalog contains 158 native entries. `ui.wallets.import_file` remains
+unregistered until native journal processing and shared daemon acceptance land.
+Document ingestion remains unimplemented; the bare-CR correction stays deferred.
 
 ## Risks
 

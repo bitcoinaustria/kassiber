@@ -20919,6 +20919,10 @@
         "tests": 1
       }
     },
+    "tests/test_rust_samourai_import.py": {
+      "SamouraiReferenceDriftTest": {"disposition": "oracle", "flags": [], "group": "imports", "reason": "Frozen Python source files, raw CLI bytes and complete typed book dumps compare native Samourai ingestion on SQLite and SQLCipher; hybrid scenarios assert native routing, including refusals and group conflicts.", "reviewed": true, "tests": 1},
+      "RustSamouraiImportTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "imports", "reason": "Frozen Python source files, raw CLI bytes and complete typed book dumps compare native Samourai ingestion on SQLite and SQLCipher; hybrid scenarios assert native routing, including refusals and group conflicts.", "reviewed": true, "tests": 4}
+    },
     "tests/test_rust_secrets_lifecycle.py": {
       "test_status_classification_dotenv_and_policy_match_without_secret_disclosure": {
         "disposition": "oracle",

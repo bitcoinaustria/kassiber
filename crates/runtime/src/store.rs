@@ -379,6 +379,12 @@ pub trait Book: Send {
     ) -> Result<Value, AppError> {
         Err(not_implemented("wallets", "generic ledger import"))
     }
+    fn import_samourai(
+        &mut self,
+        _request: kassiber_wallets::file_import::samourai::Request,
+    ) -> Result<Value, AppError> {
+        Err(not_implemented("wallets", "Samourai import"))
+    }
     /// Local file-import run services. Unsupported seam stores fail closed.
     fn import_runs(&mut self, _operation: kassiber_imports::Operation) -> Result<Value, AppError> {
         Err(not_implemented("imports", "file import runs"))

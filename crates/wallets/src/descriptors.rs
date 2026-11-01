@@ -262,7 +262,7 @@ fn public_path_preflight(input: &str) -> Result<()> {
 }
 
 enum Parsed {
-    Bitcoin(Descriptor<DescriptorPublicKey>),
+    Bitcoin(Box<Descriptor<DescriptorPublicKey>>, Vec<(String, String)>),
     Liquid(
         Box<em::Descriptor<em::DescriptorPublicKey>>,
         Option<em::confidential::Key>,
@@ -286,8 +286,30 @@ impl Parsed {
             )));
         }
         if chain == "bitcoin" {
-            let parsed = Descriptor::from_str(input).map_err(|_| parse_error(spend))?;
-            Ok(Self::Bitcoin(parsed))
+            let keys = regex::Regex::new(
+                r"\b(?:xpub|tpub|ypub|zpub|Ypub|Zpub|upub|vpub|Upub|Vpub)[1-9A-HJ-NP-Za-km-z]+",
+            )
+            .expect("constant regex");
+            let mut versions = vec![];
+            let normalized = keys.replace_all(input, |m: &regex::Captures<'_>| {
+                let Ok(mut bytes) = bitcoin::base58::decode_check(&m[0]) else {
+                    return m[0].to_owned();
+                };
+                if bytes.len() != 78 {
+                    return m[0].to_owned();
+                }
+                let main = matches!(&m[0][..4], "xpub" | "ypub" | "zpub" | "Ypub" | "Zpub");
+                bytes[..4].copy_from_slice(if main {
+                    &[0x04, 0x88, 0xb2, 0x1e]
+                } else {
+                    &[0x04, 0x35, 0x87, 0xcf]
+                });
+                let normalized = bitcoin::base58::encode_check(&bytes);
+                versions.push((normalized.clone(), m[0].to_owned()));
+                normalized
+            });
+            let parsed = Descriptor::from_str(&normalized).map_err(|_| parse_error(spend))?;
+            Ok(Self::Bitcoin(Box::new(parsed), versions))
         } else {
             let el = elements_text(spend);
             let descriptor = em::Descriptor::from_str(&el).map_err(|_| parse_error(spend))?;
@@ -319,7 +341,24 @@ impl Parsed {
     }
     fn canonical(&self) -> String {
         match self {
-            Self::Bitcoin(d) => format!("{d:#}").replace('\'', "h"),
+            Self::Bitcoin(d, versions) => {
+                let canonical = format!("{d:#}").replace('\'', "h");
+                let keys = regex::Regex::new(r"\b(?:xpub|tpub)[1-9A-HJ-NP-Za-km-z]+")
+                    .expect("constant regex");
+                let mut used = std::collections::BTreeMap::<String, usize>::new();
+                keys.replace_all(&canonical, |m: &regex::Captures<'_>| {
+                    let count = used.entry(m[0].to_owned()).or_default();
+                    let original = versions
+                        .iter()
+                        .filter(|(key, _)| key == &m[0])
+                        .nth(*count)
+                        .map(|(_, original)| original.clone())
+                        .unwrap_or_else(|| m[0].to_owned());
+                    *count += 1;
+                    original
+                })
+                .into_owned()
+            }
             Self::Liquid(d, view) => {
                 let mut t = format!("{d:#}").replace('\'', "h");
                 for (a, b) in [
@@ -348,12 +387,13 @@ impl Parsed {
     }
     fn singles(&self) -> Result<Vec<Self>> {
         match self {
-            Self::Bitcoin(d) => Ok(d
+            Self::Bitcoin(d, versions) => Ok(d
+                .as_ref()
                 .clone()
                 .into_single_descriptors()
                 .map_err(|_| Error::Value("Invalid multipath descriptor".into()))?
                 .into_iter()
-                .map(Self::Bitcoin)
+                .map(|d| Self::Bitcoin(Box::new(d), versions.clone()))
                 .collect()),
             Self::Liquid(d, k) => Ok(d
                 .as_ref()
@@ -367,14 +407,14 @@ impl Parsed {
     }
     fn ranged(&self) -> bool {
         match self {
-            Self::Bitcoin(d) => d.has_wildcard(),
+            Self::Bitcoin(d, _) => d.has_wildcard(),
             Self::Liquid(d, _) => d.has_wildcard(),
         }
     }
     fn can_unblind(&self) -> bool {
         matches!(
             self,
-            Self::Bitcoin(_)
+            Self::Bitcoin(_, _)
                 | Self::Liquid(
                     _,
                     Some(em::confidential::Key::Slip77(_) | em::confidential::Key::View(_)),
@@ -760,7 +800,7 @@ impl Plan {
         let mut paths = vec![];
         let mut origins = vec![];
         let (address, unconfidential, script) = match &branch.selected {
-            Parsed::Bitcoin(d) => {
+            Parsed::Bitcoin(d, _) => {
                 metadata(d, branch.selected.ranged(), index, &mut paths, &mut origins)?;
                 let derived = d
                     .derived_descriptor(&bitcoin::secp256k1::Secp256k1::verification_only(), index)

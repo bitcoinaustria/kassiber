@@ -18,7 +18,7 @@ import uuid
 def run(binary, argv):
     from kassiber.cli.main import build_parser
     from kassiber.cli import handlers
-    from kassiber.core import imports, import_batches, metadata, wallets, output_inventory
+    from kassiber.core import imports, import_batches, metadata, wallets, output_inventory, samourai
     from kassiber.envelope import json_ready
     from kassiber.errors import AppError
     from tests.test_rust_store_migrations import normalized_dump
@@ -45,10 +45,14 @@ def run(binary, argv):
         reference.row_factory = sqlite3.Row
         reference.execute("PRAGMA foreign_keys=ON")
         id_source = SimpleNamespace(uuid4=new_id)
-        with mock.patch.object(output_inventory, "now_iso", return_value=timestamp), mock.patch.object(wallets, "uuid", id_source), mock.patch.object(wallets, "now_iso", return_value=timestamp), mock.patch.object(imports, "uuid", id_source), mock.patch.object(import_batches, "uuid", id_source), mock.patch.object(metadata, "uuid", id_source), mock.patch.object(imports, "now_iso", return_value=timestamp), mock.patch.object(import_batches, "now_iso", return_value=timestamp), mock.patch.object(handlers, "now_iso", return_value=timestamp):
+        with mock.patch.object(samourai, "uuid", id_source), mock.patch.object(samourai, "now_iso", return_value=timestamp), mock.patch.object(output_inventory, "now_iso", return_value=timestamp), mock.patch.object(wallets, "uuid", id_source), mock.patch.object(wallets, "now_iso", return_value=timestamp), mock.patch.object(imports, "uuid", id_source), mock.patch.object(import_batches, "uuid", id_source), mock.patch.object(metadata, "uuid", id_source), mock.patch.object(imports, "now_iso", return_value=timestamp), mock.patch.object(import_batches, "now_iso", return_value=timestamp), mock.patch.object(handlers, "now_iso", return_value=timestamp):
             error = None
             try:
-                if args.wallets_command == "import-ledger":
+                if args.wallets_command == "import-samourai":
+                    outcome = samourai.import_samourai_wallet_group(reference, args.workspace, args.profile,
+                        label=args.label, account_ref=args.account, backend=args.backend, network=args.network,
+                        gap_limit=args.gap_limit, source_set_file=args.source_set_file)
+                elif args.wallets_command == "import-ledger":
                     from kassiber.cli.main import _column_map_arg
                     from kassiber.importers import preview_generic_ledger_records
                     mapping = _column_map_arg(args.column_map)
@@ -77,7 +81,7 @@ def run(binary, argv):
             assert result.returncode == 1, result.stdout
             code = error.code if isinstance(error, AppError) else "internal_error"
             assert payload["error"]["code"] == code, (payload, error)
-            if args.wallets_command in {"import-wasabi", "import-btcpay", "import-bull", "import-bullbitcoin", "import-coinfinity", "import-21bitcoin", "import-pocket", "import-pocketbitcoin", "import-strike", "import-ledger-live", "import-cointracking", "import-blockpit", "import-binance-supplemental"}:
+            if args.wallets_command in {"import-wasabi", "import-btcpay", "import-bull", "import-bullbitcoin", "import-coinfinity", "import-21bitcoin", "import-pocket", "import-pocketbitcoin", "import-strike", "import-ledger-live", "import-cointracking", "import-blockpit", "import-binance-supplemental", "import-samourai"}:
                 assert payload["error"]["message"] == str(error), (payload,error)
                 assert payload["error"].get("hint") == (error.hint if isinstance(error,AppError) else None), (payload,error)
     return result

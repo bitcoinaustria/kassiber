@@ -376,8 +376,13 @@ projections stay Python. Progress and remaining work for this slice:
   safe metadata/inventory, SQLite/SQLCipher full-book/wire parity, transactional
   privacy review, retained reference-bug repros and named mutation killers.
   See the Wasabi checkpoint in plan 21.
-- [ ] Port Samourai and document ingestion at core/CLI level, one verified
-  commit per importer.
+- [x] Port Samourai public source-set core/CLI ingestion with frozen files,
+  SQLite/SQLCipher raw-wire/full-book parity, source-group coordination,
+  retained reference-bug repros and named mutation killers. See the Samourai
+  checkpoint in plan 21.
+- [ ] Port document ingestion at core/CLI level with reviewed OCR rows,
+  source-digest binding, managed attachments, full-book/wire parity and named
+  mutation killers. An attachment grants neither ownership nor tax facts.
 - [ ] Complete the [shared file-import daemon parity follow-up](docs/reference/rust-shell.md#shared-file-import-daemon-parity-pending)
   after its native prerequisites land.
 - [ ] Port the remaining wallet commands after file-ingestion acceptance,

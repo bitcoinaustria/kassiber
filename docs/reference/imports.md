@@ -879,11 +879,15 @@ The desktop Add Connection flow asks for the four primary public account inputs
 directly: Deposit, Badbank / Toxic Change, Premix, and Postmix descriptors or
 account xpub-family keys. Internally those fields are converted into the same
 source-set structure accepted by the CLI and daemon.
-Explicit descriptor source-set imports must cover both Samourai descriptor
+Explicit descriptor source-set imports validate a plan covering both Samourai
 branches for each scanned section: branch `0` receive and branch `1` change.
 Provide a separate `change_descriptor` or a descriptor expression that expands
-to both branches; single-branch descriptors are rejected because they can miss
-change history and understate balances, reports, and source-of-funds evidence.
+to both branches. The Python reference and Rust compatibility importer also
+accept ranged receive-only descriptors when the shared parser synthesizes a
+change branch; that synthesized branch is not added to the stored source
+configuration. Fixed single-branch sources are rejected. This reference quirk
+is pinned by the [Rust Samourai checkpoint](rust-shell.md#samourai-core-and-cli-ingestion-r5-continuation)
+and its offline reproduction.
 
 Accounting behavior is intentionally conservative:
 

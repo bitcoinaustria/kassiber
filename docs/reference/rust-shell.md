@@ -106,8 +106,8 @@ dependencies.
 The [R5 local evidence boundary](rust-transactions-r5-status.md) records storage
 invariants, parity evidence and remaining work.
 
-The native catalog includes `wallets import-btcpay`, `wallets import-ledger`
-and `wallets import-wasabi`. `commands describe` lists the supported leaves
+The native catalog includes `wallets import-btcpay`, `wallets import-ledger`,
+`wallets import-wasabi` and `wallets import-samourai`. `commands describe` lists the supported leaves
 from `crates/cli/src/describe.rs`; each family registers through its own CLI
 module. Every other leaf parses exactly as in Python and then fails
 `not_implemented`
@@ -3033,6 +3033,135 @@ summarizing their results.
 Python production code, dependencies, schema, egress and AI projections are
 unchanged. Samourai and document ingestion remain separate core/CLI slices;
 BTCPay files and generic ledger are assigned to the parallel importer branch.
+
+## Samourai core and CLI ingestion (R5 continuation)
+
+Native `wallets import-samourai` reads local public descriptor/account-xpub
+source sets and atomically creates the logical parent and descriptor children.
+The core also accepts the same inline public payload, with exactly-one-source
+validation and SQLite/SQLCipher equivalence checks; it registers no daemon route.
+The account map covers Deposit, explicit PayNym, Badbank, Premix, Postmix and
+Ricochet across mainnet, testnet, signet and regtest. Network declarations,
+account roots, descriptor origins, resolved receive/change branches, gap limits
+and private-material refusals retain Python's validation and refusal order.
+Safe explicit provenance is allowlisted; participant graphs and unrelated
+source fields are discarded. The importer makes no provider request and creates
+no transactions, ownership evidence, custody decisions or tax inputs.
+
+Source parsing retains Python integer truncation, Unicode integer parsing,
+NaN/infinity refusals, metadata precedence and enum/round-reference filtering.
+Malformed JSON, integer-limit and nesting failures retain their distinct errors.
+The shared descriptor reader interprets SLIP132 public-key versions while
+retaining their authored spelling in stored material, canonical descriptors and
+plan fingerprints. Python-derived plans also pin derived addresses and origins
+for all eight additional key families. CLI output uses the shared redacted
+wallet projection; descriptors and account keys remain private local material.
+
+The reference corpus contains 518 regular files and twenty-six supplemental
+files. Native tests compare complete normalized sources and the
+SLIP132 plans. Hybrid scenarios compare every typed table and schema object
+after each call and assert native routing. Raw CLI exit/stdout/stderr bytes and
+complete typed book dumps cover every reference file on SQLite and SQLCipher.
+Coordinator sequences cover reimports, profile-scoped label conflicts, overlapping
+public sources, duplicate labels, account/profile errors and missing/malformed
+files before scope resolution. Late-child triggers prove whole-group rollback
+and unchanged readiness on both codecs.
+
+The following Python reference quirks remain, with an offline reproduction in
+`tests/rust_port/repro_samourai_reference.py`:
+
+- A ranged receive-only descriptor can pass branch validation through the
+  parser's synthesized change branch, without storing `change_descriptor`.
+- Custom xpub-source labels are ignored in favor of the account template label.
+- An explicit script declaration is not compared with the descriptor wrapper.
+- Round references can contain hex whitespace and decode to fewer than 32 bytes.
+- SLIP132 public versions bypass the reference xpub/tpub network-family check;
+  the explicitly configured network still determines derived addresses.
+- The parent retains a requested gap below one hundred while child gaps use
+  the template minimum of one hundred.
+- Successful group creation records no import batch and does not invalidate
+  journal readiness or create ordinary wallet-policy epochs.
+
+Run `uv run --locked python -m tests.rust_port.repro_samourai_reference` offline.
+These compatibility observations do not authorize accounting facts from source
+metadata. The Python product is unchanged.
+
+The catalog adds 42 Samourai mutations to the inherited 698 (740 total).
+Every new entry names its native killer in `crates/wallets/scripts/mutations.json`:
+
+| Mutation | Named killer |
+| --- | --- |
+| `W-samourai-object` | `python_samourai_import_vectors` |
+| `W-samourai-aliases` | `python_samourai_import_vectors` |
+| `W-samourai-xpub-dispatch` | `python_samourai_import_vectors` |
+| `W-samourai-network` | `python_samourai_import_vectors` |
+| `W-samourai-coin-type` | `python_samourai_import_vectors` |
+| `W-samourai-root` | `python_samourai_import_vectors` |
+| `W-samourai-gap-minimum` | `python_samourai_import_vectors` |
+| `W-samourai-gap-maximum` | `python_samourai_import_vectors` |
+| `W-samourai-float-int` | `python_samourai_import_vectors` |
+| `W-samourai-provenance-precedence` | `python_samourai_import_vectors` |
+| `W-samourai-nonnegative-provenance` | `python_samourai_import_vectors` |
+| `W-samourai-mix-provenance` | `python_samourai_import_vectors` |
+| `W-samourai-round-id-length` | `python_samourai_import_vectors` |
+| `W-samourai-round-id-pairs` | `python_samourai_import_vectors` |
+| `W-samourai-confidence-enum` | `python_samourai_import_vectors` |
+| `W-samourai-origin` | `python_samourai_import_vectors` |
+| `W-samourai-branches` | `python_samourai_import_vectors` |
+| `W-samourai-key-version` | `python_samourai_import_vectors` |
+| `W-samourai-canonical-key-version` | `python_samourai_import_vectors` |
+| `W-samourai-xpub-label` | `python_samourai_import_vectors` |
+| `W-samourai-postmix-minimum` | `python_samourai_import_vectors` |
+| `W-samourai-badbank` | `python_samourai_import_vectors` |
+| `W-samourai-paynym-scan` | `python_samourai_import_vectors` |
+| `W-samourai-privacy` | `python_samourai_import_vectors` |
+| `W-samourai-duplicates` | `samourai_coordinator_preserves_source_scope_redaction_and_reference_readiness` |
+| `W-samourai-conflict-scope` | `samourai_coordinator_preserves_source_scope_redaction_and_reference_readiness` |
+| `W-samourai-child-backend` | `samourai_coordinator_preserves_source_scope_redaction_and_reference_readiness` |
+| `W-samourai-parent-link` | `samourai_coordinator_preserves_source_scope_redaction_and_reference_readiness` |
+| `W-samourai-atomic` | `samourai_late_failure_rolls_back_group_children_and_readiness` |
+| `W-samourai-readiness-reference` | `samourai_coordinator_preserves_source_scope_redaction_and_reference_readiness` |
+| `W-samourai-watch-only-group` | `samourai_coordinator_preserves_source_scope_redaction_and_reference_readiness` |
+| `W-samourai-child-kind` | `samourai_coordinator_preserves_source_scope_redaction_and_reference_readiness` |
+| `W-samourai-postmix-warning` | `samourai_coordinator_preserves_source_scope_redaction_and_reference_readiness` |
+| `W-samourai-file-error` | `samourai_file_and_source_refusals_precede_scope_and_never_write` |
+| `W-samourai-surrogate-filter` | `python_samourai_import_vectors` |
+| `W-samourai-script-codepoints` | `python_samourai_import_vectors` |
+| `W-samourai-label-binding` | `samourai_coordinator_preserves_source_scope_redaction_and_reference_readiness` |
+| `W-samourai-duplicate-codepoints` | `samourai_coordinator_preserves_source_scope_redaction_and_reference_readiness` |
+| `W-samourai-label-binding-order` | `samourai_coordinator_preserves_source_scope_redaction_and_reference_readiness` |
+| `W-samourai-round-reference-whitespace` | `python_samourai_import_vectors` |
+| `W-samourai-source-choice` | `samourai_inline_source_sets_share_file_coordination_and_refusal_order` |
+| `W-samourai-json-error-kind` | `python_samourai_import_vectors` |
+
+All 740 mutation recipes apply. The fresh audit passes nine named unmutated
+baselines and kills all 54 selected entries: the 42 new Samourai entries and
+all twelve inherited descriptor entries. There are no survivors or build errors;
+the other 686 entries retain their earlier kill evidence.
+
+All 77 native file-import tests, 39 wallet oracle tests, twelve CLI tests and
+fourteen binary/supervisor harness tests pass. The regular reference replay
+passes four tests and 1,556 subtests; the rebuilt-harness coordinator, drift,
+supplemental and regular hybrid replay passes four tests and 566 subtests. The
+final supplemental replay passes two tests and 52 subtests, including JSON
+integer-limit and nesting errors. The offline reference reproduction passes.
+Formatting and strict workspace/harness Clippy checks pass offline.
+The classification inventory records 5,733 Python tests, and all 57 required CI
+preflight tests pass. The 58 known sandbox loopback tests remain a separate
+owner-run gate; this checkpoint does not claim a full workspace gate.
+Verification and mutation logs remain under `target/r5-importers-b2-artifacts/`.
+The scratch mutation source and mutation build tree are removed after the audit.
+
+| CLI importer | Rust-served calls | Python importer fallbacks |
+| --- | ---: | ---: |
+| Samourai | 549 | 0 |
+
+The shared `ui.wallets.import_file` daemon route remains unregistered until
+native `journals process` is registered and the shared daemon parity follow-up
+passes. The deferred bare-CR reader correction is unchanged. Document ingestion
+remains a separate core/CLI slice; BTCPay files and generic ledger belong to the
+parallel importer branch. An attached document grants neither ownership nor tax
+facts.
 
 ## Daemon
 

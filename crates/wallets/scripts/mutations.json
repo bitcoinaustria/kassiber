@@ -7821,5 +7821,425 @@
       "wasabi_missing_file_refusal_is_atomic"
     ],
     "rule": "Preserve the uncaught Python file-open refusal without borrowing the CSV missing-file contract."
+  },
+  {
+    "id": "W-samourai-object",
+    "file": "crates/wallets/src/file_import/samourai.rs",
+    "find": "if !matches!(data, Py::Dict(_)) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "python_samourai_import_vectors"
+    ],
+    "rule": "Source sets must be JSON objects before source resolution."
+  },
+  {
+    "id": "W-samourai-aliases",
+    "file": "crates/wallets/src/file_import/samourai.rs",
+    "find": "[field(data, \"children\"), field(data, \"sources\")]",
+    "replace": "[field(data, \"sources\"), field(data, \"children\")]",
+    "expect_failing": [
+      "python_samourai_import_vectors"
+    ],
+    "rule": "Children take precedence over the sources alias."
+  },
+  {
+    "id": "W-samourai-xpub-dispatch",
+    "file": "crates/wallets/src/file_import/samourai.rs",
+    "find": ".chain(xpubs.iter().map(|v| (true, v)))",
+    "replace": ".chain(xpubs.iter().map(|v| (false, v)))",
+    "expect_failing": [
+      "python_samourai_import_vectors"
+    ],
+    "rule": "Account xpub entries use the xpub source validator."
+  },
+  {
+    "id": "W-samourai-network",
+    "file": "crates/wallets/src/file_import/samourai.rs",
+    "find": "if declared != normalized {",
+    "replace": "if false {",
+    "expect_failing": [
+      "python_samourai_import_vectors"
+    ],
+    "rule": "Declared and requested source networks must agree."
+  },
+  {
+    "id": "W-samourai-coin-type",
+    "file": "crates/wallets/src/file_import/samourai.rs",
+    "find": "if network == \"main\" { 0 } else { 1 }",
+    "replace": "if network == \"main\" { 1 } else { 0 }",
+    "expect_failing": [
+      "python_samourai_import_vectors"
+    ],
+    "rule": "Mainnet uses coin type zero and test families use one."
+  },
+  {
+    "id": "W-samourai-root",
+    "file": "crates/wallets/src/file_import/samourai.rs",
+    "find": "if provided_path != s(&expected) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "python_samourai_import_vectors"
+    ],
+    "rule": "Authored account paths must equal the supported section root."
+  },
+  {
+    "id": "W-samourai-gap-minimum",
+    "file": "crates/wallets/src/file_import/samourai.rs",
+    "find": "Ok(if *n < 100.into() {",
+    "replace": "Ok(if *n < 0.into() {",
+    "expect_failing": [
+      "python_samourai_import_vectors"
+    ],
+    "rule": "Child gaps retain the Python minimum of one hundred."
+  },
+  {
+    "id": "W-samourai-gap-maximum",
+    "file": "crates/wallets/src/file_import/samourai.rs",
+    "find": "if *n > 5000.into() {",
+    "replace": "if *n > 6000.into() {",
+    "expect_failing": [
+      "python_samourai_import_vectors"
+    ],
+    "rule": "Gap limits above five thousand retain their typed refusal."
+  },
+  {
+    "id": "W-samourai-float-int",
+    "file": "crates/wallets/src/file_import/samourai.rs",
+    "find": "format!(\"{:.0}\", v.trunc())",
+    "replace": "format!(\"{:.0}\", v.floor())",
+    "expect_failing": [
+      "python_samourai_import_vectors"
+    ],
+    "rule": "Integer coercion truncates finite floats towards zero."
+  },
+  {
+    "id": "W-samourai-provenance-precedence",
+    "file": "crates/wallets/src/file_import/samourai.rs",
+    "find": "set(&mut merged, key, value.clone());",
+    "replace": "set(&mut merged, key, Py::Null);",
+    "expect_failing": [
+      "python_samourai_import_vectors"
+    ],
+    "rule": "Top-level explicit provenance wins over inline metadata."
+  },
+  {
+    "id": "W-samourai-nonnegative-provenance",
+    "file": "crates/wallets/src/file_import/samourai.rs",
+    "find": "matches!(n, Py::Int(n) if *n >= 0.into())",
+    "replace": "matches!(n, Py::Int(n) if *n > 0.into())",
+    "expect_failing": [
+      "python_samourai_import_vectors"
+    ],
+    "rule": "Zero is valid nonnegative provenance."
+  },
+  {
+    "id": "W-samourai-mix-provenance",
+    "file": "crates/wallets/src/file_import/samourai.rs",
+    "find": "if !PROVENANCE.contains(&key) {",
+    "replace": "if !PROVENANCE.contains(&key) || key == \"mix_count\" {",
+    "expect_failing": [
+      "python_samourai_import_vectors"
+    ],
+    "rule": "Safe explicit mix counts survive provenance filtering."
+  },
+  {
+    "id": "W-samourai-round-id-length",
+    "file": "crates/wallets/src/file_import/samourai.rs",
+    "find": "if normalized.chars().count() != 64 {",
+    "replace": "if normalized.chars().count() != 63 {",
+    "expect_failing": [
+      "python_samourai_import_vectors"
+    ],
+    "rule": "Round references use the reference sixty-four-character check."
+  },
+  {
+    "id": "W-samourai-round-id-pairs",
+    "file": "crates/wallets/src/file_import/samourai.rs",
+    "find": "at += 2;",
+    "replace": "at += 1;",
+    "expect_failing": [
+      "python_samourai_import_vectors"
+    ],
+    "rule": "Hexadecimal round references are parsed in complete byte pairs."
+  },
+  {
+    "id": "W-samourai-confidence-enum",
+    "file": "crates/wallets/src/file_import/samourai.rs",
+    "find": "&[\"minimum\", \"exact\", \"estimated\", \"unknown\"]",
+    "replace": "&[\"exact\", \"estimated\", \"unknown\"]",
+    "expect_failing": [
+      "python_samourai_import_vectors"
+    ],
+    "rule": "Minimum mix-count confidence remains an accepted provenance value."
+  },
+  {
+    "id": "W-samourai-origin",
+    "file": "crates/wallets/src/file_import/samourai.rs",
+    "find": "if target.first().and_then(|v| v.get(\"derivation_paths\")) != Some(&expected) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "python_samourai_import_vectors"
+    ],
+    "rule": "Derived descriptor origins must equal the declared account and branch."
+  },
+  {
+    "id": "W-samourai-branches",
+    "file": "crates/wallets/src/file_import/samourai.rs",
+    "find": "if !missing.is_empty() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "python_samourai_import_vectors"
+    ],
+    "rule": "The resolved descriptor plan must cover receive and change branches."
+  },
+  {
+    "id": "W-samourai-key-version",
+    "file": "crates/wallets/src/descriptors.rs",
+    "find": "bytes[..4].copy_from_slice(if main {\n                    &[0x04, 0x88, 0xb2, 0x1e]\n                } else {\n                    &[0x04, 0x35, 0x87, 0xcf]\n                });",
+    "replace": "let _ = main;",
+    "expect_failing": [
+      "python_samourai_import_vectors"
+    ],
+    "rule": "SLIP132 public-key versions are translated to parseable BIP32 public material."
+  },
+  {
+    "id": "W-samourai-canonical-key-version",
+    "file": "crates/wallets/src/descriptors.rs",
+    "find": "*count += 1;\n                    original",
+    "replace": "*count += 1;\n                    m[0].to_owned()",
+    "expect_failing": [
+      "python_samourai_import_vectors"
+    ],
+    "rule": "Canonical descriptors and fingerprints retain the authored SLIP132 public-key version."
+  },
+  {
+    "id": "W-samourai-xpub-label",
+    "file": "crates/wallets/src/file_import/samourai.rs",
+    "find": "if is_xpub {\n                    s(t.label)",
+    "replace": "if is_xpub {\n                    strip(field(raw, \"label\"))",
+    "expect_failing": [
+      "python_samourai_import_vectors"
+    ],
+    "rule": "Xpub source labels retain the reference template-label behavior."
+  },
+  {
+    "id": "W-samourai-postmix-minimum",
+    "file": "crates/wallets/src/file_import/samourai.rs",
+    "find": "set(&mut meta, \"minimum_mix_count\", Py::from(1));",
+    "replace": "set(&mut meta, \"minimum_mix_count\", Py::from(0));",
+    "expect_failing": [
+      "python_samourai_import_vectors"
+    ],
+    "rule": "Postmix sources start with at least one mix."
+  },
+  {
+    "id": "W-samourai-badbank",
+    "file": "crates/wallets/src/file_import/samourai.rs",
+    "find": "set(&mut meta, \"toxic_change\", Py::Bool(true));",
+    "replace": "set(&mut meta, \"toxic_change\", Py::Bool(false));",
+    "expect_failing": [
+      "python_samourai_import_vectors"
+    ],
+    "rule": "Badbank sources retain toxic-change warning provenance."
+  },
+  {
+    "id": "W-samourai-paynym-scan",
+    "file": "crates/wallets/src/file_import/samourai.rs",
+    "find": "\"scanned_without_explicit_descriptor\",\n                Py::Bool(false)",
+    "replace": "\"scanned_without_explicit_descriptor\",\n                Py::Bool(true)",
+    "expect_failing": [
+      "python_samourai_import_vectors"
+    ],
+    "rule": "PayNym recovery roots are never claimed to have been scanned implicitly."
+  },
+  {
+    "id": "W-samourai-privacy",
+    "file": "crates/wallets/src/file_import/samourai.rs",
+    "find": "Py::Bool([\"badbank\", \"premix\", \"postmix\"].contains(&t.section))",
+    "replace": "Py::Bool(![\"badbank\", \"premix\", \"postmix\"].contains(&t.section))",
+    "expect_failing": [
+      "python_samourai_import_vectors"
+    ],
+    "rule": "Only the reference privacy sections carry the default privacy boundary."
+  },
+  {
+    "id": "W-samourai-duplicates",
+    "file": "crates/wallets/src/file_import/samourai.rs",
+    "find": ".filter(|(_, count)| **count > 1)",
+    "replace": ".filter(|(_, count)| **count > 2)",
+    "expect_failing": [
+      "samourai_coordinator_preserves_source_scope_redaction_and_reference_readiness"
+    ],
+    "rule": "Duplicate child labels are refused before wallet writes."
+  },
+  {
+    "id": "W-samourai-conflict-scope",
+    "file": "crates/wallets/src/file_import/samourai.rs",
+    "find": "SELECT count(*) FROM wallets WHERE profile_id=? AND label=?",
+    "replace": "SELECT count(*) FROM wallets WHERE ? IS NOT NULL AND label=?",
+    "expect_failing": [
+      "samourai_coordinator_preserves_source_scope_redaction_and_reference_readiness"
+    ],
+    "rule": "Wallet label conflicts remain scoped to the selected profile."
+  },
+  {
+    "id": "W-samourai-child-backend",
+    "file": "crates/wallets/src/file_import/samourai.rs",
+    "find": "set(&mut config, \"backend\", s(v));",
+    "replace": "set(&mut config, \"backend\", s(\"\"));",
+    "expect_failing": [
+      "samourai_coordinator_preserves_source_scope_redaction_and_reference_readiness"
+    ],
+    "rule": "Every child receives the explicitly selected normalized backend without contacting it."
+  },
+  {
+    "id": "W-samourai-parent-link",
+    "file": "crates/wallets/src/file_import/samourai.rs",
+    "find": "(\"parent_wallet_id\", parent_id.clone())",
+    "replace": "(\"parent_wallet_id\", s(&group_id))",
+    "expect_failing": [
+      "samourai_coordinator_preserves_source_scope_redaction_and_reference_readiness"
+    ],
+    "rule": "Child provenance binds to the created parent wallet identity."
+  },
+  {
+    "id": "W-samourai-atomic",
+    "file": "crates/wallets/src/file_import/samourai.rs",
+    "find": "if result.is_err() {",
+    "replace": "if result.is_ok() {",
+    "expect_failing": [
+      "samourai_late_failure_rolls_back_group_children_and_readiness"
+    ],
+    "rule": "A failed child insertion rolls back the entire wallet group."
+  },
+  {
+    "id": "W-samourai-readiness-reference",
+    "file": "crates/wallets/src/file_import/samourai.rs",
+    "find": "let parent = insert(&labels[0], \"samourai\", &parent_config)?;",
+    "replace": "let parent = insert(&labels[0], \"samourai\", &parent_config)?;\n        crate::invalidate_journals(conn, &profile)?;",
+    "expect_failing": [
+      "samourai_coordinator_preserves_source_scope_redaction_and_reference_readiness"
+    ],
+    "rule": "Group import retains the Python reference journal-readiness behavior."
+  },
+  {
+    "id": "W-samourai-watch-only-group",
+    "file": "crates/wallets/src/file_import/samourai.rs",
+    "find": "(\"watch_only\", Py::Bool(true))",
+    "replace": "(\"watch_only\", Py::Bool(false))",
+    "expect_failing": [
+      "samourai_coordinator_preserves_source_scope_redaction_and_reference_readiness"
+    ],
+    "rule": "The Samourai parent is explicitly watch-only."
+  },
+  {
+    "id": "W-samourai-child-kind",
+    "file": "crates/wallets/src/file_import/samourai.rs",
+    "find": "children.push(insert(label_value, \"descriptor\", &config)?);",
+    "replace": "children.push(insert(label_value, \"samourai\", &config)?);",
+    "expect_failing": [
+      "samourai_coordinator_preserves_source_scope_redaction_and_reference_readiness"
+    ],
+    "rule": "Scannable children remain descriptor wallets."
+  },
+  {
+    "id": "W-samourai-postmix-warning",
+    "file": "crates/wallets/src/file_import/samourai.rs",
+    "find": "if sources.iter().any(|v| field(v, \"section\") == &s(\"postmix\")) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "samourai_coordinator_preserves_source_scope_redaction_and_reference_readiness"
+    ],
+    "rule": "Postmix groups retain the discovery-gap warning."
+  },
+  {
+    "id": "W-samourai-file-error",
+    "file": "crates/wallets/src/file_import/samourai.rs",
+    "find": "AppError::new(\"not_found\", \"Could not read Samourai descriptor/xpub set\")",
+    "replace": "AppError::new(\"internal_error\", \"Could not read Samourai descriptor/xpub set\")",
+    "expect_failing": [
+      "samourai_file_and_source_refusals_precede_scope_and_never_write"
+    ],
+    "rule": "Unreadable source files keep the typed not-found refusal before scope resolution."
+  },
+  {
+    "id": "W-samourai-surrogate-filter",
+    "file": "crates/wallets/src/file_import/samourai.rs",
+    "find": ".map(|p| char::from_u32(p).unwrap_or(char::REPLACEMENT_CHARACTER))",
+    "replace": ".filter_map(char::from_u32)",
+    "expect_failing": [
+      "python_samourai_import_vectors"
+    ],
+    "rule": "Malformed code points cannot disappear and turn an invalid section or provenance value into an accepted one."
+  },
+  {
+    "id": "W-samourai-script-codepoints",
+    "file": "crates/wallets/src/file_import/samourai.rs",
+    "find": "v => render(&v),",
+    "replace": "v => py_str(&v),",
+    "expect_failing": [
+      "python_samourai_import_vectors"
+    ],
+    "rule": "Malformed script names retain their refusal instead of becoming an accepted script type."
+  },
+  {
+    "id": "W-samourai-label-binding",
+    "file": "crates/wallets/src/file_import/samourai.rs",
+    "find": ".ok_or_else(|| crate::unicode_binding_error(value)),",
+    "replace": ".or_else(|| Some(String::new())).ok_or_else(|| crate::unicode_binding_error(value)),",
+    "expect_failing": [
+      "samourai_coordinator_preserves_source_scope_redaction_and_reference_readiness"
+    ],
+    "rule": "Surrogate child labels retain the Python UTF-8 binding refusal before any wallet writes."
+  },
+  {
+    "id": "W-samourai-duplicate-codepoints",
+    "file": "crates/wallets/src/file_import/samourai.rs",
+    "find": "let mut counts = BTreeMap::new();\n    for label in &labels {",
+    "replace": "let mut counts = BTreeMap::new();\n    for label in &labels {\n        bind(label)?;",
+    "expect_failing": [
+      "samourai_coordinator_preserves_source_scope_redaction_and_reference_readiness"
+    ],
+    "rule": "Duplicate source-label validation precedes SQLite Unicode binding failures."
+  },
+  {
+    "id": "W-samourai-label-binding-order",
+    "file": "crates/wallets/src/file_import/samourai.rs",
+    "find": "let mut conflicts = BTreeSet::new();\n    for label in &labels {",
+    "replace": "let mut conflicts = BTreeSet::new();\n    for label in labels.iter().rev() {",
+    "expect_failing": [
+      "samourai_coordinator_preserves_source_scope_redaction_and_reference_readiness"
+    ],
+    "rule": "SQLite label binding failures follow source order after duplicate validation."
+  },
+  {
+    "id": "W-samourai-round-reference-whitespace",
+    "file": "crates/wallets/src/file_import/samourai.rs",
+    "find": "if matches!(bytes[at], 9..=13 | 32) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "python_samourai_import_vectors"
+    ],
+    "rule": "Round references retain the Python sixty-four-character hexadecimal-whitespace acceptance."
+  },
+  {
+    "id": "W-samourai-source-choice",
+    "file": "crates/wallets/src/file_import/samourai.rs",
+    "find": "if selected != 1 {",
+    "replace": "if selected == 0 {",
+    "expect_failing": [
+      "samourai_inline_source_sets_share_file_coordination_and_refusal_order"
+    ],
+    "rule": "The shared core requires exactly one local file or inline public source set."
+  },
+  {
+    "id": "W-samourai-json-error-kind",
+    "file": "crates/wallets/src/file_import/samourai.rs",
+    "find": "if e.is_decode_error() {",
+    "replace": "if true {",
+    "expect_failing": [
+      "python_samourai_import_vectors"
+    ],
+    "rule": "JSON integer-limit and nesting failures retain their Python internal-error category and message."
   }
 ]

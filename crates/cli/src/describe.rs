@@ -189,6 +189,7 @@ pub const IMPLEMENTED: &[&str] = &[
     "wallets.import-btcpay",
     "wallets.import-ledger",
     "wallets.import-wasabi",
+    "wallets.import-samourai",
     "reports.cross-check",
     "reports.export-year-handoff",
     "reports.privacy-hygiene",

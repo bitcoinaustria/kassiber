@@ -409,3 +409,8 @@ REVIEWS["tests/test_wasabi_import.py"] = {
         "replacement": "crates/wallets/src/file_import/tests.rs::python_wasabi_import_vectors; crates/wallets/src/file_import/tests.rs::wasabi_bundle_metadata_vectors; crates/wallets/src/file_import/tests.rs::wasabi_coordinator_preserves_review_notes_inventory_and_identities; crates/wallets/src/file_import/tests.rs::wasabi_late_failure_rolls_back_transactions_metadata_inventory_and_readiness; crates/wallets/src/file_import/tests.rs::wasabi_surrogate_inputs_cannot_become_valid_quantities_or_flags; crates/wallets/src/file_import/tests.rs::wasabi_missing_file_refusal_is_atomic",
     },
 }
+
+REVIEWS["tests/test_rust_samourai_import.py"] = {"*": {
+    "disposition": "oracle", "group": "imports",
+    "reason": "Frozen Python source files, raw CLI bytes and complete typed book dumps compare native Samourai ingestion on SQLite and SQLCipher; hybrid scenarios assert native routing, including refusals and group conflicts.",
+}}

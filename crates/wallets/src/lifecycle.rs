@@ -266,7 +266,11 @@ fn list(conn: &Connection, profile: &str) -> Result<Py, AppError> {
     }
     Ok(Py::List(out))
 }
-fn account(conn: &Connection, profile: &str, reference: &str) -> Result<String, AppError> {
+pub(crate) fn account(
+    conn: &Connection,
+    profile: &str,
+    reference: &str,
+) -> Result<String, AppError> {
     let normalized = kassiber_pytext::strip(reference);
     for predicate in ["id=?", "lower(code)=lower(?)"] {
         if let Some(id) = conn

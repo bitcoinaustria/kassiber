@@ -14,6 +14,22 @@ pub fn execute(
     stdin: &mut dyn Read,
     stderr: &mut dyn Write,
 ) -> Result<Value, AppError> {
+    if namespace.text("wallets_command") == Some("import-samourai") {
+        return book.import_samourai(kassiber_wallets::file_import::samourai::Request {
+            workspace: namespace.get("workspace").cloned(),
+            profile: namespace.get("profile").cloned(),
+            label: namespace.text("label").unwrap_or_default().into(),
+            account: namespace.text("account").map(str::to_owned),
+            backend: namespace.text("backend").map(str::to_owned),
+            network: namespace.text("network").map(str::to_owned),
+            gap_limit: namespace
+                .get("gap_limit")
+                .filter(|v| **v != Value::Null)
+                .cloned(),
+            file: namespace.text("source_set_file").unwrap_or_default().into(),
+            source_set: None,
+        });
+    }
     let column_map = if namespace.text("wallets_command") == Some("import-ledger") {
         column_map(namespace)?
     } else {

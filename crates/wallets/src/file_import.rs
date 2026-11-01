@@ -12,6 +12,7 @@ mod phoenix;
 mod platform_csv;
 mod pocket;
 mod river;
+pub mod samourai;
 mod strike;
 mod tax_platform;
 mod twentyone;
