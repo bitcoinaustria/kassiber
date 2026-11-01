@@ -73,6 +73,7 @@ impl Handler for Script<'_> {
                             retryable: get(step, "retryable")
                                 .is_some_and(kassiber_envelope::truthy),
                             message_codepoints: None,
+                            sqlite_origin: false,
                         }
                         .into())
                     }

@@ -211,6 +211,7 @@ pub const IMPLEMENTED: &[&str] = &[
     "source-funds.links.bulk-review",
     "source-funds.review-context",
     "source-funds.request-input",
+    "source-funds.coverage",
 ];
 
 /// `_NO_BOOTSTRAP_DATABASE_PREFIXES`.

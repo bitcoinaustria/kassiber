@@ -144,6 +144,7 @@ pub(super) fn replay(
                     message: error["message"].as_str().ok_or_else(failed)?.into(),
                     hint: error["hint"].as_str().map(Into::into),
                     message_codepoints: None,
+                    sqlite_origin: false,
                     details: (!error["details"].is_null())
                         .then(|| convert(&error["details"]))
                         .transpose()

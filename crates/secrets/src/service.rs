@@ -18,6 +18,7 @@ pub fn storage_error(error: kassiber_paths::Error) -> AppError {
         details: kassiber_pytext::loads(&error.details.to_string()).ok(),
         retryable: error.retryable,
         message_codepoints: None,
+        sqlite_origin: false,
     }
 }
 

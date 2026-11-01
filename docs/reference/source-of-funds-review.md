@@ -182,8 +182,17 @@ truncation refusals and advisory input handoffs retain the Python contract.
 Current deterministic bulk eligibility is computed outside that fingerprint.
 Only an explicitly selected, bounded CLI recipe file is read; evidence files
 remain unopened. See the [review checkpoint](rust-shell.md#source-funds-review-and-input-checkpoint-r5-partial).
-Coverage, suggest/assemble dry runs and all source-funds mutations remain
-pending in Rust. PDF rendering and PDF-containing bundles remain in
+Native CLI and daemon coverage classify historical inbound observations through
+those report gates. Totals retain each inbound hop and already-spent inflows;
+they are not a current-holdings calculation. The six buckets remain exhaustive,
+and capped rows stay visible as `not_classified`. Shared report inputs live
+only for that request. The Python truncated text currently includes skipped
+rows in its claimed "classified" count; the
+[reproduction](../../crates/reports/scripts/repro_python_source_funds_coverage.py)
+records that display bug and Rust retains its text for parity. See the
+[coverage checkpoint](rust-shell.md#source-funds-coverage-checkpoint-r5-partial).
+Suggest/assemble dry runs and all source-funds mutations remain pending in
+Rust. PDF rendering and PDF-containing bundles remain in
 Python by the owner's decision; their routes are not registered natively.
 
 Uncaught failures on the native source-funds daemon reads include an empty

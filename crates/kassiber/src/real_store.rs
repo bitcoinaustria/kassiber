@@ -102,6 +102,7 @@ fn error(error: kassiber_paths::Error) -> AppError {
         details,
         retryable: error.retryable,
         message_codepoints: None,
+        sqlite_origin: false,
     }
 }
 

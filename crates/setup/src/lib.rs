@@ -39,6 +39,7 @@ fn storage_error(error: kassiber_paths::Error) -> AppError {
         },
         retryable: error.retryable,
         message_codepoints: None,
+        sqlite_origin: false,
     }
 }
 

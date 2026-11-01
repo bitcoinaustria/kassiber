@@ -1456,6 +1456,14 @@ Python has no assemble dry-run CLI/daemon contract at this base. Case saving
 and persisted provenance operations stay with the parallel mutations worker.
 PDF and PDF-containing bundles remain Python.
 
+The same continuation then adds native historical inbound coverage through
+CLI and daemon. Classification delegates to canonical report gates and retains
+all six exhaustive buckets, exact unbounded totals, lazy request-bound inputs,
+CLI/daemon limits and Python exception families. Its
+[coverage checkpoint](../reference/rust-shell.md#source-funds-coverage-checkpoint-r5-partial)
+records the 111-case oracle and 26 new mutation kills, plus the preserved Python
+truncated-summary display bug. Suggest/assemble dry runs remain separate.
+
 ### Service slice contract (R4 onward)
 
 From R4 on, work lands as vertical slices: one command family, or one

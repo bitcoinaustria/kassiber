@@ -36,6 +36,7 @@ pub const KINDS: &[&str] = &[
     "ui.source_funds.links.bulk_review",
     "ui.source_funds.links.attach",
     "ui.source_funds.evidence.list",
+    "ui.source_funds.coverage",
     "ui.source_funds.recipients.list",
     "ui.source_funds.recipients.create",
     "ui.source_funds.recipients.update",
@@ -515,6 +516,7 @@ mod tests {
             "ui.source_funds.preview",
             "ui.source_funds.review_context",
             "ui.source_funds.request_input",
+            "ui.source_funds.coverage",
         ] {
             assert!(KINDS.contains(&kind));
             assert_eq!(cross_check_args(Some(&args)).unwrap(), args);

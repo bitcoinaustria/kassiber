@@ -38,6 +38,7 @@ mod snapshots;
 mod source_funds_assembly;
 pub mod source_funds_batch;
 pub mod source_funds_cases;
+mod source_funds_coverage;
 pub mod source_funds_disclosure;
 mod source_funds_explorers;
 pub mod source_funds_links;
@@ -158,6 +159,12 @@ pub fn execute_with_sources(
     conn.execute_batch("SAVEPOINT report_read")
         .map_err(sql_error)?;
     let result = (|| {
+        if matches!(
+            command,
+            "source-funds.coverage" | "ui.source_funds.coverage"
+        ) {
+            return source_funds_coverage::execute(conn, command, args);
+        }
         if source_funds_review::handles(command) {
             return source_funds_review::execute(conn, command, args);
         }

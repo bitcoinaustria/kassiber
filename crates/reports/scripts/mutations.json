@@ -11909,5 +11909,265 @@
       "source_funds_review_recipe_file_preserves_encodings_surrogates_and_limits"
     ],
     "rule": "Expand an explicitly selected recipe path with the shared account path resolver while preserving HOME."
+  },
+  {
+    "id": "sof-coverage-bucket-order",
+    "file": "crates/reports/src/source_funds_coverage.rs",
+    "find": "\"fully_traced\",\n    \"attested\",",
+    "replace": "\"attested\",\n    \"fully_traced\",",
+    "expect_failing": [
+      "source_funds_coverage_mutation_witnesses"
+    ],
+    "rule": "Coverage preserves the ordered public bucket contract."
+  },
+  {
+    "id": "sof-coverage-report-gates",
+    "file": "crates/reports/src/source_funds_coverage.rs",
+    "find": "if !truthy(value(value(report, \"explain_gates\"), \"exportable\")) {",
+    "replace": "if false && !truthy(value(value(report, \"explain_gates\"), \"exportable\")) {",
+    "expect_failing": [
+      "source_funds_coverage_mutation_witnesses"
+    ],
+    "rule": "Canonical report blockers keep a linked inbound in review."
+  },
+  {
+    "id": "sof-coverage-unknown-origin",
+    "file": "crates/reports/src/source_funds_coverage.rs",
+    "find": "\"unknown\" => return 2,",
+    "replace": "\"unknown\" => return 0,",
+    "expect_failing": [
+      "source_funds_coverage_mutation_witnesses"
+    ],
+    "rule": "An unknown origin cannot claim fully traced coverage."
+  },
+  {
+    "id": "sof-coverage-attestation",
+    "file": "crates/reports/src/source_funds_coverage.rs",
+    "find": "=> attested = true,",
+    "replace": "=> attested = false,",
+    "expect_failing": [
+      "source_funds_coverage_mutation_witnesses"
+    ],
+    "rule": "Attestation sources retain their separate coverage bucket."
+  },
+  {
+    "id": "sof-coverage-classification-cap",
+    "file": "crates/reports/src/source_funds_coverage.rs",
+    "find": "BigInt::from(index) >= cap",
+    "replace": "BigInt::from(index) > cap",
+    "expect_failing": [
+      "source_funds_coverage_mutation_witnesses"
+    ],
+    "rule": "The transaction cap skips the first index at its exact bound."
+  },
+  {
+    "id": "sof-coverage-excluded-inbound",
+    "file": "crates/reports/src/source_funds_coverage.rs",
+    "find": "AND t.excluded=0 ORDER BY",
+    "replace": "ORDER BY",
+    "expect_failing": [
+      "source_funds_coverage_mutation_witnesses"
+    ],
+    "rule": "Excluded observations do not enter historical inbound coverage."
+  },
+  {
+    "id": "sof-coverage-inbound-scope",
+    "file": "crates/reports/src/source_funds_coverage.rs",
+    "find": "AND t.direction='inbound' AND t.excluded=0",
+    "replace": "AND t.excluded=0",
+    "expect_failing": [
+      "source_funds_coverage_mutation_witnesses"
+    ],
+    "rule": "Historical coverage counts only inbound observations."
+  },
+  {
+    "id": "sof-coverage-rejected-only",
+    "file": "crates/reports/src/source_funds_coverage.rs",
+    "find": "AND state!='rejected' LIMIT 1",
+    "replace": "AND 1=1 LIMIT 1",
+    "expect_failing": [
+      "source_funds_coverage_mutation_witnesses"
+    ],
+    "rule": "A rejected-only frontier remains untraced."
+  },
+  {
+    "id": "sof-coverage-unbounded-total",
+    "file": "crates/reports/src/source_funds_coverage.rs",
+    "find": "buckets.iter().map(|b| b.amount.clone()).sum()",
+    "replace": "BigInt::from(i64::try_from(buckets.iter().map(|b| b.amount.clone()).sum::<BigInt>()).unwrap())",
+    "expect_failing": [
+      "source_funds_coverage_mutation_witnesses"
+    ],
+    "rule": "Historical totals remain exact beyond SQLite integer width."
+  },
+  {
+    "id": "sof-coverage-amount-sum",
+    "file": "crates/reports/src/source_funds_coverage.rs",
+    "find": "buckets[index].amount += quantity;",
+    "replace": "buckets[index].amount += BigInt::from(0);",
+    "expect_failing": [
+      "source_funds_coverage_mutation_witnesses"
+    ],
+    "rule": "Every counted row contributes its exact quantity."
+  },
+  {
+    "id": "sof-coverage-skipped-count",
+    "file": "crates/reports/src/source_funds_coverage.rs",
+    "find": "buckets[index].count += 1;",
+    "replace": "if index != 5 { buckets[index].count += 1; }",
+    "expect_failing": [
+      "source_funds_coverage_mutation_witnesses"
+    ],
+    "rule": "Skipped rows remain in the exhaustive transaction totals."
+  },
+  {
+    "id": "sof-coverage-wallet-order",
+    "file": "crates/reports/src/source_funds_coverage.rs",
+    "find": "let wallets = wallets\n        .into_iter()",
+    "replace": "let wallets = wallets\n        .into_iter().rev()",
+    "expect_failing": [
+      "source_funds_coverage_mutation_witnesses"
+    ],
+    "rule": "Wallet rows retain label, asset and identity ordering."
+  },
+  {
+    "id": "sof-coverage-asset-denominations",
+    "file": "crates/reports/src/source_funds_coverage.rs",
+    "find": "assets.entry(text(row, \"asset\"))",
+    "replace": "assets.entry(super::source_funds_projection::normalized_asset(value(row, \"asset\")))",
+    "expect_failing": [
+      "source_funds_coverage_mutation_witnesses"
+    ],
+    "rule": "Coverage retains stored asset denominations without alias merging."
+  },
+  {
+    "id": "sof-coverage-default-cap",
+    "file": "crates/reports/src/source_funds_coverage.rs",
+    "find": "positive(raw_count, 2000, 50_000)",
+    "replace": "positive(raw_count, 2001, 50_000)",
+    "expect_failing": [
+      "source_funds_coverage_mutation_witnesses"
+    ],
+    "rule": "The daemon preserves the default classification cap."
+  },
+  {
+    "id": "sof-coverage-daemon-cap",
+    "file": "crates/reports/src/source_funds_coverage.rs",
+    "find": "positive(raw_count, 2000, 50_000)",
+    "replace": "positive(raw_count, 2000, 50_001)",
+    "expect_failing": [
+      "source_funds_coverage_mutation_witnesses"
+    ],
+    "rule": "The daemon enforces its 50000-transaction ceiling."
+  },
+  {
+    "id": "sof-coverage-daemon-depth",
+    "file": "crates/reports/src/source_funds_coverage.rs",
+    "find": "positive(raw_depth, 8, 32)",
+    "replace": "positive(raw_depth, 8, 64)",
+    "expect_failing": [
+      "source_funds_coverage_mutation_witnesses"
+    ],
+    "rule": "The daemon depth ceiling remains 32."
+  },
+  {
+    "id": "sof-coverage-depth-bool",
+    "file": "crates/reports/src/source_funds_coverage.rs",
+    "find": "desktop && matches!(raw_depth, Value::Bool(true))",
+    "replace": "false && desktop && matches!(raw_depth, Value::Bool(true))",
+    "expect_failing": [
+      "source_funds_coverage_mutation_witnesses"
+    ],
+    "rule": "Daemon depth true retains its Python boolean limit value."
+  },
+  {
+    "id": "sof-coverage-uncaught-error",
+    "file": "crates/reports/src/source_funds_coverage.rs",
+    "find": "error.code != \"internal_error\" || error.sqlite_origin",
+    "replace": "true || error.sqlite_origin",
+    "expect_failing": [
+      "source_funds_coverage_mutation_witnesses"
+    ],
+    "rule": "Uncaught reference failures must not disappear into in-review coverage."
+  },
+  {
+    "id": "sof-coverage-sqlite-error",
+    "file": "crates/reports/src/source_funds_coverage.rs",
+    "find": "error.code != \"internal_error\" || error.sqlite_origin",
+    "replace": "error.code != \"internal_error\"",
+    "expect_failing": [
+      "source_funds_coverage_mutation_witnesses"
+    ],
+    "rule": "SQLite report failures classify linked rows as in review."
+  },
+  {
+    "id": "sof-coverage-sqlite-origin",
+    "file": "crates/reports/src/sql.rs",
+    "find": "AppError::new(\"internal_error\", error.to_string()).with_sqlite_origin()",
+    "replace": "AppError::new(\"internal_error\", error.to_string())",
+    "expect_failing": [
+      "source_funds_coverage_mutation_witnesses"
+    ],
+    "rule": "The report SQL mapper retains native exception provenance for coverage."
+  },
+  {
+    "id": "sof-coverage-lazy-inputs",
+    "file": "crates/reports/src/source_funds_coverage.rs",
+    "find": "let mut shared = None;",
+    "replace": "let mut shared = Some(report::load_inputs(conn, &profile)?);",
+    "expect_failing": [
+      "source_funds_coverage_mutation_witnesses"
+    ],
+    "rule": "Unlinked and capped populations never load report inputs."
+  },
+  {
+    "id": "sof-coverage-report-depth",
+    "file": "crates/reports/src/source_funds_coverage.rs",
+    "find": "(\"max_depth\", Value::Int(depth.clone())),",
+    "replace": "(\"max_depth\", Value::Int(1.into())),",
+    "expect_failing": [
+      "source_funds_coverage_mutation_witnesses"
+    ],
+    "rule": "Each inbound report uses the requested coverage depth."
+  },
+  {
+    "id": "sof-coverage-summary-text",
+    "file": "crates/reports/src/source_funds_coverage.rs",
+    "find": "classified {count} of",
+    "replace": "classified 0 of",
+    "expect_failing": [
+      "source_funds_coverage_mutation_witnesses"
+    ],
+    "rule": "Coverage text preserves the unchanged Python truncation wording."
+  },
+  {
+    "id": "sof-coverage-daemon-scope",
+    "file": "crates/reports/src/source_funds_coverage.rs",
+    "find": "scope(conn, if desktop { &empty_args } else { args })",
+    "replace": "scope(conn, args)",
+    "expect_failing": [
+      "source_funds_coverage_mutation_witnesses"
+    ],
+    "rule": "The daemon uses the selected book and ignores arbitrary scope fields."
+  },
+  {
+    "id": "sof-coverage-cli-forward",
+    "file": "crates/cli/src/reports.rs",
+    "find": "\"max_depth\",\n                        \"max_transactions\",",
+    "replace": "\"max_depth\",\n                        \"max_suggestions\",",
+    "expect_failing": [
+      "source_funds_coverage_cli_forwards_scope_limits_and_format"
+    ],
+    "rule": "The CLI forwards both coverage limits to the shared service."
+  },
+  {
+    "id": "sof-coverage-daemon-registration",
+    "file": "crates/daemon/src/reports.rs",
+    "find": "    \"ui.source_funds.request_input\",\n    \"ui.source_funds.coverage\",\n];",
+    "replace": "    \"ui.source_funds.request_input\",\n];",
+    "expect_failing": [
+      "source_funds_stored_daemon_preserves_arguments_and_registers_only_lists"
+    ],
+    "rule": "Coverage is registered for native daemon routing."
   }
 ]

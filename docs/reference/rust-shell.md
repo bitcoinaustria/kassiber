@@ -7056,6 +7056,79 @@ base Python has a CLI suggest dry run but no assemble dry-run CLI/daemon
 contract. Persisted assembly, case saving and all provenance mutations remain
 with the parallel mutations worker. PDF and PDF-containing bundles stay Python.
 
+## Source-funds coverage checkpoint (R5 partial)
+
+The continuation after `69f660f50` adds native CLI `source-funds coverage` and
+`ui.source_funds.coverage`. One read snapshot classifies every non-excluded
+historical inbound observation through the complete report producer. Exact
+integer totals include each inbound hop and already-spent inflows. The six
+buckets remain exhaustive; unknown origins dominate attestations and traced
+siblings, while non-exportable linked reports remain in review. A rejected-only
+frontier is untraced. Capped rows remain in totals as `not_classified`.
+
+Report inputs load lazily and live only for that request. Entirely unlinked or
+capped populations do not inspect custody projections. CLI negative and zero
+caps retain their Python behavior. The daemon defaults to 2,000 transactions,
+caps at 50,000 and limits depth to 32; core/CLI report depth caps at 64 while
+returned limits retain the requested values. Daemon depth `true` remains JSON
+`true` and acts as depth one; a transaction cap of `true` becomes integer one.
+
+Coverage catches typed application and SQLite report failures as in review,
+but lets uncaught reference failures escape. A native-only `sqlite_origin`
+field preserves that distinction through existing error adapters; error
+envelopes retain their existing fields and bytes. No dependency, lockfile,
+schema, Python product, evidence-file or network change is introduced.
+
+The frozen oracle has 111 cases, including mixed origins, report readiness,
+current/stale custody and structural lineage, production caps, signed totals
+beyond i64, fractions, wallet/asset ordering and text. A malformed 112-table
+fixture renames a proof column to force a real SQLite report error, while an
+invalid configured explorer URL pins an uncaught failure. Unlinked and capped
+variants of the malformed fixture pin lazy input loading. Both native tests
+replay complete bytes against plaintext and SQLCipher and compare all 112
+tables around each operation.
+
+All 26 appended `sof-coverage-*` mutations pass their three named unmutated
+baselines and are killed: 24 by
+`source_funds_coverage_mutation_witnesses`, one by
+`source_funds_coverage_cli_forwards_scope_limits_and_format` and one by
+`source_funds_stored_daemon_preserves_arguments_and_registers_only_lists`.
+There are no survivors, build errors or empty selections. The 876 inherited
+entries retain their earlier evidence. Per-entry results are in
+`target/r5-sof-reads-5/mutation-coverage-summary.json`; isolated mutation source
+and build trees are removed before rebuilding the real probes.
+
+The HOME-preserving whole-process suite passes nine scenarios: all 111
+service outcomes, 72 native CLI calls across ready, stale, source-blocked and
+missing-context books, and 108 coverage requests across four native daemon
+sessions. Exit/stdout/stderr and response bytes match Python; eight output-file
+comparisons include the refused plain output's absence. All 112 tables remain
+unchanged and in-scope fallbacks are zero. Routing records and file hashes are
+retained in `target/r5-sof-reads-5/routing-coverage-accepted.json` and its adjacent
+archive. Production/harness clippy, fmt, envelope tests, six native caller tests,
+three review corpus tests, 73 focused Python reference/AI/capability regressions
+and all 902 mutation applicability checks pass. The required classifier update
+(5,725 test definitions) and CI preflight (57 passed) are recorded in
+`target/r5-sof-reads-5/verification-coverage-summary.json`. This is
+Linux-only verification; the full workspace/frontend gate and regtest are not
+claimed.
+
+The unchanged Python truncated-summary bug has a synthetic reproduction:
+
+```sh
+mise exec rust@1.99.1 uv@latest -- uv run --locked python \
+  -m crates.reports.scripts.repro_python_source_funds_coverage
+```
+
+With `max_transactions=0`, both inbound rows are skipped, yet the first line
+says "classified 2 of 2 inbound tx; 2 not classified." Its classified count
+uses the total including skipped rows. Rust preserves that text for parity;
+the structured `not_classified` fields remain exact. No Python fix is included.
+
+Suggest/assemble dry runs remain the next boundary. Case saving and persisted
+provenance operations remain with the parallel mutations worker; PDF and
+PDF-containing bundles remain Python.
+
 ## Not yet ported
 
 The diagnostics slice now implements explicit public reports and native debug

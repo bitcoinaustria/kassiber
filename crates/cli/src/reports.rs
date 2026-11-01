@@ -44,6 +44,7 @@ pub const COMMANDS: &[&str] = &[
     "source-funds.links.bulk-review",
     "source-funds.review-context",
     "source-funds.request-input",
+    "source-funds.coverage",
 ];
 pub fn kind(command: &str) -> Option<&'static str> {
     match command {
@@ -57,6 +58,21 @@ pub fn execute(book: &mut dyn Book, command: &str, args: &Namespace) -> Result<V
         return book.reports(command, &source_funds_report_request(args));
     }
     if command.starts_with("source-funds.") {
+        if command == "source-funds.coverage" {
+            return book.reports(
+                command,
+                &dict(
+                    [
+                        "workspace",
+                        "profile",
+                        "max_depth",
+                        "max_transactions",
+                        "format",
+                    ]
+                    .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null))),
+                ),
+            );
+        }
         if matches!(
             command,
             "source-funds.review-context" | "source-funds.request-input"
@@ -1118,6 +1134,46 @@ mod tests {
                     Some(&args.get(key).cloned().unwrap_or(Value::Null))
                 );
             }
+        }
+    }
+
+    #[test]
+    fn source_funds_coverage_cli_forwards_scope_limits_and_format() {
+        let args = crate::argparse::parse_args(
+            &[
+                "--format",
+                "plain",
+                "source-funds",
+                "coverage",
+                "--workspace",
+                "Main",
+                "--profile",
+                "Book",
+                "--max-depth",
+                "64",
+                "--max-transactions",
+                "0",
+            ]
+            .map(String::from),
+            crate::argparse::Context {
+                width: 78,
+                version: "test",
+            },
+        )
+        .unwrap();
+        let command = "source-funds.coverage";
+        assert!(COMMANDS.contains(&command));
+        assert!(crate::describe::IMPLEMENTED.contains(&command));
+        assert!(crate::run::implemented(command, &args));
+        let actual = execute(&mut SourceFundsCapture, command, &args).unwrap();
+        for key in [
+            "workspace",
+            "profile",
+            "max_depth",
+            "max_transactions",
+            "format",
+        ] {
+            assert_eq!(get(get(&actual, "args").unwrap(), key), args.get(key));
         }
     }
 }

@@ -11,8 +11,9 @@ pub fn sql_error(error: rusqlite::Error) -> AppError {
         )
         .with_hint("Retry when the other process finishes its write.")
         .retryable(true)
+        .with_sqlite_origin()
     } else {
-        AppError::new("internal_error", error.to_string())
+        AppError::new("internal_error", error.to_string()).with_sqlite_origin()
     }
 }
 pub fn rows(conn: &Connection, query: &str, args: impl Params) -> Result<Vec<Value>> {

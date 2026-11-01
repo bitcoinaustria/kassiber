@@ -43,6 +43,7 @@ pub fn database_error(error: rusqlite::Error) -> AppError {
         details: kassiber_pytext::loads(&error.details.to_string()).ok(),
         retryable: error.retryable,
         message_codepoints: None,
+        sqlite_origin: true,
     }
 }
 

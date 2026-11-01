@@ -33,6 +33,7 @@ pub struct AppError {
     pub details: Option<Value>,
     pub retryable: bool,
     pub message_codepoints: Option<Box<PyStr>>,
+    pub sqlite_origin: bool,
 }
 
 impl AppError {
@@ -45,6 +46,7 @@ impl AppError {
             details: None,
             retryable: false,
             message_codepoints: None,
+            sqlite_origin: false,
         }
     }
 
@@ -61,6 +63,11 @@ impl AppError {
 
     pub fn with_hint(mut self, hint: impl Into<String>) -> Self {
         self.hint = Some(hint.into().into_boxed_str());
+        self
+    }
+
+    pub fn with_sqlite_origin(mut self) -> Self {
+        self.sqlite_origin = true;
         self
     }
 

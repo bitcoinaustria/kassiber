@@ -511,8 +511,11 @@ registers them; exit-tax preserves its reference no-registration boundary.
 - [x] Port source-funds review-context/request-input with fingerprint-bound
   advisory handoffs, bounded inspection and current bulk eligibility; see the
   [review checkpoint](docs/reference/rust-shell.md#source-funds-review-and-input-checkpoint-r5-partial).
-- [ ] Finish source-funds coverage and
-  suggest/assemble dry runs in separate verified commits. Each still requires
+- [x] Port historical inbound source-funds coverage through the shared native
+  report gates, preserving exact totals, caps and error families; see the
+  [coverage checkpoint](docs/reference/rust-shell.md#source-funds-coverage-checkpoint-r5-partial).
+- [ ] Finish source-funds suggest/assemble dry runs in separate verified
+  commits. Each still requires
   byte/all-table comparisons, zero fallbacks and named mutation kills.
 - [x] Port link creation, review and managed-id evidence association through
   the shared native service, CLI and daemon, preserving exact stored msat,
