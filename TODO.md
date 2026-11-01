@@ -590,8 +590,7 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
 - [ ] R4-10 to R4-12: pre-build repairs, rendering and joins, persistence,
   each with byte or database-dump parity.
 - [ ] Finish the [R4-10 auto-pricing checkpoint](docs/reference/r4-journal-pipeline.md#r4-10-auto-pricing-checkpoint):
-  complete generated/recorded book and legacy/refusal coverage, mutation and
-  CPU acceptance.
+  finish legacy/refusal coverage, census/shadow, mutation and CPU acceptance.
   Cached pricing, source-overlap repair/warnings, and drifted legacy-pair refresh
   with profile reload have unregistered native interfaces and complete-dump
   oracles. The combined stage and split repair/price interface for R4-13 retain
@@ -599,7 +598,11 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   The [scenario replay checkpoint](docs/reference/r4-journal-pipeline.md#r4-10-scenario-replay-checkpoint)
   freezes 505 stored scenarios from the twelve generators and passes 1,010
   plaintext/SQLCipher file comparisons; ten schema refusals are tracked
-  separately. The exhaustive generated campaign is still incomplete.
+  separately. The [generated and recorded campaign](docs/reference/r4-journal-pipeline.md#r4-10-generated-and-recorded-campaign)
+  now completes 24,000 seeds and 1,030 permutations: 24,815 stored operands,
+  49,630 file comparisons and 215 separate schema refusals. Historical replay
+  and 89 fresh full-book captures also pass both file drivers. Fresh source
+  activity is measured separately; legacy activation coverage remains open.
 - [ ] Reject fractional legacy msat before Python's source-overlap fingerprint
   conversion can collapse distinct amounts. The disposable repro is
   `python -m tests.rust_port.repro_journal_fractional_source_overlap`;

@@ -739,16 +739,74 @@ Comparison failures also fail the pytest session if a tested handler catches the
 assertion. This is local verification tooling with no product or AI route.
 
 The [coverage record](r4-prebuild-campaign-results.json) gives the measured
-scope and per-scenario activity. R4-10 remains unaccepted: exhaustive generated
-and historical recorded replay, broader legacy/refusal inputs, the complete
+scope and per-scenario activity. At this checkpoint R4-10 was unaccepted:
+exhaustive generated and historical recorded replay, broader legacy/refusal inputs, the complete
 branch mutation campaign, whole-stage 20k CPU profiling/cache optimization, and
-the final acceptance record remain open. The Python `L-BTC` omission and
+the final acceptance record remained open. The Python `L-BTC` omission and
 fractional-msat fingerprint truncation remain unchanged.
 
 The checkpoint passes all **62 journal Rust tests**, two Python corpus/transaction
 tests, release all-target Clippy with warnings denied, and Rust formatting.
 The final inventory update records the two Python oracle tests, and the required
 CI preflight passes **57 tests**.
+
+### R4-10 generated and recorded campaign
+
+The exhaustive stored-operand campaign now completes all **24,000 generator
+seeds and 1,030 permutations**. Its private activity log binds every operand
+to an input digest and the tested binary. Resume validates the retained input
+prefix and driver/binary identity before reusing comparisons; changed inputs
+are refused. Activity is flushed before summary checkpoints. The final summary
+was rebuilt from the complete retained log; its elapsed time measures this
+validation, not the original comparison campaign.
+
+| Corpus | Stored operands compared | Complete SQLite/SQLCipher file comparisons |
+| --- | ---: | ---: |
+| Twelve generators and permutations | 24,815 | 49,630 |
+| Historical custody recordings and permutations | 318 | 636 |
+| Historical upgraded databases, all profiles | 3 | 6 |
+| Fresh complete books and positive control | 89 | 178 |
+
+The **215 schema refusals** among generated attempts remain separate from
+native pre-build parity. They cover ten unrepresentable scenarios, with no
+native operand created. Fifteen representable operands produce matching
+pre-build refusals. Generated operands auto-price 25,887 rows, while 280
+storable scenarios exercise no repair, pricing, warning or refusal activity.
+Per-scenario counts, omitted columns and distinct input counts are retained in
+the [campaign record](r4-prebuild-campaign-results.json). Repeated generator
+inputs are disclosed; 24,000 attempts does not mean 24,000 distinct books.
+The historical snapshot replay uses the same limited adapter. Full historical
+database replay starts after Python upgrades disposable copies of both exact
+compatibility fixtures; it does not extend native migration support.
+
+Fresh recordings preserve actual stored source evidence. Across 89 captures
+they exercise 27 duplicate exclusions, three address removals, one warning and
+14 priced rows. They produce no legacy activation or skip; broader legacy
+coverage remains a separate gate. The nine-module fresh run passes 398 tests
+and 20 subtests, with five sandbox failures. The five failing tests pass in a
+focused rerun with local permissions, an initialization prerequisite and a
+positive pre-build control: seven passing tests and one comparison. Four
+failures were denied loopback test sockets; the chat consent-refusal test also
+passes with the needed local permissions. No reference or product code was
+changed for these controls.
+
+The recorder now propagates explicitly to Python children, gives each capture
+a process/sequence identity, and writes private failure markers that the parent
+session checks even when a child catches the comparison assertion. Sessions
+require empty recording directories. Automated controls prove rejection of a
+swallowed child mismatch, stale directories, zero-comparison sessions and a
+changed resume prefix. The six-test permission rerun without a pre-build caller
+also correctly exits unsuccessfully despite passing test bodies; adding the
+positive control makes the session green.
+
+R4-10 remains **unaccepted**. The legacy/refusal and oversized-number expansion,
+remaining census/shadow lanes, mutation execution and branch audit, cache
+optimization and final CPU/acceptance record are outstanding. Initial five-pair
+whole-stage CPU medians are 0.057464 s generic 20k and 0.072883 s multi-wallet
+20k, above 0.03 s. These initial native probes use the default page cache;
+the performance continuation must measure the existing scoped rebuild cache
+and report the complete stage cost. The campaign record retains all raw CPU
+samples and benchmark-book identities.
 
 ## Performance budget
 

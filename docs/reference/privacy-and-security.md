@@ -938,6 +938,11 @@ caller writes, through a guarded native child pipe. With `--prebuild-binary`
 and `--prebuild-recordings`, it also stores complete local parity operands in
 mode-0600 files in the requested disposable worktree `target/` directory.
 Existing recording paths are refused.
+The explicit recorder configuration also propagates to Python children through
+the test-only import hook. Children append private failure markers containing
+only a fixed failure label, so a caught comparison error still fails the parent
+pytest session. Each session requires an empty destination; process IDs and a
+per-process sequence prevent child recording collisions.
 Those files can include private wallet/provider configuration and must remain
 ephemeral; they are neither product logs nor redacted diagnostics. Only synthetic
 scenario operands are checked in. The plugin is never installed by the product,

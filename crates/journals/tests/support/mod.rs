@@ -62,6 +62,19 @@ pub fn load_schema(c: &Connection, dump: &Value, schema: &Value) {
     for o in objects.iter().filter(|o| o[0] == "table") {
         c.execute_batch(o[3].as_str().unwrap()).unwrap();
     }
+    insert_dump(c, dump);
+    for kind in ["index", "view", "trigger"] {
+        for o in objects.iter().filter(|o| o[0] == kind) {
+            if let Some(sql) = o[3].as_str() {
+                c.execute_batch(sql).unwrap();
+            }
+        }
+    }
+    c.execute_batch("COMMIT;PRAGMA foreign_keys=ON;PRAGMA ignore_check_constraints=OFF")
+        .unwrap();
+}
+
+pub fn insert_dump(c: &Connection, dump: &Value) {
     for (table, data) in dump.as_object().unwrap() {
         let columns = data["columns"].as_array().unwrap();
         let query = format!(
@@ -80,15 +93,6 @@ pub fn load_schema(c: &Connection, dump: &Value, schema: &Value) {
                 .unwrap();
         }
     }
-    for kind in ["index", "view", "trigger"] {
-        for o in objects.iter().filter(|o| o[0] == kind) {
-            if let Some(sql) = o[3].as_str() {
-                c.execute_batch(sql).unwrap();
-            }
-        }
-    }
-    c.execute_batch("COMMIT;PRAGMA foreign_keys=ON;PRAGMA ignore_check_constraints=OFF")
-        .unwrap();
 }
 pub fn snapshot(c: &Connection) -> Value {
     let tables: Vec<(String, String)> = c

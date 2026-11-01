@@ -153,6 +153,44 @@ def generated(seeds=2000, permutations=True):
                 yield suite, scenario, seed_id, True, permuted_snapshot(snapshot)
 
 
+def recorded_snapshots(directory):
+    from tests.custody_engine_compare import permuted_snapshot
+    from tests.custody_snapshot import load, SCHEMA, VERSION
+    for path in sorted(directory.rglob('*.json')):
+        document = load(path)
+        if not isinstance(document, dict) or document.get('schema') != SCHEMA:
+            continue
+        snapshot = document.get('input') or {}
+        if snapshot.get('schema_version') != VERSION:
+            continue
+        name = path.relative_to(directory).as_posix()
+        yield 'historical-snapshots', name, 0, False, snapshot
+        yield 'historical-snapshots', name, 0, True, permuted_snapshot(snapshot)
+
+
+def historical_books():
+    import base64
+    import gzip
+    import tempfile
+    from pathlib import Path
+    from kassiber.db import open_db
+    scratch = ROOT / 'target/r4-10/scratch'
+    scratch.mkdir(parents=True, exist_ok=True)
+    for fixture in sorted((ROOT / 'tests/fixtures/historical').glob('*.sqlite3.gz.b64')):
+        with tempfile.TemporaryDirectory(dir=scratch, prefix='historical-prebuild-') as directory:
+            data = Path(directory)
+            (data / 'kassiber.sqlite3').write_bytes(gzip.decompress(base64.b64decode(fixture.read_bytes())))
+            conn = open_db(data)
+            try:
+                for profile in conn.execute('SELECT id FROM profiles ORDER BY id').fetchall():
+                    case = capture(conn, fixture.name + '/' + profile[0], profile[0])
+                    case['schema'] = [list(row) for row in conn.execute(
+                        "SELECT type,name,tbl_name,sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY name")]
+                    yield 'historical-books', case['name'], 0, False, case
+            finally:
+                conn.close()
+
+
 def frozen(rejections):
     from tests.custody_gap_stage import suites
     cases = []

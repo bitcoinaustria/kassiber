@@ -7,6 +7,7 @@ use kassiber_journals::prebuild::{
     source_overlap_result_fields, source_overlap_warning, PricingScope,
 };
 use kassiber_pydecimal::{Context, Rounding};
+use kassiber_store::rusqlite::config::DbConfig;
 use kassiber_store::rusqlite::Connection;
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -57,25 +58,58 @@ fn clear(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
 
 fn run(
     v: &Value,
-    connections: &mut BTreeMap<(String, String), Connection>,
+    connections: &mut BTreeMap<(String, String), (Connection, Option<Value>)>,
 ) -> Result<Value, Box<dyn std::error::Error>> {
     let reuse = v["reuse"].as_bool().unwrap_or(false);
     let private = if reuse { None } else { Some(open(v)?) };
-    let conn = if let Some(conn) = private.as_ref() {
-        conn
+    let (conn, previous_schema) = if let Some(conn) = private.as_ref() {
+        (conn, None)
     } else {
         let key = (v["database"].to_string(), v["passphrase"].to_string());
-        match connections.entry(key) {
+        let entry = match connections.entry(key) {
             std::collections::btree_map::Entry::Occupied(entry) => entry.into_mut(),
-            std::collections::btree_map::Entry::Vacant(entry) => entry.insert(open(v)?),
-        }
+            std::collections::btree_map::Entry::Vacant(entry) => entry.insert((open(v)?, None)),
+        };
+        (&entry.0, Some(&mut entry.1))
     };
     if !v["before"].is_null() {
         conn.pragma_update(None, "synchronous", "OFF")?;
-        if !v["schema"].is_null() {
-            support::load_schema(conn, &v["before"], &v["schema"]);
+        let same_schema = previous_schema
+            .as_ref()
+            .is_some_and(|s| s.as_ref() == Some(&v["schema"]));
+        if same_schema {
+            conn.pragma_update(None, "foreign_keys", "OFF")?;
+            conn.pragma_update(None, "ignore_check_constraints", "ON")?;
+            conn.set_db_config(DbConfig::SQLITE_DBCONFIG_ENABLE_TRIGGER, false)?;
+            conn.execute_batch("BEGIN")?;
+            let tables = conn
+                .prepare("SELECT name FROM sqlite_master WHERE type='table'")?
+                .query_map([], |r| r.get::<_, String>(0))?
+                .collect::<Result<Vec<_>, _>>()?;
+            for table in tables {
+                conn.execute(
+                    &format!("DELETE FROM \"{}\"", table.replace('"', "\"\"")),
+                    [],
+                )?;
+            }
+            support::insert_dump(conn, &v["before"]);
+            conn.execute_batch(
+                "COMMIT;PRAGMA foreign_keys=ON;PRAGMA ignore_check_constraints=OFF",
+            )?;
+            conn.set_db_config(DbConfig::SQLITE_DBCONFIG_ENABLE_TRIGGER, true)?;
         } else {
-            support::load(conn, &v["before"]);
+            if previous_schema.as_ref().is_some_and(|s| s.is_some()) {
+                clear(conn)?;
+                conn.pragma_update(None, "synchronous", "OFF")?;
+            }
+            if !v["schema"].is_null() {
+                support::load_schema(conn, &v["before"], &v["schema"]);
+            } else {
+                support::load(conn, &v["before"]);
+            }
+            if let Some(previous) = previous_schema {
+                *previous = Some(v["schema"].clone());
+            }
         }
         conn.pragma_update(None, "synchronous", "FULL")?;
     }
@@ -170,9 +204,6 @@ fn run(
         .unwrap_or(false)
         .then(|| support::snapshot(conn));
     conn.execute_batch("ROLLBACK")?;
-    if reuse {
-        clear(conn)?;
-    }
     Ok(
         json!({"name":v["name"],"count":count,"result":count,"projection_wire":projection_wire,"error":error,"verified":verified,"dump":dump,"cpu_seconds":cpu_seconds,"wall_seconds":wall_seconds}),
     )
