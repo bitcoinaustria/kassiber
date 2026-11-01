@@ -956,11 +956,6 @@
       "route": "{{from}} nach {{to}}",
       "to": "nach",
       "fee": "Gebühr {{amount}}",
-      "evidence": {
-        "exact": "exakter Nachweis",
-        "likely": "Zeit und Betrag passen",
-        "ownership": "beide Seiten in deinen Wallets"
-      },
       "competing_one": "{{count}} weiterer möglicher Treffer",
       "competing_other": "{{count}} weitere mögliche Treffer",
       "pair": "Paaren",
@@ -988,7 +983,25 @@
         "reason": "Geprüfte exakte Übertragungen paaren",
         "none": "Nichts wurde gepaart: Die exakten Treffer haben sich geändert. Die Liste ist wieder aktuell."
       },
-      "saving": "Wird gespeichert…"
+      "saving": "Wird gespeichert…",
+      "aboutLabel": "Über Übertragungen zwischen deinen Wallets",
+      "policyNote": "Ein Swap, der die Anschaffungskosten weiterführt, ist steuerneutral; ein steuerpflichtiger Swap zählt als Verkauf und Kauf zum Marktwert. Ändern unter Details.",
+      "type": {
+        "transfer": "Übertragung",
+        "bitcoinSwap": "Bitcoin-Swap",
+        "swap": "Swap"
+      },
+      "policy": {
+        "carrying": "Steuerneutral",
+        "taxable": "Steuerpflichtig",
+        "carryingHint": "Die Anschaffungskosten laufen weiter; nur die Gebühr wird gebucht.",
+        "taxableHint": "Zählt als Verkauf und Kauf zum Marktwert."
+      },
+      "evidenceShort": {
+        "exact": "Exakt",
+        "likely": "Wahrscheinlich",
+        "ownership": "Eigene Wallets"
+      }
     }
   }
 }

@@ -516,7 +516,8 @@
       "shownOf": "{{shown}} von {{total}} angezeigt",
       "showMoreRows": "Mehr anzeigen",
       "showMoreRowsOf": "Mehr von „{{cause}}“ anzeigen",
-      "showFewerRowsOf": "Weniger von „{{cause}}“ anzeigen"
+      "showFewerRowsOf": "Weniger von „{{cause}}“ anzeigen",
+      "aboutLabel": "Über „{{cause}}“"
     },
     "queue": {
       "waitsOn": "Wartet auf {{root}}",
