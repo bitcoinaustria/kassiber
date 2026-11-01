@@ -2470,9 +2470,11 @@ this storage difference has a native regression and an offline reference repro.
 Reference quirks, named mutation killers and verification are recorded in the
 [partial document checkpoint](../reference/rust-shell.md#reviewed-document-core-r5-partial).
 
-Completion still requires provider discovery/OCR transport,
-exact-action consent through `kassiber-net`, offline/no-egress fencing, bounded
-Poppler PDF inspection/rendering, interactive CLI review and CLI wire/full-book
+The [provider continuation](../reference/rust-shell.md#document-provider-transport-checkpoint-r5-partial)
+adds configuration bootstrap, model discovery and OCR through `kassiber-net`,
+with exact-action consent and the Python local-AI offline/no-egress exception.
+Completion still requires bounded Poppler PDF inspection/rendering,
+interactive CLI review and CLI wire/full-book
 acceptance. Product served-by counts for document preview/import and the
 shared daemon importer are zero; the native catalog remains at 158 entries.
 `ui.wallets.import_file` stays unregistered until native `journals process`

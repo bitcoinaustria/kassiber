@@ -1,0 +1,56 @@
+[
+  {
+    "name": "ollama",
+    "display_name": "Ollama",
+    "base_url": "http://localhost:11434/v1",
+    "api_key": null,
+    "default_model": null,
+    "kind": "local",
+    "notes": "Local Ollama (default OpenAI Responses-compatible endpoint)."
+  },
+  {
+    "name": "omlx",
+    "display_name": "oMLX",
+    "base_url": "http://127.0.0.1:8000/v1",
+    "api_key": null,
+    "default_model": null,
+    "kind": "local",
+    "notes": "Local oMLX (Apple Silicon MLX Responses endpoint)."
+  },
+  {
+    "name": "codex",
+    "display_name": "Codex",
+    "base_url": "codex-cli://default",
+    "api_key": null,
+    "default_model": "default",
+    "kind": "remote",
+    "notes": "Broker using the installed Codex app-server and existing login. Kassiber's typed tools are available; native coding tools are not."
+  },
+  {
+    "name": "claude",
+    "display_name": "Claude",
+    "base_url": "claude-cli://default",
+    "api_key": null,
+    "default_model": "default",
+    "kind": "remote",
+    "notes": "Broker using the installed Claude CLI and existing login. Kassiber's typed tools are available; native coding tools are not."
+  },
+  {
+    "name": "opencode",
+    "display_name": "OpenCode",
+    "base_url": "opencode-cli://default",
+    "api_key": null,
+    "default_model": null,
+    "kind": "remote",
+    "notes": "Broker using the installed OpenCode server and existing configuration. Kassiber's typed tools are available; native coding tools are not."
+  },
+  {
+    "name": "copilot",
+    "display_name": "GitHub Copilot",
+    "base_url": "copilot-cli://default",
+    "api_key": null,
+    "default_model": "default",
+    "kind": "remote",
+    "notes": "Broker using the installed GitHub Copilot CLI over the Agent Client Protocol and its existing login. Kassiber's typed tools are available; native coding tools are not."
+  }
+]

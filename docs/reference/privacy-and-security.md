@@ -321,6 +321,19 @@ provider base URL for an explicit gateway. Native CLI providers and the
 permission-gated GitHub update checker retain their separately documented
 transport configuration.
 
+The unregistered Rust document-provider service uses `kassiber-net` for model
+discovery and OCR. Constructing the service and seeding provider configuration
+contact nothing. Each invocation requires a grant bound to the document,
+options, database instance and selected provider configuration. Disabled,
+unacknowledged, off-device and unavailable-secret providers refuse before any
+request. Only marked-local loopback HTTP(S) is admitted; no CLI provider starts.
+The local-AI exception to offline mode and `KASSIBER_NO_EGRESS` matches Python.
+Requests ignore ambient proxies and permit only same-origin redirects. Both
+wire formats carry `store: false`; only the saved explicit Chat Completions
+opt-out omits it. A refusal never weakens retention. No document bytes,
+credentials or request contents enter the bounded RAM network ledger. Product
+CLI and daemon routes remain unregistered at this provider checkpoint.
+
 `KASSIBER_NO_EGRESS=1` blocks the shared backend HTTP/SOCKS and Python Electrum
 connect boundaries, native BDK/LWK observer construction, and chain-analysis
 acquisition, including loopback nodes. Acquisition rechecks it for every

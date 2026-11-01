@@ -46,6 +46,33 @@ fn main() {
         Ok(sql_time.clone())
     })
     .unwrap();
+    if field(&request, "action") == &s("preview") {
+        let optional = |key| match field(&request, key) {
+            Value::Str(v) => v.as_str().map(str::to_owned),
+            _ => None,
+        };
+        let preview = document::DocumentPreview {
+            source_file: text(field(&request, "source")),
+            provider_name: optional("provider"),
+            model: optional("model"),
+            confidence_threshold: field(&request, "threshold").clone(),
+            max_pages: field(&request, "max_pages").clone(),
+            pages: field(&request, "pages").clone(),
+            expected_fiat_currency: Some("EUR".into()),
+        };
+        let result = document::DocumentConsent::explicit(&conn, &preview).and_then(|consent| {
+            document::Providers::system().preview(&conn, &preview, Some(consent))
+        });
+        let output = match result {
+            Ok(v) => dict([("result", v)]),
+            Err(e) => dict([("error", error(e))]),
+        };
+        println!(
+            "{}",
+            kassiber_pyjson::dumps(&output, &Default::default()).unwrap()
+        );
+        return;
+    }
     let Value::List(ids) = field(&request, "attachment_ids") else {
         panic!("attachment ids")
     };

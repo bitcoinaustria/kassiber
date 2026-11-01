@@ -384,8 +384,11 @@ projections stay Python. Progress and remaining work for this slice:
   source-digest binding, managed attachments, SQLite/SQLCipher full-book and core
   response comparisons, rollback and named mutation killers. See the partial
   [document checkpoint](docs/reference/rust-shell.md#reviewed-document-core-r5-partial).
-- [ ] Finish document ingestion at core/CLI level: gated provider discovery/OCR,
-  bounded Poppler PDF verification/rendering, interactive CLI review, native
+- [x] Add unregistered document provider discovery/OCR through `kassiber-net`,
+  with exact-action consent, local-only policy and Python offline/no-egress
+  fencing. See the [provider checkpoint](docs/reference/rust-shell.md#document-provider-transport-checkpoint-r5-partial).
+- [ ] Finish document ingestion at core/CLI level: bounded Poppler PDF
+  verification/rendering, interactive CLI review, native
   registration and CLI wire/full-book/zero-fallback acceptance. Resolve the
   documented database-error wire and managed-digest cleanup differences before
   complete acceptance.

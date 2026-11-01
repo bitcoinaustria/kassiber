@@ -8511,5 +8511,75 @@
       "document_cleanup_never_follows_untrusted_stored_paths"
     ],
     "rule": "Rollback cleanup validates untrusted stored paths and cannot unlink files outside managed evidence."
+  },
+  {
+    "id": "W-document-provider-consent",
+    "file": "crates/wallets/src/file_import/document/provider/preview.rs",
+    "find": "let consent = consent.ok_or_else(consent_error)?;",
+    "replace": "let consent = consent.unwrap_or(DocumentConsent::explicit(conn, request)?);",
+    "expect_failing": [
+      "document_missing_stale_disabled_remote_and_secret_grants_make_no_attempt"
+    ],
+    "rule": "A saved provider never grants consent for an OCR action."
+  },
+  {
+    "id": "W-document-provider-endpoint",
+    "file": "crates/wallets/src/file_import/document/provider.rs",
+    "find": "|| self.provider != *provider",
+    "replace": "|| false",
+    "expect_failing": [
+      "document_missing_stale_disabled_remote_and_secret_grants_make_no_attempt"
+    ],
+    "rule": "A document action grant cannot survive provider configuration replacement."
+  },
+  {
+    "id": "W-document-provider-book",
+    "file": "crates/wallets/src/file_import/document/provider.rs",
+    "find": "setting(conn, \"database_instance_id\")?.as_deref() != Some(&self.book_id)",
+    "replace": "false",
+    "expect_failing": [
+      "document_missing_stale_disabled_remote_and_secret_grants_make_no_attempt"
+    ],
+    "rule": "OCR consent belongs to its database instance."
+  },
+  {
+    "id": "W-document-provider-model",
+    "file": "crates/wallets/src/file_import/document/provider.rs",
+    "find": "if !installed.is_empty() && found.is_none() {",
+    "replace": "if false && !installed.is_empty() && found.is_none() {",
+    "expect_failing": [
+      "python_document_provider_vectors"
+    ],
+    "rule": "An explicitly requested model must be installed when discovery returns installed models."
+  },
+  {
+    "id": "W-document-provider-retention",
+    "file": "crates/wallets/src/file_import/document/provider/http.rs",
+    "find": "if !omit {",
+    "replace": "if false && !omit {",
+    "expect_failing": [
+      "python_document_provider_vectors"
+    ],
+    "rule": "Chat Completions sends store false unless the user explicitly opted out."
+  },
+  {
+    "id": "W-document-provider-local-offline",
+    "file": "crates/wallets/src/file_import/document/provider/http.rs",
+    "find": "NetRequest::new(Subsystem::Ai, endpoint, tls).on_device_ai()",
+    "replace": "NetRequest::new(Subsystem::Ai, endpoint, tls)",
+    "expect_failing": [
+      "document_http_preview_uses_local_offline_route_and_keeps_evidence_in_memory"
+    ],
+    "rule": "Only a correctly classified local AI route retains the Python offline exception."
+  },
+  {
+    "id": "W-document-provider-store-refusal",
+    "file": "crates/wallets/src/file_import/document/provider/http.rs",
+    "find": "Err(error) if sent_store && names_store(&error) => return Err(store_refused(error)),",
+    "replace": "Err(error) if false && sent_store && names_store(&error) => return Err(store_refused(error)),",
+    "expect_failing": [
+      "document_http_fallback_is_origin_bound_and_never_weakens_retention"
+    ],
+    "rule": "A refusal of store false is reported without weakening retention or resending the document."
   }
 ]

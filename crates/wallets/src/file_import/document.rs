@@ -1,13 +1,15 @@
-//! Reviewed OCR observations and managed evidence. Provider transport and
-//! product registration are separate, pending boundaries.
+//! Reviewed OCR observations, gated local providers and managed evidence.
+//! PDF preparation and product registration are pending boundaries.
 use super::*;
 use kassiber_envelope::{get, py_str, set, truthy};
 use kassiber_pyjson::{Key, Options, PyStr};
 
 mod coordinator;
 mod files;
+mod provider;
 mod rows;
 pub use coordinator::{import_draft, reviewed_records, ImportDraft};
+pub use provider::{DocumentConsent, DocumentPreview, Providers};
 
 fn s(v: impl AsRef<str>) -> Py {
     kassiber_envelope::s(v.as_ref())

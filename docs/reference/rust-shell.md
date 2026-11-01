@@ -8342,6 +8342,49 @@ remaining on Python; subprocess/restart full-book parity and per-command native
 served-by counts with zero in-scope Python fallback. `IMPLEMENTED` remains
 unchanged until the preceding persistence acceptance passes.
 
+### Document provider transport checkpoint (R5, partial)
+
+The document core now includes provider configuration bootstrap/resolution,
+local-only model discovery and non-streaming OCR through `kassiber-net`.
+An exact invocation grant binds source/options, database instance and provider
+configuration. Reads of saved configuration do not grant egress. The service
+refuses disabled providers, remote/TEE/CLI targets and unavailable or
+out-of-namespace native credential references before contact. As in the Python
+CLI, native credential references require repair rather than a generic OS-store
+lookup; inline credentials are confined to the chosen local origin.
+
+The HTTP adapter preserves Python's model selection, Responses request and
+Chat Completions request shapes, strict models discovery, same-origin redirect
+policy and no-retention behavior. Only an auto provider without a detected
+format can switch once after a missing Responses route; model/tool failures
+never authorize that switch. Successful fallback records detection only while
+the provider still points at that URL, without changing `updated_at`.
+Only local AI keeps working offline and under the product no-egress override;
+the independent test observer still permits only owned loopback fixtures.
+
+Frozen Python provider/model/extraction/request vectors and a disposable-book
+provider replay accompany the native policy tests. The replay compares OCR
+wire results, outgoing payloads and every typed book object on SQLite and
+SQLCipher. PDF preparation and interactive CLI registration remain pending;
+the native CLI catalog and successful product served-by counts are unchanged.
+No R6 projection, daemon session, token or importer route is registered.
+
+Transport failures retain the Python `ai_unavailable` contract while their
+`reason` uses the shared network layer's fixed diagnostic rather than a raw OS
+exception, which could disclose provider credentials or document paths. The
+shared HTTP response budget also remains enforced; an oversized provider reply
+fails closed rather than allocating unbounded memory as the Python client can.
+
+Verification includes six native provider tests and 221 active frozen provider vectors,
+the inherited full-core replay (596 subtests), and the expanded focused replay
+(36 provider HTTP/policy subtests on both codecs). Successful HTTP cases run
+with offline mode, `KASSIBER_NO_EGRESS` and unusable ambient proxies enabled.
+The source consent test checks an empty attempt ledger before a grant and after
+source/options, provider, profile or database identity changes. Seven named
+`W-document-provider-*` mutation entries pin those boundaries, model selection,
+request retention and the local-AI offline classification.
+All seven mutations are killed after their four named baselines pass.
+
 ### Bitcoin atomic publication verification (R5)
 
 Local branch `t3code/r5-sync-10` starts at `004f3963`. The two preceding

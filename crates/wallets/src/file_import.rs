@@ -1,4 +1,4 @@
-//! User-triggered, local file ingestion. No provider, transport or AI dispatch.
+//! User-triggered ingestion. Document OCR requires an exact local-provider grant.
 mod binance;
 mod btcpay;
 mod bull;

@@ -10,6 +10,8 @@ import subprocess
 import tempfile
 from types import SimpleNamespace
 import unittest
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest import mock
 
 from crates.wallets.scripts.generate_document_vectors import SOURCE, SOURCE_HASH, vectors, review_vectors, error
@@ -34,6 +36,8 @@ class DocumentIngestionReferenceTest(unittest.TestCase):
     def test_document_rows_match_frozen_python_reference(self):
         self.assertEqual(cases(), vectors())
         self.assertEqual(json.loads(CORPUS.with_name('python_document_review.json').read_text()), review_vectors())
+        from crates.wallets.scripts.generate_document_provider_vectors import vectors as provider_vectors
+        self.assertEqual(json.loads(CORPUS.with_name('python_document_providers.json').read_text()), provider_vectors())
 
 
 @unittest.skipUnless(DRIVER.is_file(), 'build the document_fixture test-harness example')
@@ -95,6 +99,20 @@ class RustDocumentIngestionTest(unittest.TestCase):
                 capture_output=True, cwd=ROOT, check=True, timeout=90)
             self.assertEqual(result.stderr, '')
             return result.stdout
+        if request.get('action') == 'preview':
+            from kassiber.ai import providers
+            with closing(self.connect(request['encrypted'])) as conn, \
+                    mock.patch.object(reference, 'now_iso', return_value=TIME), \
+                    mock.patch.object(providers, 'now_iso', return_value=TIME):
+                try:
+                    result = reference.preview_document_import(conn, source_file=request['source'],
+                        provider_name=request.get('provider'), model=request.get('model'),
+                        confidence_threshold=request.get('threshold'), max_pages=request.get('max_pages'),
+                        pages=request.get('pages'), expected_fiat_currency='EUR')
+                    output = {'result': result}
+                except Exception as exc:
+                    output = {'error': error(exc)}
+            return json.dumps(output) + '\n'
         from kassiber.core import imports, attachments
         from kassiber.cli.handlers import resolve_transaction
         with closing(self.connect(request['encrypted'])) as conn:
@@ -155,6 +173,105 @@ class RustDocumentIngestionTest(unittest.TestCase):
             self.assertEqual(wires[1], wires[0])
         self.assertEqual(states[1], states[0])
         return results[1], states[1]
+
+    def test_provider_preview_wire_and_complete_books(self):
+        from crates.wallets.scripts.generate_document_vectors import base
+        ocr = json.dumps({'rows': [base()]})
+        response = json.dumps({'output': [{'type': 'message', 'content': [{'type': 'output_text', 'text': ocr}]}]})
+        chat = json.dumps({'choices': [{'message': {'content': ocr}}]})
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, *args):
+                pass
+            def do_GET(self):
+                self.respond()
+            def do_POST(self):
+                self.respond()
+            def respond(self):
+                body = self.rfile.read(int(self.headers.get('Content-Length', 0)))
+                self.server.hits.append((self.command, self.path, body))
+                status, payload = self.server.replies[min(self.server.index, len(self.server.replies) - 1)]
+                self.server.index += 1
+                data = payload.encode()
+                self.send_response(status)
+                self.send_header('Content-Length', str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+        cases = [
+            ('responses', 'auto', False, [(200, response)]),
+            ('fallback', 'auto', False, [(404, 'Not found'), (200, chat)]),
+            ('chat', 'chat_completions', False, [(200, chat)]),
+            ('explicit-responses-no-fallback', 'responses', False, [(404, 'Not found')]),
+            ('explicit-retention-choice', 'chat_completions', True, [(200, chat)]),
+            ('store-refused', 'auto', False, [(400, '{"error":{"param":"store","message":"unsupported"}}')]),
+            ('model-not-route', 'auto', False, [(404, '{"error":{"message":"model not found"}}')]),
+            ('auth-refused', 'auto', False, [(401, 'Unauthorized')]),
+        ]
+        for encrypted in [False, True]:
+            for name, wire, omit, replies in cases:
+                with self.subTest(encrypted=encrypted, case=name):
+                    baseline = self.baseline(encrypted)
+                    server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+                    server.daemon_threads = True
+                    server.replies = [(200, '{"data":[{"id":"glm-ocr"}]}'), *replies]
+                    server.hits = []
+                    thread = threading.Thread(target=server.serve_forever)
+                    thread.start()
+                    try:
+                        def setup(conn):
+                            conn.execute("INSERT INTO settings(key,value) VALUES('database_instance_id','disposable-book')")
+                            conn.execute("INSERT INTO ai_providers(name,base_url,kind,api_format,omit_store_field,created_at,updated_at) VALUES('local',?,'local',?,?,'2026-01-01','2026-01-01')",
+                                (f'http://127.0.0.1:{server.server_port}/v1', wire, omit))
+                            server.index = 0
+                        request = self.request([], encrypted, action='preview', provider='local')
+                        offline = self.root / 'offline.json'
+                        offline.write_text('{"schema_version":1,"enabled":true}')
+                        offline.chmod(0o600)
+                        with mock.patch.dict(os.environ, {'KASSIBER_NO_EGRESS': '1',
+                                'KASSIBER_OFFLINE_PREFERENCE_FILE': str(offline),
+                                'HTTP_PROXY': 'http://192.0.2.2:9', 'HTTPS_PROXY': 'http://192.0.2.2:9'}):
+                            outputs, states = self.compare(baseline, encrypted, [request], setup=setup)
+                        hits = server.hits
+                        half = len(hits) // 2
+                        self.assertEqual(len(hits), 2 * len(server.replies))
+                        for before, after in zip(hits[:half], hits[half:]):
+                            self.assertEqual(before[:2], after[:2])
+                            self.assertEqual(json.loads(before[2]) if before[2] else None,
+                                json.loads(after[2]) if after[2] else None)
+                        if name in {'responses', 'fallback', 'chat', 'explicit-retention-choice'}:
+                            self.assertEqual(outputs[0]['result']['summary']['ready'], 1)
+                    finally:
+                        server.shutdown()
+                        server.server_close()
+                        thread.join()
+
+    def test_provider_policy_refusals_match_reference_without_contact(self):
+        for encrypted in [False, True]:
+            for name in ['disabled', 'remote-unacknowledged', 'remote', 'tee', 'local-remote-host',
+                    'cli-target', 'native-missing', 'native-foreign', 'native-valid-unavailable', 'invalid-store']:
+                with self.subTest(encrypted=encrypted, case=name):
+                    baseline = self.baseline(encrypted)
+                    def setup(conn):
+                        conn.execute("INSERT INTO settings(key,value) VALUES('database_instance_id','disposable-book')")
+                        conn.execute("INSERT INTO ai_providers(name,base_url,kind,created_at,updated_at) VALUES('local','http://127.0.0.1:9/v1','local','2026-01-01','2026-01-01')")
+                        if name == 'disabled':
+                            conn.execute("UPDATE ai_providers SET enabled=0")
+                        if name in {'remote-unacknowledged', 'remote', 'tee'}:
+                            conn.execute("UPDATE ai_providers SET kind=?,acknowledged_at=?",
+                                ('tee' if name == 'tee' else 'remote', None if name == 'remote-unacknowledged' else TIME))
+                        if name == 'local-remote-host':
+                            conn.execute("UPDATE ai_providers SET base_url='https://example.invalid/v1'")
+                        if name == 'cli-target':
+                            conn.execute("UPDATE ai_providers SET base_url='codex-cli://default'")
+                        if name.startswith('native-') or name == 'invalid-store':
+                            from kassiber.ai.providers import ai_provider_secret_ref_namespace
+                            service, account = ai_provider_secret_ref_namespace(conn, 'local')
+                            if name == 'native-foreign':
+                                service, account = 'foreign', 'foreign'
+                            conn.execute("INSERT INTO ai_provider_secret_refs(provider_name,store_id,service,account,state,created_at) VALUES('local',?,?,?,?,?)",
+                                ('bad-store' if name == 'invalid-store' else 'linux_secret_service', service, account,
+                                 'missing' if name == 'native-missing' else 'ok', TIME))
+                    self.compare(baseline, encrypted,
+                        [self.request([], encrypted, action='preview', provider='local')], setup=setup)
 
     def test_reference_drafts_match_complete_books_and_managed_bytes_on_both_codecs(self):
         selected = [case for case in cases() if 'rows' in case]
