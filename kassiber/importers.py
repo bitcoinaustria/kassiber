@@ -293,8 +293,11 @@ def _wasabi_int(value: Any, field: str, *, default: int | None = None) -> int | 
 def _wasabi_amount_sats(value: Any) -> int:
     if value is None or value == "":
         raise AppError("Wasabi transaction is missing amount", code="validation")
-    if isinstance(value, int):
-        return value
+    if isinstance(value, (bool, int, float, Decimal)):
+        number = Decimal(str(value)) if not isinstance(value, bool) else None
+        if number is None or not number.is_finite() or number != number.to_integral_value():
+            raise AppError("Wasabi numeric amounts must be integer satoshis", code="validation")
+        return int(number)
     text = str(value).strip()
     try:
         if "." in text:
