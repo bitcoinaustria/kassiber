@@ -183,7 +183,7 @@ describe("quarantine cause panel", () => {
     expect(html).toContain("An intermediate wallet is missing");
     expect(html).toContain("Coins left Cold and a similar amount came back later");
     expect(html).toContain("Blocks reports");
-    expect(html).toContain("2 later transactions wait on this and clear once it is fixed.");
+    expect(html).toContain("2 more wait on this");
     // The card says how many, and which.
     expect(html).toContain("1 transaction");
     expect(html).toContain("2024-01-01 · Cold · out");

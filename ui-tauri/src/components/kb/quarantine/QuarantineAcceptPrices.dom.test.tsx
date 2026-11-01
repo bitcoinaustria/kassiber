@@ -90,7 +90,7 @@ describe("accepting approximate prices", () => {
   it("previews every held price for the book, then applies exactly that preview", async () => {
     const onClose = mount();
     expect(await screen.findByText("Accept 3 approximate prices?")).toBeTruthy();
-    expect(screen.getByTestId("quarantine-accept-effect").textContent).toContain("5");
+    expect(screen.getByTestId("review-proposal-effect").textContent).toContain("5");
 
     const plan = daemon.calls.find((call) => call.kind === "ui.review.plan")!;
     expect(plan.args).toMatchObject({
