@@ -16,7 +16,7 @@ BIN = os.environ.get('KASSIBER_LIGHTNING_FIXTURE_BIN')
 
 
 @contextmanager
-def node(data, *, failure=None):
+def node(data, *, failure=None, before_reply=None):
     hits = []
 
     class Handler(BaseHTTPRequestHandler):
@@ -24,6 +24,8 @@ def node(data, *, failure=None):
             args = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
             method = args[-1]
             hits.append(args)
+            if before_reply is not None:
+                before_reply(len(hits) - 1)
             body = json.dumps(data[method]).encode()
             self.send_response(500 if failure == method else 200)
             self.send_header('Content-Length', str(len(body)))

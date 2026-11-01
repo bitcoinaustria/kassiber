@@ -1,5 +1,4 @@
-//! Profitability over an already curated Lightning snapshot. Preparation only:
-//! the native CLN/LND acquisition boundary and public routes remain unported.
+//! Profitability over a curated Lightning snapshot acquired by the book service.
 //! These types have no fields for node pubkeys, credentials, invoices or routes.
 use super::*;
 use kassiber_pyjson::{BigInt, PyStr};

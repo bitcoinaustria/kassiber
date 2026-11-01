@@ -13240,3 +13240,33 @@ regression and inherited 535 LND / 348 CLN oracle cases. No product route is
 registered in this first commit; successful product served-by counts remain zero.
 Verification logs are under `target/r5-lightning-5/`. All Cargo builds are
 locked/offline with eight jobs and both build locations inside that directory.
+
+## Lightning profitability product wiring (R5)
+
+The second `t3code/r5-reports-lightning-5` boundary registers exactly two CLI
+leaves and one daemon kind: `reports lightning-profitability`,
+`reports export-lightning-profitability-csv` and
+`ui.reports.lightning_profitability`. They share the native book service and
+its request-local action grant; a book owns one bounded RAM network ledger.
+The CLI retains connection/window/export/scope arguments, and the daemon retains
+its aliases, profile scope and reference integer coercions. No new AI tool,
+node-snapshot/backend-test registration or background acquisition is included.
+
+The product acceptance module compares six CLN/LND scenarios in all six CLI
+output modes, exact CSV bytes and node request order, plus complete unchanged
+112-table dumps. Two daemon sessions compare all response bytes, window coercion,
+connection aliases, scoped lookup and validation errors. Hybrid route assertions
+prove **36 successful Rust reads, 36 successful Rust CSV exports and 20 successful
+Rust daemon profitability requests**, with **zero in-scope Python fallbacks**.
+Daemon sessions include eight additional deterministic refusal responses.
+Display/status reads and missing-connection, offline and no-egress refusals have
+zero node hits. Mid-acquisition book/context/wallet/backend changes refuse
+before another resource or any CSV artifact. Logs and disposable books live
+under `target/r5-lightning-5/`.
+
+The native inventory is now 155 CLI leaves (23 report commands), 16 report daemon
+kinds and two transaction export kinds. Product error comparisons retain the
+recorded native privacy differences: raw node bodies, malformed JSON previews,
+offending ancillary values and CLN process details are omitted, and native
+transport/TLS messages identify the native stack. Recorded report/CSV rounding,
+window, ancillary and publication quirks remain reference behavior.

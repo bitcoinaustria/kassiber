@@ -26,6 +26,8 @@ pub const COMMANDS: &[&str] = &[
     "reports.export-austrian-e1kv-xlsx",
     "transactions.export",
     "reports.cross-check",
+    "reports.lightning-profitability",
+    "reports.export-lightning-profitability-csv",
     "reports.export-year-handoff",
     "reports.privacy-hygiene",
     "reports.source-funds",
@@ -56,6 +58,12 @@ pub fn kind(command: &str) -> Option<&'static str> {
     }
 }
 pub fn execute(book: &mut dyn Book, command: &str, args: &Namespace) -> Result<Value, AppError> {
+    if matches!(
+        command,
+        "reports.lightning-profitability" | "reports.export-lightning-profitability-csv"
+    ) {
+        return book.reports(command, &lightning_request(args));
+    }
     if command == "reports.source-funds" {
         return book.reports(command, &source_funds_report_request(args));
     }
@@ -205,6 +213,13 @@ fn source_funds_request(args: &Namespace) -> Value {
             "from_allocation_amount",
             args.get("from_amount").cloned().unwrap_or(Value::Null),
         )]),
+    )
+}
+
+fn lightning_request(args: &Namespace) -> Value {
+    dict(
+        ["connection", "window_days", "file", "workspace", "profile"]
+            .map(|k| (k, args.get(k).cloned().unwrap_or(Value::Null))),
     )
 }
 
@@ -774,6 +789,51 @@ mod tests {
         )
         .unwrap();
         assert!(crate::run::implemented("reports.source-funds", &saving));
+    }
+    #[test]
+    fn lightning_cli_preserves_action_scope_window_file_and_registration() {
+        for command in [
+            "lightning-profitability",
+            "export-lightning-profitability-csv",
+        ] {
+            let mut argv = vec![
+                "reports",
+                command,
+                "--connection",
+                "node",
+                "--window-days",
+                "7",
+                "--workspace",
+                "Main",
+                "--profile",
+                "Book",
+            ];
+            if command.starts_with("export") {
+                argv.extend(["--file", "target/report.csv"]);
+            }
+            let args = crate::argparse::parse_args(
+                &argv.into_iter().map(String::from).collect::<Vec<_>>(),
+                crate::argparse::Context {
+                    width: 78,
+                    version: "test",
+                },
+            )
+            .unwrap();
+            let payload = lightning_request(&args);
+            for key in ["connection", "window_days", "workspace", "profile"] {
+                assert_eq!(get(&payload, key), args.get(key));
+                assert!(!matches!(get(&payload, key), None | Some(Value::Null)));
+            }
+            if command.starts_with("export") {
+                assert_eq!(
+                    get(&payload, "file"),
+                    Some(&kassiber_envelope::s("target/report.csv"))
+                );
+            }
+            let full = format!("reports.{command}");
+            assert!(COMMANDS.contains(&full.as_str()));
+            assert!(crate::describe::IMPLEMENTED.contains(&full.as_str()));
+        }
     }
     #[test]
     fn cross_check_cli_forwards_filters_files_and_native_registration() {

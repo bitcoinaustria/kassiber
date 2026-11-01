@@ -214,6 +214,8 @@ pub const IMPLEMENTED: &[&str] = &[
     "source-funds.coverage",
     "source-funds.suggest",
     "source-funds.assemble",
+    "reports.lightning-profitability",
+    "reports.export-lightning-profitability-csv",
 ];
 
 /// `_NO_BOOTSTRAP_DATABASE_PREFIXES`.

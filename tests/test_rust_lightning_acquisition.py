@@ -17,7 +17,7 @@ BIN = os.environ.get("KASSIBER_LIGHTNING_FIXTURE_BIN")
 
 
 @contextmanager
-def node(calls):
+def node(calls, *, before_reply=None):
     requests = []
 
     class Handler(BaseHTTPRequestHandler):
@@ -28,6 +28,8 @@ def node(calls):
                              "body": json.loads(body) if body else None,
                              "macaroon": self.headers.get("Grpc-Metadata-macaroon"),
                              "agent": self.headers.get("User-Agent")})
+            if before_reply is not None:
+                before_reply(index)
             response = json.dumps(calls[min(index, len(calls) - 1)]["response"]).encode()
             self.send_response(200)
             self.send_header("Content-Length", str(len(response)))

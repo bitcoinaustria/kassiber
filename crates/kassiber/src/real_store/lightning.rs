@@ -10,6 +10,27 @@ use std::time::{Duration, Instant};
 
 type Result<T> = std::result::Result<T, AppError>;
 
+pub(super) fn network_gate() -> Gate {
+    use kassiber_net::{Ledger, Offline};
+    let gate = Gate::new(
+        || match kassiber_paths::Context::from_env()
+            .ok()
+            .and_then(|ctx| kassiber_setup::offline::preference_path(&ctx).ok())
+        {
+            Some(path) if kassiber_setup::offline::enabled(&path) => Offline::Offline,
+            Some(_) => Offline::Online,
+            None => Offline::Unavailable,
+        },
+        Ledger::default(),
+    );
+    #[cfg(feature = "test-harness")]
+    let gate = match std::env::var_os("KASSIBER_RUST_TEST_CLN_FIXTURE") {
+        Some(program) => gate.with_cln_fixture(program.into()),
+        None => gate,
+    };
+    gate
+}
+
 pub(super) const COMMANDS: &[&str] = &[
     "reports.lightning-profitability",
     "reports.export-lightning-profitability-csv",

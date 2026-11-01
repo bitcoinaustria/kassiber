@@ -1101,6 +1101,7 @@ so unlock input is consumed once. Production builds have no hybrid handoff.
 Wallets using the active default retain that selection in their grant. The
 service re-resolves the current stored default before fetch and publication;
 changing it cannot redirect an already authorized sync to another backend.
+
 ## Native configuration privacy hygiene
 
 The native configuration privacy hygiene read (`reports privacy-hygiene` and
@@ -1115,21 +1116,22 @@ amounts. AI dispatch remains Python. The
 [Rust privacy checkpoint](rust-shell.md#privacy-hygiene-checkpoint-r5-reports-privacy-partial)
 records parity and the unported Mirror/PSBT boundary.
 
-The unregistered native LND profitability acquisition helper uses only
+The native LND profitability acquisition client uses only
 `kassiber-net` HTTP routes. Its caller must provide current consent for the
 book, profile, connection, report window, optional export destination and
 immutable backend configuration, in addition to the endpoint, proxy and TLS
 trust. Construction performs local configuration/certificate reads and no
 probe. The gate checks offline mode, the product no-egress switch and shared
-consent revocation during transport. A future service caller must revoke the
-grant on cancellation or a book/configuration change. It reads the same fixed
+consent revocation during transport. The shared book service rechecks scope/configuration between resources and
+before publication, and revokes its request-local grant on completion or failure. It reads the same fixed
 1000-event/payment/invoice pages as Python, including private-peer alias
 lookups, and never follows redirects or retries directly around a proxy.
 Only report channels and routing totals leave the helper; errors omit raw
-node bodies. No CLI, daemon, background or AI route uses it yet. See the
+node bodies. Only exact CLI profitability read/CSV and desktop profitability requests use it;
+background and AI routes remain unported. See the
 [LND preparation checkpoint](rust-shell.md#lnd-profitability-acquisition-checkpoint-r5-incomplete).
 
-The unregistered native CLN profitability helper gates `lightning-cli` launch
+The native CLN profitability client gates `lightning-cli` launch
 through `kassiber-net`, including local IPC and commando calls. Exact-action
 consent covers the executable, options and backend configuration as well as
 the report scope. Missing or revoked consent, offline/unavailable policy and
@@ -1137,6 +1139,6 @@ the report scope. Missing or revoked consent, offline/unavailable policy and
 and reap an in-flight child. Only fixed read-only resource methods can be
 called. The child owns its transport; the parent records a redacted process
 marker rather than claiming visibility into child sockets. Raw output and
-command details are excluded from errors. It has no product CLI, daemon,
-background or AI registration. See the
+command details are excluded from errors. It serves the same exact profitability actions through the shared book service;
+background and AI routes remain unported. See the
 [CLN subprocess boundary](rust-port-egress.md#cln-profitability-subprocess-acquisition-r5-preparation).

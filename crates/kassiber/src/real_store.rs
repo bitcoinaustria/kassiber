@@ -3,7 +3,6 @@
 //! contract without opening a network client.
 mod backends;
 mod journals;
-#[cfg(test)]
 mod lightning;
 
 use std::path::{Path, PathBuf};
@@ -631,6 +630,7 @@ impl BookStore for RealStore {
         let backend_kinds = backends.kinds();
         config.default_backend = Some(backends.default_backend.clone());
         Ok(Box::new(RealBook {
+            lightning_gate: lightning::network_gate(),
             book: Some(book),
             data_root: root.to_owned(),
             rates: kassiber_rates::Providers::system(env!("CARGO_PKG_VERSION")),
@@ -766,6 +766,7 @@ impl kassiber_setup::Sources for SetupSources {
 }
 
 struct RealBook {
+    lightning_gate: kassiber_net::Gate,
     rates: kassiber_rates::Providers,
     backend_kinds: std::collections::BTreeMap<String, String>,
     book: Option<StoredBook>,
@@ -1261,6 +1262,16 @@ impl Book for RealBook {
         kassiber_wallets::snapshot(self.conn()?, default_backend, &self.backend_kinds)
     }
     fn reports(&mut self, command: &str, args: &Value) -> Result<Value, AppError> {
+        if lightning::COMMANDS.contains(&command) {
+            return lightning::execute(
+                self.conn()?,
+                &self.backends,
+                command,
+                args,
+                self.lightning_gate.clone(),
+                env!("CARGO_PKG_VERSION"),
+            );
+        }
         if kassiber_reports::export_request::handles(command) {
             let paths = context()?
                 .resolve(&ResolveOptions {

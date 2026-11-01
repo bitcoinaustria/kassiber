@@ -43,6 +43,7 @@ pub const KINDS: &[&str] = &[
     "ui.source_funds.recipients.create",
     "ui.source_funds.recipients.update",
     "ui.source_funds.recipients.delete",
+    "ui.reports.lightning_profitability",
     "ui.reports.cross_check",
 ];
 pub fn execute(book: &mut dyn Book, kind: &str, raw: Option<&Value>) -> Result<Value, AppError> {
@@ -54,7 +55,9 @@ pub fn execute(book: &mut dyn Book, kind: &str, raw: Option<&Value>) -> Result<V
     }
     if matches!(
         kind,
-        "ui.reports.cross_check" | "ui.reports.export_cross_check"
+        "ui.reports.cross_check"
+            | "ui.reports.export_cross_check"
+            | "ui.reports.lightning_profitability"
     ) {
         return book.reports(kind, &cross_check_args(raw)?);
     }
@@ -844,5 +847,18 @@ mod tests {
         assert!(KINDS.contains(&"ui.reports.privacy_hygiene"));
         assert!(!KINDS.contains(&"ui.reports.privacy_mirror"));
         assert!(!KINDS.contains(&"ui.reports.psbt_privacy"));
+    }
+    #[test]
+    fn lightning_daemon_preserves_alias_scope_window_and_registration() {
+        assert!(KINDS.contains(&"ui.reports.lightning_profitability"));
+        let args = dict([
+            ("label", s("node")),
+            ("workspace", s("Main")),
+            ("profile", s("Book")),
+            ("window_days", s("7")),
+        ]);
+        assert_eq!(cross_check_args(Some(&args)).unwrap(), args);
+        assert_eq!(cross_check_args(None).unwrap(), dict::<&str>([]));
+        assert!(cross_check_args(Some(&Value::List(vec![]))).is_err());
     }
 }

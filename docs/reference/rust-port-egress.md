@@ -791,3 +791,24 @@ its disposable loopback fake node. Process comparisons exercise actual child
 arguments and acquired projections against unchanged Python. Policy refusal
 processes prove zero node hits, process attempts and ledger rows before exact
 action consent. This is acquisition evidence, not public CLI/daemon acceptance.
+
+## Lightning profitability product routes (R5)
+
+`reports lightning-profitability`, `reports export-lightning-profitability-csv`
+and `ui.reports.lightning_profitability` now use the native shared book service.
+Only invocation of one of these exact actions creates its request-local grant.
+Loading the book, listing wallets/backends, status, route registration and saved
+configuration create no grant and perform no node request or subprocess launch.
+The grant binds the operation, book/profile/connection, window, export path and
+effective private backend configuration. Scope/config changes are checked before
+each resource and before publication, and completion/failure revokes the grant.
+Offline and `KASSIBER_NO_EGRESS` refuse loopback and CLN processes too.
+
+CLN retains the subprocess visibility limit above. LND uses the reviewed HTTP,
+TLS and explicit proxy routes without redirects or direct retry around a proxy.
+Only curated open channels and routing aggregates reach the report renderer;
+raw snapshots, credentials, invoice/payment data and node bodies are not returned
+or persisted. The full operator report/CSV is not an AI or diagnostics projection.
+Node-snapshot and backend-test product routes and AI projections remain separately
+unported. The [service checkpoint](rust-shell.md#lightning-profitability-product-wiring-r5)
+records actual wire/CSV/database and served-by verification.
