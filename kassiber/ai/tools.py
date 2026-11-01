@@ -3298,7 +3298,7 @@ _EXPANDED_TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ),
     ToolEntry(
         name="ui.review.badges",
-        description="Read cheap unresolved quarantine, stale-journal, and transfer-review counts.",
+        description="Read cheap unresolved quarantine, stale-journal, and transfer-review counts, and the Review screen's total.",
         parameters=_EMPTY_OBJECT_SCHEMA,
         kind_class="read_only",
         wire_name="ui_review_badges",
@@ -4357,7 +4357,7 @@ def select_tool_capabilities(
         selected.update(str(item) for item in requested if str(item) in TOOL_CAPABILITY_NAMES)
 
     haystack = f"{route} {' '.join(recent_user_messages)}"
-    if _continues_review_checkpoint(messages, latest) or any(
+    if route == "/review" or _continues_review_checkpoint(messages, latest) or any(
         word in haystack for word in ("quarantine", "quarantäne", "quarantaene", "review cases", "review receipt", "accounting review")
     ):
         # Evidence, wallet and report words within a repair request should not

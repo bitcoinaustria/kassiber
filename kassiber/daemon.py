@@ -782,6 +782,7 @@ _AI_SCREEN_ROUTES = frozenset(
         "/swaps",
         "/transfers",
         "/custody-gaps",
+        "/review",
         "/quarantine",
         "/reconcile",
         "/egress",
@@ -6881,7 +6882,7 @@ def _transaction_review_context_payload(
             {
                 "code": "review_quarantine",
                 "label": "Review the transaction's quarantine blocker",
-                "route": "/quarantine",
+                "route": "/review",
                 "transaction": canonical_id,
                 "requires_consent": False,
             }
