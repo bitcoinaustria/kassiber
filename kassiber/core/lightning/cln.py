@@ -815,6 +815,8 @@ def _build_forwards(
 def _routing_summary(
     snapshot: CoreLightningSnapshot, window_days: int
 ) -> NodeRoutingSnapshot | None:
+    if any(method in snapshot.errors for method in ("listpeerchannels", "listforwards", "listpays", "bkpr-listincome")):
+        return None
     settled_forwards = [
         row for row in snapshot.forwards if _forward_status(row.get("status")) == "settled"
     ]
@@ -861,16 +863,6 @@ def _routing_summary(
                 event.get("debit_msat") or event.get("credit_msat")
             )
 
-    if not (
-        forward_count
-        or payment_count
-        or rebalance_count
-        or routing_revenue_msat
-        or payment_cost_msat
-        or rebalance_cost_msat
-        or onchain_cost_msat
-    ):
-        return None
     net_msat = routing_revenue_msat - payment_cost_msat - rebalance_cost_msat - onchain_cost_msat
     return NodeRoutingSnapshot(
         window_label=f"Last {window_days} days",
