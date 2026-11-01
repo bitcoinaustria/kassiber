@@ -19,6 +19,7 @@ fn native_builder_matches_python_states_refusals_and_uuid_tapes() {
         include_str!("data/render-scalar-coercions.json"),
         include_str!("data/render-branches.json"),
         include_str!("data/render-native-builder.json"),
+        include_str!("data/render-native-graph.json"),
     ] {
         let cases = scalar::decode(source).unwrap();
         for case in list(&cases) {
@@ -62,6 +63,6 @@ fn native_builder_matches_python_states_refusals_and_uuid_tapes() {
             }
         }
     }
-    assert_eq!(count, 1254);
+    assert_eq!(count, 1435);
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }

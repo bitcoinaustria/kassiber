@@ -138,3 +138,15 @@ pub fn journal_operands(
         wallets,
     ))
 }
+
+pub fn native_liquid_graph(raw: &kassiber_pyjson::Value) -> Option<kassiber_pyjson::Value> {
+    let kassiber_pyjson::Value::Str(raw) = raw else {
+        return None;
+    };
+    let decoded = crate::liquid::decode(&Value::String(raw.as_str()?.into()))?;
+    crate::codec::from_json(&decoded).ok()
+}
+
+pub fn native_alphanumeric(c: char) -> bool {
+    crate::python_text::isalnum(c)
+}

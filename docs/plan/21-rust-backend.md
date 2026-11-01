@@ -3014,8 +3014,10 @@ The [native ledger continuation](../reference/r4-journal-render-scalar-checkpoin
 adds a lazy native-value ledger reader checked against 990 Python results.
 The [native builder assembly continuation](../reference/r4-journal-render-scalar-checkpoint.md#native-builder-assembly-continuation-partial)
 checks 1,254 complete builder outcomes, including all 234 merged branch witnesses
-and 30 new scalar captures. Its ownership graph adapter remains transitional;
-full native joins, the probe handoff and end-to-end scalar acceptance remain open.
+and 30 new scalar captures. The
+[native ownership graph continuation](../reference/r4-journal-render-scalar-checkpoint.md#native-ownership-graph-continuation)
+replaces its serde graph adapter and checks 1,435 outcomes, including 181 new
+scalar graph captures. The probe handoff and end-to-end scalar acceptance remain open.
 R4-11 remains incomplete: lossless native scalar fidelity, exhaustive
 rendering/join mutations and full inherited campaign gates still need completion.
 The [borrowed-pricing continuation](../reference/r4-journal-render-boundary-checkpoint.md#sixth-continuation-borrowed-pricing-and-entry-identities)

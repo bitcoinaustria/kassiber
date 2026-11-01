@@ -306,3 +306,74 @@ The local evidence is under `target/r4-fidelity-3/`. The verification index
 binds the changed source, fixtures, catalog and check logs; the verification
 build tree is removed after summarizing. No push, PR or external comment is
 performed.
+
+## Native ownership graph continuation
+
+This local continuation starts at `a30e13088` on
+`t3code/r4-11-render-fidelity-4`. **R4-11 remains unaccepted.** This boundary
+completes native scalar consumption in the ownership review join. It does not
+wire the diagnostic probe or certify the remaining acceptance campaigns.
+
+The native builder no longer serializes, sorts and reparses ownership operands
+through serde. Native graph parsing, physical and inferred scopes, owned-script
+and outpoint lookup, component exclusions, legacy grouping, candidate amounts
+and metadata retain their Python scalar representation until consumption.
+Actual surrogates remain distinct from literal backslash-u text. Compound
+string coercions retain mapping insertion order; amounts remain arbitrary-width
+integers. Inbound coercion refusals, graph-index overflow and malformed script
+refusals propagate through the native error carrier. Unused graph, component
+and metadata values do not acquire an admission refusal.
+
+The parser projects only the graph fields consumed by this diagnostic join.
+It merges complementary stored observations in Python's input/output order,
+retains the first present script/value and requires valued outputs before
+using graph ownership. Ignored leg asset/role/conflict metadata grants no
+ownership or accounting authority. Liquid raw-hex decoding reuses custody's
+existing local protocol decoder, after checking the consumed hex operand;
+no dependency, I/O, product route or Python accounting behavior changes.
+
+`render-native-graph.json` adds **181** production Python builder captures,
+including **11** refusals. They cover actual/literal surrogate identities,
+script keys and candidate fields; raw NaN and both infinities; ordered mapping
+and list coercions; wide integers; graph output-index/value/script/asset/role
+operands; malformed inbound amounts; configuration scope and ignored component
+fields. Raw custody scalars are restored after the snapshot adapter so they
+reach the native reader as their original tokens, including quarantine ids.
+The existing six corpora remain unchanged. The native builder now compares
+complete canonical states or all refusal attributes and causes, with exact
+UUID consumption, across **1,435** outcomes.
+
+### Verification and remaining work
+
+The all-feature release journal suite passes all **47 tests**. Scoped
+all-target/all-feature release clippy for custody and journals passes with
+`-D warnings`; workspace formatting passes. All **613** all-feature release
+custody tests and all **eight** Python oracle/capture tests pass, including
+rebuilding the native graph captures from production Python. The required
+classifier update leaves the inventory unchanged; required CI preflight passes
+all **57 tests**.
+
+All **ten** recipes in `crates/journals/scripts/native_graph_mutations.json`
+are killed by `native_builder_matches_python_states_refusals_and_uuid_tapes`
+after a passing unmutated baseline, with no survivors or compiler failures.
+They pin surrogate preservation, script case conversion, the sats/msat factor,
+mapping insertion order, legacy identity whitespace, graph-index overflow,
+unknown output values, integer refusals, exact confidence and reason precedence.
+All **334** renderer/persistence/branch/scalar/native recipes apply; only the
+ten new graph recipes were executed for kills in this continuation.
+
+Local evidence is retained under `target/r4-fidelity-4/`. The mutation summary
+binds each recipe and named kill to source/test/fixture hashes and checks for
+worktree drift. The verification index binds the passing check logs and proves
+the six inherited render corpora are unchanged. No Python reference bug was
+identified. No timing campaign, push, PR or external comment is performed.
+
+Requested items 2–6 remain open: lossless probe decoding and the native handoff
+(including all four end-to-end surrogate repros); raw nonfinite fidelity across
+all consumed and ignored stages; successful lazy decoding through the probe;
+complete shape, wallet mapping/order, arithmetic, refusal-order and UUID
+fidelity; then the full renderer/persistence/custody mutation shards, all
+25,030 inputs, census/shadow/fresh recordings, integrated SQLite/SQLCipher
+campaigns, repository gate, paired CPU checks against `8a9492199`, and the
+acceptance record. The focused native graph witnesses do not certify those
+campaigns. Python retains production accounting authority.

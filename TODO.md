@@ -704,6 +704,14 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   the desktop daemon's pairing default with R4-14 before changing its route;
   prepared-book probe results do not authorize production routing.
 
+<!-- inherited from render@f1712c625; pending r10 verification -->
+  ownership graph consumption is completed by the
+  [native ownership continuation](docs/reference/r4-journal-render-scalar-checkpoint.md#native-ownership-graph-continuation),
+  which compares 1,435 complete outcomes. The lossless probe handoff and final
+  acceptance remain open. Python retains production authority.
+- [ ] R4-13 to R4-16: CLI and daemon commands, automatic pairing, the
+  freshness journal job and the authority switch.
+
 ## Rust backend R5 transfers and review
 
 The [partial checkpoint](docs/reference/rust-shell.md#transfers-and-review-classification-r5)

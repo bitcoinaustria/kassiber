@@ -4,6 +4,8 @@ use kassiber_pydecimal::{Context, Decimal};
 use std::collections::HashMap;
 
 mod builder;
+mod graph;
+mod ownership;
 pub use builder::{build, finish, State};
 
 #[derive(Clone, Debug)]
@@ -77,6 +79,18 @@ fn get<'a>(value: &'a Value, key: &str) -> Result<&'a Value> {
             format!("'{}' object has no attribute 'get'", kind(value)),
         ))
     }
+}
+
+fn get_default<'a>(value: &'a Value, key: &str, default: &'a Value) -> Result<&'a Value> {
+    get(value, key)?;
+    let Value::Dict(items) = value else {
+        unreachable!()
+    };
+    Ok(items
+        .iter()
+        .find(|(k, _)| matches!(k,Key::Str(s) if s.is(key)))
+        .map(|(_, v)| v)
+        .unwrap_or(default))
 }
 
 fn set(value: &mut Value, key: &str, replacement: Value) {

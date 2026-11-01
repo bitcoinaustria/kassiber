@@ -93,7 +93,7 @@ pub fn build<'a>(
 pub fn finish(custody: &Value, ledger: Ledger) -> Result<State<'_>> {
     let quantity_differences = differences(custody, &ledger.wallet_holdings)?;
     let (ownership_review_counts, ownership_review_candidates) =
-        ownership_review(custody, &ledger.quarantines)?;
+        super::ownership::ownership_review(custody, &ledger.quarantines)?;
     Ok(State {
         ledger,
         custody,
@@ -227,59 +227,4 @@ fn differences(c: &Value, holdings: &Value) -> Result<Value> {
         ]));
     }
     Ok(Value::List(result))
-}
-
-fn admitted(value: &Value) -> Result<serde_json::Value> {
-    let canonical = scalar::encode(value).map_err(|e| error("ValueError", e.to_string()))?;
-    let sorted = scalar::decode(&canonical)?;
-    scalar::to_json(&sorted).ok_or_else(|| {
-        error(
-            "EngineContractError",
-            "native ownership graph scalar is not representable",
-        )
-    })
-}
-
-fn ownership_review(c: &Value, quarantines: &[Value]) -> Result<(Value, Value)> {
-    if quarantines.is_empty() {
-        return Ok((
-            dict([("total", Value::from(0)), ("by_reason", dict([]))]),
-            Value::List(vec![]),
-        ));
-    }
-    for row in items(field(c, "rows")) {
-        if is(field(row, "direction"), "inbound") {
-            int(field(row, "amount"))?;
-        }
-    }
-    let mut operands = serde_json::Map::new();
-    for key in ["rows", "owned_index", "active_components"] {
-        operands.insert(key.into(), admitted(field(c, key))?);
-    }
-    let qs = quarantines
-        .iter()
-        .map(|q| {
-            Ok(crate::QuarantineRow {
-                workspace_id: serde_json::Value::Null,
-                profile_id: serde_json::Value::Null,
-                transaction_id: admitted(required(q, "transaction_id")?)?,
-                reason: text(required(q, "reason")?)
-                    .as_str()
-                    .ok_or_else(|| {
-                        error(
-                            "EngineContractError",
-                            "native ownership reason scalar is not representable",
-                        )
-                    })?
-                    .into(),
-                detail_json: String::new(),
-            })
-        })
-        .collect::<Result<Vec<_>>>()?;
-    let (counts, candidates) =
-        crate::boundary::joins::ownership_review(&crate::boundary::RenderOperands::from_json(&serde_json::Value::Object(operands)), &qs)?;
-    Ok((
-        kassiber_custody::codec::from_json(&counts).unwrap(),
-        kassiber_custody::codec::from_json(&candidates).unwrap(),
-    ))
 }
