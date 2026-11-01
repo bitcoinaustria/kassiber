@@ -1,0 +1,1452 @@
+{
+  "acceptance_base_commit": "6f22619e6e1030b4e42b24f36993865e488312a2",
+  "binary": {
+    "path": "target/cargo/release/examples/journal-prebuild",
+    "sha256": "f52c80ba8b9ab9a0466df083efdbf2209e7f9ab93c5d15badb7499e52c146ce3"
+  },
+  "census_shadow": {
+    "checkpoint_sha256": "42b1f5fe237efa4faa8fb388844e12a5440933a6f0f1ade2856fcd118bcc1f2e",
+    "limits": "Combined coverage is not an uninterrupted passing shard. Shadow single-build read-budget exclusions pass census. Frozen regeneration captures are not independent handler books.",
+    "record": "docs/reference/r4-prebuild-campaign-results.json",
+    "scope": "Core census and report census/shadow identity coverage completed across recorded initial runs and exact continuations; report identity manifests leave no missing identities or unrechecked failures. Full core shadow passes as a complete run; separate final handler controls verify activation and skip in each mode."
+  },
+  "cleanup": {
+    "account_home_unchanged": true,
+    "background_jobs_left": 0,
+    "historical_inputs_unchanged": true,
+    "local_only": true,
+    "mutation_and_coverage_build_trees_removed": true
+  },
+  "coverage": {
+    "limits": "Stable LLVM emits no branch counters. Generic/error/closing regions and explicit defensive paths are dispositioned; no claim of measured 100% branch coverage or allocator-exhaustion parity.",
+    "measured_branch_counters": false,
+    "prebuild_tests_passed": 44,
+    "record": {
+      "path": "docs/reference/r4-prebuild-branch-audit.json",
+      "sha256": "f65d49526b78444f88728353d4a19cf85b39612c1a210e55238ee7125de38034"
+    },
+    "unclassified_regions": 0,
+    "zero_count_executable_region_entries_dispositioned": 104
+  },
+  "cpu": {
+    "clock": "Whole-stage user plus system process CPU; seven alternating Python/native pairs per setting; cache entry/restoration, callbacks and optional result fields included; fixture/open/writer-acquisition/dump-check/final rollback excluded",
+    "default_cache_medians": {
+      "generic": 0.021221,
+      "multi-wallet": 0.026913
+    },
+    "disposition": "Retain the measured source-index optimization and unchanged shared 128 MiB cache. Scoped-cache multi-wallet stage budget remains unmet; R4-13 whole-pipeline measurements must resolve cache tradeoffs before claiming the complete performance target.",
+    "record": {
+      "path": "docs/reference/r4-prebuild-finalization-results.json",
+      "sha256": "e369c0408891a1279ae8e8c19c14dfd47d74464639e2d8cb6a44be6ac838ff00"
+    },
+    "scoped_multi_wallet_best_seconds": 0.033108,
+    "scoped_multi_wallet_diagnostic": {
+      "cache_entry": 0.002645,
+      "cache_restoration": 0.000366,
+      "other": 4.2e-05,
+      "pricing": 0.009276,
+      "repairs": 0.023649,
+      "total": 0.035978
+    },
+    "scoped_multi_wallet_miss_percent": 15.6,
+    "scoped_multi_wallet_miss_seconds": 0.004666,
+    "scoped_rebuild_cache_medians": {
+      "generic": 0.02907,
+      "multi-wallet": 0.034666
+    },
+    "target_seconds": 0.03
+  },
+  "file_replays": {
+    "counting": "Counts are compared operands and driver runs, not unique economic books. Regenerated frozen operands and repeated recordings are disclosed; schema refusals are not native comparisons. Captures from interrupted/failed pytest sessions retain valid individual dump comparisons but do not make those sessions passing shards.",
+    "fresh_final_handler_comparisons": 8,
+    "fresh_final_handler_record": {
+      "path": "target/r4-10/final-handlers/summary.json",
+      "sha256": "a7c981ddd325216c3e06c4bb9ba616048e8672ee03361be74673610f815fc00b"
+    },
+    "full_dump_comparisons": 55618,
+    "hand_authored_edge_comparisons": 674,
+    "hand_authored_edge_record": {
+      "binary_sha256": "f52c80ba8b9ab9a0466df083efdbf2209e7f9ab93c5d15badb7499e52c146ce3",
+      "checker_sha256": "8c355d884082bd3b755ac3bd9f0057a65a8d2ce959a8f68a22a266339cd82b2b",
+      "comparisons": 674,
+      "log_sha256": "c91ab073c13c909f37042c5f52f3785891c5ab1c8edf78cfb48b55af34fee556",
+      "network": "native process killed on socket/connect/send syscalls; guard self-test passed",
+      "summary_path": "target/r4-10/final-handlers/edge-files.json",
+      "summary_sha256": "c91ab073c13c909f37042c5f52f3785891c5ab1c8edf78cfb48b55af34fee556"
+    },
+    "runs": {
+      "census-harness-verified-recordings": {
+        "activity_bearing_operands": 2,
+        "activity_log": {
+          "path": "target/r4-10/final-replay/census-harness-verified-recordings.activity.jsonl",
+          "sha256": "16913f872aed28b5de194c1841ef082c5ba28e5fc0b8b0027b3aac89387ba6bc"
+        },
+        "adapter": "Complete stored database dumps; no snapshot-to-database adaptation in this replay",
+        "attempts": 19,
+        "comparisons": 38,
+        "distinct_request_hashes": 19,
+        "log_sha256": "7ccf3eb4ebd3f2ac9aa7f98e3fe3c1eda9a12fa1375130e3482d24d6b114b00f",
+        "no_observable_stage_activity": 17,
+        "schema_refusals": 0,
+        "stored_operands": 19,
+        "suites": {
+          "recorded": {
+            "omitted_columns": {},
+            "schema_refusal_messages": {},
+            "totals": {
+              "addresses_removed": 0,
+              "attempts": 19,
+              "auto_priced": 0,
+              "books": 19,
+              "changed_tables": 12,
+              "components": 5,
+              "duplicates_excluded": 0,
+              "legacy_activated": 1,
+              "legacy_skipped": 1,
+              "permutation_attempts": 0,
+              "refusals": 0,
+              "seed_attempts": 19,
+              "transactions": 38,
+              "warnings": 0
+            }
+          }
+        },
+        "summary": {
+          "path": "target/r4-10/final-replay/census-harness-verified-recordings.json",
+          "sha256": "406122937ad995fb9bf5acccffd6cff148ae136c1e5eb28ef3a4330ff131997a"
+        }
+      },
+      "census-legacy-verified-recordings": {
+        "activity_bearing_operands": 2,
+        "activity_log": {
+          "path": "target/r4-10/final-replay/census-legacy-verified-recordings.activity.jsonl",
+          "sha256": "e9a6a0be274491721a1798f9a87ebbe72b6a9bf0b01a72f8abcf1f5a44cbf8b9"
+        },
+        "adapter": "Complete stored database dumps; no snapshot-to-database adaptation in this replay",
+        "attempts": 2,
+        "comparisons": 4,
+        "distinct_request_hashes": 2,
+        "log_sha256": "e6a7a05d0e2ca2d99f040a8d9458ed223aa9768a3ef4a9919741e7953845b978",
+        "no_observable_stage_activity": 0,
+        "schema_refusals": 0,
+        "stored_operands": 2,
+        "suites": {
+          "recorded": {
+            "omitted_columns": {},
+            "schema_refusal_messages": {},
+            "totals": {
+              "addresses_removed": 0,
+              "attempts": 2,
+              "auto_priced": 0,
+              "books": 2,
+              "changed_tables": 12,
+              "components": 4,
+              "duplicates_excluded": 0,
+              "legacy_activated": 1,
+              "legacy_skipped": 1,
+              "permutation_attempts": 0,
+              "refusals": 0,
+              "seed_attempts": 2,
+              "transactions": 6,
+              "warnings": 0
+            }
+          }
+        },
+        "summary": {
+          "path": "target/r4-10/final-replay/census-legacy-verified-recordings.json",
+          "sha256": "180d0a3b892ec885f07d96d4c80055e66c24022b6aaa1bbddce3ad5b792bd7a5"
+        }
+      },
+      "core-census-completion-recordings": {
+        "activity_bearing_operands": 2,
+        "activity_log": {
+          "path": "target/r4-10/final-replay/core-census-completion-recordings.activity.jsonl",
+          "sha256": "4423ed145c83160fcf15adde82539958875926e81dc05cb47add63e175df6708"
+        },
+        "adapter": "Complete stored database dumps; no snapshot-to-database adaptation in this replay",
+        "attempts": 2,
+        "comparisons": 4,
+        "distinct_request_hashes": 2,
+        "log_sha256": "e6a7a05d0e2ca2d99f040a8d9458ed223aa9768a3ef4a9919741e7953845b978",
+        "no_observable_stage_activity": 0,
+        "schema_refusals": 0,
+        "stored_operands": 2,
+        "suites": {
+          "recorded": {
+            "omitted_columns": {},
+            "schema_refusal_messages": {},
+            "totals": {
+              "addresses_removed": 0,
+              "attempts": 2,
+              "auto_priced": 0,
+              "books": 2,
+              "changed_tables": 12,
+              "components": 4,
+              "duplicates_excluded": 0,
+              "legacy_activated": 1,
+              "legacy_skipped": 1,
+              "permutation_attempts": 0,
+              "refusals": 0,
+              "seed_attempts": 2,
+              "transactions": 6,
+              "warnings": 0
+            }
+          }
+        },
+        "summary": {
+          "path": "target/r4-10/final-replay/core-census-completion-recordings.json",
+          "sha256": "b756dcc7a154f776dc65d46c9cc6d66d6abc79a3d0773b4af71c32d8d9f5007a"
+        }
+      },
+      "fresh-network-verified": {
+        "activity_bearing_operands": 1,
+        "activity_log": {
+          "path": "target/r4-10/final-replay/fresh-network-verified.activity.jsonl",
+          "sha256": "7606d847543d9b199bcc8ae38724ec8407db0b01601b93cf54d0c7d4827dd73f"
+        },
+        "adapter": "Complete stored database dumps; no snapshot-to-database adaptation in this replay",
+        "attempts": 1,
+        "comparisons": 2,
+        "distinct_request_hashes": 1,
+        "log_sha256": "50677e7030b344b3bcab0ef29f89ad82a825e2268603c2f4775515124112c200",
+        "no_observable_stage_activity": 0,
+        "schema_refusals": 0,
+        "stored_operands": 1,
+        "suites": {
+          "recorded": {
+            "omitted_columns": {},
+            "schema_refusal_messages": {},
+            "totals": {
+              "addresses_removed": 1,
+              "attempts": 1,
+              "auto_priced": 0,
+              "books": 1,
+              "changed_tables": 7,
+              "components": 0,
+              "duplicates_excluded": 1,
+              "legacy_activated": 0,
+              "legacy_skipped": 0,
+              "permutation_attempts": 0,
+              "refusals": 0,
+              "seed_attempts": 1,
+              "transactions": 2,
+              "warnings": 0
+            }
+          }
+        },
+        "summary": {
+          "path": "target/r4-10/final-replay/fresh-network-verified.json",
+          "sha256": "f29b942852485cdde5e9cd4b088ae4aa864255464fcf6fbd4607f7909655db28"
+        }
+      },
+      "fresh-recordings": {
+        "activity_bearing_operands": 16,
+        "activity_log": {
+          "path": "target/r4-10/final-replay/fresh-recordings.activity.jsonl",
+          "sha256": "72a97a6ad9fbcf3fe8f984665f6b44d1bd8c3f9716d3e518d1a6606e59d21feb"
+        },
+        "adapter": "Complete stored database dumps; no snapshot-to-database adaptation in this replay",
+        "attempts": 88,
+        "comparisons": 176,
+        "distinct_request_hashes": 88,
+        "log_sha256": "5633ea592af50cdc70e19e92977e2101a264d1bbd924cc52cf4f2baefdb82ca6",
+        "no_observable_stage_activity": 72,
+        "schema_refusals": 0,
+        "stored_operands": 88,
+        "suites": {
+          "recorded": {
+            "omitted_columns": {},
+            "schema_refusal_messages": {},
+            "totals": {
+              "addresses_removed": 2,
+              "attempts": 88,
+              "auto_priced": 14,
+              "books": 88,
+              "changed_tables": 53,
+              "components": 153,
+              "duplicates_excluded": 26,
+              "legacy_activated": 0,
+              "legacy_skipped": 0,
+              "permutation_attempts": 0,
+              "refusals": 0,
+              "seed_attempts": 88,
+              "transactions": 1433,
+              "warnings": 1
+            }
+          }
+        },
+        "summary": {
+          "path": "target/r4-10/final-replay/fresh-recordings.json",
+          "sha256": "0169e0a8803b40942f3aa92dc530201c79f5dfff53b5df5cf5e70090f28b2f5e"
+        }
+      },
+      "frozen": {
+        "activity_bearing_operands": 225,
+        "activity_log": {
+          "path": "target/r4-10/final-replay/frozen.activity.jsonl",
+          "sha256": "86f8208df68e0d17e9895224497217dad684049baa72ea3e42006b458a190768"
+        },
+        "adapter": "Complete stored database dumps; no snapshot-to-database adaptation in this replay",
+        "attempts": 505,
+        "comparisons": 1010,
+        "distinct_request_hashes": 505,
+        "log_sha256": "9b5d3a00ae0e78e2785a49c587516ded5661336b60004079ebc2ef2fb5bc9bef",
+        "no_observable_stage_activity": 280,
+        "schema_refusals": 0,
+        "stored_operands": 505,
+        "suites": {
+          "frozen": {
+            "omitted_columns": {},
+            "schema_refusal_messages": {},
+            "totals": {
+              "addresses_removed": 0,
+              "attempts": 505,
+              "auto_priced": 793,
+              "books": 505,
+              "changed_tables": 672,
+              "components": 193,
+              "duplicates_excluded": 0,
+              "legacy_activated": 0,
+              "legacy_skipped": 0,
+              "permutation_attempts": 0,
+              "refusals": 1,
+              "seed_attempts": 505,
+              "transactions": 2399,
+              "warnings": 0
+            }
+          }
+        },
+        "summary": {
+          "path": "target/r4-10/final-replay/frozen.json",
+          "sha256": "7635071acd5740b10abb7ce8ce465218e580a29db2b42138ad02bf1064f6d275"
+        }
+      },
+      "full-core-accounting-census-permitted-recordings": {
+        "activity_bearing_operands": 226,
+        "activity_log": {
+          "path": "target/r4-10/final-replay/full-core-accounting-census-permitted-recordings.activity.jsonl",
+          "sha256": "91dc7fd0f38f5bc7f7d743e11ebe7decad08845862c5ff77a2700c6d253f7b73"
+        },
+        "adapter": "Complete stored database dumps; no snapshot-to-database adaptation in this replay",
+        "attempts": 565,
+        "comparisons": 1130,
+        "distinct_request_hashes": 565,
+        "log_sha256": "1a0d032c87df212d25f53cc500af27a9fd7b718bf8054bc820b1a8e036f0ae71",
+        "no_observable_stage_activity": 339,
+        "schema_refusals": 0,
+        "stored_operands": 565,
+        "suites": {
+          "recorded": {
+            "omitted_columns": {},
+            "schema_refusal_messages": {},
+            "totals": {
+              "addresses_removed": 0,
+              "attempts": 565,
+              "auto_priced": 794,
+              "books": 565,
+              "changed_tables": 675,
+              "components": 238,
+              "duplicates_excluded": 0,
+              "legacy_activated": 0,
+              "legacy_skipped": 0,
+              "permutation_attempts": 0,
+              "refusals": 1,
+              "seed_attempts": 565,
+              "transactions": 2611,
+              "warnings": 0
+            }
+          }
+        },
+        "summary": {
+          "path": "target/r4-10/final-replay/full-core-accounting-census-permitted-recordings.json",
+          "sha256": "33d62bc9e6253b587e781ecd2148300db0c7cffd843bce2f46267ec7128ae7cd"
+        }
+      },
+      "full-core-accounting-census-recordings": {
+        "activity_bearing_operands": 228,
+        "activity_log": {
+          "path": "target/r4-10/final-replay/full-core-accounting-census-recordings.activity.jsonl",
+          "sha256": "fbbf8ad837be729dd45e63891657a7a4caea7e4228c179e0a1ce206dd93ba2b7"
+        },
+        "adapter": "Complete stored database dumps; no snapshot-to-database adaptation in this replay",
+        "attempts": 568,
+        "comparisons": 1136,
+        "distinct_request_hashes": 568,
+        "log_sha256": "04a092887d92ceb87af0e554f871f1d8bb119ad686cfe8d15391be0c81d37d86",
+        "no_observable_stage_activity": 340,
+        "schema_refusals": 0,
+        "stored_operands": 568,
+        "suites": {
+          "recorded": {
+            "omitted_columns": {},
+            "schema_refusal_messages": {},
+            "totals": {
+              "addresses_removed": 0,
+              "attempts": 568,
+              "auto_priced": 798,
+              "books": 568,
+              "changed_tables": 681,
+              "components": 240,
+              "duplicates_excluded": 0,
+              "legacy_activated": 0,
+              "legacy_skipped": 0,
+              "permutation_attempts": 0,
+              "refusals": 1,
+              "seed_attempts": 568,
+              "transactions": 2620,
+              "warnings": 0
+            }
+          }
+        },
+        "summary": {
+          "path": "target/r4-10/final-replay/full-core-accounting-census-recordings.json",
+          "sha256": "d8f7226333842acc1c1d399d2fc4e5aba944d9974d9eea377f686ca6a385a771"
+        }
+      },
+      "full-core-accounting-shadow-verified-recordings": {
+        "activity_bearing_operands": 228,
+        "activity_log": {
+          "path": "target/r4-10/final-replay/full-core-accounting-shadow-verified-recordings.activity.jsonl",
+          "sha256": "89811573c26cbee61729583880104a2f6902c16dbdded82a795acfedacc3cbd3"
+        },
+        "adapter": "Complete stored database dumps; no snapshot-to-database adaptation in this replay",
+        "attempts": 568,
+        "comparisons": 1136,
+        "distinct_request_hashes": 568,
+        "log_sha256": "04a092887d92ceb87af0e554f871f1d8bb119ad686cfe8d15391be0c81d37d86",
+        "no_observable_stage_activity": 340,
+        "schema_refusals": 0,
+        "stored_operands": 568,
+        "suites": {
+          "recorded": {
+            "omitted_columns": {},
+            "schema_refusal_messages": {},
+            "totals": {
+              "addresses_removed": 0,
+              "attempts": 568,
+              "auto_priced": 798,
+              "books": 568,
+              "changed_tables": 681,
+              "components": 240,
+              "duplicates_excluded": 0,
+              "legacy_activated": 0,
+              "legacy_skipped": 0,
+              "permutation_attempts": 0,
+              "refusals": 1,
+              "seed_attempts": 568,
+              "transactions": 2620,
+              "warnings": 0
+            }
+          }
+        },
+        "summary": {
+          "path": "target/r4-10/final-replay/full-core-accounting-shadow-verified-recordings.json",
+          "sha256": "92b3b77d2ce4bdbfbf7233728ce72784179bbd1ee437bb56d01262ee61822e34"
+        }
+      },
+      "full-reports-contracts-census-verified-recordings": {
+        "activity_bearing_operands": 9,
+        "activity_log": {
+          "path": "target/r4-10/final-replay/full-reports-contracts-census-verified-recordings.activity.jsonl",
+          "sha256": "ff47bb5025e2ac3a5ca7cd34341629f34777b17a21a632f6b2698908515c6187"
+        },
+        "adapter": "Complete stored database dumps; no snapshot-to-database adaptation in this replay",
+        "attempts": 150,
+        "comparisons": 300,
+        "distinct_request_hashes": 150,
+        "log_sha256": "d1f80d1c37e1aacaf4643273adb8cceb2dad6f1acb958bf96a82e4bbad28ff22",
+        "no_observable_stage_activity": 141,
+        "schema_refusals": 0,
+        "stored_operands": 150,
+        "suites": {
+          "recorded": {
+            "omitted_columns": {},
+            "schema_refusal_messages": {},
+            "totals": {
+              "addresses_removed": 0,
+              "attempts": 150,
+              "auto_priced": 0,
+              "books": 150,
+              "changed_tables": 12,
+              "components": 57,
+              "duplicates_excluded": 0,
+              "legacy_activated": 1,
+              "legacy_skipped": 1,
+              "permutation_attempts": 0,
+              "refusals": 0,
+              "seed_attempts": 150,
+              "transactions": 502,
+              "warnings": 7
+            }
+          }
+        },
+        "summary": {
+          "path": "target/r4-10/final-replay/full-reports-contracts-census-verified-recordings.json",
+          "sha256": "42d386fe7040050448ba2c919b5081b04117ae35bae9cd15fe28de1a99947ab1"
+        }
+      },
+      "full-reports-contracts-shadow-verified-recordings": {
+        "activity_bearing_operands": 9,
+        "activity_log": {
+          "path": "target/r4-10/final-replay/full-reports-contracts-shadow-verified-recordings.activity.jsonl",
+          "sha256": "00003e171b969ed4d2ac5ad1776d0cca9436a9d94e2b04450e3a727827155a0f"
+        },
+        "adapter": "Complete stored database dumps; no snapshot-to-database adaptation in this replay",
+        "attempts": 150,
+        "comparisons": 300,
+        "distinct_request_hashes": 150,
+        "log_sha256": "d1f80d1c37e1aacaf4643273adb8cceb2dad6f1acb958bf96a82e4bbad28ff22",
+        "no_observable_stage_activity": 141,
+        "schema_refusals": 0,
+        "stored_operands": 150,
+        "suites": {
+          "recorded": {
+            "omitted_columns": {},
+            "schema_refusal_messages": {},
+            "totals": {
+              "addresses_removed": 0,
+              "attempts": 150,
+              "auto_priced": 0,
+              "books": 150,
+              "changed_tables": 12,
+              "components": 57,
+              "duplicates_excluded": 0,
+              "legacy_activated": 1,
+              "legacy_skipped": 1,
+              "permutation_attempts": 0,
+              "refusals": 0,
+              "seed_attempts": 150,
+              "transactions": 502,
+              "warnings": 7
+            }
+          }
+        },
+        "summary": {
+          "path": "target/r4-10/final-replay/full-reports-contracts-shadow-verified-recordings.json",
+          "sha256": "dcae231a5cf18ca904fb0598dbf0a9ab8276841704a0c5f00ffd945de8e2a515"
+        }
+      },
+      "generated": {
+        "activity_bearing_operands": 9016,
+        "activity_log": {
+          "path": "target/r4-10/final-replay/generated.activity.jsonl",
+          "sha256": "0fbc23588bebd39b2d4a505aed7f74800d630ac06bf72aff90c3889a858cb96c"
+        },
+        "adapter": "Stored snapshot columns only, synthetic cache rows; no inferred inventory, ownership, or legacy pair links",
+        "attempts": 25030,
+        "comparisons": 49630,
+        "distinct_request_hashes": 22790,
+        "log_sha256": "c69edc661cf78f5cd43fce1d4571be128a6731bde0021e15e2b6124dde072cf8",
+        "no_observable_stage_activity": 15799,
+        "schema_refusals": 215,
+        "stored_operands": 24815,
+        "suites": {
+          "channels": {
+            "omitted_columns": {
+              "adapter.transaction_fingerprint": 2967,
+              "transactions.account_code": 5415,
+              "transactions.account_label": 5415,
+              "transactions.config_json": 5415,
+              "transactions.config_text_mentions_samourai": 5415,
+              "transactions.journal_transaction_id": 576,
+              "transactions.observation_application_revision": 5415,
+              "transactions.observation_authority_version": 5415,
+              "transactions.observation_fee_attribution": 5415,
+              "transactions.observation_graph_hash": 5415,
+              "transactions.observation_observed_at": 5415,
+              "transactions.observation_observer_kinds_json": 5415,
+              "transactions.observation_quantity_hash": 5415,
+              "transactions.wallet_account_id": 5415,
+              "transactions.wallet_kind": 5415,
+              "transactions.wallet_label": 5415,
+              "wallets.account_code": 6192,
+              "wallets.account_label": 6192,
+              "wallets.config_text_mentions_samourai": 6192,
+              "wallets.wallet_account_id": 6192
+            },
+            "schema_refusal_messages": {},
+            "totals": {
+              "addresses_removed": 0,
+              "attempts": 2064,
+              "auto_priced": 448,
+              "books": 2064,
+              "changed_tables": 192,
+              "components": 0,
+              "duplicates_excluded": 0,
+              "legacy_activated": 0,
+              "legacy_skipped": 0,
+              "permutation_attempts": 64,
+              "refusals": 0,
+              "seed_attempts": 2000,
+              "transactions": 5415,
+              "warnings": 0
+            }
+          },
+          "components": {
+            "omitted_columns": {
+              "adapter.transaction_fingerprint": 59,
+              "adapter.wallet_label": 391,
+              "transactions.account_code": 8730,
+              "transactions.account_label": 8730,
+              "transactions.config_json": 8730,
+              "transactions.config_text_mentions_samourai": 8730,
+              "transactions.native_event_id": 56,
+              "transactions.native_namespace": 56,
+              "transactions.observation_application_revision": 8730,
+              "transactions.observation_authority_version": 8730,
+              "transactions.observation_fee_attribution": 8730,
+              "transactions.observation_graph_hash": 8730,
+              "transactions.observation_observed_at": 8730,
+              "transactions.observation_observer_kinds_json": 8730,
+              "transactions.observation_quantity_hash": 8730,
+              "transactions.wallet_account_id": 8730,
+              "transactions.wallet_kind": 8730,
+              "transactions.wallet_label": 8730,
+              "wallets.account_code": 6537,
+              "wallets.account_label": 6537,
+              "wallets.config_text_mentions_samourai": 6899,
+              "wallets.wallet_account_id": 6537
+            },
+            "schema_refusal_messages": {
+              "NOT NULL constraint failed: custody_component_economic_terms.term_kind": 59,
+              "UNIQUE constraint failed: custody_component_allocations.component_id, custody_component_allocations.source_leg_id, custody_component_allocations.sink_leg_id": 15,
+              "UNIQUE constraint failed: custody_component_evidence_commitments.component_id, custody_component_evidence_commitments.ordinal": 14,
+              "UNIQUE constraint failed: custody_component_legs.component_id, custody_component_legs.ordinal": 45
+            },
+            "totals": {
+              "addresses_removed": 0,
+              "attempts": 2312,
+              "auto_priced": 8485,
+              "books": 2179,
+              "changed_tables": 6408,
+              "components": 2403,
+              "duplicates_excluded": 0,
+              "legacy_activated": 0,
+              "legacy_skipped": 0,
+              "permutation_attempts": 312,
+              "refusals": 15,
+              "schema_refusals": 133,
+              "seed_attempts": 2000,
+              "transactions": 8730,
+              "warnings": 0
+            }
+          },
+          "evidence": {
+            "omitted_columns": {
+              "adapter.wallet_label": 71,
+              "transactions.account_code": 4045,
+              "transactions.account_label": 4045,
+              "transactions.config_json": 4116,
+              "transactions.config_text_mentions_samourai": 4116,
+              "transactions.observation_application_revision": 4116,
+              "transactions.observation_authority_version": 4116,
+              "transactions.observation_fee_attribution": 4116,
+              "transactions.observation_graph_hash": 4116,
+              "transactions.observation_observed_at": 4045,
+              "transactions.observation_observer_kinds_json": 4045,
+              "transactions.observation_quantity_hash": 4116,
+              "transactions.wallet_account_id": 4045,
+              "transactions.wallet_kind": 4116,
+              "transactions.wallet_label": 4045,
+              "wallets.account_code": 6174,
+              "wallets.account_label": 6174,
+              "wallets.config_text_mentions_samourai": 6174,
+              "wallets.wallet_account_id": 6174
+            },
+            "schema_refusal_messages": {},
+            "totals": {
+              "addresses_removed": 0,
+              "attempts": 2058,
+              "auto_priced": 426,
+              "books": 2058,
+              "changed_tables": 426,
+              "components": 142,
+              "duplicates_excluded": 0,
+              "legacy_activated": 0,
+              "legacy_skipped": 0,
+              "permutation_attempts": 58,
+              "refusals": 0,
+              "seed_attempts": 2000,
+              "transactions": 4116,
+              "warnings": 0
+            }
+          },
+          "fanout": {
+            "omitted_columns": {
+              "adapter.transaction_fingerprint": 2274,
+              "adapter.wallet_label": 88,
+              "transactions.account_code": 6550,
+              "transactions.account_label": 6550,
+              "transactions.config_json": 6550,
+              "transactions.config_text_mentions_samourai": 6550,
+              "transactions.journal_transaction_id": 6462,
+              "transactions.observation_application_revision": 6550,
+              "transactions.observation_authority_version": 6550,
+              "transactions.observation_fee_attribution": 6550,
+              "transactions.observation_graph_hash": 6550,
+              "transactions.observation_observed_at": 6550,
+              "transactions.observation_observer_kinds_json": 6550,
+              "transactions.observation_quantity_hash": 6550,
+              "transactions.wallet_account_id": 6550,
+              "transactions.wallet_kind": 6550,
+              "transactions.wallet_label": 6550,
+              "wallets.account_code": 6327,
+              "wallets.account_label": 6327,
+              "wallets.config_text_mentions_samourai": 6371,
+              "wallets.wallet_account_id": 6327
+            },
+            "schema_refusal_messages": {},
+            "totals": {
+              "addresses_removed": 0,
+              "attempts": 2094,
+              "auto_priced": 5611,
+              "books": 2094,
+              "changed_tables": 6147,
+              "components": 44,
+              "duplicates_excluded": 0,
+              "legacy_activated": 0,
+              "legacy_skipped": 0,
+              "permutation_attempts": 94,
+              "refusals": 0,
+              "seed_attempts": 2000,
+              "transactions": 6550,
+              "warnings": 0
+            }
+          },
+          "gaps": {
+            "omitted_columns": {
+              "adapter.wallet_label": 195,
+              "transactions.account_code": 62334,
+              "transactions.account_label": 62334,
+              "transactions.config_json": 62334,
+              "transactions.config_text_mentions_samourai": 62334,
+              "transactions.observation_application_revision": 62334,
+              "transactions.observation_authority_version": 62334,
+              "transactions.observation_fee_attribution": 62334,
+              "transactions.observation_graph_hash": 62334,
+              "transactions.observation_observed_at": 62334,
+              "transactions.observation_observer_kinds_json": 62334,
+              "transactions.observation_quantity_hash": 62334,
+              "transactions.wallet_account_id": 62334,
+              "transactions.wallet_config_json": 62334,
+              "transactions.wallet_kind": 62334,
+              "transactions.wallet_label": 62334,
+              "wallets.account_code": 6192,
+              "wallets.account_label": 6192,
+              "wallets.config_text_mentions_samourai": 6192,
+              "wallets.wallet_account_id": 6192
+            },
+            "schema_refusal_messages": {},
+            "totals": {
+              "addresses_removed": 0,
+              "attempts": 2064,
+              "auto_priced": 0,
+              "books": 2064,
+              "changed_tables": 0,
+              "components": 0,
+              "duplicates_excluded": 0,
+              "legacy_activated": 0,
+              "legacy_skipped": 0,
+              "permutation_attempts": 64,
+              "refusals": 0,
+              "seed_attempts": 2000,
+              "transactions": 62334,
+              "warnings": 0
+            }
+          },
+          "graph": {
+            "omitted_columns": {
+              "adapter.transaction_fingerprint": 504,
+              "transactions.account_code": 3024,
+              "transactions.account_label": 3024,
+              "transactions.config_json": 3024,
+              "transactions.config_text_mentions_samourai": 3024,
+              "transactions.journal_transaction_id": 3024,
+              "transactions.observation_application_revision": 3024,
+              "transactions.observation_authority_version": 3024,
+              "transactions.observation_fee_attribution": 3024,
+              "transactions.observation_graph_hash": 3024,
+              "transactions.observation_observed_at": 3024,
+              "transactions.observation_observer_kinds_json": 3024,
+              "transactions.observation_quantity_hash": 3024,
+              "transactions.wallet_account_id": 3024,
+              "transactions.wallet_kind": 3024,
+              "transactions.wallet_label": 3024,
+              "wallets.account_code": 6048,
+              "wallets.account_label": 6048,
+              "wallets.config_text_mentions_samourai": 6048,
+              "wallets.wallet_account_id": 6048
+            },
+            "schema_refusal_messages": {},
+            "totals": {
+              "addresses_removed": 0,
+              "attempts": 2016,
+              "auto_priced": 3024,
+              "books": 2016,
+              "changed_tables": 6048,
+              "components": 0,
+              "duplicates_excluded": 0,
+              "legacy_activated": 0,
+              "legacy_skipped": 0,
+              "permutation_attempts": 16,
+              "refusals": 0,
+              "seed_attempts": 2000,
+              "transactions": 3024,
+              "warnings": 0
+            }
+          },
+          "native": {
+            "omitted_columns": {
+              "adapter.transaction_fingerprint": 2566,
+              "adapter.wallet_label": 76,
+              "transactions.account_code": 4942,
+              "transactions.account_label": 4942,
+              "transactions.config_json": 4942,
+              "transactions.config_text_mentions_samourai": 4942,
+              "transactions.journal_transaction_id": 342,
+              "transactions.observation_application_revision": 4942,
+              "transactions.observation_authority_version": 4942,
+              "transactions.observation_fee_attribution": 4942,
+              "transactions.observation_graph_hash": 4942,
+              "transactions.observation_observed_at": 4942,
+              "transactions.observation_observer_kinds_json": 4942,
+              "transactions.observation_quantity_hash": 4942,
+              "transactions.swap_refund_funding_outpoint": 38,
+              "transactions.txid": 2110,
+              "transactions.wallet_account_id": 4942,
+              "transactions.wallet_config_json": 4448,
+              "transactions.wallet_kind": 4942,
+              "transactions.wallet_label": 4942,
+              "wallets.account_code": 4484,
+              "wallets.account_label": 4484,
+              "wallets.config_text_mentions_samourai": 570,
+              "wallets.wallet_account_id": 4484
+            },
+            "schema_refusal_messages": {},
+            "totals": {
+              "addresses_removed": 0,
+              "attempts": 2110,
+              "auto_priced": 266,
+              "books": 2110,
+              "changed_tables": 114,
+              "components": 0,
+              "duplicates_excluded": 0,
+              "legacy_activated": 0,
+              "legacy_skipped": 0,
+              "permutation_attempts": 110,
+              "refusals": 0,
+              "seed_attempts": 2000,
+              "transactions": 4942,
+              "warnings": 0
+            }
+          },
+          "pipeline": {
+            "omitted_columns": {
+              "adapter.transaction_fingerprint": 2870,
+              "transactions.account_code": 6244,
+              "transactions.account_label": 6244,
+              "transactions.config_json": 6244,
+              "transactions.config_text_mentions_samourai": 6244,
+              "transactions.journal_transaction_id": 6244,
+              "transactions.observation_application_revision": 6244,
+              "transactions.observation_authority_version": 6244,
+              "transactions.observation_fee_attribution": 6244,
+              "transactions.observation_graph_hash": 6244,
+              "transactions.observation_observed_at": 6244,
+              "transactions.observation_observer_kinds_json": 6244,
+              "transactions.observation_quantity_hash": 6244,
+              "transactions.wallet_account_id": 6244,
+              "transactions.wallet_kind": 6244,
+              "transactions.wallet_label": 6244,
+              "wallets.account_code": 6072,
+              "wallets.account_label": 6072,
+              "wallets.config_text_mentions_samourai": 6072,
+              "wallets.wallet_account_id": 6072
+            },
+            "schema_refusal_messages": {},
+            "totals": {
+              "addresses_removed": 0,
+              "attempts": 2024,
+              "auto_priced": 6244,
+              "books": 2024,
+              "changed_tables": 6072,
+              "components": 0,
+              "duplicates_excluded": 0,
+              "legacy_activated": 0,
+              "legacy_skipped": 0,
+              "permutation_attempts": 24,
+              "refusals": 0,
+              "seed_attempts": 2000,
+              "transactions": 6244,
+              "warnings": 0
+            }
+          },
+          "reconciliation": {
+            "omitted_columns": {
+              "adapter.transaction_fingerprint": 4674,
+              "transactions.account_code": 8610,
+              "transactions.account_label": 8610,
+              "transactions.config_json": 8610,
+              "transactions.config_text_mentions_samourai": 8610,
+              "transactions.journal_transaction_id": 8610,
+              "transactions.observation_application_revision": 8610,
+              "transactions.observation_authority_version": 8610,
+              "transactions.observation_fee_attribution": 8610,
+              "transactions.observation_graph_hash": 8610,
+              "transactions.observation_observed_at": 8610,
+              "transactions.observation_observer_kinds_json": 8610,
+              "transactions.observation_quantity_hash": 8610,
+              "transactions.wallet_account_id": 8610,
+              "transactions.wallet_kind": 8610,
+              "transactions.wallet_label": 8610,
+              "wallets.account_code": 6150,
+              "wallets.account_label": 6150,
+              "wallets.config_text_mentions_samourai": 6150,
+              "wallets.wallet_account_id": 6150
+            },
+            "schema_refusal_messages": {
+              "NOT NULL constraint failed: custody_component_economic_terms.source_row_hash": 82
+            },
+            "totals": {
+              "addresses_removed": 0,
+              "attempts": 2050,
+              "auto_priced": 0,
+              "books": 1968,
+              "changed_tables": 0,
+              "components": 2050,
+              "duplicates_excluded": 0,
+              "legacy_activated": 0,
+              "legacy_skipped": 0,
+              "permutation_attempts": 50,
+              "refusals": 0,
+              "schema_refusals": 82,
+              "seed_attempts": 2000,
+              "transactions": 8610,
+              "warnings": 0
+            }
+          },
+          "recorded": {
+            "omitted_columns": {
+              "adapter.transaction_fingerprint": 270,
+              "adapter.wallet_label": 45,
+              "transactions.account_code": 4544,
+              "transactions.account_label": 4544,
+              "transactions.config_json": 4544,
+              "transactions.config_text_mentions_samourai": 4544,
+              "transactions.journal_transaction_id": 4454,
+              "transactions.observation_application_revision": 4544,
+              "transactions.observation_authority_version": 4544,
+              "transactions.observation_fee_attribution": 4544,
+              "transactions.observation_graph_hash": 4544,
+              "transactions.observation_observed_at": 4544,
+              "transactions.observation_observer_kinds_json": 4544,
+              "transactions.observation_quantity_hash": 4544,
+              "transactions.wallet_account_id": 4544,
+              "transactions.wallet_kind": 4544,
+              "transactions.wallet_label": 4544,
+              "wallets.account_code": 6276,
+              "wallets.account_label": 6276,
+              "wallets.config_text_mentions_samourai": 6321,
+              "wallets.wallet_account_id": 6276
+            },
+            "schema_refusal_messages": {},
+            "totals": {
+              "addresses_removed": 0,
+              "attempts": 2092,
+              "auto_priced": 90,
+              "books": 2092,
+              "changed_tables": 135,
+              "components": 45,
+              "duplicates_excluded": 0,
+              "legacy_activated": 0,
+              "legacy_skipped": 0,
+              "permutation_attempts": 92,
+              "refusals": 0,
+              "seed_attempts": 2000,
+              "transactions": 4544,
+              "warnings": 0
+            }
+          },
+          "safety": {
+            "omitted_columns": {
+              "adapter.transaction_fingerprint": 858,
+              "transactions.account_code": 4695,
+              "transactions.account_label": 4695,
+              "transactions.config_json": 4695,
+              "transactions.config_text_mentions_samourai": 4695,
+              "transactions.journal_transaction_id": 4271,
+              "transactions.observation_application_revision": 4695,
+              "transactions.observation_authority_version": 4695,
+              "transactions.observation_fee_attribution": 4695,
+              "transactions.observation_graph_hash": 4695,
+              "transactions.observation_observed_at": 4695,
+              "transactions.observation_observer_kinds_json": 4695,
+              "transactions.observation_quantity_hash": 4695,
+              "transactions.wallet_account_id": 4695,
+              "transactions.wallet_kind": 4695,
+              "transactions.wallet_label": 4695,
+              "wallets.account_code": 6287,
+              "wallets.account_label": 6287,
+              "wallets.config_text_mentions_samourai": 6287,
+              "wallets.wallet_account_id": 6287
+            },
+            "schema_refusal_messages": {},
+            "totals": {
+              "addresses_removed": 0,
+              "attempts": 2078,
+              "auto_priced": 1173,
+              "books": 2078,
+              "changed_tables": 1281,
+              "components": 53,
+              "duplicates_excluded": 0,
+              "legacy_activated": 0,
+              "legacy_skipped": 0,
+              "permutation_attempts": 78,
+              "refusals": 0,
+              "seed_attempts": 2000,
+              "transactions": 4695,
+              "warnings": 0
+            }
+          },
+          "samourai": {
+            "omitted_columns": {
+              "adapter.transaction_fingerprint": 241,
+              "adapter.wallet_label": 60,
+              "transactions.account_code": 4679,
+              "transactions.account_label": 4679,
+              "transactions.config_json": 4679,
+              "transactions.config_text_mentions_samourai": 4679,
+              "transactions.observation_application_revision": 4679,
+              "transactions.observation_authority_version": 4679,
+              "transactions.observation_fee_attribution": 4679,
+              "transactions.observation_graph_hash": 4679,
+              "transactions.observation_observed_at": 4679,
+              "transactions.observation_observer_kinds_json": 4679,
+              "transactions.observation_quantity_hash": 4679,
+              "transactions.wallet_account_id": 4679,
+              "transactions.wallet_kind": 4679,
+              "transactions.wallet_label": 4679,
+              "wallets.account_code": 6204,
+              "wallets.account_label": 6204,
+              "wallets.config_text_mentions_samourai": 6264,
+              "wallets.wallet_account_id": 6204
+            },
+            "schema_refusal_messages": {},
+            "totals": {
+              "addresses_removed": 0,
+              "attempts": 2068,
+              "auto_priced": 120,
+              "books": 2068,
+              "changed_tables": 180,
+              "components": 60,
+              "duplicates_excluded": 0,
+              "legacy_activated": 0,
+              "legacy_skipped": 0,
+              "permutation_attempts": 68,
+              "refusals": 0,
+              "seed_attempts": 2000,
+              "transactions": 4679,
+              "warnings": 0
+            }
+          }
+        },
+        "summary": {
+          "path": "target/r4-10/final-replay/generated.json",
+          "sha256": "9dce037deb41d31c5c36b0dc9d93fc02f6b1ae77e26b5395270b1c93667b7395"
+        }
+      },
+      "historical-books": {
+        "activity_bearing_operands": 0,
+        "activity_log": {
+          "path": "target/r4-10/final-replay/historical-books.activity.jsonl",
+          "sha256": "41842b02b4994e5be6050c822f3a895e02fd62947efa0f4fe1b172e5355146b3"
+        },
+        "adapter": "Complete stored database dumps; no snapshot-to-database adaptation in this replay",
+        "attempts": 3,
+        "comparisons": 6,
+        "distinct_request_hashes": 3,
+        "log_sha256": "2683eab998c62f119251448d13adf6237126149dfefb8132c1ecc66eb03d2951",
+        "no_observable_stage_activity": 3,
+        "schema_refusals": 0,
+        "stored_operands": 3,
+        "suites": {
+          "historical-books": {
+            "omitted_columns": {},
+            "schema_refusal_messages": {},
+            "totals": {
+              "addresses_removed": 0,
+              "attempts": 3,
+              "auto_priced": 0,
+              "books": 3,
+              "changed_tables": 0,
+              "components": 7,
+              "duplicates_excluded": 0,
+              "legacy_activated": 0,
+              "legacy_skipped": 0,
+              "permutation_attempts": 0,
+              "refusals": 0,
+              "seed_attempts": 3,
+              "transactions": 16,
+              "warnings": 0
+            }
+          }
+        },
+        "summary": {
+          "path": "target/r4-10/final-replay/historical-books.json",
+          "sha256": "c5918af6e1e35400d8174fc2bbdddc5f98d0ce6a501bc66b4acaec9bb9eacc31"
+        }
+      },
+      "historical-snapshots": {
+        "activity_bearing_operands": 30,
+        "activity_log": {
+          "path": "target/r4-10/final-replay/historical-snapshots.activity.jsonl",
+          "sha256": "47b0b89e72e09b53c691ec0d9ea1e0a5ca8a07b275ecb3a87eb19ea6302fd918"
+        },
+        "adapter": "Stored snapshot columns only, synthetic cache rows; no inferred inventory, ownership, or legacy pair links",
+        "attempts": 318,
+        "comparisons": 636,
+        "distinct_request_hashes": 314,
+        "log_sha256": "3ca2e9dbb404f686ec222ef9cf36238de68808b6c76fde464dd24046f4e64ec8",
+        "no_observable_stage_activity": 288,
+        "schema_refusals": 0,
+        "stored_operands": 318,
+        "suites": {
+          "historical-snapshots": {
+            "omitted_columns": {
+              "transactions.account_code": 3616,
+              "transactions.account_label": 3616,
+              "transactions.config_json": 3622,
+              "transactions.config_text_mentions_samourai": 3622,
+              "transactions.observation_application_revision": 3622,
+              "transactions.observation_authority_version": 3622,
+              "transactions.observation_fee_attribution": 3622,
+              "transactions.observation_graph_hash": 3622,
+              "transactions.observation_observed_at": 3616,
+              "transactions.observation_observer_kinds_json": 3616,
+              "transactions.observation_quantity_hash": 3622,
+              "transactions.wallet_account_id": 3616,
+              "transactions.wallet_kind": 3622,
+              "transactions.wallet_label": 3616,
+              "wallets.account_code": 1422,
+              "wallets.account_label": 1422,
+              "wallets.config_text_mentions_samourai": 1422,
+              "wallets.wallet_account_id": 1422
+            },
+            "schema_refusal_messages": {},
+            "totals": {
+              "addresses_removed": 0,
+              "attempts": 318,
+              "auto_priced": 62,
+              "books": 318,
+              "changed_tables": 90,
+              "components": 430,
+              "duplicates_excluded": 0,
+              "legacy_activated": 0,
+              "legacy_skipped": 0,
+              "permutation_attempts": 159,
+              "refusals": 0,
+              "seed_attempts": 159,
+              "transactions": 3622,
+              "warnings": 0
+            }
+          }
+        },
+        "summary": {
+          "path": "target/r4-10/final-replay/historical-snapshots.json",
+          "sha256": "14fbfd5f80986e9d30dba12a81db45eac9989ea4e0e11244c20d969e2e5f8347"
+        }
+      },
+      "reports-census-completion-recordings": {
+        "activity_bearing_operands": 0,
+        "activity_log": {
+          "path": "target/r4-10/final-replay/reports-census-completion-recordings.activity.jsonl",
+          "sha256": "c298504850847405f7f521acaadbab19d05a253eb59171d714ed142357596d6c"
+        },
+        "adapter": "Complete stored database dumps; no snapshot-to-database adaptation in this replay",
+        "attempts": 17,
+        "comparisons": 34,
+        "distinct_request_hashes": 17,
+        "log_sha256": "ddb77d54e19a0877d47bcb095e127709a08a9031f49f6cf8da3daf60dc357f3d",
+        "no_observable_stage_activity": 17,
+        "schema_refusals": 0,
+        "stored_operands": 17,
+        "suites": {
+          "recorded": {
+            "omitted_columns": {},
+            "schema_refusal_messages": {},
+            "totals": {
+              "addresses_removed": 0,
+              "attempts": 17,
+              "auto_priced": 0,
+              "books": 17,
+              "changed_tables": 0,
+              "components": 23,
+              "duplicates_excluded": 0,
+              "legacy_activated": 0,
+              "legacy_skipped": 0,
+              "permutation_attempts": 0,
+              "refusals": 0,
+              "seed_attempts": 17,
+              "transactions": 73,
+              "warnings": 0
+            }
+          }
+        },
+        "summary": {
+          "path": "target/r4-10/final-replay/reports-census-completion-recordings.json",
+          "sha256": "ac2d539f99707787092a9ff513773eb724cd6b999122cc1eec90320e9eaaaf68"
+        }
+      },
+      "reports-shadow-completion-recordings": {
+        "activity_bearing_operands": 0,
+        "activity_log": {
+          "path": "target/r4-10/final-replay/reports-shadow-completion-recordings.activity.jsonl",
+          "sha256": "9a37b084fec85d50306846a3b33dc495efea9c10f11ec2b6596ea38bf9f257b6"
+        },
+        "adapter": "Complete stored database dumps; no snapshot-to-database adaptation in this replay",
+        "attempts": 17,
+        "comparisons": 34,
+        "distinct_request_hashes": 17,
+        "log_sha256": "ddb77d54e19a0877d47bcb095e127709a08a9031f49f6cf8da3daf60dc357f3d",
+        "no_observable_stage_activity": 17,
+        "schema_refusals": 0,
+        "stored_operands": 17,
+        "suites": {
+          "recorded": {
+            "omitted_columns": {},
+            "schema_refusal_messages": {},
+            "totals": {
+              "addresses_removed": 0,
+              "attempts": 17,
+              "auto_priced": 0,
+              "books": 17,
+              "changed_tables": 0,
+              "components": 23,
+              "duplicates_excluded": 0,
+              "legacy_activated": 0,
+              "legacy_skipped": 0,
+              "permutation_attempts": 0,
+              "refusals": 0,
+              "seed_attempts": 17,
+              "transactions": 73,
+              "warnings": 0
+            }
+          }
+        },
+        "summary": {
+          "path": "target/r4-10/final-replay/reports-shadow-completion-recordings.json",
+          "sha256": "3d3dd23cb5adcf47500e4c454f07aded41874af14de997f8cf3e85a22e7f628f"
+        }
+      },
+      "shadow-harness-verified-recordings": {
+        "activity_bearing_operands": 2,
+        "activity_log": {
+          "path": "target/r4-10/final-replay/shadow-harness-verified-recordings.activity.jsonl",
+          "sha256": "3332afe28edd8b9495eaa9489cc8dd011569798d7c3e566892a2b9a10c7f6813"
+        },
+        "adapter": "Complete stored database dumps; no snapshot-to-database adaptation in this replay",
+        "attempts": 19,
+        "comparisons": 38,
+        "distinct_request_hashes": 19,
+        "log_sha256": "7ccf3eb4ebd3f2ac9aa7f98e3fe3c1eda9a12fa1375130e3482d24d6b114b00f",
+        "no_observable_stage_activity": 17,
+        "schema_refusals": 0,
+        "stored_operands": 19,
+        "suites": {
+          "recorded": {
+            "omitted_columns": {},
+            "schema_refusal_messages": {},
+            "totals": {
+              "addresses_removed": 0,
+              "attempts": 19,
+              "auto_priced": 0,
+              "books": 19,
+              "changed_tables": 12,
+              "components": 5,
+              "duplicates_excluded": 0,
+              "legacy_activated": 1,
+              "legacy_skipped": 1,
+              "permutation_attempts": 0,
+              "refusals": 0,
+              "seed_attempts": 19,
+              "transactions": 38,
+              "warnings": 0
+            }
+          }
+        },
+        "summary": {
+          "path": "target/r4-10/final-replay/shadow-harness-verified-recordings.json",
+          "sha256": "7a906a2f183be68e56f784841ca3dcc4f15105c6032392f9de7ac59c854c99bc"
+        }
+      },
+      "shadow-legacy-verified-recordings": {
+        "activity_bearing_operands": 2,
+        "activity_log": {
+          "path": "target/r4-10/final-replay/shadow-legacy-verified-recordings.activity.jsonl",
+          "sha256": "d1f383935f1526addf84030938c9042343d62abfed7aa7c99807fc5baec38949"
+        },
+        "adapter": "Complete stored database dumps; no snapshot-to-database adaptation in this replay",
+        "attempts": 2,
+        "comparisons": 4,
+        "distinct_request_hashes": 2,
+        "log_sha256": "e6a7a05d0e2ca2d99f040a8d9458ed223aa9768a3ef4a9919741e7953845b978",
+        "no_observable_stage_activity": 0,
+        "schema_refusals": 0,
+        "stored_operands": 2,
+        "suites": {
+          "recorded": {
+            "omitted_columns": {},
+            "schema_refusal_messages": {},
+            "totals": {
+              "addresses_removed": 0,
+              "attempts": 2,
+              "auto_priced": 0,
+              "books": 2,
+              "changed_tables": 12,
+              "components": 4,
+              "duplicates_excluded": 0,
+              "legacy_activated": 1,
+              "legacy_skipped": 1,
+              "permutation_attempts": 0,
+              "refusals": 0,
+              "seed_attempts": 2,
+              "transactions": 6,
+              "warnings": 0
+            }
+          }
+        },
+        "summary": {
+          "path": "target/r4-10/final-replay/shadow-legacy-verified-recordings.json",
+          "sha256": "061c18206a4a26b9f0e986b8d9699757922f73ba5eaa16160415a6be54e3ae21"
+        }
+      }
+    },
+    "summary": {
+      "path": "target/r4-10/final-replay/summary.json",
+      "sha256": "85da4d5b1d56c5c6d87da96eb7e8b27839415d38c7eab1f10eb06685ee3b7033"
+    },
+    "total_including_edges_and_final_handlers": 56300
+  },
+  "historical_inputs": {
+    "adaptation": "Snapshot columns only; no inferred inventory, ownership or legacy review authority",
+    "directories": {
+      "kassiber-r2d-recorded-census": 73,
+      "kassiber-r2d-recorded-shadow": 6,
+      "kassiber-r2e-census-snapshots": 40,
+      "kassiber-r2e-shadow-snapshots": 40
+    },
+    "manifest": {
+      "files": 159,
+      "manifest_sha256": "87371ee1de2007b27575c4ea1b711b1cb32fb6f57809cfc76aac737185e92d20",
+      "read_only": true,
+      "unchanged": true
+    },
+    "read_only": true,
+    "requests": 159,
+    "root": "/home/tg/.cache/kassiber-verify/custody-recordings",
+    "upgrade": "Python upgrades disposable copies before replay; no native historical authored migration support is claimed",
+    "upgraded_fixtures": [
+      "pre_432_5d232097.sqlite3.gz.b64/pf",
+      "pre_435_16b7bdc1.sqlite3.gz.b64/pf",
+      "pre_partial_payout_ca9a672f.sqlite3.gz.b64/profile"
+    ]
+  },
+  "implementation_commit": "6f22619e6e1030b4e42b24f36993865e488312a2",
+  "known_python_reference_bugs": [
+    {
+      "issue": "L-BTC price alias omission retained for parity",
+      "repro": "tests/rust_port/repro_journal_lbtc_price_alias.py"
+    },
+    {
+      "issue": "Fractional-msat source fingerprint truncation retained for parity",
+      "repro": "tests/rust_port/repro_journal_fractional_source_overlap.py"
+    },
+    {
+      "issue": "Fractional-msat pricing quantity truncation retained for parity",
+      "repro": "tests/rust_port/repro_journal_fractional_pricing.py"
+    }
+  ],
+  "limits": [
+    "No production routing or full journals-process acceptance; integration belongs to R4-13",
+    "No expansion of native historical authored migrations",
+    "No universal allocation-failure parity; inherited Decimal formatting bound remains",
+    "No complete-workspace quality-gate or push-readiness claim; local-only scope"
+  ],
+  "mutations": {
+    "build_or_selection_errors": 0,
+    "catalogue_entries_killed": 2838,
+    "custody_execution": "396 + 156 + 1775 verified recipe segments; not one uninterrupted catalogue run; pending interrupted recipes rerun",
+    "final_prebuild_journals_recorder_run": {
+      "path": "docs/reference/r4-prebuild-finalization-results.json",
+      "sha256": "e369c0408891a1279ae8e8c19c14dfd47d74464639e2d8cb6a44be6ac838ff00"
+    },
+    "inherited_custody": 2327,
+    "inherited_journals": 112,
+    "inherited_record": {
+      "path": "docs/reference/r4-prebuild-inherited-mutations.json",
+      "sha256": "65d6518bdb0ebe55bedf245a675a47f177f6f5bef51691d6339bf841769e97e6"
+    },
+    "inherited_transfers_daemon": 280,
+    "legacy_original_subset": 21,
+    "pipeline_original_subset": 7,
+    "prebuild": 116,
+    "pricing_source_original_subset": 46,
+    "recorder": 3,
+    "survivors": 0,
+    "transfer_execution": "The 280-entry transfer/daemon gate retains its recorded implementation commit; every mutated-file hash still matches. The 112-entry journal gate was refreshed after the shared SQLite refusal fix."
+  },
+  "schema": "kassiber.r4-prebuild-acceptance.v1",
+  "scope": "Ordered source repair/warning, drifted legacy pair refresh and profile reload, cached/stored pricing, result-field bytes and rollback through later build/persistence failure; Python remains the production authority; no R4-13 routing",
+  "source_sha256": {
+    "crates/journals/src/persistence.rs": "3c4a00c849a6cef59822b9038df8254c1341f2660c34389ea405b89148af9782",
+    "crates/journals/src/prebuild.rs": "40221ca89b394394f4bd7ce90246b26d0a4e6e36899f483b7e1d026d575f68d8",
+    "crates/journals/src/prebuild/legacy.rs": "fb960b601e5fa75cf3ed8d56cc802023c1100e45e9b81b9c23bc31023a9d772c",
+    "crates/journals/src/prebuild/overlap.rs": "b716aaa960ac3d872ab24d1cdd427cdd7837a1f231523de8600dd1842a32b550",
+    "crates/journals/src/prebuild/pipeline.rs": "485a5c38661a66a96fedf22b6bc1a46101874ae5dd0b8ffc4e5fd957266639c1",
+    "crates/journals/src/prebuild/pricing.rs": "de86b8a369da7488b715a88d32b9ca166ec46126e18e5c76c4b2ccdddc68c748",
+    "crates/journals/src/prebuild/sources.rs": "d34139e04e8257c78306cf7f1b066368283bb4e3aa6dd3b1407d02c93bc7563c",
+    "crates/journals/src/prebuild/tests.rs": "1e6e9e8a8b1c106ce7458149aff1272b4a98ef8d3fbb3c574d4ba7e84b9abc11"
+  },
+  "status": "Functionally accepted as an unregistered native pre-build boundary with an explicit scoped-cache multi-wallet CPU-budget miss",
+  "verification": {
+    "classifier": {
+      "path": "target/r4-10/acceptance-classifier.log",
+      "sha256": "6d5aec411b822716320386bd5a09a02e20eb087879bc27512f783043fa4d4896"
+    },
+    "clippy": "Release all-target affected-crate Clippy with warnings denied passed",
+    "formatting": "passed",
+    "manual_second_pass": "Reviewed native cache lifetime and error-family conversion, retained vector/reference stability, complete file replay activities/counts and source/binary bindings, exact mutation catalogue accounting, target-specific witness selection, census/shadow provenance and exclusions, CPU timer/budget miss, staged and unstaged diffs",
+    "native_tests": 118,
+    "preflight": {
+      "passed": 57,
+      "path": "target/r4-10/acceptance-preflight.log",
+      "sha256": "ef31a3c36fbc8fad3d58d7f68d7b67f04f0bb63d9da38ac731dfe4d80033cd62"
+    },
+    "previous_required_checks": {
+      "classifier": {
+        "path": "target/r4-10/final-classifier.log",
+        "sha256": "6d5aec411b822716320386bd5a09a02e20eb087879bc27512f783043fa4d4896"
+      },
+      "clippy": {
+        "path": "target/r4-10/final-clippy.log",
+        "sha256": "a70da5408e7a6da7efe97b23011504833b16a7875bda14543f2504b5b8c7d97a"
+      },
+      "formatting": {
+        "path": "target/r4-10/final-fmt.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "manual_second_pass": "Reviewed shared SQLite conversion, no-overlap cache lifetime, refresh after active repair, whole-stage timer/cache costs, old-vector stability, mutation baseline/kill logs, region dispositions and unchanged Python/product routing",
+      "preflight": {
+        "passed": 57,
+        "path": "target/r4-10/final-preflight.log",
+        "sha256": "bed08dafbe337875e7d8c0df8ecd4216ec5e5c71d27340425c10dc8513d2faa6"
+      },
+      "python_harness": {
+        "passed": 10,
+        "path": "target/r4-10/final-python-harness.log",
+        "sha256": "fcae2efc5c94f8bea5efae1f0740bbc4765937eef9c017cc29b2420ebd20dad5"
+      }
+    },
+    "python_harness_tests": 10
+  }
+}

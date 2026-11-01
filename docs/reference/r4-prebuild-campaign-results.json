@@ -1,5 +1,15 @@
 {
   "base_commit": "9e8979d30",
+  "current_acceptance": {
+    "binary_sha256": "f52c80ba8b9ab9a0466df083efdbf2209e7f9ab93c5d15badb7499e52c146ce3",
+    "catalogue_entries_killed": 2838,
+    "complete_functional_gates": true,
+    "full_dump_comparisons": 56300,
+    "generated_attempts": 25030,
+    "record": "r4-prebuild-acceptance.json",
+    "schema_refusals": 215,
+    "status": "Functionally accepted with recorded scoped-cache multi-wallet CPU budget debt"
+  },
   "edge_expansion": {
     "additional_reference_repro": "tests/rust_port/repro_journal_fractional_pricing.py",
     "base_commit": "777204565",
@@ -18938,11 +18948,10 @@
     "stale_directory": "A nonempty recording directory is refused"
   },
   "remaining": [
-    "Bind the generated, historical and complete-book campaign replays to the final native implementation",
-    "Write the acceptance record and run final required checks"
+    "Resolve the scoped-cache multi-wallet 0.034666 s pre-build CPU median against 0.03 s during R4-13 whole-pipeline cache measurement"
   ],
   "schema": "kassiber.r4-prebuild-campaign-checkpoint.v2",
-  "status": "Inherited mutation catalogues complete; final whole-campaign binary binding and acceptance record remain open",
+  "status": "R4-10 functionally accepted; final binary and complete activity bound; scoped-cache multi-wallet CPU miss remains explicit",
   "uncovered_numeric_followup": {
     "base_commit": "b7cf849f9",
     "file_comparisons": 530,

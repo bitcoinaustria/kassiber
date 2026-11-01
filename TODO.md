@@ -621,6 +621,22 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   multi-wallet is 0.034666 s, with its complete cost breakdown recorded.
   All 2,327 inherited custody recipes also pass across verified prefixes and
   a targeted continuation. Final campaign binding and acceptance remain open.
+
+<!-- inherited from prebuild@a0393276a; pending r10 verification -->
+- [ ] R4-9 to R4-12: native loader, pre-build repairs, rendering and joins,
+  persistence, each with byte or database-dump parity.
+- [x] Finish the [R4-10 pre-build boundary](docs/reference/r4-journal-pipeline.md#r4-10-functional-acceptance):
+  ordered source repair/warnings, legacy refresh/profile reload and cached pricing,
+  including later-failure rollback and result-field parity. The final binary passes
+  56,300 complete SQLite/SQLCipher comparisons across the full generated campaign,
+  historical recordings, upgraded fixtures, frozen/edge cases and census/shadow
+  books. All 2,838 catalogue entries are killed; combined-run qualifications and
+  complete activity accounting are in the acceptance record. Python's known
+  `L-BTC` and fractional-msat bugs remain unchanged, with repros.
+- [ ] Resolve the scoped-cache multi-wallet pre-build CPU budget during R4-13
+  whole-pipeline measurement. Its 20k median is 0.034666 s against 0.03 s;
+  default-cache books meet the target. The acceptance record preserves all
+  samples and the complete cost breakdown; the shared 128 MiB cache is unchanged.
 - [ ] Reject fractional legacy msat before Python's source-overlap fingerprint
   conversion can collapse distinct amounts. The disposable repro is
   `python -m tests.rust_port.repro_journal_fractional_source_overlap`;

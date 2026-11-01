@@ -35,6 +35,12 @@ R4-13 has a [test-only composition checkpoint](r4-journal-process-checkpoint.md)
 real ordered R4-10 repairs/pricing through native load and persistence with
 transactional rollback and progress, and no CLI or daemon registration. Its
 test-only probe does not close whole-pipeline parity or performance acceptance.
+
+<!-- inherited from prebuild@a0393276a; pending r10 verification -->
+that misses its 0.30 s target and remains unaccepted and unrouted.
+R4-10 has [functional acceptance](#r4-10-functional-acceptance) for its native
+pre-build boundary, with the scoped-cache multi-wallet CPU miss recorded.
+Production integration belongs to R4-13.
 This document plans stage R4 of
 [plan 21](../plan/21-rust-backend.md): `journals process` end to end in the Rust
 binary, byte-identical to Python and much faster. It builds on the
@@ -380,6 +386,14 @@ byte parity; its CPU ceilings remain the stage acceptance targets.
 | R4-12 | Persistence: typed rows to prepared statements, freshness markers, filed-report impact resolution, deferred checkpoint; database-dump parity. [Unregistered checkpoint](r4-journal-persistence-checkpoint.md); acceptance open. | Continuation plaintext 20k fresh CPU: Python 1.504 / 1.553; floor 0.854 / 0.951; native 0.931 / 1.117. Unchanged CPU 0.770 / 0.453 still misses. | ≤ floor + 0.15 s |
 | R4-13 | CLI `journals process` with and without `--auto-pair`, desktop `ui.journals.process` with pairing and scoped AI processing without pairing; progress phases; hybrid routing. [Test-only composition checkpoint](r4-journal-process-checkpoint.md) composes the real R4-10 API; refresh coordination and registration/acceptance gates remain open. | — | End-to-end targets below |
 | R4-14 | Automatic pairing (transfer suggestions, rules, bulk exact) for `--auto-pair` and the desktop path; [stage accepted](rust-pairing.md), journal routing awaits R4-13/R4-15/R4-16 | Python 3.44 / 4.74 historical; CPU remeasured 4.710 / 5.823 | 10× Python CPU; native 0.362 / 0.495, **13.02× / 11.75×** |
+
+<!-- inherited from prebuild@a0393276a; pending r10 verification -->
+| R4-9 | Native SQLite loader to `BookSnapshot`, including book-network facts, the owned index (descriptor derivation from the R5 descriptor slice) and receipt sources; v1 byte gate against Python; [direct-load checkpoint](r4-native-loader-checkpoint.md): generic 20k 0.505 s CPU / 0.509 s wall including admission, target missed, acceptance remains open | Python load 1.57 / 1.89 (historical floor 0.11; remeasured shell CPU 0.117) | ≤ 0.30 s |
+| R4-10 | Pre-build repairs and auto-pricing in Rust; [functional acceptance](#r4-10-functional-acceptance) completes database-dump and mutation gates. The scoped-cache multi-wallet CPU budget remains missed. | Python 0.03 | ≤ 0.03 s |
+| R4-11 | Rendering and joins: entries, quarantine enrichment with ownership candidates, holdings, balance comparison, ownership review; [partial implementation](r4-journal-render-checkpoint.md), acceptance remains open | Python 1.38 / 1.71 | ≤ 0.15 s |
+| R4-12 | Persistence: typed rows to prepared statements, freshness markers, filed-report impact resolution, deferred checkpoint; database-dump parity. [Unregistered checkpoint](r4-journal-persistence-checkpoint.md); acceptance open. | Python 2.25 / 2.55 (deferred-checkpoint floor 1.25 / 1.45) | ≤ floor + 0.15 s |
+| R4-13 | CLI `journals process` and daemon `ui.journals.process` without automatic pairing in the binary; progress phases; hybrid routing | — | End-to-end targets below |
+| R4-14 | Automatic pairing (transfer suggestions, rules, bulk exact) for `--auto-pair` and the desktop path (decision 3: ported in R4) | Python 3.44 / 4.74 | 10× Python |
 | R4-15 | Freshness `journal_refresh` job and the daemon's single execution slot in Rust | — | Parity with the daemon smoke sessions |
 | R4-16 | Authority switch (below) | — | All gates and budgets |
 
@@ -394,10 +408,13 @@ remaining whole-pipeline budget.
 
 ### R4-10 auto-pricing checkpoint
 
-This is a partial, unregistered library checkpoint. It ports cached pricing,
-the [source-overlap stage](#r4-10-source-overlap-checkpoint), and
-[legacy refresh](#r4-10-legacy-refresh-checkpoint). **R4-10 is not
-complete, and this function is not a replacement for the pre-build pipeline.**
+The checkpoints below retain their original gate status. The later
+[functional acceptance](#r4-10-functional-acceptance) records the completed scope
+and remaining CPU budget debt.
+
+This partial, unregistered library checkpoint describes cached pricing. Later
+checkpoints add the [source-overlap stage](#r4-10-source-overlap-checkpoint) and
+[legacy refresh](#r4-10-legacy-refresh-checkpoint), then combine the ordered stage.
 Python's ordered pre-build contract is:
 
 1. `_repair_journal_source_overlaps`, followed by
@@ -1107,6 +1124,82 @@ The 112 journal recipes were refreshed in the final-source 231-entry isolated
 run after the shared SQLite refusal conversion changed. All inherited mutation
 catalogues are now complete. Final whole-campaign binary binding and the
 acceptance record remain open.
+
+### R4-10 functional acceptance
+
+The unregistered native pre-build boundary is **functionally accepted**, with
+an explicit scoped-cache multi-wallet CPU-budget miss. The
+[acceptance record](r4-prebuild-acceptance.json) binds the final binary, sources,
+activity logs, complete file comparisons, mutations and required checks.
+R4-13 owns production integration and the remaining whole-pipeline cache tradeoff.
+
+The final binary repeats all 24,000 generated seeds and 1,030 permutations.
+Its 215 schema refusals remain separate from the 24,815 stored operands and
+49,630 native file comparisons. Per-suite activity, omitted columns, refusals,
+distinct request hashes and operands with no observable stage activity are
+recorded. Repeated requests and regenerated frozen captures are counted as
+operands, without claiming that they are distinct economic books.
+
+| Final-binary corpus | Complete SQLite/SQLCipher file comparisons |
+| --- | ---: |
+| Twelve generators and permutations | 49,630 |
+| 159 historical snapshots and their permutations | 636 |
+| Three Python-upgraded historical fixtures, one profile each | 6 |
+| 505 frozen representatives | 1,010 |
+| Fresh recordings and network/positive control | 178 |
+| Core census initial, permitted and completion captures | 2,270 |
+| Core custody-shadow captures | 1,136 |
+| Report census initial and completion captures | 334 |
+| Report shadow initial and completion captures | 334 |
+| Earlier focused legacy census/shadow captures | 8 |
+| Focused census/shadow harness captures | 76 |
+| Expanded hand-authored edge corpus | 674 |
+| Fresh final handler census/shadow controls | 8 |
+| **Total** | **56,300** |
+
+The historical inputs remain byte-identical to their before-replay manifest.
+The snapshot adapter grants no inventory, ownership or legacy-review authority.
+The three database fixtures are upgraded in disposable copies by Python before
+pre-build comparison; this does not extend native historical authored migration.
+
+Census and report-shadow identity coverage remains the documented combination
+of initial runs and exact continuations. Replaying a capture from a failed test
+session proves that individual input's parity; it does not make that session
+an uninterrupted passing shard. The final two-case handler runs pass in both
+census and shadow modes, each observing one legacy activation and one domain
+skip. The core frozen-regeneration captures remain separate from independent
+handler activity in the recorded provenance.
+
+All **2,838 catalogue entries** are killed: 116 pre-build, three recorder,
+112 inherited journal, 280 transfer/daemon and 2,327 custody entries. The final
+journal gate was refreshed after the shared SQLite refusal fix. Transfer gate
+mutated-file hashes remain unchanged. Custody combines its verified
+396 + 156 + 1,775 segments, with every incomplete pending recipe rerun.
+There are no survivors or build/selection errors within the recorded build scope.
+
+The default-cache 20k medians meet 0.03 s at **0.021221 s generic** and
+**0.026913 s multi-wallet**. Scoped-cache medians are **0.029070 s** and
+**0.034666 s** respectively. The latter misses by **0.004666 s (15.6%)**;
+its best sample is 0.033108 s. The median diagnostic sample totals 0.035978 s:
+repairs 0.023649 s, pricing 0.009276 s, cache entry 0.002645 s, restoration
+0.000366 s and other stage work 0.000042 s. These are whole-stage user plus
+system process-CPU measurements, including cache entry/restoration and result
+fields. The unchanged shared 128 MiB cache serves later stages too; its tradeoff
+requires whole-pipeline measurement in R4-13. The complete performance target
+is still unmet for scoped-cache multi-wallet.
+
+All 118 release journal/transfer tests, ten Python harness tests, release
+all-target Clippy, formatting, the final classifier update and 57 preflight
+checks pass. The region audit dispositions all 104 remaining zero-count
+executable-region entries after 44 pre-build coverage tests. Stable LLVM emits
+no branch counters, so no measured 100% branch-coverage claim is made.
+Allocator exhaustion and formatting above the inherited Decimal allocation bound
+remain outside the parity claim.
+
+Python's `L-BTC` omission and fractional-msat truncation are retained, with
+checked-in repros. Production pre-build routing and book schema are unchanged.
+The summarized mutation and coverage build trees are removed, historical inputs
+remain read-only, and verification leaves no owned background jobs running.
 
 ## Performance budget
 
