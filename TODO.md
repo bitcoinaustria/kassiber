@@ -662,7 +662,10 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   checkpoint. A borrowed retained-row probe records all four 20k read floors.
   Fresh-connection SQLCipher reads exceed the old allowance; read floor + 0.15
   seconds is proposed for unchanged cells. Fresh keeps the write floor. A
-  quiet-host repeat and cheap unchanged comparison remain open. Corrected
+  quiet-host repeat and cheap unchanged comparison remain open. A later typed
+  comparison prototype also missed the proposed unchanged allowance over five
+  pairs and was withdrawn; its measurements and an integrated negative-zero
+  rewrite witness remain, with a targeted `JP-signed-zero` kill. Corrected
   appended benchmark inputs carry distinct raw identities and assert actual writes.
   R4-9's test-only loader now constructs the current custody records directly;
   generic 20k still takes 0.505 s CPU / 0.509 s wall against 0.30 s. It remains

@@ -168,6 +168,62 @@ fn nonfinite_entry_quantities_refuse_and_restore_every_table() {
     }
 }
 
+#[test]
+fn typed_entry_negative_zero_forces_rewrites_in_all_five_real_columns() {
+    use kassiber_journals::{storage::journal_entry_id, JournalDecimal};
+    for column in 0..5 {
+        let mut v = cases()[0].clone();
+        let c = Connection::open_in_memory().unwrap();
+        load(&c, &v["before"]);
+        for clock in ["2026-10-31T12:00:00Z", "2026-11-01T12:00:00Z"] {
+            v["created_at"] = serde_json::json!(clock);
+            c.execute_batch("BEGIN IMMEDIATE;SAVEPOINT journals_process")
+                .unwrap();
+            let mut writes = Writes::default();
+            let mut target = None;
+            store_with(&c, &v, &mut writes, |state| {
+                let e = &mut state.entries[0];
+                target = Some(
+                    journal_entry_id(
+                        e.profile_id.as_str().unwrap(),
+                        e.transaction_id.as_str().unwrap(),
+                        e.wallet_id.as_str().unwrap(),
+                        e.entry_type,
+                        &e.asset,
+                        0,
+                    )
+                    .unwrap(),
+                );
+                let zero = JournalDecimal("-0.000".parse().unwrap());
+                match column {
+                    0 => e.fiat_value = zero,
+                    1 => e.unit_cost = zero,
+                    2 => e.cost_basis = Some(zero),
+                    3 => e.proceeds = Some(zero),
+                    4 => e.gain_loss = Some(zero),
+                    _ => unreachable!(),
+                }
+            })
+            .unwrap();
+            let target = target.unwrap();
+            assert!(
+                writes.tables.contains(&"journal_entries"),
+                "column {column}"
+            );
+            let (created, siblings): (String, i64) = c.query_row(
+                "SELECT created_at,(SELECT COUNT(*) FROM journal_entries AS sibling WHERE sibling.occurred_at=entry.occurred_at) FROM journal_entries AS entry WHERE id=?",
+                [&target], |r| Ok((r.get(0)?, r.get(1)?)),
+            ).unwrap();
+            assert_eq!(
+                siblings, 1,
+                "an unrelated sibling rewrite must not mask the sign check"
+            );
+            assert_eq!(created, clock, "column {column}");
+            c.execute_batch("RELEASE journals_process;COMMIT").unwrap();
+        }
+    }
+}
+
 struct Scratch(std::path::PathBuf);
 impl Scratch {
     fn new(name: &str) -> Self {

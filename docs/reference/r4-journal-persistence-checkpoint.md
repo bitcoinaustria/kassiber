@@ -6,6 +6,95 @@ persistence-branch mutation coverage and inherited full R4 campaigns must close
 before this becomes production authority. Python remains the reference. No CLI
 or daemon registration changes are included.
 
+## Typed comparison probe from `a06bc004f` (withdrawn)
+
+This attempt leaves **R4-12 unaccepted**. The typed comparison prototype was
+withdrawn after its generic SQLite unchanged cell missed both the original
+write-floor allowance and the proposed read-floor allowance. All final
+production persistence sources remain at `51bd20498`. The read-floor probe
+below and a new integrated negative-zero regression remain.
+
+The prototype compared borrowed `ValueRef` cells directly with typed metadata,
+quantities and decimal coefficients. It checked exact fixed-point spelling and
+all five REAL sign bits without preparing ordinary unchanged decimal strings.
+Validated calculation fields were compared against the retained compact bytes;
+no canonical digest or intermediate JSON tree was built. Source dictionaries
+retained canonical first-seen deduplication, with cached ASCII quoting checks
+and a bounded small-dictionary comparison before the indexed large path.
+Dynamic shapes retained the existing legacy encoding and refusal path.
+
+Final bindings and ordinary compact strings were prepared only for changed
+entries and their changed timestamp groups. Fresh books bypassed comparison
+preparation once the retained entry table was known empty. Quantity postings
+compared cheap amount/state cells first. Preparation, comparison, writes and
+COMMIT all stayed inside the native timer. No schema, stored digest, Python
+reference, dependencies or command registration changed.
+
+The first exploratory fresh/unchanged pair matched all six timed dumps but
+missed unchanged at 0.421432 CPU seconds. The optimized prototype then ran five
+alternating pairs per mode, matching all **30 timed dumps**. The table uses
+independent process-CPU minima; every sample and phase profile is retained in
+[the typed-probe measurement record](r4-journal-persistence-typed-probe-measurements.json).
+
+| Generic SQLite 20k | Python CPU | Native CPU | Write floor CPU | Native − write floor | Result |
+| --- | ---: | ---: | ---: | ---: | --- |
+| fresh | 1.308421 | 0.842522 | 0.722667 | 0.119855 | Within write floor + 0.15 |
+| unchanged | 1.004621 | 0.356593 | 0.000875 | 0.355718 | Misses both allowances |
+
+The unchanged borrowed-read floor is 0.083712 CPU seconds. Native therefore
+adds **0.272881 seconds**, exceeding the proposed 0.15 allowance by **0.122881**.
+The five-pair load range is 25.023–32.441; this is not quiet-host acceptance.
+Preparation and retained comparisons still dominate. These runs do not establish
+a controlled speed improvement over the earlier variants, and no final native
+optimization is retained. The other 20k cells, appended/changed and 2k cases
+were not rerun for this prototype after this required cell failed.
+
+Before withdrawal the prototype passed 60 journal tests, including complete
+dumps, refusal/unwind rollback and physical crash recovery. Focused tests also
+pinned exact decimal spelling, canonical string escapes, the 4,096-source
+calculation dictionary, every typed retained content column and the absence of
+final bindings for unchanged rows. Release clippy, all targets with warnings
+denied, passed. Its four relocated mutation recipes passed 181-recipe
+applicability; no kill rerun or exhaustive branch audit is claimed.
+The archived sources, patch, binary and SHA-256 manifest remain under
+`target/typed-prototype/`, bound by the measurement record.
+
+The retained `typed_entry_negative_zero_forces_rewrites_in_all_five_real_columns`
+test runs two complete stores for each REAL field and requires actual journal
+writes on the second store. It checks the exact target entry's new creation
+time and excludes sibling rewrites that could mask a missed sign check. It
+passes against the restored implementation and kills the existing
+`JP-signed-zero` mutation at runtime; the restored source passes again. This is
+one targeted kill, not the full mutation campaign or branch audit.
+
+Restored-source verification passes 57 journal tests, the read-floor example's
+test, eight Python oracle tests, release all-target clippy with warnings denied,
+and workspace formatting. The required classifier update produces no generated
+diff, and preflight `--ci` passes 57 tests. A manual second review confirms
+production-source identity and the evidence's limited scope. Verification logs,
+source hashes and artifact cleanup are recorded in the measurement record.
+
+Remaining acceptance work, in order:
+
+1. Repeat the independent-connection read floor on a quiet host and settle the
+   proposed read-floor + 0.15 CPU budget for unchanged cells. Fresh keeps the
+   write-floor + 0.15 budget.
+2. Implement a cheaper comparison and meet all eight 20k fresh/unchanged cells
+   over five alternating pairs, plus appended/changed and 2k comparisons on
+   both shapes and drivers, with exact dumps.
+3. Complete the exhaustive persistence branch-to-mutation audit and final kills.
+   The full 181-recipe campaign has not been rerun here; only the targeted
+   `JP-signed-zero` kill above was rerun.
+4. Run resumable campaigns for 24,000 books and 1,030 permutations; 159 retained
+   recordings and permutations plus fresh recordings; full census and shadow,
+   preserving the known Python shadow read-budget repro; and 2,285 custody
+   mutations. None ran in this attempt.
+5. Verify the integrated R4-13 contract on both physical drivers: outer
+   transaction before snapshots/repairs, whole pre-COMMIT rollback, settings
+   restoration, committed visibility, response flush before checkpoint, dropped
+   handles and post-COMMIT failures without a second failure response. Then
+   write acceptance. This attempt does not close that gate.
+
 ## Borrowed retained-row read floor from `d6e46912b`
 
 R4-12 remains **unaccepted**. The unregistered `journal-read-floor` example
@@ -691,7 +780,7 @@ the environment was synchronized with `uv sync --locked --python 3.11`.
 Cargo runs offline. Point `TMPDIR` at an existing directory under worktree
 `target/`; a read-only shared uv cache can use `UV_NO_SYNC=1` and
 `UV_CACHE_DIR=target/uv-cache` after synchronization. Never use a real book.
-Use `CARGO_BUILD_JOBS=4`, `CARGO_TARGET_DIR=$PWD/target` and
+Use `CARGO_BUILD_JOBS=8`, `CARGO_TARGET_DIR=$PWD/target` and
 `CARGO_BUILD_BUILD_DIR=$PWD/target/build` to keep builds bounded and local.
 
 ```sh

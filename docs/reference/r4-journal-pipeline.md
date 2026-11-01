@@ -397,6 +397,13 @@ byte parity; its CPU ceilings remain the stage acceptance targets.
 | R4-15 | Freshness `journal_refresh` job and the daemon's single execution slot in Rust | — | Parity with the daemon smoke sessions |
 | R4-16 | Authority switch (below) | — | All gates and budgets |
 
+The [retained-row read-floor probe](r4-journal-persistence-checkpoint.md#borrowed-retained-row-read-floor-from-d6e46912b)
+proposes read floor + 0.15 CPU seconds for unchanged R4-12 cells after the
+fresh-connection SQLCipher scan alone exceeded the old allowance. Fresh retains
+the write-floor budget. This remains a proposal pending a quiet-host repeat;
+R4-12 is unaccepted. A subsequent typed comparison probe also missed the
+proposed unchanged allowance and was withdrawn.
+
 R4-2 to R4-8 change no product behavior. Python still owns production until
 R4-16. Order follows the data flow, because every stage reads the rows. A
 stage whose neighbor is not typed yet would convert at its boundary. The
