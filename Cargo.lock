@@ -1701,6 +1701,7 @@ dependencies = [
  "kassiber-setup",
  "kassiber-store",
  "kassiber-tax-core",
+ "kassiber-transactions",
  "kassiber-transfers",
  "kassiber-wallets",
  "nix 0.30.1",
@@ -1924,7 +1925,6 @@ dependencies = [
  "kassiber-pyjson",
  "kassiber-pytext",
  "kassiber-store",
- "kassiber-transactions",
  "serde_json",
  "tempfile",
 ]

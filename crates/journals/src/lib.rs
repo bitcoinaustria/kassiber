@@ -15,13 +15,13 @@ pub mod prebuild;
 pub mod process;
 mod render;
 #[cfg(feature = "test-harness")]
-pub mod review_effects;
+mod review_apply;
 #[cfg(feature = "test-harness")]
-pub mod review_workflow;
+pub mod review_effects;
 #[cfg(feature = "test-harness")]
 mod review_simulation;
 #[cfg(feature = "test-harness")]
-mod review_apply;
+pub mod review_workflow;
 pub mod scalar;
 pub mod service;
 pub mod storage;

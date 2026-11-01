@@ -1,14 +1,10 @@
 #![cfg(feature = "test-harness")]
 use kassiber_envelope::{dict, get, py_str, s, AppError};
+use kassiber_journals::review_workflow::{self, Error};
 use kassiber_pyjson::Value;
 use kassiber_store::rusqlite::{types::Value as Sql, Connection};
-use kassiber_transfers::{
-    review_artifact,
-    review_operations::canonical,
-    Scope, Sources,
-};
+use kassiber_transfers::{review_artifact, review_operations::canonical, Scope, Sources};
 use std::collections::BTreeMap;
-use kassiber_journals::review_workflow::{self, Error};
 
 const CLOCK: &str = "2026-10-31T12:00:00Z";
 struct Clock;

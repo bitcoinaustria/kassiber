@@ -166,15 +166,30 @@ fn integer(value: &Value) -> Result<kassiber_pyjson::BigInt> {
 #[cfg(feature = "test-harness")]
 #[doc(hidden)]
 pub mod review_support {
-    pub fn parse_json(text: &str) -> super::Result<super::Value> { super::parse_json(text) }
+    pub fn parse_json(text: &str) -> super::Result<super::Value> {
+        super::parse_json(text)
+    }
     use super::*;
-    pub fn value(row: &Value, key: &str) -> Value { super::value(row, key) }
-    pub fn text(row: &Value, key: &str) -> String { super::text(row, key) }
-    pub fn reference_bind(value: &Value, index: usize) -> Result<kassiber_store::rusqlite::types::Value> {
+    pub fn value(row: &Value, key: &str) -> Value {
+        super::value(row, key)
+    }
+    pub fn text(row: &Value, key: &str) -> String {
+        super::text(row, key)
+    }
+    pub fn reference_bind(
+        value: &Value,
+        index: usize,
+    ) -> Result<kassiber_store::rusqlite::types::Value> {
         component_reads::reference_bind(value, index)
     }
-    pub fn require_input_version(conn: &Connection, scope: &Scope<'_>, expected: &Value) -> Result<i64> {
+    pub fn require_input_version(
+        conn: &Connection,
+        scope: &Scope<'_>,
+        expected: &Value,
+    ) -> Result<i64> {
         component_rows::require_input_version(conn, scope, expected)
     }
-    pub fn input_version(profile: &Value) -> i64 { component_rows::input_version(profile) }
+    pub fn input_version(profile: &Value) -> i64 {
+        component_rows::input_version(profile)
+    }
 }

@@ -1,12 +1,12 @@
 use crate::review_workflow::Error;
-use kassiber_transfers::{review_cases, sql, review_support, Scope, Sources};
-use kassiber_transfers::review_support::{text, value};
+use crate::JournalState;
 use kassiber_custody::codec;
 use kassiber_envelope::{dict, get, s, set, AppError};
-use crate::JournalState;
 use kassiber_pyjson::{PyStr, Value};
 use kassiber_store::rusqlite::Connection;
 use kassiber_transactions::metadata::{self, Command, GroupedUpdate, PricingUpdate};
+use kassiber_transfers::review_support::{text, value};
+use kassiber_transfers::{review_cases, review_support, sql, Scope, Sources};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Default)]
@@ -308,8 +308,11 @@ mod tests {
 
     #[test]
     fn intervening_metadata_requires_refreshed_canonical_suspense_decisions() {
-        let fixture = kassiber_pytext::loads(include_str!("../tests/review_cases.json")).unwrap();
-        let plans = kassiber_pytext::loads(include_str!("../tests/review_plans.json")).unwrap();
+        let fixture =
+            kassiber_pytext::loads(include_str!("../../transfers/tests/review_cases.json"))
+                .unwrap();
+        let plans = kassiber_pytext::loads(include_str!("../../transfers/tests/review_plans.json"))
+            .unwrap();
         let list = |value| match value {
             Value::List(rows) => rows,
             _ => panic!("fixture list"),
@@ -345,8 +348,7 @@ mod tests {
             .unwrap()
             .remove(0);
         let prepared =
-            crate::pipeline::Prepared::load(&conn, profile, "2026-10-31T12:00:00Z")
-                .unwrap();
+            crate::pipeline::Prepared::load(&conn, profile, "2026-10-31T12:00:00Z").unwrap();
         let state = prepared.review_state(&conn, || "derived".into()).unwrap();
         let cases = Cases::from_state(&state);
         let operations = list(value(&plan, "operations"));

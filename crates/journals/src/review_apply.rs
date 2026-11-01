@@ -1,16 +1,15 @@
 //! One writer scope owns review operations, canonical journals and the receipt.
+use crate::{persistence, storage::RebuildCache};
 use crate::{
     review_effects, review_simulation,
     review_workflow::{derived_ids, facts, prepare, profile, Error},
-
 };
 use kassiber_custody::codec;
-use kassiber_transfers::{review_artifact, review_operations, review_support, sql, Scope, Sources};
-use kassiber_transfers::review_support::{text, value};
 use kassiber_envelope::{dict, get, s, set, AppError};
-use crate::{persistence, storage::RebuildCache};
 use kassiber_pyjson::{PyStr, Value};
 use kassiber_store::rusqlite::{params, Connection};
+use kassiber_transfers::review_support::{text, value};
+use kassiber_transfers::{review_artifact, review_operations, review_support, sql, Scope, Sources};
 use std::collections::BTreeSet;
 
 pub struct Apply<'a> {
@@ -172,11 +171,7 @@ pub fn apply(
         }
         review_support::parse_json(&text(existing, "receipt_json"))?
     } else {
-        review_support::require_input_version(
-            conn,
-            scope,
-            &value(artifact, "base_input_version"),
-        )?;
+        review_support::require_input_version(conn, scope, &value(artifact, "base_input_version"))?;
         let before = prepare(conn, scope, as_of)?;
         let state = before.review_state(conn, derived_ids())?;
         if !review_artifact::equal(
@@ -246,4 +241,6 @@ pub fn apply(
     Ok(receipt)
 }
 
-fn service_refusal(error: AppError) -> crate::Refusal { error.into() }
+fn service_refusal(error: AppError) -> crate::Refusal {
+    error.into()
+}

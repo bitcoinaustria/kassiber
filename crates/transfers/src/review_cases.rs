@@ -305,7 +305,7 @@ fn pair_records(conn: &Connection, scope: &Scope<'_>) -> Result<Rows> {
     Ok(result)
 }
 
-pub(crate) fn current_pairs(conn: &Connection, scope: &Scope<'_>) -> Result<Vec<Value>> {
+pub fn current_pairs(conn: &Connection, scope: &Scope<'_>) -> Result<Vec<Value>> {
     let mut result = Vec::new();
     for mut pair in list(&records::pairs(conn, scope)?).to_vec() {
         for side in ["out", "in"] {
