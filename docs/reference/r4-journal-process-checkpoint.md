@@ -822,3 +822,23 @@ comparisons belong to their recorded source and binary, and do not certify
 this merge. Complete inherited campaigns and each route's authority, envelope,
 event, zero-fallback and mutation gates remain open. No registered-command
 performance result exists, and probe timings are not substituted for one.
+
+## Fifth continuation: production binding
+
+`t3code/r4-13-journals-process-5` starts at `502039979`. The shared book
+adapter now binds `journals::service::process` to the existing setup selector
+resolver and real transfer `SystemSources`. Resolution occurs under the writer
+reservation and retains all stored profile fields through the loader adapter.
+It does not substitute the probe's injected profile. The runtime reply handle
+keeps the deferred checkpoint alive until the transport flushes its response.
+Loader and process composition compile in the production feature set.
+The binding passes 65 library checks and all four native process groups. The
+complete-book/tape group replays each case through both injected and scoped
+resolution. Foreign and ambiguous selectors refuse without writes; context,
+ID and label selection preserve stored REAL values, including infinity.
+
+This first boundary does not activate a route. The owner's registration strategy
+allows whole-invocation Python fallback for native refusals before writes, or
+after a proven byte-identical rollback. Successful admitted books must remain
+native. Route activation and source-bound acceptance are recorded separately
+below; the earlier campaigns and benchmarks remain historical evidence.

@@ -161,8 +161,24 @@ pub struct StatusFacts {
     pub counts: StatusCounts,
 }
 
+/// A committed journal response retains its deferred checkpoint until the
+/// transport has published and flushed the terminal envelope.
+pub trait JournalReply {
+    fn payload(&self) -> &Value;
+    fn after_reply(self: Box<Self>) -> Result<(), AppError>;
+}
+
 /// An open, unlocked book.
 pub trait Book: Send {
+    fn process_journals(
+        &mut self,
+        _workspace: Option<&Value>,
+        _profile: Option<&Value>,
+        _progress: &mut dyn FnMut(&'static str),
+    ) -> Result<Box<dyn JournalReply + '_>, AppError> {
+        Err(not_implemented("journals", "process"))
+    }
+
     /// Redacted report over this admitted connection; never exposes raw rows/configuration.
     fn diagnostics(
         &self,

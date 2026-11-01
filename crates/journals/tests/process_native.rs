@@ -62,70 +62,87 @@ impl Sources for Tapes<'_> {
 fn native_process_real_prebuild_matches_complete_python_books_and_lifecycle_tapes() {
     let vectors = vectors();
     for case in vectors["cases"].as_array().unwrap() {
-        let c = Connection::open_in_memory().unwrap();
-        support::load(&c, &expand(&vectors, case, "before"));
-        let sources = Tapes::new(case);
-        let mut phases = Vec::new();
-        let result = process::process_native(
-            &c,
-            |conn| {
-                assert_eq!(
-                    conn.transaction_state(Some("main")).unwrap(),
-                    TransactionState::Write
-                );
-                Ok(case["profile"].clone())
-            },
-            kassiber_pydecimal::Context::RP2,
-            &sources,
-            &mut |phase| phases.push(serde_json::json!({"phase":phase})),
-            &mut (),
-        );
-        match result {
-            Ok(result) => {
-                assert!(case["error"].is_null(), "{}", case["name"]);
-                assert_eq!(result.payload, case["result"], "{}", case["name"]);
-                result.after_reply().unwrap();
+        for scoped in [false, true] {
+            let c = Connection::open_in_memory().unwrap();
+            support::load(&c, &expand(&vectors, case, "before"));
+            let sources = Tapes::new(case);
+            let mut phases = Vec::new();
+            let result = if scoped {
+                kassiber_journals::service::process_with_sources(
+                    &c,
+                    Some(&kassiber_envelope::s(
+                        case["profile"]["workspace_id"].as_str().unwrap(),
+                    )),
+                    Some(&kassiber_envelope::s(
+                        case["profile"]["id"].as_str().unwrap(),
+                    )),
+                    &sources,
+                    &mut |phase| phases.push(serde_json::json!({"phase":phase})),
+                    &mut (),
+                )
+            } else {
+                process::process_native(
+                    &c,
+                    |conn| {
+                        assert_eq!(
+                            conn.transaction_state(Some("main")).unwrap(),
+                            TransactionState::Write
+                        );
+                        Ok(case["profile"].clone())
+                    },
+                    kassiber_pydecimal::Context::RP2,
+                    &sources,
+                    &mut |phase| phases.push(serde_json::json!({"phase":phase})),
+                    &mut (),
+                )
+            };
+            match result {
+                Ok(result) => {
+                    assert!(case["error"].is_null(), "{}", case["name"]);
+                    assert_eq!(result.payload, case["result"], "{}", case["name"]);
+                    result.after_reply().unwrap();
+                }
+                Err(error) => assert_eq!(
+                    serde_json::to_value(error).unwrap(),
+                    case["error"],
+                    "{}",
+                    case["name"]
+                ),
             }
-            Err(error) => assert_eq!(
-                serde_json::to_value(error).unwrap(),
-                case["error"],
+            let actual = support::snapshot(&c);
+            let expected = expand(&vectors, case, "expected");
+            for (table, expected) in expected.as_object().unwrap() {
+                assert!(
+                    support::logical_equal(&actual[table], expected),
+                    "{} {table}: {} != {expected}",
+                    case["name"],
+                    actual[table]
+                );
+            }
+            assert!(
+                sources.ids.borrow_mut().next().is_none(),
+                "unused identity: {}",
+                case["name"]
+            );
+            assert!(
+                sources.ticks.borrow_mut().next().is_none(),
+                "unused clock: {}",
+                case["name"]
+            );
+            assert_eq!(
+                phases,
+                *case["phases"].as_array().unwrap(),
                 "{}",
                 case["name"]
-            ),
-        }
-        let actual = support::snapshot(&c);
-        let expected = expand(&vectors, case, "expected");
-        for (table, expected) in expected.as_object().unwrap() {
-            assert!(
-                support::logical_equal(&actual[table], expected),
-                "{} {table}: {} != {expected}",
-                case["name"],
-                actual[table]
             );
+            assert_eq!(
+                sources.build_reads.get(),
+                usize::from(phases.iter().any(|p| p["phase"] == "building")),
+                "{}",
+                case["name"]
+            );
+            assert!(c.is_autocommit());
         }
-        assert!(
-            sources.ids.borrow_mut().next().is_none(),
-            "unused identity: {}",
-            case["name"]
-        );
-        assert!(
-            sources.ticks.borrow_mut().next().is_none(),
-            "unused clock: {}",
-            case["name"]
-        );
-        assert_eq!(
-            phases,
-            *case["phases"].as_array().unwrap(),
-            "{}",
-            case["name"]
-        );
-        assert_eq!(
-            sources.build_reads.get(),
-            usize::from(phases.iter().any(|p| p["phase"] == "building")),
-            "{}",
-            case["name"]
-        );
-        assert!(c.is_autocommit());
     }
 }
 

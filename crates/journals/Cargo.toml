@@ -18,6 +18,7 @@ kassiber-transfers = { path = "../transfers" }
 # Reuse the shared SQL driver for test-only review composition.
 kassiber-store = { path = "../store" }
 kassiber-wallets = { path = "../wallets" }
+kassiber-setup = { path = "../setup" }
 kassiber-tax-core = { path = "../../tax-engine/core" }
 # Reuse the book's SQLCipher driver and existing Python-compatible timestamp
 # parser; neither the standard library nor the renderer supplies these.

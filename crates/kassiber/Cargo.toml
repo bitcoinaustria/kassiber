@@ -36,6 +36,7 @@ kassiber-diagnostics = { path = "../diagnostics" }
 kassiber-chain = { path = "../chain" }
 kassiber-backup = { path = "../backup" }
 kassiber-reports = { path = "../reports" }
+kassiber-journals = { path = "../journals" }
 
 kassiber-transfers = { path = "../transfers" }
 kassiber-rates = { path = "../rates" }

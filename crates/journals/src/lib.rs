@@ -5,7 +5,6 @@
 pub mod boundary;
 pub mod engine;
 mod integer;
-#[cfg(any(test, feature = "test-harness"))]
 pub mod loader;
 mod model;
 pub mod native;
@@ -13,7 +12,6 @@ pub mod persistence;
 #[cfg(any(test, feature = "test-harness"))]
 pub mod pipeline;
 pub mod prebuild;
-#[cfg(any(test, feature = "test-harness"))]
 pub mod process;
 mod render;
 #[cfg(feature = "test-harness")]
@@ -21,6 +19,7 @@ pub mod review_effects;
 #[cfg(feature = "test-harness")]
 pub mod review_workflow;
 pub mod scalar;
+pub mod service;
 pub mod storage;
 pub mod timing;
 pub use model::*;

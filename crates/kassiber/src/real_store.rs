@@ -748,6 +748,18 @@ struct RealBook {
     backends: backends::Config,
 }
 
+struct NativeJournalReply<'a>(kassiber_journals::process::Committed<'a>);
+impl JournalReply for NativeJournalReply<'_> {
+    fn payload(&self) -> &Value {
+        &self.0.ordered_payload
+    }
+    fn after_reply(self: Box<Self>) -> Result<(), AppError> {
+        self.0
+            .after_reply()
+            .map_err(kassiber_journals::service::application_error)
+    }
+}
+
 /// Only test builds accept an injected report clock. UUIDs retain their native
 /// source and process oracles declare a one-to-one mapping for generated ids.
 struct ReportSources;
@@ -773,6 +785,20 @@ impl RealBook {
 }
 
 impl Book for RealBook {
+    fn process_journals(
+        &mut self,
+        workspace: Option<&Value>,
+        profile: Option<&Value>,
+        progress: &mut dyn FnMut(&'static str),
+    ) -> Result<Box<dyn JournalReply + '_>, AppError> {
+        let result =
+            kassiber_journals::service::process(self.conn()?, workspace, profile, &mut |phase| {
+                progress(phase)
+            })
+            .map_err(kassiber_journals::service::application_error)?;
+        Ok(Box::new(NativeJournalReply(result)))
+    }
+
     fn diagnostics(
         &self,
         args: &Value,
