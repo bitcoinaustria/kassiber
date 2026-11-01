@@ -125,6 +125,10 @@ jobs:
         if: matrix.shard == 'serial-daemon'
         run: |
           cargo build -p kassiber --features test-harness --locked
+          cargo build -p kassiber-backup --example kassiber-backup-probe --features test-hooks --offline --locked
+          cargo build -p kassiber-store --example kassiber-storage-probe --features test-hooks --offline --locked
+          cargo build -p kassiber-secrets --example kassiber-secrets-probe --features test-hooks,native-keyring --offline --locked
+          cargo build -p kassiber-chain --example client_fixture --features test-harness --offline --locked
           cargo build -p kassiber-wallets --example discovery_fixture --features test-harness --offline --locked
           cargo build -p kassiber-wallets --example acquisition_fixture --features test-harness --offline --locked
           cargo build -p kassiber-wallets --example observer_state_fixture --features test-harness --offline --locked

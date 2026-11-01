@@ -56,6 +56,9 @@ run cargo test -p kassiber-net --features test-observer --locked
 run cargo clippy -p kassiber -p kassiber-daemon -p kassiber-runtime --all-targets --features kassiber/test-harness --locked -- -D warnings
 run cargo test -p kassiber --features test-harness --locked
 run cargo build -p kassiber --features test-harness --locked
+run cargo build -p kassiber-backup --example kassiber-backup-probe --features test-hooks --offline --locked
+run cargo build -p kassiber-store --example kassiber-storage-probe --features test-hooks --offline --locked
+run cargo build -p kassiber-secrets --example kassiber-secrets-probe --features test-hooks,native-keyring --offline --locked
 run cargo build -p kassiber-chain --example client_fixture --features test-harness --offline --locked
 run cargo build -p kassiber-wallets --example discovery_fixture --features test-harness --offline --locked
 run cargo build -p kassiber-wallets --example acquisition_fixture --features test-harness --offline --locked

@@ -310,6 +310,15 @@ class PythonShardContractTest(unittest.TestCase):
         self.assertLess(gate.index("run cargo build -p kassiber-chain --example client_fixture --features test-harness --offline --locked"), gate.index(select))
         self.assertIn("run py crates/wallets/scripts/acquisition_mutation_check.py --check", gate)
         self.assertLess(gate.index(select), gate.index("-m pytest tests"))
+        for fixture_build in (
+            "cargo build -p kassiber-backup --example kassiber-backup-probe --features test-hooks --offline --locked",
+            "cargo build -p kassiber-store --example kassiber-storage-probe --features test-hooks --offline --locked",
+            "cargo build -p kassiber-secrets --example kassiber-secrets-probe --features test-hooks,native-keyring --offline --locked",
+            "cargo build -p kassiber-chain --example client_fixture --features test-harness --offline --locked",
+        ):
+            with self.subTest(fixture_build=fixture_build):
+                self.assertIn(fixture_build, steps[build_index]["run"])
+                self.assertLess(gate.index("run " + fixture_build), gate.index(select))
 
 
 class TaxShadowOverlayContractTest(unittest.TestCase):
