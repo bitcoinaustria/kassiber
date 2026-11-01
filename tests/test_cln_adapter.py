@@ -35,6 +35,11 @@ from kassiber.db import open_db
 from kassiber.errors import AppError
 
 
+def _report_snapshot(snapshot_blob):
+    with patch.object(core_cln, "now_iso", return_value="2023-11-14T22:16:00Z"):
+        return core_cln.build_node_snapshot(snapshot_blob, window_days=30)
+
+
 def _canned_payloads(extra: dict[str, Any] | None = None) -> dict[str, Any]:
     """Canned RPC responses with the kinds of Tier-1 fields adapters must
     discard already present, so the tests can prove they never leak out."""
@@ -258,7 +263,7 @@ class FetchNodeSnapshotTest(unittest.TestCase):
             {"kind": "coreln", "name": "cln", "url": "cln://local"},
             rpc_call=_rpc(used),
         )
-        return core_cln.build_node_snapshot(snapshot_blob, window_days=30)
+        return _report_snapshot(snapshot_blob)
 
     def test_fetch_node_snapshot_returns_typed_snapshot(self) -> None:
         snapshot = self._snapshot()
@@ -349,7 +354,7 @@ class FetchNodeSnapshotTest(unittest.TestCase):
         for needle in forbidden_substrings:
             self.assertNotIn(needle, serialized, msg=f"leaked: {needle}")
         # Forwards in NodeSnapshot must not carry failure_reason either.
-        snapshot = core_cln.build_node_snapshot(snapshot_blob, window_days=30)
+        snapshot = _report_snapshot(snapshot_blob)
         for forward in snapshot.forwards:
             self.assertIsNone(forward.failure_reason)
 
@@ -932,7 +937,7 @@ class RebalanceCostFormulaTest(unittest.TestCase):
             {"kind": "coreln", "name": "cln", "url": "cln://local"},
             rpc_call=_rpc(payloads),
         )
-        snapshot = core_cln.build_node_snapshot(snapshot_blob, window_days=30)
+        snapshot = _report_snapshot(snapshot_blob)
         self.assertIsNotNone(snapshot.routing)
         # 3000 msat = 3 sat (truncated). Principal is NOT added.
         self.assertEqual(snapshot.routing.rebalance_cost_sat, 3)
@@ -976,7 +981,7 @@ class RebalanceCostFormulaTest(unittest.TestCase):
             {"kind": "coreln", "name": "cln", "url": "cln://local"},
             rpc_call=_rpc(payloads),
         )
-        snapshot = core_cln.build_node_snapshot(snapshot_blob, window_days=30)
+        snapshot = _report_snapshot(snapshot_blob)
         self.assertIsNotNone(snapshot.routing)
         # 3000 msat -> 3 sat, counted ONCE (not 6 like the pre-fix bug).
         self.assertEqual(snapshot.routing.rebalance_cost_sat, 3)

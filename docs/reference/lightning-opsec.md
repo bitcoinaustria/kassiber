@@ -202,6 +202,13 @@ CSV output is fully rendered and UTF-8 validated before touching the destination
 then published through an owner-only sibling file and atomic replacement.
 Encoding or publication failure leaves the previous artifact intact.
 
+Core Lightning profitability requires successful channel, forward, payment and
+bookkeeper-income resources. A complete empty window has known zero totals;
+failed resources leave routing unavailable. The requested window bounds settled
+forward revenue, completed payment fees and bookkeeper fee events by their
+timestamps, including channel earnings. A relevant event with no usable time
+leaves the window unavailable instead of assigning it to a guessed period.
+
 ### AI tool surface redaction
 
 The daemon's AI dispatch path swaps the full payload helpers

@@ -35,7 +35,7 @@ import json
 import sqlite3
 import subprocess
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal, InvalidOperation
 from typing import Any, Callable, Mapping, MutableMapping, Sequence
 
@@ -45,7 +45,7 @@ from ...redaction import backend_credentials, withhold_credentials
 from ...envelope import json_ready
 from ...errors import AppError
 from ...msat import msat_to_btc
-from ...time_utils import UNKNOWN_OCCURRED_AT, now_iso, timestamp_to_iso
+from ...time_utils import UNKNOWN_OCCURRED_AT, now_iso, timestamp_to_iso, timestamp_microseconds
 from ...util import str_or_none
 from .. import imports as core_imports
 from ..repo import invalidate_journals
@@ -812,10 +812,40 @@ def _build_forwards(
     return tuple(results)
 
 
+def _routing_window(snapshot: CoreLightningSnapshot, window_days: int) -> CoreLightningSnapshot:
+    """Filter routing facts in RAM; an undated relevant fact makes the window unknown."""
+    epoch = timestamp_microseconds("1970-01-01T00:00:00Z")
+    end = Decimal(timestamp_microseconds(now_iso()) - epoch) / 1_000_000
+    start = end - window_days * 86400
+    errors = dict(snapshot.errors)
+
+    def inside(row, *fields):
+        stamp = next((row.get(key) for key in fields if row.get(key) is not None), None)
+        try:
+            value = Decimal(str(stamp))
+            if not value.is_finite():
+                raise ValueError
+        except (InvalidOperation, ValueError):
+            errors["routing_window"] = "A routing event has no usable timestamp."
+            return False
+        return start <= value <= end
+
+    forwards = tuple(row for row in snapshot.forwards
+                     if _forward_status(row.get("status")) == "settled"
+                     and inside(row, "resolved_time", "received_time"))
+    pays = tuple(row for row in snapshot.pays
+                 if str_or_none(row.get("status")) in {"complete", "completed", "paid"}
+                 and inside(row, "completed_at", "created_at"))
+    income = tuple(row for row in snapshot.income_events
+                   if (str_or_none(row.get("tag")) or "").lower() in {"rebalance_fee", "onchain_fee", "onchain_fees"}
+                   and inside(row, "timestamp"))
+    return replace(snapshot, forwards=forwards, pays=pays, income_events=income, errors=errors)
+
+
 def _routing_summary(
     snapshot: CoreLightningSnapshot, window_days: int
 ) -> NodeRoutingSnapshot | None:
-    if any(method in snapshot.errors for method in ("listpeerchannels", "listforwards", "listpays", "bkpr-listincome")):
+    if any(method in snapshot.errors for method in ("listpeerchannels", "listforwards", "listpays", "bkpr-listincome", "routing_window")):
         return None
     settled_forwards = [
         row for row in snapshot.forwards if _forward_status(row.get("status")) == "settled"
@@ -922,7 +952,8 @@ def build_node_snapshot(
 ) -> NodeSnapshot:
     peer_alias_map = _build_peer_alias_map(snapshot)
     channels = tuple(_node_channel(row, peer_alias_map) for row in snapshot.channels)
-    earned_per_channel = _per_channel_routing(snapshot)
+    routing_window = _routing_window(snapshot, window_days)
+    earned_per_channel = _per_channel_routing(routing_window)
     enriched_channels = tuple(
         (
             channel
@@ -950,7 +981,7 @@ def build_node_snapshot(
 
     onchain_balance_msat = _onchain_balance_msat(snapshot)
 
-    routing = _routing_summary(snapshot, window_days)
+    routing = _routing_summary(routing_window, window_days)
     forwards = _build_forwards(snapshot, peer_alias_map)
     invoice_count, paid_invoice_count, expired_invoice_count = _invoice_counts(snapshot)
     payment_count, completed_payment_count, failed_payment_count = _payment_counts(snapshot)
