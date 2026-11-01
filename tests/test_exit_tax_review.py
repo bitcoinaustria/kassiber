@@ -190,6 +190,38 @@ def test_old_fee_journals_require_one_rebuild_without_rewriting_evidence(engine_
         reopened.close()
 
 
+def test_generic_book_requires_one_rebuild_after_semantics_version_upgrade(engine_book, tmp_path):
+    from kassiber.core.custody_journal import projection_freshness
+    from kassiber.errors import AppError
+
+    conn = engine_book(regime_rows(), country="generic", pair=True)
+    before = dict(conn.execute("SELECT * FROM profiles").fetchone())
+    retained = [tuple(row) for row in conn.execute("SELECT * FROM journal_entries ORDER BY id")]
+    raw = [tuple(row) for row in conn.execute("SELECT * FROM transactions ORDER BY id")]
+    conn.execute("UPDATE profiles SET required_journal_semantics_version=1, journal_semantics_version=1")
+    conn.commit()
+    conn.close()
+    for _ in range(2):
+        with open_db(tmp_path / "engine-0") as reopened:
+            profile = dict(reopened.execute("SELECT * FROM profiles").fetchone())
+            assert profile["journal_input_version"] == before["journal_input_version"]
+            assert profile["last_processed_at"] == before["last_processed_at"]
+            assert not projection_freshness(reopened, profile["id"])["is_current"]
+            assert [tuple(row) for row in reopened.execute("SELECT * FROM journal_entries ORDER BY id")] == retained
+            assert [tuple(row) for row in reopened.execute("SELECT * FROM transactions ORDER BY id")] == raw
+            with pytest.raises(AppError, match="fresh journals"):
+                reports.report_exit_tax(reopened, "W", "P", handlers._report_hooks())
+    with open_db(tmp_path / "engine-0") as rebuilt:
+        handlers.process_journals(rebuilt, "W", "P")
+        profile = rebuilt.execute("SELECT * FROM profiles").fetchone()
+        assert profile["journal_semantics_version"] == 2
+        assert projection_freshness(rebuilt, profile["id"])["is_current"]
+    with open_db(tmp_path / "engine-0") as reopened:
+        profile = reopened.execute("SELECT * FROM profiles").fetchone()
+        assert projection_freshness(reopened, profile["id"])["is_current"]
+        reports.report_exit_tax(reopened, "W", "P", handlers._report_hooks())
+
+
 @pytest.mark.parametrize("quote_source", ("cache", "transaction"))
 @pytest.mark.parametrize("last_instant", ("2024-03-31T21:59:59.500000Z", "2024-03-31T21:59:59.999999Z"))
 def test_full_departure_day_includes_fractional_inventory_and_quotes(engine_book, quote_source, last_instant):
