@@ -225,7 +225,7 @@ def save_reviewed_case(
 ) -> dict[str, Any]:
     """Save the inspected report only while its provenance inputs still match.
 
-    The existing snapshot writer commits the case. Hold the SQLite writer lock
+    This boundary commits the complete case. Hold the SQLite writer lock
     from revalidation through that commit, rather than checking an old report
     and then rebuilding against potentially changed evidence.
     """
@@ -241,11 +241,13 @@ def save_reviewed_case(
             raise _error("Source-funds review scope is truncated; narrow the investigation before saving")
         options = dict(context["recipe"])
         options["recipient_ref"] = options.pop("recipient")
-        return source_funds.build_report(
+        result = source_funds.build_report(
             conn, context["workspace_id"], context["profile_id"], hooks,
             target_transaction_ref=context["target"]["transaction_id"],
             **options, save_case=True, case_label=case_label, include_diagrams=True,
         )
+        conn.commit()
+        return result
     except BaseException:
         conn.rollback()
         raise
