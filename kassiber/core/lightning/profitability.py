@@ -239,4 +239,5 @@ def profitability_csv_rows(
 
 
 def _sat_to_btc(value: int) -> str:
-    return f"{value / 100_000_000:.8f}"
+    whole, fraction = divmod(abs(value), 100_000_000)
+    return f"{'-' if value < 0 else ''}{whole}.{fraction:08d}"

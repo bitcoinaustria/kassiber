@@ -192,6 +192,11 @@ encode the policy where they can:
   the capability before dispatching a feature; unsupported features fail
   with `lightning_capability_unsupported`.
 
+### Profitability exports
+
+The operator CSV formats satoshi amounts as exact eight-place BTC strings,
+including values beyond floating-point integer precision.
+
 ### AI tool surface redaction
 
 The daemon's AI dispatch path swaps the full payload helpers
