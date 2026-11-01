@@ -3215,7 +3215,7 @@ _GENERIC_LEDGER_DATE_HEADERS = {
 }
 
 _GENERIC_LEDGER_CURRENCY_SYMBOLS = (
-    "$", "€", "£", "CHF", "USD", "EUR", "GBP", "BTC", "XBT", "LBTC", "SATS", "SAT",
+    "$", "€", "£", "CHF", "USD", "EUR", "GBP", "LBTC", "BTC", "XBT", "SATS", "SAT",
 )
 _GENERIC_LEDGER_EURO_DATE_RE = re.compile(r"^(\d{1,2})\.(\d{1,2})\.(\d{4})(?:[ T](.+))?$")
 
