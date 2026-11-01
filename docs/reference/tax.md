@@ -335,6 +335,10 @@ entries before the next civil midnight (exclusive): Europe/Vienna for Austrian
 books, UTC for generic books. This includes fractional seconds and compares
 exact instants even for legacy offset timestamps. Internal transfers move wallet context without
 changing global inventory; income recognition is not counted twice.
+Dashboard wallet tax-free hints retain the journal's transfer-regime flows,
+but are cleared per asset when the shared consumed-lot inventory has no
+Altbestand left, including when another wallet's sale consumed those lots.
+They do not identify physical tax lots within a globally pooled book.
 FMV chooses the closest cached or transaction quote strictly before that same
 cutoff. Either source must be at most 24 hours old relative to the cutoff;
 exactly 24 hours is allowed. At equal instants the cache wins, retaining manual

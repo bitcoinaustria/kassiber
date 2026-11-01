@@ -686,6 +686,50 @@ def test_dashboard_wallet_flags_follow_real_consumption_despite_override(engine_
     assert tile["taxFreeQuantitySats"] == (10_000_000 if has_alt else 0)
 
 
+@pytest.mark.parametrize("override", DISPOSAL_OVERRIDES)
+def test_dashboard_wallet_flags_clear_after_cross_wallet_alt_exhaustion(engine_book, override):
+    # Reviewer's matrix scenario 2: Hot's earlier sale consumes Cold's FIFO
+    # Alt lots, then Cold's 1.1 BTC sale exhausts the remainder across wallets.
+    rows = regime_rows() + [
+        ("bigsell", "Cold", "2023-10-01T00:00:00Z", "outbound", 11 * BTC // 10, 0, 26000, "sell"),
+    ]
+    conn = engine_book(rows, pair=True, overrides={"bigsell": override},
+                       quotes=[("2024-03-31T12:00:00Z", 65000)])
+    profile = conn.execute("SELECT * FROM profiles").fetchone()
+    tile = ui_snapshot._tax_free_balance_snapshot(conn, profile, {})
+    assert tile["taxFreeQuantitySats"] == 0
+    assert tile["wallets"]
+    assert not any(wallet["hasTaxFreeBalance"] for wallet in tile["wallets"])
+    # Keep the independently verified departure figures untouched.
+    report = reports.report_exit_tax(conn, "W", "P", handlers._report_hooks(), departure_date="2024-03-31")
+    assert report["totals"]["neuQuantitySats"] == 45_970_000
+    assert report["totals"]["neuCostBasis"] == 10868.00
+    assert report["totals"]["estimatedTax"] == 5228.44
+
+
+def test_dashboard_wallet_flags_gate_each_asset_by_remaining_alt_inventory(engine_book):
+    conn = engine_book([
+        ("alt", "Cold", "2020-01-01T00:00:00Z", "inbound", BTC // 10, 0, 8000, "buy"),
+        ("neu", "Hot", "2022-01-01T00:00:00Z", "inbound", BTC, 0, 40000, "buy"),
+        ("sell", "Hot", "2024-12-31T12:00:00Z", "outbound", BTC // 10, 0, 65000, "sell"),
+    ])
+    cold = conn.execute("SELECT id FROM wallets WHERE label='Cold'").fetchone()[0]
+    hot = conn.execute("SELECT id FROM wallets WHERE label='Hot'").fetchone()[0]
+    # A retained, independent LBTC acquisition must not preserve the exhausted
+    # BTC badge. Neither wallet flows nor nonzero book-wide Alt alone suffice.
+    conn.execute("""INSERT INTO journal_entries(id,workspace_id,profile_id,transaction_id,
+        wallet_id,occurred_at,entry_type,asset,quantity,fiat_value,description,created_at)
+        SELECT 'lbtc',workspace_id,profile_id,transaction_id,?,occurred_at,
+        entry_type,'LBTC',quantity,fiat_value,description,created_at
+        FROM journal_entries WHERE transaction_id='alt'""", (hot,))
+    profile = conn.execute("SELECT * FROM profiles").fetchone()
+    tile = ui_snapshot._tax_free_balance_snapshot(conn, profile, {})
+    assert tile["taxFreeQuantitySats"] == 10_000_000
+    assert {wallet["walletId"]: wallet["hasTaxFreeBalance"] for wallet in tile["wallets"]} == {
+        cold: False, hot: True,
+    }
+
+
 @pytest.mark.parametrize("source", ("cache", "transaction"))
 @pytest.mark.parametrize(("at", "utc"), [
     ("2024-12-31T12:34:56.123456+01:00", "2024-12-31T11:34:56.123456Z"),

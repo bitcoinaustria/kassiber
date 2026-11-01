@@ -3850,7 +3850,13 @@ def _tax_free_balance_snapshot(
         "taxableMarketValue": totals["neuMarketValue"],
         "needsJournals": needs_journals,
         "quarantines": quarantines,
-        "wallets": _tax_free_wallet_summaries(entries),
+        "wallets": _tax_free_wallet_summaries(
+            entries,
+            remaining_alt_sats={
+                lot["asset"]: lot["quantitySats"]
+                for lot in report["lots"] if lot["regime"] == "alt"
+            },
+        ),
         "buckets": [
             {
                 "id": "altbestand",
@@ -3872,8 +3878,12 @@ def _tax_free_balance_snapshot(
     }
 
 
-def _tax_free_wallet_summaries(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    tax_free_by_wallet: dict[str, Decimal] = defaultdict(Decimal)
+def _tax_free_wallet_summaries(
+    entries: list[dict[str, Any]],
+    *,
+    remaining_alt_sats: dict[str, int] | None = None,
+) -> list[dict[str, Any]]:
+    tax_free_by_wallet_asset: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
     for entry in entries:
         entry_type = str(entry.get("entry_type") or "")
         if entry_type == "transfer_fee":
@@ -3881,6 +3891,7 @@ def _tax_free_wallet_summaries(entries: list[dict[str, Any]]) -> list[dict[str, 
         wallet_id = str(entry.get("wallet_id") or "")
         if not wallet_id:
             continue
+        key = (wallet_id, str(entry.get("asset") or ""))
         qty = dec(entry.get("quantity") or 0)
         if qty == 0:
             continue
@@ -3895,18 +3906,25 @@ def _tax_free_wallet_summaries(entries: list[dict[str, Any]]) -> list[dict[str, 
             if alt_msat is not None:
                 alt_qty = dec(msat_to_btc(alt_msat))
                 if entry_type == "transfer_out":
-                    tax_free_by_wallet[wallet_id] -= alt_qty
+                    tax_free_by_wallet_asset[key] -= alt_qty
                 else:
-                    tax_free_by_wallet[wallet_id] += alt_qty
+                    tax_free_by_wallet_asset[key] += alt_qty
                 continue
         if _entry_has_alt_regime(entry):
-            tax_free_by_wallet[wallet_id] += qty
+            tax_free_by_wallet_asset[key] += qty
+    # Wallet flow hints alone cannot account for globally pooled lot selection:
+    # a sale in another wallet can exhaust this asset's Altbestand. The shared
+    # inventory already applies RP2's consumed regimes; do not select lots here.
+    has_alt_by_wallet: dict[str, bool] = {}
+    for (wallet_id, asset), qty in tax_free_by_wallet_asset.items():
+        has_alt = qty > 0 and (remaining_alt_sats is None or remaining_alt_sats.get(asset, 0) > 0)
+        has_alt_by_wallet[wallet_id] = has_alt_by_wallet.get(wallet_id, False) or has_alt
     return [
         {
             "walletId": wallet_id,
-            "hasTaxFreeBalance": qty > 0,
+            "hasTaxFreeBalance": has_alt,
         }
-        for wallet_id, qty in sorted(tax_free_by_wallet.items())
+        for wallet_id, has_alt in sorted(has_alt_by_wallet.items())
     ]
 
 
