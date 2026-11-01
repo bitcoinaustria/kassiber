@@ -34,7 +34,7 @@ from typing import Any, Mapping, Optional, Sequence
 
 from ..errors import AppError
 from ..tax_policy import build_tax_policy
-from ..time_utils import parse_iso_datetime_or_none, parse_timestamp, timestamp_microseconds
+from ..time_utils import parse_iso_datetime_or_none, timestamp_microseconds
 from . import pricing
 from . import report_context as core_report_context
 from . import custody_journal
@@ -189,8 +189,19 @@ def _resolve_departure(departure_date: Optional[str], jurisdiction: str = "gener
     """
 
     zone = AT_TAX_TZ if jurisdiction.strip().lower() == "at" else timezone.utc
-    instant = (datetime.fromisoformat(parse_timestamp(str(departure_date)).replace("Z", "+00:00"))
-               if departure_date else datetime.now(timezone.utc))
+    if departure_date:
+        raw = str(departure_date).strip()
+        hint = "Use a date (YYYY-MM-DD) or a date-time with an offset, e.g. 2025-01-01T12:00:00+01:00."
+        try:
+            instant = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise AppError("Invalid exit-tax departure date", code="validation", hint=hint) from exc
+        if len(raw) == 10:
+            instant = instant.replace(tzinfo=zone)
+        elif instant.tzinfo is None or instant.utcoffset() is None:
+            raise AppError("Exit-tax departure time requires an offset", code="validation", hint=hint)
+    else:
+        instant = datetime.now(timezone.utc)
     day = instant.astimezone(zone).date()
     next_day = day + timedelta(days=1)
     cutoff = datetime.combine(next_day, datetime.min.time(), tzinfo=zone)

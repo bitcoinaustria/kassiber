@@ -363,6 +363,9 @@ Generic books use the UTC day. A date-only departure names that civil day;
 a departure supplied with a time and offset is converted to the jurisdiction's
 civil day first. The exclusive cutoff is the next midnight in that timezone,
 converted to UTC for inventory, cached quotes and transaction quotes together.
+Timed departures require an explicit offset (`Z` or, for example, `+01:00`).
+A date-time without an offset is rejected with a typed `validation` error;
+use a date alone to name a civil day without specifying an instant.
 PDF and XLSX drafts stamp `departureTimezone` as well as the departure date.
 The desktop takes its default departure date from the core and displays that
 timezone; clearing the date asks the core for today's civil day again.
