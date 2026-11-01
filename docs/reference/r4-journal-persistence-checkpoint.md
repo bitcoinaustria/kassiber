@@ -6,6 +6,28 @@ persistence-branch mutation coverage and inherited full R4 campaigns must close
 before this becomes production authority. Python remains the reference. No CLI
 or daemon registration changes are included.
 
+## Correctness continuation from `a63556cc7`
+
+The [correctness record](r4-journal-persistence-correctness.md) and its
+[aggregate evidence](r4-journal-persistence-correctness.json) add both physical
+drivers' caller/rollback/response witnesses and an exact 410-recipe journal
+kill set, including the unchanged original 201 recipes. The final journal
+package run passes 91 tests. The comparison, preparation and write
+implementation bodies remain identical to the starting checkpoint.
+
+All twelve generated suite shards (24,000 books and 1,030 permutations), all
+159 retained requests and their permutations, and fresh census/shadow
+recordings pass custody/render comparisons. The record distinguishes upstream
+refusals, rendering comparisons and whole-database persistence witnesses.
+The first two custody mutation shards kill 221 of the current 2,327 recipes;
+2,106 remain unrun. Their build trees are removed after summarizing.
+
+**Acceptance remains open beyond CPU.** The per-decision branch map and full
+census/shadow and custody mutation campaigns still need completion. The record
+retains failing/interrupted attempts and the known Python read-budget
+reproduction. Its verified caller tests exercise the unregistered service and
+explicit callers; they do not register the future R4-13 product routes.
+
 ## Accepted CPU budget for the next continuation
 
 The owner accepts **borrowed read floor + 0.15 process CPU seconds for unchanged

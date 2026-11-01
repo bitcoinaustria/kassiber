@@ -20022,7 +20022,9 @@
     "tests/test_rust_journal_persistence.py": {
       "test_storage_vectors_rebuild_from_python_reference": {
         "disposition": "oracle",
-        "flags": [],
+        "flags": [
+          "sql"
+        ],
         "group": "journals",
         "reason": "regenerates exact storage encodings and replays complete frozen database snapshots through unchanged Python; native tests persist the same stage and ledger inputs and compare every stored scalar, id, timestamp and rowid",
         "reviewed": true,

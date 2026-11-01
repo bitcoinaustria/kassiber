@@ -689,8 +689,12 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   store timings remain contention-qualified. Empty retained tables now skip
   comparison sorting and timestamp-group construction; fresh paired CPU improves,
   while the unchanged paired cell regresses slightly and acceptance stays open.
-  Finish the full eight-cell budget gate, then the mutation audit and inherited
-  campaigns.
+  The [correctness continuation](docs/reference/r4-journal-persistence-correctness.md)
+  pins both physical drivers' caller contracts, kills all 410 journal recipes,
+  and completes generated, retained and fresh custody/render replay shards.
+  Finish the full CPU gate alongside the exhaustive per-decision branch map,
+  full census/shadow and complete custody mutation campaign; acceptance remains
+  open beyond CPU.
   Historical signed-zero, retained-column and mixed-clock witnesses remain.
   Corrected appended inputs carry distinct raw identities and assert actual writes.
   R4-9's test-only loader now constructs the current custody records directly;
