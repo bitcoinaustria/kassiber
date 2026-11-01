@@ -6,6 +6,7 @@ pub const KINDS: &[&str] = &[
     "ui.transactions.export_csv",
     "ui.transactions.export_xlsx",
     "ui.transactions.export_platform_csv",
+    "ui.privacy_hygiene.snapshot",
     "ui.reports.explain_capital_gain",
     "ui.reports.summary",
     "ui.reports.balance_sheet",
@@ -48,6 +49,9 @@ pub const KINDS: &[&str] = &[
     "ui.reports.cross_check",
 ];
 pub fn execute(book: &mut dyn Book, kind: &str, raw: Option<&Value>) -> Result<Value, AppError> {
+    if kind == "ui.privacy_hygiene.snapshot" {
+        return book.reports(kind, raw.unwrap_or(&Value::Null));
+    }
     if kind == "ui.reports.psbt_privacy" {
         return book.reports(kind, &psbt_args(raw)?);
     }

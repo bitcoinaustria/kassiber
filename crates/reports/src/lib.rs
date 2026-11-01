@@ -31,6 +31,7 @@ mod history;
 mod holdings;
 mod journal;
 pub mod legacy_privacy;
+mod legacy_privacy_wire;
 pub mod lightning;
 mod platform_csv;
 mod privacy_hygiene;
@@ -169,6 +170,9 @@ pub fn execute_with_sources(
     conn.execute_batch("SAVEPOINT report_read")
         .map_err(sql_error)?;
     let result = (|| {
+        if command == "ui.privacy_hygiene.snapshot" {
+            return legacy_privacy_wire::snapshot(conn, args);
+        }
         if matches!(
             command,
             "source-funds.coverage" | "ui.source_funds.coverage"

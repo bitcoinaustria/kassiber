@@ -509,3 +509,13 @@ Native wallet refreshes retain validated block-hash/height changes even when
 confirmation time is unchanged. Such changes generate report-evidence review
 items without discarding timestamp-based pricing or replacing unrelated stored
 transaction evidence. Generic imports do not gain this observation authority.
+
+## Legacy hygiene compatibility
+
+`ui.privacy_hygiene.snapshot` remains the separate Phase-1 compatibility scorer
+over stored transaction JSON and durable wallet inventory. Its native port
+preserves advisory tells, collaboration exclusions, inbound attribution and
+explicit missing-data states. It performs no acquisition or graph-index write.
+The CLI-launched daemon serves the existing kind; no new CLI command is added.
+`reports privacy-hygiene` continues to return the configuration report. See the
+[native acceptance checkpoint](rust-shell.md#legacy-hygiene-daemon-acceptance-r5-privacy-legacy).

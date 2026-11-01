@@ -4236,3 +4236,23 @@ This prerequisite registers no product route. The existing
 zero-fallback routing proof and registration; no new CLI command is planned.
 `reports privacy-hygiene` remains the distinct configuration report. Mirror
 and PSBT product acceptance remain parallel work.
+
+### R5 privacy: legacy hygiene daemon acceptance
+
+The continuation after `b46684d90` serves the existing
+`ui.privacy_hygiene.snapshot` natively through the CLI-launched daemon. It
+preserves Python's raw options, active context, expected-scope checks, request
+IDs, public projections and insertion-ordered wire bytes. Malformed stored
+active amounts retain the reference message with honest native diagnostics;
+the daemon rolls back and continues. Python product code is unchanged.
+
+The [acceptance checkpoint](../reference/rust-shell.md#legacy-hygiene-daemon-acceptance-r5-privacy-legacy)
+records 342 legacy requests in 14 native daemon sessions, 12 unchanged
+configuration-report CLI calls, complete 112-table comparisons, zero fallbacks
+and strict no-egress proofs with both offline-switch states. Eight transport
+mutations are killed by three named process tests, in addition to the 39 native
+scorer mutations. The existing `reports privacy-hygiene` configuration report
+is unchanged; this port adds no CLI command, permission or AI tool. Native CLI
+inventory remains 154 leaves (22 reports); the report daemon dispatcher adds
+one existing legacy snapshot to its 15 report kinds and two transaction exports.
+Mirror and PSBT product acceptance remain the parallel workstreams' scope.

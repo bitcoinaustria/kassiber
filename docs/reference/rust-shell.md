@@ -13996,3 +13996,82 @@ scorer has zero accepted product reads and is not registered. Its existing
 acceptance, routing proof and registration. The separate
 `reports privacy-hygiene` configuration CLI must remain unchanged; the scorer
 adds no CLI command. Mirror and PSBT product acceptance remain parallel work.
+
+## Legacy hygiene daemon acceptance (R5 privacy legacy)
+
+The continuation after `b46684d90` registers the existing
+`ui.privacy_hygiene.snapshot` kind. The CLI launches the native daemon, which
+forwards raw options to the scorer inside the report service's single SQLite
+read snapshot. Active context, wallet/transaction coercion, limits, empty
+profiles, typed refusals, request IDs and expected-scope guards retain Python's
+behavior. A native serializer restores Python's object insertion order,
+including the original caller order in invalid-limit details.
+
+The command surface is unchanged. There is no new CLI command, flag, daemon
+kind, desktop permission or AI tool. `reports privacy-hygiene` and
+`ui.reports.privacy_hygiene` remain the separate configuration report. The
+legacy compatibility scorer does not substitute for Privacy Mirror's graph.
+
+Three process tests in `crates/kassiber/tests/legacy_privacy_transport.rs`
+launch the retained Python oracle in `tests/test_rust_legacy_privacy_services.py`.
+Ordinary response/error bytes, exit codes, stderr and complete sorted contents
+of all 112 tables match. Ready handshakes are excluded from byte equality,
+with the newly native kind asserted in `supported_kinds`. Both product
+offline-switch states run under strict no-egress guards without consent.
+
+| Dedicated accepted routing | Rust | Python fallback |
+| --- | ---: | ---: |
+| Legacy daemon sessions (336 ordinary requests) | 12 | 0 |
+| Legacy corrupt-amount sessions (6 requests) | 2 | 0 |
+| Existing configuration-report CLI calls | 12 | 0 |
+
+The ordinary sessions cover six distinct books and 28 requests per session: all
+argument shapes, wallet/transaction references, numeric/Unicode limits, malformed
+limits, unknown fields, active/stale expected scopes and missing/null request
+IDs. The CLI regression preserves machine/JSON/table/plain/CSV output and
+`--output` file bytes. Each reference and native read preserves all 112 tables.
+
+Malformed active amounts retain the reference `internal_error` message. As in
+the accepted configuration-hygiene native diagnostic contract, an unhandled
+legacy error has `debug: ""`; typed errors retain `debug: null`. With and without
+`--debug`, the oracle replaces exactly Python's encoded traceback debug string
+with the empty native string and compares every other response byte. Python's
+traceback stderr is asserted separately; native stderr remains empty. The daemon
+rolls back and serves the following typed request. Python remains unchanged.
+
+All eight entries in
+`crates/reports/scripts/legacy_privacy_transport_mutations.json` compile and are
+killed by these named process selections:
+
+| Named test | Mutations killed |
+| --- | ---: |
+| `legacy_daemon_acceptance_bytes_all_tables_zero_fallback` | 5 |
+| `legacy_cli_configuration_report_remains_unchanged` | 1 |
+| `legacy_corrupt_amount_has_honest_native_diagnostics` | 2 |
+
+The serial scratch checker requires a passing, nonempty unmutated selection,
+a successful mutated build and an actual named-test failure. Run it with
+`crates/reports/scripts/legacy_privacy_transport_mutation_check.py`; set
+`KASSIBER_REFERENCE_PYTHON` to this checkout's locked Python interpreter for
+scratch-tree runs. The 39 scorer recipes retain the preceding boundary's kill
+evidence. All 758 inherited report recipes still apply, without changes to
+their shared diagnostic recipes. They are not rerun.
+
+Native CLI inventory stays at 154 leaves, including 22 reports. The report
+daemon dispatcher now serves its existing 15 report kinds, two transaction
+exports and the newly native legacy snapshot. Legacy served-by counts are
+nonzero above; Mirror and PSBT product acceptance remain parallel work. No
+Python product, dependency, lockfile, schema, egress or AI-authority change is
+introduced. Local logs, routing counts and all 47 mutation/killer mappings live
+under `target/r5-legacy/`. Owned verification/mutation build trees and disposable
+roots are removed after summarizing.
+
+Verification is local Linux with Rust 1.99.1, locked Python 3.11, offline Cargo
+and `CARGO_BUILD_JOBS=8`, preserving account `HOME`. Workspace formatting and
+production/test-harness workspace/all-target Clippy pass with warnings denied.
+The seven native scorer groups, five retained Python oracle cases, three
+transport process tests and 75 report/CLI/daemon library tests pass. Mutation
+applicability and the unchanged Python malformed-amount reproduction pass.
+The required test-classifier update records 5,727 definitions; the required
+CI preflight passes all 57 tests. Full workspace runtime, Python/frontend,
+packaged and platform gates are not run; this is not a push-ready claim.

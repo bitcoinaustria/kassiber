@@ -1134,3 +1134,14 @@ cancellation sends no export/restore action. Once an explicitly confirmed
 installation starts it runs to completion or rollback; it is not interruptible
 halfway through replacement. These actions are desktop-only, absent from AI
 tools, and never synchronize backup files or credentials.
+
+## Legacy hygiene snapshot
+
+`ui.privacy_hygiene.snapshot` is the existing local Phase-1 transaction/inventory
+scorer. Its native implementation preserves active context, optional `wallet`,
+`transaction` and `limit` arguments, public findings and coverage states. The
+CLI launches it through `kassiber daemon`; there is no corresponding new CLI
+command. `reports privacy-hygiene` and `ui.reports.privacy_hygiene` remain the
+distinct configuration report. The scorer performs no network request or
+accounting write. Its [native acceptance](rust-shell.md#legacy-hygiene-daemon-acceptance-r5-privacy-legacy)
+records wire, table, routing and unhandled-diagnostic parity.

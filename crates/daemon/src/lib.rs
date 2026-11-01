@@ -228,6 +228,9 @@ impl From<AppError> for Failure {
 }
 
 fn report_failure(kind: &str, error: AppError) -> Failure {
+    if kind == "ui.privacy_hygiene.snapshot" && error.code == "internal_error" {
+        return Failure::Unhandled(error);
+    }
     if matches!(
         kind,
         "ui.reports.privacy_hygiene" | "ui.reports.psbt_privacy"

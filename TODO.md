@@ -554,9 +554,10 @@ registers them; exit-tax preserves its reference no-registration boundary.
 - [x] Port the separate legacy hygiene scorer with Python-derived vectors for
   every scoring rule, exact amounts, complete 112-table reads and named killed
   mutations; see the [scorer prerequisite](docs/reference/rust-shell.md#legacy-hygiene-scorer-prerequisite-r5-privacy-legacy-partial).
-- [ ] Accept and register its existing `ui.privacy_hygiene.snapshot` through the
+- [x] Accept and register its existing `ui.privacy_hygiene.snapshot` through the
   CLI-launched daemon, with non-zero native served-by counts and zero fallbacks.
   Preserve the distinct `reports privacy-hygiene` configuration CLI; add no command.
+  See the [daemon acceptance](docs/reference/rust-shell.md#legacy-hygiene-daemon-acceptance-r5-privacy-legacy).
 - [x] Port the shared bounded PSBT v0/v2 parser, supplied-UTXO/script validation,
   required-locktime resolution and redacted public analysis as a native
   prerequisite. The transient script-bearing inventory adapter is local-only.

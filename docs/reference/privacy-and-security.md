@@ -1160,3 +1160,15 @@ Exact wire and all-table comparisons run under strict no-egress in both
 offline-switch states. AI dispatch and the separate chain-analysis PSBT
 comparison/Payjoin/entropy routes retain their existing authority boundaries.
 See the [native acceptance checkpoint](rust-shell.md#registered-psbt-privacy-reads-r5-privacy-psbt).
+
+## Native legacy privacy hygiene
+
+The existing `ui.privacy_hygiene.snapshot` compatibility read also runs natively.
+It scores only stored transaction structure and durable local inventory, with
+explicit unknown coverage and advisory findings. It neither acquires missing
+prevouts nor writes graph, wallet, custody or accounting state. Public snapshots
+omit scores, addresses, scripts, raw JSON, wallet configuration and exact
+amounts. There is no new CLI command, AI permission or network trigger;
+`reports privacy-hygiene` remains the separate configuration report. The
+[legacy acceptance checkpoint](rust-shell.md#legacy-hygiene-daemon-acceptance-r5-privacy-legacy)
+records complete-table, exact-wire and strict no-egress checks.
