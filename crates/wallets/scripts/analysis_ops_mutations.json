@@ -108,5 +108,95 @@
       "analysis_history_failure_rolls_back_label_and_import"
     ],
     "rule": "A database failure must not leave the label without its historical revision."
+  },
+  {
+    "id": "analysis-watch-encrypted-book",
+    "file": "crates/wallets/src/analysis_ops/watches.rs",
+    "find": "if !keyed.is_some_and(|value| truthy(&value)) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "analysis_watches_match_python_bytes_events_and_all_112_tables"
+    ],
+    "rule": "Background evidence work requires a keyed SQLCipher book."
+  },
+  {
+    "id": "analysis-watch-configure-revision",
+    "file": "crates/wallets/src/analysis_ops/watches.rs",
+    "find": "        let old = get_watch(conn, profile, field(args, \"id\"))?;\n        if !same_revision(args, &old) {",
+    "replace": "        let old = get_watch(conn, profile, field(args, \"id\"))?;\n        if false && !same_revision(args, &old) {",
+    "expect_failing": [
+      "analysis_watches_match_python_bytes_events_and_all_112_tables"
+    ],
+    "rule": "Configuration binds the watch's current integer revision."
+  },
+  {
+    "id": "analysis-watch-create-plan-binding",
+    "file": "crates/wallets/src/analysis_ops/watches.rs",
+    "find": "if canonical(&current)? != canonical(plan)? {",
+    "replace": "if false {",
+    "expect_failing": [
+      "analysis_watches_match_python_bytes_events_and_all_112_tables"
+    ],
+    "rule": "Creation persists only the unchanged reviewed preview."
+  },
+  {
+    "id": "analysis-watch-threshold-reversed",
+    "file": "crates/wallets/src/analysis_ops/watches.rs",
+    "find": "} else if only_true(before) {",
+    "replace": "} else if false {",
+    "expect_failing": [
+      "analysis_watches_match_python_bytes_events_and_all_112_tables"
+    ],
+    "rule": "A confirmation threshold that no longer holds emits a reversal."
+  },
+  {
+    "id": "analysis-watch-checkpoint-skip",
+    "file": "crates/wallets/src/analysis_ops/watches.rs",
+    "find": "if valid && field(&row, \"checkpoint\") == &s(checkpoint.as_str()) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "analysis_watches_match_python_bytes_events_and_all_112_tables"
+    ],
+    "rule": "Unchanged evidence revisions skip evaluation and keep the receipt."
+  },
+  {
+    "id": "analysis-watch-book-identity",
+    "file": "crates/wallets/src/analysis_ops/watches.rs",
+    "find": ".is_ok_and(|book| py_eq(field(&row, \"book_id\"), &book))",
+    "replace": ".is_ok_and(|_| true)",
+    "expect_failing": [
+      "analysis_watches_match_python_bytes_events_and_all_112_tables"
+    ],
+    "rule": "A watch never continues in a different book."
+  },
+  {
+    "id": "analysis-watch-acknowledge-once",
+    "file": "crates/wallets/src/analysis_ops/watches.rs",
+    "find": "SET acknowledged_at=COALESCE(acknowledged_at,?)",
+    "replace": "SET acknowledged_at=?",
+    "expect_failing": [
+      "analysis_watches_match_python_bytes_events_and_all_112_tables"
+    ],
+    "rule": "Acknowledgement keeps its first timestamp."
+  },
+  {
+    "id": "analysis-watch-report-impact",
+    "file": "crates/wallets/src/analysis_ops/watches.rs",
+    "find": "            set(item, \"report_impact\", impact);",
+    "replace": "            let _ = impact;",
+    "expect_failing": [
+      "analysis_watches_match_python_bytes_events_and_all_112_tables"
+    ],
+    "rule": "Inbox items expose their saved-report impact."
+  },
+  {
+    "id": "analysis-watch-report-reversal",
+    "file": "crates/wallets/src/publication/reports.rs",
+    "find": "|| ![\"coverage_lost\", \"threshold_reversed\"].contains(&code)",
+    "replace": "|| ![\"coverage_lost\"].contains(&code)",
+    "expect_failing": [
+      "analysis_watches_match_python_bytes_events_and_all_112_tables"
+    ],
+    "rule": "A reversed confirmation marks dependent saved reports uncertain."
   }
 ]

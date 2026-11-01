@@ -25,6 +25,14 @@ def main():
         stack.enter_context(patch.object(REFERENCE.cases,'uuid',SimpleNamespace(uuid4=source.label_uuid)))
         stack.enter_context(patch.object(REFERENCE.projection_store,'uuid',SimpleNamespace(uuid4=source.uuid)))
         stack.enter_context(patch.object(project,'_owner_lock_root',return_value=Path(os.environ['KASSIBER_RUST_TEST_OWNER_ROOT'])))
+        from kassiber.core import chain_analysis_watches as watches, filed_report_chain
+        for module in [watches, filed_report_chain]:
+            stack.enter_context(patch.object(module,'now_iso',return_value=REFERENCE.NOW))
+            stack.enter_context(patch.object(module,'uuid',SimpleNamespace(uuid4=source.label_uuid)))
+        if os.environ.get('KASSIBER_ANALYSIS_REFERENCE_NO_WATCH_WORKER') == '1':
+            # Request/response parity only; the background tick has its own test.
+            from kassiber import daemon
+            stack.enter_context(patch.object(daemon,'_start_watch_worker',lambda *args, **kwargs: None))
         return cli(sys.argv[1:])
 
 

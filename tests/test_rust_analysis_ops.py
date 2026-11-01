@@ -256,8 +256,9 @@ def test_analysis_operations_product_daemon_bytes_events_and_all_tables(tmp_path
     expected_ready=json.loads(expected.stdout.splitlines()[0])
     kinds=ready['data']['supported_kinds']
     scoped={'ui.chain_analysis.'+op for op,_ in requests}
-    assert kinds[:len(scoped)]==sorted(scoped)
-    assert kinds[len(scoped)]=='status'
+    native=sorted(kind for kind in kinds if kind.startswith('ui.chain_analysis.'))
+    assert scoped<=set(native) and kinds[:len(native)]==native
+    assert kinds[len(native)]=='status'
     assert len(kinds)==len(set(kinds))
     assert set(kinds)<=set(expected_ready['data']['supported_kinds'])|{'test.stream','test.emit_event','test.late','test.secret_store'}
     for record in [ready,expected_ready]:

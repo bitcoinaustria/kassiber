@@ -239,6 +239,14 @@ pub const IMPLEMENTED: &[&str] = &[
     "chain-analysis.cases.delete",
     "chain-analysis.datasets.revoke",
     "chain-analysis.datasets.discard",
+    "chain-analysis.watches.preview",
+    "chain-analysis.watches.create",
+    "chain-analysis.watches.list",
+    "chain-analysis.watches.configure",
+    "chain-analysis.watches.delete",
+    "chain-analysis.watches.inbox",
+    "chain-analysis.watches.acknowledge",
+    "chain-analysis.watches.evaluate",
 ];
 
 /// `_NO_BOOTSTRAP_DATABASE_PREFIXES`.

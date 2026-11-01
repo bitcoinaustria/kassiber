@@ -27,6 +27,10 @@ fn main() {
                 .iter()
                 .map(|case| {
                     let conn = Connection::open_in_memory().unwrap();
+                    if get(case, "encrypted") == Some(&Value::Bool(true)) {
+                        conn.execute_batch(kassiber_wallets::analysis_ops::fixture::WATCH_KEY)
+                            .unwrap();
+                    }
                     conn.execute_batch("PRAGMA foreign_keys=ON").unwrap();
                     conn.execute_batch(include_str!(
                         "../../reports/tests/data/privacy_hygiene_seed.sql"

@@ -114,7 +114,9 @@ The native catalog includes `wallets import-btcpay`, `wallets import-ledger`,
 `commands describe` lists the supported leaves from `crates/cli/src/describe.rs`;
 each family registers through its own CLI
 module. The [chain-analysis mutation checkpoint](#chain-analysis-local-mutations-r5-partial)
-adds seven local label, case and dataset lifecycle leaves. Every other leaf parses exactly as in Python and then fails
+adds seven local label, case and dataset lifecycle leaves, and the
+[evidence-watch checkpoint](#chain-analysis-evidence-watches-r5-partial) adds
+all eight `watches` leaves. Every other leaf parses exactly as in Python and then fails
 `not_implemented`
 (`details.component` `cli`, `details.command` its dotted path), before any
 project is read or created. Nothing falls back to Python in the product.
@@ -15178,3 +15180,57 @@ Unsupported routes fail closed. AI projections remain Python. No new
 dependency, schema or network permission is added; no loopback backend test is
 attempted by this local-only slice. Full quality-gate, platform packaging and
 complete operations acceptance are not claimed.
+
+## Chain-analysis evidence watches (R5, partial)
+
+`t3code/r5-chain-analysis-ops-2` continues the operations assignment from
+`dfd7b7e86`. `kassiber-wallets::analysis_ops::watches` ports
+`chain_analysis_watches`: preview, create, list, configure, delete, inbox,
+acknowledge and evaluate. CLI registrations rise from 161 to 169 and eight
+daemon kinds are appended. Watches stay local-only: no transport, model call or
+accounting write. Preview, create and evaluate require a keyed SQLCipher book,
+detected through `cipher_version` and a nonempty `cipher_salt` exactly as in
+Python. Evaluation recomputes the canonical graph through the durable index,
+fences each watch by domain and book identity, skips unchanged index revisions
+and appends inbox events with their baselines in one savepoint. Confirmation
+coverage loss and reversal mark dependent saved reports through the shared
+`publication::reports` helpers; inbox items carry the same report-impact
+projection. Only Python's write operations commit; preview, list and inbox leave
+a caller's transaction as Python does.
+
+`crates/wallets/scripts/generate_analysis_watches.py` records 18 unchanged-Python
+scenarios over in-memory keyed SQLCipher books (one plaintext refusal case), with
+every action's canonical envelope, transaction state and all 112 table
+commitments. They cover argument and domain refusals, unbound books, the
+output-spent lifecycle, definition-based creation, confirmation thresholds,
+reorg coverage loss and report impacts, findings/attribution/connection rules,
+domain and book-identity changes, the 250-watch limit, paused duplicates,
+case-based watches, foreign books, corrupt stored rows and caller rollback.
+`tests/test_rust_analysis_watches.py` replays them natively with strict
+no-consent guards and offline off/on, on SQLCipher DELETE and WAL disk books,
+and compares whole-process CLI and daemon bytes against unchanged Python on an
+encrypted book. The daemon reference disables Python's background watch worker;
+the native daemon has no worker yet, so the tick and its
+`ui.chain_analysis.watches.changed` delivery remain unported.
+
+`tests/rust_port/repro_watch_acknowledge_transaction.py` records a Python
+reference quirk: acknowledging a missing inbox event leaves the driver's
+implicit write transaction open. The native port reproduces the observable
+state. Nine named recipes in `analysis_ops_mutations.json` (encryption,
+revision binding, plan binding, threshold reversal, checkpoint skip, book
+identity, first acknowledgement, report impact and report reversal) are all
+killed.
+
+| Operation (CLI `chain-analysis.`, daemon `ui.chain_analysis.`) | CLI invocations | Daemon requests |
+| --- | ---: | ---: |
+| `watches.preview` | 6 | 4 |
+| `watches.create` | 6 | 6 |
+| `watches.list` | 4 | 4 |
+| `watches.configure` | 4 | 2 |
+| `watches.delete` | 4 | 2 |
+| `watches.inbox` | 8 | 4 |
+| `watches.acknowledge` | 4 | 2 |
+| `watches.evaluate` | 4 | 2 |
+| **Total** | **40** | **26** |
+
+Counts are totals across offline off/on with zero Python fallbacks.

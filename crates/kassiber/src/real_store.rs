@@ -1275,7 +1275,7 @@ impl Book for RealBook {
             args,
             &mut AnalysisSources::default(),
         )?;
-        if !conn.is_autocommit() {
+        if kassiber_wallets::analysis_ops::is_write(operation) && !conn.is_autocommit() {
             conn.execute_batch("COMMIT")
                 .map_err(kassiber_wallets::database_error)?;
         }

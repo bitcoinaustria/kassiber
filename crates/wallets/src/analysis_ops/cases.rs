@@ -8,7 +8,7 @@ fn digest(value: &Value) -> Result<String> {
         .collect())
 }
 
-fn get_case(conn: &Connection, profile: &str, id: &Value) -> Result<Value> {
+pub(super) fn get_case(conn: &Connection, profile: &str, id: &Value) -> Result<Value> {
     text_value(id, "id", 64)?;
     let row = first(
         conn,

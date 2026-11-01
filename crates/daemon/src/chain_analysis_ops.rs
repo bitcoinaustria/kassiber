@@ -10,6 +10,14 @@ pub const KINDS: &[&str] = &[
     "ui.chain_analysis.labels.delete",
     "ui.chain_analysis.labels.import",
     "ui.chain_analysis.labels.upsert",
+    "ui.chain_analysis.watches.acknowledge",
+    "ui.chain_analysis.watches.configure",
+    "ui.chain_analysis.watches.create",
+    "ui.chain_analysis.watches.delete",
+    "ui.chain_analysis.watches.evaluate",
+    "ui.chain_analysis.watches.inbox",
+    "ui.chain_analysis.watches.list",
+    "ui.chain_analysis.watches.preview",
 ];
 
 pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<Value, AppError> {

@@ -14,6 +14,7 @@ mod datasets;
 #[cfg(any(test, feature = "test-harness"))]
 pub mod fixture;
 mod labels;
+mod watches;
 
 pub struct Scope<'a> {
     pub workspace_id: &'a str,
@@ -66,11 +67,34 @@ pub fn execute_with_sources(
         "cases.delete" => cases::delete(conn, scope.profile_id, &args),
         "datasets.revoke" => datasets::revoke(conn, scope.profile_id, &args, sources),
         "datasets.discard" => datasets::discard(conn, scope.profile_id, &args),
+        "watches.preview"
+        | "watches.create"
+        | "watches.list"
+        | "watches.configure"
+        | "watches.delete"
+        | "watches.inbox"
+        | "watches.acknowledge"
+        | "watches.evaluate" => {
+            watches::dispatch(conn, scope.profile_id, &operation[8..], &args, sources)
+        }
         _ => Err(AppError::new(
             "not_implemented",
             "Unsupported chain analysis operation",
         )),
     }
+}
+
+/// Python's `WRITE_OPERATIONS`: only these commit the caller's connection.
+pub fn is_write(operation: &str) -> bool {
+    !matches!(
+        operation,
+        "watches.preview"
+            | "watches.list"
+            | "watches.inbox"
+            | "sources.plan"
+            | "sources.list"
+            | "acquire.plan"
+    )
 }
 
 fn invalid(message: &str) -> AppError {

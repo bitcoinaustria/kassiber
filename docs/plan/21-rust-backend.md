@@ -4437,3 +4437,14 @@ import/discard async starts and job cancellation. Exact-action consent,
 once-only source authorization and gated acquisition egress with revocation
 and cancellation still need implementation and loopback acceptance. No new
 network capability or accounting authority is introduced by this checkpoint.
+
+### R5 chain analysis: evidence watches (partial)
+
+`t3code/r5-chain-analysis-ops-2` continues from `dfd7b7e86` and ports all eight
+`watches` leaves and daemon kinds through the shared native service, raising
+the CLI inventory from 161 to 169. Watches remain local-only and require a
+keyed SQLCipher book. The [acceptance record](../reference/rust-shell.md#chain-analysis-evidence-watches-r5-partial)
+pins 18 unchanged-Python scenarios with all 112 tables, SQLCipher DELETE/WAL
+disk replay, encrypted-book CLI/daemon parity with offline off/on and nine
+killed mutations. The daemon's background watch tick, sources, dataset import,
+acquisition, async starts and job cancellation remain open.

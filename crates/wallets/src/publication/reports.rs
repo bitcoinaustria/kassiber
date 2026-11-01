@@ -320,38 +320,250 @@ pub fn record_wallet_changes(
         if py_eq(&before, &after) {
             continue;
         }
-        let ident = new_id();
-        let event = new_id();
-        let timestamp = now();
-        conn.execute(
-            "INSERT INTO chain_analysis_watch_inbox
-            (id,watch_id,profile_id,sequence,code,observation_json,created_at)
-            VALUES(?,NULL,?,0,?,?,?)",
-            params_from_iter([
-                Sql::Text(event.clone()),
-                sql(field(&dependency, "profile_id")),
-                Sql::Text(code.into()),
-                Sql::Text(compact(&dict([("before", before), ("after", after)]))?),
-                Sql::Text(timestamp.clone()),
-            ]),
-        )
-        .map_err(database_error)?;
-        conn.execute(
-            "INSERT INTO filed_report_chain_impacts
-            (id,snapshot_id,profile_id,transaction_id,inbox_id,created_at) VALUES(?,?,?,?,?,?)",
-            params_from_iter([
-                Sql::Text(ident),
-                sql(field(&dependency, "snapshot_id")),
-                sql(field(&dependency, "profile_id")),
-                sql(field(&dependency, "transaction_id")),
-                Sql::Text(event),
-                Sql::Text(timestamp),
-            ]),
-        )
-        .map_err(database_error)?;
+        append(conn, &dependency, before, after, code, new_id, now)?;
         count += 1;
     }
     Ok(count)
+}
+
+/// `filed_report_chain._append` after its equality check.
+fn append(
+    conn: &Connection,
+    dependency: &Value,
+    before: Value,
+    after: Value,
+    code: &str,
+    new_id: &mut dyn FnMut() -> String,
+    now: &mut dyn FnMut() -> String,
+) -> Result<()> {
+    let ident = new_id();
+    let event = new_id();
+    let timestamp = now();
+    conn.execute(
+        "INSERT INTO chain_analysis_watch_inbox
+        (id,watch_id,profile_id,sequence,code,observation_json,created_at)
+        VALUES(?,NULL,?,0,?,?,?)",
+        params_from_iter([
+            Sql::Text(event.clone()),
+            sql(field(dependency, "profile_id")),
+            Sql::Text(code.into()),
+            Sql::Text(compact(&dict([("before", before), ("after", after)]))?),
+            Sql::Text(timestamp.clone()),
+        ]),
+    )
+    .map_err(database_error)?;
+    conn.execute(
+        "INSERT INTO filed_report_chain_impacts
+        (id,snapshot_id,profile_id,transaction_id,inbox_id,created_at) VALUES(?,?,?,?,?,?)",
+        params_from_iter([
+            Sql::Text(ident),
+            sql(field(dependency, "snapshot_id")),
+            sql(field(dependency, "profile_id")),
+            sql(field(dependency, "transaction_id")),
+            Sql::Text(event),
+            Sql::Text(timestamp),
+        ]),
+    )
+    .map_err(database_error)?;
+    Ok(())
+}
+
+/// `resolve_protocol_scope({"chain": chain, "network": network})` for the
+/// Bitcoin/Liquid physical subjects a confirmation watch can name.
+fn protocol_scope(chain: &str, network: &str) -> Option<(String, String)> {
+    let chain = crate::descriptors::normalize_chain(chain).ok()?;
+    let network = crate::descriptors::normalize_network(&chain, network).ok()?;
+    Some((chain, network))
+}
+
+/// `record_watch_change(conn, profile_id, definition, after, code)`: only an
+/// existing physical confirmation watch attaches uncertainty to saved reports.
+pub fn record_watch_change(
+    conn: &Connection,
+    profile_id: &str,
+    definition: &Value,
+    _after: &Value,
+    code: &str,
+    new_id: &mut dyn FnMut() -> String,
+    now: &mut dyn FnMut() -> String,
+) -> Result<()> {
+    if field(definition, "rule") != &s("confirmations")
+        || !["coverage_lost", "threshold_reversed"].contains(&code)
+    {
+        return Ok(());
+    }
+    let query = field(definition, "query");
+    let subject = kassiber_pytext::lower(kassiber_pytext::strip(&py_str(
+        get(query, "subject").unwrap_or(&s("")),
+    )));
+    let text = |key: &str| get(query, key).map(py_str);
+    let Some(identity) = crate::analysis_index::occurrences::parse_transaction_identity(
+        &subject,
+        text("chain").as_deref(),
+        text("network").as_deref(),
+    ) else {
+        return Ok(());
+    };
+    let part = |n: usize| match &identity {
+        Value::List(items) => items[n].clone(),
+        _ => Value::Null,
+    };
+    let (chain, network, txid) = (py_str(&part(0)), py_str(&part(1)), py_str(&part(2)));
+    let (domain, occurrence) = (part(3), part(4));
+    let physical = protocol_scope(&chain, &network);
+    let filtered = protocol_scope(
+        &text("chain").unwrap_or_else(|| chain.clone()),
+        &text("network").unwrap_or_else(|| network.clone()),
+    );
+    let (Some(physical), Some(filtered)) = (physical, filtered) else {
+        return Ok(());
+    };
+    if physical != filtered {
+        return Ok(());
+    }
+    let network = physical.1;
+    let mut resolver =
+        crate::analysis_index::occurrences::OccurrenceResolver::read(conn, profile_id)?;
+    for dependency in rows(
+        conn,
+        "SELECT * FROM filed_report_chain_dependencies WHERE profile_id=? AND chain=? AND network=? AND txid=?",
+        [profile_id, chain.as_str(), network.as_str(), txid.as_str()],
+    )? {
+        let captured = kassiber_pytext::loads(&or_text(field(&dependency, "observation_json")))
+            .map_err(|error| AppError::new("internal_error", error.to_string()))?;
+        let captured_domain = field(&captured, "domain_id").clone();
+        let candidate = dict([
+            ("chain", s(chain.as_str())),
+            ("network", s(network.as_str())),
+            ("domain_id", captured_domain.clone()),
+        ]);
+        if !resolver.accepts(&candidate, false) {
+            continue;
+        }
+        if domain != Value::Null {
+            if !py_eq(&domain, &captured_domain) {
+                continue;
+            }
+            let source = crate::analysis_index::occurrences::SourceIdentity {
+                domain_id: domain.clone(),
+                namespace: format!("domain:{}:", py_str(&domain)),
+                occurrence_id: None,
+                trusted_reference: false,
+            };
+            if resolver.transaction_id(&chain, &network, &txid, &source, &occurrence, false)?
+                != subject
+            {
+                continue;
+            }
+        }
+        if let Value::Str(text) = &occurrence {
+            let block = py_str(&Value::Str(text.clone()));
+            let block = block.split(':').next().unwrap_or("");
+            if !py_eq(&s(block), field(&captured, "block_hash")) {
+                continue;
+            }
+        }
+        let uncertain = dict([
+            ("status", s("unavailable")),
+            (
+                "reason",
+                s(if code == "coverage_lost" {
+                    "watch_coverage_lost"
+                } else {
+                    "watch_confirmation_reversed"
+                }),
+            ),
+        ]);
+        let before = last_observation(conn, &dependency)?;
+        if py_eq(&before, &uncertain) {
+            continue;
+        }
+        append(conn, &dependency, before, uncertain, code, new_id, now)?;
+    }
+    Ok(())
+}
+
+/// `custody_filed_reports._json_object`.
+fn json_object(value: &Value) -> Value {
+    kassiber_pytext::loads(&if truthy(value) {
+        py_str(value)
+    } else {
+        "{}".into()
+    })
+    .ok()
+    .filter(|v| matches!(v, Value::Dict(_)))
+    .unwrap_or_else(|| Value::Dict(vec![]))
+}
+
+/// `inbox_report_impact(conn, profile_id, inbox_id)`.
+pub fn inbox_report_impact(
+    conn: &Connection,
+    profile_id: &str,
+    inbox_id: &Value,
+) -> Result<Option<Value>> {
+    let Some(row) = first(
+        conn,
+        "SELECT impact.*, resolution.rebuilt_at, resolution.summary_json
+        FROM filed_report_chain_impacts impact LEFT JOIN filed_report_chain_resolutions resolution ON resolution.impact_id=impact.id
+        WHERE impact.profile_id=? AND impact.inbox_id=?",
+        params_from_iter([Sql::Text(profile_id.into()), sql(inbox_id)]),
+    )?
+    else {
+        return Ok(None);
+    };
+    let snapshot = first(
+        conn,
+        "SELECT * FROM filed_report_snapshots WHERE id = ?",
+        params_from_iter([sql(field(&row, "snapshot_id"))]),
+    )?
+    .filter(|snapshot| field(snapshot, "profile_id") == &s(profile_id))
+    .ok_or_else(|| AppError::new("not_found", "filed report snapshot was not found"))?;
+    let available = first(
+        conn,
+        "SELECT 1 FROM transactions WHERE profile_id=? AND id=?",
+        params_from_iter([
+            Sql::Text(profile_id.into()),
+            sql(field(&row, "transaction_id")),
+        ]),
+    )?
+    .is_some();
+    let resolution = if truthy(field(&row, "summary_json")) {
+        kassiber_pytext::loads(&py_str(field(&row, "summary_json")))
+            .map_err(|error| AppError::new("internal_error", error.to_string()))?
+    } else {
+        Value::Null
+    };
+    Ok(Some(dict([
+        ("id", field(&row, "id").clone()),
+        ("snapshot_id", field(&snapshot, "id").clone()),
+        ("report_kind", field(&snapshot, "report_kind").clone()),
+        ("report_state", field(&snapshot, "report_state").clone()),
+        ("content_sha256", field(&snapshot, "content_sha256").clone()),
+        (
+            "period_start_year",
+            field(&snapshot, "period_start_year").clone(),
+        ),
+        (
+            "period_end_year",
+            field(&snapshot, "period_end_year").clone(),
+        ),
+        (
+            "report_scope",
+            json_object(field(&snapshot, "report_scope_json")),
+        ),
+        ("transaction_id", field(&row, "transaction_id").clone()),
+        ("transaction_available", Value::Bool(available)),
+        (
+            "before_gain_summary",
+            json_object(field(&snapshot, "gain_summary_json")),
+        ),
+        ("resolution", resolution),
+        ("rebuilt_at", field(&row, "rebuilt_at").clone()),
+        (
+            "filing_review_required",
+            Value::Bool(field(&snapshot, "report_state") == &s("filed")),
+        ),
+    ])))
 }
 
 #[cfg(test)]

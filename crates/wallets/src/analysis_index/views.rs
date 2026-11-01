@@ -126,6 +126,10 @@ pub fn with_read<R>(
 }
 
 impl<'a> SqlView<'a> {
+    /// The synchronized `chain_index_state` row this view reads.
+    pub fn state(&self) -> &Value {
+        &self.state
+    }
     pub(super) fn book_scope(&self) -> Result<super::handles::BookScope, AppError> {
         super::handles::BookScope::read(self.conn, self.profile)
     }

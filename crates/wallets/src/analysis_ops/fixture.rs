@@ -1,6 +1,9 @@
 use super::*;
 use kassiber_envelope::{build_error_envelope, success};
 
+/// Keys an in-memory SQLCipher book so watch operations see an encrypted database.
+pub const WATCH_KEY: &str = "PRAGMA key='analysis-watch-fixture'";
+
 #[derive(Default)]
 pub struct FixedSources {
     counter: u64,
@@ -55,7 +58,10 @@ pub fn evaluate(case: &Value, conn: &Connection) -> Result<Value> {
                 &mut sources,
             ) {
                 Ok(result) => {
-                    if !truthy(field(case, "caller_owned")) && !conn.is_autocommit() {
+                    if !truthy(field(case, "caller_owned"))
+                        && is_write(operation)
+                        && !conn.is_autocommit()
+                    {
                         conn.execute_batch("COMMIT").map_err(database_error)?;
                     }
                     success(&format!("ui.chain_analysis.{operation}"), result)

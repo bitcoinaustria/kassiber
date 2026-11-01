@@ -1,9 +1,11 @@
 use super::*;
 
 fn run(group: &str) {
-    let Value::List(cases) =
-        kassiber_pytext::loads(include_str!("../../tests/data/analysis_ops.json")).unwrap()
-    else {
+    run_corpus(include_str!("../../tests/data/analysis_ops.json"), group);
+}
+
+pub(super) fn run_corpus(corpus: &str, group: &str) {
+    let Value::List(cases) = kassiber_pytext::loads(corpus).unwrap() else {
         panic!("fixture corpus")
     };
     let mut selected = 0;
@@ -13,6 +15,9 @@ fn run(group: &str) {
     {
         selected += 1;
         let conn = Connection::open_in_memory().unwrap();
+        if truthy(field(case, "encrypted")) {
+            conn.execute_batch(fixture::WATCH_KEY).unwrap();
+        }
         conn.execute_batch("PRAGMA foreign_keys=ON").unwrap();
         conn.execute_batch(include_str!(
             "../../../reports/tests/data/privacy_hygiene_seed.sql"
@@ -88,6 +93,14 @@ fn analysis_dataset_lifecycle_matches_python_and_all_112_tables() {
 #[test]
 fn analysis_operations_preserve_caller_transactions_and_rollback() {
     run("rollback");
+}
+
+#[test]
+fn analysis_watches_match_python_bytes_events_and_all_112_tables() {
+    run_corpus(
+        include_str!("../../tests/data/analysis_watches.json"),
+        "watches",
+    );
 }
 
 #[test]

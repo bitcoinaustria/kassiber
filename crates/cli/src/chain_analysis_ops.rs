@@ -11,6 +11,14 @@ pub const COMMANDS: &[&str] = &[
     "chain-analysis.cases.delete",
     "chain-analysis.datasets.revoke",
     "chain-analysis.datasets.discard",
+    "chain-analysis.watches.preview",
+    "chain-analysis.watches.create",
+    "chain-analysis.watches.list",
+    "chain-analysis.watches.configure",
+    "chain-analysis.watches.delete",
+    "chain-analysis.watches.inbox",
+    "chain-analysis.watches.acknowledge",
+    "chain-analysis.watches.evaluate",
 ];
 
 fn document(raw: &str) -> Result<Value, AppError> {
@@ -44,20 +52,33 @@ fn document(raw: &str) -> Result<Value, AppError> {
 }
 
 pub fn execute(book: &mut dyn Book, path: &str, ns: &Namespace) -> Result<Value, AppError> {
-    let mut args = dict(
-        ["id", "title", "expected_snapshot_id", "expected_revision"]
-            .iter()
-            .filter_map(|key| {
-                ns.get(key)
-                    .filter(|v| v != &&Value::Null)
-                    .map(|v| (*key, v.clone()))
-            }),
-    );
-    if let Some(raw) = ns.text("document") {
+    // `cli.chain_analysis.dispatch`: the attributes each leaf forwards.
+    let allowed: &[&str] = match path {
+        "chain-analysis.watches.inbox" => &["limit", "before"],
+        _ => &[
+            "id",
+            "other_id",
+            "limit",
+            "cursor",
+            "after_id",
+            "title",
+            "expected_snapshot_id",
+            "expected_revision",
+        ],
+    };
+    let mut args = dict(allowed.iter().filter_map(|key| {
+        ns.get(key)
+            .filter(|v| v != &&Value::Null)
+            .map(|v| (*key, v.clone()))
+    }));
+    let present = |key: &str| ns.text(key).filter(|raw| !raw.is_empty());
+    if let Some(raw) = present("document") {
         args = document(raw)?;
     }
-    if let Some(raw) = ns.text("query") {
-        kassiber_envelope::set(&mut args, "query", document(raw)?);
+    for key in ["query", "plan"] {
+        if let Some(raw) = present(key) {
+            kassiber_envelope::set(&mut args, key, document(raw)?);
+        }
     }
     book.chain_analysis_ops(
         ns.get("workspace"),

@@ -529,3 +529,8 @@ REVIEWS["tests/test_rust_analysis_ops.py"] = {"*": {
     "disposition": "oracle", "group": "chain-sync",
     "reason": "compares seven native label, saved-case and dataset lifecycle CLI/daemon routes with unchanged Python bytes and all 112 tables; checks SQLite/SQLCipher rollback, named mutations, the retained Liquid address reference bug and zero-fallback no-consent processes with offline mode off/on; watches, source/acquisition consent and async workers remain unported",
 }}
+
+REVIEWS["tests/test_rust_analysis_watches.py"] = {"*": {
+    "disposition": "oracle", "group": "chain-sync",
+    "reason": "compares all eight native evidence-watch CLI/daemon routes with unchanged Python bytes and all 112 tables on keyed SQLCipher books; covers saved-report impacts, encryption refusal, SQLCipher DELETE/WAL rollback, named mutations, the retained acknowledgement-transaction reference quirk and zero-fallback no-consent processes with offline mode off/on; the background watch tick remains unported",
+}}
