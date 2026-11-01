@@ -1,0 +1,2313 @@
+{
+  "base_commit": "51bd20498",
+  "accepted": false,
+  "production_changes": false,
+  "budget_cpu_over_floor": 0.15,
+  "selection": "Process CPU. Baseline: one exploratory alternating pair per cell. Prototype: one pair fresh/unchanged, then five alternating pairs for generic SQLite unchanged; independent minima for Python/native/floor.",
+  "timing_scope": "All native preparation, comparisons, writes and COMMIT remain timed. Decode/render, exact complete dumps and PASSIVE checkpoint remain outside. Native and reference use copied physical books.",
+  "toolchain": {
+    "rust": "1.99.1",
+    "python": "3.11.17",
+    "native_cargo_commands_offline": true,
+    "cargo_build_jobs": 8,
+    "rust_test_threads": 1,
+    "build_tree": "target/build",
+    "maturin_no_install_rust": true,
+    "uv_sync": "uv sync --locked --python 3.11 --offline"
+  },
+  "baseline": {
+    "exact_timed_stores": 24,
+    "measurements": [
+      {
+        "path": "target/baseline/generic-20000-sqlite",
+        "environment": {
+          "book": {
+            "schema": "kassiber.journals-bench-book.v1",
+            "kind": "generic",
+            "transactions": 20000,
+            "seed": 1,
+            "csv_sha256": {
+              "book.csv": "7b09f4fd1d6fc465734d1c30db1e8ca2445577932c2fd924ab593106172cf6b1"
+            },
+            "pegs": 0,
+            "pegs_paired": 0,
+            "journals": {
+              "entries_created": 20000,
+              "quarantined": 0,
+              "cross_asset_pairs": 0,
+              "processed_transactions": 20000
+            },
+            "built_by": "32767d331e7be68c1efba00f9811f501d8a5f76f",
+            "build_seconds": 37.0,
+            "source": "copied historical synthetic book; CSV digests checked against the continuation record",
+            "normalized_by": "51bd20498 Python capture with fixed persistence clock"
+          },
+          "runs": 1,
+          "python": "3.11.17 (main, Oct 21 2026, 17:46:53) [Clang 23.1.3 ]",
+          "cpus": 48,
+          "probe_sha256": "09217ae8ee8bd482719316d7408d203667ae9eaf7dbc2a3a3fc397064fa25201",
+          "harness_sha256": "b9cb682b6e652362756528a4cedf38713774d70833ce1c1c5300a14a3c3a6bbc",
+          "checkout_sources_at_measurement": {
+            "crates/journals/src/boundary/joins.rs": "58b06db41921c470886b1cd1e190f506d6fd9175645c58321340fc6dd464c68e",
+            "crates/journals/src/boundary.rs": "2ddc678761e48f07a4277b2c20622a94a631f2c7c3725eefa32370a71abd878d",
+            "crates/journals/src/compute.rs": "b50c57224fc536c3df0fdff7d4d465d396aed6f717c158fb668f0fee0d507102",
+            "crates/journals/src/lib.rs": "f3d8fc2ab7257405c56545dda5d0bf7b3c24d90be78b8ccdc219feda380a576d",
+            "crates/journals/src/loader/direct.rs": "6f4ff944e2dd1a053ae54807ad510094ffa7c6c72c7c97b25cb5b2a4b876b999",
+            "crates/journals/src/loader/ownership.rs": "e9fd153c3ddbc0b7ad836c280e2219d8c0285e46e80f457fb5039003d250c2c8",
+            "crates/journals/src/loader/receipts.rs": "08b0978e2fed949d12af142596d9c91f1e39436d6dd2665e62e374af69bb4453",
+            "crates/journals/src/loader/tests.rs": "c32901ad80222bb09c20979247c37cebc1801dfd26dfc5cddc430c7bc034b804",
+            "crates/journals/src/loader/worklist.rs": "64670923212f75666cf0496da7e4ff7a9073e85e382d715bdebf05776a5d3516",
+            "crates/journals/src/loader.rs": "42698dcb84c9f0aba04eef10a14ecdb2e8b0497960f8bdd4d48dd7a17c762465",
+            "crates/journals/src/model.rs": "68f10bb6e44e1283ccf887606562fd908ad764848e7a4f3fdbe5e2f196239f8b",
+            "crates/journals/src/persistence/filed.rs": "24206d69912e8b067199a1f42a3ba1ba257ed40ff99e1569d0dc9d4d3ff94432",
+            "crates/journals/src/persistence/quantity.rs": "947e1c3927fc943f0eb187604e82e06a37ded17ccbf617d51358abbdd0a4a094",
+            "crates/journals/src/persistence/quarantine.rs": "c9cb06f5e0b8ab54fc47c20d9b4f7dc63a54379444e864fb450d0ef2f8235c0d",
+            "crates/journals/src/persistence.rs": "840fd2e09d7f591e9c680afa9c04f4cd1f44197eee50b57515c3fa5759f4288e",
+            "crates/journals/src/render.rs": "afac4610917b0ed8ef320385b7f80ca5cb28bd69187e9c00b5dac5b998550d45",
+            "crates/journals/src/storage/calculation.rs": "69df0af55305ea1446c07b629cc1204abbc0999fc932f1ede71941dd06b93dd8",
+            "crates/journals/src/storage/digest.rs": "48b92c62c7b3062c0bd6e816b1704ddf55088bda831c4d2130bccc00e19f28e9",
+            "crates/journals/src/storage/tests.rs": "c183832c9c6d6e450a9639f0f92249cbf6bbf5b48b869861b19149d6039649f2",
+            "crates/journals/src/storage.rs": "2650b204b9191fd389bcc5baa49bcaeb365c077e2600f2750b84a750cd20f4d4"
+          },
+          "sources": {
+            "crates/journals/src/boundary.rs": "2ddc678761e48f07a4277b2c20622a94a631f2c7c3725eefa32370a71abd878d",
+            "crates/journals/src/boundary/joins.rs": "58b06db41921c470886b1cd1e190f506d6fd9175645c58321340fc6dd464c68e",
+            "crates/journals/src/compute.rs": "b50c57224fc536c3df0fdff7d4d465d396aed6f717c158fb668f0fee0d507102",
+            "crates/journals/src/lib.rs": "f3d8fc2ab7257405c56545dda5d0bf7b3c24d90be78b8ccdc219feda380a576d",
+            "crates/journals/src/loader.rs": "42698dcb84c9f0aba04eef10a14ecdb2e8b0497960f8bdd4d48dd7a17c762465",
+            "crates/journals/src/loader/direct.rs": "6f4ff944e2dd1a053ae54807ad510094ffa7c6c72c7c97b25cb5b2a4b876b999",
+            "crates/journals/src/loader/ownership.rs": "e9fd153c3ddbc0b7ad836c280e2219d8c0285e46e80f457fb5039003d250c2c8",
+            "crates/journals/src/loader/receipts.rs": "08b0978e2fed949d12af142596d9c91f1e39436d6dd2665e62e374af69bb4453",
+            "crates/journals/src/loader/tests.rs": "c32901ad80222bb09c20979247c37cebc1801dfd26dfc5cddc430c7bc034b804",
+            "crates/journals/src/loader/worklist.rs": "64670923212f75666cf0496da7e4ff7a9073e85e382d715bdebf05776a5d3516",
+            "crates/journals/src/model.rs": "68f10bb6e44e1283ccf887606562fd908ad764848e7a4f3fdbe5e2f196239f8b",
+            "crates/journals/src/persistence.rs": "8d97d978da4911d18f662b9ef780a802b601cd5c7faa9bd28f62bc31d388c5e0",
+            "crates/journals/src/persistence/filed.rs": "24206d69912e8b067199a1f42a3ba1ba257ed40ff99e1569d0dc9d4d3ff94432",
+            "crates/journals/src/persistence/quantity.rs": "947e1c3927fc943f0eb187604e82e06a37ded17ccbf617d51358abbdd0a4a094",
+            "crates/journals/src/persistence/quarantine.rs": "c9cb06f5e0b8ab54fc47c20d9b4f7dc63a54379444e864fb450d0ef2f8235c0d",
+            "crates/journals/src/render.rs": "afac4610917b0ed8ef320385b7f80ca5cb28bd69187e9c00b5dac5b998550d45",
+            "crates/journals/src/storage.rs": "d659568b07eb32327c08615b1d94e9f80e1594f6c5c16597f81c28262d49f243",
+            "crates/journals/src/storage/calculation.rs": "a637aca0d07926d54671a0b2bffdf988574adae711cc2a8db5a413dd9d55f2ba",
+            "crates/journals/src/storage/tests.rs": "c183832c9c6d6e450a9639f0f92249cbf6bbf5b48b869861b19149d6039649f2"
+          },
+          "source_manifest_note": "Binary built and copied from clean 51bd20498 before edits. Checkout hashes observed by the later harness belong to the prototype; actual binary source hashes above are reconstructed from the clean commit."
+        },
+        "measurements": [
+          {
+            "mode": "fresh",
+            "transactions": 20000,
+            "appended_transactions": 0,
+            "activity": {
+              "journal_entries": {
+                "insert": 20000,
+                "delete": 0
+              },
+              "journal_quantity_postings": {
+                "insert": 40000,
+                "delete": 0
+              }
+            },
+            "entries": 20000,
+            "postings": 40000,
+            "best": {
+              "python": 1.5046963310000017,
+              "rust": 0.8984640000000002,
+              "floor": 0.7198190000000002
+            },
+            "best_wall": {
+              "python": 1.533913640974788,
+              "rust": 0.946477472,
+              "floor": 0.78889049
+            },
+            "trials": [
+              {
+                "python": {
+                  "seconds": 1.533913640974788,
+                  "cpu_seconds": 1.5046963310000017,
+                  "load1": 32.662109375
+                },
+                "rust": {
+                  "seconds": 0.946477472,
+                  "cpu_seconds": 0.8984640000000002,
+                  "phases": {
+                    "begin": {
+                      "cpu": 1.8999999999991246e-05,
+                      "wall": 2.1111e-05
+                    },
+                    "commit": {
+                      "cpu": 0.236491,
+                      "wall": 0.279063406
+                    },
+                    "complete": {
+                      "cpu": 0.011700000000000266,
+                      "wall": 0.011791663
+                    },
+                    "entries_prepare": {
+                      "cpu": 0.10727600000000015,
+                      "wall": 0.10824555
+                    },
+                    "entries_write": {
+                      "cpu": 0.2409279999999998,
+                      "wall": 0.242965609
+                    },
+                    "filed": {
+                      "cpu": 0.0001180000000000625,
+                      "wall": 0.000114353
+                    },
+                    "pricing": {
+                      "cpu": 0.018959999999999866,
+                      "wall": 0.019096177
+                    },
+                    "quantity": {
+                      "cpu": 0.0028600000000000847,
+                      "wall": 0.002881284
+                    },
+                    "quantity_other": {
+                      "cpu": 0.01629499999999995,
+                      "wall": 0.016412967
+                    },
+                    "quantity_postings_bind": {
+                      "cpu": 0.03390799999999983,
+                      "wall": 0.034210934
+                    },
+                    "quantity_postings_prepare": {
+                      "cpu": 0.014750999999999959,
+                      "wall": 0.014867453
+                    },
+                    "quantity_postings_write": {
+                      "cpu": 0.20942300000000014,
+                      "wall": 0.210973484
+                    },
+                    "setup": {
+                      "cpu": 0.0003069999999998352,
+                      "wall": 0.000309607
+                    },
+                    "small_tables": {
+                      "cpu": 0.005399000000000154,
+                      "wall": 0.005440122
+                    }
+                  },
+                  "load1": 32.52880859375
+                },
+                "floor": {
+                  "seconds": 0.78889049,
+                  "cpu_seconds": 0.7198190000000002,
+                  "phases": null,
+                  "load1": 31.28515625
+                }
+              }
+            ],
+            "over_floor": 0.17864499999999994
+          },
+          {
+            "mode": "unchanged",
+            "transactions": 20000,
+            "appended_transactions": 0,
+            "activity": {
+              "journal_entries": {
+                "insert": 0,
+                "delete": 0
+              },
+              "journal_quantity_postings": {
+                "insert": 0,
+                "delete": 0
+              }
+            },
+            "entries": 20000,
+            "postings": 40000,
+            "best": {
+              "python": 1.3325130560000034,
+              "rust": 0.4977840000000002,
+              "floor": 0.0015530000000003596
+            },
+            "best_wall": {
+              "python": 1.3435411319951527,
+              "rust": 0.531011656,
+              "floor": 0.018672677
+            },
+            "trials": [
+              {
+                "python": {
+                  "seconds": 1.3435411319951527,
+                  "cpu_seconds": 1.3325130560000034,
+                  "load1": 29.0673828125
+                },
+                "rust": {
+                  "seconds": 0.531011656,
+                  "cpu_seconds": 0.4977840000000002,
+                  "phases": {
+                    "begin": {
+                      "cpu": 2.0999999999826713e-05,
+                      "wall": 2.297e-05
+                    },
+                    "commit": {
+                      "cpu": 0.0015929999999997335,
+                      "wall": 0.030134314
+                    },
+                    "complete": {
+                      "cpu": 0.015894000000000297,
+                      "wall": 0.016015248
+                    },
+                    "entries_prepare": {
+                      "cpu": 0.1361819999999998,
+                      "wall": 0.137719467
+                    },
+                    "entries_write": {
+                      "cpu": 0.08497200000000005,
+                      "wall": 0.085836427
+                    },
+                    "filed": {
+                      "cpu": 0.00013500000000021828,
+                      "wall": 0.000127273
+                    },
+                    "pricing": {
+                      "cpu": 0.021863000000000188,
+                      "wall": 0.022068204
+                    },
+                    "quantity": {
+                      "cpu": 0.003413999999999806,
+                      "wall": 0.003446517
+                    },
+                    "quantity_other": {
+                      "cpu": 0.01754900000000026,
+                      "wall": 0.017692445
+                    },
+                    "quantity_postings_bind": {
+                      "cpu": 0.04573499999999986,
+                      "wall": 0.04610072
+                    },
+                    "quantity_postings_prepare": {
+                      "cpu": 0.0206090000000001,
+                      "wall": 0.020790095
+                    },
+                    "quantity_postings_write": {
+                      "cpu": 0.14102099999999984,
+                      "wall": 0.142115026
+                    },
+                    "setup": {
+                      "cpu": 0.00037300000000017874,
+                      "wall": 0.000377889
+                    },
+                    "small_tables": {
+                      "cpu": 0.008400999999999659,
+                      "wall": 0.008478489
+                    }
+                  },
+                  "load1": 29.0673828125
+                },
+                "floor": {
+                  "seconds": 0.018672677,
+                  "cpu_seconds": 0.0015530000000003596,
+                  "phases": null,
+                  "load1": 28.2607421875
+                }
+              }
+            ],
+            "over_floor": 0.49623099999999987
+          }
+        ]
+      },
+      {
+        "path": "target/baseline/generic-20000-cipher",
+        "environment": {
+          "book": {
+            "schema": "kassiber.journals-bench-book.v1",
+            "kind": "generic",
+            "transactions": 20000,
+            "seed": 1,
+            "csv_sha256": {
+              "book.csv": "7b09f4fd1d6fc465734d1c30db1e8ca2445577932c2fd924ab593106172cf6b1"
+            },
+            "pegs": 0,
+            "pegs_paired": 0,
+            "journals": {
+              "entries_created": 20000,
+              "quarantined": 0,
+              "cross_asset_pairs": 0,
+              "processed_transactions": 20000
+            },
+            "built_by": "32767d331e7be68c1efba00f9811f501d8a5f76f",
+            "build_seconds": 37.0,
+            "source": "copied historical synthetic book; CSV digests checked against the continuation record",
+            "normalized_by": "51bd20498 Python capture with fixed persistence clock"
+          },
+          "runs": 1,
+          "python": "3.11.17 (main, Oct 21 2026, 17:46:53) [Clang 23.1.3 ]",
+          "cpus": 48,
+          "probe_sha256": "09217ae8ee8bd482719316d7408d203667ae9eaf7dbc2a3a3fc397064fa25201",
+          "harness_sha256": "b9cb682b6e652362756528a4cedf38713774d70833ce1c1c5300a14a3c3a6bbc",
+          "checkout_sources_at_measurement": {
+            "crates/journals/src/boundary/joins.rs": "58b06db41921c470886b1cd1e190f506d6fd9175645c58321340fc6dd464c68e",
+            "crates/journals/src/boundary.rs": "2ddc678761e48f07a4277b2c20622a94a631f2c7c3725eefa32370a71abd878d",
+            "crates/journals/src/compute.rs": "b50c57224fc536c3df0fdff7d4d465d396aed6f717c158fb668f0fee0d507102",
+            "crates/journals/src/lib.rs": "f3d8fc2ab7257405c56545dda5d0bf7b3c24d90be78b8ccdc219feda380a576d",
+            "crates/journals/src/loader/direct.rs": "6f4ff944e2dd1a053ae54807ad510094ffa7c6c72c7c97b25cb5b2a4b876b999",
+            "crates/journals/src/loader/ownership.rs": "e9fd153c3ddbc0b7ad836c280e2219d8c0285e46e80f457fb5039003d250c2c8",
+            "crates/journals/src/loader/receipts.rs": "08b0978e2fed949d12af142596d9c91f1e39436d6dd2665e62e374af69bb4453",
+            "crates/journals/src/loader/tests.rs": "c32901ad80222bb09c20979247c37cebc1801dfd26dfc5cddc430c7bc034b804",
+            "crates/journals/src/loader/worklist.rs": "64670923212f75666cf0496da7e4ff7a9073e85e382d715bdebf05776a5d3516",
+            "crates/journals/src/loader.rs": "42698dcb84c9f0aba04eef10a14ecdb2e8b0497960f8bdd4d48dd7a17c762465",
+            "crates/journals/src/model.rs": "68f10bb6e44e1283ccf887606562fd908ad764848e7a4f3fdbe5e2f196239f8b",
+            "crates/journals/src/persistence/filed.rs": "24206d69912e8b067199a1f42a3ba1ba257ed40ff99e1569d0dc9d4d3ff94432",
+            "crates/journals/src/persistence/quantity.rs": "947e1c3927fc943f0eb187604e82e06a37ded17ccbf617d51358abbdd0a4a094",
+            "crates/journals/src/persistence/quarantine.rs": "c9cb06f5e0b8ab54fc47c20d9b4f7dc63a54379444e864fb450d0ef2f8235c0d",
+            "crates/journals/src/persistence.rs": "840fd2e09d7f591e9c680afa9c04f4cd1f44197eee50b57515c3fa5759f4288e",
+            "crates/journals/src/render.rs": "afac4610917b0ed8ef320385b7f80ca5cb28bd69187e9c00b5dac5b998550d45",
+            "crates/journals/src/storage/calculation.rs": "69df0af55305ea1446c07b629cc1204abbc0999fc932f1ede71941dd06b93dd8",
+            "crates/journals/src/storage/digest.rs": "48b92c62c7b3062c0bd6e816b1704ddf55088bda831c4d2130bccc00e19f28e9",
+            "crates/journals/src/storage/tests.rs": "c183832c9c6d6e450a9639f0f92249cbf6bbf5b48b869861b19149d6039649f2",
+            "crates/journals/src/storage.rs": "2650b204b9191fd389bcc5baa49bcaeb365c077e2600f2750b84a750cd20f4d4"
+          },
+          "sources": {
+            "crates/journals/src/boundary.rs": "2ddc678761e48f07a4277b2c20622a94a631f2c7c3725eefa32370a71abd878d",
+            "crates/journals/src/boundary/joins.rs": "58b06db41921c470886b1cd1e190f506d6fd9175645c58321340fc6dd464c68e",
+            "crates/journals/src/compute.rs": "b50c57224fc536c3df0fdff7d4d465d396aed6f717c158fb668f0fee0d507102",
+            "crates/journals/src/lib.rs": "f3d8fc2ab7257405c56545dda5d0bf7b3c24d90be78b8ccdc219feda380a576d",
+            "crates/journals/src/loader.rs": "42698dcb84c9f0aba04eef10a14ecdb2e8b0497960f8bdd4d48dd7a17c762465",
+            "crates/journals/src/loader/direct.rs": "6f4ff944e2dd1a053ae54807ad510094ffa7c6c72c7c97b25cb5b2a4b876b999",
+            "crates/journals/src/loader/ownership.rs": "e9fd153c3ddbc0b7ad836c280e2219d8c0285e46e80f457fb5039003d250c2c8",
+            "crates/journals/src/loader/receipts.rs": "08b0978e2fed949d12af142596d9c91f1e39436d6dd2665e62e374af69bb4453",
+            "crates/journals/src/loader/tests.rs": "c32901ad80222bb09c20979247c37cebc1801dfd26dfc5cddc430c7bc034b804",
+            "crates/journals/src/loader/worklist.rs": "64670923212f75666cf0496da7e4ff7a9073e85e382d715bdebf05776a5d3516",
+            "crates/journals/src/model.rs": "68f10bb6e44e1283ccf887606562fd908ad764848e7a4f3fdbe5e2f196239f8b",
+            "crates/journals/src/persistence.rs": "8d97d978da4911d18f662b9ef780a802b601cd5c7faa9bd28f62bc31d388c5e0",
+            "crates/journals/src/persistence/filed.rs": "24206d69912e8b067199a1f42a3ba1ba257ed40ff99e1569d0dc9d4d3ff94432",
+            "crates/journals/src/persistence/quantity.rs": "947e1c3927fc943f0eb187604e82e06a37ded17ccbf617d51358abbdd0a4a094",
+            "crates/journals/src/persistence/quarantine.rs": "c9cb06f5e0b8ab54fc47c20d9b4f7dc63a54379444e864fb450d0ef2f8235c0d",
+            "crates/journals/src/render.rs": "afac4610917b0ed8ef320385b7f80ca5cb28bd69187e9c00b5dac5b998550d45",
+            "crates/journals/src/storage.rs": "d659568b07eb32327c08615b1d94e9f80e1594f6c5c16597f81c28262d49f243",
+            "crates/journals/src/storage/calculation.rs": "a637aca0d07926d54671a0b2bffdf988574adae711cc2a8db5a413dd9d55f2ba",
+            "crates/journals/src/storage/tests.rs": "c183832c9c6d6e450a9639f0f92249cbf6bbf5b48b869861b19149d6039649f2"
+          },
+          "source_manifest_note": "Binary built and copied from clean 51bd20498 before edits. Checkout hashes observed by the later harness belong to the prototype; actual binary source hashes above are reconstructed from the clean commit."
+        },
+        "measurements": [
+          {
+            "mode": "fresh",
+            "transactions": 20000,
+            "appended_transactions": 0,
+            "activity": {
+              "journal_entries": {
+                "insert": 20000,
+                "delete": 0
+              },
+              "journal_quantity_postings": {
+                "insert": 40000,
+                "delete": 0
+              }
+            },
+            "entries": 20000,
+            "postings": 40000,
+            "best": {
+              "python": 1.8449521990000015,
+              "rust": 1.2320790000000001,
+              "floor": 0.7431000000000001
+            },
+            "best_wall": {
+              "python": 1.904033792001428,
+              "rust": 1.290718718,
+              "floor": 0.789731174
+            },
+            "trials": [
+              {
+                "python": {
+                  "seconds": 1.904033792001428,
+                  "cpu_seconds": 1.8449521990000015,
+                  "load1": 25.6845703125
+                },
+                "rust": {
+                  "seconds": 1.290718718,
+                  "cpu_seconds": 1.2320790000000001,
+                  "phases": {
+                    "begin": {
+                      "cpu": 1.999999999990898e-05,
+                      "wall": 2.1141e-05
+                    },
+                    "commit": {
+                      "cpu": 0.33808799999999994,
+                      "wall": 0.381714589
+                    },
+                    "complete": {
+                      "cpu": 0.026447999999999805,
+                      "wall": 0.026713617
+                    },
+                    "entries_prepare": {
+                      "cpu": 0.1292089999999999,
+                      "wall": 0.132901349
+                    },
+                    "entries_write": {
+                      "cpu": 0.29989599999999994,
+                      "wall": 0.303942731
+                    },
+                    "filed": {
+                      "cpu": 0.0002780000000002225,
+                      "wall": 0.000268156
+                    },
+                    "pricing": {
+                      "cpu": 0.06586999999999987,
+                      "wall": 0.067391476
+                    },
+                    "quantity": {
+                      "cpu": 0.0033799999999999386,
+                      "wall": 0.003414906
+                    },
+                    "quantity_other": {
+                      "cpu": 0.017905999999999977,
+                      "wall": 0.018294509
+                    },
+                    "quantity_postings_bind": {
+                      "cpu": 0.042286000000000046,
+                      "wall": 0.042742395
+                    },
+                    "quantity_postings_prepare": {
+                      "cpu": 0.017357000000000067,
+                      "wall": 0.017519572
+                    },
+                    "quantity_postings_write": {
+                      "cpu": 0.27060700000000026,
+                      "wall": 0.274765789
+                    },
+                    "setup": {
+                      "cpu": 0.0010969999999999036,
+                      "wall": 0.001118465
+                    },
+                    "small_tables": {
+                      "cpu": 0.01962200000000003,
+                      "wall": 0.019813353
+                    }
+                  },
+                  "load1": 25.7099609375
+                },
+                "floor": {
+                  "seconds": 0.789731174,
+                  "cpu_seconds": 0.7431000000000001,
+                  "phases": null,
+                  "load1": 25.33251953125
+                }
+              }
+            ],
+            "over_floor": 0.48897900000000005
+          },
+          {
+            "mode": "unchanged",
+            "transactions": 20000,
+            "appended_transactions": 0,
+            "activity": {
+              "journal_entries": {
+                "insert": 0,
+                "delete": 0
+              },
+              "journal_quantity_postings": {
+                "insert": 0,
+                "delete": 0
+              }
+            },
+            "entries": 20000,
+            "postings": 40000,
+            "best": {
+              "python": 1.2914032050000088,
+              "rust": 0.9882659999999999,
+              "floor": 0.4529350000000001
+            },
+            "best_wall": {
+              "python": 3.7168683480122127,
+              "rust": 3.437437526,
+              "floor": 2.7615090860000002
+            },
+            "trials": [
+              {
+                "python": {
+                  "seconds": 3.7168683480122127,
+                  "cpu_seconds": 1.2914032050000088,
+                  "load1": 60.47314453125
+                },
+                "rust": {
+                  "seconds": 3.437437526,
+                  "cpu_seconds": 0.9882659999999999,
+                  "phases": {
+                    "begin": {
+                      "cpu": 1.6999999999933735e-05,
+                      "wall": 1.8721e-05
+                    },
+                    "commit": {
+                      "cpu": 0.4210370000000001,
+                      "wall": 1.948170859
+                    },
+                    "complete": {
+                      "cpu": 0.012706999999999802,
+                      "wall": 0.012809925
+                    },
+                    "entries_prepare": {
+                      "cpu": 0.09671800000000008,
+                      "wall": 0.097324014
+                    },
+                    "entries_write": {
+                      "cpu": 0.1313740000000001,
+                      "wall": 0.132323566
+                    },
+                    "filed": {
+                      "cpu": 0.0003769999999998497,
+                      "wall": 0.000389369
+                    },
+                    "pricing": {
+                      "cpu": 0.06514699999999962,
+                      "wall": 0.065777279
+                    },
+                    "quantity": {
+                      "cpu": 0.003425999999999929,
+                      "wall": 0.049294901
+                    },
+                    "quantity_other": {
+                      "cpu": 0.01533500000000032,
+                      "wall": 0.015456625
+                    },
+                    "quantity_postings_bind": {
+                      "cpu": 0.03833200000000003,
+                      "wall": 0.039280498
+                    },
+                    "quantity_postings_prepare": {
+                      "cpu": 0.014867999999999881,
+                      "wall": 0.015085987
+                    },
+                    "quantity_postings_write": {
+                      "cpu": 0.17421299999999995,
+                      "wall": 0.180253617
+                    },
+                    "setup": {
+                      "cpu": 0.0021720000000000628,
+                      "wall": 0.242923386
+                    },
+                    "small_tables": {
+                      "cpu": 0.012528000000000095,
+                      "wall": 0.638239438
+                    }
+                  },
+                  "load1": 67.001953125
+                },
+                "floor": {
+                  "seconds": 2.7615090860000002,
+                  "cpu_seconds": 0.4529350000000001,
+                  "phases": null,
+                  "load1": 80.51220703125
+                }
+              }
+            ],
+            "over_floor": 0.5353309999999998
+          }
+        ]
+      },
+      {
+        "path": "target/baseline/multi-wallet-20000-sqlite",
+        "environment": {
+          "book": {
+            "schema": "kassiber.journals-bench-book.v1",
+            "kind": "multi-wallet",
+            "transactions": 20000,
+            "seed": 7,
+            "csv_sha256": {
+              "Hot.csv": "8d3852c3bcdb36bdd425b76fb3a8e5f64bf462e57c6b61294ed774681ac81146",
+              "Cold.csv": "ed3a0928e98404316be9b9fa7e3b603f4d4e0d7577633bec06e441d8d0e8ff5f",
+              "LHot.csv": "0cdeee02cfd30c7a1bc950bb013c3bbe793b4f1c7f19bc7ab4a4569100117b7a",
+              "LCold.csv": "94adb338d7efdf3b52025c2ef85e0fb586a7f501ff446d6aef3572295f8fc748"
+            },
+            "pegs": 3306,
+            "pegs_paired": 300,
+            "journals": {
+              "entries_created": 19983,
+              "quarantined": 17,
+              "cross_asset_pairs": 300,
+              "processed_transactions": 20000
+            },
+            "built_by": "b5eb38ea8cb764675322e61e9b957a57deb947c6",
+            "build_seconds": 1239.1,
+            "source": "copied historical synthetic book; CSV digests checked against the continuation record",
+            "normalized_by": "51bd20498 Python capture with fixed persistence clock"
+          },
+          "runs": 1,
+          "python": "3.11.17 (main, Oct 21 2026, 17:46:53) [Clang 23.1.3 ]",
+          "cpus": 48,
+          "probe_sha256": "09217ae8ee8bd482719316d7408d203667ae9eaf7dbc2a3a3fc397064fa25201",
+          "harness_sha256": "b9cb682b6e652362756528a4cedf38713774d70833ce1c1c5300a14a3c3a6bbc",
+          "checkout_sources_at_measurement": {
+            "crates/journals/src/boundary/joins.rs": "58b06db41921c470886b1cd1e190f506d6fd9175645c58321340fc6dd464c68e",
+            "crates/journals/src/boundary.rs": "2ddc678761e48f07a4277b2c20622a94a631f2c7c3725eefa32370a71abd878d",
+            "crates/journals/src/compute.rs": "b50c57224fc536c3df0fdff7d4d465d396aed6f717c158fb668f0fee0d507102",
+            "crates/journals/src/lib.rs": "f3d8fc2ab7257405c56545dda5d0bf7b3c24d90be78b8ccdc219feda380a576d",
+            "crates/journals/src/loader/direct.rs": "6f4ff944e2dd1a053ae54807ad510094ffa7c6c72c7c97b25cb5b2a4b876b999",
+            "crates/journals/src/loader/ownership.rs": "e9fd153c3ddbc0b7ad836c280e2219d8c0285e46e80f457fb5039003d250c2c8",
+            "crates/journals/src/loader/receipts.rs": "08b0978e2fed949d12af142596d9c91f1e39436d6dd2665e62e374af69bb4453",
+            "crates/journals/src/loader/tests.rs": "c32901ad80222bb09c20979247c37cebc1801dfd26dfc5cddc430c7bc034b804",
+            "crates/journals/src/loader/worklist.rs": "64670923212f75666cf0496da7e4ff7a9073e85e382d715bdebf05776a5d3516",
+            "crates/journals/src/loader.rs": "42698dcb84c9f0aba04eef10a14ecdb2e8b0497960f8bdd4d48dd7a17c762465",
+            "crates/journals/src/model.rs": "68f10bb6e44e1283ccf887606562fd908ad764848e7a4f3fdbe5e2f196239f8b",
+            "crates/journals/src/persistence/filed.rs": "24206d69912e8b067199a1f42a3ba1ba257ed40ff99e1569d0dc9d4d3ff94432",
+            "crates/journals/src/persistence/quantity.rs": "53a839835d70cb33fe86b885d9885c651c74a69ff8413d7024dcdb361133c813",
+            "crates/journals/src/persistence/quarantine.rs": "c9cb06f5e0b8ab54fc47c20d9b4f7dc63a54379444e864fb450d0ef2f8235c0d",
+            "crates/journals/src/persistence.rs": "840fd2e09d7f591e9c680afa9c04f4cd1f44197eee50b57515c3fa5759f4288e",
+            "crates/journals/src/render.rs": "afac4610917b0ed8ef320385b7f80ca5cb28bd69187e9c00b5dac5b998550d45",
+            "crates/journals/src/storage/calculation.rs": "69df0af55305ea1446c07b629cc1204abbc0999fc932f1ede71941dd06b93dd8",
+            "crates/journals/src/storage/digest.rs": "7acb34b7f5be86247135ca181b5d2bfcd326f58b01dcfdd305c531c76b14c55c",
+            "crates/journals/src/storage/tests.rs": "41f72abb866de0038eca456e7f93bbc3b661beda96a761cc7c629fe9227e11c4",
+            "crates/journals/src/storage.rs": "2650b204b9191fd389bcc5baa49bcaeb365c077e2600f2750b84a750cd20f4d4"
+          },
+          "sources": {
+            "crates/journals/src/boundary.rs": "2ddc678761e48f07a4277b2c20622a94a631f2c7c3725eefa32370a71abd878d",
+            "crates/journals/src/boundary/joins.rs": "58b06db41921c470886b1cd1e190f506d6fd9175645c58321340fc6dd464c68e",
+            "crates/journals/src/compute.rs": "b50c57224fc536c3df0fdff7d4d465d396aed6f717c158fb668f0fee0d507102",
+            "crates/journals/src/lib.rs": "f3d8fc2ab7257405c56545dda5d0bf7b3c24d90be78b8ccdc219feda380a576d",
+            "crates/journals/src/loader.rs": "42698dcb84c9f0aba04eef10a14ecdb2e8b0497960f8bdd4d48dd7a17c762465",
+            "crates/journals/src/loader/direct.rs": "6f4ff944e2dd1a053ae54807ad510094ffa7c6c72c7c97b25cb5b2a4b876b999",
+            "crates/journals/src/loader/ownership.rs": "e9fd153c3ddbc0b7ad836c280e2219d8c0285e46e80f457fb5039003d250c2c8",
+            "crates/journals/src/loader/receipts.rs": "08b0978e2fed949d12af142596d9c91f1e39436d6dd2665e62e374af69bb4453",
+            "crates/journals/src/loader/tests.rs": "c32901ad80222bb09c20979247c37cebc1801dfd26dfc5cddc430c7bc034b804",
+            "crates/journals/src/loader/worklist.rs": "64670923212f75666cf0496da7e4ff7a9073e85e382d715bdebf05776a5d3516",
+            "crates/journals/src/model.rs": "68f10bb6e44e1283ccf887606562fd908ad764848e7a4f3fdbe5e2f196239f8b",
+            "crates/journals/src/persistence.rs": "8d97d978da4911d18f662b9ef780a802b601cd5c7faa9bd28f62bc31d388c5e0",
+            "crates/journals/src/persistence/filed.rs": "24206d69912e8b067199a1f42a3ba1ba257ed40ff99e1569d0dc9d4d3ff94432",
+            "crates/journals/src/persistence/quantity.rs": "947e1c3927fc943f0eb187604e82e06a37ded17ccbf617d51358abbdd0a4a094",
+            "crates/journals/src/persistence/quarantine.rs": "c9cb06f5e0b8ab54fc47c20d9b4f7dc63a54379444e864fb450d0ef2f8235c0d",
+            "crates/journals/src/render.rs": "afac4610917b0ed8ef320385b7f80ca5cb28bd69187e9c00b5dac5b998550d45",
+            "crates/journals/src/storage.rs": "d659568b07eb32327c08615b1d94e9f80e1594f6c5c16597f81c28262d49f243",
+            "crates/journals/src/storage/calculation.rs": "a637aca0d07926d54671a0b2bffdf988574adae711cc2a8db5a413dd9d55f2ba",
+            "crates/journals/src/storage/tests.rs": "c183832c9c6d6e450a9639f0f92249cbf6bbf5b48b869861b19149d6039649f2"
+          },
+          "source_manifest_note": "Binary built and copied from clean 51bd20498 before edits. Checkout hashes observed by the later harness belong to the prototype; actual binary source hashes above are reconstructed from the clean commit."
+        },
+        "measurements": [
+          {
+            "mode": "fresh",
+            "transactions": 20000,
+            "appended_transactions": 0,
+            "activity": {
+              "journal_entries": {
+                "insert": 19983,
+                "delete": 0
+              },
+              "journal_quantity_postings": {
+                "insert": 45216,
+                "delete": 0
+              }
+            },
+            "entries": 19983,
+            "postings": 45216,
+            "best": {
+              "python": 2.8902525640000007,
+              "rust": 1.381844,
+              "floor": 0.8863100000000008
+            },
+            "best_wall": {
+              "python": 2.9741974019852933,
+              "rust": 1.4601166970000001,
+              "floor": 0.954509026
+            },
+            "trials": [
+              {
+                "python": {
+                  "seconds": 2.9741974019852933,
+                  "cpu_seconds": 2.8902525640000007,
+                  "load1": 83.64990234375
+                },
+                "rust": {
+                  "seconds": 1.4601166970000001,
+                  "cpu_seconds": 1.381844,
+                  "phases": {
+                    "begin": {
+                      "cpu": 2.4999999999941735e-05,
+                      "wall": 2.74e-05
+                    },
+                    "commit": {
+                      "cpu": 0.3029679999999999,
+                      "wall": 0.367766883
+                    },
+                    "complete": {
+                      "cpu": 0.01392400000000027,
+                      "wall": 0.014062884
+                    },
+                    "entries_prepare": {
+                      "cpu": 0.14590799999999993,
+                      "wall": 0.150361908
+                    },
+                    "entries_write": {
+                      "cpu": 0.28818600000000005,
+                      "wall": 0.290815714
+                    },
+                    "filed": {
+                      "cpu": 5.999999999950489e-06,
+                      "wall": 1.65e-06
+                    },
+                    "pricing": {
+                      "cpu": 0.031235000000000124,
+                      "wall": 0.031514524
+                    },
+                    "quantity": {
+                      "cpu": 0.008185999999999805,
+                      "wall": 0.008275194
+                    },
+                    "quantity_other": {
+                      "cpu": 0.09021799999999969,
+                      "wall": 0.091150165
+                    },
+                    "quantity_postings_bind": {
+                      "cpu": 0.09024800000000033,
+                      "wall": 0.091105615
+                    },
+                    "quantity_postings_prepare": {
+                      "cpu": 0.028168999999999667,
+                      "wall": 0.028433025
+                    },
+                    "quantity_postings_write": {
+                      "cpu": 0.37534800000000024,
+                      "wall": 0.379043005
+                    },
+                    "setup": {
+                      "cpu": 0.0006790000000003182,
+                      "wall": 0.000674115
+                    },
+                    "small_tables": {
+                      "cpu": 0.006683999999999912,
+                      "wall": 0.00674129
+                    }
+                  },
+                  "load1": 80.39453125
+                },
+                "floor": {
+                  "seconds": 0.954509026,
+                  "cpu_seconds": 0.8863100000000008,
+                  "phases": null,
+                  "load1": 76.75927734375
+                }
+              }
+            ],
+            "over_floor": 0.49553399999999925
+          },
+          {
+            "mode": "unchanged",
+            "transactions": 20000,
+            "appended_transactions": 0,
+            "activity": {
+              "journal_entries": {
+                "insert": 0,
+                "delete": 0
+              },
+              "journal_quantity_postings": {
+                "insert": 0,
+                "delete": 0
+              }
+            },
+            "entries": 19983,
+            "postings": 45216,
+            "best": {
+              "python": 1.1497751520000037,
+              "rust": 0.44667999999999997,
+              "floor": 0.011660000000000004
+            },
+            "best_wall": {
+              "python": 1.1602869499765802,
+              "rust": 0.485284237,
+              "floor": 0.047085131
+            },
+            "trials": [
+              {
+                "python": {
+                  "seconds": 1.1602869499765802,
+                  "cpu_seconds": 1.1497751520000037,
+                  "load1": 55.171875
+                },
+                "rust": {
+                  "seconds": 0.485284237,
+                  "cpu_seconds": 0.44667999999999997,
+                  "phases": {
+                    "begin": {
+                      "cpu": 2.2000000000188535e-05,
+                      "wall": 2.2841e-05
+                    },
+                    "commit": {
+                      "cpu": 0.0035250000000002224,
+                      "wall": 0.038406428
+                    },
+                    "complete": {
+                      "cpu": 0.010825000000000085,
+                      "wall": 0.010898603
+                    },
+                    "entries_prepare": {
+                      "cpu": 0.10560400000000003,
+                      "wall": 0.1065544
+                    },
+                    "entries_write": {
+                      "cpu": 0.06681999999999988,
+                      "wall": 0.067310943
+                    },
+                    "filed": {
+                      "cpu": 5.999999999950489e-06,
+                      "wall": 1.12e-06
+                    },
+                    "pricing": {
+                      "cpu": 0.023486000000000118,
+                      "wall": 0.023673389
+                    },
+                    "quantity": {
+                      "cpu": 0.0047079999999999345,
+                      "wall": 0.004749156
+                    },
+                    "quantity_other": {
+                      "cpu": 0.052829000000000015,
+                      "wall": 0.053438573
+                    },
+                    "quantity_postings_bind": {
+                      "cpu": 0.042206999999999883,
+                      "wall": 0.04251366
+                    },
+                    "quantity_postings_prepare": {
+                      "cpu": 0.014686000000000199,
+                      "wall": 0.01479904
+                    },
+                    "quantity_postings_write": {
+                      "cpu": 0.11551,
+                      "wall": 0.116389839
+                    },
+                    "setup": {
+                      "cpu": 0.0004559999999997899,
+                      "wall": 0.00045911
+                    },
+                    "small_tables": {
+                      "cpu": 0.005935000000000024,
+                      "wall": 0.005971403
+                    }
+                  },
+                  "load1": 55.171875
+                },
+                "floor": {
+                  "seconds": 0.047085131,
+                  "cpu_seconds": 0.011660000000000004,
+                  "phases": null,
+                  "load1": 52.35498046875
+                }
+              }
+            ],
+            "over_floor": 0.43501999999999996
+          }
+        ]
+      },
+      {
+        "path": "target/baseline/multi-wallet-20000-cipher",
+        "environment": {
+          "book": {
+            "schema": "kassiber.journals-bench-book.v1",
+            "kind": "multi-wallet",
+            "transactions": 20000,
+            "seed": 7,
+            "csv_sha256": {
+              "Hot.csv": "8d3852c3bcdb36bdd425b76fb3a8e5f64bf462e57c6b61294ed774681ac81146",
+              "Cold.csv": "ed3a0928e98404316be9b9fa7e3b603f4d4e0d7577633bec06e441d8d0e8ff5f",
+              "LHot.csv": "0cdeee02cfd30c7a1bc950bb013c3bbe793b4f1c7f19bc7ab4a4569100117b7a",
+              "LCold.csv": "94adb338d7efdf3b52025c2ef85e0fb586a7f501ff446d6aef3572295f8fc748"
+            },
+            "pegs": 3306,
+            "pegs_paired": 300,
+            "journals": {
+              "entries_created": 19983,
+              "quarantined": 17,
+              "cross_asset_pairs": 300,
+              "processed_transactions": 20000
+            },
+            "built_by": "b5eb38ea8cb764675322e61e9b957a57deb947c6",
+            "build_seconds": 1239.1,
+            "source": "copied historical synthetic book; CSV digests checked against the continuation record",
+            "normalized_by": "51bd20498 Python capture with fixed persistence clock"
+          },
+          "runs": 1,
+          "python": "3.11.17 (main, Oct 21 2026, 17:46:53) [Clang 23.1.3 ]",
+          "cpus": 48,
+          "probe_sha256": "09217ae8ee8bd482719316d7408d203667ae9eaf7dbc2a3a3fc397064fa25201",
+          "harness_sha256": "b9cb682b6e652362756528a4cedf38713774d70833ce1c1c5300a14a3c3a6bbc",
+          "checkout_sources_at_measurement": {
+            "crates/journals/src/boundary/joins.rs": "58b06db41921c470886b1cd1e190f506d6fd9175645c58321340fc6dd464c68e",
+            "crates/journals/src/boundary.rs": "2ddc678761e48f07a4277b2c20622a94a631f2c7c3725eefa32370a71abd878d",
+            "crates/journals/src/compute.rs": "b50c57224fc536c3df0fdff7d4d465d396aed6f717c158fb668f0fee0d507102",
+            "crates/journals/src/lib.rs": "f3d8fc2ab7257405c56545dda5d0bf7b3c24d90be78b8ccdc219feda380a576d",
+            "crates/journals/src/loader/direct.rs": "6f4ff944e2dd1a053ae54807ad510094ffa7c6c72c7c97b25cb5b2a4b876b999",
+            "crates/journals/src/loader/ownership.rs": "e9fd153c3ddbc0b7ad836c280e2219d8c0285e46e80f457fb5039003d250c2c8",
+            "crates/journals/src/loader/receipts.rs": "08b0978e2fed949d12af142596d9c91f1e39436d6dd2665e62e374af69bb4453",
+            "crates/journals/src/loader/tests.rs": "c32901ad80222bb09c20979247c37cebc1801dfd26dfc5cddc430c7bc034b804",
+            "crates/journals/src/loader/worklist.rs": "64670923212f75666cf0496da7e4ff7a9073e85e382d715bdebf05776a5d3516",
+            "crates/journals/src/loader.rs": "42698dcb84c9f0aba04eef10a14ecdb2e8b0497960f8bdd4d48dd7a17c762465",
+            "crates/journals/src/model.rs": "68f10bb6e44e1283ccf887606562fd908ad764848e7a4f3fdbe5e2f196239f8b",
+            "crates/journals/src/persistence/filed.rs": "24206d69912e8b067199a1f42a3ba1ba257ed40ff99e1569d0dc9d4d3ff94432",
+            "crates/journals/src/persistence/quantity.rs": "53a839835d70cb33fe86b885d9885c651c74a69ff8413d7024dcdb361133c813",
+            "crates/journals/src/persistence/quarantine.rs": "c9cb06f5e0b8ab54fc47c20d9b4f7dc63a54379444e864fb450d0ef2f8235c0d",
+            "crates/journals/src/persistence.rs": "840fd2e09d7f591e9c680afa9c04f4cd1f44197eee50b57515c3fa5759f4288e",
+            "crates/journals/src/render.rs": "afac4610917b0ed8ef320385b7f80ca5cb28bd69187e9c00b5dac5b998550d45",
+            "crates/journals/src/storage/calculation.rs": "69df0af55305ea1446c07b629cc1204abbc0999fc932f1ede71941dd06b93dd8",
+            "crates/journals/src/storage/digest.rs": "7acb34b7f5be86247135ca181b5d2bfcd326f58b01dcfdd305c531c76b14c55c",
+            "crates/journals/src/storage/tests.rs": "41f72abb866de0038eca456e7f93bbc3b661beda96a761cc7c629fe9227e11c4",
+            "crates/journals/src/storage.rs": "2650b204b9191fd389bcc5baa49bcaeb365c077e2600f2750b84a750cd20f4d4"
+          },
+          "sources": {
+            "crates/journals/src/boundary.rs": "2ddc678761e48f07a4277b2c20622a94a631f2c7c3725eefa32370a71abd878d",
+            "crates/journals/src/boundary/joins.rs": "58b06db41921c470886b1cd1e190f506d6fd9175645c58321340fc6dd464c68e",
+            "crates/journals/src/compute.rs": "b50c57224fc536c3df0fdff7d4d465d396aed6f717c158fb668f0fee0d507102",
+            "crates/journals/src/lib.rs": "f3d8fc2ab7257405c56545dda5d0bf7b3c24d90be78b8ccdc219feda380a576d",
+            "crates/journals/src/loader.rs": "42698dcb84c9f0aba04eef10a14ecdb2e8b0497960f8bdd4d48dd7a17c762465",
+            "crates/journals/src/loader/direct.rs": "6f4ff944e2dd1a053ae54807ad510094ffa7c6c72c7c97b25cb5b2a4b876b999",
+            "crates/journals/src/loader/ownership.rs": "e9fd153c3ddbc0b7ad836c280e2219d8c0285e46e80f457fb5039003d250c2c8",
+            "crates/journals/src/loader/receipts.rs": "08b0978e2fed949d12af142596d9c91f1e39436d6dd2665e62e374af69bb4453",
+            "crates/journals/src/loader/tests.rs": "c32901ad80222bb09c20979247c37cebc1801dfd26dfc5cddc430c7bc034b804",
+            "crates/journals/src/loader/worklist.rs": "64670923212f75666cf0496da7e4ff7a9073e85e382d715bdebf05776a5d3516",
+            "crates/journals/src/model.rs": "68f10bb6e44e1283ccf887606562fd908ad764848e7a4f3fdbe5e2f196239f8b",
+            "crates/journals/src/persistence.rs": "8d97d978da4911d18f662b9ef780a802b601cd5c7faa9bd28f62bc31d388c5e0",
+            "crates/journals/src/persistence/filed.rs": "24206d69912e8b067199a1f42a3ba1ba257ed40ff99e1569d0dc9d4d3ff94432",
+            "crates/journals/src/persistence/quantity.rs": "947e1c3927fc943f0eb187604e82e06a37ded17ccbf617d51358abbdd0a4a094",
+            "crates/journals/src/persistence/quarantine.rs": "c9cb06f5e0b8ab54fc47c20d9b4f7dc63a54379444e864fb450d0ef2f8235c0d",
+            "crates/journals/src/render.rs": "afac4610917b0ed8ef320385b7f80ca5cb28bd69187e9c00b5dac5b998550d45",
+            "crates/journals/src/storage.rs": "d659568b07eb32327c08615b1d94e9f80e1594f6c5c16597f81c28262d49f243",
+            "crates/journals/src/storage/calculation.rs": "a637aca0d07926d54671a0b2bffdf988574adae711cc2a8db5a413dd9d55f2ba",
+            "crates/journals/src/storage/tests.rs": "c183832c9c6d6e450a9639f0f92249cbf6bbf5b48b869861b19149d6039649f2"
+          },
+          "source_manifest_note": "Binary built and copied from clean 51bd20498 before edits. Checkout hashes observed by the later harness belong to the prototype; actual binary source hashes above are reconstructed from the clean commit."
+        },
+        "measurements": [
+          {
+            "mode": "fresh",
+            "transactions": 20000,
+            "appended_transactions": 0,
+            "activity": {
+              "journal_entries": {
+                "insert": 19983,
+                "delete": 0
+              },
+              "journal_quantity_postings": {
+                "insert": 45216,
+                "delete": 0
+              }
+            },
+            "entries": 19983,
+            "postings": 45216,
+            "best": {
+              "python": 1.8666173029999982,
+              "rust": 1.3150209999999998,
+              "floor": 0.8006500000000001
+            },
+            "best_wall": {
+              "python": 1.961750062997453,
+              "rust": 1.408613682,
+              "floor": 0.881505502
+            },
+            "trials": [
+              {
+                "python": {
+                  "seconds": 1.961750062997453,
+                  "cpu_seconds": 1.8666173029999982,
+                  "load1": 31.39990234375
+                },
+                "rust": {
+                  "seconds": 1.408613682,
+                  "cpu_seconds": 1.3150209999999998,
+                  "phases": {
+                    "begin": {
+                      "cpu": 1.8999999999991246e-05,
+                      "wall": 2.0281e-05
+                    },
+                    "commit": {
+                      "cpu": 0.3136110000000003,
+                      "wall": 0.395601023
+                    },
+                    "complete": {
+                      "cpu": 0.015113999999999628,
+                      "wall": 0.015266111
+                    },
+                    "entries_prepare": {
+                      "cpu": 0.1130110000000002,
+                      "wall": 0.114213301
+                    },
+                    "entries_write": {
+                      "cpu": 0.2778719999999999,
+                      "wall": 0.28082984
+                    },
+                    "filed": {
+                      "cpu": 7.000000000090267e-06,
+                      "wall": 1.83e-06
+                    },
+                    "pricing": {
+                      "cpu": 0.07939399999999974,
+                      "wall": 0.08108454
+                    },
+                    "quantity": {
+                      "cpu": 0.009680999999999607,
+                      "wall": 0.009770018
+                    },
+                    "quantity_other": {
+                      "cpu": 0.05411900000000003,
+                      "wall": 0.054627891
+                    },
+                    "quantity_postings_bind": {
+                      "cpu": 0.07163800000000009,
+                      "wall": 0.072531229
+                    },
+                    "quantity_postings_prepare": {
+                      "cpu": 0.016992000000000118,
+                      "wall": 0.017162693
+                    },
+                    "quantity_postings_write": {
+                      "cpu": 0.34924100000000013,
+                      "wall": 0.353014252
+                    },
+                    "setup": {
+                      "cpu": 0.0013390000000002011,
+                      "wall": 0.00134437
+                    },
+                    "small_tables": {
+                      "cpu": 0.01290799999999992,
+                      "wall": 0.013025291
+                    }
+                  },
+                  "load1": 31.7685546875
+                },
+                "floor": {
+                  "seconds": 0.881505502,
+                  "cpu_seconds": 0.8006500000000001,
+                  "phases": null,
+                  "load1": 31.787109375
+                }
+              }
+            ],
+            "over_floor": 0.5143709999999997
+          },
+          {
+            "mode": "unchanged",
+            "transactions": 20000,
+            "appended_transactions": 0,
+            "activity": {
+              "journal_entries": {
+                "insert": 0,
+                "delete": 0
+              },
+              "journal_quantity_postings": {
+                "insert": 0,
+                "delete": 0
+              }
+            },
+            "entries": 19983,
+            "postings": 45216,
+            "best": {
+              "python": 1.6406937630000016,
+              "rust": 0.7116639999999999,
+              "floor": 0.019226999999999883
+            },
+            "best_wall": {
+              "python": 1.9068623229977675,
+              "rust": 0.789066696,
+              "floor": 0.076300193
+            },
+            "trials": [
+              {
+                "python": {
+                  "seconds": 1.9068623229977675,
+                  "cpu_seconds": 1.6406937630000016,
+                  "load1": 29.43896484375
+                },
+                "rust": {
+                  "seconds": 0.789066696,
+                  "cpu_seconds": 0.7116639999999999,
+                  "phases": {
+                    "begin": {
+                      "cpu": 1.8999999999991246e-05,
+                      "wall": 1.967e-05
+                    },
+                    "commit": {
+                      "cpu": 0.006488999999999745,
+                      "wall": 0.074239987
+                    },
+                    "complete": {
+                      "cpu": 0.012193000000000342,
+                      "wall": 0.012335375
+                    },
+                    "entries_prepare": {
+                      "cpu": 0.11148900000000017,
+                      "wall": 0.113128185
+                    },
+                    "entries_write": {
+                      "cpu": 0.13379299999999983,
+                      "wall": 0.134881791
+                    },
+                    "filed": {
+                      "cpu": 7.999999999785956e-06,
+                      "wall": 1.59e-06
+                    },
+                    "pricing": {
+                      "cpu": 0.07328999999999963,
+                      "wall": 0.074637337
+                    },
+                    "quantity": {
+                      "cpu": 0.009388999999999648,
+                      "wall": 0.009484202
+                    },
+                    "quantity_other": {
+                      "cpu": 0.06029000000000018,
+                      "wall": 0.060802148
+                    },
+                    "quantity_postings_bind": {
+                      "cpu": 0.054693999999999576,
+                      "wall": 0.055562821
+                    },
+                    "quantity_postings_prepare": {
+                      "cpu": 0.019268000000000285,
+                      "wall": 0.020264212
+                    },
+                    "quantity_postings_write": {
+                      "cpu": 0.21868200000000027,
+                      "wall": 0.221466794
+                    },
+                    "setup": {
+                      "cpu": 0.0011410000000005027,
+                      "wall": 0.001145636
+                    },
+                    "small_tables": {
+                      "cpu": 0.010905000000000165,
+                      "wall": 0.011001916
+                    }
+                  },
+                  "load1": 29.00341796875
+                },
+                "floor": {
+                  "seconds": 0.076300193,
+                  "cpu_seconds": 0.019226999999999883,
+                  "phases": null,
+                  "load1": 29.72412109375
+                }
+              }
+            ],
+            "over_floor": 0.692437
+          }
+        ]
+      }
+    ],
+    "note": "All eight one-pair fresh/unchanged cells miss the budget. These are profiling data, not an acceptance minimum or a controlled speed comparison with the earlier checkpoint."
+  },
+  "prototype": {
+    "disposition": "withdrawn",
+    "exact_timed_stores": 21,
+    "measurements": [
+      {
+        "path": "target/digest/generic-20000",
+        "environment": {
+          "book": {
+            "schema": "kassiber.journals-bench-book.v1",
+            "kind": "generic",
+            "transactions": 20000,
+            "seed": 1,
+            "csv_sha256": {
+              "book.csv": "7b09f4fd1d6fc465734d1c30db1e8ca2445577932c2fd924ab593106172cf6b1"
+            },
+            "pegs": 0,
+            "pegs_paired": 0,
+            "journals": {
+              "entries_created": 20000,
+              "quarantined": 0,
+              "cross_asset_pairs": 0,
+              "processed_transactions": 20000
+            },
+            "built_by": "32767d331e7be68c1efba00f9811f501d8a5f76f",
+            "build_seconds": 37.0,
+            "source": "copied historical synthetic book; CSV digests checked against the continuation record",
+            "normalized_by": "51bd20498 Python capture with fixed persistence clock"
+          },
+          "runs": 1,
+          "python": "3.11.17 (main, Oct 21 2026, 17:46:53) [Clang 23.1.3 ]",
+          "cpus": 48,
+          "probe_sha256": "b9dbb6d8775a4f8549eeaff13b5371cd872f4bf1181fdf278261c8bef3797ec5",
+          "harness_sha256": "b9cb682b6e652362756528a4cedf38713774d70833ce1c1c5300a14a3c3a6bbc",
+          "sources": {
+            "crates/journals/src/boundary/joins.rs": "58b06db41921c470886b1cd1e190f506d6fd9175645c58321340fc6dd464c68e",
+            "crates/journals/src/boundary.rs": "2ddc678761e48f07a4277b2c20622a94a631f2c7c3725eefa32370a71abd878d",
+            "crates/journals/src/compute.rs": "b50c57224fc536c3df0fdff7d4d465d396aed6f717c158fb668f0fee0d507102",
+            "crates/journals/src/lib.rs": "f3d8fc2ab7257405c56545dda5d0bf7b3c24d90be78b8ccdc219feda380a576d",
+            "crates/journals/src/loader/direct.rs": "6f4ff944e2dd1a053ae54807ad510094ffa7c6c72c7c97b25cb5b2a4b876b999",
+            "crates/journals/src/loader/ownership.rs": "e9fd153c3ddbc0b7ad836c280e2219d8c0285e46e80f457fb5039003d250c2c8",
+            "crates/journals/src/loader/receipts.rs": "08b0978e2fed949d12af142596d9c91f1e39436d6dd2665e62e374af69bb4453",
+            "crates/journals/src/loader/tests.rs": "c32901ad80222bb09c20979247c37cebc1801dfd26dfc5cddc430c7bc034b804",
+            "crates/journals/src/loader/worklist.rs": "64670923212f75666cf0496da7e4ff7a9073e85e382d715bdebf05776a5d3516",
+            "crates/journals/src/loader.rs": "42698dcb84c9f0aba04eef10a14ecdb2e8b0497960f8bdd4d48dd7a17c762465",
+            "crates/journals/src/model.rs": "68f10bb6e44e1283ccf887606562fd908ad764848e7a4f3fdbe5e2f196239f8b",
+            "crates/journals/src/persistence/filed.rs": "24206d69912e8b067199a1f42a3ba1ba257ed40ff99e1569d0dc9d4d3ff94432",
+            "crates/journals/src/persistence/quantity.rs": "53a839835d70cb33fe86b885d9885c651c74a69ff8413d7024dcdb361133c813",
+            "crates/journals/src/persistence/quarantine.rs": "c9cb06f5e0b8ab54fc47c20d9b4f7dc63a54379444e864fb450d0ef2f8235c0d",
+            "crates/journals/src/persistence.rs": "e5e942d0c4ecfcd064ea60e106436d7284c3467b01e75fe649fd4f7c74013b8e",
+            "crates/journals/src/render.rs": "afac4610917b0ed8ef320385b7f80ca5cb28bd69187e9c00b5dac5b998550d45",
+            "crates/journals/src/storage/calculation.rs": "69df0af55305ea1446c07b629cc1204abbc0999fc932f1ede71941dd06b93dd8",
+            "crates/journals/src/storage/digest.rs": "513af3291c2d915b2929a7d1735194fde19f48a304f910a989f29ae8c1d846d8",
+            "crates/journals/src/storage/tests.rs": "41f72abb866de0038eca456e7f93bbc3b661beda96a761cc7c629fe9227e11c4",
+            "crates/journals/src/storage.rs": "2650b204b9191fd389bcc5baa49bcaeb365c077e2600f2750b84a750cd20f4d4"
+          }
+        },
+        "measurements": [
+          {
+            "mode": "fresh",
+            "transactions": 20000,
+            "appended_transactions": 0,
+            "activity": {
+              "journal_entries": {
+                "insert": 20000,
+                "delete": 0
+              },
+              "journal_quantity_postings": {
+                "insert": 40000,
+                "delete": 0
+              }
+            },
+            "entries": 20000,
+            "postings": 40000,
+            "best": {
+              "python": 1.3913162869999987,
+              "rust": 0.9941690000000003,
+              "floor": 0.736809
+            },
+            "best_wall": {
+              "python": 1.4131113209878094,
+              "rust": 1.059643502,
+              "floor": 0.830992958
+            },
+            "trials": [
+              {
+                "python": {
+                  "seconds": 1.4131113209878094,
+                  "cpu_seconds": 1.3913162869999987,
+                  "load1": 26.7919921875
+                },
+                "rust": {
+                  "seconds": 1.059643502,
+                  "cpu_seconds": 0.9941690000000003,
+                  "phases": {
+                    "begin": {
+                      "cpu": 2.0000000000131024e-05,
+                      "wall": 2.139e-05
+                    },
+                    "commit": {
+                      "cpu": 0.2510399999999997,
+                      "wall": 0.30943768
+                    },
+                    "complete": {
+                      "cpu": 0.00370999999999988,
+                      "wall": 0.003743422
+                    },
+                    "entries_prepare": {
+                      "cpu": 0.033849999999999714,
+                      "wall": 0.034164818
+                    },
+                    "entries_write": {
+                      "cpu": 0.3324570000000002,
+                      "wall": 0.335247764
+                    },
+                    "filed": {
+                      "cpu": 0.00013000000000040757,
+                      "wall": 0.000125283
+                    },
+                    "pricing": {
+                      "cpu": 0.02248299999999981,
+                      "wall": 0.022760499
+                    },
+                    "quantity": {
+                      "cpu": 0.00302200000000008,
+                      "wall": 0.003051003
+                    },
+                    "quantity_other": {
+                      "cpu": 0.01888700000000032,
+                      "wall": 0.01909542
+                    },
+                    "quantity_postings_bind": {
+                      "cpu": 0.04669400000000001,
+                      "wall": 0.047131981
+                    },
+                    "quantity_postings_prepare": {
+                      "cpu": 0.01635999999999993,
+                      "wall": 0.016519209
+                    },
+                    "quantity_postings_write": {
+                      "cpu": 0.25881599999999993,
+                      "wall": 0.261544109
+                    },
+                    "setup": {
+                      "cpu": 0.0003189999999999582,
+                      "wall": 0.000324189
+                    },
+                    "small_tables": {
+                      "cpu": 0.006355999999999806,
+                      "wall": 0.006407304
+                    }
+                  },
+                  "load1": 26.88916015625
+                },
+                "floor": {
+                  "seconds": 0.830992958,
+                  "cpu_seconds": 0.736809,
+                  "phases": null,
+                  "load1": 26.81787109375
+                }
+              }
+            ],
+            "over_floor": 0.25736000000000026
+          },
+          {
+            "mode": "unchanged",
+            "transactions": 20000,
+            "appended_transactions": 0,
+            "activity": {
+              "journal_entries": {
+                "insert": 0,
+                "delete": 0
+              },
+              "journal_quantity_postings": {
+                "insert": 0,
+                "delete": 0
+              }
+            },
+            "entries": 20000,
+            "postings": 40000,
+            "best": {
+              "python": 1.0310287020000004,
+              "rust": 0.4775600000000002,
+              "floor": 0.0009900000000002684
+            },
+            "best_wall": {
+              "python": 1.041180461004842,
+              "rust": 0.529011766,
+              "floor": 0.064002983
+            },
+            "trials": [
+              {
+                "python": {
+                  "seconds": 1.041180461004842,
+                  "cpu_seconds": 1.0310287020000004,
+                  "load1": 24.0869140625
+                },
+                "rust": {
+                  "seconds": 0.529011766,
+                  "cpu_seconds": 0.4775600000000002,
+                  "phases": {
+                    "begin": {
+                      "cpu": 2.199999999996649e-05,
+                      "wall": 2.372e-05
+                    },
+                    "commit": {
+                      "cpu": 0.0012279999999997848,
+                      "wall": 0.047223991
+                    },
+                    "complete": {
+                      "cpu": 0.0027529999999997834,
+                      "wall": 0.002772175
+                    },
+                    "entries_prepare": {
+                      "cpu": 0.029912999999999856,
+                      "wall": 0.030138141
+                    },
+                    "entries_write": {
+                      "cpu": 0.17739400000000005,
+                      "wall": 0.180200073
+                    },
+                    "filed": {
+                      "cpu": 0.00012100000000003774,
+                      "wall": 0.000116253
+                    },
+                    "pricing": {
+                      "cpu": 0.021930000000000005,
+                      "wall": 0.022140727
+                    },
+                    "quantity": {
+                      "cpu": 0.003309999999999924,
+                      "wall": 0.00333969
+                    },
+                    "quantity_other": {
+                      "cpu": 0.02136899999999997,
+                      "wall": 0.021575961
+                    },
+                    "quantity_postings_bind": {
+                      "cpu": 0.062562,
+                      "wall": 0.063026318
+                    },
+                    "quantity_postings_prepare": {
+                      "cpu": 0.018499000000000043,
+                      "wall": 0.018651492
+                    },
+                    "quantity_postings_write": {
+                      "cpu": 0.132015,
+                      "wall": 0.133277829
+                    },
+                    "setup": {
+                      "cpu": 0.000360000000000138,
+                      "wall": 0.00035561
+                    },
+                    "small_tables": {
+                      "cpu": 0.006070000000000242,
+                      "wall": 0.006110584
+                    }
+                  },
+                  "load1": 24.0869140625
+                },
+                "floor": {
+                  "seconds": 0.064002983,
+                  "cpu_seconds": 0.0009900000000002684,
+                  "phases": null,
+                  "load1": 23.27880859375
+                }
+              }
+            ],
+            "over_floor": 0.47656999999999994
+          }
+        ]
+      },
+      {
+        "path": "target/digest/generic-20000-five",
+        "environment": {
+          "book": {
+            "schema": "kassiber.journals-bench-book.v1",
+            "kind": "generic",
+            "transactions": 20000,
+            "seed": 1,
+            "csv_sha256": {
+              "book.csv": "7b09f4fd1d6fc465734d1c30db1e8ca2445577932c2fd924ab593106172cf6b1"
+            },
+            "pegs": 0,
+            "pegs_paired": 0,
+            "journals": {
+              "entries_created": 20000,
+              "quarantined": 0,
+              "cross_asset_pairs": 0,
+              "processed_transactions": 20000
+            },
+            "built_by": "32767d331e7be68c1efba00f9811f501d8a5f76f",
+            "build_seconds": 37.0,
+            "source": "copied historical synthetic book; CSV digests checked against the continuation record",
+            "normalized_by": "51bd20498 Python capture with fixed persistence clock"
+          },
+          "runs": 5,
+          "python": "3.11.17 (main, Oct 21 2026, 17:46:53) [Clang 23.1.3 ]",
+          "cpus": 48,
+          "probe_sha256": "b9dbb6d8775a4f8549eeaff13b5371cd872f4bf1181fdf278261c8bef3797ec5",
+          "harness_sha256": "b9cb682b6e652362756528a4cedf38713774d70833ce1c1c5300a14a3c3a6bbc",
+          "sources": {
+            "crates/journals/src/boundary/joins.rs": "58b06db41921c470886b1cd1e190f506d6fd9175645c58321340fc6dd464c68e",
+            "crates/journals/src/boundary.rs": "2ddc678761e48f07a4277b2c20622a94a631f2c7c3725eefa32370a71abd878d",
+            "crates/journals/src/compute.rs": "b50c57224fc536c3df0fdff7d4d465d396aed6f717c158fb668f0fee0d507102",
+            "crates/journals/src/lib.rs": "f3d8fc2ab7257405c56545dda5d0bf7b3c24d90be78b8ccdc219feda380a576d",
+            "crates/journals/src/loader/direct.rs": "6f4ff944e2dd1a053ae54807ad510094ffa7c6c72c7c97b25cb5b2a4b876b999",
+            "crates/journals/src/loader/ownership.rs": "e9fd153c3ddbc0b7ad836c280e2219d8c0285e46e80f457fb5039003d250c2c8",
+            "crates/journals/src/loader/receipts.rs": "08b0978e2fed949d12af142596d9c91f1e39436d6dd2665e62e374af69bb4453",
+            "crates/journals/src/loader/tests.rs": "c32901ad80222bb09c20979247c37cebc1801dfd26dfc5cddc430c7bc034b804",
+            "crates/journals/src/loader/worklist.rs": "64670923212f75666cf0496da7e4ff7a9073e85e382d715bdebf05776a5d3516",
+            "crates/journals/src/loader.rs": "42698dcb84c9f0aba04eef10a14ecdb2e8b0497960f8bdd4d48dd7a17c762465",
+            "crates/journals/src/model.rs": "68f10bb6e44e1283ccf887606562fd908ad764848e7a4f3fdbe5e2f196239f8b",
+            "crates/journals/src/persistence/filed.rs": "24206d69912e8b067199a1f42a3ba1ba257ed40ff99e1569d0dc9d4d3ff94432",
+            "crates/journals/src/persistence/quantity.rs": "53a839835d70cb33fe86b885d9885c651c74a69ff8413d7024dcdb361133c813",
+            "crates/journals/src/persistence/quarantine.rs": "c9cb06f5e0b8ab54fc47c20d9b4f7dc63a54379444e864fb450d0ef2f8235c0d",
+            "crates/journals/src/persistence.rs": "e5e942d0c4ecfcd064ea60e106436d7284c3467b01e75fe649fd4f7c74013b8e",
+            "crates/journals/src/render.rs": "afac4610917b0ed8ef320385b7f80ca5cb28bd69187e9c00b5dac5b998550d45",
+            "crates/journals/src/storage/calculation.rs": "69df0af55305ea1446c07b629cc1204abbc0999fc932f1ede71941dd06b93dd8",
+            "crates/journals/src/storage/digest.rs": "513af3291c2d915b2929a7d1735194fde19f48a304f910a989f29ae8c1d846d8",
+            "crates/journals/src/storage/tests.rs": "41f72abb866de0038eca456e7f93bbc3b661beda96a761cc7c629fe9227e11c4",
+            "crates/journals/src/storage.rs": "2650b204b9191fd389bcc5baa49bcaeb365c077e2600f2750b84a750cd20f4d4"
+          }
+        },
+        "measurements": [
+          {
+            "mode": "unchanged",
+            "transactions": 20000,
+            "appended_transactions": 0,
+            "activity": {
+              "journal_entries": {
+                "insert": 0,
+                "delete": 0
+              },
+              "journal_quantity_postings": {
+                "insert": 0,
+                "delete": 0
+              }
+            },
+            "entries": 20000,
+            "postings": 40000,
+            "best": {
+              "python": 1.0072716590000006,
+              "rust": 0.40068899999999985,
+              "floor": 0.0014070000000003802
+            },
+            "best_wall": {
+              "python": 1.0175657910003792,
+              "rust": 0.429360224,
+              "floor": 0.037727604
+            },
+            "trials": [
+              {
+                "python": {
+                  "seconds": 1.049046014988562,
+                  "cpu_seconds": 1.0369007319999994,
+                  "load1": 19.24853515625
+                },
+                "rust": {
+                  "seconds": 0.493817294,
+                  "cpu_seconds": 0.45390799999999976,
+                  "phases": {
+                    "begin": {
+                      "cpu": 1.8999999999991246e-05,
+                      "wall": 2.0001e-05
+                    },
+                    "commit": {
+                      "cpu": 0.0020809999999999995,
+                      "wall": 0.03797056
+                    },
+                    "complete": {
+                      "cpu": 0.0025849999999998374,
+                      "wall": 0.002607374
+                    },
+                    "entries_prepare": {
+                      "cpu": 0.030609999999999804,
+                      "wall": 0.030863646
+                    },
+                    "entries_write": {
+                      "cpu": 0.16961100000000018,
+                      "wall": 0.170849474
+                    },
+                    "filed": {
+                      "cpu": 0.00011500000000008725,
+                      "wall": 0.000111973
+                    },
+                    "pricing": {
+                      "cpu": 0.019832000000000072,
+                      "wall": 0.02002061
+                    },
+                    "quantity": {
+                      "cpu": 0.003059000000000145,
+                      "wall": 0.003084836
+                    },
+                    "quantity_other": {
+                      "cpu": 0.017370000000000108,
+                      "wall": 0.01753217
+                    },
+                    "quantity_postings_bind": {
+                      "cpu": 0.06780900000000001,
+                      "wall": 0.068671122
+                    },
+                    "quantity_postings_prepare": {
+                      "cpu": 0.017336999999999936,
+                      "wall": 0.01757417
+                    },
+                    "quantity_postings_write": {
+                      "cpu": 0.11789499999999986,
+                      "wall": 0.11885251
+                    },
+                    "setup": {
+                      "cpu": 0.0003370000000000317,
+                      "wall": 0.000339838
+                    },
+                    "small_tables": {
+                      "cpu": 0.005231999999999903,
+                      "wall": 0.005266499
+                    }
+                  },
+                  "load1": 19.24853515625
+                },
+                "floor": {
+                  "seconds": 0.037727604,
+                  "cpu_seconds": 0.0018380000000002283,
+                  "phases": null,
+                  "load1": 18.828125
+                }
+              },
+              {
+                "rust": {
+                  "seconds": 0.437221182,
+                  "cpu_seconds": 0.40072999999999936,
+                  "phases": {
+                    "begin": {
+                      "cpu": 1.5999999999571912e-05,
+                      "wall": 1.857e-05
+                    },
+                    "commit": {
+                      "cpu": 0.0012369999999997106,
+                      "wall": 0.033660634
+                    },
+                    "complete": {
+                      "cpu": 0.0028839999999998867,
+                      "wall": 0.002911781
+                    },
+                    "entries_prepare": {
+                      "cpu": 0.02707000000000015,
+                      "wall": 0.02734159
+                    },
+                    "entries_write": {
+                      "cpu": 0.1697450000000007,
+                      "wall": 0.17197952
+                    },
+                    "filed": {
+                      "cpu": 0.00011600000000022703,
+                      "wall": 0.000112743
+                    },
+                    "pricing": {
+                      "cpu": 0.015236999999999057,
+                      "wall": 0.015373386
+                    },
+                    "quantity": {
+                      "cpu": 0.002646999999999622,
+                      "wall": 0.002668795
+                    },
+                    "quantity_other": {
+                      "cpu": 0.013929000000000968,
+                      "wall": 0.014037563
+                    },
+                    "quantity_postings_bind": {
+                      "cpu": 0.05800200000000011,
+                      "wall": 0.058393199
+                    },
+                    "quantity_postings_prepare": {
+                      "cpu": 0.0139149999999999,
+                      "wall": 0.014010693
+                    },
+                    "quantity_postings_write": {
+                      "cpu": 0.09018199999999954,
+                      "wall": 0.090897225
+                    },
+                    "setup": {
+                      "cpu": 0.00026500000000062585,
+                      "wall": 0.000261467
+                    },
+                    "small_tables": {
+                      "cpu": 0.005468999999999724,
+                      "wall": 0.005504945
+                    }
+                  },
+                  "load1": 18.828125
+                },
+                "python": {
+                  "seconds": 1.0286240040150005,
+                  "cpu_seconds": 1.018252338,
+                  "load1": 18.6015625
+                },
+                "floor": {
+                  "seconds": 0.039450735,
+                  "cpu_seconds": 0.002061999999999564,
+                  "phases": null,
+                  "load1": 18.6015625
+                }
+              },
+              {
+                "python": {
+                  "seconds": 1.0175657910003792,
+                  "cpu_seconds": 1.0072716590000006,
+                  "load1": 19.5947265625
+                },
+                "rust": {
+                  "seconds": 0.50995922,
+                  "cpu_seconds": 0.42127400000000037,
+                  "phases": {
+                    "begin": {
+                      "cpu": 1.600000000046009e-05,
+                      "wall": 1.9081e-05
+                    },
+                    "commit": {
+                      "cpu": 0.0013500000000004064,
+                      "wall": 0.084868946
+                    },
+                    "complete": {
+                      "cpu": 0.0031269999999992137,
+                      "wall": 0.003146117
+                    },
+                    "entries_prepare": {
+                      "cpu": 0.024850999999999956,
+                      "wall": 0.025031122
+                    },
+                    "entries_write": {
+                      "cpu": 0.1664500000000011,
+                      "wall": 0.168734056
+                    },
+                    "filed": {
+                      "cpu": 0.00014299999999956015,
+                      "wall": 0.000138803
+                    },
+                    "pricing": {
+                      "cpu": 0.01695599999999864,
+                      "wall": 0.017137759
+                    },
+                    "quantity": {
+                      "cpu": 0.0031520000000000437,
+                      "wall": 0.0032828
+                    },
+                    "quantity_other": {
+                      "cpu": 0.016178000000000026,
+                      "wall": 0.016298479
+                    },
+                    "quantity_postings_bind": {
+                      "cpu": 0.06451100000000132,
+                      "wall": 0.065303627
+                    },
+                    "quantity_postings_prepare": {
+                      "cpu": 0.015697999999998657,
+                      "wall": 0.016204916
+                    },
+                    "quantity_postings_write": {
+                      "cpu": 0.10269800000000018,
+                      "wall": 0.103562532
+                    },
+                    "setup": {
+                      "cpu": 0.00024900000000016576,
+                      "wall": 0.000245756
+                    },
+                    "small_tables": {
+                      "cpu": 0.00587900000000019,
+                      "wall": 0.005930595
+                    }
+                  },
+                  "load1": 19.5947265625
+                },
+                "floor": {
+                  "seconds": 0.062392215,
+                  "cpu_seconds": 0.0015319999999992007,
+                  "phases": null,
+                  "load1": 19.546875
+                }
+              },
+              {
+                "rust": {
+                  "seconds": 0.429360224,
+                  "cpu_seconds": 0.40068899999999985,
+                  "phases": {
+                    "begin": {
+                      "cpu": 1.7000000001488047e-05,
+                      "wall": 1.8681e-05
+                    },
+                    "commit": {
+                      "cpu": 0.0010010000000004737,
+                      "wall": 0.026301883
+                    },
+                    "complete": {
+                      "cpu": 0.001970999999999279,
+                      "wall": 0.001984919
+                    },
+                    "entries_prepare": {
+                      "cpu": 0.02377699999999905,
+                      "wall": 0.023987317
+                    },
+                    "entries_write": {
+                      "cpu": 0.1569730000000007,
+                      "wall": 0.158253737
+                    },
+                    "filed": {
+                      "cpu": 0.00011000000000116472,
+                      "wall": 0.000107693
+                    },
+                    "pricing": {
+                      "cpu": 0.015569000000001054,
+                      "wall": 0.015713934
+                    },
+                    "quantity": {
+                      "cpu": 0.0025380000000012615,
+                      "wall": 0.002557363
+                    },
+                    "quantity_other": {
+                      "cpu": 0.015326999999999202,
+                      "wall": 0.015477148
+                    },
+                    "quantity_postings_bind": {
+                      "cpu": 0.05997299999999939,
+                      "wall": 0.060386806
+                    },
+                    "quantity_postings_prepare": {
+                      "cpu": 0.013560999999999268,
+                      "wall": 0.013662244
+                    },
+                    "quantity_postings_write": {
+                      "cpu": 0.10468100000000113,
+                      "wall": 0.105653182
+                    },
+                    "setup": {
+                      "cpu": 0.00025599999999847967,
+                      "wall": 0.000252366
+                    },
+                    "small_tables": {
+                      "cpu": 0.00492599999999932,
+                      "wall": 0.004962931
+                    }
+                  },
+                  "load1": 19.546875
+                },
+                "python": {
+                  "seconds": 1.0286617840174586,
+                  "cpu_seconds": 1.016519406999997,
+                  "load1": 19.1826171875
+                },
+                "floor": {
+                  "seconds": 0.05851813,
+                  "cpu_seconds": 0.0014710000000004442,
+                  "phases": null,
+                  "load1": 19.1826171875
+                }
+              },
+              {
+                "python": {
+                  "seconds": 1.4801031470124144,
+                  "cpu_seconds": 1.4657800379999983,
+                  "load1": 19.1826171875
+                },
+                "rust": {
+                  "seconds": 0.465500784,
+                  "cpu_seconds": 0.4315350000000002,
+                  "phases": {
+                    "begin": {
+                      "cpu": 2.1000000000270802e-05,
+                      "wall": 2.213e-05
+                    },
+                    "commit": {
+                      "cpu": 0.0014089999999988834,
+                      "wall": 0.031384106
+                    },
+                    "complete": {
+                      "cpu": 0.0030940000000008183,
+                      "wall": 0.003149127
+                    },
+                    "entries_prepare": {
+                      "cpu": 0.02768000000000015,
+                      "wall": 0.02788025
+                    },
+                    "entries_write": {
+                      "cpu": 0.1688040000000015,
+                      "wall": 0.170903183
+                    },
+                    "filed": {
+                      "cpu": 0.00012199999999751299,
+                      "wall": 0.000116853
+                    },
+                    "pricing": {
+                      "cpu": 0.017085999999999046,
+                      "wall": 0.01719703
+                    },
+                    "quantity": {
+                      "cpu": 0.0038400000000002876,
+                      "wall": 0.003871404
+                    },
+                    "quantity_other": {
+                      "cpu": 0.01624299999999934,
+                      "wall": 0.01635529
+                    },
+                    "quantity_postings_bind": {
+                      "cpu": 0.060397999999999286,
+                      "wall": 0.060818715
+                    },
+                    "quantity_postings_prepare": {
+                      "cpu": 0.015861000000001013,
+                      "wall": 0.015988741
+                    },
+                    "quantity_postings_write": {
+                      "cpu": 0.1109390000000019,
+                      "wall": 0.111675516
+                    },
+                    "setup": {
+                      "cpu": 0.00033099999999919305,
+                      "wall": 0.000325298
+                    },
+                    "small_tables": {
+                      "cpu": 0.005691999999999808,
+                      "wall": 0.0057465
+                    }
+                  },
+                  "load1": 19.0078125
+                },
+                "floor": {
+                  "seconds": 0.03893797,
+                  "cpu_seconds": 0.0014070000000003802,
+                  "phases": null,
+                  "load1": 19.0078125
+                }
+              }
+            ],
+            "over_floor": 0.39928199999999947
+          }
+        ]
+      }
+    ],
+    "implementation": "SHA-256 digests cover each stored content scalar with type and length framing, excluding created_at. Typed calculations stream exact canonical bytes into a digest; unchanged entries skip final bindings and compact-string assembly. Decimal conversion and validation still occur. Posting digests are computed during validation. Fresh rows use prepared writes. No preparation is moved outside the timer and no schema, values, transaction policy or DML order is intentionally changed.",
+    "verification": {
+      "journal_tests": 54,
+      "failed": 0,
+      "ignored": 0,
+      "physical_sqlite_sqlcipher_crash_tests": true,
+      "mutation_recipes_apply": 181,
+      "mutation_kill_campaign_run": false,
+      "exhaustive_branch_audit_complete": false
+    },
+    "source_archive": {
+      "patch": "target/digest-prototype.patch",
+      "patch_sha256": "4865c13ba7410476657dcc1613a2226282f26517fcee9ef051db27209dc97199",
+      "sources": "target/digest-source",
+      "binary": "target/journal-persist-digest",
+      "binary_sha256": "b9dbb6d8775a4f8549eeaff13b5371cd872f4bf1181fdf278261c8bef3797ec5"
+    },
+    "reason": "The five-pair generic SQLite unchanged CPU minimum exceeds the write floor by 0.399282 seconds, above the allowed 0.15. Stop at this failed first acceptance gate; do not retain the speculative production refactor or claim completion."
+  },
+  "retained_reader_probe": {
+    "production": false,
+    "parity_claim": false,
+    "source": "target/scan-persistence-rows.rs",
+    "source_sha256": "14d520ae8c56e4eee1a13bd92bf935011f89e3e523a9360efcb337c70ca9bcf4",
+    "method": "Five warmed repetitions on the same disposable generic SQLite connection, direct reads versus json_array packing. CPU spans query iteration, decoding and a simplified SHA-256 stream. Hash framing and some float handling differ from production: this is a reader feasibility probe, not an exact row-digest oracle or SQL floor.",
+    "modes": {
+      "0": "direct ValueRef reads",
+      "1": "json_array plus Vec<Value> decode",
+      "2": "json_array plus streaming serde visitor"
+    },
+    "samples": [
+      {
+        "iteration": 0,
+        "table": "journal_entries",
+        "mode": 0,
+        "rows": 20000,
+        "cpu_seconds": 0.04941
+      },
+      {
+        "iteration": 0,
+        "table": "journal_entries",
+        "mode": 1,
+        "rows": 20000,
+        "cpu_seconds": 0.145651
+      },
+      {
+        "iteration": 0,
+        "table": "journal_entries",
+        "mode": 2,
+        "rows": 20000,
+        "cpu_seconds": 0.12007499999999999
+      },
+      {
+        "iteration": 0,
+        "table": "journal_quantity_postings",
+        "mode": 0,
+        "rows": 40000,
+        "cpu_seconds": 0.07680499999999996
+      },
+      {
+        "iteration": 0,
+        "table": "journal_quantity_postings",
+        "mode": 1,
+        "rows": 40000,
+        "cpu_seconds": 0.12356399999999995
+      },
+      {
+        "iteration": 0,
+        "table": "journal_quantity_postings",
+        "mode": 2,
+        "rows": 40000,
+        "cpu_seconds": 0.09838199999999997
+      },
+      {
+        "iteration": 1,
+        "table": "journal_entries",
+        "mode": 0,
+        "rows": 20000,
+        "cpu_seconds": 0.046691999999999956
+      },
+      {
+        "iteration": 1,
+        "table": "journal_entries",
+        "mode": 1,
+        "rows": 20000,
+        "cpu_seconds": 0.13493199999999994
+      },
+      {
+        "iteration": 1,
+        "table": "journal_entries",
+        "mode": 2,
+        "rows": 20000,
+        "cpu_seconds": 0.112286
+      },
+      {
+        "iteration": 1,
+        "table": "journal_quantity_postings",
+        "mode": 0,
+        "rows": 40000,
+        "cpu_seconds": 0.07301199999999997
+      },
+      {
+        "iteration": 1,
+        "table": "journal_quantity_postings",
+        "mode": 1,
+        "rows": 40000,
+        "cpu_seconds": 0.11145799999999995
+      },
+      {
+        "iteration": 1,
+        "table": "journal_quantity_postings",
+        "mode": 2,
+        "rows": 40000,
+        "cpu_seconds": 0.09268399999999999
+      },
+      {
+        "iteration": 2,
+        "table": "journal_entries",
+        "mode": 0,
+        "rows": 20000,
+        "cpu_seconds": 0.048848
+      },
+      {
+        "iteration": 2,
+        "table": "journal_entries",
+        "mode": 1,
+        "rows": 20000,
+        "cpu_seconds": 0.13648300000000013
+      },
+      {
+        "iteration": 2,
+        "table": "journal_entries",
+        "mode": 2,
+        "rows": 20000,
+        "cpu_seconds": 0.1117570000000001
+      },
+      {
+        "iteration": 2,
+        "table": "journal_quantity_postings",
+        "mode": 0,
+        "rows": 40000,
+        "cpu_seconds": 0.07309900000000003
+      },
+      {
+        "iteration": 2,
+        "table": "journal_quantity_postings",
+        "mode": 1,
+        "rows": 40000,
+        "cpu_seconds": 0.11644799999999988
+      },
+      {
+        "iteration": 2,
+        "table": "journal_quantity_postings",
+        "mode": 2,
+        "rows": 40000,
+        "cpu_seconds": 0.08536199999999994
+      },
+      {
+        "iteration": 3,
+        "table": "journal_entries",
+        "mode": 0,
+        "rows": 20000,
+        "cpu_seconds": 0.04381799999999991
+      },
+      {
+        "iteration": 3,
+        "table": "journal_entries",
+        "mode": 1,
+        "rows": 20000,
+        "cpu_seconds": 0.13141900000000017
+      },
+      {
+        "iteration": 3,
+        "table": "journal_entries",
+        "mode": 2,
+        "rows": 20000,
+        "cpu_seconds": 0.11060900000000018
+      },
+      {
+        "iteration": 3,
+        "table": "journal_quantity_postings",
+        "mode": 0,
+        "rows": 40000,
+        "cpu_seconds": 0.057455000000000034
+      },
+      {
+        "iteration": 3,
+        "table": "journal_quantity_postings",
+        "mode": 1,
+        "rows": 40000,
+        "cpu_seconds": 0.10601100000000008
+      },
+      {
+        "iteration": 3,
+        "table": "journal_quantity_postings",
+        "mode": 2,
+        "rows": 40000,
+        "cpu_seconds": 0.08639399999999986
+      },
+      {
+        "iteration": 4,
+        "table": "journal_entries",
+        "mode": 0,
+        "rows": 20000,
+        "cpu_seconds": 0.04418299999999986
+      },
+      {
+        "iteration": 4,
+        "table": "journal_entries",
+        "mode": 1,
+        "rows": 20000,
+        "cpu_seconds": 0.1317400000000002
+      },
+      {
+        "iteration": 4,
+        "table": "journal_entries",
+        "mode": 2,
+        "rows": 20000,
+        "cpu_seconds": 0.1110129999999998
+      },
+      {
+        "iteration": 4,
+        "table": "journal_quantity_postings",
+        "mode": 0,
+        "rows": 40000,
+        "cpu_seconds": 0.05747800000000014
+      },
+      {
+        "iteration": 4,
+        "table": "journal_quantity_postings",
+        "mode": 1,
+        "rows": 40000,
+        "cpu_seconds": 0.12241400000000002
+      },
+      {
+        "iteration": 4,
+        "table": "journal_quantity_postings",
+        "mode": 2,
+        "rows": 40000,
+        "cpu_seconds": 0.09951900000000036
+      }
+    ]
+  },
+  "discarded_setup": {
+    "path": "target/baseline/generic-20000",
+    "reason": "Historical source books still contained older stored journal rows. The unchanged witness found 20,000 entry INSERTs and DELETEs, so the run was excluded. Disposable copies were normalized with the unchanged current Python capture and fixed oracle clock before all valid runs.",
+    "reference_python_changed": false
+  },
+  "normalization": {
+    "script": "target/normalize_and_baseline.py",
+    "script_sha256": "00e9a9a8d56080c52af3e30ea10d0f1959547713dbdf6e37c7bd38eecd7f6829",
+    "csv_digests_checked_against": "docs/reference/r4-journal-persistence-continuation-measurements.json",
+    "book_manifests": {
+      "generic-20000": {
+        "schema": "kassiber.journals-bench-book.v1",
+        "kind": "generic",
+        "transactions": 20000,
+        "seed": 1,
+        "csv_sha256": {
+          "book.csv": "7b09f4fd1d6fc465734d1c30db1e8ca2445577932c2fd924ab593106172cf6b1"
+        },
+        "pegs": 0,
+        "pegs_paired": 0,
+        "journals": {
+          "entries_created": 20000,
+          "quarantined": 0,
+          "cross_asset_pairs": 0,
+          "processed_transactions": 20000
+        },
+        "built_by": "32767d331e7be68c1efba00f9811f501d8a5f76f",
+        "build_seconds": 37.0,
+        "source": "copied historical synthetic book; CSV digests checked against the continuation record",
+        "normalized_by": "51bd20498 Python capture with fixed persistence clock"
+      },
+      "generic-2000": {
+        "schema": "kassiber.journals-bench-book.v1",
+        "kind": "generic",
+        "transactions": 2000,
+        "seed": 1,
+        "csv_sha256": {
+          "book.csv": "11b9ae7166f9ca46e8eea1fe82465380d70d6f194cd215649a2ab31647aa1352"
+        },
+        "pegs": 0,
+        "source": "copied historical synthetic book; CSV digests checked against the continuation record",
+        "built_by": "reused synthetic corpus; source CSVs exactly match current generator",
+        "normalized_by": "51bd20498 Python capture with fixed persistence clock"
+      },
+      "multi-wallet-20000": {
+        "schema": "kassiber.journals-bench-book.v1",
+        "kind": "multi-wallet",
+        "transactions": 20000,
+        "seed": 7,
+        "csv_sha256": {
+          "Hot.csv": "8d3852c3bcdb36bdd425b76fb3a8e5f64bf462e57c6b61294ed774681ac81146",
+          "Cold.csv": "ed3a0928e98404316be9b9fa7e3b603f4d4e0d7577633bec06e441d8d0e8ff5f",
+          "LHot.csv": "0cdeee02cfd30c7a1bc950bb013c3bbe793b4f1c7f19bc7ab4a4569100117b7a",
+          "LCold.csv": "94adb338d7efdf3b52025c2ef85e0fb586a7f501ff446d6aef3572295f8fc748"
+        },
+        "pegs": 3306,
+        "pegs_paired": 300,
+        "journals": {
+          "entries_created": 19983,
+          "quarantined": 17,
+          "cross_asset_pairs": 300,
+          "processed_transactions": 20000
+        },
+        "built_by": "b5eb38ea8cb764675322e61e9b957a57deb947c6",
+        "build_seconds": 1239.1,
+        "source": "copied historical synthetic book; CSV digests checked against the continuation record",
+        "normalized_by": "51bd20498 Python capture with fixed persistence clock"
+      },
+      "multi-wallet-2000": {
+        "schema": "kassiber.journals-bench-book.v1",
+        "kind": "multi-wallet",
+        "transactions": 2000,
+        "seed": 7,
+        "csv_sha256": {
+          "Hot.csv": "e106b0aa2628699a1bff2b7fa4705a94ff8aa3c52761582e69baee21090e0d6c",
+          "Cold.csv": "e65f77cd25ab4e5de41f831eccc073c12b9cd2c5b9909fdca5ae4bea88eabdca",
+          "LHot.csv": "77da8aad0da7f1401e6ed0d8663299c669a05b5a194e2c6fd6c2d3ac9299ab98",
+          "LCold.csv": "94adb338d7efdf3b52025c2ef85e0fb586a7f501ff446d6aef3572295f8fc748"
+        },
+        "pegs": 342,
+        "source": "copied historical synthetic book; CSV digests checked against the continuation record",
+        "built_by": "reused synthetic corpus; source CSVs exactly match current generator",
+        "normalized_by": "51bd20498 Python capture with fixed persistence clock"
+      }
+    }
+  },
+  "baseline_binary": {
+    "path": "target/journal-persist-baseline",
+    "sha256": "09217ae8ee8bd482719316d7408d203667ae9eaf7dbc2a3a3fc397064fa25201"
+  },
+  "remaining": [
+    "Cheap typed-value row comparison and all eight five-pair 20k CPU passes, plus appended/changed and both-size/driver comparisons. No appended/changed or 2k comparisons were rerun in this attempt.",
+    "Exhaustive persistence branch-to-mutation audit, including the final comparison path. The inherited 181 kills were not rerun here.",
+    "24,000 generated books; 1,030 permutations; 159 retained recordings and their permutations plus fresh recordings; full census and shadow; 2,285 custody mutations, in resumable shards. Preserve the existing Python shadow read-budget repro.",
+    "Integrated R4-13 witnesses on both physical drivers: outer transaction ownership before reads/repairs, whole pre-COMMIT rollback, settings restoration, committed visibility, response flush before checkpoint, dropped handles, and post-COMMIT errors without a second failure reply; then acceptance record."
+  ],
+  "final_verification": {
+    "journal_tests": {
+      "passed": 56,
+      "failed": 0,
+      "ignored": 0,
+      "log": "target/final-journal-tests.log",
+      "sha256": "c62b42f455e39dc674c8eda35fb0930f9ac2d24cd987dc4bbc6c09b7ebac2f8a"
+    },
+    "python_oracles": {
+      "passed": 8,
+      "log": "target/final-python-oracles.log",
+      "sha256": "7c4bf8f87b9c5cd717a72e5a6defe7399fe6d7135a2d4c7e058dd94a0d3fc41b"
+    },
+    "clippy": {
+      "passed": true,
+      "package": "kassiber-journals",
+      "release": true,
+      "all_targets": true,
+      "deny_warnings": true,
+      "log": "target/final-journal-clippy.log",
+      "sha256": "8fd31c43a38cc2071418477f37e7d51f82ea4e8232c8816e4742cd77dd71a1bd"
+    },
+    "workspace_format": {
+      "passed": true,
+      "log": "target/final-format.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "classifier_update": {
+      "completed": true,
+      "generated_diff": false,
+      "log": "target/final-classifier.log",
+      "sha256": "6d5aec411b822716320386bd5a09a02e20eb087879bc27512f783043fa4d4896"
+    },
+    "preflight": {
+      "passed": 57,
+      "ci": true,
+      "log": "target/final-preflight.log",
+      "sha256": "7d3a0e8fa42f56d418c7951c849a0feaa6fb42f31c1c10d9a207d65ad9c52d86"
+    },
+    "mutation_applicability": {
+      "entries": 181,
+      "kills_rerun": false,
+      "log": "target/final-mutation-check.log",
+      "sha256": "e5d6bd463e0acb2907a1d0a93f90752cc716d2e81ad0efb4410b5ef7e015b721"
+    },
+    "manual_second_review": true,
+    "production_sources_match_base": true,
+    "prototype_sources_retained_locally": true,
+    "build_tree_removed_after_verification": true,
+    "test_source_sha256": "199c5229846b89ef177d8941dd2a223975511b97cbac4576e551803b02989104"
+  }
+}

@@ -509,3 +509,131 @@ fn shared_calculation_encoder_keeps_every_source_operand_and_refusal() {
         }
     }
 }
+
+#[derive(Default)]
+struct DeltaWrites(usize);
+impl WriteObserver for DeltaWrites {
+    fn wrote(&mut self, _: &'static str) -> rusqlite::Result<()> {
+        self.0 += 1;
+        Ok(())
+    }
+}
+
+#[test]
+fn every_retained_content_column_forces_writes_but_the_build_clock_does_not() {
+    fn check<const N: usize>(
+        name: &str,
+        columns: &[&str; N],
+        original: [Sql; N],
+        reals: &[usize],
+        replace: impl Fn(&Connection, &str, &[[Sql; N]], &mut DeltaWrites) -> rusqlite::Result<()>,
+    ) {
+        for column in 0..N {
+            let c = Connection::open_in_memory().unwrap();
+            table(&c, name, columns);
+            replace(
+                &c,
+                "p",
+                std::slice::from_ref(&original),
+                &mut DeltaWrites::default(),
+            )
+            .unwrap();
+            let before = snapshot::<N>(&c, name);
+            let mut next = original.clone();
+            next[N - 1] = Sql::Text("later".into());
+            let mut writes = DeltaWrites::default();
+            replace(&c, "p", std::slice::from_ref(&next), &mut writes).unwrap();
+            assert_eq!(writes.0, 0, "{name} clock");
+            assert_eq!(snapshot::<N>(&c, name), before);
+            if column != N - 1 {
+                next[column] = if reals.contains(&column) {
+                    Sql::Real(2.5)
+                } else {
+                    Sql::Text("changed".into())
+                };
+            }
+            replace(&c, "p", std::slice::from_ref(&next), &mut writes).unwrap();
+            assert_eq!(
+                writes.0,
+                if column == N - 1 { 0 } else { 2 },
+                "{name} {column}"
+            );
+            if column != N - 1 {
+                let after = snapshot::<N>(&c, name);
+                assert_eq!(after.len(), 1);
+                assert_eq!(after[0].1, next, "{name} {column}");
+            }
+        }
+    }
+    check(
+        "journal_entries",
+        &ENTRY_COLUMNS,
+        entry("a", "time", "old"),
+        &[10, 11, 12, 13, 14],
+        replace_journal_entries,
+    );
+    let mut posting = std::array::from_fn(|_| Sql::Null);
+    posting[0] = Sql::Text("posting".into());
+    posting[2] = Sql::Text("p".into());
+    posting[11] = Sql::Text("old".into());
+    check(
+        "journal_quantity_postings",
+        &POSTING_COLUMNS,
+        posting,
+        &[],
+        replace_quantity_postings,
+    );
+}
+
+#[test]
+fn retained_comparisons_distinguish_cell_boundaries_blob_text_and_null_text() {
+    for mode in 0..3 {
+        let c = Connection::open_in_memory().unwrap();
+        table(&c, "journal_entries", &ENTRY_COLUMNS);
+        let mut original = entry("a", "time", "old");
+        original[24] = Sql::Text("a".into());
+        original[25] = Sql::Text("bc".into());
+        if mode == 1 {
+            original[20] = Sql::Blob(b"{}".to_vec());
+        }
+        replace_journal_entries(&c, "p", std::slice::from_ref(&original), &mut ()).unwrap();
+        let mut next = original;
+        next[28] = Sql::Text("later".into());
+        match mode {
+            0 => {
+                next[24] = Sql::Text("ab".into());
+                next[25] = Sql::Text("c".into());
+            }
+            1 => next[20] = Sql::Text("{}".into()),
+            2 => next[21] = Sql::Text(String::new()),
+            _ => unreachable!(),
+        }
+        let mut writes = DeltaWrites::default();
+        replace_journal_entries(&c, "p", std::slice::from_ref(&next), &mut writes).unwrap();
+        assert_eq!(writes.0, 2, "mode {mode}");
+        assert_eq!(snapshot::<29>(&c, "journal_entries")[0].1, next);
+    }
+}
+
+#[test]
+fn every_entry_real_column_preserves_the_negative_zero_rewrite_rule() {
+    for column in 10..=14 {
+        let c = Connection::open_in_memory().unwrap();
+        table(&c, "journal_entries", &ENTRY_COLUMNS);
+        let mut original = entry("a", "time", "old");
+        original[column] = Sql::Real(0.0);
+        replace_journal_entries(&c, "p", std::slice::from_ref(&original), &mut ()).unwrap();
+        let mut next = original;
+        next[column] = Sql::Real(-0.0);
+        next[28] = Sql::Text("later".into());
+        for _ in 0..2 {
+            let mut writes = DeltaWrites::default();
+            replace_journal_entries(&c, "p", std::slice::from_ref(&next), &mut writes).unwrap();
+            assert_eq!(writes.0, 2, "column {column}");
+            assert_eq!(
+                snapshot::<29>(&c, "journal_entries")[0].1[28],
+                Sql::Text("later".into())
+            );
+        }
+    }
+}

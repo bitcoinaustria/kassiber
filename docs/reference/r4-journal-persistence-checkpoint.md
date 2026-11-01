@@ -6,6 +6,86 @@ persistence-branch mutation coverage and inherited full R4 campaigns must close
 before this becomes production authority. Python remains the reference. No CLI
 or daemon registration changes are included.
 
+## Digest probe from `51bd20498` (withdrawn)
+
+This attempt leaves **R4-12 unaccepted**. The schema-preserving digest and lazy
+binding prototype passed its correctness checks but missed the CPU budget. It
+was withdrawn. Production code, schema, Python reference and mutation recipes
+remain at `51bd20498`; this checkpoint adds retained-row regression witnesses
+and the [measurement record](r4-journal-persistence-digest-probe-measurements.json).
+
+The clean baseline binary was built and copied before Rust edits. Historical
+synthetic books were copied into worktree `target/`, their CSV hashes checked
+against the previous continuation, and their journals rebuilt with the current
+unchanged Python capture and fixed oracle clock. The first unnormalized copy
+failed the unchanged witness with 20,000 entry rewrites; its measurements are
+excluded. The record binds baseline sources to the clean commit and preserves
+the different checkout hashes that the harness observed during later runs.
+
+All eight normalized baseline fresh/unchanged cells passed complete dumps but
+missed the CPU allowance in one exploratory pair each. Host load rose while the
+initial build and book preparation ran; the valid baseline samples span
+25.333–83.650. These one-pair results establish profiling evidence, rather than
+five-pair acceptance or a controlled speed comparison with previous runs.
+
+The prototype hashed every stored content scalar with type and length framing,
+excluding the retained write timestamp. Calculations streamed canonical bytes
+into SHA-256; unchanged entries skipped final bindings and compact-string
+assembly. Decimal conversion and validation remained necessary. Posting digests
+were computed during validation. Preparation, comparisons, writes and COMMIT
+all remained inside the timer. There was no schema change or persisted digest.
+
+The prototype matched all six stores in its fresh/unchanged generic SQLite pair,
+then all fifteen stores in five alternating unchanged pairs. The five-pair
+unchanged minimum was **0.400689 CPU seconds**, against a **0.001407-second**
+floor: **0.399282 seconds above the floor**, exceeding the allowed 0.15. The
+single fresh pair was 0.257360 seconds above its floor. Scalar preparation,
+canonical calculation hashing and retained-row reads still consumed the budget.
+The fresh/unchanged floor, native and Python runs total **45 exact timed dumps**
+across this attempt, including the 24 baseline stores.
+
+A separate disposable reader probe compared direct reads with `json_array`
+packing decoded through either `Vec<Value>` or a streaming serde visitor. Both
+packed variants were slower in that probe. Its simplified hashing and float
+handling do not establish row-digest parity, durability or an acceptance floor.
+The complete withdrawn patch, source archive, binaries and probe stay locally
+under `target/`, with hashes and paths in the measurement record.
+
+Three new regression tests pin actual delta writes for every content column in
+both large tables, retained clocks, ambiguous adjacent text boundaries,
+BLOB versus TEXT, NULL versus empty TEXT, and the negative-zero rewrite rule in
+all five entry REAL columns. These witnesses remain after withdrawing the
+prototype. The prototype itself passed 54 journal tests, including complete
+dumps, refusal/unwind rollback and physical SQLite/SQLCipher crash recovery;
+its adjusted 181 mutation recipes only passed applicability checking. No new
+mutation-kill or exhaustive branch audit is claimed.
+
+Final checkpoint verification: 56 journal tests and eight Python oracles passed;
+release journal clippy (all targets, warnings denied), workspace formatting,
+181-recipe applicability and manual second review passed. The required classifier
+update produced no diff and the required preflight shard passed all 57 tests.
+Logs, source hashes and scope are recorded in the measurement record. The
+verification build tree was removed after summarizing its results.
+
+Remaining work, in order:
+
+1. Implement a sufficiently cheap typed-value comparison and meet all eight
+   20k floor + 0.15 CPU cells over five alternating pairs. Repeat appended,
+   changed and 2k comparisons on both book shapes and drivers. This attempt
+   did not rerun appended/changed or 2k comparisons.
+2. Complete the exhaustive persistence branch-to-mutation audit and kill its
+   recipes against the final comparison path. The inherited 181 kills were
+   not rerun in this attempt.
+3. Run the inherited 24,000 generated books, 1,030 permutations, 159 retained
+   recordings and their permutations plus fresh recordings, full census and
+   shadow, and 2,285 custody mutations in resumable shards. Preserve the known
+   Python shadow read-budget repro below. None ran in this attempt.
+4. Verify the integrated R4-13 contract on both physical drivers: whole outer
+   transaction ownership before snapshots/repairs, pre-COMMIT rollback,
+   setting restoration, committed visibility, response flush before checkpoint,
+   dropped handles and post-COMMIT failures without a second failure reply.
+   Then write the acceptance record. No integrated R4-13 witness ran here.
+
 ## Continuation from `32767d331`
 
 This continuation keeps **R4-12 unaccepted**. It reduces preparation without

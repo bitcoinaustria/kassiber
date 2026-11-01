@@ -653,6 +653,19 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   repeated work; final 20k CPU passes one of eight required fresh/unchanged
   cells. Unchanged builds still need a cheap comparison path. Corrected appended
   benchmark inputs carry distinct raw identities and assert actual writes.
+
+<!-- inherited from persist-accept@d6e46912b; pending r10 verification -->
+  repeated work; the last complete five-pair campaign passes one of eight
+  required 20k fresh/unchanged cells. A later schema-preserving digest probe
+  missed the generic unchanged CPU budget over five pairs and was withdrawn;
+  its retained-row regression witnesses and measurements are recorded in the
+  checkpoint. Unchanged builds still need a cheap comparison path. Corrected
+  appended benchmark inputs carry distinct raw identities and assert actual writes.
+  R4-9's test-only loader now constructs the current custody records directly;
+  generic 20k still takes 0.505 s CPU / 0.509 s wall against 0.30 s. It remains
+  unaccepted pending the typed consumer boundary, full legacy fidelity and
+  complete parity/mutation gates
+  ([evidence and remaining work](docs/reference/r4-native-loader-checkpoint.md)).
 - [ ] Finish the [R4-11 rendering checkpoint](docs/reference/r4-journal-render-checkpoint.md):
   close scalar/refusal gaps and complete the final integrated mutation
   and inherited campaign gates. The [performance follow-up](docs/reference/r4-journal-render-performance-checkpoint.md)
