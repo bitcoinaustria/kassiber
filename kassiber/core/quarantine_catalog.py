@@ -150,6 +150,7 @@ _REASONS: dict[str, ReasonInfo] = {
         CATEGORY_NEEDS_DECISION, ACTION_ATTACH_EVIDENCE
     ),
     "custody_authored_migration_incomplete": _info(CATEGORY_NEEDS_DECISION),
+    "synthetic_import_duplicate_review_required": _info(CATEGORY_NEEDS_DECISION),
     "custody_component_blocked": _info(CATEGORY_NEEDS_DECISION),
     "custody_interpreter_blocked": _info(CATEGORY_NEEDS_DECISION),
     "unclassified_income_kind": _info(CATEGORY_NEEDS_DECISION, ACTION_CLASSIFY),

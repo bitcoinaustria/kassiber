@@ -48,3 +48,13 @@ proceeds by pricing both slices at the full payout value. The upgrade must
 refuse reports until rebuilding; corrected proceeds are 11.2 EUR (10 + 1.2).
 It was generated with the reviewer's `upg_a.py`, changing only its scratch/source
 paths, against an archived historical Python tree. It contains no real data.
+
+## Positional CSV identities
+
+`pre_economic_csv_ids_1ec7e7da.json` is a compact projection of exact transaction
+and import-batch rows written with the `1ec7e7da0` import parsers and the unchanged
+insertion/batch writer. Each of Binance autoinvest, Binance dividends, Coinfinity,
+Pocket Bitcoin and Ledger Live has two identical source rows with old positional
+IDs. Coinfinity/Pocket rows are excluded gap evidence with completed review.
+The fixture contains synthetic data only; it is a row-identity compatibility
+fixture, not a separate historical-schema or encryption fixture.

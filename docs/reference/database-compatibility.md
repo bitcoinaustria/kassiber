@@ -48,6 +48,46 @@ upgrade because the global calculation semantics version increases to 2.
 The targeted Austrian migration and the global version check are separate:
 the latter also refuses older stamped builds after migration; an audit alone
 cannot make journals rebuilt by an older writer fresh.
+## ID-less CSV identity compatibility
+
+Binance supplemental autoinvest/dividend, Coinfinity, Pocket Bitcoin and Ledger
+Live previously included the export's row position in fallback transaction IDs.
+They now use an economic hash plus the occurrence count of identical rows in
+that export. Explicit provider and chain IDs keep their original identity.
+
+Import recomputes the economic hash of recognizable stored synthetic rows from
+their `raw_json`, separately per wallet. Stored occurrences are ordered by
+import-batch time, then the old numeric row index. Incoming occurrence *n* is
+already present when the wallet has at least *n* stored occurrences, including
+excluded rows. The compatibility match changes no stored IDs, fingerprints,
+raw observations, batch memberships, or reviews. Overlapping exports can add
+new rows and genuinely repeated occurrences without reopening reviewed gaps.
+Missing or malformed source payloads and explicit provider IDs are not guessed
+into this compatibility mapping. An old ID qualifies when its stored raw row has
+no provider ID, it starts with the old prefix and raw date, and it ends in a
+positive row index; earlier amount spellings do not matter. Old Binance
+dividend IDs (`binance:<index>`) also need text-only CSV cells, because the API
+importer writes `binance:<epoch>` for an ID-less dividend with numeric cells.
+
+Journal calculation semantics version 3 detects existing excess copies by
+wallet and economic hash. If active rows span at least two recorded import
+batches and exceed the largest single-export count, every active member gets
+the report-blocking `synthetic_import_duplicate_review_required` review item.
+Excluded members still establish the original single-export count. A current
+occurrence suffix also establishes that count when its batch inserted only the
+new remainder of an overlapping export. Unbatched rows alone cannot establish
+two distinct imports. One export's genuine identical repeats remain valid.
+
+The detector excludes and deletes nothing and chooses no survivor. Review the
+exports, use `metadata exclude --transaction <id>` for the copies the user
+identifies, and rebuild journals. Earlier version-2 journals require a current
+rebuild before report use; retained journals, authored reviews and saved/filed
+snapshots are unchanged until their normal explicit processing/review steps.
+
+Coverage: `tests/test_import_csv_upgrade_compatibility.py` restores exact rows
+written by the pre-change parsers/storage writer and checks all five families,
+overlapping exports, genuine repeats, reviewed gap evidence, cross-batch review,
+and either choice of excluded copy.
 
 ## Dependency-origin correction
 

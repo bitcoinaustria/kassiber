@@ -1732,6 +1732,11 @@ export therefore preserves the earlier rows' identities while keeping genuine
 identical repeats. Coinfinity, Pocket Bitcoin and Ledger Live use the same
 rule for their ID-less fallback rows; explicit provider and chain ids retain
 their identity. Mutable notes and labels do not participate in these keys.
+Old positional IDs are recognized from their stored raw rows without rewriting
+them, including excluded/reviewed evidence. Existing excess copies across import
+batches block reports as `synthetic_import_duplicate_review_required` until the
+user reviews the exports and excludes the duplicate rows. See
+[identity compatibility](database-compatibility.md#id-less-csv-identity-compatibility).
 
 ```bash
 python3 -m kassiber wallets import-binance-supplemental \

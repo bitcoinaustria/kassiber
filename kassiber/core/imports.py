@@ -1842,6 +1842,13 @@ def insert_wallet_records(
         raise AppError("Import wallet does not belong to the selected book", code="not_found")
     normalized_records = [normalize_import_record(record, source_label=source_label) for record in records]
     guard_observations(conn, profile["id"], ({**normalized, "wallet_kind": scoped_wallet["kind"], "wallet_config_json": scoped_wallet["config_json"]} for normalized in normalized_records))
+    from ..importers import synthetic_csv_identity
+    from .import_identity import stored_synthetic_occurrences
+    synthetic_identities = [synthetic_csv_identity(row["external_id"], row["raw_json"])
+                            for row in normalized_records]
+    stored_occurrences = (stored_synthetic_occurrences(conn, profile_id=profile["id"], wallet_id=wallet["id"])
+                          if any(synthetic_identities) else {})
+    incoming_occurrences = {}
     if authoritative_chain_observer:
         # Direction is no longer part of native identity, so two records in one
         # batch sharing (txid, asset) with opposite directions would now write
@@ -1870,6 +1877,21 @@ def insert_wallet_records(
                     retryable=False,
                 )
     for index, (record, normalized) in enumerate(zip(records, normalized_records), start=1):
+        identity = synthetic_identities[index - 1]
+        if identity is not None:
+            key = (wallet["id"], identity[0])
+            occurrence = incoming_occurrences[key] = incoming_occurrences.get(key, 0) + 1
+            members = stored_occurrences.get(key, ())
+            if (occurrence <= len(members)
+                    and members[occurrence - 1]["external_id"] != normalized["external_id"]):
+                # Compatibility is an in-memory match, never an ID migration or
+                # enrichment that could overwrite the owner's reviewed row.
+                skipped += 1
+                unchanged += 1
+                if progress is not None and (index % 200 == 0 or index == total):
+                    _emit_import_progress(progress, wallet_label=wallet["label"], processed=index,
+                                          total=total, imported=imported, skipped=skipped)
+                continue
         tax_platform_row_identity = str_or_none(
             record.get("_tax_platform_row_identity")
         )

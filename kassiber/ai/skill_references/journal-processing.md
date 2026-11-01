@@ -146,6 +146,11 @@ or unpair and pair the reviewed legs again. A simple pair can preview/apply
 `repair_legacy_pair` through the local CLI review workflow. AI cannot author
 that revision; never replace it with exclusion or automatic unpairing.
 
+`synthetic_import_duplicate_review_required` identifies excess ID-less CSV rows
+across import batches. Every active member is held; Kassiber selects no survivor.
+Compare the source exports with the user before using `metadata exclude` for
+the copies they identify. Genuine identical repeats in one export are retained.
+
 In chat use `ui.review.cases`, inspect `ui.transactions.review_context` and
 `ui.transfers.review_context`, then `ui.review.plan`. Explain the returned
 before/after effects and tax delta and obtain per-call consent for

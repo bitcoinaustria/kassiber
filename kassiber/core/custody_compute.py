@@ -49,7 +49,10 @@ def compute_custody_decisions(snapshot, *, stage_observer=None, owned_index_obse
     loan_legs = snapshot["loan_legs"]
     channel_roles, channel_transfer_pairs = channel_context_from_records(snapshot["channel_records"], rows, wallet_refs_by_id)
     active_components, component_blockers = compute_components_stage(snapshot)
-    migration_quarantines = custody_authored_migration.migration_quarantines_from_rows(snapshot["migration_issues"])
+    migration_quarantines = (
+        *custody_authored_migration.migration_quarantines_from_rows(snapshot["migration_issues"]),
+        *snapshot.get("import_duplicate_quarantines", ()),
+    )
     evidence_snapshots = {}
     for row in snapshot["evidence_snapshots"]:
         evidence_snapshots.setdefault(str(row["subject_id"]), []).append(dict(row))

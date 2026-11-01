@@ -165,6 +165,7 @@ def load_custody_snapshot(conn, profile, *, as_of: str):
     """
     from .custody_journal import CustodyJournalBuilder, transaction_rate_rows
     from . import custody_gap_reviews, custody_gaps, source_overlap
+    from .import_identity import duplicate_review_quarantines
     builder = CustodyJournalBuilder(conn, profile, as_of=as_of)
     profile_id = str(profile["id"])
     network = _network_facts(conn, profile_id)
@@ -222,6 +223,9 @@ def load_custody_snapshot(conn, profile, *, as_of: str):
         "loan_legs": [dict(row) for row in conn.execute("SELECT transaction_id,role FROM loan_legs WHERE profile_id=? AND deleted_at IS NULL", (profile_id,))],
         "evidence_snapshots": [dict(row) for row in conn.execute("SELECT subject_id,detail_hash,quantity_hash,payload_json,created_at FROM custody_authored_evidence_snapshots WHERE profile_id=? AND subject_kind='custody_component' ORDER BY subject_id,quantity_hash,detail_hash", (profile_id,))],
         "migration_issues": [dict(row) for row in conn.execute("SELECT * FROM custody_authored_migration_issues WHERE profile_id=? AND resolved_at IS NULL ORDER BY created_at,id", (profile_id,))],
+        # Held ID-less import duplicates, read from transactions and batches
+        # like the gap worklist; compute treats them as migration holds.
+        "import_duplicate_quarantines": list(duplicate_review_quarantines(conn, profile_id)),
         "gap_reviews": custody_gap_reviews.latest_review_rows(conn, profile_id),
         "pair_dismissals": [dict(row) for row in conn.execute("SELECT * FROM transaction_pair_dismissals WHERE profile_id=?", (profile_id,))],
         "gap_worklist": {"large_book": large_book, "rows": [_safe_row(row) for row in worklist]},

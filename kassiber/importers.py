@@ -1236,6 +1236,61 @@ def _number_synthetic_csv_occurrences(records):
     return records
 
 
+def synthetic_csv_identity(external_id, raw_json):
+    """Recover (economic key, ordinal, legacy) only for recognized ID-less rows.
+
+    Explicit provider IDs and malformed/unrelated raw payloads never qualify.
+    Legacy ordinals are file positions; current ordinals count identical rows.
+    """
+    identity = str(external_id or "")
+    if not identity.startswith(("ledgerlive:", "coinfinity:coinfinity:",
+                                "pocketbitcoin:pocketbitcoin:", "binance-supplemental:", "binance:")):
+        return None
+    try:
+        raw = json.loads(raw_json) if isinstance(raw_json, str) else raw_json
+        if not isinstance(raw, dict):
+            return None
+        if identity.startswith("ledgerlive:"):
+            record = normalize_ledgerlive_record(raw)
+            old_prefix = "ledgerlive:"
+        elif identity.startswith("coinfinity:coinfinity:"):
+            record = normalize_coinfinity_record(raw)
+            old_prefix = "coinfinity:coinfinity:"
+        elif identity.startswith("pocketbitcoin:pocketbitcoin:"):
+            record = normalize_pocketbitcoin_record(raw, withdrawal=raw.get("_pocketbitcoin_withdrawal"))
+            old_prefix = "pocketbitcoin:pocketbitcoin:"
+        elif identity.startswith("binance-supplemental:"):
+            record = normalize_binance_supplemental_autoinvest_record(raw)
+            old_prefix = "binance-supplemental:"
+        else:
+            record = normalize_binance_supplemental_dividend_record(raw)
+            old_prefix = "binance:"
+        if not record or not record.get("_synthetic_csv_id"):
+            return None
+        economic = record["txid"]
+        current = identity.startswith(economic + ":")
+        if current:
+            ordinal = identity[len(economic) + 1:]
+        elif old_prefix == "binance:":
+            # `binance:<n>` is also the API importer's ID for a dividend keyed
+            # by its epoch time. Only CSV cells, which are always text, qualify.
+            if not all(value is None or isinstance(value, str) for value in raw.values()):
+                return None
+            ordinal = identity[len(old_prefix):]
+        else:
+            # Old IDs are `<prefix><raw date>:...:<row index>`. Earlier parsers
+            # may have spelled the amount differently, so match the date only;
+            # the raw row already proved the provider ID column was empty.
+            if not identity.startswith(f"{old_prefix}{record['occurred_at']}:"):
+                return None
+            ordinal = identity.rsplit(":", 1)[1]
+        if not ordinal.isascii() or not ordinal.isdigit() or int(ordinal) < 1:
+            return None
+        return economic, int(ordinal), not current
+    except (AppError, ValueError, TypeError, ArithmeticError, AttributeError):
+        return None
+
+
 def _bullbitcoin_wallet_external_id(sanitized, index):
     txid = str_or_none(_get_cell(sanitized, "txid"))
     if txid:
