@@ -3347,6 +3347,24 @@ def _db_anchor_validation(
         sink = legs_by_id.get(str(allocation.get("sink_leg_id")))
         if source is not None and sink is not None and sink.get("role") == "fee":
             fee_by_transaction[str(source.get("transaction_id"))] += int(allocation.get("source_amount_msat") or 0)
+            row = transaction_rows.get(str(source.get("transaction_id")))
+            if row is not None and conservation_mode == "quantity":
+                boundary = row_boundary_amounts(row)
+                if (
+                    sink.get("notes") == "reviewed_residual:network_fee"
+                    and boundary.fee_msat > 0
+                    and int(source.get("amount_msat") or 0) < boundary.wallet_movement_msat
+                ):
+                    issues.append({
+                        "code": "legacy_pair_fee_allocation_review_required",
+                        "message": (
+                            "legacy pair fee allocation may consume principal as well as "
+                            "the observed fee; revise the complete debit and residual"
+                        ),
+                        "source_leg_id": source["id"],
+                        "fee_leg_id": sink["id"],
+                        "review_required": True,
+                    })
     coverage: list[dict[str, Any]] = []
     for transaction_id in sorted(by_transaction):
         row = transaction_rows.get(transaction_id)

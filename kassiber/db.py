@@ -976,7 +976,7 @@ def _migrate_stored_error_credentials(conn) -> int:
 
 
 PARTIAL_PAYOUT_SEMANTICS_MIGRATION = "custody-partial-payout-pricing-v1"
-JOURNAL_CALCULATION_SEMANTICS_VERSION = 2
+JOURNAL_CALCULATION_SEMANTICS_VERSION = 3
 JOURNAL_SEMANTICS_ADOPTION_MIGRATION = "journal-calculation-semantics-adoption-v1"
 
 
@@ -5847,6 +5847,7 @@ def ensure_schema_compat(conn):
     # The import is local to keep the core module independent from schema
     # bootstrap and to avoid a module-level db -> core -> db cycle.
     from .core.custody_authored_migration import (
+        mark_legacy_pair_fee_reviews,
         refresh_legacy_authored_components,
     )
 
@@ -5854,6 +5855,8 @@ def ensure_schema_compat(conn):
     if migration.changed:
         conn.commit()
     if _migrate_partial_payout_semantics(conn):
+        conn.commit()
+    if mark_legacy_pair_fee_reviews(conn):
         conn.commit()
     _ensure_commercial_reconciliation_schema(conn)
     _ensure_freshness_schema(conn)

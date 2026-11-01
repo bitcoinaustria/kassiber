@@ -1416,7 +1416,7 @@ class AuditPackageCoreTest(unittest.TestCase):
                 "filed_report_impact_count": 1,
             },
         )
-        self.assertEqual(summary["summary"]["schema_migration_audit_count"], 7)
+        self.assertEqual(summary["summary"]["schema_migration_audit_count"], 8)
         migration_names = [audit["migration_name"] for audit in summary["schema_migration_audits"]]
         self.assertIn("at-fee-consumed-regime-v1", migration_names)
         self.assertIn("stored-error-credentials-v1", migration_names)

@@ -114,6 +114,11 @@ For an outbound anchor whose backend stores the miner fee separately, the
 source leg is the complete debit (`transaction amount + transaction fee`). The
 fee leg allocates part of that source; it is not added a second time for anchor
 coverage. For fee-inclusive imports, the source equals the stored net debit.
+Older pair components that counted an observed fee as reviewed principal while
+omitting it from the complete source debit require a new reviewed revision.
+They remain authored-active but ineffective with
+`legacy_pair_fee_allocation_review_required`; an audited one-shot compatibility
+step marks affected journals stale without changing those immutable facts.
 Pair authoring uses that same debit when allocating a reviewed residual: a
 1,000 msat principal, separate 10 msat fee, and 998 msat receipt produce a
 1,010 msat source, 998 msat destination, 2 msat suspense, and 10 msat fee.

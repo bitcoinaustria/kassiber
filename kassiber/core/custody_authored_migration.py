@@ -43,6 +43,59 @@ from .custody_evidence import resolve_protocol_scope, row_boundary_amounts
 
 _MIGRATION_NAMESPACE = uuid.UUID("95ed148a-743a-4dcc-9b55-ca8cc203d547")
 _VALUATION_UNIT = "reviewed_source_msat"
+LEGACY_PAIR_FEE_REVIEW_MIGRATION = "custody-legacy-pair-fee-review-v1"
+
+
+def mark_legacy_pair_fee_reviews(conn: sqlite3.Connection) -> bool:
+    """Invalidate old pair journals once; retain immutable economics for review.
+
+    The validation blocker remains reproducible from the authored legs and
+    observed debit. The audit and journal invalidation share a savepoint, so
+    interruption cannot leave a completed audit over a still-current journal.
+    """
+    with _savepoint(conn, "legacy_pair_fee_review"):
+        if conn.execute(
+            "SELECT 1 FROM schema_migration_audits WHERE migration_name = ?",
+            (LEGACY_PAIR_FEE_REVIEW_MIGRATION,),
+        ).fetchone():
+            return False
+        candidates = conn.execute("""
+            SELECT DISTINCT component.id, component.profile_id
+            FROM custody_components component
+            JOIN custody_component_legs fee ON fee.component_id = component.id
+            WHERE component.state = 'active'
+              AND component.conservation_mode = 'quantity'
+              AND fee.role = 'fee' AND fee.notes = 'reviewed_residual:network_fee'
+        """).fetchall()
+        affected = [row for row in candidates if any(
+            issue["code"] == "legacy_pair_fee_allocation_review_required"
+            for issue in get_component(conn, row["id"])["validation"]["issues"]
+        )]
+        profiles = sorted({row["profile_id"] for row in affected})
+        conn.execute("""
+            INSERT INTO schema_migration_audits
+                (id, migration_name, schema_version, impact_json, created_at)
+            VALUES (?, ?, 1, ?, ?)
+        """, (
+            LEGACY_PAIR_FEE_REVIEW_MIGRATION, LEGACY_PAIR_FEE_REVIEW_MIGRATION,
+            json.dumps({
+                "schema_version": 1,
+                "migration": LEGACY_PAIR_FEE_REVIEW_MIGRATION,
+                "affected_component_count": len(affected),
+                "affected_profile_count": len(profiles),
+                "required_journal_semantics_version": 3,
+                "explanation": "Legacy pair fee allocations require review; authored economics and retained journals are unchanged.",
+            }, sort_keys=True), now_iso(),
+        ))
+        conn.executemany("""
+            UPDATE profiles SET last_processed_at = NULL,
+                last_processed_tx_count = 0,
+                journal_input_version = journal_input_version + 1,
+                ownership_review_counts_json = NULL,
+                required_journal_semantics_version = MAX(required_journal_semantics_version, 3)
+            WHERE id = ?
+        """, [(profile_id,) for profile_id in profiles])
+    return True
 
 
 @dataclass(frozen=True)
