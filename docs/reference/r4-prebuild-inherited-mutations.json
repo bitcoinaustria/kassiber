@@ -1,0 +1,47 @@
+{
+  "checker_path": "tax-engine/scripts/mutation_check.py",
+  "checker_sha256": "c82cd3b18ad04f02fea67131370b419d8b2149bb2eec1e11575c8232a2bf7935",
+  "execution": "One test process at a time; copied tracked worktree in target scratch; offline Cargo; eight build jobs",
+  "implementation_commit": "b11068fe0c538e7a6a4055043f73e21447adb0a6",
+  "invocation_path": "target/r4-10/run-inherited-mutations.py",
+  "invocation_sha256": "3271ebf882b929b02fd6b461185fc1ebb90c71e1059d795493268242dd716987",
+  "journals": {
+    "baseline_selections": 20,
+    "catalog_sha256": "5e2ae4103aff896cdfb90f185eb2868874579d430df96810e9237a913a4d6c6e",
+    "elapsed_seconds": null,
+    "errors": 0,
+    "failed_invocation_sha256": "7f0cd07550b110c52911629b3eebc5b3dfec4bf3794deaa36010275ff4ae1834",
+    "group": "journals",
+    "killed": 112,
+    "log_path": "target/r4-10/inherited-journals.log",
+    "log_sha256": "7c5fe2f3f0d2db5326f835d4bd19512609186deeb595243ab79317aaf1de0c43",
+    "orchestration_exit": 1,
+    "orchestration_note": "Shared checker completed with all 112 mutations killed; local summary writer then raised a Path/string concatenation TypeError. Summary reconstructed from complete log and unchanged tracked sources; no source changed during this run.",
+    "recipes": 112,
+    "result": 0,
+    "source_sha256": {
+      "crates/journals/src/boundary.rs": "2ddc678761e48f07a4277b2c20622a94a631f2c7c3725eefa32370a71abd878d",
+      "crates/journals/src/boundary/joins.rs": "58b06db41921c470886b1cd1e190f506d6fd9175645c58321340fc6dd464c68e",
+      "crates/journals/src/persistence.rs": "5c186a231d25d05b3234c9fadaefbd85cf4924c836ad60c2fd3e25d2346cb410",
+      "crates/journals/src/persistence/filed.rs": "ba5e5f16065308ebbaeebbd1153f74e094cab4be61c7050e57135893598b6dbe",
+      "crates/journals/src/persistence/quantity.rs": "85c931d09675800d5a63e66ebd843883abc027f6b6448cb7ff0b22630c11289a",
+      "crates/journals/src/persistence/quarantine.rs": "c9cb06f5e0b8ab54fc47c20d9b4f7dc63a54379444e864fb450d0ef2f8235c0d",
+      "crates/journals/src/render.rs": "afac4610917b0ed8ef320385b7f80ca5cb28bd69187e9c00b5dac5b998550d45",
+      "crates/journals/src/storage.rs": "486b6fc5fd605ac13a0212e4d09bfc506e086cd60eba6c71c3fba5ff874b9942"
+    },
+    "status": "passed",
+    "survivors": 0
+  },
+  "remaining": [
+    "Execute 280 transfer/daemon recipes",
+    "Execute 2327 custody recipes"
+  ],
+  "schema": "kassiber.r4-prebuild-inherited-mutations.v1",
+  "verification": {
+    "classifier_update": "passed; no inventory delta",
+    "manual_second_pass": "Reviewed complete kill log, source/catalog bindings, summary-writer recovery, and staged docs; no product changes",
+    "preflight_log": "target/r4-10/inherited-journals-preflight.log",
+    "preflight_log_sha256": "eb6fbf7f1907b0a28fdccfa7130f89c24f3f2c88660a6159972b71b1975db12e",
+    "preflight_tests": 57
+  }
+}

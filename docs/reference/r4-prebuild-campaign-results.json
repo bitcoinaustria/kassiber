@@ -17393,6 +17393,12 @@
       }
     }
   },
+  "inherited_mutation_gates": {
+    "custody": "not executed",
+    "journals_killed": 112,
+    "record": "r4-prebuild-inherited-mutations.json",
+    "transfer_daemon": "not executed"
+  },
   "initial_whole_stage_cpu": {
     "clock": "process CPU, stage only; five alternating Python/native pairs; real SQLite files; fixture loading, writer acquisition, dump verification and final rollback excluded",
     "samples": [
@@ -18893,7 +18899,7 @@
   },
   "remaining": [
     "Complete the uncovered-region/branch witness and disposition audit",
-    "Execute inherited journal (112), transfer/daemon (280) and custody (2327) mutation catalogues",
+    "Execute inherited transfer/daemon (280) and custody (2327) mutation catalogues",
     "Profile whole-stage 20k process CPU, optimize caches, compare with 0.03 seconds and record a breakdown if missed",
     "Bind final whole-campaign gates to the final implementation and write the acceptance record"
   ],

@@ -606,8 +606,8 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   closes the 81 pre-build recipe kill set and records fresh handler activation
   and domain-skip outcomes. Core shadow passes; census and report coverage
   completes across initial runs and exact continuations after recorder fixes.
-  Three recorder/guard mutations are killed. Inherited mutation execution,
-  the branch audit and whole-stage cache/CPU acceptance remain open.
+  Three recorder/guard mutations and all 112 inherited journal mutations are
+  killed. Transfer/daemon and custody mutation execution, the branch audit and whole-stage cache/CPU acceptance remain open.
   The [numeric branch follow-up](docs/reference/r4-journal-pipeline.md#r4-10-uncovered-numeric-paths)
   adds binary-number refusal and exact infinite-REAL dump witnesses, with 530
   file comparisons and 19 killed numeric/dump mutations. Remaining branch

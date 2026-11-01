@@ -965,6 +965,23 @@ catalogues, whole-stage 20k cache/CPU work, final campaign binding and acceptanc
 record remain open. Earlier generated/census/shadow evidence retains its original
 implementation binding; this checkpoint does not claim a fresh whole-campaign run.
 
+### R4-10 inherited journal mutation gate
+
+The inherited render/persistence catalogue now passes all **112 recipes**.
+All 20 named baseline selections pass unmutated; every recipe builds and is
+killed by its named tests. There are no survivors or build/selection errors.
+The [inherited gate record](r4-prebuild-inherited-mutations.json) binds the
+catalogue and mutated source hashes to the tested implementation and local log.
+The shared checker uses a disposable copied tree, offline Cargo and one test
+process at a time. Product code and the Python reference are unchanged.
+The local summary writer failed after the successful checker returned; the
+record explicitly distinguishes that bookkeeping error and its reconstruction
+from the completed mutation gate.
+
+R4-10 remains **unaccepted**. The 280 transfer/daemon and 2,327 custody recipes,
+remaining uncovered-region dispositions, whole-stage cache/CPU work, final
+campaign binding and acceptance record remain open.
+
 ## Performance budget
 
 The budget is for the Rust binary's `journals process` (no `--auto-pair`) on
