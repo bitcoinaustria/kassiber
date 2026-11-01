@@ -1,18 +1,22 @@
+use super::super::value::{json, Value};
 use kassiber_envelope::{py_str, AppError};
 use kassiber_pyjson::{BigInt, Value as Py};
-use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub(super) fn py(v: &Value) -> Py {
-    kassiber_pytext::loads(&v.to_string()).expect("JSON value")
+    v.py()
 }
 pub(super) fn json(v: &Py) -> Result<Value, AppError> {
-    let text = kassiber_pyjson::dumps(v, &kassiber_pyjson::Options::new().compact())
-        .map_err(|_| super::super::invalid())?;
-    serde_json::from_str(&text).map_err(|_| super::super::invalid())
+    Ok(Value::from_py(v))
 }
 pub(super) fn text(v: &Value) -> String {
-    py_str(&py(v))
+    match v {
+        Value::String(v) => v
+            .code_points()
+            .map(|c| char::from_u32(c).unwrap_or('\u{fffd}'))
+            .collect(),
+        _ => py_str(&py(v)),
+    }
 }
 pub(super) fn truth(v: &Value) -> bool {
     kassiber_envelope::truthy(&py(v))
@@ -28,18 +32,17 @@ pub(super) fn integer(v: &Value) -> Option<BigInt> {
     if v.is_boolean() {
         return None;
     }
-    let n = crate::scan::integer(v)?;
+    let n = crate::scan::integer(&v.serde())?;
     (n >= BigInt::from(0) && kassiber_pytext::strip(&text(v)) == n.to_string()).then_some(n)
 }
 pub(super) fn nonnegative(v: &Value) -> bool {
-    v.as_number().is_some_and(|n| {
-        n.as_str()
-            .parse::<BigInt>()
-            .is_ok_and(|n| n >= BigInt::from(0))
-    })
+    matches!(v, Value::Int(n) if n >= &BigInt::from(0))
 }
 pub(super) fn canonical(v: &Value) -> Option<String> {
-    crate::publication::physical::canonical_txid(&py(v))
+    let text = text(v);
+    let text = kassiber_pytext::strip(&text);
+    (text.len() == 64 && text.bytes().all(|b| b.is_ascii_hexdigit()))
+        .then(|| text.to_ascii_lowercase())
 }
 pub(super) fn mapping(v: &Value, nested: bool) -> Value {
     parsed_mapping(v, nested).unwrap_or_else(|| json!({}))
@@ -119,9 +122,9 @@ pub(super) fn address(entry: &Value) -> Value {
     if value.is_null() || value == "" {
         return Value::Null;
     }
-    let text = text(value);
-    let text = kassiber_pytext::strip(&text);
-    if text.is_empty() {
+    let text = string(value);
+    let text = kassiber_pytext::strip_py(&text);
+    if text.code_points().next().is_none() {
         Value::Null
     } else {
         json!(text)
@@ -165,7 +168,7 @@ pub(super) fn branch(label: &Value, index: &Value) -> Value {
     let number = if index.is_boolean() {
         None
     } else {
-        crate::scan::integer(index)
+        crate::scan::integer(&index.serde())
             .filter(|n| kassiber_pytext::strip(&text(index)) == n.to_string())
     };
     let role = number
@@ -265,7 +268,7 @@ pub(super) fn collaboration(row: &Value, raw: &Value) -> Value {
     let mut counts = BTreeMap::<BigInt, usize>::new();
     for output in &outputs {
         if let Some(value) =
-            crate::analysis_features::value_sats(output).filter(|n| n > &BigInt::from(0))
+            crate::analysis_features::value_sats(&output.serde()).filter(|n| n > &BigInt::from(0))
         {
             *counts.entry(value).or_default() += 1;
         }
@@ -313,4 +316,31 @@ pub(super) fn stronger(a: Value, b: Value) -> Value {
     } else {
         a
     }
+}
+
+pub(super) fn string(value: &Value) -> kassiber_pyjson::PyStr {
+    match value {
+        Value::String(v) => v.clone(),
+        _ => py_str(&py(value)).into(),
+    }
+}
+
+pub(in crate::analysis_index) fn scope(
+    row: &Value,
+) -> Result<(String, String), kassiber_custody::components::Error> {
+    let raw = mapping(&row["raw_json"], false);
+    let config = mapping(
+        if truth(&row["config_json"]) {
+            &row["config_json"]
+        } else {
+            &row["wallet_config_json"]
+        },
+        false,
+    );
+    kassiber_custody::evidence::scope(&serde_json::json!({
+        "chain": row["chain"].serde(), "network": row["network"].serde(),
+        "wallet_kind": row["wallet_kind"].serde(), "asset": row["asset"].serde(),
+        "raw_json": {"chain": raw["chain"].serde(), "network": raw["network"].serde()},
+        "config_json": {"chain": config["chain"].serde(), "network": config["network"].serde()}
+    }))
 }

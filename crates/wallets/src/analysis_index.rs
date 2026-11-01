@@ -15,6 +15,7 @@ mod observer;
 pub mod occurrences;
 pub mod sources;
 pub mod traversal;
+mod value;
 
 pub(super) trait Text {
     fn as_str(&self) -> Option<&str>;
@@ -78,7 +79,7 @@ fn invalid() -> AppError {
 #[derive(Clone, Debug)]
 pub struct AnalysisIndex {
     snapshot: Value,
-    positions: BTreeMap<&'static str, BTreeMap<String, usize>>,
+    positions: BTreeMap<&'static str, BTreeMap<kassiber_pyjson::PyStr, usize>>,
 }
 impl AnalysisIndex {
     pub fn from_snapshot(snapshot: Value) -> Result<Self, AppError> {
@@ -102,9 +103,12 @@ impl AnalysisIndex {
             };
             let mut index = BTreeMap::new();
             for (position, (key, value)) in entries.iter().enumerate() {
-                let Some(key) = key.as_str() else {
+                let kassiber_pyjson::Key::Str(key) = key else {
                     return Err(invalid());
                 };
+                if name != "subjects" && key.as_str().is_none() {
+                    return Err(invalid());
+                }
                 if index.insert(key.to_owned(), position).is_some()
                     || if ["outgoing", "incoming", "subjects"].contains(&name) {
                         !matches!(value, Value::List(_))
@@ -131,7 +135,10 @@ impl AnalysisIndex {
         &self.snapshot
     }
     pub fn lookup(&self, map: &str, key: &str) -> Option<&Value> {
-        let at = *self.positions.get(map)?.get(key)?;
+        let at = *self
+            .positions
+            .get(map)?
+            .get(&kassiber_pyjson::PyStr::from(key))?;
         let Value::Dict(values) = field(&self.snapshot, map) else {
             return None;
         };

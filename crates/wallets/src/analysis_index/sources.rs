@@ -1,9 +1,9 @@
+use super::value::{json, Value};
 use super::{ingestion::ObservationBuilder, AnalysisIndex};
 use crate::{database_error, publication::row::rows};
 use kassiber_envelope::AppError;
 use kassiber_pyjson::Options;
 use kassiber_store::rusqlite::{params_from_iter, types::Value as Sql, Connection, Params};
-use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -12,27 +12,30 @@ pub const MAX_SCRIPT_BYTES: usize = 10_000;
 const MATCH_LIMIT: usize = 5_000;
 
 fn text(value: &Value) -> String {
-    kassiber_envelope::py_str(&kassiber_pytext::loads(&value.to_string()).unwrap())
+    match value {
+        Value::String(v) => v
+            .code_points()
+            .map(|c| char::from_u32(c).unwrap_or('\u{fffd}'))
+            .collect(),
+        _ => kassiber_envelope::py_str(&value.py()),
+    }
 }
 
 fn truth(value: &Value) -> bool {
-    kassiber_envelope::truthy(&kassiber_pytext::loads(&value.to_string()).unwrap())
+    kassiber_envelope::truthy(&value.py())
 }
 
 fn read(conn: &Connection, sql: &str, params: impl Params) -> Result<Vec<Value>, AppError> {
     rows(conn, sql, params)?
         .into_iter()
-        .map(|row| {
-            let encoded = kassiber_pyjson::dumps(&row, &Options::new().compact())
-                .map_err(|_| super::invalid())?;
-            serde_json::from_str(&encoded).map_err(|_| super::invalid())
-        })
+        .map(|row| Ok(Value::from_py(&row)))
         .collect()
 }
 
 fn parse(value: &Value) -> Result<Value, AppError> {
-    let parsed: Value = serde_json::from_str(value.as_str().ok_or_else(super::invalid)?)
+    let parsed = kassiber_pytext::loads(value.as_str().ok_or_else(super::invalid)?)
         .map_err(|_| super::invalid())?;
+    let parsed = Value::from_py(&parsed);
     if parsed.is_object() {
         Ok(parsed)
     } else {
@@ -168,7 +171,7 @@ fn capture(
             if truth(&row["deleted"]) {
                 continue;
             }
-            if let Ok((chain, network)) = kassiber_custody::evidence::scope(&row) {
+            if let Ok((chain, network)) = super::ingestion::scope(&row) {
                 row["chain"] = json!(chain);
                 row["network"] = json!(network);
                 builder.labels.push(row);
@@ -306,10 +309,10 @@ fn attach_datasets(
         let manifest = parse(&pack["manifest_json"])?;
         if ["valid_from", "valid_until"]
             .iter()
-            .any(|key| !matches!(manifest.get(*key), Some(Value::Null | Value::String(_))))
+            .any(|key| !matches!(manifest.get(key), Some(Value::Null | Value::String(_))))
             || ["source", "attribution_method", "license"]
                 .iter()
-                .any(|key| manifest.get(*key).is_none())
+                .any(|key| manifest.get(key).is_none())
         {
             return Err(super::invalid());
         }
@@ -320,7 +323,7 @@ fn attach_datasets(
         pack.insert("accounting_authority".into(), json!(false));
     }
     let encoded = kassiber_pyjson::dumps(
-        &kassiber_pytext::loads(&json!(packs).to_string()).unwrap(),
+        &json!(packs).py(),
         &Options::new()
             .sort_keys(true)
             .compact()

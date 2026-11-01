@@ -4313,3 +4313,20 @@ The required classifier update records 5,716 definitions; CI preflight passes
 57 tests without skips. Build trees are removed after summaries are retained.
 Full workspace runtime, full quality-gate and packaged/platform acceptance are
 not established by this partial checkpoint.
+
+### R5 privacy: merged analysis and legacy JSON (partial)
+
+`t3code/r5-privacy-mirror-4` starts at `911f5d3e7` and merges the analysis line
+through `4d2e0c289`. SQL sourcing and the traversal, clustering, patterns,
+attribution/dataset and entropy kernels now share one immutable native index.
+The [legacy JSON checkpoint](../reference/rust-shell.md#mirror-legacy-json-compatibility-r5-partial)
+adds exact non-finite/surrogate source handling, commitments and observer aliases
+with a 512-case unchanged-Python corpus. Typed physical identities still fail
+closed. The reference manifest-encoding failure has a separate reproduction;
+Python product code is unchanged.
+
+Durable triggers/contributions, incremental synchronization and SQLite/SQLCipher
+kill recovery, bounded observer-scoped SQL views, process/book-bound handles,
+the Mirror report and CLI/daemon acceptance/registration remain open. Mirror
+product served-by counts are zero. AI projections remain Python; this adds no
+schema, dependency or egress permission and makes no full Mirror acceptance claim.

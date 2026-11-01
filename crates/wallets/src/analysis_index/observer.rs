@@ -1,7 +1,7 @@
 //! Apply the public knowledge boundary before any query or analytics.
 use super::{field, fields, list, remove, AnalysisIndex, Text};
 use kassiber_envelope::{dict, s, set, truthy, AppError};
-use kassiber_pyjson::Value;
+use kassiber_pyjson::{PyStr, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
 fn refs(values: &Value, subject: &Value) -> Value {
@@ -142,7 +142,7 @@ pub(super) fn public(index: &AnalysisIndex) -> Result<AnalysisIndex, AppError> {
         }
         facts.push((id.to_owned(), public));
     }
-    let mut subjects: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    let mut subjects: BTreeMap<PyStr, BTreeSet<String>> = BTreeMap::new();
     let output_map: BTreeMap<_, _> = outputs.iter().map(|(k, v)| (k.as_str(), v)).collect();
     for id in &node_order {
         let node = &nodes[id];
@@ -158,7 +158,10 @@ pub(super) fn public(index: &AnalysisIndex) -> Result<AnalysisIndex, AppError> {
         ] {
             if truthy(&alias) {
                 subjects
-                    .entry(kassiber_envelope::py_str(&alias))
+                    .entry(match &alias {
+                        Value::Str(v) => v.clone(),
+                        _ => kassiber_envelope::py_str(&alias).into(),
+                    })
                     .or_default()
                     .insert(id.clone());
             }
@@ -169,7 +172,7 @@ pub(super) fn public(index: &AnalysisIndex) -> Result<AnalysisIndex, AppError> {
             .filter(|v| truthy(v))
         {
             subjects
-                .entry(format!("script:{}", kassiber_envelope::py_str(script)))
+                .entry(format!("script:{}", kassiber_envelope::py_str(script)).into())
                 .or_default()
                 .insert(id.clone());
         }

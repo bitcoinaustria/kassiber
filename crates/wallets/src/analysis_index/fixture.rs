@@ -65,12 +65,7 @@ pub fn evaluate(case: &Value, conn: &Connection) -> Result<Value, AppError> {
         Some("ingestion") => {
             let mut builder = super::ingestion::ObservationBuilder::read(conn, "p")?;
             for request in list(field(case, "requests")) {
-                let encoded = kassiber_pyjson::dumps(
-                    field(request, "row"),
-                    &kassiber_pyjson::Options::new().compact(),
-                )
-                .unwrap();
-                let row = serde_json::from_str(&encoded).unwrap();
+                let row = super::value::Value::from_py(field(request, "row"));
                 match field(request, "source").as_str() {
                     Some("transaction") => {
                         builder.transaction(&row, field(request, "cached") == &Value::Bool(true))?

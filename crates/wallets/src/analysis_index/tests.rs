@@ -98,6 +98,25 @@ fn immutable_snapshot_rejects_malformed_indexes_and_retains_lookup() {
         kassiber_envelope::set(&mut bad, map, value);
         assert!(AnalysisIndex::from_snapshot(bad).is_err());
     }
+    for map in [
+        "nodes",
+        "edges",
+        "outgoing",
+        "incoming",
+        "transaction_facts",
+        "output_facts",
+    ] {
+        let mut bad = snapshot.clone();
+        let value = if ["outgoing", "incoming"].contains(&map) {
+            Value::List(vec![])
+        } else {
+            dict::<&str>([])
+        };
+        let key =
+            kassiber_pyjson::Key::Str(kassiber_pyjson::PyStr::from_code_points([0xd800]).unwrap());
+        kassiber_envelope::set(&mut bad, map, Value::Dict(vec![(key, value)]));
+        assert!(AnalysisIndex::from_snapshot(bad).is_err(), "{map}");
+    }
 }
 
 #[test]
@@ -234,7 +253,7 @@ fn confirmation_cache_stays_with_its_caller_snapshot_and_rolls_back() {
 }
 
 #[test]
-fn observation_ingestion_refuses_unrepresentable_legacy_mappings() {
+fn observation_ingestion_accepts_ignored_legacy_values_without_writes() {
     let conn = Connection::open_in_memory().unwrap();
     conn.execute_batch(include_str!(
         "../../../reports/tests/data/privacy_hygiene_seed.sql"
@@ -249,10 +268,10 @@ fn observation_ingestion_refuses_unrepresentable_legacy_mappings() {
         r#"{"unexpected":"\ud800"}"#,
     ] {
         let mut builder = ingestion::ObservationBuilder::read(&conn, "p").unwrap();
-        let row = serde_json::json!({"id":"legacy","raw_json":raw});
-        assert!(builder.transaction(&row, false).is_err());
-        let row = serde_json::json!({"payload_json":raw});
-        assert!(builder.reference(&row, true).is_err());
+        let row = super::value::json!({"id":"legacy","raw_json":raw});
+        builder.transaction(&row, false).unwrap();
+        let row = super::value::json!({"payload_json":raw});
+        builder.reference(&row, true).unwrap();
         assert_eq!(tables(&conn), before);
     }
 }
@@ -293,6 +312,70 @@ fn sql_sources_match_python_variants_and_all_112_tables() {
         conn.execute_batch("ROLLBACK TO source_read; RELEASE source_read")
             .unwrap();
     }
+}
+
+#[test]
+fn legacy_sql_sources_match_python_bytes_and_all_112_tables() {
+    assert!(run_legacy(&[]) > 400);
+}
+
+fn run_legacy(prefixes: &[&str]) -> usize {
+    let cases =
+        kassiber_pytext::loads(include_str!("../../tests/data/analysis_legacy.json")).unwrap();
+    let mut selected = 0;
+    for case in list(&cases).iter().filter(|case| {
+        prefixes.is_empty()
+            || prefixes
+                .iter()
+                .any(|prefix| field(case, "name").as_str().unwrap().starts_with(prefix))
+    }) {
+        selected += 1;
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(include_str!(
+            "../../../reports/tests/data/privacy_hygiene_seed.sql"
+        ))
+        .unwrap();
+        conn.execute_batch(include_str!("../../../reports/tests/data/book.sql"))
+            .unwrap();
+        conn.execute_batch(field(case, "sql").as_str().unwrap())
+            .unwrap();
+        let before = tables(&conn);
+        let actual = fixture::evaluate(case, &conn).unwrap();
+        assert_eq!(
+            canonical(&actual),
+            canonical(field(case, "expected")),
+            "{}",
+            field(case, "name").as_str().unwrap()
+        );
+        assert!(conn.is_autocommit());
+        assert_eq!(tables(&conn), before);
+    }
+    assert!(selected > 0);
+    selected
+}
+
+#[test]
+fn legacy_json_preserves_opaque_values_and_commitments() {
+    run_legacy(&["ignored-", "source-record-", "status-", "surrogate-key-"]);
+}
+
+#[test]
+fn legacy_json_preserves_observer_aliases() {
+    run_legacy(&[
+        "surrogate-address-",
+        "output-scriptpubkey_address-",
+        "surrogate-coinbase-",
+    ]);
+}
+
+#[test]
+fn legacy_json_preserves_invalid_identifiers_and_scope() {
+    run_legacy(&[
+        "surrogate-txid-fallback-",
+        "config-ignored-",
+        "raw-network-",
+        "surrogate-boundary-",
+    ]);
 }
 
 #[test]
@@ -347,6 +430,8 @@ fn sql_sources_refuse_malformed_dataset_mappings_without_writes() {
                 "1",
                 "{}",
                 r#"{"valid_from":1,"valid_until":null,"source":"s","attribution_method":"a","license":"l"}"#,
+                r#"{"valid_from":null,"valid_until":null,"source":"s","attribution_method":"a","license":"l","unused":NaN}"#,
+                r#"{"valid_from":null,"valid_until":null,"source":"s","attribution_method":"a","license":"l","unused":"\ud800"}"#,
             ][..],
         ),
         (

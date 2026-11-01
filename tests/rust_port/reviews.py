@@ -461,6 +461,10 @@ REVIEWS["tests/test_rust_analysis_ingestion.py"] = {"*": {
 }}
 
 
+REVIEWS["tests/test_rust_analysis_legacy.py"] = {"*": {
+    "disposition": "oracle", "group": "chain-sync",
+    "reason": "compares legacy non-finite JSON and surrogate values, keys, observer aliases and source commitments with unchanged Python bytes and all 112 tables; retains manifest reference-failure repros, named mutations and no-consent native processes; durable synchronization and product Mirror routing remain unported",
+}}
 
 REVIEWS["tests/test_rust_analysis_traversal.py"] = {"*": {
     "disposition": "oracle", "group": "chain-sync",

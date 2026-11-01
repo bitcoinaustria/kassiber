@@ -1,20 +1,21 @@
+use super::value::{json, Value};
 use super::{
     confirmations::ConfirmationOverlay,
     occurrences::{OccurrenceResolver, SourceIdentity},
     AnalysisIndex,
 };
 use kassiber_envelope::AppError;
-use kassiber_pyjson::BigInt;
+use kassiber_pyjson::{BigInt, PyStr};
 use kassiber_store::rusqlite::Connection;
-use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
 mod normalize;
+pub(super) use normalize::scope;
 use normalize::*;
 
 type Members = (BTreeSet<String>, BTreeSet<String>);
 
-pub struct ObservationBuilder<'a> {
+pub(super) struct ObservationBuilder<'a> {
     conn: &'a Connection,
     profile: String,
     occurrences: OccurrenceResolver<'a>,
@@ -22,7 +23,8 @@ pub struct ObservationBuilder<'a> {
     edges: BTreeMap<String, Value>,
     edge_order: Vec<String>,
     orders: BTreeMap<&'static str, Vec<String>>,
-    subjects: BTreeMap<String, BTreeSet<String>>,
+    subjects: BTreeMap<PyStr, BTreeSet<String>>,
+    subject_order: Vec<PyStr>,
     tx_facts: BTreeMap<String, Value>,
     pub(super) output_facts: BTreeMap<String, Value>,
     findings: Vec<Value>,
@@ -52,7 +54,7 @@ fn point(item: &Value) -> Option<(String, BigInt)> {
     if id == "0".repeat(64) {
         return None;
     }
-    let index = crate::scan::integer(&item["vout"])?;
+    let index = crate::scan::integer(&item["vout"].serde())?;
     (index >= BigInt::from(0)).then_some((id, index))
 }
 
@@ -67,6 +69,7 @@ impl<'a> ObservationBuilder<'a> {
             edge_order: Vec::new(),
             orders: BTreeMap::new(),
             subjects: BTreeMap::new(),
+            subject_order: Vec::new(),
             tx_facts: BTreeMap::new(),
             output_facts: BTreeMap::new(),
             findings: Vec::new(),
@@ -104,12 +107,9 @@ impl<'a> ObservationBuilder<'a> {
     }
     pub(super) fn alias(&mut self, alias: &Value, id: &str) {
         if !alias.is_null() && alias != "" {
-            let alias = text(alias);
+            let alias = string(alias);
             if !self.subjects.contains_key(&alias) {
-                self.orders
-                    .entry("subjects")
-                    .or_default()
-                    .push(alias.clone());
+                self.subject_order.push(alias.clone());
             }
             self.subjects
                 .entry(alias)
@@ -260,7 +260,7 @@ impl<'a> ObservationBuilder<'a> {
         let outpoint = format!("{txid}:{vout}");
         self.nodes.get_mut(&id).unwrap()["outpoint"] = json!(outpoint);
         self.nodes.get_mut(&id).unwrap()["label"] = json!(format!("{}:{vout}", &txid[..10]));
-        let amount = crate::analysis_features::value_sats(entry)
+        let amount = crate::analysis_features::value_sats(&entry.serde())
             .filter(|n| n >= &BigInt::from(0))
             .map(|n| (n * BigInt::from(1000)).to_string());
         let raw_asset = if truth(&entry["asset_id"]) {
@@ -271,7 +271,7 @@ impl<'a> ObservationBuilder<'a> {
         let asset = if chain == "bitcoin" {
             json!("BTC")
         } else if truth(raw_asset) {
-            json!(text(raw_asset))
+            json!(string(raw_asset))
         } else {
             Value::Null
         };
@@ -343,7 +343,7 @@ impl<'a> ObservationBuilder<'a> {
             if !value.is_null() && !truth(&facts[&conflict]) {
                 if !facts[key].is_null() && facts[key] != value {
                     facts[key] = Value::Null;
-                    facts[conflict] = json!(true);
+                    facts[&conflict] = json!(true);
                 } else {
                     facts[key] = value;
                 }
@@ -361,7 +361,7 @@ impl<'a> ObservationBuilder<'a> {
             self.invalid(false);
             return Ok(());
         }
-        let Ok((chain, network)) = kassiber_custody::evidence::scope(row) else {
+        let Ok((chain, network)) = scope(row) else {
             self.invalid(false);
             return Ok(());
         };
@@ -412,13 +412,9 @@ impl<'a> ObservationBuilder<'a> {
                 json!(if cached { "reference" } else { "observed" });
         }
         if !cached {
-            self.nodes
-                .get_mut(&id)
-                .unwrap()
-                .as_object_mut()
-                .unwrap()
-                .entry("transaction_id")
-                .or_insert_with(|| row["id"].clone());
+            if self.nodes[&id].get("transaction_id").is_none() {
+                self.nodes.get_mut(&id).unwrap()["transaction_id"] = row["id"].clone();
+            }
             self.records.insert(text(&row["id"]), id.clone());
             self.alias(&row["id"], &id);
             self.alias(&json!(format!("record:{}", text(&row["id"]))), &id);
@@ -458,11 +454,8 @@ impl<'a> ObservationBuilder<'a> {
         } else if raw["status"]["confirmed"] == false {
             self.merge(&id, &[("confirmations", json!(0))], rank, &evidence)?;
         }
-        if raw["confirmations"].as_number().is_some_and(|n| {
-            n.as_str()
-                .parse::<BigInt>()
-                .is_ok_and(|n| n < BigInt::from(0))
-        }) || raw["removed"] == true
+        if matches!(&raw["confirmations"], Value::Int(n) if n < &BigInt::from(0))
+            || raw["removed"] == true
         {
             self.nodes.get_mut(&id).unwrap()["status"] = json!("stale");
             self.finding("retracted_transaction",vec![id.clone()],"Stored transaction is removed or conflicted; it cannot prove current reachability.",false,vec![])?;
@@ -488,12 +481,15 @@ impl<'a> ObservationBuilder<'a> {
             } else {
                 "stored_transaction"
             };
-            let mut features = crate::analysis_features::normalize(
-                &raw[crate::analysis_features::PERSISTED_FEATURE_KEY],
+            let features = crate::analysis_features::normalize(
+                &raw[crate::analysis_features::PERSISTED_FEATURE_KEY].serde(),
                 source,
                 Some(&id),
             )
-            .unwrap_or_else(|| crate::analysis_features::extract(&raw, source, Some(&id), &[]));
+            .unwrap_or_else(|| {
+                crate::analysis_features::extract(&raw.serde(), source, Some(&id), &[])
+            });
+            let mut features = json!(features);
             if let Some(previous) = facts["features"]["features"].as_array() {
                 for item in features["features"].as_array_mut().unwrap() {
                     if let Some(prior) = previous
@@ -537,7 +533,7 @@ impl<'a> ObservationBuilder<'a> {
             }
             let Some((parent, vout)) = point(item) else {
                 if item["is_coinbase"] == true
-                    || item["coinbase"].as_str().is_some_and(|v| !v.is_empty())
+                    || matches!(&item["coinbase"], Value::String(v) if v.code_points().next().is_some())
                 {
                     coinbase = true;
                 } else {
@@ -581,7 +577,7 @@ impl<'a> ObservationBuilder<'a> {
                 valid_outputs = false;
                 continue;
             };
-            if crate::analysis_features::value_sats(item).is_none()
+            if crate::analysis_features::value_sats(&item.serde()).is_none()
                 && script(item).is_none()
                 && !truth(&item["valuecommitment"])
             {
@@ -663,7 +659,7 @@ impl<'a> ObservationBuilder<'a> {
             self.invalid(false);
             return Ok(());
         }
-        let Ok((chain, network)) = kassiber_custody::evidence::scope(row) else {
+        let Ok((chain, network)) = scope(row) else {
             self.invalid(false);
             return Ok(());
         };
@@ -781,7 +777,7 @@ impl<'a> ObservationBuilder<'a> {
             return Ok(());
         }
         let scope = kassiber_custody::evidence::scope(
-            &json!({"chain":row["chain"],"network":row["network"]}),
+            &json!({"chain":row["chain"],"network":row["network"]}).serde(),
         );
         let Some((chain, network, txid)) = scope
             .ok()
@@ -789,7 +785,7 @@ impl<'a> ObservationBuilder<'a> {
             .filter(|(chain, network, txid)| {
                 ["bitcoin", "liquid"].contains(&chain.as_str())
                     && kassiber_custody::evidence::scope(
-                        &json!({"chain":chain,"network":network,"raw_json":payload}),
+                        &json!({"chain":chain,"network":network,"raw_json":payload}).serde(),
                     )
                     .is_ok_and(|v| v == (chain.clone(), network.clone()))
                     && canonical(&payload["txid"]).is_none_or(|id| id == *txid)
@@ -849,7 +845,7 @@ impl<'a> ObservationBuilder<'a> {
         if acquired && self.nodes.contains_key(&id) {
             self.seeds.insert(id.clone());
             let status = mapping(&row["status_json"], false);
-            self.nodes.get_mut(&id).unwrap()["evidence"].as_array_mut().unwrap().push(json!({"source":"local_acquisition","reference":id,"level":"reference","observed_at":row["observed_at"],"source_name":row["source_name"],"confirmed":status["confirmed"]==true,"block_height":integer(&status["block_height"]).map(|v|v.to_string().parse::<serde_json::Number>().unwrap()),"status_commitment":digest(&status)?}));
+            self.nodes.get_mut(&id).unwrap()["evidence"].as_array_mut().unwrap().push(json!({"source":"local_acquisition","reference":id,"level":"reference","observed_at":row["observed_at"],"source_name":row["source_name"],"confirmed":status["confirmed"]==true,"block_height":integer(&status["block_height"]).map(Value::Int),"status_commitment":digest(&status)?}));
             if status["removed"] == true || status["conflicted"] == true {
                 self.nodes.get_mut(&id).unwrap()["status"] = json!("stale");
             }
@@ -1082,7 +1078,7 @@ impl<'a> ObservationBuilder<'a> {
         self.coverage.as_object_mut().unwrap().extend(json!({"node_count":self.nodes.len(),"edge_count":self.edges.len(),"missing_node_count":self.nodes.values().filter(|v|v["status"]=="missing").count(),"conflicting_node_count":self.nodes.values().filter(|v|v["status"]=="conflicting").count(),"complete_transaction_count":self.tx_facts.values().filter(|v|v["complete"]==true).count(),"reference_node_count":self.nodes.values().filter(|v|v["status"]=="reference").count()}).as_object().unwrap().clone());
         let mut labels = self.labels;
         for label in &mut labels {
-            let ids = self.subjects.get(&text(&label["subject"]));
+            let ids = self.subjects.get(&string(&label["subject"]));
             label["node_ids"] = json!(ids
                 .into_iter()
                 .flatten()
@@ -1105,6 +1101,19 @@ impl<'a> ObservationBuilder<'a> {
             &json!({"snapshot_id":snapshot_id,"nodes":self.nodes,"edges":self.edges,"outgoing":outgoing,"incoming":incoming,"subjects":self.subjects,"transaction_facts":self.tx_facts,"output_facts":self.output_facts,"findings":self.findings,"coverage":self.coverage,"labels":labels,"profile_seeds":self.seeds}),
         );
         self.orders.insert("edges", self.edge_order);
+        let subjects = kassiber_pyjson::Value::Dict(
+            self.subject_order
+                .into_iter()
+                .map(|key| {
+                    let ids = &self.subjects[&key];
+                    (
+                        kassiber_pyjson::Key::Str(key),
+                        py(&json!(ids.iter().collect::<Vec<_>>())),
+                    )
+                })
+                .collect(),
+        );
+        kassiber_envelope::set(&mut snapshot, "subjects", subjects);
         for (name, order) in self.orders {
             let mut values: BTreeMap<_, _> = super::fields(super::field(&snapshot, name))
                 .map(|(key, value)| (key.to_owned(), value.clone()))

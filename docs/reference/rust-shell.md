@@ -14514,3 +14514,71 @@ with process/book-bound handles and remaining source/dataset service integration
 Mirror served-by counts remain zero and unsupported routes still fail closed.
 AI projections remain Python. There are no new dependencies, lockfile/schema
 changes, external writes or egress permissions.
+
+## Mirror legacy JSON compatibility (R5, partial)
+
+`t3code/r5-privacy-mirror-4` starts at `911f5d3e7` and merges the completed
+analysis line through `4d2e0c289`. The resolved merge retains SQL sourcing and
+all five analytics boundaries. Its baseline passes 20 native analysis-index
+tests and 33 retained Python/native oracle tests without skips.
+
+SQL sourcing and the observation builder now retain Python-compatible JSON
+values through a private ordered value adapter. Non-finite floats, lone
+surrogates and surrogate-bearing mapping keys survive normalization when
+Python retains them. Source/status commitments and dataset claims use the
+lossless Python-value projection. A separate projection feeds the existing
+typed scope and closed feature validators; it never supplies retained source
+JSON or commitments. Invalid numeric values remain unavailable, and invalid
+characters cannot turn into a valid transaction identity or collaboration tag.
+
+Address text and observer aliases preserve exact code points. Snapshot subject
+indexes admit these legacy aliases while node/edge/adjacency/fact identities
+retain their UTF-8 validation. Mapping insertion order survives Python-style
+text conversion; mapping equality remains independent of that order.
+
+The frozen unchanged-Python source corpus adds 512 cases, each with canonical
+byte comparison and all-112-table read invariants. It includes public/owner
+projections, ignored legacy metadata, wallet configuration, exact scopes,
+non-finite numeric prerequisites, malformed physical identities, composite
+addresses, source records and status commitments. Native driver runs with
+`KASSIBER_NO_EGRESS` unset/set add 1,024 evaluations with literal canonical
+stdout equality, zero Python fallback, and empty network attempt/ledger
+buffers. The earlier whitespace-script and hash-seed reproductions remain;
+native ambiguous ordering stays deterministic and matches one recorded Python
+variant.
+
+`tests/rust_port/repro_analysis_legacy.py` records an additional Python
+reference failure: an unused non-finite or lone-surrogate dataset-manifest
+field escapes as `ValueError` or `UnicodeEncodeError` during state-digest
+encoding. Rust refuses these manifests with validation errors and leaves the
+caller transaction and all 112 tables intact. Python product code is unchanged.
+
+This is only the first requested continuation boundary. Still required, in
+order: durable triggers and contributions; incremental synchronization and
+SQLite/SQLCipher process-kill recovery; bounded observer-scoped SQL views;
+process/book-bound handles and the Mirror report projection; CLI/daemon
+acceptance and registration with non-zero served-by counts. Mirror product
+served-by counts remain zero and unsupported routes continue to fail closed.
+AI projections remain Python. There are no dependency, lockfile, product schema
+or network-permission changes. No durable publication, product registration,
+full quality-gate or packaged/platform acceptance is claimed.
+
+Local Linux verification uses Rust 1.99.1 with locked offline Cargo, eight build
+jobs and locked Python 3.11.17. All 24 native analysis-index tests and five new
+Python/native legacy checks pass without skips. The rebuilt native driver also
+passes 12 process/catalog regression checks across the occurrence, ingestion,
+SQL-source and legacy corpora: eight guarded processes cover 2,346 evaluations,
+preserve all 112 tables and record zero fallback or network attempts. All nine
+legacy mutation recipes compile and are killed; their three unmutated selections
+pass. Workspace formatting and wallet production/test-harness all-target Clippy
+pass with warnings denied. The required classifier update records 5,742 test
+definitions, and CI preflight passes all 57 tests without skips.
+
+The manual second pass preserves mapping equality independently of insertion
+order and checks that unusual aliases do not relax physical identity validation.
+`target/r5-mirror-4/` retains verification/mutation summaries and logs, including
+corrected intermediate lint failures. Owned verification and mutation build
+trees are removed after recording their results. Scratch/data roots stay under
+this worktree's `target/`, account `HOME` is preserved, and test jobs run
+serially. No background job remains. The full workspace runtime suite,
+Python/frontend quality gate and packaged/platform gates are not run.

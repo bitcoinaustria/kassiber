@@ -628,9 +628,14 @@ registers them; exit-tax preserves its reference no-registration boundary.
   intrafees, link counts and cooperative budgets) and full captured-index
   analytics composition; see the
   [entropy checkpoint](docs/reference/rust-shell.md#mirror-entropy-and-analytics-composition-r5-partial).
-- [ ] Finish Mirror's legacy non-finite JSON/lone-surrogate handling and durable
-  projection synchronization/read view,
-  process/book-bound handles, report composition and CLI/daemon acceptance. Preserve deterministic native
+- [x] Preserve legacy non-finite JSON and lone surrogates through Mirror SQL
+  sourcing, source commitments and observer aliases. Retain independent typed
+  node identity checks and the Python malformed-manifest reproduction; see the
+  [legacy JSON checkpoint](docs/reference/rust-shell.md#mirror-legacy-json-compatibility-r5-partial).
+- [ ] Finish Mirror's durable triggers/contributions, incremental synchronization
+  and SQLite/SQLCipher kill recovery, bounded observer-scoped SQL views,
+  process/book-bound handles, report composition and CLI/daemon acceptance with
+  non-zero served-by counts. Preserve deterministic native
   ambiguity ordering; retain the recorded Python reference repro.
 - [x] Port full-report, Austrian bundle and transaction CSV artifacts, saved
   export registration and their daemon kinds. Preserve
