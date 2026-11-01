@@ -309,6 +309,7 @@ def test_quantity_refusal_compared_after_gaps(tmp_path, monkeypatch, mode, rust_
     monkeypatch.setattr(compare, '_COMPUTE_FUNCTIONS', compare._capture_compute_functions())
     if rust_refuses:
         monkeypatch.setattr(kassiber_tax, 'custody', lambda _, **kwargs: json.dumps({'error': {'code': 'TypeError' if rust_refuses == 'wrong_code' else 'ValueError', 'stage': 'gaps' if rust_refuses == 'wrong_stage' else stage}}))
+    monkeypatch.setattr(compare, '_COMPUTE_FUNCTIONS', compare._capture_compute_functions())
     previous = compare._INSTALLED_MODE
     compare.install_custody_mode(mode)
     conn = open_db(tmp_path / 'book')
@@ -378,6 +379,7 @@ def test_injected_failure_requires_exact_stage_and_exception(tmp_path, monkeypat
     monkeypatch.setattr(compare, '_COMPUTE_FUNCTIONS', compare._capture_compute_functions())
     monkeypatch.setattr(CustodyJournalBuilder, 'load_snapshot', lambda _: book)
     monkeypatch.setenv(compare.RECORDS_ENV, str(tmp_path / 'records'))
+    monkeypatch.setattr(compare, '_COMPUTE_FUNCTIONS', compare._capture_compute_functions())
     previous = compare._INSTALLED_MODE
     compare.install_custody_mode(mode)
     try:
