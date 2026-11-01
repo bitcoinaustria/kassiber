@@ -619,7 +619,8 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   pre-build, 112 journal and three recorder recipes in an isolated final-source
   run. Whole-stage default-cache 20k medians meet 0.03 s; scoped-cache
   multi-wallet is 0.034666 s, with its complete cost breakdown recorded.
-  Final custody continuation, campaign binding and acceptance remain open.
+  All 2,327 inherited custody recipes also pass across verified prefixes and
+  a targeted continuation. Final campaign binding and acceptance remain open.
 - [ ] Reject fractional legacy msat before Python's source-overlap fingerprint
   conversion can collapse distinct amounts. The disposable repro is
   `python -m tests.rust_port.repro_journal_fractional_source_overlap`;

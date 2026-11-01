@@ -14,7 +14,248 @@
       "sha256": "b4598b4cf50a6ee3d6fd78be98564e3d4ecee5803d6053ce3f01e7892e92e0bd"
     }
   },
+  "current_journals": {
+    "errors": 0,
+    "killed": 112,
+    "log": {
+      "path": "target/r4-10/final-mutations-isolated.log",
+      "sha256": "f6e73459be8981bf8e3d584d93c6df96c5a017c416548bb9d78bca35d85f5090"
+    },
+    "note": "Final-source 231-recipe run includes every inherited journal recipe, 116 pre-build recipes and three recorder recipes; supersedes initial journals source binding",
+    "recipes": 112,
+    "record": "docs/reference/r4-prebuild-finalization-results.json",
+    "source_sha256": {
+      "crates/journals/src/boundary.rs": "2ddc678761e48f07a4277b2c20622a94a631f2c7c3725eefa32370a71abd878d",
+      "crates/journals/src/boundary/joins.rs": "58b06db41921c470886b1cd1e190f506d6fd9175645c58321340fc6dd464c68e",
+      "crates/journals/src/persistence.rs": "3c4a00c849a6cef59822b9038df8254c1341f2660c34389ea405b89148af9782",
+      "crates/journals/src/persistence/filed.rs": "ba5e5f16065308ebbaeebbd1153f74e094cab4be61c7050e57135893598b6dbe",
+      "crates/journals/src/persistence/quantity.rs": "85c931d09675800d5a63e66ebd843883abc027f6b6448cb7ff0b22630c11289a",
+      "crates/journals/src/persistence/quarantine.rs": "c9cb06f5e0b8ab54fc47c20d9b4f7dc63a54379444e864fb450d0ef2f8235c0d",
+      "crates/journals/src/prebuild.rs": "40221ca89b394394f4bd7ce90246b26d0a4e6e36899f483b7e1d026d575f68d8",
+      "crates/journals/src/prebuild/legacy.rs": "fb960b601e5fa75cf3ed8d56cc802023c1100e45e9b81b9c23bc31023a9d772c",
+      "crates/journals/src/prebuild/overlap.rs": "b716aaa960ac3d872ab24d1cdd427cdd7837a1f231523de8600dd1842a32b550",
+      "crates/journals/src/prebuild/pipeline.rs": "485a5c38661a66a96fedf22b6bc1a46101874ae5dd0b8ffc4e5fd957266639c1",
+      "crates/journals/src/prebuild/pricing.rs": "de86b8a369da7488b715a88d32b9ca166ec46126e18e5c76c4b2ccdddc68c748",
+      "crates/journals/src/prebuild/sources.rs": "d34139e04e8257c78306cf7f1b066368283bb4e3aa6dd3b1407d02c93bc7563c",
+      "crates/journals/src/render.rs": "afac4610917b0ed8ef320385b7f80ca5cb28bd69187e9c00b5dac5b998550d45",
+      "crates/journals/src/storage.rs": "486b6fc5fd605ac13a0212e4d09bfc506e086cd60eba6c71c3fba5ff874b9942",
+      "crates/journals/tests/support/mod.rs": "b08803499aa50a6687769235b4749580ee73df7dd4c229ced45a341690696150",
+      "crates/transfers/src/legacy_refresh.rs": "43d6c59182338a8efe90dec1b36dbb067bc8b6d942b70ab5b5e2d0bb7664cdbb",
+      "crates/transfers/src/pair_spec.rs": "aaaa5d8a2afcf0347131ff3dcfdf0606da7baf07e2a9b0e9261f5b03c473e950",
+      "scripts/check-journal-prebuild.py": "8c355d884082bd3b755ac3bd9f0057a65a8d2ce959a8f68a22a266339cd82b2b",
+      "tests/rust_port/journal_persistence_oracle.py": "0a243b400043e2678029d90beb817547a81fd62fa3890d82ddf2a258c7fc2ec5",
+      "tests/rust_port/journal_prebuild_recorder.py": "20ff8b1cec42710cb1eca18df69276050614d9fa014981cd4875ba37fd7d3414"
+    },
+    "status": "passed",
+    "survivors": 0
+  },
+  "custody": {
+    "build_cleanup": "Copied scratch trees removed by checker; isolated target build tree removed after summary validation",
+    "catalog_sha256": "f0bfe24dae45c9c35236e5f90bc09532ccda66b4d1cf49042508701299fe99c4",
+    "distinct_recipe_ids_sha256": "6caa20206389b0bb5aef7b29d879c17aba772fb4db4234bfa3354fab8b9da0d4",
+    "errors": 0,
+    "execution": "Combined verified 396- and 156-recipe prefixes plus a completed 1775-recipe continuation; not an uninterrupted catalogue run. All 424 original baseline selections passed; continuations separately passed 138 and 128 selections. No incomplete interrupted recipe is counted.",
+    "implementation_commit": "8e8e82fc863560ccb60374cfe222e1d005aa4358",
+    "killed": 2327,
+    "python_recipes": 21,
+    "recipes": 2327,
+    "result": 0,
+    "rust_recipes": 2306,
+    "segments": [
+      {
+        "baseline_selections": 424,
+        "complete_catalogue": false,
+        "killed": 396,
+        "log": {
+          "path": "target/r4-10/inherited-custody.log",
+          "sha256": "d4bde44111aa40d08ca3b6f2fe85320029e24a0d7131a629490f2f967b4fa1de"
+        },
+        "prefix_recipes": 396
+      },
+      {
+        "baseline_selections": 138,
+        "complete_catalogue": false,
+        "interruption": "SIGINT after complete kill lines; incomplete recipe will be rerun; checker restored source and removed copied scratch tree",
+        "killed": 156,
+        "log": {
+          "path": "target/r4-10/custody-continuation.log",
+          "sha256": "9ab6e42c4934e51379aeba495d4d8b6b0731d280d781bd8c3d1739ccd9027d7a"
+        },
+        "prefix_recipes": 156
+      },
+      {
+        "baseline_selections": 128,
+        "build_scope": "All 11 custody test targets built and listed at baseline; each mutation builds every target containing one of its named substring-filter witnesses; every named witness runs with shared-checker failure semantics; examples excluded",
+        "complete_selected_remainder": true,
+        "killed": 1775,
+        "log": {
+          "path": "target/r4-10/custody-targeted.log",
+          "sha256": "f50178980de53abc2a67b2da0244e0d437bd9f56c9c2bed8561b056328747a21"
+        },
+        "result": {
+          "path": "target/r4-10/custody-targeted-result.json",
+          "sha256": "b29b0205f3518d77561cc809f0646c0387db8a25adb7cacce208a321f9dc40a8"
+        },
+        "runner": {
+          "path": "target/r4-10/finish-custody-targeted.py",
+          "sha256": "f4d6df82644d5f44b1e630d0ae3cd5967650a56fef4f80c7872f250943d21cda"
+        },
+        "target_inventory": [
+          {
+            "kind": "test",
+            "listing_sha256": "ee4dafbc8657d887c3d9d436efa55c6595930ffcbad390ba0b1493385cca78b5",
+            "name": "projection_lossless",
+            "tests": 4
+          },
+          {
+            "kind": "test",
+            "listing_sha256": "ff56fc15c31b1955b226839fef2d614d48f53f30c8e9362de711aa76edce9282",
+            "name": "evidence_cases",
+            "tests": 19
+          },
+          {
+            "kind": "test",
+            "listing_sha256": "4c557e87a25af3ab27dca4ad0dfc50cc7a78111e301588af72769af54a1b685e",
+            "name": "projection_cases",
+            "tests": 25
+          },
+          {
+            "kind": "test",
+            "listing_sha256": "6d5d03edb58aebf55cd3f5c2f8f7bbe661837004280ff924cfaf0f527d404cdd",
+            "name": "typed_rows",
+            "tests": 7
+          },
+          {
+            "kind": "test",
+            "listing_sha256": "816dfe0d66ca110c48e55792cd5f29954e5a55c3ad465c94172fe3a0226682ce",
+            "name": "projection_stage",
+            "tests": 5
+          },
+          {
+            "kind": "test",
+            "listing_sha256": "ebe876b3de4ff12f51f4d7dc35c41999ff003615558976b3cd639a6a1aa5263d",
+            "name": "gap_cases",
+            "tests": 10
+          },
+          {
+            "kind": "test",
+            "listing_sha256": "540a7c11a0196c32956297904e73a8198cf3966baefe76f81b4eb2a06dcf2f71",
+            "name": "hash_vectors",
+            "tests": 6
+          },
+          {
+            "kind": "test",
+            "listing_sha256": "bef7851f0f0429a98d9b253e3bb2bbcb925541dd23676dfd6074c407c60057f6",
+            "name": "component_cases",
+            "tests": 181
+          },
+          {
+            "kind": "test",
+            "listing_sha256": "c53dc20231603fe378fb926daeea172bd1c806bf5cec949005a705511d6a580d",
+            "name": "interpretation_cases",
+            "tests": 137
+          },
+          {
+            "kind": "test",
+            "listing_sha256": "0ebeaaed623458f9bd1b8ef83e2d6f7035d8a3d056c4bc5fa6a15b509a70d634",
+            "name": "quantity_cases",
+            "tests": 31
+          },
+          {
+            "kind": "lib",
+            "listing_sha256": "8393e18dd8d816575a3dd462ce2b79ce4baef7f642a1eae47ad42ac5597a4b08",
+            "name": "kassiber_custody",
+            "tests": 188
+          }
+        ]
+      }
+    ],
+    "source_sha256": {
+      "crates/custody/src/codec.rs": "81ed97f0f19c9a90bca3ea5db96e8f9125b1fbc340e444a62959606200343661",
+      "crates/custody/src/components/anchors.rs": "acc36e035bcdac8a463594bcfb790a7cfce032593ba712c87e7b4f07e2e9713a",
+      "crates/custody/src/components/commitments.rs": "6fcb3bce56edd5c13c356221c40297671b4dfd265f89cc80f8797726fc9e5603",
+      "crates/custody/src/components/conservation.rs": "b6f2d71e36304f22369a9e9dee8872057e3a0ed764f311fcaf32de942b7de13f",
+      "crates/custody/src/components/mod.rs": "d1cd3412e0b1fd0ace31f1dde80758a07a34a40b7e1a2fe2bef34b9e334dc6e8",
+      "crates/custody/src/components/scope.rs": "5c0192e8159d9c2a8a8bb5c12420940fc078ee64d835e6fb995704a5015bdd25",
+      "crates/custody/src/components/time.rs": "10b27e1ff764f9cf3f1f4e21ce13f87f390b7fe299abfb77a132ac48e5ccad3f",
+      "crates/custody/src/evidence.rs": "ad0fcbf1a6e6865365cb6d20552d2c789cd859003e8fa5bc4a83738c0b9f4357",
+      "crates/custody/src/finalized_projection.rs": "47ab74232cc64b8649352a97e9c3881d4cae20f328422061047a297f6f108159",
+      "crates/custody/src/finalized_projection/composition.rs": "50c5f172cb6fb7fe6433323d598942fc470bed6b79d9671a056e684c905dcd26",
+      "crates/custody/src/finalized_projection/conversions.rs": "13f844454b2b80e587ec350117a8ccd25af20b00dfb01df3d4254fd44f61e686",
+      "crates/custody/src/finalized_projection/fees.rs": "3932c6a5d725db2faf0968e52fd3ff4dc2a9b8b9d8c2d7e646e115468eec3f42",
+      "crates/custody/src/finalized_projection/money.rs": "632c7bc937a53cd1c1a468e3d0abbccc9ba75712711d083b47a7de86947c5817",
+      "crates/custody/src/finalized_projection/payouts.rs": "1b327a54ed0f9810a86109ce900ba81dee7240803c94c04f6e1e8f6a73c20ed5",
+      "crates/custody/src/finalized_projection/principal.rs": "15804339f95231187de24a75768e5f8736f9788f63e411c4955fa68d245feeae",
+      "crates/custody/src/finalized_projection/quarantines.rs": "609a63ed05b3bb995be80223fa20e6ea75e3db493c4a40892a4a0fff2c20bc34",
+      "crates/custody/src/finalized_projection/runtime.rs": "79c30ce6557b16f5cd1a26f93f0470f2961bd6a392aea1606ea5e78d387768a8",
+      "crates/custody/src/gaps/candidate.rs": "3120e184ca1572769dc0ef63566234cbd89b5ff188146b8952716827ae61dbff",
+      "crates/custody/src/gaps/mod.rs": "8ce07b6a31e22e97bb91c03bf9ac264ab8ea6d1aac10a4e14ae83d5eeb9a5738",
+      "crates/custody/src/gaps/normalize.rs": "f1b28f7b1ac7d1902e5d9f72d606499d2a5635b2cbac6cd17bb548fd004f2bf2",
+      "crates/custody/src/gaps/pagination.rs": "fd0b8ec97a0aa9166658e771e0e36675c03ad876947c3fcc8eb788b3acf0087f",
+      "crates/custody/src/gaps/search.rs": "f99e7af793a9f347d9df549cb0acea9fb86e1cd0687401e6354606be305afe8e",
+      "crates/custody/src/gates/network.rs": "ed125970feb2d3ae5e05a521f96bcca63f0005d751d74780d120cbb4be91ebc9",
+      "crates/custody/src/graph.rs": "f169cd83255aabb4403b2dc1a49620aea122de7f24004b68ffd8a5d3fc6b59d1",
+      "crates/custody/src/graph/ownership.rs": "e115909f7792bf2bb90ab5efe79a9dd9d7948ab397a1b13b0bc71a40115a5655",
+      "crates/custody/src/graph/stored.rs": "ddd509de9d1ad8c8ad17b873fccd0e3f18efce80902e19fa7a916bda141a60a2",
+      "crates/custody/src/interpretation/channels.rs": "b22ff625698dc157219c91f3408b0925c8d9583b2254d67db2e847906b4c4b89",
+      "crates/custody/src/interpretation/chronology.rs": "d2ccb4676c7c9860b172d0716f91c09d1ecab50804ac9be29121866dde41af33",
+      "crates/custody/src/interpretation/claims.rs": "c8346014aace9c138486c43def1a9cc60e5b0377582191b56b499ad0bc723a82",
+      "crates/custody/src/interpretation/consolidation.rs": "482c17bb364467871932a2d22908a3e4e6a06626f32053bec0cd40b7ba673fc2",
+      "crates/custody/src/interpretation/fanout.rs": "f44bd4d58e63c5d9b626e7f67fe5471046f8a9a252c0028eaca5ee0c77e929e4",
+      "crates/custody/src/interpretation/fifo.rs": "d0645854f65a28da9331d030875757f9979ac30016c7e34acba052ff7b13906f",
+      "crates/custody/src/interpretation/holds.rs": "eda65613cdc6a5331856bee72219f6e81a3213a69903cfe8e7371013d5fb0642",
+      "crates/custody/src/interpretation/htlc.rs": "bce0c3ec0b2bd5d6b8d058d5203fd335a0b35a13d36dafa3a0bd3b955a7ed954",
+      "crates/custody/src/interpretation/matcher.rs": "b70726dbba73061de84f0144d06e44cd2725c3e7367e4d57a152928ceaa96080",
+      "crates/custody/src/interpretation/matcher/providers.rs": "e61638b27e743d65374a6fe48b8d8b7d71939abe905d273a4846614c305ad13d",
+      "crates/custody/src/interpretation/migration.rs": "e111940bdd1babfd67278002bd67144d8a9373fa842b76a5393e7264bcb93be8",
+      "crates/custody/src/interpretation/mod.rs": "9871dcabc1615307c33cbd321ac69609a0ac7f3fb782463ba88ce35dfee68c4b",
+      "crates/custody/src/interpretation/native.rs": "59e4f0247778037969fd4ecefa5b8dbcfe071a5ccfa56b26bc4d184e23fd95b3",
+      "crates/custody/src/interpretation/ownership.rs": "0508c64de70f9f24b58547ad50292e8265ac948f9097643212288fefa7ee2fd1",
+      "crates/custody/src/interpretation/pairs.rs": "28c75a12c6606f6398773324c4a216287f02f5a40254c9a51ca6f71305cf422a",
+      "crates/custody/src/interpretation/pipeline.rs": "1557b8cbdcdd598dab21d20637605aa99835df71b7c4ebe58d026fb815682557",
+      "crates/custody/src/interpretation/privacy.rs": "69390545422d2512cf581b32fcafc305c7be250cdcb0374045a4df7e114f0fa7",
+      "crates/custody/src/interpretation/reconciliation.rs": "58c23d8a060a6c9cc08ee51d9a1b4c929ee7c1b03f5b5e389867caab84df78cb",
+      "crates/custody/src/interpretation/recorded.rs": "802fd1e2f8bc0e3c4e6fd1e90e2de17a2730a5eac0e2143ff871c6ec3081ed60",
+      "crates/custody/src/interpretation/reviewed.rs": "4f5ea237a154be76240f13d73362c4a64dd6f9a88ad435f0da0dcbbf29a61bfb",
+      "crates/custody/src/interpretation/safety.rs": "496e8d02f3f1f2893d5f03a2879010b3f9c166cddb28b955bef43b27954c6087",
+      "crates/custody/src/interpretation/samourai.rs": "1cc78a778564e411eed8f47b763258f5cb8bbcf11b55db626e7c0ca52bb3d1ba",
+      "crates/custody/src/interpretation/text.rs": "10935d069ab01d1c43e8855bf74745dbffdd79f7072a09cebeffe9c30e751d0b",
+      "crates/custody/src/ledger_request.rs": "143bf1f6d40d268677c5897a8d0568db353ca10b7dbbc50283b5e99e3d2b998c",
+      "crates/custody/src/ledger_request/config.rs": "5673dde571f729f44a070cc8a0456e0c05fa5d32af11c99cff5e75fc0f685d13",
+      "crates/custody/src/ledger_request/time.rs": "33383b8f4b5bdb107396cdeb474a29b533b8e82bcbd4fc5755e01dad46d4d3b0",
+      "crates/custody/src/lib.rs": "451da7ae9e874494f78fbfccb1ba194776425ce49bd99dea33d4e20f0637d250",
+      "crates/custody/src/liquid.rs": "678ed34ac454a14f1ec0a6f8db6f5b530b4173e2f25eb1f878c295f39e2196bc",
+      "crates/custody/src/python_text.rs": "4ee9fe912c31eb405e7fc873a1acd3f004be000a943bb98d5fc27520cd0c308e",
+      "crates/custody/src/quantity/allocation.rs": "1f8dd6de771f61394f39bd713856c16f210b791cf6b1c0c3d42261aee7e40b6e",
+      "crates/custody/src/quantity/arbitration.rs": "42a8beda9454bf90186399ee97880e00875b609911d12b749de692d5dc4c50ba",
+      "crates/custody/src/quantity/balances.rs": "cc9be94d788ecc9d80ead117c9b1020a99dc357c4bb3e866ed76dc394df56740",
+      "crates/custody/src/quantity/hashes.rs": "07c4d11d1ab16003de5a24887f5ad8d52aec084cdc948877035af533094c315f",
+      "crates/custody/src/quantity/holds.rs": "5a055484eb37230047885af14f7355b50498c2b3816991ef6c63079cc8ddcb7d",
+      "crates/custody/src/quantity/mod.rs": "ce2b74490dbff9d25d9912db1d520fa5ab52c6d5180ad568fe17d8870830f41d",
+      "crates/custody/src/quantity/native.rs": "edb5038257cfc74a8cc9f78ca641b7a0a94a9df72c2f9c59d03f5eddb09aa39f",
+      "crates/custody/src/quantity/reviewed.rs": "e7d8685f00c46da0f080ba34877fcbf2cf6814f7dd8072966b983cca8f41ca37",
+      "crates/custody/src/quantity/runtime.rs": "2a6792bf073e08d677ca1362a59144546723554317f8297f4002ace16113b536",
+      "crates/custody/src/quantity/transfers.rs": "311bf9fcaa0d436a4793fd3d7c0373d3e02a5f639749c44fb99863bb5553a92b",
+      "crates/custody/src/snapshot/book.rs": "ad3a7611bfac67b00e27b2a2e033d8fe287b2899a792533cea0779f0f979a299",
+      "crates/custody/src/snapshot/identifiers.rs": "8bedfa34d0ece3c77ee3f0ed105a6895dbc7799cf5da56139ea1832d5d66fc20",
+      "crates/custody/src/snapshot/network.rs": "76de45152c8e4888de0b125433c8bedc930f7884bb0596fe7cd31428936cc951",
+      "crates/custody/src/snapshot/rows.rs": "5bb2d729277880734b51466941e5d9c0494a6b886ef96493704aa5dcaa9cfe6f",
+      "tests/custody_engine_compare.py": "6d11580506bdd491637ea270104fd13fa8fe1b6f0eb2db3edc4dd75cebaff280",
+      "tests/custody_quantity_composition_generator.py": "2dfeb40f2af8ab22c660ec46e88b7c12873e56cb8a96159f2ed14848400e491c",
+      "tests/custody_quantity_runtime_generator.py": "34903096aa53119f55618a3bab38d6450b6d1f5fe593e1cfe59fc65d70972b59",
+      "tests/test_custody_quantity_port.py": "e88b0f1055939c29d5ce83b39a77e7793033f737b002426bb880d67eb038caa9",
+      "tests/test_custody_quantity_stage.py": "19f802f4b44894b435128dead316e66d91096ee987c16a82414dffce57c21c71",
+      "tests/test_custody_snapshot.py": "82041c2068c17c09d2468a4c1b716586881b35cc039f147582a7b0a2bb65fb9c"
+    },
+    "status": "passed",
+    "survivors": 0
+  },
   "execution": "One test process at a time; copied tracked worktree in target scratch; offline Cargo; eight build jobs",
+  "final_verification": {
+    "log_accounting": "Each catalogue id appears exactly once in combined custody kill order, with no survivor/build/selection error; interrupted pending recipes rerun",
+    "manual_second_pass": "Reviewed target discovery against all 613 baseline tests across 11 targets, substring-filter selection, per-mutation target builds, every named witness, return-code/count validation and prefix source/catalogue/log hashes",
+    "source_hashes": "All mutated source hashes and catalogues verified after runs; transfer gate bindings unchanged"
+  },
   "implementation_commit": "b11068fe0c538e7a6a4055043f73e21447adb0a6",
   "invocation_path": "target/r4-10/run-inherited-mutations.py",
   "invocation_sha256": "3271ebf882b929b02fd6b461185fc1ebb90c71e1059d795493268242dd716987",
@@ -45,10 +286,10 @@
     "status": "passed",
     "survivors": 0
   },
-  "remaining": [
-    "Execute 2327 custody recipes"
-  ],
+  "latest_implementation_commit": "8e8e82fc863560ccb60374cfe222e1d005aa4358",
+  "remaining": [],
   "schema": "kassiber.r4-prebuild-inherited-mutations.v1",
+  "status": "All inherited journal, transfer/daemon and custody mutation gates passed; final journal gate refreshed after shared SQLite refusal fix",
   "transfers": {
     "baseline_selections": 44,
     "catalog_sha256": "4a6f2cf59bee5c7daae9877f221b2c785c86a473c0f6529e2628b70740a186d7",

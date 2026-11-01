@@ -764,7 +764,7 @@ validation, not the original comparison campaign.
 | --- | ---: | ---: |
 | Twelve generators and permutations | 24,815 | 49,630 |
 | Historical custody recordings and permutations | 318 | 636 |
-| Historical upgraded databases, all profiles | 3 | 6 |
+| Three historical upgraded databases, one profile each | 3 | 6 |
 | Fresh complete books and positive control | 89 | 178 |
 
 The **215 schema refusals** among generated attempts remain separate from
@@ -776,8 +776,10 @@ Per-scenario counts, omitted columns and distinct input counts are retained in
 the [campaign record](r4-prebuild-campaign-results.json). Repeated generator
 inputs are disclosed; 24,000 attempts does not mean 24,000 distinct books.
 The historical snapshot replay uses the same limited adapter. Full historical
-database replay starts after Python upgrades disposable copies of both exact
-compatibility fixtures; it does not extend native migration support.
+database replay starts after Python upgrades disposable copies of the three
+exact fixtures (`pre_432_5d232097`, `pre_435_16b7bdc1` and
+`pre_partial_payout_ca9a672f`), with one profile in each; it does not extend
+native migration support.
 
 Fresh recordings preserve actual stored source evidence. Across 89 captures
 they exercise 27 duplicate exclusions, three address removals, one warning and
@@ -1082,6 +1084,29 @@ pass. The [finalization record](r4-prebuild-finalization-results.json) binds
 source hashes, vectors, logs, all CPU samples and coverage dispositions.
 R4-10 remains unaccepted pending the custody mutation continuation, final
 whole-campaign implementation binding and acceptance record.
+
+### R4-10 inherited custody mutation gate
+
+All **2,327 custody recipes** are killed, with no survivors, build errors or
+selection errors. The [inherited gate record](r4-prebuild-inherited-mutations.json)
+checks every catalogue id exactly once across verified **396 + 156 + 1,775**
+recipe segments. The first two runs were intentionally interrupted; their
+incomplete pending recipes were rerun. This is combined evidence, not one
+uninterrupted catalogue run.
+
+All 424 original baseline selections passed. The continuations separately
+passed 138 and 128 selections. The last continuation built and listed all
+613 tests across 11 custody test targets before its baseline, then built every
+target containing a named witness for each mutation. Every named substring
+filter selected tests and failed as required. Benchmark examples were excluded.
+The record binds the runner, checker, catalogue, source files and complete logs.
+Copied mutation trees and the isolated build tree are removed after validation.
+
+The 280 transfer/daemon recipes retain their verified mutated-source hashes.
+The 112 journal recipes were refreshed in the final-source 231-entry isolated
+run after the shared SQLite refusal conversion changed. All inherited mutation
+catalogues are now complete. Final whole-campaign binary binding and the
+acceptance record remain open.
 
 ## Performance budget
 

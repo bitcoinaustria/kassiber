@@ -14250,7 +14250,7 @@
     "complete": true,
     "database_mode": "SQLite and SQLCipher files",
     "elapsed_seconds": 1.2178671110013966,
-    "limits": "All three profiles from both exact historical fixtures after Python compatibility upgrade; no assertion of native authored migration support.",
+    "limits": "Three exact historical fixtures after Python compatibility upgrade, one profile each: pre_432_5d232097/pf, pre_435_16b7bdc1/pf and pre_partial_payout_ca9a672f/profile; no assertion of native authored migration support.",
     "schema": "kassiber.r4-prebuild-campaign.v1",
     "suites": {
       "historical-books": {
@@ -17411,7 +17411,20 @@
     }
   },
   "inherited_mutation_gates": {
-    "custody": "not executed",
+    "custody": {
+      "errors": 0,
+      "killed": 2327,
+      "recipes": 2327,
+      "record": "r4-prebuild-inherited-mutations.json",
+      "segments": [
+        396,
+        156,
+        1775
+      ],
+      "status": "passed",
+      "survivors": 0
+    },
+    "journals_final_source": "All 112 journal recipes rerun in the final-source 231-entry isolated gate; see r4-prebuild-finalization-results.json",
     "journals_killed": 112,
     "record": "r4-prebuild-inherited-mutations.json",
     "transfer_daemon": "all 280 killed; 44 baseline selections pass"
@@ -18925,12 +18938,11 @@
     "stale_directory": "A nonempty recording directory is refused"
   },
   "remaining": [
-    "Complete 2327 inherited custody recipes across the verified 396-recipe prefix and the 1931-recipe continuation",
     "Bind the generated, historical and complete-book campaign replays to the final native implementation",
     "Write the acceptance record and run final required checks"
   ],
   "schema": "kassiber.r4-prebuild-campaign-checkpoint.v2",
-  "status": "Generated, recorded, legacy/refusal and prebuild mutation/census checkpoints; R4-10 remains unaccepted",
+  "status": "Inherited mutation catalogues complete; final whole-campaign binary binding and acceptance record remain open",
   "uncovered_numeric_followup": {
     "base_commit": "b7cf849f9",
     "file_comparisons": 530,
