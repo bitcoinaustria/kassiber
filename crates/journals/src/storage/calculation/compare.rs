@@ -496,6 +496,9 @@ impl std::fmt::Write for Cursor<'_> {
 }
 
 #[cfg(test)]
+mod audit_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 

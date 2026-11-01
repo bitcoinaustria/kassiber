@@ -163,7 +163,7 @@ impl storage::WriteObserver for Writes {
 pub fn store(
     c: &Connection,
     v: &Value,
-    writes: &mut Writes,
+    writes: &mut impl storage::WriteObserver,
 ) -> Result<persistence::Stored, Refusal> {
     store_with(c, v, writes, |_| {})
 }
@@ -171,7 +171,7 @@ pub fn store(
 pub fn store_with(
     c: &Connection,
     v: &Value,
-    writes: &mut Writes,
+    writes: &mut impl storage::WriteObserver,
     edit: impl FnOnce(&mut kassiber_journals::JournalState<'_>),
 ) -> Result<persistence::Stored, Refusal> {
     let r = &v["record"];

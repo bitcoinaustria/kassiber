@@ -2647,7 +2647,7 @@
     "expect_failing": [
       "storage_encodings_and_markers_match_python"
     ],
-    "rule": "UUID hex retains each digest byte’s high nibble."
+    "rule": "UUID hex retains each digest byte\u2019s high nibble."
   },
   {
     "id": "JP-uuid-low-digit",
@@ -2657,7 +2657,7 @@
     "expect_failing": [
       "storage_encodings_and_markers_match_python"
     ],
-    "rule": "UUID hex retains each digest byte’s low nibble."
+    "rule": "UUID hex retains each digest byte\u2019s low nibble."
   },
   {
     "id": "JP-padding-shortcut-negative-limit",
@@ -2988,5 +2988,545 @@
       "physical_probe_marks_both_commit_paths_before_a_failed_success_flush"
     ],
     "rule": "The native store path records durable COMMIT before publishing success."
+  },
+  {
+    "id": "JP-compare-scalar-text-refusal",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "Value::String(s) => Some(Self::quoted(s)),\n            _ => None,",
+    "replace": "Value::String(s) => Some(Self::quoted(s)),\n            _ => Some(Self::Null),",
+    "expect_failing": [
+      "comparison_scalars_refuse_noncanonical_tokens"
+    ],
+    "rule": "Nontext JSON scalars are not canonical text/null tokens."
+  },
+  {
+    "id": "JP-compare-scalar-zero",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "Self::Integer(if n == \"-0\" { \"0\" } else { n })",
+    "replace": "Self::Integer(n)",
+    "expect_failing": [
+      "comparison_scalars_refuse_noncanonical_tokens"
+    ],
+    "rule": "Canonical integer tokens normalize negative integer zero."
+  },
+  {
+    "id": "JP-compare-source-cache",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "            return *id;",
+    "replace": "            return None;",
+    "expect_failing": [
+      "comparison_source_dictionary_retains_every_field_and_cache_identity"
+    ],
+    "rule": "Reused validated sources retain their dictionary identity."
+  },
+  {
+    "id": "JP-compare-source-shape-refusal",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "        if !text(&source.provenance.transaction_id)",
+    "replace": "        if true || !text(&source.provenance.transaction_id)",
+    "expect_failing": [
+      "comparison_source_dictionary_retains_every_field_and_cache_identity"
+    ],
+    "rule": "Canonical source shapes retain valid source scalars and refuse invalid fields."
+  },
+  {
+    "id": "JP-compare-source-transaction",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "shape[0] = Scalar::text(&source.provenance.transaction_id)?;",
+    "replace": "shape[0] = Scalar::Null;",
+    "expect_failing": [
+      "comparison_source_dictionary_retains_every_field_and_cache_identity"
+    ],
+    "rule": "Source dictionary transaction identity is retained."
+  },
+  {
+    "id": "JP-compare-source-strings",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "shape[index + 1] = Scalar::quoted(value);",
+    "replace": "shape[index + 1] = Scalar::Null;",
+    "expect_failing": [
+      "comparison_source_dictionary_retains_every_field_and_cache_identity"
+    ],
+    "rule": "Every source string retains its exact text."
+  },
+  {
+    "id": "JP-compare-source-fee",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "shape[6] = Scalar::integer(&source.crypto_fee_msat);",
+    "replace": "shape[6] = Scalar::Null;",
+    "expect_failing": [
+      "comparison_source_dictionary_retains_every_field_and_cache_identity"
+    ],
+    "rule": "Source dictionary retains its signed crypto fee."
+  },
+  {
+    "id": "JP-compare-pricing-order",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "for (index, pricing) in [0, 5, 1, 2, 9, 10, 11, 8, 7, 4, 3, 6]",
+    "replace": "for (index, pricing) in [5, 0, 1, 2, 9, 10, 11, 8, 7, 4, 3, 6]",
+    "expect_failing": [
+      "comparison_source_dictionary_retains_every_field_and_cache_identity"
+    ],
+    "rule": "Typed pricing slots follow the compact storage order."
+  },
+  {
+    "id": "JP-compare-absent",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "return Ok(Prepared::Absent);",
+    "replace": "return Ok(Prepared::Fallback(Some(\"null\".into()), None));",
+    "expect_failing": [
+      "comparison_dispatch_and_refusals_preserve_exact_storage_bytes"
+    ],
+    "rule": "Absent calculations retain two SQL NULL cells."
+  },
+  {
+    "id": "JP-compare-direct-capacity",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "calculation.fragments.len() <= 8 && valid_direct(calculation)",
+    "replace": "valid_direct(calculation)",
+    "expect_failing": [
+      "comparison_dispatch_and_refusals_preserve_exact_storage_bytes"
+    ],
+    "rule": "Direct comparison never exceeds the sixteen-source stack capacity."
+  },
+  {
+    "id": "JP-compare-compact-schema",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "if calculation.schema_version != 1 {",
+    "replace": "if false {",
+    "expect_failing": [
+      "comparison_dispatch_and_refusals_preserve_exact_storage_bytes"
+    ],
+    "rule": "Future calculation schemas use lossless legacy storage."
+  },
+  {
+    "id": "JP-compare-compact-quantity",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "if !exact_integer_text(&fragment.quantity_msat, Some(&fragment.quantity_msat_exact)) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "comparison_dispatch_and_refusals_preserve_exact_storage_bytes"
+    ],
+    "rule": "Noncanonical fragment quantities fall back to legacy storage."
+  },
+  {
+    "id": "JP-compare-compact-acquisition",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "                _ => return None,",
+    "replace": "                _ => {},",
+    "expect_failing": [
+      "comparison_dispatch_and_refusals_preserve_exact_storage_bytes"
+    ],
+    "rule": "Acquisition amount/exact presence mismatches retain legacy bytes."
+  },
+  {
+    "id": "JP-compare-compact-event-link",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "Some(self.source(&fragment.event)?),",
+    "replace": "None,",
+    "expect_failing": [
+      "comparison_dispatch_and_refusals_preserve_exact_storage_bytes"
+    ],
+    "rule": "Every compact fragment retains its event source link."
+  },
+  {
+    "id": "JP-compare-compact-lot-link",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "Some(lot) => Some(self.source(lot)?),",
+    "replace": "Some(_lot) => None,",
+    "expect_failing": [
+      "comparison_dispatch_and_refusals_preserve_exact_storage_bytes"
+    ],
+    "rule": "A present lot retains its compact source link."
+  },
+  {
+    "id": "JP-compare-linear-dictionary",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "prior == id || self.shapes[*prior] == self.shapes[*id]",
+    "replace": "true",
+    "expect_failing": [
+      "comparison_source_dictionary_retains_every_field_and_cache_identity"
+    ],
+    "rule": "Small source dictionaries deduplicate by complete canonical source shape."
+  },
+  {
+    "id": "JP-compare-hashed-dictionary",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "positions.entry(&self.shapes[*id])",
+    "replace": "positions.entry(&self.shapes[0])",
+    "expect_failing": [
+      "comparison_source_dictionary_retains_every_field_and_cache_identity"
+    ],
+    "rule": "Large source dictionaries preserve distinct source shapes."
+  },
+  {
+    "id": "JP-compare-absent-cell-pair",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "legacy == ValueRef::Null && compact == ValueRef::Null",
+    "replace": "legacy == ValueRef::Null || compact == ValueRef::Null",
+    "expect_failing": [
+      "comparison_dispatch_and_refusals_preserve_exact_storage_bytes"
+    ],
+    "rule": "Either non-NULL retained calculation cell changes an absent calculation."
+  },
+  {
+    "id": "JP-compare-fallback-legacy",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "legacy == cell(a) && compact == cell(b)",
+    "replace": "true && compact == cell(b)",
+    "expect_failing": [
+      "comparison_dispatch_and_refusals_preserve_exact_storage_bytes"
+    ],
+    "rule": "Legacy fallback comparison includes every legacy byte."
+  },
+  {
+    "id": "JP-compare-fallback-compact",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "legacy == cell(a) && compact == cell(b)",
+    "replace": "legacy == cell(a)",
+    "expect_failing": [
+      "comparison_dispatch_and_refusals_preserve_exact_storage_bytes"
+    ],
+    "rule": "Legacy fallback comparison includes the companion compact cell."
+  },
+  {
+    "id": "JP-compare-direct-legacy-guard",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "Self::Direct(calculation) => {\n                if legacy != ValueRef::Null {",
+    "replace": "Self::Direct(calculation) => {\n                if false {",
+    "expect_failing": [
+      "comparison_dispatch_and_refusals_preserve_exact_storage_bytes"
+    ],
+    "rule": "Direct compact comparison rejects a populated legacy cell."
+  },
+  {
+    "id": "JP-compare-compact-legacy-guard",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "Self::Compact { .. } => {\n                if legacy != ValueRef::Null {",
+    "replace": "Self::Compact { .. } => {\n                if false {",
+    "expect_failing": [
+      "comparison_dispatch_and_refusals_preserve_exact_storage_bytes"
+    ],
+    "rule": "Dictionary compact comparison rejects a populated legacy cell."
+  },
+  {
+    "id": "JP-compare-direct-tail",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "consume_direct(calculation, &mut cursor).is_some() && cursor.0.is_empty()",
+    "replace": "consume_direct(calculation, &mut cursor).is_some()",
+    "expect_failing": [
+      "comparison_dispatch_and_refusals_preserve_exact_storage_bytes"
+    ],
+    "rule": "Direct comparison refuses trailing bytes after a complete compact value."
+  },
+  {
+    "id": "JP-compare-compact-tail",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "self.consume(sources, &mut cursor).is_some() && cursor.0.is_empty()",
+    "replace": "self.consume(sources, &mut cursor).is_some()",
+    "expect_failing": [
+      "comparison_dispatch_and_refusals_preserve_exact_storage_bytes"
+    ],
+    "rule": "Dictionary comparison refuses trailing bytes after a complete compact value."
+  },
+  {
+    "id": "JP-compare-consume-variant",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "        else {\n            return None;\n        };",
+    "replace": "        else {\n            return Some(());\n        };",
+    "expect_failing": [
+      "comparison_dispatch_and_refusals_preserve_exact_storage_bytes"
+    ],
+    "rule": "Only a compact prepared value can consume a dictionary representation."
+  },
+  {
+    "id": "JP-compare-direct-version",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "calculation.schema_version == 1",
+    "replace": "true",
+    "expect_failing": [
+      "comparison_dispatch_and_refusals_preserve_exact_storage_bytes"
+    ],
+    "rule": "Direct validation preserves future-schema legacy storage."
+  },
+  {
+    "id": "JP-compare-direct-quantity",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "exact_integer_text(&fragment.quantity_msat, Some(&fragment.quantity_msat_exact))\n                && match",
+    "replace": "true\n                && match",
+    "expect_failing": [
+      "comparison_dispatch_and_refusals_preserve_exact_storage_bytes"
+    ],
+    "rule": "Direct validation requires exact fragment integer spelling."
+  },
+  {
+    "id": "JP-compare-direct-acquisition",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "                    _ => false,",
+    "replace": "                    _ => true,",
+    "expect_failing": [
+      "comparison_dispatch_and_refusals_preserve_exact_storage_bytes"
+    ],
+    "rule": "Direct validation refuses asymmetric acquisition amount presence."
+  },
+  {
+    "id": "JP-compare-direct-acquisition-exact",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "(Some(quantity), Some(exact)) => exact_integer_text(quantity, Some(exact)),",
+    "replace": "(Some(_quantity), Some(_exact)) => true,",
+    "expect_failing": [
+      "comparison_dispatch_and_refusals_preserve_exact_storage_bytes"
+    ],
+    "rule": "Direct validation requires exact acquisition integer spelling."
+  },
+  {
+    "id": "JP-compare-direct-event",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "                && valid_source(&fragment.event)",
+    "replace": "                && true",
+    "expect_failing": [
+      "comparison_dispatch_and_refusals_preserve_exact_storage_bytes"
+    ],
+    "rule": "Direct validation refuses invalid event provenance."
+  },
+  {
+    "id": "JP-compare-direct-lot",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "                && fragment.lot.as_ref().is_none_or(valid_source)",
+    "replace": "                && true",
+    "expect_failing": [
+      "comparison_dispatch_and_refusals_preserve_exact_storage_bytes"
+    ],
+    "rule": "Direct validation refuses invalid lot provenance."
+  },
+  {
+    "id": "JP-compare-equal-asset",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "a.asset == b.asset",
+    "replace": "true",
+    "expect_failing": [
+      "comparison_source_dictionary_retains_every_field_and_cache_identity"
+    ],
+    "rule": "Canonical source equality includes asset independently of other source fields."
+  },
+  {
+    "id": "JP-compare-equal-spot",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "a.spot_price_exact == b.spot_price_exact",
+    "replace": "true",
+    "expect_failing": [
+      "comparison_source_dictionary_retains_every_field_and_cache_identity"
+    ],
+    "rule": "Canonical source equality includes spot independently of other source fields."
+  },
+  {
+    "id": "JP-compare-equal-fiat-fee",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "a.fiat_fee_exact == b.fiat_fee_exact",
+    "replace": "true",
+    "expect_failing": [
+      "comparison_source_dictionary_retains_every_field_and_cache_identity"
+    ],
+    "rule": "Canonical source equality includes fiat-fee independently of other source fields."
+  },
+  {
+    "id": "JP-compare-equal-crypto-fee",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "integer(&a.crypto_fee_msat) == integer(&b.crypto_fee_msat)",
+    "replace": "true",
+    "expect_failing": [
+      "comparison_source_dictionary_retains_every_field_and_cache_identity"
+    ],
+    "rule": "Canonical source equality includes crypto-fee independently of other source fields."
+  },
+  {
+    "id": "JP-compare-equal-transaction",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "a.provenance.transaction_id == b.provenance.transaction_id",
+    "replace": "true",
+    "expect_failing": [
+      "comparison_source_dictionary_retains_every_field_and_cache_identity"
+    ],
+    "rule": "Canonical source equality includes transaction independently of other source fields."
+  },
+  {
+    "id": "JP-compare-equal-engine-event",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "a.provenance.engine_event_id == b.provenance.engine_event_id",
+    "replace": "true",
+    "expect_failing": [
+      "comparison_source_dictionary_retains_every_field_and_cache_identity"
+    ],
+    "rule": "Canonical source equality includes engine-event independently of other source fields."
+  },
+  {
+    "id": "JP-compare-equal-occurred",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "a.provenance.occurred_at == b.provenance.occurred_at",
+    "replace": "true",
+    "expect_failing": [
+      "comparison_source_dictionary_retains_every_field_and_cache_identity"
+    ],
+    "rule": "Canonical source equality includes occurred independently of other source fields."
+  },
+  {
+    "id": "JP-compare-equal-pricing",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "a.provenance.pricing.0 == b.provenance.pricing.0",
+    "replace": "true",
+    "expect_failing": [
+      "comparison_source_dictionary_retains_every_field_and_cache_identity"
+    ],
+    "rule": "Canonical source equality includes pricing independently of other source fields."
+  },
+  {
+    "id": "JP-compare-source-count",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "                count += 1;",
+    "replace": "                count += 0;",
+    "expect_failing": [
+      "comparison_dispatch_and_refusals_preserve_exact_storage_bytes"
+    ],
+    "rule": "Direct source enumeration advances for each distinct event or lot."
+  },
+  {
+    "id": "JP-compare-source-unique",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "                .any(|prior| source_equal(prior, source))",
+    "replace": "                .any(|_prior| false)",
+    "expect_failing": [
+      "comparison_dispatch_and_refusals_preserve_exact_storage_bytes"
+    ],
+    "rule": "Direct source enumeration deduplicates equivalent provenance."
+  },
+  {
+    "id": "JP-compare-cursor-scalar-refusal",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "            _ => None,\n        }\n    }\n    fn take",
+    "replace": "            _ => Some(()),\n        }\n    }\n    fn take",
+    "expect_failing": [
+      "comparison_scalars_refuse_noncanonical_tokens"
+    ],
+    "rule": "The cursor refuses nontext/non-null scalar tokens."
+  },
+  {
+    "id": "JP-compare-cursor-take",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "self.0 = self.0.strip_prefix(expected)?;",
+    "replace": "self.0 = self.0.get(expected.len()..)?;",
+    "expect_failing": [
+      "comparison_dispatch_and_refusals_preserve_exact_storage_bytes"
+    ],
+    "rule": "The retained byte cursor compares every expected byte before advancing."
+  },
+  {
+    "id": "JP-compare-escape-quote",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "'\"' => self.take(b\"\\\\\\\"\")?",
+    "replace": "'\"' => self.take(b\"!\")?",
+    "expect_failing": [
+      "canonical_string_comparison_preserves_escaping_and_byte_boundaries"
+    ],
+    "rule": "Canonical string comparison preserves the quote escape."
+  },
+  {
+    "id": "JP-compare-escape-backslash",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "'\\\\' => self.take(b\"\\\\\\\\\")?",
+    "replace": "'\\\\' => self.take(b\"!\")?",
+    "expect_failing": [
+      "canonical_string_comparison_preserves_escaping_and_byte_boundaries"
+    ],
+    "rule": "Canonical string comparison preserves the backslash escape."
+  },
+  {
+    "id": "JP-compare-escape-backspace",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "self.take(b\"\\\\b\")?",
+    "replace": "self.take(b\"!\")?",
+    "expect_failing": [
+      "canonical_string_comparison_preserves_escaping_and_byte_boundaries"
+    ],
+    "rule": "Canonical string comparison preserves the backspace escape."
+  },
+  {
+    "id": "JP-compare-escape-formfeed",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "self.take(b\"\\\\f\")?",
+    "replace": "self.take(b\"!\")?",
+    "expect_failing": [
+      "canonical_string_comparison_preserves_escaping_and_byte_boundaries"
+    ],
+    "rule": "Canonical string comparison preserves the formfeed escape."
+  },
+  {
+    "id": "JP-compare-escape-newline",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "self.take(b\"\\\\n\")?",
+    "replace": "self.take(b\"!\")?",
+    "expect_failing": [
+      "canonical_string_comparison_preserves_escaping_and_byte_boundaries"
+    ],
+    "rule": "Canonical string comparison preserves the newline escape."
+  },
+  {
+    "id": "JP-compare-escape-return",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "self.take(b\"\\\\r\")?",
+    "replace": "self.take(b\"!\")?",
+    "expect_failing": [
+      "canonical_string_comparison_preserves_escaping_and_byte_boundaries"
+    ],
+    "rule": "Canonical string comparison preserves the return escape."
+  },
+  {
+    "id": "JP-compare-escape-tab",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "self.take(b\"\\\\t\")?",
+    "replace": "self.take(b\"!\")?",
+    "expect_failing": [
+      "canonical_string_comparison_preserves_escaping_and_byte_boundaries"
+    ],
+    "rule": "Canonical string comparison preserves the tab escape."
+  },
+  {
+    "id": "JP-compare-escape-unicode",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "write!(self, \"\\\\u{unit:04x}\").ok()?;",
+    "replace": "write!(self, \"\\\\u{unit:04X}\").ok()?;",
+    "expect_failing": [
+      "canonical_string_comparison_preserves_escaping_and_byte_boundaries"
+    ],
+    "rule": "Unicode comparison preserves lowercase Python ASCII escapes and surrogate pairs."
+  },
+  {
+    "id": "JP-savepoint-create-error",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "    conn.execute_batch(\"SAVEPOINT r4_journal_store\")?;",
+    "replace": "    let _ = conn.execute_batch(\"SAVEPOINT r4_journal_store\");",
+    "expect_failing": [
+      "physical_savepoint_driver_failures_require_whole_caller_rollback"
+    ],
+    "rule": "Savepoint driver failures propagate before the caller can publish success."
+  },
+  {
+    "id": "JP-savepoint-release-error",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "    conn.execute_batch(\"RELEASE r4_journal_store\")?;",
+    "replace": "    let _ = conn.execute_batch(\"RELEASE r4_journal_store\");",
+    "expect_failing": [
+      "physical_savepoint_driver_failures_require_whole_caller_rollback"
+    ],
+    "rule": "Savepoint driver failures propagate before the caller can publish success."
+  },
+  {
+    "id": "JP-compare-equal-zero",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "        if s == \"-0\" {\n            \"0\"\n        } else {\n            s\n        }",
+    "replace": "        s",
+    "expect_failing": [
+      "comparison_scalars_refuse_noncanonical_tokens"
+    ],
+    "rule": "Source equality canonicalizes raw negative integer zero before deduplication."
   }
 ]

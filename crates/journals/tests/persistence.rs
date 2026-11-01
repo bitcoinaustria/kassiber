@@ -989,3 +989,67 @@ fn physical_commit_failure_remains_uncommitted_and_rolls_back_the_whole_caller()
         ));
     }
 }
+
+#[test]
+fn physical_savepoint_driver_failures_require_whole_caller_rollback() {
+    use kassiber_journals::storage::WriteObserver;
+    struct Release<'a> {
+        conn: &'a Connection,
+        writes: usize,
+    }
+    impl WriteObserver for Release<'_> {
+        fn wrote(&mut self, _: &'static str) -> kassiber_store::rusqlite::Result<()> {
+            self.writes += 1;
+            Ok(())
+        }
+        fn phase(&mut self, phase: &'static str) {
+            if phase == "complete" {
+                self.conn.execute_batch("RELEASE r4_journal_store").unwrap();
+            }
+        }
+    }
+    let scratch = Scratch::new("savepoint-driver-refusal");
+    let v = &cases()[0];
+    for cipher in [false, true] {
+        let path = scratch.0.join(format!("{cipher}.sqlite3"));
+        let c = physical_connection(&path, cipher);
+        load(&c, &v["before"]);
+        c.execute_batch("CREATE TABLE savepoint_busy(value INTEGER)")
+            .unwrap();
+        let before = snapshot(&c);
+        c.execute_batch("BEGIN IMMEDIATE;UPDATE profiles SET last_processed_tx_count=-1")
+            .unwrap();
+        {
+            let mut statement = c
+                .prepare("INSERT INTO savepoint_busy VALUES(1) RETURNING value")
+                .unwrap();
+            let mut pending = statement.query([]).unwrap();
+            assert!(pending.next().unwrap().is_some());
+            let mut writes = Writes::default();
+            let error = store(&c, v, &mut writes).unwrap_err();
+            assert_eq!(error.family, "DatabaseError");
+            assert!(error.message.contains("SQL statements in progress"));
+            assert_eq!(writes.count, 0);
+        }
+        c.execute_batch("ROLLBACK").unwrap();
+        assert!(logical_equal(&snapshot(&c), &before));
+        c.execute_batch("BEGIN IMMEDIATE;UPDATE profiles SET last_processed_tx_count=-1")
+            .unwrap();
+        let mut release = Release {
+            conn: &c,
+            writes: 0,
+        };
+        let error = store(&c, v, &mut release).unwrap_err();
+        assert_eq!(error.family, "DatabaseError");
+        assert!(error.message.contains("no such savepoint"));
+        assert!(release.writes > 10);
+        assert!(!c.is_autocommit());
+        c.execute_batch("ROLLBACK").unwrap();
+        assert!(logical_equal(&snapshot(&c), &before));
+        drop(c);
+        assert!(logical_equal(
+            &snapshot(&physical_connection(&path, cipher)),
+            &before
+        ));
+    }
+}
