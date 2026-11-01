@@ -71,6 +71,7 @@ fn replay(witnesses: bool) {
                     "evidence-truncation",
                     "eligible-custody-current",
                     "eligible-structural-current",
+                    "eligible-structural-with-manual",
                     "eligible-structural-current-strong",
                     "eligible-custody-current-chain",
                     "eligible-custody-current-from-allocation",

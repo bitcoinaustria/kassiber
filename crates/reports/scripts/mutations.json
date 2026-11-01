@@ -11493,8 +11493,8 @@
   {
     "id": "sof-save-daemon-registration",
     "file": "crates/daemon/src/reports.rs",
-    "find": "    \"ui.source_funds.cases.save\",\n    \"ui.source_funds.review_context\",\n    \"ui.source_funds.request_input\",\n    \"ui.source_funds.coverage\",\n];",
-    "replace": "    \"ui.source_funds.review_context\",\n    \"ui.source_funds.request_input\",\n    \"ui.source_funds.coverage\",\n];",
+    "find": "    \"ui.source_funds.cases.save\",\n    \"ui.source_funds.review_context\",\n    \"ui.source_funds.request_input\",\n    \"ui.source_funds.coverage\",\n    \"ui.source_funds.suggest\",\n    \"ui.source_funds.assemble\",\n];",
+    "replace": "    \"ui.source_funds.review_context\",\n    \"ui.source_funds.request_input\",\n    \"ui.source_funds.coverage\",\n    \"ui.source_funds.suggest\",\n    \"ui.source_funds.assemble\",\n];",
     "expect_failing": [
       "source_funds_case_save_daemon_preserves_recipe_fingerprint_and_registration"
     ],
@@ -11503,8 +11503,8 @@
   {
     "id": "sof-save-context-registration",
     "file": "crates/daemon/src/reports.rs",
-    "find": "    \"ui.source_funds.cases.save\",\n    \"ui.source_funds.review_context\",\n    \"ui.source_funds.request_input\",\n    \"ui.source_funds.coverage\",\n];",
-    "replace": "    \"ui.source_funds.cases.save\",\n    \"ui.source_funds.request_input\",\n    \"ui.source_funds.coverage\",\n];",
+    "find": "    \"ui.source_funds.cases.save\",\n    \"ui.source_funds.review_context\",\n    \"ui.source_funds.request_input\",\n    \"ui.source_funds.coverage\",\n    \"ui.source_funds.suggest\",\n    \"ui.source_funds.assemble\",\n];",
+    "replace": "    \"ui.source_funds.cases.save\",\n    \"ui.source_funds.request_input\",\n    \"ui.source_funds.coverage\",\n    \"ui.source_funds.suggest\",\n    \"ui.source_funds.assemble\",\n];",
     "expect_failing": [
       "source_funds_stored_daemon_preserves_arguments_and_registers_only_lists"
     ],
@@ -11708,7 +11708,7 @@
     "expect_failing": [
       "source_funds_review_mutation_witnesses"
     ],
-    "rule": "The deterministic allowlist includes native structural suggestions."
+    "rule": "Only custody-component and structural suggestions enter automatic review; matching structural evidence never upgrades a manual method."
   },
   {
     "id": "sof-review-eligibility-chain",
@@ -12163,8 +12163,8 @@
   {
     "id": "sof-coverage-daemon-registration",
     "file": "crates/daemon/src/reports.rs",
-    "find": "    \"ui.source_funds.request_input\",\n    \"ui.source_funds.coverage\",\n];",
-    "replace": "    \"ui.source_funds.request_input\",\n];",
+    "find": "    \"ui.source_funds.request_input\",\n    \"ui.source_funds.coverage\",\n    \"ui.source_funds.suggest\",\n    \"ui.source_funds.assemble\",\n];",
+    "replace": "    \"ui.source_funds.request_input\",\n    \"ui.source_funds.suggest\",\n    \"ui.source_funds.assemble\",\n];",
     "expect_failing": [
       "source_funds_stored_daemon_preserves_arguments_and_registers_only_lists"
     ],
@@ -12183,12 +12183,12 @@
   {
     "id": "sof-suggest-persistence-refusal",
     "file": "crates/reports/src/source_funds_suggest.rs",
-    "find": "if !truthy(value(args, \"dry_run\")) {",
-    "replace": "if false {",
+    "find": "replace(&mut result, \"committed\", Value::Bool(true))",
+    "replace": "replace(&mut result, \"committed\", Value::Bool(false))",
     "expect_failing": [
-      "source_funds_suggest_refuses_persistence_without_changing_tables"
+      "source_funds_suggest_persists_without_a_preview_marker"
     ],
-    "rule": "Only previews are admitted; persistence stays unported."
+    "rule": "Persisted suggestions report the accepted commit and never carry a preview marker."
   },
   {
     "id": "sof-suggest-positive-cap",
@@ -12473,8 +12473,8 @@
   {
     "id": "sof-suggest-dry-run-flag",
     "file": "crates/reports/src/source_funds_suggest.rs",
-    "find": "(\"dry_run\",Value::Bool(true))",
-    "replace": "(\"dry_run\",Value::Bool(false))",
+    "find": "replace(&mut result, \"dry_run\", Value::Bool(true))",
+    "replace": "replace(&mut result, \"dry_run\", Value::Bool(false))",
     "expect_failing": [
       "source_funds_suggest_mutation_witnesses"
     ],
@@ -12483,12 +12483,12 @@
   {
     "id": "sof-suggest-cli-guard",
     "file": "crates/cli/src/run.rs",
-    "find": "&& (command != \"source-funds.suggest\" || args.flag(\"dry_run\"))",
-    "replace": "&& (command != \"source-funds.suggest\" || true)",
+    "find": "    IMPLEMENTED.contains(&command)",
+    "replace": "    command != \"source-funds.suggest\" && IMPLEMENTED.contains(&command)",
     "expect_failing": [
-      "source_funds_suggest_cli_forwards_preview_and_refuses_persistence"
+      "source_funds_suggest_cli_forwards_preview_and_persistence"
     ],
-    "rule": "Persistence is refused by the pre-bootstrap native probe."
+    "rule": "Both persisted suggestions and previews use the registered native route."
   },
   {
     "id": "sof-suggest-projection-uses-stored-amount",
@@ -12509,5 +12509,206 @@
       "source_funds_suggest_mutation_witnesses"
     ],
     "rule": "Unrecognized nonempty wallet sections remain eligible inbound privacy-boundary candidates."
+  },
+  {
+    "id": "sof-pass-suggest-dispatch",
+    "file": "crates/reports/src/lib.rs",
+    "find": "if source_funds_suggest::handles(command) {",
+    "replace": "if false && source_funds_suggest::handles(command) {",
+    "expect_failing": [
+      "source_funds_passes_mutation_witnesses"
+    ],
+    "rule": "Persisted suggestions dispatch before the report read savepoint."
+  },
+  {
+    "id": "sof-pass-assemble-dispatch",
+    "file": "crates/reports/src/lib.rs",
+    "find": "if source_funds_assemble::handles(command) {",
+    "replace": "if false && source_funds_assemble::handles(command) {",
+    "expect_failing": [
+      "source_funds_passes_mutation_witnesses"
+    ],
+    "rule": "Assembly dispatches through the native shared mutation service."
+  },
+  {
+    "id": "sof-pass-writer-rollback",
+    "file": "crates/reports/src/source_funds_suggest.rs",
+    "find": "let result = crate::export::admitted(conn, operation)?;",
+    "replace": "let result = operation()?;",
+    "expect_failing": [
+      "source_funds_passes_mutation_witnesses",
+      "source_funds_passes_rollback_response_projection_without_undoing_prior_commits"
+    ],
+    "rule": "Keep every current pass atomic through its response projection and commit."
+  },
+  {
+    "id": "sof-pass-caller-commit",
+    "file": "crates/reports/src/source_funds_suggest.rs",
+    "find": "    if !conn.is_autocommit() {",
+    "replace": "    if false && !conn.is_autocommit() {",
+    "expect_failing": [
+      "source_funds_passes_commit_caller_work_and_preserve_preview_rollback"
+    ],
+    "rule": "A successful persisted suggestion commits caller-owned work as Python does."
+  },
+  {
+    "id": "sof-pass-daemon-bool",
+    "file": "crates/reports/src/source_funds_suggest.rs",
+    "find": "if !matches!(broad, Value::Bool(_)) {",
+    "replace": "if false && !matches!(broad, Value::Bool(_)) {",
+    "expect_failing": [
+      "source_funds_passes_mutation_witnesses"
+    ],
+    "rule": "Daemon suggestions require a supplied broad-hint flag to be boolean."
+  },
+  {
+    "id": "sof-pass-daemon-zero-cap",
+    "file": "crates/reports/src/source_funds_suggest.rs",
+    "find": "    let cap = get(raw, \"max_suggestions\")\n        .filter(|v| truthy(v))",
+    "replace": "    let cap = get(raw, \"max_suggestions\")\n        .filter(|_| true)",
+    "expect_failing": [
+      "source_funds_passes_mutation_witnesses"
+    ],
+    "rule": "Daemon suggestion caps retain Python false-value defaulting."
+  },
+  {
+    "id": "sof-pass-positive-passes",
+    "file": "crates/reports/src/source_funds_assemble.rs",
+    "find": "if max <= 0.into() {",
+    "replace": "if false && max <= 0.into() {",
+    "expect_failing": [
+      "source_funds_passes_mutation_witnesses"
+    ],
+    "rule": "Assembly refuses nonpositive pass counts before deriving inputs."
+  },
+  {
+    "id": "sof-pass-bounded-passes",
+    "file": "crates/reports/src/source_funds_assemble.rs",
+    "find": "max.min(16.into())",
+    "replace": "max.min(15.into())",
+    "expect_failing": [
+      "source_funds_passes_mutation_witnesses"
+    ],
+    "rule": "Assembly caps requested passes at the same sixteen-pass boundary."
+  },
+  {
+    "id": "sof-pass-default-passes",
+    "file": "crates/reports/src/source_funds_assemble.rs",
+    "find": ".unwrap_or(Value::Int(8.into()))",
+    "replace": ".unwrap_or(Value::Int(7.into()))",
+    "expect_failing": [
+      "source_funds_passes_mutation_witnesses"
+    ],
+    "rule": "Daemon assembly defaults to eight passes, including false values."
+  },
+  {
+    "id": "sof-pass-frozen-suggest",
+    "file": "crates/reports/src/source_funds_assemble.rs",
+    "find": "source_funds_suggest::run(conn, &args, sources, Some(&inputs))",
+    "replace": "source_funds_suggest::run(conn, &args, sources, None)",
+    "expect_failing": [
+      "source_funds_passes_mutation_witnesses"
+    ],
+    "rule": "Every suggestion pass uses the single initially frozen input set."
+  },
+  {
+    "id": "sof-pass-frozen-review",
+    "file": "crates/reports/src/source_funds_batch.rs",
+    "find": "let reviewable = eligible(conn, &profile, &considered, frozen)?;",
+    "replace": "let reviewable = eligible(conn, &profile, &considered, None)?;",
+    "expect_failing": [
+      "source_funds_passes_mutation_witnesses"
+    ],
+    "rule": "Automatic review uses the same frozen custody and structural input set."
+  },
+  {
+    "id": "sof-pass-convergence",
+    "file": "crates/reports/src/source_funds_assemble.rs",
+    "find": "if int(&suggested, \"inserted\") == 0 && int(&result, \"reviewed\") == 0 {",
+    "replace": "if int(&suggested, \"inserted\") == 0 || int(&result, \"reviewed\") == 0 {",
+    "expect_failing": [
+      "source_funds_passes_mutation_witnesses"
+    ],
+    "rule": "Assembly converges only when both suggestion and review passes stop progressing."
+  },
+  {
+    "id": "sof-pass-insert-count",
+    "file": "crates/reports/src/source_funds_assemble.rs",
+    "find": "inserted += int(&suggested, \"inserted\");",
+    "replace": "inserted = int(&suggested, \"inserted\");",
+    "expect_failing": [
+      "source_funds_passes_mutation_witnesses"
+    ],
+    "rule": "Assembly accumulates every persisted suggestion pass."
+  },
+  {
+    "id": "sof-pass-review-count",
+    "file": "crates/reports/src/source_funds_assemble.rs",
+    "find": "reviewed += int(&result, \"reviewed\");",
+    "replace": "reviewed += 0;",
+    "expect_failing": [
+      "source_funds_passes_mutation_witnesses"
+    ],
+    "rule": "Assembly counts the reviewed rows across its committed passes."
+  },
+  {
+    "id": "sof-pass-method-count",
+    "file": "crates/reports/src/source_funds_assemble.rs",
+    "find": "*methods.entry(text(link, \"method\")).or_default() += 1;",
+    "replace": "*methods.entry(text(link, \"method\")).or_default() += 0;",
+    "expect_failing": [
+      "source_funds_passes_mutation_witnesses"
+    ],
+    "rule": "Assembly reports actual reviewed methods, without counting heuristic hints."
+  },
+  {
+    "id": "sof-pass-attestation",
+    "file": "crates/reports/src/source_funds_assemble.rs",
+    "find": "&& get(&raw, \"observer_owned_scripts\").is_none()",
+    "replace": "&& false && get(&raw, \"observer_owned_scripts\").is_none()",
+    "expect_failing": [
+      "source_funds_passes_mutation_witnesses"
+    ],
+    "rule": "Assembly reports scoped authoritative spends missing input attestation."
+  },
+  {
+    "id": "sof-pass-cli-fields",
+    "file": "crates/cli/src/reports.rs",
+    "find": "\"max_suggestions\",\n                        \"max_passes\",",
+    "replace": "\"max_suggestions\",\n                        \"omitted_max_passes\",",
+    "expect_failing": [
+      "source_funds_passes_cli_forwards_assembly_scope_and_cap"
+    ],
+    "rule": "The native CLI forwards the requested assembly pass limit."
+  },
+  {
+    "id": "sof-pass-cli-registration",
+    "file": "crates/cli/src/describe.rs",
+    "find": "    \"source-funds.assemble\",\n",
+    "replace": "",
+    "expect_failing": [
+      "source_funds_passes_cli_forwards_assembly_scope_and_cap"
+    ],
+    "rule": "The native CLI advertises and routes persisted assembly."
+  },
+  {
+    "id": "sof-pass-daemon-suggest",
+    "file": "crates/daemon/src/reports.rs",
+    "find": "    \"ui.source_funds.coverage\",\n    \"ui.source_funds.suggest\",\n    \"ui.source_funds.assemble\",\n];",
+    "replace": "    \"ui.source_funds.coverage\",\n    \"ui.source_funds.assemble\",\n];",
+    "expect_failing": [
+      "source_funds_stored_daemon_preserves_arguments_and_registers_only_lists"
+    ],
+    "rule": "The daemon registers the native suggest mutation."
+  },
+  {
+    "id": "sof-pass-daemon-assemble",
+    "file": "crates/daemon/src/reports.rs",
+    "find": "    \"ui.source_funds.coverage\",\n    \"ui.source_funds.suggest\",\n    \"ui.source_funds.assemble\",\n];",
+    "replace": "    \"ui.source_funds.coverage\",\n    \"ui.source_funds.suggest\",\n];",
+    "expect_failing": [
+      "source_funds_stored_daemon_preserves_arguments_and_registers_only_lists"
+    ],
+    "rule": "The daemon registers the native assemble mutation."
   }
 ]

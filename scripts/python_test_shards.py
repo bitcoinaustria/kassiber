@@ -130,6 +130,8 @@ _DAEMON_SERIAL_MODULES = frozenset(
         "test_rust_source_funds_review",
         "test_rust_source_funds_coverage",
         "test_rust_source_funds_suggest",
+        "test_rust_source_funds_passes",
+        "test_rust_source_funds_routes",
     }
 )
 _REGRESSION_SERIAL_MODULES = frozenset({"test_review_regressions"})

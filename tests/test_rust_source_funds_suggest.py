@@ -96,5 +96,5 @@ def test_source_funds_suggest_cli_bytes_files_all_tables_and_zero_fallbacks(tmp_
     assert len(served)==count==20
     assert served==[dict(command='source-funds.suggest',served_by='rust')]*count
     probe=subprocess.run([RUST_BIN,'source-funds','suggest'],env={**env,'KASSIBER_RUST_TEST_PROBE':'1'},capture_output=True,check=False)
-    assert probe.returncode==3
+    assert probe.returncode==0
     assert state(root)==before

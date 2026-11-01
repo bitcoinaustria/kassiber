@@ -218,7 +218,7 @@ fn candidate<'a>(
         explanation: explanation.into(),
     })
 }
-fn scope(conn: &Connection, profile: &str, target: &str) -> Result<HashSet<String>> {
+pub(super) fn scope(conn: &Connection, profile: &str, target: &str) -> Result<HashSet<String>> {
     let mut found = HashSet::from([target.into()]);
     let mut queue = VecDeque::from([target.to_owned()]);
     while let Some(id) = queue.pop_front() {
@@ -229,20 +229,118 @@ fn scope(conn: &Connection, profile: &str, target: &str) -> Result<HashSet<Strin
     Ok(found)
 }
 
+pub fn handles(command: &str) -> bool {
+    matches!(command, "source-funds.suggest" | "ui.source_funds.suggest")
+}
+
 pub fn execute(
+    conn: &Connection,
+    command: &str,
+    raw: &Value,
+    sources: &dyn kassiber_setup::Sources,
+) -> Result<Value> {
+    let args = arguments(command, raw)?;
+    if !command.starts_with("ui.") && truthy(value(&args, "dry_run")) {
+        conn.execute_batch("SAVEPOINT source_funds_preview")
+            .map_err(sql_error)?;
+        let result = run(conn, &args, sources, None);
+        conn.execute_batch("ROLLBACK TO source_funds_preview; RELEASE source_funds_preview")
+            .map_err(sql_error)?;
+        return result.map(|mut result| {
+            replace(&mut result, "dry_run", Value::Bool(true));
+            result
+        });
+    }
+    committed(conn, || run(conn, &args, sources, None)).map(|mut result| {
+        replace(&mut result, "committed", Value::Bool(true));
+        result
+    })
+}
+
+pub(super) fn arguments(command: &str, raw: &Value) -> Result<Value> {
+    if !command.starts_with("ui.") {
+        return Ok(raw.clone());
+    }
+    let empty = dict::<&str>([]);
+    let raw = if matches!(raw, Value::Null) {
+        &empty
+    } else {
+        raw
+    };
+    if !matches!(raw, Value::Dict(_)) {
+        return Err(AppError::new("validation", "daemon args must be an object")
+            .with_details(dict([("type", s(kassiber_envelope::type_name(raw)))])));
+    }
+    let mut args = dict::<&str>([]);
+    let target = value(raw, "target_transaction");
+    replace(
+        &mut args,
+        "target_transaction",
+        if let Value::Str(v) = target {
+            Value::Str(kassiber_pytext::strip_py(v))
+        } else {
+            Value::Null
+        },
+    );
+    let broad = get(raw, "include_broad_hints").unwrap_or(&Value::Bool(false));
+    if !matches!(broad, Value::Bool(_)) {
+        return Err(
+            AppError::new("validation", "include_broad_hints must be a boolean")
+                .with_details(dict([("type", s(kassiber_envelope::type_name(broad)))])),
+        );
+    }
+    replace(&mut args, "include_broad_hints", Value::Bool(truthy(broad)));
+    let cap = get(raw, "max_suggestions")
+        .filter(|v| truthy(v))
+        .cloned()
+        .unwrap_or(Value::Int(500.into()));
+    replace(&mut args, "max_suggestions", Value::Int(integer(&cap)?));
+    Ok(args)
+}
+
+pub(super) fn committed<T>(conn: &Connection, operation: impl FnOnce() -> Result<T>) -> Result<T> {
+    let result = crate::export::admitted(conn, operation)?;
+    if !conn.is_autocommit() {
+        if let Err(error) = conn.execute_batch("COMMIT") {
+            let _ = conn.execute_batch("ROLLBACK");
+            return Err(sql_error(error));
+        }
+    }
+    Ok(result)
+}
+
+pub(super) struct Inputs<'a> {
+    pub report: report::Inputs<'a>,
+    pub structural: Vec<kassiber_custody::source_funds::StructuralPair>,
+}
+
+pub(super) fn load_inputs<'a>(conn: &'a Connection, profile: &Value) -> Result<Inputs<'a>> {
+    let report = report::load_inputs(conn, profile)?;
+    let owned = rows(
+        conn,
+        "SELECT * FROM wallet_utxos WHERE profile_id=?",
+        [text(profile, "id")],
+    )?;
+    let structural = kassiber_custody::source_funds::structural_pair_details(
+        &report
+            .active
+            .iter()
+            .map(kassiber_custody::codec::to_json)
+            .collect::<Vec<_>>(),
+        &owned
+            .iter()
+            .map(kassiber_custody::codec::to_json)
+            .collect::<Vec<_>>(),
+    );
+    Ok(Inputs { report, structural })
+}
+
+pub(super) fn run(
     conn: &Connection,
     args: &Value,
     sources: &dyn kassiber_setup::Sources,
+    frozen: Option<&Inputs<'_>>,
 ) -> Result<Value> {
-    if !truthy(value(args, "dry_run")) {
-        return Err(AppError::new(
-            "not_implemented",
-            "persisted source-funds suggestions are not ported",
-        ));
-    }
-    run(conn, args, sources)
-}
-fn run(conn: &Connection, args: &Value, sources: &dyn kassiber_setup::Sources) -> Result<Value> {
     let (workspace, profile) = kassiber_setup::references::scope(conn, args)?;
     let profile_id = text(&profile, "id");
     let target = if truthy(value(args, "target_transaction")) {
@@ -265,7 +363,11 @@ fn run(conn: &Connection, args: &Value, sources: &dyn kassiber_setup::Sources) -
         ));
     }
     let cap = cap.min(500.into());
-    let active = report::active_rows(conn, &profile_id)?;
+    let active = if let Some(inputs) = frozen {
+        inputs.report.active.clone()
+    } else {
+        report::active_rows(conn, &profile_id)?
+    };
     let scope = if let Some(id) = &target {
         scope(conn, &profile_id, id)?
     } else {
@@ -330,7 +432,13 @@ fn run(conn: &Connection, args: &Value, sources: &dyn kassiber_setup::Sources) -
             }
         }
     }
-    let inputs = report::load_inputs_with_active(conn, &profile, active)?;
+    let loaded;
+    let inputs = if let Some(inputs) = frozen {
+        &inputs.report
+    } else {
+        loaded = report::load_inputs_with_active(conn, &profile, active)?;
+        &loaded
+    };
     let active = &inputs.active;
     let rows_by_id: BTreeMap<_, _> = active.iter().map(|r| (text(r, "id"), r)).collect();
     let reviewed_targets: HashSet<_> = inputs
@@ -372,21 +480,27 @@ fn run(conn: &Connection, args: &Value, sources: &dyn kassiber_setup::Sources) -
         pass.insert(c, true)?;
     }
     if target.is_some() {
-        let owned = rows(
-            conn,
-            "SELECT * FROM wallet_utxos WHERE profile_id=?",
-            [&profile_id],
-        )?;
-        let pairs = kassiber_custody::source_funds::structural_pair_details(
-            &active
-                .iter()
-                .map(kassiber_custody::codec::to_json)
-                .collect::<Vec<_>>(),
-            &owned
-                .iter()
-                .map(kassiber_custody::codec::to_json)
-                .collect::<Vec<_>>(),
-        );
+        let loaded;
+        let pairs = if let Some(inputs) = frozen {
+            &inputs.structural
+        } else {
+            let owned = rows(
+                conn,
+                "SELECT * FROM wallet_utxos WHERE profile_id=?",
+                [&profile_id],
+            )?;
+            loaded = kassiber_custody::source_funds::structural_pair_details(
+                &active
+                    .iter()
+                    .map(kassiber_custody::codec::to_json)
+                    .collect::<Vec<_>>(),
+                &owned
+                    .iter()
+                    .map(kassiber_custody::codec::to_json)
+                    .collect::<Vec<_>>(),
+            );
+            &loaded
+        };
         for pair in pairs {
             if inputs
                 .allocations
@@ -539,5 +653,5 @@ fn run(conn: &Connection, args: &Value, sources: &dyn kassiber_setup::Sources) -
         .iter()
         .map(|r| super::source_funds_reads::link(conn, r))
         .collect::<Result<Vec<_>>>()?;
-    Ok(dict([("inserted",Value::Int(links.len().into())),("committed",Value::Bool(false)),("target_transaction_id",target.map(s).unwrap_or(Value::Null)),("links",Value::List(links)),("privacy_warning",s("No chain backend was queried. If public Esplora/Electrum observations are added later, the queried txids reveal the target path to that backend.")),("dry_run",Value::Bool(true))]))
+    Ok(dict([("inserted",Value::Int(links.len().into())),("committed",Value::Bool(false)),("target_transaction_id",target.map(s).unwrap_or(Value::Null)),("links",Value::List(links)),("privacy_warning",s("No chain backend was queried. If public Esplora/Electrum observations are added later, the queried txids reveal the target path to that backend."))]))
 }

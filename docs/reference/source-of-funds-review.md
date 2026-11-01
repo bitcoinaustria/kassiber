@@ -148,8 +148,8 @@ establish provenance, ownership or tax facts. Native source creation and managed
 evidence association, link creation/review and managed-id attachment, plus
 recipient creation, updates and soft deletion, are
 available through the CLI and daemon. They retain the provenance boundary and
-roll back failed writes; native AI consent/once-only
-admission remains pending. The native report producer also
+roll back failed writes. AI tool execution, consent and once-only admission
+remain Python-owned under R6. The native report producer also
 serves `reports source-funds` and `ui.source_funds.preview`, including
 disclosure, current stored custody and
 structural-lineage checks, recipients, explorer references, findings, text and
@@ -164,8 +164,8 @@ writer admission. The native daemon
 `ui.source_funds.review_context` supplies the fingerprint used by reviewed saves;
 those saves reject stale or truncated inspections under the same write lock.
 CLI review-context, input handoffs and coverage share this producer.
-Persisted suggest/assemble remain pending; see the
-[save checkpoint](rust-shell.md#source-funds-case-save-checkpoint-r5-partial).
+Persisted suggest and assemble also use the native service; see the
+[persisted-pass checkpoint](rust-shell.md#source-funds-persisted-pass-checkpoint-r5).
 Native batch review revalidates the target's
 suggested links against current stored custody or authoritative, wallet-scoped
 structural lineage under the same write lock as approval. An explicit empty
@@ -194,14 +194,15 @@ records that display bug and Rust retains its text for parity. See the
 Native `source-funds suggest --dry-run` previews local privacy-boundary,
 current stored custody, structural-input and provider-hint candidates. It
 retains the reference ordering, reviewed/rejected-link vetoes, confidence
-supersession, target frontier and 500-row ceiling. The shared report savepoint
+supersession, target frontier and 500-row ceiling. Its preview savepoint
 rolls back every temporary edit before returning the preview, including on
 failure. Suggestions remain heuristic provenance requiring review; they grant
 no ownership or tax authority. Evidence files and backends are not opened.
-Persisted suggest calls and both daemon suggestion/assembly kinds remain
-Python. At this base Python has no CLI or daemon assemble dry-run contract;
-its assembly operation commits during its passes. The native assemble preview
-therefore remains pending a shared contract. See the
+Persisted suggestions and assembly run natively through CLI and daemon.
+Assembly loads inputs once, then commits each suggestion pass and each review
+pass separately, retaining completed stages if a later stage fails. It defaults
+to eight passes and caps requests at sixteen. There is no assembly dry-run
+contract. See the
 [suggestion checkpoint](rust-shell.md#source-funds-suggestion-preview-checkpoint-r5-partial).
 PDF rendering and PDF-containing bundles remain in Python by the owner's
 decision; their routes are not registered natively.
@@ -209,6 +210,14 @@ decision; their routes are not registered natively.
 Uncaught failures on the native source-funds daemon reads include an empty
 native debug string; typed refusals retain null. Python-only traceback frames
 and stderr are not fabricated. Non-debug response fields retain exact parity.
+
+The AI tool executor calls Python's connection-scoped source-funds service
+directly. It does not invoke the native CLI or daemon transport. Its advertised
+schemas, explicit consent, duplicate-call suppression, frozen book/input
+binding and redacted projections remain Python-owned under R6, including source
+admission and case saving. Direct CLI and desktop requests retain their own
+validation and case-review fingerprint barriers; they do not enter the AI
+consent loop.
 
 Recipient mutations preserve exact, profile-scoped references and frozen case
 recipient fields. Python currently translates duplicate-recipient constraint
@@ -238,3 +247,12 @@ The synthetic [batch reproduction](../../crates/reports/scripts/repro_python_sou
 records it on both database bindings. Native batch admission retains all updates
 and response projection in one transaction and rolls back the entire batch on
 failure; Python product behavior is unchanged.
+
+Persisted suggestions can likewise release their outermost savepoint before
+projecting the response, and assembly's bulk-review stage commits before its
+projection. The [pass reproduction](../../crates/reports/scripts/repro_python_source_funds_pass_projection.py)
+records corrupt-allocation failures after those commits on both bindings.
+Native passes keep their own write and response projection atomic while
+retaining earlier committed assembly stages. These injected corrupt-record
+paths have separate native rollback tests and are excluded from parity claims;
+Python product behavior is unchanged.

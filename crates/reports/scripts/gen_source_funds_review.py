@@ -65,6 +65,9 @@ def cases():
             sql="UPDATE source_funds_links SET state='suggested';"
             if name=='custody-current':sql+="UPDATE transactions SET occurred_at='2023-01-01T00:00:00Z' WHERE id='out';"
             add('eligible-'+name,json.loads(case['args_json']),seed=case['sql'],sql=sql)
+            if name=='structural-current':
+                manual=sql+"INSERT INTO source_funds_links(id,workspace_id,profile_id,from_source_id,from_transaction_id,to_transaction_id,link_type,state,confidence,method,asset,allocation_amount,allocation_policy,explanation,uses_chain_observation,chain_data_confirmed,created_at,updated_at,from_asset,from_allocation_amount) SELECT 'manual-copy',workspace_id,profile_id,from_source_id,from_transaction_id,to_transaction_id,link_type,'suggested',confidence,'manual',asset,allocation_amount,allocation_policy,explanation,uses_chain_observation,chain_data_confirmed,created_at,updated_at,from_asset,from_allocation_amount FROM source_funds_links WHERE method='utxo_spend' LIMIT 1;"
+                add('eligible-structural-with-manual',json.loads(case['args_json']),seed=case['sql'],sql=manual)
             if name=='custody-current':
                 beyond=sql+"UPDATE source_funds_links SET id='zz-eligible';"+''.join(link(f'extra-{i:03}','s-a','in',1,source=True,state='rejected') for i in range(202))
                 add('eligible-beyond-inspection',json.loads(case['args_json']),seed=case['sql'],sql=beyond)
@@ -124,6 +127,9 @@ def evaluate(fixtures):
             assert tables(conn)==before,case['name']
             if case['name'] in ['eligible-custody-current','eligible-structural-current']:
                 assert expected['ok']['bulk_review']['eligible_link_ids'],case['name']
+            if case['name']=='eligible-structural-with-manual':
+                eligible=expected['ok']['bulk_review']['eligible_link_ids']
+                assert eligible and 'manual-copy' not in eligible,case['name']
             result.append(wire(expected))
             conn.execute('ROLLBACK TO review_case');conn.execute('RELEASE review_case')
         conn.close()

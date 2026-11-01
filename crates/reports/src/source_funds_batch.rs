@@ -124,18 +124,51 @@ fn custody(
     Ok(result)
 }
 
-fn eligible(conn: &Connection, profile: &str, considered: &[&Value]) -> Result<Vec<Value>> {
+fn eligible(
+    conn: &Connection,
+    profile: &str,
+    considered: &[&Value],
+    frozen: Option<&source_funds_suggest::Inputs<'_>>,
+) -> Result<Vec<Value>> {
     if considered.is_empty() {
         return Ok(vec![]);
     }
-    let active = active_rows(conn, profile)?;
+    let loaded_active;
+    let active = if let Some(inputs) = frozen {
+        &inputs.report.active
+    } else {
+        loaded_active = active_rows(conn, profile)?;
+        &loaded_active
+    };
     let by_id: HashMap<_, _> = active.iter().map(|row| (text(row, "id"), row)).collect();
-    let custody = custody(conn, profile, &by_id)?;
+    let custody = if let Some(inputs) = frozen {
+        inputs
+            .report
+            .allocations
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect()
+    } else {
+        custody(conn, profile, &by_id)?
+    };
     let structural = if considered
         .iter()
         .any(|row| text(row, "method") == "utxo_spend")
     {
-        source_funds_assembly::derive(conn, profile, &active)?
+        if let Some(inputs) = frozen {
+            inputs
+                .structural
+                .iter()
+                .map(|p| source_funds_assembly::Pair {
+                    from: p.from.clone(),
+                    to: p.to.clone(),
+                    allocation: p.allocation.into(),
+                    gross: p.from_allocation.into(),
+                })
+                .collect()
+        } else {
+            source_funds_assembly::derive(conn, profile, active)?
+        }
     } else {
         vec![]
     };
@@ -182,7 +215,7 @@ fn eligible(conn: &Connection, profile: &str, considered: &[&Value]) -> Result<V
 pub(super) fn eligible_ids(conn: &Connection, profile: &str, target: &str) -> Result<Vec<String>> {
     let population = scoped(conn, profile, target)?;
     let considered: Vec<_> = population.iter().collect();
-    Ok(eligible(conn, profile, &considered)?
+    Ok(eligible(conn, profile, &considered, None)?
         .iter()
         .map(|row| text(row, "id"))
         .collect())
@@ -193,6 +226,16 @@ pub fn execute(
     command: &str,
     raw: &Value,
     sources: &dyn Sources,
+) -> Result<Value> {
+    execute_with_inputs(conn, command, raw, sources, None)
+}
+
+pub(super) fn execute_with_inputs(
+    conn: &Connection,
+    command: &str,
+    raw: &Value,
+    sources: &dyn Sources,
+    frozen: Option<&source_funds_suggest::Inputs<'_>>,
 ) -> Result<Value> {
     let desktop = command.starts_with("ui.");
     let empty = dict::<&str>([]);
@@ -256,7 +299,7 @@ pub fn execute(
                     .is_none_or(|ids| ids.contains(&text(row, "id")))
             })
             .collect();
-        let reviewable = eligible(conn, &profile, &considered)?;
+        let reviewable = eligible(conn, &profile, &considered, frozen)?;
         let now = sources.now(conn)?;
         let dry_run = !desktop && truthy(value(args, "dry_run"));
         if dry_run {

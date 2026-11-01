@@ -35,6 +35,7 @@ mod platform_csv;
 mod privacy_hygiene;
 mod snapshot_write;
 mod snapshots;
+mod source_funds_assemble;
 mod source_funds_assembly;
 pub mod source_funds_batch;
 pub mod source_funds_cases;
@@ -138,6 +139,12 @@ pub fn execute_with_sources(
     args: &Value,
     sources: &dyn kassiber_setup::Sources,
 ) -> Result<Value> {
+    if source_funds_suggest::handles(command) {
+        return source_funds_suggest::execute(conn, command, args, sources);
+    }
+    if source_funds_assemble::handles(command) {
+        return source_funds_assemble::execute(conn, command, args, sources);
+    }
     if source_funds_cases::handles(command, args) {
         return source_funds_cases::execute(conn, command, args, sources);
     }
@@ -160,9 +167,6 @@ pub fn execute_with_sources(
     conn.execute_batch("SAVEPOINT report_read")
         .map_err(sql_error)?;
     let result = (|| {
-        if command == "source-funds.suggest" {
-            return source_funds_suggest::execute(conn, args, sources);
-        }
         if matches!(
             command,
             "source-funds.coverage" | "ui.source_funds.coverage"

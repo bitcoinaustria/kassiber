@@ -118,7 +118,7 @@ fn source_funds_suggest_mutation_witnesses() {
 }
 
 #[test]
-fn source_funds_suggest_refuses_persistence_without_changing_tables() {
+fn source_funds_suggest_persists_without_a_preview_marker() {
     let root = tempfile::tempdir().unwrap();
     let book = Book::create(&root.path().join("data"), None).unwrap();
     let conn = book.connection();
@@ -126,16 +126,23 @@ fn source_funds_suggest_refuses_persistence_without_changing_tables() {
         serde_json::from_str(include_str!("data/source_funds_suggest.json")).unwrap();
     conn.execute_batch(cases[0]["sql"].as_str().unwrap())
         .unwrap();
-    let before = dump(conn);
-    for args in [dict::<&str>([]), dict([("dry_run", Value::Bool(false))])] {
-        let error = kassiber_reports::execute_with_sources(
-            conn,
-            "source-funds.suggest",
-            &args,
-            &Fixed(std::cell::Cell::new(0)),
-        )
-        .unwrap_err();
-        assert_eq!(error.code, "not_implemented");
-        assert_eq!(dump(conn), before);
-    }
+    let result = kassiber_reports::execute_with_sources(
+        conn,
+        "source-funds.suggest",
+        &dict::<&str>([]),
+        &Fixed(std::cell::Cell::new(0)),
+    )
+    .unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&result, "committed"),
+        Some(&Value::Bool(true))
+    );
+    assert!(kassiber_envelope::get(&result, "dry_run").is_none());
+    assert_eq!(
+        conn.query_row("SELECT COUNT(*) FROM source_funds_links", [], |r| r
+            .get::<_, i64>(0))
+            .unwrap(),
+        1
+    );
+    assert!(conn.is_autocommit());
 }

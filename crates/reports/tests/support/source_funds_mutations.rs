@@ -33,6 +33,9 @@ impl Sources for Fixed<'_> {
             .filter(|v| **v == s("uuid"))
             .count();
         self.calls.borrow_mut().push(s("uuid"));
+        if kassiber_envelope::truthy(value(self.case, "sequential_ids")) {
+            return Ok(format!("00000000-0000-4000-8000-{:012}", index + 1));
+        }
         if let Value::List(ids) = value(self.case, "ids") {
             return Ok(kassiber_envelope::py_str(&ids[index]));
         }
@@ -42,6 +45,15 @@ impl Sources for Fixed<'_> {
     }
     fn now(&self, _: &Connection) -> Result<String, AppError> {
         self.calls.borrow_mut().push(s("now"));
+        let count = self
+            .calls
+            .borrow()
+            .iter()
+            .filter(|v| **v == s("now"))
+            .count();
+        if value(self.case, "fail_now") == &Value::Int(count.into()) {
+            return Err(AppError::new("validation", "late source clock refusal"));
+        }
         Ok("2026-01-02T03:04:05Z".into())
     }
 }

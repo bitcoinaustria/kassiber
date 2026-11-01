@@ -213,6 +213,7 @@ pub const IMPLEMENTED: &[&str] = &[
     "source-funds.request-input",
     "source-funds.coverage",
     "source-funds.suggest",
+    "source-funds.assemble",
 ];
 
 /// `_NO_BOOTSTRAP_DATABASE_PREFIXES`.

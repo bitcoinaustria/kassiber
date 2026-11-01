@@ -13131,3 +13131,78 @@ archive tree is owned scratch and is removed during cleanup. Account HOME and
 stashes remain untouched. Persisted suggestion and per-pass assembly are the
 next implementation boundary. No Python product, dependency, schema or lockfile
 changes are introduced by this integration.
+
+## Source-funds persisted-pass checkpoint (R5)
+
+Continuation 5 serves persisted `source-funds suggest`, `source-funds assemble`
+and both daemon kinds through the shared native reports service. Preview uses
+its own rollback savepoint; persistent dispatch runs before the report-read
+savepoint. Assembly loads custody, observations and structural lineage once,
+then commits suggestion and bulk-review stages separately during each pass.
+It preserves Python's eight-pass default, sixteen-pass ceiling, 500-suggestion
+per-pass cap, convergence, method counts and scoped missing-attestation list.
+Successful persisted suggestions also commit caller-owned work as Python does.
+Late failure rolls back the current stage while preserving prior commits.
+
+The 269-case frozen corpus regenerates unchanged and passes 538 live Python
+versus native service comparisons across SQLite and SQLCipher. It pins exact
+helper envelopes and clock/UUID calls, all 112 tables, attachment hashes,
+daemon coercion, caps, frozen inputs and late statement/deferred-commit failures.
+Four process tests add 24 native CLI/daemon comparisons with exact wire bytes,
+all tables, hashes and zero fallbacks. Generated UUIDs are mapped only after
+matching their link endpoints/type/method and proving v4 identities. Process
+fixtures retain the account HOME and use disposable roots under this worktree.
+
+The [Python projection reproduction](../../crates/reports/scripts/repro_python_source_funds_pass_projection.py)
+confirms that outermost suggestion savepoint release or bulk-review commit can
+persist corrupt allocation rows before response projection fails on both
+bindings. Rust keeps the current stage's write and projection atomic, retaining
+earlier assembly commits. These corrupt-record paths have separate native
+rollback witnesses and are excluded from parity acceptance. Python product
+code remains unchanged. Trigger-injected service failures are separate from
+process fixtures because native book admission rejects unknown schema objects.
+
+The complete [served-by audit](source-funds-rust-route-audit.md) accounts for
+19 native CLI leaves and 21 native source-funds daemon kinds. AI tool execution,
+source admissions, case saves, consent and once-only checks remain Python-owned
+under the owner's R6 decision. The Python tool executor calls connection-scoped
+Python services directly; direct CLI/desktop handlers have no AI-loop consent
+or duplicate-call gate to migrate. Their validation, scope and same-lock save
+fingerprints remain enforced. The two CLI and two daemon PDF-containing export
+routes remain explicitly Python-owned. No native AI loop, dependency, lockfile,
+schema, accounting or egress change is introduced.
+
+All 1,121 named mutation entries apply uniquely. The selected campaign kills
+all twenty new `sof-pass-*` mutations and all 21 retargeted inherited mutations.
+Fourteen nonempty unmutated baselines pass. The initial campaign killed 38 of
+41; stronger manual-method, frozen-review and input-attestation fixtures kill
+the three survivors after two fresh passing baselines. No build failure or
+empty selection counts as a kill. The review corpus now contains 139 cases;
+all original 138 records are unchanged. The final pass corpus preserves 267
+unchanged cases and verifies both changed/new witnesses on both bindings.
+
+| Named witness | New named mutations killed |
+| --- | --- |
+| `source_funds_passes_mutation_witnesses` | `sof-pass-suggest-dispatch`, `sof-pass-assemble-dispatch`, `sof-pass-writer-rollback`, `sof-pass-daemon-bool`, `sof-pass-daemon-zero-cap`, `sof-pass-positive-passes`, `sof-pass-bounded-passes`, `sof-pass-default-passes`, `sof-pass-frozen-suggest`, `sof-pass-frozen-review`, `sof-pass-convergence`, `sof-pass-insert-count`, `sof-pass-review-count`, `sof-pass-method-count`, `sof-pass-attestation` |
+| `source_funds_passes_rollback_response_projection_without_undoing_prior_commits` | `sof-pass-writer-rollback` (independent rollback witness) |
+| `source_funds_passes_commit_caller_work_and_preserve_preview_rollback` | `sof-pass-caller-commit` |
+| `source_funds_passes_cli_forwards_assembly_scope_and_cap` | `sof-pass-cli-fields`, `sof-pass-cli-registration` |
+| `source_funds_stored_daemon_preserves_arguments_and_registers_only_lists` | `sof-pass-daemon-suggest`, `sof-pass-daemon-assemble` |
+
+The strengthened `source_funds_review_mutation_witnesses` also kills the
+retargeted `sof-review-eligibility-method`: matching structural evidence cannot
+upgrade a manually authored suggestion. The catalogue records each remaining
+inherited mutation's exact witness. Initial results, the three successful
+retries and their union are retained in the task-local mutation summary.
+
+Verification passes all eighteen affected report-service Rust tests, all 49
+CLI/daemon library tests (26 CLI, 23 daemon), and 22 focused Python process/AI
+regressions. Those regressions include complete route ownership, existing
+suggestion previews, batch review, frozen case saves, diagnostic comparison,
+Python tool validation/redaction and consent/book-scope checks. Workspace
+formatting and reports/CLI/daemon all-target clippy with warnings denied pass
+under Rust 1.99.1 with locked offline Cargo. The classifier update records 5,743
+Python test definitions and assigns both new oracle modules to the serial
+daemon lane. Logs and summaries remain in `target/r5-sof-mutations-5/`; completed
+verification build trees and the initial account-directed archive tree are
+removed after summarizing.

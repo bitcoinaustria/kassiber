@@ -46,6 +46,7 @@ pub const COMMANDS: &[&str] = &[
     "source-funds.request-input",
     "source-funds.coverage",
     "source-funds.suggest",
+    "source-funds.assemble",
 ];
 pub fn kind(command: &str) -> Option<&'static str> {
     match command {
@@ -59,7 +60,7 @@ pub fn execute(book: &mut dyn Book, command: &str, args: &Namespace) -> Result<V
         return book.reports(command, &source_funds_report_request(args));
     }
     if command.starts_with("source-funds.") {
-        if command == "source-funds.suggest" {
+        if matches!(command, "source-funds.suggest" | "source-funds.assemble") {
             return book.reports(
                 command,
                 &dict(
@@ -69,6 +70,7 @@ pub fn execute(book: &mut dyn Book, command: &str, args: &Namespace) -> Result<V
                         "target_transaction",
                         "include_broad_hints",
                         "max_suggestions",
+                        "max_passes",
                         "dry_run",
                     ]
                     .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null))),
@@ -683,7 +685,6 @@ mod tests {
         for command in [
             "reports.export-source-funds-pdf",
             "reports.export-source-funds-bundle",
-            "source-funds.assemble",
         ] {
             assert!(!COMMANDS.contains(&command));
             assert!(!crate::describe::IMPLEMENTED.contains(&command));
@@ -1193,7 +1194,7 @@ mod tests {
         }
     }
     #[test]
-    fn source_funds_suggest_cli_forwards_preview_and_refuses_persistence() {
+    fn source_funds_suggest_cli_forwards_preview_and_persistence() {
         for preview in [false, true] {
             let mut argv: Vec<String> = [
                 "source-funds",
@@ -1221,10 +1222,7 @@ mod tests {
                 },
             )
             .unwrap();
-            assert_eq!(
-                crate::run::implemented("source-funds.suggest", &args),
-                preview
-            );
+            assert!(crate::run::implemented("source-funds.suggest", &args));
             let actual = execute(&mut SourceFundsCapture, "source-funds.suggest", &args).unwrap();
             let request = get(&actual, "args").unwrap();
             for key in [
@@ -1237,6 +1235,44 @@ mod tests {
             ] {
                 assert_eq!(get(request, key), args.get(key));
             }
+        }
+    }
+    #[test]
+    fn source_funds_passes_cli_forwards_assembly_scope_and_cap() {
+        let argv = [
+            "source-funds",
+            "assemble",
+            "--target-transaction",
+            "target",
+            "--max-passes",
+            "3",
+            "--include-broad-hints",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Book",
+        ]
+        .map(String::from);
+        let args = crate::argparse::parse_args(
+            &argv,
+            crate::argparse::Context {
+                width: 80,
+                version: "test",
+            },
+        )
+        .unwrap();
+        assert!(COMMANDS.contains(&"source-funds.assemble"));
+        assert!(crate::run::implemented("source-funds.assemble", &args));
+        let actual = execute(&mut SourceFundsCapture, "source-funds.assemble", &args).unwrap();
+        let request = get(&actual, "args").unwrap();
+        for key in [
+            "target_transaction",
+            "max_passes",
+            "include_broad_hints",
+            "workspace",
+            "profile",
+        ] {
+            assert_eq!(get(request, key), args.get(key));
         }
     }
 }
