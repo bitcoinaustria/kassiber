@@ -385,39 +385,18 @@ pub fn load(conn: &Connection, profile: Value, as_of: &str) -> Result<LoadedSnap
         )?);
     }
     let mut revision_headers = vec![];
-    if revision_ids.iter().any(revisions::Reference::is_text)
-        && revision_ids.iter().any(revisions::Reference::is_bytes)
-    {
-        return Err(Error::Reference(crate::Refusal::new(
-            "TypeError",
-            "'<' not supported between instances of 'str' and 'bytes'",
-        )));
-    }
-    if revision_ids.iter().any(revisions::Reference::is_text)
-        && revision_ids.iter().any(|id| !id.is_text())
-    {
-        // Python sorts a set here, so hash randomization can reverse the
-        // comparison operands. Keep one deterministic observed variant until
-        // the reference's ordering is made deterministic separately.
-        let numeric = revision_ids.iter().find(|id| !id.is_text()).unwrap();
-        return Err(Error::Reference(crate::Refusal::new(
-            "TypeError",
-            format!(
-                "'<' not supported between instances of '{}' and 'str'",
-                numeric.python_type()
-            ),
-        )));
-    }
-    if revision_ids.iter().any(revisions::Reference::is_bytes)
-        && revision_ids.iter().any(|id| !id.is_bytes())
-    {
-        let other = revision_ids.iter().find(|id| !id.is_bytes()).unwrap();
-        return Err(Error::Reference(crate::Refusal::new(
-            "TypeError",
-            format!(
-                "'<' not supported between instances of 'bytes' and '{}'",
-                other.python_type()
-            ),
+    // INTEGER and REAL share a sortable family, unlike TEXT and BLOB.
+    let mixed_revisions = if revision_ids.iter().any(revisions::Reference::is_text) {
+        revision_ids.iter().any(|id| !id.is_text())
+    } else if revision_ids.iter().any(revisions::Reference::is_bytes) {
+        revision_ids.iter().any(|id| !id.is_bytes())
+    } else {
+        false
+    };
+    if mixed_revisions {
+        return Err(app_refusal(kassiber_envelope::AppError::new(
+            "validation",
+            "Custody revision references contain incompatible types",
         )));
     }
     for id in revision_ids {

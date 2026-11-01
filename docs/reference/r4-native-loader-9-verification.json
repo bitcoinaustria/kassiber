@@ -2,7 +2,7 @@
   "schema": "kassiber.custody-loader-acceptance.v1",
   "date": "2026-11-01",
   "base_commit": "c5966c1ff",
-  "acceptance": "accepted except the BLOB corruption class (pending owner decision) and 16 seed-dependent messages (pending Python fix)",
+  "acceptance": "R4-9 fully accepted; see deterministic continuation for final integrated gates",
   "production_authority": "Python; native loader remains test-only",
   "production_source_unchanged": true,
   "post_campaign_metadata_changes": [
@@ -413,5 +413,8 @@
       "multi_wallet_20k_cpu_seconds": 0.428645,
       "within_loader_7_five_percent_budget": true
     }
-  }
+  },
+  "original_acceptance": "accepted except the BLOB corruption class (pending owner decision) and 16 seed-dependent messages (pending Python fix)",
+  "superseded_by": "docs/reference/r4-native-loader-determinism-verification.json",
+  "scope": "Historical loader-9 campaign results below retain their original fingerprints and exception counts; current acceptance is in the deterministic continuation."
 }

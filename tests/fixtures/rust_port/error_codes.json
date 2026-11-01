@@ -9273,7 +9273,7 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/custody_snapshot.py:153",
+      "at": "kassiber/core/custody_snapshot.py:154",
       "callee": "_error",
       "code": "book_network_review_required",
       "form": "call",
@@ -9281,11 +9281,18 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/custody_snapshot.py:156",
+      "at": "kassiber/core/custody_snapshot.py:157",
       "callee": "_error",
       "code": "book_network_review_required",
       "form": "call",
       "policy_at": "kassiber/core/book_network.py:40",
+      "retryable": false
+    },
+    {
+      "at": "kassiber/core/custody_snapshot.py:206",
+      "callee": "AppError",
+      "code": "validation",
+      "form": "call",
       "retryable": false
     },
     {

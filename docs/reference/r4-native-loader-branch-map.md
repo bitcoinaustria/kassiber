@@ -4,7 +4,8 @@ This map inventories the native loader in `crates/journals/src/loader.rs` and
 its `direct`, `ownership`, `receipts`, `revisions` and `worklist` modules. It
 also includes the shared-record/admission and downstream refusal seams changed
 by the loader checkpoints. Test modules are witnesses, not loader branches.
-The catalogue is `crates/journals/scripts/loader_mutations.json`; every entry
+The catalogues are `crates/journals/scripts/loader_mutations.json` and
+`crates/journals/scripts/loader_blob_mutations.json`; every entry
 names its killer in `expect_failing`. A catalogue entry is evidence only after
 it builds, its unmutated witness passes, and the mutation fails that witness.
 The campaign record, rather than this source inventory, owns kill status.
@@ -55,7 +56,7 @@ contract, even when the Rust call itself has no `if`.
 | Active count and transaction/wallet/profile selection; all rows versus bounded >50k worklist | `JL-direct-active-count`, `JL-direct-threshold`, `JL-worklist-threshold` | `native_loader_selects_bounded_worklist_from_active_count`, `native_loader_bounds_gap_worklist` |
 | Current versus stale/null authority; graph truth/equality; amount before fee; truthy quantity conversion including overflow | `JL-confirmation-capture`, `JL-confirmation-null`, `JL-confirmation-version`, `JL-confirmation-graph`, `JL-confirmation-field-order`, `JL-confirmation-truth`, `JL-confirmation-overflow` | `native_loader_preserves_receipt_error_precedence`, `native_loader_integer_overflow_refusals_match_python`, `native_loader_matches_python_database_bytes` |
 | Active components, leg ordering, anchor identity/lookup, anchor wallets, referenced revision identity, non-active revision headers | `JL-active-components`, `JL-leg-order`, `JL-anchor-lookup`, `JL-anchor-identity`, `JL-anchor-wallet`, `JL-revision-identity`, `JL-revision-bind` | `native_loader_matches_python_database_bytes`, `native_loader_revision_queries_keep_sqlite_binding_types` |
-| Mixed text/numeric revision population refuses before queries/output; deterministic numeric type name and message | `JL-revision-reference-storage`, `JL-revision-message-family`, `JL-revision-message-text`, `JL-revision-message-int`, `JL-revision-message-real` | `native_loader_refuses_mixed_revision_references_before_output` |
+| Mixed TEXT/numeric/BLOB revision populations refuse before queries/output with one typed validation error | `JL-revision-reference-storage`, `JL-revision-message-family`, `JL-revision-message-text`, `JL-revision-message-int`, `JL-revision-message-real`, `JL-revision-validation-code`, `JL-reference-mixed-type-guard` | `native_loader_refuses_mixed_revision_references_before_output`, `native_loader_revision_order_preserves_python_numeric_identity`, `test_loader_mixed_revision_refusal_is_stable_across_hash_seeds` |
 | Modern rates versus operational legacy-column fallback; optional reviews versus empty operational fallback; latest revision and stable review order | `JL-rate-fallback`, `JL-review-fallback`, `JL-latest-review`, `JL-utf8-review-fallback` | `native_loader_matches_python_database_bytes`, `native_loader_utf8_optional_reviews_preserve_python_fallback` |
 | Channel records only; live loan legs; custody-component evidence; unresolved migration issues; pair dismissals and ordered auxiliary rows | `JL-channel-kind`, `JL-loan-deletion`, `JL-evidence-subject`, `JL-migration-resolution` | `native_loader_matches_python_database_bytes` |
 | Receipt load succeeds / refuses; earlier accounting/component error wins; builtin exception family versus AppError code | `JL-receipt-precedence`, `JL-receipt-error-family`, `JL-receipt-accounting-precedence`, `JL-receipt-component-precedence` | `native_loader_preserves_receipt_error_precedence` |
@@ -94,7 +95,7 @@ contract, even when the Rust call itself has no `if`.
 | Revision scalar string/number/unsupported; integer versus real identity; same/mixed numeric comparisons, range endpoints, fraction, integer identity above 2^53, text ordering and original binding | `JL-revision-unsupported`, `JL-revision-is-text`, `JL-revision-integer-order`, `JL-revision-real-order`, `JL-revision-mixed-integer-real`, `JL-revision-mixed-real-integer`, `JL-revision-upper-range`, `JL-revision-lower-range`, `JL-revision-fraction`, `JL-revision-exact-integer`, `JL-revision-text-order`, `JL-revision-bind` | `native_loader_revision_order_preserves_python_numeric_identity`, `native_loader_revision_queries_keep_sqlite_binding_types` |
 | Worklist <=50k versus bounded population; structured source limit, remaining ordinary budget, global cross-asset amount/date/id order, empty/nonempty return ranges, return limit and final stable order | `JL-worklist-threshold`, `JL-typed-limit`, `JL-source-budget`, `JL-worklist-budget-branch`, `JL-worklist-source-order`, `JL-worklist-range-branch`, `JL-return-limit` | `native_loader_bounds_gap_worklist`, `native_loader_worklist_ranks_sources_across_assets_before_budgeting` |
 | Worklist SQL NULL/int/real/text binding versus out-of-range/surrogate/unsupported values; truthy string versus empty fallback | `JL-parameter-null`, `JL-parameter-int`, `JL-parameter-real`, `JL-parameter-text`, `JL-parameter-refusal`, `JL-worklist-string` | `native_loader_worklist_parameters_keep_sqlite_scalar_types` |
-| Consumer component integer/timestamp and finalized price refusal messages/codes; seed rule requires observed complete code/message pairs and cannot admit a refused projection | `JL-component-integer-infinity`, `JL-component-integer-message`, `JL-component-sort-message`, `JL-price-message`, `JL-price-code`, `JL-audit-seed-variants`, `JL-audit-seed-code` | `component_integer_refusal_messages_match_python`, `component_header_sort_retains_python_type_errors`, `finalized_price_errors_keep_field_code_and_message`, `test_loader_seed_variants_require_observed_complete_refusal_pairs` |
+| Consumer component integer/timestamp and finalized price refusal messages/codes; refusals require exact complete code/message pairs across seeds and cannot admit a refused projection | `JL-component-integer-infinity`, `JL-component-integer-message`, `JL-component-sort-message`, `JL-price-message`, `JL-price-code`, `JL-audit-seed-variants`, `JL-audit-seed-code` | `component_integer_refusal_messages_match_python`, `component_header_sort_retains_python_type_errors`, `finalized_price_errors_keep_field_code_and_message`, `test_loader_revision_audit_requires_exact_refusal_pairs` |
 
 ## Individual SQL scope guards
 
@@ -179,3 +180,35 @@ runner errors. The separate custody campaign's final kill set equals all
 to preserve their stated contracts and killed in fresh shards. The
 [acceptance record](r4-native-loader-checkpoint.md#loader-9-acceptance) owns
 provenance, the re-anchor review and the remaining gates.
+
+## Integrated BLOB contracts
+
+The combined catalogue has 357 entries: the 308 loader-9 recipes, 47 BLOB
+recipes and two deterministic-refusal recipes. No entry is removed.
+The BLOB continuation adds the following named recipes to the branch map.
+Byte identity, literal-map escaping, decoding and conversion remain consumer
+contracts; they do not grant ownership or accounting authority. Mixed revision
+references now share the same validation refusal as the port-branch Python
+reference. INTEGER and REAL remain one sortable family. `Reference::python_type`
+now exists only in the scalar identity witnesses; the
+retained `JL-revision-message-int`/`real` recipes pin those witness types rather
+than select the runtime refusal. The historical
+`JL-audit-seed-variants` and `JB-audit-blob-variant` IDs are retained but their
+recipes now enforce exact matching and BLOB seed-sweep coverage.
+
+| Module / seam | Mutation IDs | Named killers |
+| --- | --- | --- |
+| `crates/custody/src/codec.rs` | `JB-typed-from-json`, `JB-typed-to-json`, `JB-bytes-truth`, `JB-bytes-string`, `JB-bytes-integer`, `JB-bytes-fast-json`, `JB-literal-tag-escape`, `JB-literal-map-roundtrip`, `JB-json-bytes-object` | `raw_bytes_preserve_identity_truth_integer_and_literal_maps`, `json_snapshot_cannot_forge_internal_byte_scalars` |
+| `crates/custody/src/components/mod.rs` | `JB-component-int-kind`, `JB-component-int-repr`, `JB-component-byte-sort`, `JB-component-header-bytes` | `component_bytes_sort_and_integer_semantics_match_python` |
+| `crates/custody/src/evidence.rs` | `JB-evidence-byte-policy` | `evidence_bytes_use_utf8_replacement_before_canonical_json` |
+| `crates/custody/src/graph/stored.rs` | `JB-graph-byte-object`, `JB-graph-byte-parse`, `JB-graph-byte-truth` | `stored_graph_json_bytes_decode_only_at_the_mapping_consumer` |
+| `crates/custody/src/lib.rs` | `JB-snapshot-wire-tag-guard` | `json_snapshot_cannot_forge_internal_byte_scalars` |
+| `crates/journals/scripts/audit_loader_storage.py` | `JB-audit-blob-variant` | `tests/test_rust_custody_loader.py::test_loader_revision_audit_requires_exact_refusal_pairs` |
+| `crates/journals/src/loader.rs` | `JB-config-memo`, `JB-parsed-bytes`, `JB-convert-literal-map`, `JB-query-bytes-truth` | `native_loader_blob_conversions_preserve_bytes_and_consuming_policy`, `native_loader_reads_direct_columns_without_conversion` |
+| `crates/journals/src/loader/direct.rs` | `JB-revision-mixed-text`, `JB-revision-mixed-number`, `JB-gate-literal-map` | `native_loader_blob_revision_references_bind_and_refuse_before_output`, `native_loader_refuses_mixed_blob_numeric_revisions_before_queries`, `native_loader_reads_direct_columns_without_conversion` |
+| `crates/journals/src/loader/ownership.rs` | `JB-ownership-config`, `JB-bytes-int-ascii`, `JB-bytes-int-error`, `JB-outpoint-bytes-ascii` | `native_loader_blob_conversions_preserve_bytes_and_consuming_policy` |
+| `crates/journals/src/loader/revisions.rs` | `JB-revision-bind`, `JB-revision-byte-order`, `JB-revision-byte-type` | `native_loader_blob_revision_references_bind_and_refuse_before_output`, `native_loader_blob_revision_identity_is_distinct_and_lexicographic` |
+| `crates/pyjson/src/bytes.rs` | `JB-json-bytes-bom`, `JB-json-bytes-surrogates`, `JB-json-bytes-utf32-le`, `JB-json-bytes-utf32-be`, `JB-json-bytes-utf16-le`, `JB-json-bytes-utf16-be`, `JB-json-bytes-truncation`, `JB-json-bytes-unpaired`, `JB-json-bytes-short-utf16` | `json_bytes_detect_encoding_without_changing_bytes_identity`, `raw_bytes_preserve_identity_truth_integer_and_literal_maps` |
+| `crates/pyjson/src/encode.rs` | `JB-json-bytes-refusal`, `JB-json-bytes-default`, `JB-json-bytes-message` | `bytes_json_policy_and_repr_match_python`, `native_loader_blob_conversions_preserve_bytes_and_consuming_policy` |
+| `crates/pyjson/src/value.rs` | `JB-bytes-repr-quotes` | `bytes_json_policy_and_repr_match_python` |
+| `crates/pytext/src/json.rs` | `JB-json-raw-surrogates` | `json_parser_preserves_raw_surrogate_identity` |

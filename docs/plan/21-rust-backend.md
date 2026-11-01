@@ -2310,16 +2310,24 @@ proves 53 exact native-loader byte matches and replays 53 fresh requests and
 permutations. The [acceptance record](../reference/r4-native-loader-checkpoint.md#loader-9-acceptance)
 owns the complete counts, re-anchor review and resumable campaign provenance.
 
-The integrated R4-9 stage combines loader-9 acceptance with BLOB parity;
-forty seed-dependent messages remain pending the Python fix. Loader-9 changes tests,
-fixtures, catalogues and acceptance records; production Rust and Python code are
-unchanged. Python retains production journal authority, and the loader remains
-behind `test-harness` until its separate integration/authority gates.
+The integrated R4-9 stage is **fully accepted, with no pending exceptions**.
+The port-branch Python reference and native loader reject incompatible revision
+reference families with one typed `validation` message before revision sorting
+or queries. Exact matching replaces measured variant-set acceptance. Fresh
+22,528-case composed and 16,384-case non-BLOB audits pass; the forty historical
+message cases are stable in fresh Python processes under eight hash seeds.
+All 357 combined loader mutations are killed, including the new reference guard;
+the inherited full 2,292-entry custody campaign remains complete. Fresh 24,000
+books/1,030 permutations, 159 retained requests and permutations, focused
+census/shadow and static gates pass. The
+[current acceptance record](../reference/r4-native-loader-checkpoint.md#deterministic-revision-reference-acceptance)
+distinguishes the fresh evidence from inherited campaigns and timing.
 
-Loader-8's paired 20k CPU totals including admission remain 0.288331 s generic
-and 0.428645 s multi-wallet, both within 5% of loader-7. Those timings and the
-16,384-case non-BLOB audit are inherited unchanged; the final campaign results
-above are fresh. The 4,446 BLOB gaps and sixteen message cases remain pending.
+The BLOB same-host timing comparison remains within 5% of the retained loader-8
+baseline; this determinism continuation does not claim a fresh benchmark.
+Python retains production journal authority, and the native loader remains
+behind `test-harness` until its separate integration/authority gates. Shipped
+Python was audited separately and is unaffected by the port-branch reference fix.
 
 ### R4-0 integrated stack
 

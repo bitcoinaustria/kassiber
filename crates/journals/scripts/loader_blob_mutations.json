@@ -212,8 +212,8 @@
   {
     "id": "JB-revision-mixed-text",
     "file": "crates/journals/src/loader/direct.rs",
-    "find": "&& revision_ids.iter().any(revisions::Reference::is_bytes)",
-    "replace": "&& false",
+    "find": "revision_ids.iter().any(|id| !id.is_text())",
+    "replace": "false",
     "expect_failing": [
       "native_loader_blob_revision_references_bind_and_refuse_before_output"
     ],
@@ -222,8 +222,8 @@
   {
     "id": "JB-revision-mixed-number",
     "file": "crates/journals/src/loader/direct.rs",
-    "find": "&& revision_ids.iter().any(|id| !id.is_bytes())",
-    "replace": "&& false",
+    "find": "revision_ids.iter().any(|id| !id.is_bytes())",
+    "replace": "false",
     "expect_failing": [
       "native_loader_refuses_mixed_blob_numeric_revisions_before_queries"
     ],
@@ -285,9 +285,9 @@
     "find": "stored_type in (\"integer\", \"real\", \"blob\")",
     "replace": "stored_type in (\"integer\", \"real\")",
     "expect_failing": [
-      "tests/test_rust_custody_loader.py::test_loader_seed_variants_require_observed_complete_refusal_pairs"
+      "tests/test_rust_custody_loader.py::test_loader_revision_audit_requires_exact_refusal_pairs"
     ],
-    "rule": "Apply the owner-authorized measured complete-envelope variant rule to BLOB revision references."
+    "rule": "Include BLOB/TEXT mixed revisions in the exact deterministic refusal seed sweep."
   },
   {
     "id": "JB-convert-literal-map",

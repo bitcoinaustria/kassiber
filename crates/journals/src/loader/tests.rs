@@ -229,12 +229,7 @@ fn native_loader_refuses_mixed_revision_references_before_output() {
         .find(|case| text(get(case, "name")) == "structural-columns")
         .unwrap();
     for field in ["supersedes_component_id", "superseded_by_component_id"] {
-        for (scalar, kind) in [
-            ("7", "int"),
-            ("1.5", "float"),
-            ("1e999", "float"),
-            ("-1e999", "float"),
-        ] {
+        for scalar in ["7", "1.5", "1e999", "-1e999"] {
             let conn = Connection::open_in_memory().unwrap();
             let sql = text(get(case, "sql"))
                 .replace(&format!("\"{field}\" TEXT"), &format!("\"{field}\""));
@@ -247,12 +242,13 @@ fn native_loader_refuses_mixed_revision_references_before_output() {
                     get(case, "profile").clone(),
                     &text(get(case, "as_of")),
                 ) else {
-                    panic!("expected reference sort refusal")
+                    panic!("expected mixed revision validation refusal")
                 };
-                assert_eq!(refusal.family, "TypeError");
+                assert_eq!(refusal.family, "AppError");
+                assert_eq!(refusal.code.as_deref(), Some("validation"));
                 assert_eq!(
                     refusal.message,
-                    format!("'<' not supported between instances of '{kind}' and 'str'")
+                    "Custody revision references contain incompatible types"
                 );
             }
             assert_eq!(changes, conn.total_changes());
@@ -808,10 +804,11 @@ fn native_loader_blob_revision_references_bind_and_refuse_before_output() {
             ) else {
                 panic!("mixed bytes must refuse")
             };
-            assert_eq!(error.family, "TypeError");
+            assert_eq!(error.family, "AppError");
+            assert_eq!(error.code.as_deref(), Some("validation"));
             assert_eq!(
                 error.message,
-                "'<' not supported between instances of 'str' and 'bytes'"
+                "Custody revision references contain incompatible types"
             );
         }
         assert_eq!(changes, conn.total_changes());
@@ -834,7 +831,7 @@ fn native_loader_refuses_mixed_blob_numeric_revisions_before_queries() {
         "\"superseded_by_component_id\" TEXT",
         "\"superseded_by_component_id\"",
     );
-    for (scalar, kind) in [("7", "int"), ("1.5", "float")] {
+    for scalar in ["7", "1.5", "1e999", "-1e999"] {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch(&sql).unwrap();
         conn.execute_batch(&format!("BEGIN IMMEDIATE; UPDATE custody_components SET supersedes_component_id=NULL,superseded_by_component_id=NULL; UPDATE custody_components SET supersedes_component_id=x'3737' WHERE id='active-a'; UPDATE custody_components SET superseded_by_component_id={scalar} WHERE id='active-b';")).unwrap();
@@ -846,10 +843,11 @@ fn native_loader_refuses_mixed_blob_numeric_revisions_before_queries() {
         ) else {
             panic!("mixed bytes must refuse")
         };
-        assert_eq!(error.family, "TypeError");
+        assert_eq!(error.family, "AppError");
+        assert_eq!(error.code.as_deref(), Some("validation"));
         assert_eq!(
             error.message,
-            format!("'<' not supported between instances of 'bytes' and '{kind}'")
+            "Custody revision references contain incompatible types"
         );
         assert_eq!(changes, conn.total_changes());
         assert!(!conn.is_autocommit());

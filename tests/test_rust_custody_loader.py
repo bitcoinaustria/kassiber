@@ -22,23 +22,26 @@ pytestmark = pytest.mark.skipif(not Path(BINARY).is_file(), reason="requires cus
 AS_OF = "2026-10-31T12:00:00Z"
 
 
-def test_loader_seed_variants_require_observed_complete_refusal_pairs():
+def test_loader_revision_audit_requires_exact_refusal_pairs():
+    from kassiber.errors import AppError
     from crates.journals.scripts.audit_loader_storage import (
-        classify, classify_projection, mixed_revision_refusal,
+        REVISION_REFUSAL, classify, classify_projection, mixed_revision_refusal,
     )
-    first = exception_boundaries(TypeError("'<' not supported between instances of 'str' and 'float'"))
-    second = exception_boundaries(TypeError("'<' not supported between instances of 'float' and 'str'"))
-    reference = {"phase": "load", "refusal": {"family": "TypeError", "message": first["cli"]["message"]},
-                 "boundaries": first}
-    actual = {"boundaries": second}
-    assert classify(reference, actual) == "different_refusal"
-    assert classify(reference, actual, [first, second]) == "equal_refusal"
-    assert classify_projection(reference, actual, [first, second]) == "equal_projection_refusal"
-    assert classify_projection(reference, {"value": {}}, [first, second]) == "native_admitted_refused_projection"
-    wrong_code = {key: {**value, "code": "validation"} for key, value in second.items()}
-    assert classify_projection(reference, {"boundaries": wrong_code}, [first, second]) == "different_projection_refusal"
-    unknown_message = exception_boundaries(TypeError("unobserved sort refusal"))
-    assert classify_projection(reference, {"boundaries": unknown_message}, [first, second]) == "different_projection_refusal"
+    boundary = exception_boundaries(AppError(REVISION_REFUSAL, code="validation"))
+    reference = {"phase": "load", "refusal": {"family": "AppError", "code": "validation",
+                 "message": REVISION_REFUSAL}, "boundaries": boundary}
+    assert classify(reference, {"boundaries": boundary}) == "equal_refusal"
+    assert classify_projection(reference, {"boundaries": boundary}) == "equal_projection_refusal"
+    assert classify_projection(reference, {"value": {}}) == "native_admitted_refused_projection"
+    for error in (TypeError("'<' not supported between instances of 'str' and 'float'"),
+                  TypeError("'<' not supported between instances of 'float' and 'str'"),
+                  TypeError("'<' not supported between instances of 'str' and 'bytes'"),
+                  TypeError("'<' not supported between instances of 'bytes' and 'str'"),
+                  AppError(REVISION_REFUSAL, code="internal_error"),
+                  AppError("different validation message", code="validation")):
+        wrong = {"boundaries": exception_boundaries(error)}
+        assert classify(reference, wrong) == "different_refusal"
+        assert classify_projection(reference, wrong) == "different_projection_refusal"
     for table, column, storage, eligible in [
         ("custody_components", "supersedes_component_id", "real", True),
         ("custody_components", "superseded_by_component_id", "integer", True),
@@ -47,6 +50,48 @@ def test_loader_seed_variants_require_observed_complete_refusal_pairs():
         ("custody_components", "supersedes_component_id", "blob", True),
     ]:
         assert mixed_revision_refusal(reference, table, column, storage) is eligible
+
+
+@pytest.mark.parametrize("field", ["supersedes_component_id", "superseded_by_component_id"])
+@pytest.mark.parametrize("scalar", ["7", "1.5", "1e999", "-1e999", "x'ff00'", "x'3737'",
+                                    "x'7b22636861696e223a22626974636f696e222c226e6574776f726b223a226d61696e227d'"])
+def test_loader_mixed_revision_refusal_is_stable_across_hash_seeds(field, scalar):
+    from crates.journals.scripts.audit_loader_storage import HASH_SEEDS, reference_seed_sweep
+    case = next(case for case in json.loads((ROOT / "crates/journals/tests/data/loader.json").read_text())
+                if case["name"] == "structural-columns")
+    sql = case["sql"].replace(f'"{field}" TEXT', f'"{field}"')
+    sql += f"; UPDATE custody_components SET {field}={scalar} WHERE id='active-a';"
+    request = {"sql": sql, "profile": case["profile"], "as_of": AS_OF, "project": True}
+    sweep = reference_seed_sweep(request)
+    assert len(HASH_SEEDS) >= 8
+    assert set(sweep["outcomes_by_hash_seed"]) == set(HASH_SEEDS)
+    result = subprocess.run([BINARY], input=json.dumps(request), text=True,
+                            capture_output=True, check=True, timeout=120)
+    assert not result.stderr
+    actual = json.loads(result.stdout)
+    for reference in sweep["outcomes_by_hash_seed"].values():
+        assert {key: actual["refusal"][key] for key in ("family", "code", "message")} == reference["refusal"]
+        assert actual["boundaries"] == reference["boundaries"]
+    assert actual["writes"] == 0
+    assert "v1" not in actual
+    assert "projection" not in actual
+
+
+def test_loader_keeps_mixed_integer_real_revision_order(loose_book):
+    from unittest.mock import patch
+    conn, helper = loose_book
+    with patch(__name__ + ".check", lambda _conn: None):
+        test_loader_covers_every_structural_table_column_and_filter((conn, helper))
+    from crates.journals.scripts.audit_loader_storage import without_affinity
+    with without_affinity(conn) as legacy:
+        legacy.execute("UPDATE custody_components SET supersedes_component_id=NULL,superseded_by_component_id=NULL")
+        legacy.execute("UPDATE custody_components SET supersedes_component_id=7 WHERE id='active-a'")
+        legacy.execute("UPDATE custody_components SET superseded_by_component_id=1.5 WHERE id='active-b'")
+        before = legacy.total_changes
+        snapshot = load_custody_snapshot(legacy, _profile(legacy), as_of=AS_OF)
+        assert snapshot["revision_headers"] == []
+        check(legacy)
+        assert legacy.total_changes == before
 
 
 def test_loader_projection_audit_keeps_transport_and_product_outcomes_distinct():

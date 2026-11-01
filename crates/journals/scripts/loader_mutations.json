@@ -1012,12 +1012,12 @@
   {
     "id": "JL-revision-reference-storage",
     "file": "crates/journals/src/loader/direct.rs",
-    "find": "if revision_ids.iter().any(revisions::Reference::is_text)\n        && revision_ids.iter().any(|id| !id.is_text())",
-    "replace": "if false",
+    "find": "if mixed_revisions {",
+    "replace": "if false {",
     "expect_failing": [
       "native_loader_refuses_mixed_revision_references_before_output"
     ],
-    "rule": "Refuse mixed text/numeric revision references before output, preserving the caller transaction."
+    "rule": "Refuse incompatible revision-reference families before queries or output."
   },
   {
     "id": "JL-negative-nonfinite",
@@ -1302,22 +1302,22 @@
   {
     "id": "JL-revision-message-family",
     "file": "crates/journals/src/loader/direct.rs",
-    "find": "let numeric = revision_ids.iter().find(|id| !id.is_text()).unwrap();\n        return Err(Error::Reference(crate::Refusal::new(\n            \"TypeError\",\n            format!(",
-    "replace": "let numeric = revision_ids.iter().find(|id| !id.is_text()).unwrap();\n        return Err(Error::Reference(crate::Refusal::new(\n            \"ValueError\",\n            format!(",
+    "find": "return Err(app_refusal(kassiber_envelope::AppError::new(\n            \"validation\",\n            \"Custody revision references contain incompatible types\",\n        )));",
+    "replace": "return Err(Error::Reference(crate::Refusal::new(\n            \"TypeError\",\n            \"Custody revision references contain incompatible types\",\n        )));",
     "expect_failing": [
       "native_loader_refuses_mixed_revision_references_before_output"
     ],
-    "rule": "Preserve the Python mixed-reference TypeError family."
+    "rule": "Preserve the typed AppError validation refusal for mixed revision references."
   },
   {
     "id": "JL-revision-message-text",
     "file": "crates/journals/src/loader/direct.rs",
-    "find": "'<' not supported between instances of '{}' and 'str'",
-    "replace": "'<' not supported between instances of '{}' and 'text'",
+    "find": "Custody revision references contain incompatible types",
+    "replace": "Custody revision references have unknown types",
     "expect_failing": [
       "native_loader_refuses_mixed_revision_references_before_output"
     ],
-    "rule": "Emit one deterministic observed Python sort message."
+    "rule": "Preserve the exact deterministic revision validation message."
   },
   {
     "id": "JL-revision-message-int",
@@ -1325,9 +1325,9 @@
     "find": "SqlValue::Integer(_) => \"int\",",
     "replace": "SqlValue::Integer(_) => \"float\",",
     "expect_failing": [
-      "native_loader_refuses_mixed_revision_references_before_output"
+      "native_loader_revision_order_preserves_python_numeric_identity"
     ],
-    "rule": "Render SQLite INTEGER revision references as Python int."
+    "rule": "Preserve the SQLite scalar type identity in the revision witness."
   },
   {
     "id": "JL-revision-message-real",
@@ -1335,29 +1335,29 @@
     "find": "SqlValue::Real(_) => \"float\",",
     "replace": "SqlValue::Real(_) => \"int\",",
     "expect_failing": [
-      "native_loader_refuses_mixed_revision_references_before_output"
+      "native_loader_revision_order_preserves_python_numeric_identity"
     ],
-    "rule": "Render SQLite REAL revision references as Python float, including infinities."
+    "rule": "Preserve the SQLite scalar type identity in the revision witness."
   },
   {
     "id": "JL-audit-seed-variants",
     "file": "crates/journals/scripts/audit_loader_storage.py",
-    "find": "any(actual == variant for variant in variants)",
-    "replace": "False",
+    "find": "return actual == reference",
+    "replace": "return True",
     "expect_failing": [
-      "tests/test_rust_custody_loader.py::test_loader_seed_variants_require_observed_complete_refusal_pairs"
+      "tests/test_rust_custody_loader.py::test_loader_revision_audit_requires_exact_refusal_pairs"
     ],
-    "rule": "Match a complete refusal variant observed under another Python seed."
+    "rule": "Refusal comparison requires exact complete boundary pairs; obsolete operand-order variants must fail."
   },
   {
     "id": "JL-audit-seed-code",
     "file": "crates/journals/scripts/audit_loader_storage.py",
-    "find": "actual == variant for variant in variants",
-    "replace": "actual is not None for variant in variants",
+    "find": "return actual == reference",
+    "replace": "return actual is not None and all(actual[key][\"message\"] == value[\"message\"] for key, value in reference.items())",
     "expect_failing": [
-      "tests/test_rust_custody_loader.py::test_loader_seed_variants_require_observed_complete_refusal_pairs"
+      "tests/test_rust_custody_loader.py::test_loader_revision_audit_requires_exact_refusal_pairs"
     ],
-    "rule": "Reject unobserved codes and messages despite the Python determinism exception."
+    "rule": "Refusal comparison must include error codes as well as messages."
   },
   {
     "id": "JL-convert-null",
@@ -1672,8 +1672,8 @@
   {
     "id": "JL-integer-string",
     "file": "crates/journals/src/loader/ownership.rs",
-    "find": "and_then(|value| kassiber_pytext::parse_int(value).ok())",
-    "replace": "and_then(|_value| None)",
+    "find": "Value::Str(value) => value\n            .as_str()\n            .and_then(|value| kassiber_pytext::parse_int(value).ok()),",
+    "replace": "Value::Str(_) => None,",
     "expect_failing": [
       "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
     ],
@@ -3078,5 +3078,25 @@
       "native_loader_scoped_index_preserves_evidence_order_and_sorts_wallet_pairs"
     ],
     "rule": "Sort scoped txid wallet pairs while preserving the authored order of scoped outpoint evidence."
+  },
+  {
+    "id": "JL-reference-mixed-type-guard",
+    "file": "kassiber/core/custody_snapshot.py",
+    "find": "if len(revision_types) > 1:",
+    "replace": "if False:",
+    "expect_failing": [
+      "tests/test_rust_custody_loader.py::test_loader_mixed_revision_refusal_is_stable_across_hash_seeds"
+    ],
+    "rule": "Refuse incompatible revision types before Python sorts the hash-randomized set."
+  },
+  {
+    "id": "JL-revision-validation-code",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "return Err(app_refusal(kassiber_envelope::AppError::new(\n            \"validation\",\n            \"Custody revision references contain incompatible types\",\n        )));",
+    "replace": "return Err(app_refusal(kassiber_envelope::AppError::new(\n            \"internal_error\",\n            \"Custody revision references contain incompatible types\",\n        )));",
+    "expect_failing": [
+      "native_loader_refuses_mixed_revision_references_before_output"
+    ],
+    "rule": "Mixed revision references carry the validation code rather than an internal failure."
   }
 ]

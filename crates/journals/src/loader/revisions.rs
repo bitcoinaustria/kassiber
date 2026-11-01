@@ -37,6 +37,7 @@ impl Reference {
         matches!(self.0, SqlValue::Blob(_))
     }
 
+    #[cfg(test)]
     pub(super) fn python_type(&self) -> &'static str {
         match self.0 {
             SqlValue::Text(_) => "str",

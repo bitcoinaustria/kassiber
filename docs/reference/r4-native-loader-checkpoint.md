@@ -1,13 +1,15 @@
 # R4-9 native custody loader checkpoint
 
-> Evidence inherited from t3code/r4-9-loader-9@e15900677 and
-> t3code/r4-9-loader-blob@d03c0b9a1; pending fresh r9 verification.
+> Evidence inherited from t3code/r4-9-loader-determinism@aaf6216e3; pending fresh r9 verification.
 
-The composed stage retains loader-9's exhaustive map and the BLOB continuation's
-closed storage-class gaps. Forty seed-dependent messages remain pending the
-Python determinism fix. Integrated r9 acceptance requires fresh gates; the
-sections below retain both source branches' historical evidence and scope.
-Python retains production authority and the loader remains test-only.
+R4-9 is **fully accepted, with no pending exceptions**. The integrated
+continuation combines loader-9's exhaustive branch map and stage campaigns,
+the BLOB continuation's lossless consumers, and the deterministic revision
+refusal below. The [current acceptance record](r4-native-loader-determinism-verification.json)
+owns the fresh integrated gates. Earlier sections retain their historical
+measurements and refusal rules; the [deterministic continuation](#deterministic-revision-reference-acceptance)
+supersedes their forty message exceptions. Production journal authority remains
+with Python; merged full-process integration belongs to R4-13.
 
 ## Representation and authority
 
@@ -37,10 +39,10 @@ The generic-20k transactions, rate and gap projections previously owned
 column layouts. Network observations still materialize JSON objects for the
 existing network consumer. This is a transitional row representation, not the
 plan's eventual lossless `SqlValue`/`BookSnapshot` boundary. INTEGER and REAL
-remain distinct. Mixed revision-reference refusals now use a deterministic
-observed Python message under the owner's seed-variant rule. The pending Python
-fix remains the sole storage-audit exception described below; BLOB parity is
-closed.
+remain distinct. Mixed revision references now refuse with one typed
+`validation` error in the port-branch Python reference and native loader before
+revision sorting/queries. INTEGER and REAL remain one sortable numeric family.
+BLOB parity and all forty historical message exceptions are closed.
 
 Admission memoizes only successfully checked, identical configuration strings
 within one validation call. Every different string and every object still goes
@@ -809,8 +811,9 @@ here. The inherited complete-campaign evidence remains historical.
 
 ## Loader-9 acceptance
 
-On 2026-11-01, R4-9 is **accepted except the BLOB corruption class (pending
-owner decision) and 16 seed-dependent messages (pending Python fix)**.
+The original loader-9 acceptance on 2026-11-01 excluded BLOB corruption and
+sixteen seed-dependent messages. The BLOB and deterministic continuations below
+close both exclusions: **R4-9 is now fully accepted, with no pending exceptions**.
 The [verification summary](r4-native-loader-9-verification.json) records the
 catalogue hashes, campaign fingerprints, probe hash, gate counts and log paths.
 Production Rust and Python code are unchanged in loader-9: changes add test
@@ -887,7 +890,9 @@ The focused modules are `test_custody_observation_consistency.py` and
 disposable recording roots. The retained corpus at
 `/home/tg/.cache/kassiber-verify/custody-recordings/` is read-only.
 
-The loader-8 audit and paired timing are inherited, not rerun or changed here.
+At this historical loader-9 checkpoint, the loader-8 audit and paired timing
+were inherited, not rerun or changed. The later continuations below supersede
+the recorded storage gaps.
 All **16,384 non-BLOB cases** retain their recorded matches, zero writes and
 zero unsafe admissions. The **4,446 BLOB gaps** remain pending an owner decision;
 the **16 seed-dependent messages** remain pending the Python determinism fix,
@@ -904,9 +909,9 @@ deleted after summarizing; scripts, probe, resumable logs and fresh recordings
 remain under `target/r4-loader-9`. No background job remains at handoff. This is
 a local acceptance commit, with no push, PR, external comment or routing change.
 
-## BLOB storage-class continuation (unaccepted)
+## BLOB storage-class continuation (historical)
 
-SQLite BLOBs now enter both native readers as `kassiber_pyjson::Value::Bytes`.
+At the BLOB checkpoint, SQLite BLOBs entered both native readers as `kassiber_pyjson::Value::Bytes`.
 The transitional JSON-shaped custody records carry a private, lossless hex
 adapter that restores typed bytes at consumers. Literal mappings with private
 tag keys are escaped in both the JSON request and native typed-map paths, so
@@ -946,7 +951,8 @@ Seed 1 renders `str` then `bytes`; seeds 2–4 render `bytes` then `str`. The au
 stores each per-seed pair and the complete measured variant set, without mixing
 halves or broadening successful outcomes. Native always renders `str` then
 `bytes`, and refuses before revision queries or output. These 24 and the prior
-16 cases remain **pending Python determinism fix**. The planned port-branch
+16 cases remained pending at that checkpoint; the deterministic continuation
+below closes all forty. The planned port-branch
 Python fix will refuse mixed-type revision references with one typed message
 before sorting; the adjacent mixed-type guards in `loader/direct.rs` can switch
 to that single refusal when it lands. Python production code is unchanged.
@@ -1001,21 +1007,81 @@ the copied uv cache are deleted after summarizing, while the probe, synthetic
 books, scripts and logs remain. No background job remains at handoff. Local
 only: no push, PR, external comment or production routing change.
 
-## Remaining acceptance work
+## Deterministic revision-reference acceptance
 
-1. Integrate the parallel loader-9 exhaustive branch-to-named-mutation map
-   and the full 2,292-entry custody campaign, resolving survivors and runner
-   errors. The 136 inherited plus 47 BLOB recipes here remain partial evidence.
-2. Finish the integrated census/shadow gates. The fresh 24,000 generated books,
-   1,030 permutations and 159 retained replays plus permutations above pass;
-   rerun integrated gates as required after composing the parallel branches.
-3. Reproduce the historical 20k absolute CPU limits (0.294 / 0.4452 s)
-   on a suitable host; only the same-host loader-8 regression check passes here.
-4. Write acceptance and update plan 21/TODO only after those requirements pass.
-   BLOB parity is closed. The only storage-audit exception is the **40 measured
-   seed-dependent messages, pending Python determinism fix**. Until the other
-   gates finish, R4-9 remains unaccepted. Python keeps production authority
-   until its separate integration gate.
+On 2026-11-01, **R4-9 is fully accepted, with no pending exceptions**.
+The port-branch Python reference `load_custody_snapshot` checks reference
+families immediately before sorting revision IDs. Mixed numeric/TEXT,
+BLOB/TEXT and numeric/BLOB populations raise `AppError` with code `validation`
+and the exact message `Custody revision references contain incompatible types`.
+The native loader emits the same typed refusal before revision queries or
+output. Both retain the existing earlier-error precedence and caller rollback
+ownership. INTEGER and REAL remain mutually sortable, including infinities and
+integer identity above 2^53; homogeneous TEXT/BLOB references retain their own
+ordering and SQLite bindings. Shipped Python was audited separately and is
+unaffected by this port-branch reference correction.
+
+The audit no longer accepts any message variant set. It compares the complete
+CLI/daemon code/message pairs exactly, independently for v1 transport and
+finalized projection. The [composed audit](r4-native-loader-determinism-storage-audit.json)
+and [non-BLOB rerun](r4-native-loader-determinism-non-blob-audit.json) retain the
+same 23-table, 360-column, all-row, two-affinity manifest and actual `typeof()`.
+The forty closed cases have exactly the same identities as the historical
+sixteen numeric/TEXT and twenty-four BLOB/TEXT exceptions. Each case is repeated
+in fresh CPython 3.11 processes under **eight hash seeds, 0–7**, requiring the
+same family, validation code and message in every process. This includes both
+infinity signs and all three BLOB payload sets. The full audit contains 320
+fresh seed-process checks; the separate non-BLOB rerun adds 128. Native
+family/code/message and default AppError attributes also match all forty cases.
+
+| Fresh gate | Result |
+| --- | --- |
+| Composed storage audit | 22,528 exact matches: 7,448 successful projections and 15,080 refusals; all 6,144 actual BLOB cases match |
+| Non-BLOB audit | 16,384 exact matches: 5,308 successful projections and 11,076 refusals |
+| Audit safety and seed closure | Zero writes, unsafe admissions, unresolved outcomes or pending exceptions; all forty historical case identities verified |
+| Twelve generated suites | 24,000 books and 1,030 permutations; 24,852 complete seven-stage matches and 178 matching finalized refusals |
+| Per-scenario controls | Exact visit counts, quantity activity/inactive controls and frozen interpretation counts pass |
+| Retained replay | 159 requests and 159 permutations; zero differences or pre-request refusals; source corpus read-only |
+| Focused census and shadow | Each passes 59 tests, 53 exact native-loader v1 matches and 53 comparisons of all seven stages with zero skips |
+| Fresh focused recordings | Each lane replays 53 requests and 53 permutations with zero differences or pre-request refusals |
+| Live Python loader oracle | 274 tests pass, including the eight-seed refusals and valid mixed INTEGER/REAL control |
+| Rust journals/custody/pyjson/pytext/envelope suites | 679 tests pass; zero failures or ignored tests |
+| Frozen loader vectors | All 76 byte vectors and 43 refusals regenerate without changes |
+| Static and inventory gates | Offline release/all-target clippy with `test-harness` and `-D warnings`, workspace formatting, catalogue applicability, inventory update and 57-test CI preflight pass |
+
+The [fresh loader mutation campaign](r4-native-loader-determinism-mutations.json)
+kills **all 357 entries**, with zero survivors or runner errors; all
+**46 named witness filters** pass unmutated first. The catalogue retains
+all 308 loader-9 and 47 BLOB entries and adds `JL-reference-mixed-type-guard`
+and `JL-revision-validation-code`. Removing the new Python guard is killed by
+the fresh-process seed witness. Existing mixed-reference recipes are re-anchored
+to the typed refusal, and the former variant-rule IDs now enforce exact boundary
+matching and BLOB seed coverage. The merge also narrows `JL-integer-string` to
+its string arm because BLOB conversion introduced a second parser call.
+The [branch map](r4-native-loader-branch-map.md) includes the combined contracts.
+The inherited complete **2,292-entry custody campaign** remains the loader-9
+record; this continuation does not claim a fresh custody mutation campaign.
+
+The [machine-readable acceptance record](r4-native-loader-determinism-verification.json)
+contains source/catalogue/harness fingerprints, the native probe hash, each gate's
+log/hash and campaign provenance. The earlier focused-run assertion compared
+native-only metadata with the Python refusal projection; it was corrected to
+compare family/code/message, and the complete 274-test oracle passes afterward.
+Preflight found the static error-code index needed the new validation site and
+shifted source locations; the reviewed snapshot is refreshed and all 57 tests pass.
+Timing is inherited from the BLOB same-host regression record, which stays
+within 5% of its retained loader-8 baseline; no fresh benchmark is claimed.
+
+Verification uses Rust 1.99.1, locked Python 3.11.17 and uv 0.13.6, offline
+Cargo, `CARGO_BUILD_JOBS=8` and `MATURIN_NO_INSTALL_RUST=1`, without changing
+`HOME` or dependencies. One test job runs at a time. All scratch is under
+`target/r4-loader-determinism`; mutation scratch/build trees, verification
+build trees and the copied uv cache are removed after summarizing. The native
+probe, synthetic audit records, scripts, source-bound incremental mutation
+results and logs remain. A manual second review covers guard precedence,
+scalar identity, exact boundary pairing, all forty case identities, named kills,
+zero writes and authority. No background job remains at handoff. This is local
+only: no push, PR, external comment or production authority switch.
 
 ## R4-13 integration contract
 

@@ -1,0 +1,2163 @@
+{
+  "fingerprint": "cff2f6b056ee6137da79f47f012327c86440fc415a47ce31733731db7333dd62",
+  "catalogs": {
+    "crates/journals/scripts/loader_mutations.json": "86768153d83dcf3f7580ea552c057c2fd51793c4e02868330e2c37fdfb13f8a8",
+    "crates/journals/scripts/loader_blob_mutations.json": "75a3feb7fddcea71bdd68bbd522e681272d9309d227350bf230cd924d73145cd"
+  },
+  "entries": 357,
+  "killed": 357,
+  "survivors": [],
+  "errors": [],
+  "unmutated_witness_filters": 46,
+  "wall_seconds": 2163.6707955180027,
+  "kill_set_equals_catalog": true,
+  "kills": [
+    {
+      "id": "JL-write-lock",
+      "tests": [
+        "native_loader_requires_caller_write_transaction"
+      ]
+    },
+    {
+      "id": "JL-integer-storage",
+      "tests": [
+        "native_loader_keeps_sql_values_and_refuses_blob_coercion"
+      ]
+    },
+    {
+      "id": "JL-real-storage",
+      "tests": [
+        "native_loader_keeps_sql_values_and_refuses_blob_coercion"
+      ]
+    },
+    {
+      "id": "JL-duplicate-column",
+      "tests": [
+        "native_loader_keeps_sql_values_and_refuses_blob_coercion"
+      ]
+    },
+    {
+      "id": "JL-active-components",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-leg-order",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-anchor-lookup",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-loan-deletion",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-evidence-subject",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-migration-resolution",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-latest-review",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-channel-kind",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-config-marker",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-script-source",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-outpoint-source",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-retired-policy",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-inventory-account",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-scan-warning",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-derived-history",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-worklist-threshold",
+      "tests": [
+        "native_loader_bounds_gap_worklist"
+      ]
+    },
+    {
+      "id": "JL-source-budget",
+      "tests": [
+        "native_loader_bounds_gap_worklist"
+      ]
+    },
+    {
+      "id": "JL-typed-limit",
+      "tests": [
+        "native_loader_bounds_gap_worklist"
+      ]
+    },
+    {
+      "id": "JL-return-limit",
+      "tests": [
+        "native_loader_bounds_gap_worklist"
+      ]
+    },
+    {
+      "id": "JL-nonobject-config",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-blob-refusal",
+      "tests": [
+        "native_loader_keeps_sql_values_and_refuses_blob_coercion"
+      ]
+    },
+    {
+      "id": "JL-direct-null",
+      "tests": [
+        "native_loader_reads_direct_columns_without_conversion"
+      ]
+    },
+    {
+      "id": "JL-direct-integer",
+      "tests": [
+        "native_loader_reads_direct_columns_without_conversion"
+      ]
+    },
+    {
+      "id": "JL-direct-real",
+      "tests": [
+        "native_loader_reads_direct_columns_without_conversion"
+      ]
+    },
+    {
+      "id": "JL-direct-blob",
+      "tests": [
+        "native_loader_reads_direct_columns_without_conversion"
+      ]
+    },
+    {
+      "id": "JL-direct-nonfinite",
+      "tests": [
+        "native_loader_preserves_nonfinite_real_until_downstream"
+      ]
+    },
+    {
+      "id": "JL-direct-duplicate",
+      "tests": [
+        "native_loader_reads_direct_columns_without_conversion"
+      ]
+    },
+    {
+      "id": "JL-column-order",
+      "tests": [
+        "native_loader_reads_direct_columns_without_conversion"
+      ]
+    },
+    {
+      "id": "JL-config-cache-hit",
+      "tests": [
+        "native_loader_reads_direct_columns_without_conversion"
+      ]
+    },
+    {
+      "id": "JL-config-cache-insert",
+      "tests": [
+        "native_loader_reads_direct_columns_without_conversion"
+      ]
+    },
+    {
+      "id": "JL-config-nontext",
+      "tests": [
+        "native_loader_reads_direct_columns_without_conversion"
+      ]
+    },
+    {
+      "id": "JL-config-direct-marker",
+      "tests": [
+        "native_loader_reads_direct_columns_without_conversion"
+      ]
+    },
+    {
+      "id": "JL-direct-threshold",
+      "tests": [
+        "native_loader_selects_bounded_worklist_from_active_count"
+      ]
+    },
+    {
+      "id": "JL-direct-active-count",
+      "tests": [
+        "native_loader_selects_bounded_worklist_from_active_count"
+      ]
+    },
+    {
+      "id": "JL-receipt-precedence",
+      "tests": [
+        "native_loader_preserves_receipt_error_precedence"
+      ]
+    },
+    {
+      "id": "JL-receipt-error-family",
+      "tests": [
+        "native_loader_preserves_receipt_error_precedence"
+      ]
+    },
+    {
+      "id": "JL-receipt-alias-last",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-receipt-negative-floor",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-receipt-horizon",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-receipt-empty-candidate",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-receipt-lexical-admission",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-receipt-escaped-json",
+      "tests": [
+        "native_loader_receipt_filter_never_rejects_possible_identities"
+      ]
+    },
+    {
+      "id": "JL-receipt-identity-length",
+      "tests": [
+        "native_loader_receipt_filter_never_rejects_possible_identities"
+      ]
+    },
+    {
+      "id": "JL-receipt-identity-reset",
+      "tests": [
+        "native_loader_receipt_filter_never_rejects_possible_identities"
+      ]
+    },
+    {
+      "id": "JL-receipt-numeric-id",
+      "tests": [
+        "native_loader_receipt_filter_never_rejects_possible_identities"
+      ]
+    },
+    {
+      "id": "JL-receipt-object-graph",
+      "tests": [
+        "native_loader_receipt_filter_never_rejects_possible_identities"
+      ]
+    },
+    {
+      "id": "JL-owned-used-horizon",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-owned-cache-horizon",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-direct-utf8",
+      "tests": [
+        "native_loader_reads_direct_columns_without_conversion"
+      ]
+    },
+    {
+      "id": "JL-direct-text",
+      "tests": [
+        "native_loader_reads_direct_columns_without_conversion"
+      ]
+    },
+    {
+      "id": "JL-receipt-accounting-precedence",
+      "tests": [
+        "native_loader_preserves_receipt_error_precedence"
+      ]
+    },
+    {
+      "id": "JL-receipt-component-precedence",
+      "tests": [
+        "native_loader_preserves_receipt_error_precedence"
+      ]
+    },
+    {
+      "id": "JL-receipt-empty-script-fallback",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-existing-config-marker",
+      "tests": [
+        "native_loader_reads_direct_columns_without_conversion"
+      ]
+    },
+    {
+      "id": "JL-owned-cache-descriptor",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-shared-column-order",
+      "tests": [
+        "shared_record_preserves_map_semantics"
+      ]
+    },
+    {
+      "id": "JL-shared-column-unique",
+      "tests": [
+        "shared_record_preserves_map_semantics"
+      ]
+    },
+    {
+      "id": "JL-shared-column-reuse",
+      "tests": [
+        "shared_record_preserves_map_semantics"
+      ]
+    },
+    {
+      "id": "JL-shared-get-position",
+      "tests": [
+        "shared_record_preserves_map_semantics"
+      ]
+    },
+    {
+      "id": "JL-shared-contains",
+      "tests": [
+        "shared_record_preserves_map_semantics"
+      ]
+    },
+    {
+      "id": "JL-shared-map-values",
+      "tests": [
+        "shared_record_preserves_map_semantics"
+      ]
+    },
+    {
+      "id": "JL-shared-serialize",
+      "tests": [
+        "shared_record_preserves_map_semantics"
+      ]
+    },
+    {
+      "id": "JL-config-memo-admission",
+      "tests": [
+        "shared_snapshot_config_admission_checks_every_population"
+      ]
+    },
+    {
+      "id": "JL-config-second-column",
+      "tests": [
+        "shared_snapshot_config_admission_checks_every_population"
+      ]
+    },
+    {
+      "id": "JL-config-anchor-admission",
+      "tests": [
+        "shared_snapshot_config_admission_checks_every_population"
+      ]
+    },
+    {
+      "id": "JL-safe-confirmation-column",
+      "tests": [
+        "native_loader_filters_only_safe_confirmation_columns"
+      ]
+    },
+    {
+      "id": "JL-raw-confirmation-column",
+      "tests": [
+        "native_loader_filters_only_safe_confirmation_columns"
+      ]
+    },
+    {
+      "id": "JL-safe-row-confirmation",
+      "tests": [
+        "native_loader_filters_only_safe_confirmation_columns"
+      ]
+    },
+    {
+      "id": "JL-dropped-text-validation",
+      "tests": [
+        "native_loader_filters_only_safe_confirmation_columns"
+      ]
+    },
+    {
+      "id": "JL-owned-config-refusal-family",
+      "tests": [
+        "native_loader_preserves_receipt_error_precedence"
+      ]
+    },
+    {
+      "id": "JL-owned-config-refusal-message",
+      "tests": [
+        "native_loader_preserves_receipt_error_precedence"
+      ]
+    },
+    {
+      "id": "JL-owned-address-refusal-family",
+      "tests": [
+        "native_loader_preserves_receipt_error_precedence"
+      ]
+    },
+    {
+      "id": "JL-owned-address-refusal-message",
+      "tests": [
+        "native_loader_preserves_receipt_error_precedence"
+      ]
+    },
+    {
+      "id": "JL-owned-summary-refusal-order",
+      "tests": [
+        "native_loader_preserves_receipt_error_precedence"
+      ]
+    },
+    {
+      "id": "JL-owned-empty-inventory-label",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-receipt-raw-inventory-label",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-owned-outpoint-refusal",
+      "tests": [
+        "native_loader_preserves_receipt_error_precedence"
+      ]
+    },
+    {
+      "id": "JL-outpoint-repr-limit",
+      "tests": [
+        "native_loader_outpoint_integer_preserves_python_refusals"
+      ]
+    },
+    {
+      "id": "JL-outpoint-digit-limit",
+      "tests": [
+        "native_loader_outpoint_integer_preserves_python_refusals"
+      ]
+    },
+    {
+      "id": "JL-outpoint-nonfinite",
+      "tests": [
+        "native_loader_outpoint_integer_preserves_python_refusals"
+      ]
+    },
+    {
+      "id": "JL-outpoint-nan-family",
+      "tests": [
+        "native_loader_outpoint_integer_preserves_python_refusals"
+      ]
+    },
+    {
+      "id": "JL-outpoint-infinity-family",
+      "tests": [
+        "native_loader_outpoint_integer_preserves_python_refusals"
+      ]
+    },
+    {
+      "id": "JL-outpoint-prefix-limit",
+      "tests": [
+        "native_loader_outpoint_integer_preserves_python_refusals"
+      ]
+    },
+    {
+      "id": "JL-outpoint-prefix-sign",
+      "tests": [
+        "native_loader_outpoint_integer_preserves_python_refusals"
+      ]
+    },
+    {
+      "id": "JL-outpoint-prefix-unicode-space",
+      "tests": [
+        "native_loader_outpoint_integer_preserves_python_refusals"
+      ]
+    },
+    {
+      "id": "JL-outpoint-prefix-parse",
+      "tests": [
+        "native_loader_outpoint_integer_preserves_python_refusals"
+      ]
+    },
+    {
+      "id": "JL-utf8-column",
+      "tests": [
+        "native_loader_utf8_refusals_preserve_python_column_order_and_message"
+      ]
+    },
+    {
+      "id": "JL-utf8-limit",
+      "tests": [
+        "native_loader_utf8_refusals_preserve_python_column_order_and_message"
+      ]
+    },
+    {
+      "id": "JL-utf8-nul",
+      "tests": [
+        "native_loader_utf8_refusals_preserve_python_column_order_and_message"
+      ]
+    },
+    {
+      "id": "JL-utf8-ascii",
+      "tests": [
+        "native_loader_utf8_refusals_preserve_python_column_order_and_message"
+      ]
+    },
+    {
+      "id": "JL-utf8-physical-order",
+      "tests": [
+        "native_loader_utf8_refusals_preserve_python_column_order_and_message"
+      ]
+    },
+    {
+      "id": "JL-utf8-auxiliary-validation",
+      "tests": [
+        "native_loader_utf8_refusals_preserve_python_column_order_and_message"
+      ]
+    },
+    {
+      "id": "JL-confirmation-capture",
+      "tests": [
+        "native_loader_preserves_receipt_error_precedence"
+      ]
+    },
+    {
+      "id": "JL-confirmation-version",
+      "tests": [
+        "native_loader_preserves_receipt_error_precedence"
+      ]
+    },
+    {
+      "id": "JL-confirmation-graph",
+      "tests": [
+        "native_loader_preserves_receipt_error_precedence"
+      ]
+    },
+    {
+      "id": "JL-confirmation-field-order",
+      "tests": [
+        "native_loader_preserves_receipt_error_precedence"
+      ]
+    },
+    {
+      "id": "JL-utf8-review-fallback",
+      "tests": [
+        "native_loader_utf8_optional_reviews_preserve_python_fallback"
+      ]
+    },
+    {
+      "id": "JL-revision-reference-storage",
+      "tests": [
+        "native_loader_refuses_mixed_revision_references_before_output"
+      ]
+    },
+    {
+      "id": "JL-negative-nonfinite",
+      "tests": [
+        "native_loader_preserves_nonfinite_real_until_downstream"
+      ]
+    },
+    {
+      "id": "JL-nan-storage",
+      "tests": [
+        "native_loader_preserves_nonfinite_real_until_downstream"
+      ]
+    },
+    {
+      "id": "JL-revision-integer-order",
+      "tests": [
+        "native_loader_revision_order_preserves_python_numeric_identity"
+      ]
+    },
+    {
+      "id": "JL-revision-real-order",
+      "tests": [
+        "native_loader_revision_order_preserves_python_numeric_identity"
+      ]
+    },
+    {
+      "id": "JL-revision-mixed-integer-real",
+      "tests": [
+        "native_loader_revision_order_preserves_python_numeric_identity"
+      ]
+    },
+    {
+      "id": "JL-revision-mixed-real-integer",
+      "tests": [
+        "native_loader_revision_order_preserves_python_numeric_identity"
+      ]
+    },
+    {
+      "id": "JL-revision-upper-range",
+      "tests": [
+        "native_loader_revision_order_preserves_python_numeric_identity"
+      ]
+    },
+    {
+      "id": "JL-revision-lower-range",
+      "tests": [
+        "native_loader_revision_order_preserves_python_numeric_identity"
+      ]
+    },
+    {
+      "id": "JL-revision-fraction",
+      "tests": [
+        "native_loader_revision_order_preserves_python_numeric_identity"
+      ]
+    },
+    {
+      "id": "JL-revision-exact-integer",
+      "tests": [
+        "native_loader_revision_order_preserves_python_numeric_identity"
+      ]
+    },
+    {
+      "id": "JL-revision-text-order",
+      "tests": [
+        "native_loader_revision_order_preserves_python_numeric_identity"
+      ]
+    },
+    {
+      "id": "JL-revision-is-text",
+      "tests": [
+        "native_loader_revision_order_preserves_python_numeric_identity"
+      ]
+    },
+    {
+      "id": "JL-revision-unsupported",
+      "tests": [
+        "native_loader_revision_order_preserves_python_numeric_identity"
+      ]
+    },
+    {
+      "id": "JL-revision-bind",
+      "tests": [
+        "native_loader_revision_queries_keep_sqlite_binding_types"
+      ]
+    },
+    {
+      "id": "JL-integer-overflow",
+      "tests": [
+        "native_loader_caught_integer_errors_still_propagate_overflow"
+      ]
+    },
+    {
+      "id": "JL-confirmation-overflow",
+      "tests": [
+        "native_loader_integer_overflow_refusals_match_python"
+      ]
+    },
+    {
+      "id": "JL-receipt-branch-overflow",
+      "tests": [
+        "native_loader_integer_overflow_refusals_match_python"
+      ]
+    },
+    {
+      "id": "JL-receipt-index-overflow",
+      "tests": [
+        "native_loader_integer_overflow_refusals_match_python"
+      ]
+    },
+    {
+      "id": "JL-current-scan-overflow",
+      "tests": [
+        "native_loader_preserves_receipt_error_precedence"
+      ]
+    },
+    {
+      "id": "JL-historic-scan-overflow",
+      "tests": [
+        "native_loader_preserves_receipt_error_precedence"
+      ]
+    },
+    {
+      "id": "JL-checkpoint-overflow",
+      "tests": [
+        "native_loader_preserves_receipt_error_precedence"
+      ]
+    },
+    {
+      "id": "JL-loaded-admission",
+      "tests": [
+        "native_loader_legacy_scalars_keep_downstream_admission"
+      ]
+    },
+    {
+      "id": "JL-projection-loaded-admission",
+      "tests": [
+        "native_loader_legacy_scalars_keep_downstream_admission"
+      ]
+    },
+    {
+      "id": "JL-component-integer-infinity",
+      "tests": [
+        "component_integer_refusal_messages_match_python"
+      ]
+    },
+    {
+      "id": "JL-component-integer-message",
+      "tests": [
+        "component_integer_refusal_messages_match_python"
+      ]
+    },
+    {
+      "id": "JL-component-sort-message",
+      "tests": [
+        "component_header_sort_retains_python_type_errors"
+      ]
+    },
+    {
+      "id": "JL-price-message",
+      "tests": [
+        "finalized_price_errors_keep_field_code_and_message"
+      ]
+    },
+    {
+      "id": "JL-price-code",
+      "tests": [
+        "finalized_price_errors_keep_field_code_and_message"
+      ]
+    },
+    {
+      "id": "JL-revision-message-family",
+      "tests": [
+        "native_loader_refuses_mixed_revision_references_before_output"
+      ]
+    },
+    {
+      "id": "JL-revision-message-text",
+      "tests": [
+        "native_loader_refuses_mixed_revision_references_before_output"
+      ]
+    },
+    {
+      "id": "JL-revision-message-int",
+      "tests": [
+        "native_loader_revision_order_preserves_python_numeric_identity"
+      ]
+    },
+    {
+      "id": "JL-revision-message-real",
+      "tests": [
+        "native_loader_revision_order_preserves_python_numeric_identity"
+      ]
+    },
+    {
+      "id": "JL-audit-seed-variants",
+      "tests": [
+        "tests/test_rust_custody_loader.py::test_loader_revision_audit_requires_exact_refusal_pairs"
+      ]
+    },
+    {
+      "id": "JL-audit-seed-code",
+      "tests": [
+        "tests/test_rust_custody_loader.py::test_loader_revision_audit_requires_exact_refusal_pairs"
+      ]
+    },
+    {
+      "id": "JL-convert-null",
+      "tests": [
+        "native_loader_scalar_helpers_preserve_types_and_missing_values"
+      ]
+    },
+    {
+      "id": "JL-convert-bool",
+      "tests": [
+        "native_loader_scalar_helpers_preserve_types_and_missing_values"
+      ]
+    },
+    {
+      "id": "JL-convert-int",
+      "tests": [
+        "native_loader_scalar_helpers_preserve_types_and_missing_values"
+      ]
+    },
+    {
+      "id": "JL-convert-list",
+      "tests": [
+        "native_loader_scalar_helpers_preserve_types_and_missing_values"
+      ]
+    },
+    {
+      "id": "JL-convert-key",
+      "tests": [
+        "native_loader_scalar_helpers_preserve_types_and_missing_values"
+      ]
+    },
+    {
+      "id": "JL-get-found",
+      "tests": [
+        "native_loader_scalar_helpers_preserve_types_and_missing_values"
+      ]
+    },
+    {
+      "id": "JL-set-existing",
+      "tests": [
+        "native_loader_scalar_helpers_preserve_types_and_missing_values"
+      ]
+    },
+    {
+      "id": "JL-set-new",
+      "tests": [
+        "native_loader_scalar_helpers_preserve_types_and_missing_values"
+      ]
+    },
+    {
+      "id": "JL-truth-null",
+      "tests": [
+        "native_loader_scalar_helpers_preserve_types_and_missing_values"
+      ]
+    },
+    {
+      "id": "JL-truth-bool",
+      "tests": [
+        "native_loader_scalar_helpers_preserve_types_and_missing_values"
+      ]
+    },
+    {
+      "id": "JL-truth-int",
+      "tests": [
+        "native_loader_scalar_helpers_preserve_types_and_missing_values"
+      ]
+    },
+    {
+      "id": "JL-truth-float",
+      "tests": [
+        "native_loader_scalar_helpers_preserve_types_and_missing_values"
+      ]
+    },
+    {
+      "id": "JL-truth-string",
+      "tests": [
+        "native_loader_scalar_helpers_preserve_types_and_missing_values"
+      ]
+    },
+    {
+      "id": "JL-truth-list",
+      "tests": [
+        "native_loader_scalar_helpers_preserve_types_and_missing_values"
+      ]
+    },
+    {
+      "id": "JL-truth-dict",
+      "tests": [
+        "native_loader_scalar_helpers_preserve_types_and_missing_values"
+      ]
+    },
+    {
+      "id": "JL-parsed-string",
+      "tests": [
+        "native_loader_scalar_helpers_preserve_types_and_missing_values"
+      ]
+    },
+    {
+      "id": "JL-sql-null",
+      "tests": [
+        "native_loader_scalar_helpers_preserve_types_and_missing_values"
+      ]
+    },
+    {
+      "id": "JL-app-family",
+      "tests": [
+        "native_loader_refusal_attributes_and_display_keep_private_values_out"
+      ]
+    },
+    {
+      "id": "JL-app-code",
+      "tests": [
+        "native_loader_refusal_attributes_and_display_keep_private_values_out"
+      ]
+    },
+    {
+      "id": "JL-app-hint",
+      "tests": [
+        "native_loader_refusal_attributes_and_display_keep_private_values_out"
+      ]
+    },
+    {
+      "id": "JL-app-details",
+      "tests": [
+        "native_loader_refusal_attributes_and_display_keep_private_values_out"
+      ]
+    },
+    {
+      "id": "JL-app-retryable",
+      "tests": [
+        "native_loader_refusal_attributes_and_display_keep_private_values_out"
+      ]
+    },
+    {
+      "id": "JL-display-database",
+      "tests": [
+        "native_loader_refusal_attributes_and_display_keep_private_values_out"
+      ]
+    },
+    {
+      "id": "JL-display-invalid",
+      "tests": [
+        "native_loader_refusal_attributes_and_display_keep_private_values_out"
+      ]
+    },
+    {
+      "id": "JL-display-reference",
+      "tests": [
+        "native_loader_refusal_attributes_and_display_keep_private_values_out"
+      ]
+    },
+    {
+      "id": "JL-operational-class",
+      "tests": [
+        "native_loader_refusal_attributes_and_display_keep_private_values_out"
+      ]
+    },
+    {
+      "id": "JL-address-case",
+      "tests": [
+        "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+      ]
+    },
+    {
+      "id": "JL-address-base58",
+      "tests": [
+        "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+      ]
+    },
+    {
+      "id": "JL-integer-int",
+      "tests": [
+        "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+      ]
+    },
+    {
+      "id": "JL-integer-bool",
+      "tests": [
+        "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+      ]
+    },
+    {
+      "id": "JL-integer-float",
+      "tests": [
+        "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+      ]
+    },
+    {
+      "id": "JL-integer-string",
+      "tests": [
+        "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+      ]
+    },
+    {
+      "id": "JL-script-space",
+      "tests": [
+        "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+      ]
+    },
+    {
+      "id": "JL-script-hex",
+      "tests": [
+        "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+      ]
+    },
+    {
+      "id": "JL-addresses-string",
+      "tests": [
+        "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+      ]
+    },
+    {
+      "id": "JL-addresses-list",
+      "tests": [
+        "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+      ]
+    },
+    {
+      "id": "JL-addresses-dict",
+      "tests": [
+        "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+      ]
+    },
+    {
+      "id": "JL-addresses-empty",
+      "tests": [
+        "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+      ]
+    },
+    {
+      "id": "JL-addresses-dedupe",
+      "tests": [
+        "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+      ]
+    },
+    {
+      "id": "JL-chain-default",
+      "tests": [
+        "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+      ]
+    },
+    {
+      "id": "JL-scope-fallback",
+      "tests": [
+        "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+      ]
+    },
+    {
+      "id": "JL-descriptor-presence",
+      "tests": [
+        "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+      ]
+    },
+    {
+      "id": "JL-descriptor-empty",
+      "tests": [
+        "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+      ]
+    },
+    {
+      "id": "JL-index-address-empty",
+      "tests": [
+        "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+      ]
+    },
+    {
+      "id": "JL-index-script-case",
+      "tests": [
+        "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+      ]
+    },
+    {
+      "id": "JL-index-script-empty",
+      "tests": [
+        "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+      ]
+    },
+    {
+      "id": "JL-index-outpoint-absent",
+      "tests": [
+        "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+      ]
+    },
+    {
+      "id": "JL-index-outpoint-case",
+      "tests": [
+        "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+      ]
+    },
+    {
+      "id": "JL-index-txid-empty",
+      "tests": [
+        "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+      ]
+    },
+    {
+      "id": "JL-index-txid-dedupe",
+      "tests": [
+        "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+      ]
+    },
+    {
+      "id": "JL-index-scoped-dedupe",
+      "tests": [
+        "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+      ]
+    },
+    {
+      "id": "JL-index-reference-filter",
+      "tests": [
+        "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+      ]
+    },
+    {
+      "id": "JL-index-scoped-filter",
+      "tests": [
+        "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+      ]
+    },
+    {
+      "id": "JL-index-txid-sort",
+      "tests": [
+        "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+      ]
+    },
+    {
+      "id": "JL-owned-activation",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-owned-wallet-scope",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-owned-inventory-chain",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-owned-inventory-network",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-owned-inventory-script",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-owned-current-scan",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-owned-scan-cap",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-owned-history-source",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-owned-history-nonempty",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-owned-descriptor-gate",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-owned-floor-warning",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-owned-derive-start",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-owned-derived-source",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-owned-unconfidential",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-owned-infer-txid",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-owned-infer-observed",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-owned-infer-vout",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-owned-infer-negative",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-owned-infer-exclusive",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-owned-reference-inputs",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-owned-reference-txid",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-receipt-scope-chain",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-receipt-scope-asset",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-receipt-wallet-count",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-receipt-wallet-direction",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-receipt-scope-empty",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-receipt-address-label",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-receipt-script-raw",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-receipt-script-address",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-receipt-checkpoint-merge",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-receipt-default-horizon",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-receipt-derive-start",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-receipt-script-filter",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-receipt-deprecated",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-receipt-count",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-worklist-budget-branch",
+      "tests": [
+        "native_loader_bounds_gap_worklist"
+      ]
+    },
+    {
+      "id": "JL-worklist-range-branch",
+      "tests": [
+        "native_loader_bounds_gap_worklist"
+      ]
+    },
+    {
+      "id": "JL-worklist-source-order",
+      "tests": [
+        "native_loader_worklist_ranks_sources_across_assets_before_budgeting"
+      ]
+    },
+    {
+      "id": "JL-parameter-null",
+      "tests": [
+        "native_loader_worklist_parameters_keep_sqlite_scalar_types"
+      ]
+    },
+    {
+      "id": "JL-parameter-int",
+      "tests": [
+        "native_loader_worklist_parameters_keep_sqlite_scalar_types"
+      ]
+    },
+    {
+      "id": "JL-parameter-real",
+      "tests": [
+        "native_loader_worklist_parameters_keep_sqlite_scalar_types"
+      ]
+    },
+    {
+      "id": "JL-parameter-text",
+      "tests": [
+        "native_loader_worklist_parameters_keep_sqlite_scalar_types"
+      ]
+    },
+    {
+      "id": "JL-parameter-refusal",
+      "tests": [
+        "native_loader_worklist_parameters_keep_sqlite_scalar_types"
+      ]
+    },
+    {
+      "id": "JL-worklist-string",
+      "tests": [
+        "native_loader_worklist_parameters_keep_sqlite_scalar_types"
+      ]
+    },
+    {
+      "id": "JL-gate-ordered",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-gate-anchor-path",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-gate-fixed-order",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-gate-root-path",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-network-table",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-network-reference-table",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-network-reference-columns",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-network-private",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-network-source",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-anchor-identity",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-anchor-wallet",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-revision-identity",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-confirmation-null",
+      "tests": [
+        "native_loader_preserves_receipt_error_precedence"
+      ]
+    },
+    {
+      "id": "JL-confirmation-truth",
+      "tests": [
+        "native_loader_preserves_receipt_error_precedence"
+      ]
+    },
+    {
+      "id": "JL-rate-fallback",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-review-fallback",
+      "tests": [
+        "native_loader_utf8_optional_reviews_preserve_python_fallback"
+      ]
+    },
+    {
+      "id": "JL-convert-decimal",
+      "tests": [
+        "native_loader_scalar_helpers_preserve_types_and_missing_values"
+      ]
+    },
+    {
+      "id": "JL-convert-surrogate-string",
+      "tests": [
+        "native_loader_scalar_helpers_preserve_types_and_missing_values"
+      ]
+    },
+    {
+      "id": "JL-convert-surrogate-key",
+      "tests": [
+        "native_loader_scalar_helpers_preserve_types_and_missing_values"
+      ]
+    },
+    {
+      "id": "JL-truth-decimal",
+      "tests": [
+        "native_loader_scalar_helpers_preserve_types_and_missing_values"
+      ]
+    },
+    {
+      "id": "JL-query-discarded-text",
+      "tests": [
+        "native_loader_utf8_refusals_preserve_python_column_order_and_message"
+      ]
+    },
+    {
+      "id": "JL-config-allowlist",
+      "tests": [
+        "native_loader_adapter_preserves_order_and_refuses_invalid_shapes"
+      ]
+    },
+    {
+      "id": "JL-config-samourai-fields",
+      "tests": [
+        "native_loader_adapter_preserves_order_and_refuses_invalid_shapes"
+      ]
+    },
+    {
+      "id": "JL-config-samourai-shape",
+      "tests": [
+        "native_loader_adapter_preserves_order_and_refuses_invalid_shapes"
+      ]
+    },
+    {
+      "id": "JL-config-object-raw",
+      "tests": [
+        "native_loader_adapter_preserves_order_and_refuses_invalid_shapes"
+      ]
+    },
+    {
+      "id": "JL-config-cache-value",
+      "tests": [
+        "native_loader_bounds_gap_worklist"
+      ]
+    },
+    {
+      "id": "JL-adapter-list-shape",
+      "tests": [
+        "native_loader_adapter_preserves_order_and_refuses_invalid_shapes"
+      ]
+    },
+    {
+      "id": "JL-adapter-row-shape",
+      "tests": [
+        "native_loader_adapter_preserves_order_and_refuses_invalid_shapes"
+      ]
+    },
+    {
+      "id": "JL-adapter-missing-string",
+      "tests": [
+        "native_loader_adapter_preserves_order_and_refuses_invalid_shapes"
+      ]
+    },
+    {
+      "id": "JL-gate-native-order",
+      "tests": [
+        "native_loader_adapter_preserves_order_and_refuses_invalid_shapes"
+      ]
+    },
+    {
+      "id": "JL-receipt-scope-missing",
+      "tests": [
+        "native_loader_receipt_defaults_preserve_missing_scope_and_source_facts"
+      ]
+    },
+    {
+      "id": "JL-receipt-config-fallback",
+      "tests": [
+        "native_loader_receipt_defaults_preserve_missing_scope_and_source_facts"
+      ]
+    },
+    {
+      "id": "JL-receipt-kind-fallback",
+      "tests": [
+        "native_loader_receipt_defaults_preserve_missing_scope_and_source_facts"
+      ]
+    },
+    {
+      "id": "JL-receipt-label-fallback",
+      "tests": [
+        "native_loader_receipt_defaults_preserve_missing_scope_and_source_facts"
+      ]
+    },
+    {
+      "id": "JL-sql-loader-scope-01",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-sql-loader-scope-02",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-sql-direct-scope-01",
+      "tests": [
+        "native_loader_selects_bounded_worklist_from_active_count"
+      ]
+    },
+    {
+      "id": "JL-sql-direct-scope-02",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-sql-direct-scope-03",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-sql-direct-scope-04",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-sql-direct-scope-05",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-sql-direct-scope-06",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-sql-direct-scope-07",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-sql-direct-scope-08",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-sql-direct-scope-09",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-sql-direct-scope-10",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-sql-direct-scope-11",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-sql-direct-scope-12",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-sql-direct-scope-13",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-sql-direct-scope-14",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-sql-direct-scope-15",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-sql-direct-scope-16",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-sql-direct-scope-17",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-sql-direct-scope-18",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-sql-direct-scope-19",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-sql-direct-scope-20",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-sql-direct-scope-21",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-sql-direct-scope-22",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-sql-direct-scope-23",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-sql-ownership-scope-01",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-sql-ownership-scope-02",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-sql-ownership-scope-03",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-sql-ownership-scope-04",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-sql-ownership-scope-05",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-sql-receipts-scope-01",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-sql-receipts-scope-02",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-sql-receipts-scope-03",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-sql-receipts-scope-04",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-sql-receipts-scope-05",
+      "tests": [
+        "native_loader_matches_python_database_bytes"
+      ]
+    },
+    {
+      "id": "JL-sql-worklist-scope-01",
+      "tests": [
+        "native_loader_bounds_gap_worklist"
+      ]
+    },
+    {
+      "id": "JL-sql-worklist-scope-02",
+      "tests": [
+        "native_loader_bounds_gap_worklist"
+      ]
+    },
+    {
+      "id": "JL-sql-worklist-scope-03",
+      "tests": [
+        "native_loader_bounds_gap_worklist"
+      ]
+    },
+    {
+      "id": "JL-index-scoped-sort",
+      "tests": [
+        "native_loader_scoped_index_preserves_evidence_order_and_sorts_wallet_pairs"
+      ]
+    },
+    {
+      "id": "JL-index-scoped-outpoint-order",
+      "tests": [
+        "native_loader_scoped_index_preserves_evidence_order_and_sorts_wallet_pairs"
+      ]
+    },
+    {
+      "id": "JL-reference-mixed-type-guard",
+      "tests": [
+        "tests/test_rust_custody_loader.py::test_loader_mixed_revision_refusal_is_stable_across_hash_seeds"
+      ]
+    },
+    {
+      "id": "JL-revision-validation-code",
+      "tests": [
+        "native_loader_refuses_mixed_revision_references_before_output"
+      ]
+    },
+    {
+      "id": "JB-config-memo",
+      "tests": [
+        "native_loader_blob_conversions_preserve_bytes_and_consuming_policy"
+      ]
+    },
+    {
+      "id": "JB-parsed-bytes",
+      "tests": [
+        "native_loader_blob_conversions_preserve_bytes_and_consuming_policy"
+      ]
+    },
+    {
+      "id": "JB-ownership-config",
+      "tests": [
+        "native_loader_blob_conversions_preserve_bytes_and_consuming_policy"
+      ]
+    },
+    {
+      "id": "JB-bytes-int-ascii",
+      "tests": [
+        "native_loader_blob_conversions_preserve_bytes_and_consuming_policy"
+      ]
+    },
+    {
+      "id": "JB-bytes-int-error",
+      "tests": [
+        "native_loader_blob_conversions_preserve_bytes_and_consuming_policy"
+      ]
+    },
+    {
+      "id": "JB-typed-from-json",
+      "tests": [
+        "raw_bytes_preserve_identity_truth_integer_and_literal_maps"
+      ]
+    },
+    {
+      "id": "JB-typed-to-json",
+      "tests": [
+        "raw_bytes_preserve_identity_truth_integer_and_literal_maps"
+      ]
+    },
+    {
+      "id": "JB-bytes-truth",
+      "tests": [
+        "raw_bytes_preserve_identity_truth_integer_and_literal_maps"
+      ]
+    },
+    {
+      "id": "JB-bytes-string",
+      "tests": [
+        "raw_bytes_preserve_identity_truth_integer_and_literal_maps"
+      ]
+    },
+    {
+      "id": "JB-bytes-integer",
+      "tests": [
+        "raw_bytes_preserve_identity_truth_integer_and_literal_maps"
+      ]
+    },
+    {
+      "id": "JB-bytes-fast-json",
+      "tests": [
+        "raw_bytes_preserve_identity_truth_integer_and_literal_maps"
+      ]
+    },
+    {
+      "id": "JB-literal-tag-escape",
+      "tests": [
+        "json_snapshot_cannot_forge_internal_byte_scalars"
+      ]
+    },
+    {
+      "id": "JB-literal-map-roundtrip",
+      "tests": [
+        "raw_bytes_preserve_identity_truth_integer_and_literal_maps"
+      ]
+    },
+    {
+      "id": "JB-json-bytes-object",
+      "tests": [
+        "raw_bytes_preserve_identity_truth_integer_and_literal_maps"
+      ]
+    },
+    {
+      "id": "JB-component-int-kind",
+      "tests": [
+        "component_bytes_sort_and_integer_semantics_match_python"
+      ]
+    },
+    {
+      "id": "JB-component-int-repr",
+      "tests": [
+        "component_bytes_sort_and_integer_semantics_match_python"
+      ]
+    },
+    {
+      "id": "JB-component-byte-sort",
+      "tests": [
+        "component_bytes_sort_and_integer_semantics_match_python"
+      ]
+    },
+    {
+      "id": "JB-component-header-bytes",
+      "tests": [
+        "component_bytes_sort_and_integer_semantics_match_python"
+      ]
+    },
+    {
+      "id": "JB-revision-bind",
+      "tests": [
+        "native_loader_blob_revision_references_bind_and_refuse_before_output"
+      ]
+    },
+    {
+      "id": "JB-revision-byte-order",
+      "tests": [
+        "native_loader_blob_revision_identity_is_distinct_and_lexicographic"
+      ]
+    },
+    {
+      "id": "JB-revision-byte-type",
+      "tests": [
+        "native_loader_blob_revision_identity_is_distinct_and_lexicographic"
+      ]
+    },
+    {
+      "id": "JB-revision-mixed-text",
+      "tests": [
+        "native_loader_blob_revision_references_bind_and_refuse_before_output"
+      ]
+    },
+    {
+      "id": "JB-revision-mixed-number",
+      "tests": [
+        "native_loader_refuses_mixed_blob_numeric_revisions_before_queries"
+      ]
+    },
+    {
+      "id": "JB-json-bytes-refusal",
+      "tests": [
+        "bytes_json_policy_and_repr_match_python"
+      ]
+    },
+    {
+      "id": "JB-json-bytes-default",
+      "tests": [
+        "bytes_json_policy_and_repr_match_python"
+      ]
+    },
+    {
+      "id": "JB-json-bytes-message",
+      "tests": [
+        "native_loader_blob_conversions_preserve_bytes_and_consuming_policy"
+      ]
+    },
+    {
+      "id": "JB-json-bytes-bom",
+      "tests": [
+        "json_bytes_detect_encoding_without_changing_bytes_identity"
+      ]
+    },
+    {
+      "id": "JB-json-bytes-surrogates",
+      "tests": [
+        "raw_bytes_preserve_identity_truth_integer_and_literal_maps"
+      ]
+    },
+    {
+      "id": "JB-audit-blob-variant",
+      "tests": [
+        "tests/test_rust_custody_loader.py::test_loader_revision_audit_requires_exact_refusal_pairs"
+      ]
+    },
+    {
+      "id": "JB-convert-literal-map",
+      "tests": [
+        "native_loader_reads_direct_columns_without_conversion"
+      ]
+    },
+    {
+      "id": "JB-gate-literal-map",
+      "tests": [
+        "native_loader_reads_direct_columns_without_conversion"
+      ]
+    },
+    {
+      "id": "JB-json-bytes-utf32-le",
+      "tests": [
+        "json_bytes_detect_encoding_without_changing_bytes_identity"
+      ]
+    },
+    {
+      "id": "JB-json-bytes-utf32-be",
+      "tests": [
+        "json_bytes_detect_encoding_without_changing_bytes_identity"
+      ]
+    },
+    {
+      "id": "JB-json-bytes-utf16-le",
+      "tests": [
+        "json_bytes_detect_encoding_without_changing_bytes_identity"
+      ]
+    },
+    {
+      "id": "JB-json-bytes-utf16-be",
+      "tests": [
+        "json_bytes_detect_encoding_without_changing_bytes_identity"
+      ]
+    },
+    {
+      "id": "JB-json-bytes-truncation",
+      "tests": [
+        "json_bytes_detect_encoding_without_changing_bytes_identity"
+      ]
+    },
+    {
+      "id": "JB-json-bytes-unpaired",
+      "tests": [
+        "json_bytes_detect_encoding_without_changing_bytes_identity"
+      ]
+    },
+    {
+      "id": "JB-json-bytes-short-utf16",
+      "tests": [
+        "json_bytes_detect_encoding_without_changing_bytes_identity"
+      ]
+    },
+    {
+      "id": "JB-bytes-repr-quotes",
+      "tests": [
+        "bytes_json_policy_and_repr_match_python"
+      ]
+    },
+    {
+      "id": "JB-query-bytes-truth",
+      "tests": [
+        "native_loader_blob_conversions_preserve_bytes_and_consuming_policy"
+      ]
+    },
+    {
+      "id": "JB-outpoint-bytes-ascii",
+      "tests": [
+        "native_loader_blob_conversions_preserve_bytes_and_consuming_policy"
+      ]
+    },
+    {
+      "id": "JB-evidence-byte-policy",
+      "tests": [
+        "evidence_bytes_use_utf8_replacement_before_canonical_json"
+      ]
+    },
+    {
+      "id": "JB-graph-byte-object",
+      "tests": [
+        "stored_graph_json_bytes_decode_only_at_the_mapping_consumer"
+      ]
+    },
+    {
+      "id": "JB-graph-byte-parse",
+      "tests": [
+        "stored_graph_json_bytes_decode_only_at_the_mapping_consumer"
+      ]
+    },
+    {
+      "id": "JB-graph-byte-truth",
+      "tests": [
+        "stored_graph_json_bytes_decode_only_at_the_mapping_consumer"
+      ]
+    },
+    {
+      "id": "JB-snapshot-wire-tag-guard",
+      "tests": [
+        "json_snapshot_cannot_forge_internal_byte_scalars"
+      ]
+    },
+    {
+      "id": "JB-json-raw-surrogates",
+      "tests": [
+        "json_parser_preserves_raw_surrogate_identity"
+      ]
+    }
+  ],
+  "schema": "kassiber.custody-loader-determinism-mutations.v1",
+  "manifest": "target/r4-loader-determinism/mutations/manifest.json",
+  "results": "target/r4-loader-determinism/mutations/results.jsonl",
+  "build_trees_deleted": true,
+  "scratch_deleted": true
+}

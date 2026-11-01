@@ -9,6 +9,7 @@ from dataclasses import asdict
 import json
 from typing import Any, Mapping
 
+from ..errors import AppError
 from . import ownership
 
 SCHEMA_VERSION = 1
@@ -198,6 +199,11 @@ def load_custody_snapshot(conn, profile, *, as_of: str):
         if row is not None:
             anchor_wallets.append(_safe_row(row))
     revision_headers = []
+    # INTEGER and REAL share Python's numeric ordering; TEXT and BLOB do not.
+    # Refuse before sorting the set so hash randomization cannot pick an error.
+    revision_types = {"number" if isinstance(value, (int, float)) else type(value).__name__ for value in revision_ids}
+    if len(revision_types) > 1:
+        raise AppError("Custody revision references contain incompatible types", code="validation")
     for component_id in sorted(revision_ids):
         row = conn.execute("SELECT * FROM custody_components WHERE id=?", (component_id,)).fetchone()
         if row is not None:
