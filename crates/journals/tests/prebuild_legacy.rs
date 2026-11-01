@@ -242,3 +242,28 @@ fn prebuild_legacy_sql_failure_propagates_and_rolls_back() {
     assert!(support::logical_equal(&support::snapshot(&c), &before));
     assert!(!c.is_autocommit());
 }
+
+#[test]
+fn prebuild_legacy_wide_and_malformed_reviewed_amounts() {
+    check(&[
+        "reviewed-null",
+        "reviewed-empty",
+        "reviewed-invalid-text",
+        "reviewed-fraction-text",
+        "reviewed-exponent-text",
+        "reviewed-unicode-text",
+        "reviewed-i128-text",
+        "reviewed-negative-i128-text",
+        "reviewed-max-digits",
+        "reviewed-too-many-digits",
+        "reviewed-leading-zero-limit",
+        "reviewed-real-negative",
+        "reviewed-below-i128-text",
+        "two-groups-invalid-text",
+        "two-groups-oversized",
+        "missing-outbound",
+        "missing-inbound",
+        "missing-commitments",
+        "resolved-issue-recurs",
+    ]);
+}

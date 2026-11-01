@@ -5,7 +5,7 @@ struct Transaction {
     occurred_at: String,
     confirmed_at: Option<String>,
     asset: String,
-    amount: i64,
+    amount: Sql,
     currency: Option<String>,
     rate: Sql,
     value: Sql,
@@ -46,11 +46,13 @@ impl Price {
                 };
                 Ok(Self::Special(text))
             }
-            Err(_) => {
+            Err(error) => {
                 let mut refusal = Refusal::new("AppError", format!("Invalid decimal value: {raw}"));
                 refusal.code = Some("app_error".into());
-                let mut cause =
-                    Refusal::new("InvalidOperation", "[<class 'decimal.ConversionSyntax'>]");
+                let mut cause = Refusal::new(
+                    "InvalidOperation",
+                    format!("[<class 'decimal.{}'>]", error.name()),
+                );
                 cause.retryable = None;
                 refusal.cause = Some(Box::new(cause));
                 Err(refusal)
@@ -240,6 +242,37 @@ fn real(value: &Option<Price>) -> Result<Sql, Refusal> {
     value.as_ref().map_or(Ok(Sql::Null), Price::real)
 }
 
+fn quantity(amount: &Sql, context: Context) -> Result<Option<Decimal>, Refusal> {
+    let integer = match amount {
+        Sql::Integer(n) if *n <= 0 => return Ok(None),
+        Sql::Integer(n) => Decimal::from(*n),
+        Sql::Real(n) if *n <= 0.0 => return Ok(None),
+        Sql::Real(n) if n.is_finite() => format!("{:.0}", n.trunc()).parse::<Decimal>()?,
+        Sql::Real(_) => {
+            return Err(Refusal::new(
+                "OverflowError",
+                "cannot convert float infinity to integer",
+            ))
+        }
+        Sql::Text(_) | Sql::Blob(_) | Sql::Null => {
+            let kind = match amount {
+                Sql::Text(_) => "str",
+                Sql::Blob(_) => "bytes",
+                _ => "NoneType",
+            };
+            return Err(Refusal::new(
+                "TypeError",
+                format!("'>' not supported between instances of '{kind}' and 'int'"),
+            ));
+        }
+    };
+    Ok(Some(
+        integer
+            .div(&Decimal::from(100_000_000_000i64), &context)
+            .map_err(arithmetic)?,
+    ))
+}
+
 pub(super) fn run(conn: &Connection, scope: &PricingScope<'_>) -> Result<usize, Refusal> {
     let mut statement = conn.prepare_cached(
         "SELECT id,occurred_at,confirmed_at,asset,amount,fiat_currency,fiat_rate,fiat_value,fiat_rate_exact,fiat_value_exact
@@ -333,25 +366,21 @@ pub(super) fn run(conn: &Connection, scope: &PricingScope<'_>) -> Result<usize, 
         drop(cached_rows);
         let mut rate = first(&[&row.rate_exact, &cached.rate_exact, &row.rate, &cached.rate])?;
         let mut value = first(&[&row.value_exact])?;
-        let quantity = if row.amount > 0 {
-            Some(
-                Decimal::from(row.amount)
-                    .div(&Decimal::from(100_000_000_000i64), &scope.decimal_context)?,
-            )
-        } else {
-            None
-        };
         if value.is_none() {
-            if let (Some(rate), Some(quantity)) = (&rate, &quantity) {
-                value = Some(rate.multiply(quantity, scope.decimal_context)?);
+            if let Some(rate) = &rate {
+                if let Some(quantity) = quantity(&row.amount, scope.decimal_context)? {
+                    value = Some(rate.multiply(&quantity, scope.decimal_context)?);
+                }
             }
         }
         if value.is_none() {
             value = first(&[&row.value])?;
         }
         if rate.is_none() {
-            if let (Some(value), Some(quantity)) = (&value, &quantity) {
-                rate = Some(value.divide(quantity, scope.decimal_context)?);
+            if let Some(value) = &value {
+                if let Some(quantity) = quantity(&row.amount, scope.decimal_context)? {
+                    rate = Some(value.divide(&quantity, scope.decimal_context)?);
+                }
             }
         }
         let manual = kassiber_pytext::lower(kassiber_pytext::strip(&cached.source)) == "manual";

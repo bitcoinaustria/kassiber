@@ -337,3 +337,13 @@ fn prebuild_sources_nonfinite_economics_refuses_without_writes() {
         }
     }
 }
+
+#[test]
+fn prebuild_sources_wide_economic_fingerprints() {
+    check(&[
+        "wide-economic-amount",
+        "wide-economic-fee",
+        "wide-economic-max-digits",
+        "wide-economic-i128",
+    ]);
+}

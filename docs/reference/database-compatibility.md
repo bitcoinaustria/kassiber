@@ -163,3 +163,13 @@ separately; whole-open Python cookie stability is not claimed.
 
 See the [page-index implementation evidence](transaction-page-index.md) for
 measurements and verification results.
+
+## Native journal pre-build legacy numeric inputs
+
+R4-10 changes no schema or stored values on open. The unregistered pre-build
+stage preserves historical REAL/text storage classes and the Python stage's
+lazy quantity conversion. Malformed reviewed integer text propagates its exact
+Python refusal and rolls back the stage; it does not silently become a skipped
+migration. An oversized valid integer becomes the same exact blocking migration
+issue as Python, without a native fixed-width panic. Existing fractional-msat
+truncation is retained only for parity; see the [R4-10 edge evidence](r4-journal-pipeline.md#r4-10-legacy-and-refusal-expansion).

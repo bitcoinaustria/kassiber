@@ -50,6 +50,16 @@ thread_local! {
 pub enum CapturedError {
     Sqlite(kassiber_store::rusqlite::Error),
     App(AppError),
+    Python {
+        family: &'static str,
+        message: String,
+    },
+}
+
+impl From<AppError> for CapturedError {
+    fn from(error: AppError) -> Self {
+        Self::App(error)
+    }
 }
 
 struct ErrorScope(bool);
@@ -65,7 +75,7 @@ impl Drop for ErrorScope {
 }
 
 pub(super) fn capture_sqlite<T>(
-    f: impl FnOnce() -> Result<T>,
+    f: impl FnOnce() -> std::result::Result<T, CapturedError>,
 ) -> std::result::Result<T, CapturedError> {
     SQLITE_ERRORS.with(|errors| errors.borrow_mut().push(None));
     let mut scope = ErrorScope(true);
@@ -75,7 +85,7 @@ pub(super) fn capture_sqlite<T>(
     match (result, error) {
         (Ok(value), _) => Ok(value),
         (Err(_), Some(error)) => Err(CapturedError::Sqlite(error)),
-        (Err(error), None) => Err(CapturedError::App(error)),
+        (Err(error), None) => Err(error),
     }
 }
 
@@ -230,7 +240,12 @@ mod tests {
         let c = Connection::open_in_memory().unwrap();
         let mapped = error(c.execute("SELECT absent", []).unwrap_err());
         assert_eq!(mapped.code, "internal_error");
-        let domain = || Err::<(), _>(AppError::new("validation", "domain refusal"));
+        let domain = || {
+            Err::<(), _>(CapturedError::App(AppError::new(
+                "validation",
+                "domain refusal",
+            )))
+        };
         assert!(matches!(capture_sqlite(domain), Err(CapturedError::App(_))));
         let raw = capture_sqlite(|| {
             c.execute("SELECT absent", []).map_err(error)?;

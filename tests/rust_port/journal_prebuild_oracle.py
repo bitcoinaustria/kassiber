@@ -131,6 +131,22 @@ def vectors():
         "quiet-nan": ({}, {"rate_exact": "-NaN001"}),
         "signaling-nan": ({}, {"rate_exact": "sNaN12"}),
         "clear-old-reference": ({"pricing_external_ref": "old-evidence"}, {}),
+        "rate-context-overflow": ({}, {"rate_exact": "1e1000000"}),
+        "rate-extreme-overflow": ({}, {"rate_exact": "1e999999999999999999"}),
+        "rate-construction-overflow": ({}, {"rate_exact": "1e1000000000000000000"}),
+        "rate-subnormal-underflow": ({}, {"rate_exact": "1e-1000031"}),
+        "rate-large-coefficient": ({}, {"rate_exact": '0.' + '1' * 5000}),
+        "rate-large-nan-payload": ({}, {"rate_exact": 'sNaN' + '1' * 5000}),
+        "legacy-real-amount": ({"amount": 1.75}, {}),
+        "legacy-negative-real-amount": ({"amount": -1.75}, {}),
+        "legacy-wide-real-amount": ({"amount": 1e20}, {}),
+        "legacy-text-amount": ({"amount": '1_000'}, {}),
+        "legacy-text-amount-cache-miss": ({"amount": '1_000'}, None),
+        "legacy-text-amount-unsupported": ({"amount": '1_000', "asset": 'ETH'}, {}),
+        "legacy-amount-skipped-for-existing-value": ({"amount": '1_000', "fiat_value_exact": '1', "fiat_price_source": 'rates_cache'}, {}),
+        "value-derived-rate": ({"fiat_value_exact": '1', "fiat_price_source": 'rates_cache'}, {"rate_exact": '', "rate": ''}),
+        "legacy-text-amount-value-derived-rate": ({"amount": '1_000', "fiat_value_exact": '1', "fiat_price_source": 'rates_cache'}, {"rate_exact": '', "rate": ''}),
+        "empty-rate-and-value": ({"amount": '1_000'}, {"rate_exact": '', "rate": ''}),
     }
     for name, (tx, cached) in cases.items():
         conn = sqlite3.connect(":memory:")

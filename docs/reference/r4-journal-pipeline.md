@@ -808,6 +808,44 @@ the performance continuation must measure the existing scoped rebuild cache
 and report the complete stage cost. The campaign record retains all raw CPU
 samples and benchmark-book identities.
 
+### R4-10 legacy and refusal expansion
+
+The separate-stage corpus now has 57 legacy, 69 pricing and 53 source cases.
+The ordered corpus has 50 cases, including the expanded edge operands and
+refusals after successful source repair, legacy activation, and an earlier
+independent legacy group. All before/after dumps preserve rowids, storage
+classes, exact decimal text, REAL bits, callback consumption, and result-field
+bytes. The native tests also retain pending caller writes and prove rollback.
+
+Reviewed amount text covers Python Unicode/underscore syntax, malformed,
+fractional and exponent text, positive and negative i128 boundaries, 4,300-digit
+accepted inputs, the 4,301-digit refusal, and leading-zero digit-limit counting.
+Missing anchors/commitments and a recurring resolved migration issue remain
+separate eligibility or refusal cases. Legacy integer conversion now preserves
+its raw Python exception family through the transfer helper; it does not become
+a skipped domain issue. Oversized positive reviewed quantities retain their
+exact value in the domain issue before any fixed-width conversion; nonpositive
+quantities cannot activate a slice. The scoped raw SQLite capture remains
+unwind-safe and retains technical exception precedence.
+
+Pricing covers decimal construction limits, arithmetic overflow/subnormal
+results, 5,000-digit coefficients and NaN payloads, legacy REAL/text quantities,
+missing caches, unsupported assets, existing values and value-derived rates.
+Quantity conversion happens only when Python needs it, after cache selection.
+The precise chained decimal refusal survives construction overflow.
+Python also truncates a fractional legacy quantity during pricing; reproduce
+with `uv run --locked python -m tests.rust_port.repro_journal_fractional_pricing`.
+The existing alias and fingerprint bugs and this quantity truncation remain
+unchanged in Python and are retained for parity.
+
+All **458 complete-dump comparisons** pass across real SQLite and SQLCipher
+files under the native socket guard; its self-test passes. Release all-target
+Clippy passes for both affected crates with warnings denied. Seven additional
+mutation recipes pin the corrected refusal paths; execution remains open.
+
+These are additional correctness checkpoints. Census/shadow, full mutation
+execution, cache optimization and whole-stage CPU acceptance remain open.
+
 ## Performance budget
 
 The budget is for the Rust binary's `journals process` (no `--auto-pair`) on

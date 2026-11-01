@@ -64,6 +64,9 @@ pub fn refresh_drifted_legacy_pair_components(
                         .take()
                         .unwrap_or_else(|| match e {
                             legacy_refresh::Error::App(e) => app(e),
+                            legacy_refresh::Error::Python { family, message } => {
+                                Refusal::new(family, message)
+                            }
                             legacy_refresh::Error::Sqlite(e) => match e {
                                 rusqlite::Error::SqliteFailure(code, Some(message)) => {
                                     Refusal::new(

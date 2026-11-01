@@ -212,21 +212,33 @@ pub(super) fn group_hashed(ordered: &[Value], full: bool, hashes: &[String]) -> 
         let target = principal(&boundary(row, "in")) - targets.get(&target_id).unwrap_or(&0);
         let explicit = value(row, "out_amount");
         let requested = if matches!(explicit, Value::Null) || explicit == s("") {
-            available
+            available.into()
+        } else if let Value::Int(n) = explicit {
+            n
         } else {
-            n(&explicit)
+            0.into()
         };
-        if requested > available {
+        if requested > available.into() {
             return Err(AppError::new(
                 "custody_legacy_group_invalid",
                 "a reviewed pair exceeds its available source quantity",
             )
             .with_details(dict([
                 ("pair_id", value(row, "id")),
-                ("requested_msat", num(requested)),
+                ("requested_msat", Value::Int(requested.clone())),
                 ("available_msat", num(available)),
             ])));
         }
+        let requested = if requested <= 0.into() {
+            0
+        } else {
+            requested.to_string().parse::<i128>().map_err(|_| {
+                AppError::new(
+                    "internal_error",
+                    "reviewed quantity exceeds available integer range",
+                )
+            })?
+        };
         let a = if conversion {
             requested.min(available)
         } else {

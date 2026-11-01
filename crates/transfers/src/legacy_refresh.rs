@@ -4,6 +4,8 @@ use kassiber_envelope::{s, set, truthy};
 use kassiber_store::rusqlite::{params, TransactionState};
 use std::collections::{BTreeMap, BTreeSet};
 
+type RefreshResult<T> = std::result::Result<T, Error>;
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ConsolidationResult {
     pub activated: usize,
@@ -29,7 +31,11 @@ impl Drop for Savepoint<'_> {
     }
 }
 
-fn atomic<T>(c: &Connection, name: &'static str, f: impl FnOnce() -> Result<T>) -> Result<T> {
+fn atomic<T>(
+    c: &Connection,
+    name: &'static str,
+    f: impl FnOnce() -> RefreshResult<T>,
+) -> RefreshResult<T> {
     c.execute_batch(&format!("SAVEPOINT {name}"))
         .map_err(sql::error)?;
     let mut guard = Savepoint(c, name, true);
@@ -54,7 +60,10 @@ impl Sources for FixedTime {
     }
 }
 
-fn domain(error: &AppError) -> bool {
+fn domain(error: &Error) -> bool {
+    let Error::App(error) = error else {
+        return false;
+    };
     error.code.starts_with("custody_")
         || matches!(
             error.code.as_str(),
@@ -119,7 +128,7 @@ fn link(c: &Connection, group: &[Value], id: &str) -> Result<()> {
     Ok(())
 }
 
-fn group_spec(group: &[Value]) -> Result<Value> {
+fn group_spec(group: &[Value]) -> RefreshResult<Value> {
     let mut ordered = group.to_vec();
     ordered.sort_by_key(|r| (text(r, "created_at"), text(r, "id")));
     let hashes = ordered
@@ -143,11 +152,23 @@ fn group_spec(group: &[Value]) -> Result<Value> {
             } else {
                 Value::Int(0.into())
             };
-            let parsed = integer(&raw)?;
+            let parsed = if let Value::Str(text) = &raw {
+                kassiber_pytext::parse_int(text.as_str().unwrap_or_default()).map_err(|error| Error::Python {
+                    family: "ValueError",
+                    message: match error {
+                        kassiber_pytext::NumberError::Invalid => format!(
+                            "invalid literal for int() with base 10: {}", kassiber_envelope::py_repr(&raw)),
+                        kassiber_pytext::NumberError::TooManyDigits(n) => format!(
+                            "Exceeds the limit (4300 digits) for integer string conversion: value has {n} digits; use sys.set_int_max_str_digits() to increase the limit"),
+                    },
+                })?
+            } else {
+                integer(&raw)?
+            };
             set(row, key, Value::Int(parsed));
         }
     }
-    spec::group_hashed(&ordered, true, &hashes)
+    spec::group_hashed(&ordered, true, &hashes).map_err(Error::App)
 }
 
 fn consolidate(
@@ -155,7 +176,7 @@ fn consolidate(
     scope: &Scope<'_>,
     group: &[Value],
     sources: &dyn Sources,
-) -> Result<bool> {
+) -> RefreshResult<bool> {
     atomic(c, "legacy_pair_group", || {
         let mut plan = group_spec(group)?;
         let mut linked: BTreeSet<_> = group
@@ -271,9 +292,12 @@ fn consolidate(
 fn record_issue(
     c: &Connection,
     group: &[Value],
-    error: &AppError,
+    error: &Error,
     sources: &dyn Sources,
 ) -> Result<()> {
+    let Error::App(error) = error else {
+        return Err(AppError::new("internal_error", "non-domain legacy refusal"));
+    };
     let now = sources.now(c)?;
     for row in group {
         let legacy = text(row, "id");
@@ -342,12 +366,13 @@ fn refresh(
     c: &Connection,
     scope: &Scope<'_>,
     sources: &dyn Sources,
-) -> Result<ConsolidationResult> {
+) -> RefreshResult<ConsolidationResult> {
     if c.transaction_state(Some("main")).map_err(sql::error)? != TransactionState::Write {
         return Err(AppError::new(
             "internal_error",
             "journal pre-build requires the caller's write transaction",
-        ));
+        )
+        .into());
     }
     atomic(c, "legacy_pair_refresh", || {
         let mut repairable = BTreeSet::new();

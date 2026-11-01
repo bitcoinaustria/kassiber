@@ -590,7 +590,7 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
 - [ ] R4-10 to R4-12: pre-build repairs, rendering and joins, persistence,
   each with byte or database-dump parity.
 - [ ] Finish the [R4-10 auto-pricing checkpoint](docs/reference/r4-journal-pipeline.md#r4-10-auto-pricing-checkpoint):
-  finish legacy/refusal coverage, census/shadow, mutation and CPU acceptance.
+  finish census/shadow, mutation and CPU acceptance.
   Cached pricing, source-overlap repair/warnings, and drifted legacy-pair refresh
   with profile reload have unregistered native interfaces and complete-dump
   oracles. The combined stage and split repair/price interface for R4-13 retain

@@ -103,7 +103,8 @@ def vectors():
     source = {case['name']: case for case in source_vectors()}
     cases = []
     for name in ('empty', 'cached-pricing', 'all-stages', 'domain-skip', 'pricing-refusal',
-                 'legacy-refusal', 'source-warning', 'repeat'):
+                 'legacy-refusal', 'source-warning', 'repeat', 'legacy-numeric-refusal',
+                 'legacy-digit-limit-refusal', 'pricing-construction-refusal'):
         conn = sqlite3.connect(':memory:')
         conn.row_factory = sqlite3.Row
         profile_id = 'p' if name in {'empty', 'cached-pricing'} else 'pf'
@@ -121,17 +122,20 @@ def vectors():
             with patch.object(migration, 'now_iso', return_value=CLOCK), patch('kassiber.core.custody_components._now_iso', return_value=CLOCK):
                 migration.refresh_legacy_authored_components(conn)
             conn.execute("UPDATE transactions SET kind='withdrawal' WHERE id='legacy-out'")
-            if name in {'domain-skip', 'legacy-refusal'}:
+            if name in {'domain-skip', 'legacy-refusal', 'legacy-numeric-refusal', 'legacy-digit-limit-refusal'}:
                 triggers = conn.execute("SELECT name,sql FROM sqlite_master WHERE type='trigger' AND tbl_name='transaction_pairs'").fetchall()
                 for trigger, _ in triggers:
                     conn.execute(f'DROP TRIGGER "{trigger}"')
                 if name == 'domain-skip':
                     conn.execute("UPDATE transaction_pairs SET out_amount=1001")
-                else:
+                elif name == 'legacy-refusal':
                     conn.execute("UPDATE transaction_pairs SET component_id='absent'")
+                else:
+                    conn.execute("UPDATE transaction_pairs SET out_amount=?",
+                                 ('bad' if name == 'legacy-numeric-refusal' else '1_' + '0' * 4300,))
                 for _, sql in triggers:
                     conn.execute(sql)
-            rate(conn, rate_exact='bad' if name == 'pricing-refusal' else '40000')
+            rate(conn, rate_exact={'pricing-refusal': 'bad', 'pricing-construction-refusal': '1e1000000000000000000'}.get(name, '40000'))
         if name == 'repeat':
             conn.commit()
             initial_ids = iter(uuid.UUID(int=i) for i in range(1000, 2000))
@@ -141,6 +145,21 @@ def vectors():
                 handlers.auto_price_transactions_from_rates_cache(conn, conn.execute("SELECT * FROM profiles WHERE id='pf'").fetchone())
         cases.append(capture(conn, name, profile_id))
         conn.close()
+    from tests.rust_port.journal_legacy_refresh_oracle import vectors as legacy_vectors
+    from tests.rust_port.journal_prebuild_oracle import vectors as pricing_vectors
+    for family, originals, generate, profile_id in (
+        ('legacy', 38, legacy_vectors, 'p'),
+        ('pricing', 53, pricing_vectors, 'p'),
+        ('sources', 49, source_vectors, 'pf'),
+    ):
+        for edge in generate()[originals:]:
+            conn = sqlite3.connect(':memory:')
+            conn.row_factory = sqlite3.Row
+            try:
+                restore(conn, edge['before'])
+                cases.append(capture(conn, family + '/' + edge['name'], profile_id))
+            finally:
+                conn.close()
     return cases
 
 

@@ -64,7 +64,14 @@ def vectors():
         "mixed-linked-group", "unlinked-neighbor", "changing-clock", "resolved-issue",
         "repeated-issue", "two-groups", "legacy-real-amount", "legacy-text-amount",
         "invalid-created-at", "empty-created-at", "offset-created-at",
-        "membership-refusal", "draft-exists", "repeated-drift", "repeated-drift-refusal",
+        "membership-refusal", "draft-exists",
+        "reviewed-null", "reviewed-empty", "reviewed-invalid-text", "reviewed-fraction-text",
+        "reviewed-exponent-text", "reviewed-unicode-text", "reviewed-i128-text",
+        "reviewed-negative-i128-text", "reviewed-max-digits", "reviewed-too-many-digits",
+        "reviewed-leading-zero-limit", "reviewed-real-negative", "missing-outbound",
+        "missing-inbound", "missing-commitments", "resolved-issue-recurs",
+        "two-groups-invalid-text", "two-groups-oversized", "reviewed-below-i128-text",
+        "repeated-drift", "repeated-drift-refusal",
     )
     output = []
     for name in names:
@@ -82,7 +89,7 @@ def vectors():
             conn.execute("UPDATE transaction_pairs SET out_amount=400")
             transaction(conn, "in-two", amount=500)
             pair(conn, "pair-two", target="in-two", amount=500)
-        if name in {"two-groups", "changing-clock"}:
+        if name in {"two-groups", "changing-clock", "two-groups-invalid-text", "two-groups-oversized"}:
             transaction(conn, "out-two", direction="outbound", amount=800)
             transaction(conn, "in-two", amount=800)
             pair(conn, "pair-two", "out-two", "in-two", 800)
@@ -129,6 +136,36 @@ def vectors():
             if changes[name][0].startswith("UPDATE custody_components"):
                 for guard in guards:
                     conn.execute(guard[1])
+        reviewed = {
+            'reviewed-null': None, 'reviewed-empty': '', 'reviewed-invalid-text': 'invalid',
+            'reviewed-fraction-text': '900.5', 'reviewed-exponent-text': '9e2',
+            'reviewed-unicode-text': '\u2003\u0669\u0660\u0660\u2003',
+            'reviewed-i128-text': '170_141183460469231731687303715884105727',
+            'reviewed-negative-i128-text': '-170_141183460469231731687303715884105728',
+            'reviewed-max-digits': '1_' + '0' * 4299,
+            'reviewed-too-many-digits': '1_' + '0' * 4300,
+            'reviewed-leading-zero-limit': '0_' + '0' * 4300 + '900',
+            'reviewed-real-negative': -900.5,
+            'reviewed-below-i128-text': '-170_141183460469231731687303715884105729',
+        }
+        if name in {'two-groups-invalid-text', 'two-groups-oversized'}:
+            conn.execute("UPDATE transaction_pairs SET out_amount=? WHERE id='pair-two'",
+                         ('bad' if name == 'two-groups-invalid-text' else '1_' + '0' * 4299,))
+        if name in reviewed:
+            conn.execute('UPDATE transaction_pairs SET out_amount=?', (reviewed[name],))
+        if name in {'missing-outbound', 'missing-inbound'}:
+            conn.execute('PRAGMA foreign_keys=OFF')
+            conn.execute('UPDATE transaction_pairs SET ' + ('out' if name == 'missing-outbound' else 'in') + "_transaction_id='absent'")
+        if name == 'missing-commitments':
+            guards = conn.execute("SELECT name,sql FROM sqlite_master WHERE type='trigger' AND tbl_name='custody_component_evidence_commitments'").fetchall()
+            for guard, _ in guards:
+                conn.execute(f'DROP TRIGGER "{guard}"')
+            conn.execute('DELETE FROM custody_component_evidence_commitments')
+            for _, sql in guards:
+                conn.execute(sql)
+        if name == 'resolved-issue-recurs':
+            conn.execute("UPDATE transaction_pairs SET out_amount=1001")
+            conn.execute("INSERT INTO custody_authored_migration_issues(id,workspace_id,profile_id,legacy_table,legacy_source_id,issue_code,transaction_ids_json,details_json,resolved_at,created_at,updated_at) VALUES('old-issue','w','p','transaction_pairs','pair','prior','[]','{}',?,?,?)", (CLOCK, CLOCK, CLOCK))
         if name in {"unlinked-neighbor", "connected-conversion", "mixed-linked-group"}:
             transaction(conn, "in-two", amount=100)
             pair(conn, "pair-two", target="in-two", amount=100)

@@ -155,3 +155,31 @@ fn prebuild_pricing_refusal_rolls_back_earlier_writes() {
         "rate-overflow",
     ]);
 }
+
+#[test]
+fn prebuild_pricing_extreme_decimal_refusals() {
+    check(&[
+        "rate-context-overflow",
+        "rate-extreme-overflow",
+        "rate-construction-overflow",
+        "rate-subnormal-underflow",
+        "rate-large-coefficient",
+        "rate-large-nan-payload",
+    ]);
+}
+
+#[test]
+fn prebuild_pricing_legacy_quantity_storage_and_lazy_refusals() {
+    check(&[
+        "legacy-real-amount",
+        "legacy-negative-real-amount",
+        "legacy-wide-real-amount",
+        "legacy-text-amount",
+        "legacy-text-amount-cache-miss",
+        "legacy-text-amount-unsupported",
+        "legacy-amount-skipped-for-existing-value",
+        "value-derived-rate",
+        "legacy-text-amount-value-derived-rate",
+        "empty-rate-and-value",
+    ]);
+}

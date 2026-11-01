@@ -77,6 +77,7 @@ def vectors():
         "script-hex", "script-pubkey-object", "script-pubkey-string", "raw-inventory-whitespace",
         "invalid-outputs", "invalid-inputs", "changing-clock", "invalid-deprecated-none",
         "legacy-real-amount", "legacy-real-fee", "invalid-economic-amount", "invalid-economic-fee", "economic-text-int",
+        "wide-economic-amount", "wide-economic-fee", "wide-economic-max-digits", "wide-economic-i128",
     )
     output = []
     for name in names:
@@ -127,7 +128,7 @@ def vectors():
             _utxo(conn, "duplicate", addr)
             _utxo(conn, "duplicate", ADDR_B, txid="bb")
             conn.execute("INSERT INTO freshness_source_states(profile_id,source_key,source_type,source_label,checkpoint_json,updated_at) VALUES('pf','onchain_wallet:duplicate','onchain_wallet','Address','{}',?)", (CLOCK,))
-        if name in {"trim-empty", "trim-partial", "duplicate", "multiple-duplicates", "outbound", "nested-raw", "review-conflict", "mixed-conflict", "excluded-duplicate", "script-hex", "script-pubkey-object", "script-pubkey-string", "invalid-outputs", "invalid-inputs", "changing-clock", "legacy-real-amount", "legacy-real-fee", "invalid-economic-amount", "invalid-economic-fee", "economic-text-int"} or name.startswith("unresolved-") or name == "deprecated-active":
+        if name in {"trim-empty", "trim-partial", "duplicate", "multiple-duplicates", "outbound", "nested-raw", "review-conflict", "mixed-conflict", "excluded-duplicate", "script-hex", "script-pubkey-object", "script-pubkey-string", "invalid-outputs", "invalid-inputs", "changing-clock", "legacy-real-amount", "legacy-real-fee", "invalid-economic-amount", "invalid-economic-fee", "economic-text-int"} or name.startswith(("unresolved-", "wide-economic-")) or name == "deprecated-active":
             direction = "outbound" if name in {"outbound", "invalid-inputs"} else "inbound"
             _tx(conn, "keep", "canonical", "AA" * 32, direction=direction, script_pubkey=_script(addr))
             _tx(conn, "exclude", "duplicate", "AA" * 32, direction=direction, script_pubkey=_script(addr))
@@ -144,6 +145,15 @@ def vectors():
             if name == "economic-text-int":
                 conn.execute("UPDATE transactions SET amount=1000 WHERE id='keep'")
                 conn.execute("UPDATE transactions SET amount='1_000' WHERE id='exclude'")
+            numeric = {
+                'wide-economic-amount': ('amount', '1_' + '0' * 4300),
+                'wide-economic-fee': ('fee', '1_' + '0' * 4300),
+                'wide-economic-max-digits': ('amount', '1_' + '0' * 4299),
+                'wide-economic-i128': ('amount', '170_141183460469231731687303715884105727'),
+            }
+            if name in numeric:
+                field, raw = numeric[name]
+                conn.execute(f'UPDATE transactions SET {field}=?', (raw,))
             if name == "unresolved-direction":
                 conn.execute("UPDATE transactions SET direction='outbound' WHERE id='exclude'")
                 conn.execute("UPDATE transactions SET raw_json=?", (json.dumps(dict(vin=[dict(prevout=dict(scriptpubkey=_script(addr)))],vout=[dict(scriptpubkey=_script(addr))])),))

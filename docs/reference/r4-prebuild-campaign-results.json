@@ -1,5 +1,49 @@
 {
   "base_commit": "9e8979d30",
+  "edge_expansion": {
+    "additional_reference_repro": "tests/rust_port/repro_journal_fractional_pricing.py",
+    "base_commit": "777204565",
+    "clippy": "release, both affected crates, all targets and test-harness, warnings denied: passed",
+    "corrected_native_paths": [
+      "Preserve ValueError and the 4300-digit limit for legacy reviewed text; rollback technical numeric refusals instead of recording domain skips",
+      "Compare arbitrary-sized reviewed integers before narrowing so oversized positive values retain exact domain issue details without panic",
+      "Retain decimal InvalidOperation versus ConversionSyntax in chained construction refusals",
+      "Convert historical REAL/text pricing quantities lazily after cache selection and only when a price requires quantity"
+    ],
+    "file_replay": {
+      "boundary": "ordered source repairs, drifted legacy pair refresh/profile reload, and cached pricing",
+      "full_dump_comparisons": 458,
+      "network": "native process killed on socket/connect/send syscalls; guard self-test passed"
+    },
+    "mutation_recipes": {
+      "catalog": "crates/journals/scripts/prebuild_edge_mutations.json",
+      "entries": 7,
+      "status": "Applicability checked; execution belongs to the next boundary"
+    },
+    "native_binary_sha256": "fa547d8f9a18974a00a4aba5aa4b2024dfa20f8976adccf5773e55e8bfe309c0",
+    "native_regressions": "106 journal/transfer tests pass before the final quantity fixture expansion; subsequent focused legacy/pipeline (15) and pricing/pipeline (15) tests pass",
+    "python_reference_unchanged": true,
+    "remaining": "Census/shadow, complete mutation campaign and uncovered branch audit, whole-stage cache/CPU optimization and acceptance",
+    "schema": "kassiber.r4-prebuild-edge-expansion.v1",
+    "vectors": {
+      "legacy": {
+        "cases": 57,
+        "sha256": "1a81abbec4d26a7819a2577efa358c58df3dd174b2dbe9bdea7b9c273e3ee58c"
+      },
+      "pipeline": {
+        "cases": 50,
+        "sha256": "446c044317d1133679ecbe5de938ed255ddde77610c78e33338482c568ef974b"
+      },
+      "pricing": {
+        "cases": 69,
+        "sha256": "3d86afbbc748a6896828794dbaa5bdae781c4fabe10b238cf58aef7d5a0171cc"
+      },
+      "sources": {
+        "cases": 53,
+        "sha256": "dde79e5916d97dc609cee47366b7c33e400c24b22c54221a50d2fd2e16431834"
+      }
+    }
+  },
   "fresh_full_books": {
     "activity_path": "target/r4-10/fresh-files.activity.jsonl",
     "activity_sha256": "72a97a6ad9fbcf3fe8f984665f6b44d1bd8c3f9716d3e518d1a6606e59d21feb",
@@ -17459,13 +17503,12 @@
     "stale_directory": "A nonempty recording directory is refused"
   },
   "remaining": [
-    "Broaden legacy/refusal inputs, including oversized numeric cases",
     "Complete focused census/shadow across the remaining pre-build branches",
     "Execute all 21 legacy, 7 pipeline and 46 existing pricing/source mutations, plus uncovered branch recipes and inherited required gates",
     "Profile whole-stage 20k process CPU, optimize caches, measure the cost breakdown against 0.03 s, and write acceptance"
   ],
   "schema": "kassiber.r4-prebuild-campaign-checkpoint.v2",
-  "status": "Generated and recorded coverage boundary; R4-10 remains unaccepted",
+  "status": "Generated/recorded and legacy/refusal coverage checkpoints; R4-10 remains unaccepted",
   "verification": {
     "classifier_update": "passed; two new oracle tests recorded",
     "combined_stage_file_comparisons": 16,
