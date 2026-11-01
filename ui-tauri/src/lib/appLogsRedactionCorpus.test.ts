@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import corpus from "../../../tests/fixtures/operational_redaction_cases.json";
 import stress from "../../../tests/fixtures/secret_redaction_stress_cases.json";
+import failClosed from "../../../tests/fixtures/secret_redaction_5e_cases.json";
 import secrets from "../../../tests/fixtures/secret_redaction_cases.json";
 
 let logs: typeof import("./appLogs");
@@ -49,4 +50,15 @@ it.each(stress)("keeps adversarial secret shape $name within the deadline", (tes
   const start = performance.now();
   logs.emitAppLog({ level: "info", module: "test", file: "test", line: 1, msg: text, fields: {} });
   expect(performance.now() - start).toBeLessThan(500);
+});
+
+it.each(failClosed)("fails closed for review regression $id", (testCase) => {
+  const output = logs.emitAppLog({ level: "info", module: "test", file: "test", line: 1, msg: testCase.input, fields: {} })!.msg;
+  if (testCase.sentinel) {
+    expect(output).not.toContain(testCase.sentinel);
+    for (let start = 0; start < testCase.sentinel.length - 3; start += 1) {
+      expect(output).not.toContain(testCase.sentinel.slice(start, start + 4));
+    }
+  }
+  for (const keep of testCase.preserved) expect(output).toContain(keep);
 });

@@ -106,33 +106,34 @@ const BARE_BIP39_WORD_RUN_PATTERNS: Array<[RegExp, TextBackstopReplacement]> =
 
 const SECRET_FLOOR_TEXT_PATTERNS: Array<[RegExp, TextBackstopReplacement]> = [
   ...BARE_BIP39_WORD_RUN_PATTERNS,
-  [/\b(?:5[1-9A-HJ-NP-Za-km-z]{49,50}|[KL][1-9A-HJ-NP-Za-km-z]{50,51})\b/g, "[redacted-private-key]"],
+  [/(?<![A-Za-z0-9_])nsec1[023456789acdefghjklmnpqrstuvwxyz]{20,}(?![A-Za-z0-9_])/gi, "[redacted-private-key]"],
+  [/(?<![A-Za-z0-9_])(?:5[1-9A-HJ-NP-Za-km-z]{49,50}|[KL][1-9A-HJ-NP-Za-km-z]{50,51})(?![A-Za-z0-9_])/g, "[redacted-private-key]"],
   [
-    /\b(?:xprv|tprv|yprv|zprv|uprv|vprv)[A-Za-z0-9]{16,}\b/gi,
+    /(?<![A-Za-z0-9_])(?:xprv|tprv|yprv|zprv|uprv|vprv)[A-Za-z0-9]{16,}(?![A-Za-z0-9_])/gi,
     "[redacted-private-key]",
   ],
   [
-    /\b(?:xpub|tpub|ypub|zpub|upub|vpub)[1-9A-HJ-NP-Za-km-z]{20,}\b/gi,
+    /(?<![A-Za-z0-9_])(?:xpub|tpub|ypub|zpub|upub|vpub)[1-9A-HJ-NP-Za-km-z]{20,}(?![A-Za-z0-9_])/gi,
     "[redacted-extended-key]",
   ],
   [
-    /\bsp\([^\n]{8,800}\)(?:#[a-z0-9]{8})?/gi,
+    /(?<![A-Za-z0-9_])sp\([^\n]{8,800}\)(?:#[a-z0-9]{8})?/gi,
     (match) => maskDescriptor(match),
   ],
   [
-    /\b(?:t?spscan|t?spspend)1[023456789acdefghjklmnpqrstuvwxyz]{20,1020}\b/gi,
+    /(?<![A-Za-z0-9_])(?:t?spscan|t?spspend)1[023456789acdefghjklmnpqrstuvwxyz]{20,1020}(?![A-Za-z0-9_])/gi,
     "[redacted-silent-payment-key]",
   ],
   [
-    /\b(?:sp|tsp)1[023456789acdefghjklmnpqrstuvwxyz]{100,1020}\b/gi,
+    /(?<![A-Za-z0-9_])(?:sp|tsp)1[023456789acdefghjklmnpqrstuvwxyz]{100,1020}(?![A-Za-z0-9_])/gi,
     "[redacted-silent-payment-address]",
   ],
   [
-    /\b(wpkh|sh|wsh|tr|pkh|combo)\([^)\n]{16,400}\)/gi,
+    /(?<![A-Za-z0-9_])(wpkh|sh|wsh|tr|pkh|combo)\([^)\n]{16,400}\)/gi,
     "[redacted-descriptor]",
   ],
-  [/\b[Bb]earer\s+[A-Za-z0-9._~+/-]+=*/g, "Bearer [redacted]"],
-  [/\bsk-[A-Za-z0-9._~+/-]{6,}\b/g, "[redacted-secret]"],
+  [/(?<![A-Za-z0-9_])[Bb]earer[ \t\r\n\v\f\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+[A-Za-z0-9._~+/-]+=*/g, "Bearer [redacted]"],
+  [/(?<![A-Za-z0-9_])sk-[A-Za-z0-9._~+/-]{6,}(?![A-Za-z0-9_])/g, "[redacted-secret]"],
 ];
 
 const PUBLIC_SAFE_AMOUNT_NUMBER =
