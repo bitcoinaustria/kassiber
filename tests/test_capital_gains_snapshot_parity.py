@@ -11,6 +11,18 @@ from kassiber.db import DATABASE_INSTANCE_ID_SETTING
 
 
 class CapitalGainsSnapshotParityTests(unittest.TestCase):
+    def test_long_term_engine_label_is_presented_as_long_term(self):
+        conn = self._conn()
+        try:
+            conn.execute("INSERT INTO wallets VALUES ('w1', 'p1', 'Hot')")
+            conn.execute("INSERT INTO transactions VALUES ('t','p1','w1',0,1,'2026-01-01T00:00:00Z','BTC',1000)")
+            conn.execute("INSERT INTO journal_entries VALUES ('j','p1','t','disposal','2026-01-01T00:00:00Z',-1000,1,2,1,NULL,NULL,'long_term','now')")
+            with patch.object(ui_snapshot, "_journal_freshness", return_value={"needs_processing": False}):
+                result = ui_snapshot.build_capital_gains_snapshot(conn, tax_year=2026)
+            self.assertEqual(result["lots"][0]["type"], "LT")
+        finally:
+            conn.close()
+
     def _conn(self, *, tax_country: str = "generic", gains_algorithm: str = "fifo"):
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row

@@ -6541,7 +6541,7 @@ def build_capital_gains_snapshot(
             ),
             "type": (
                 "LT"
-                if str(row["capital_gains_type"] or "").lower() == "long"
+                if str(row["capital_gains_type"] or "").lower() in {"long", "long_term"}
                 else "ST"
             ),
             "transactionId": row["transaction_id"],
