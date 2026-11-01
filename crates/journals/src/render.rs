@@ -8,6 +8,8 @@ use kassiber_tax_core::{
 use serde_json::{json, Value};
 use std::{borrow::Cow, collections::HashMap};
 const CTX: Context = Context::RP2;
+mod response;
+pub(crate) use response::response_refusal;
 const REVIEW: [&str; 7] = [
     "pricing_quality",
     "pricing_source_kind",
@@ -649,12 +651,13 @@ pub fn render_ledger<'i>(
     let source_values = std::iter::repeat_with(|| None)
         .take(row_values.len())
         .collect();
-    let labels = inputs
-        .wallets
-        .iter()
-        .filter(|w| !w["label"].is_null() && w["label"] != "")
-        .map(|w| (row_key(&w["label"]), w))
-        .collect();
+    let mut labels = HashMap::new();
+    for wallet in inputs.wallets {
+        let label = response::get(wallet, "label")?;
+        if !label.is_null() && label != "" {
+            labels.insert(row_key(label), wallet);
+        }
+    }
     let mut reader = Reader {
         inputs,
         original_rows: array(&inputs.projection["rows"]),

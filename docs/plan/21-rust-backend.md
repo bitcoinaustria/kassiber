@@ -3023,6 +3023,11 @@ open, and fresh CPU pairs do not recertify both 20k budgets.
 The [controlled CPU comparison](../reference/r4-journal-render-boundary-checkpoint.md#eighth-continuation-controlled-cpu-comparison)
 reestablishes both 0.15 s budgets on unchanged native source in seven alternating
 pairs with exact state bytes. Fidelity, integration and full acceptance remain open.
+The [ordered-refusal continuation](../reference/r4-journal-render-boundary-checkpoint.md#ninth-continuation-ordered-response-refusals)
+adds a cold response traversal, rejects malformed response lists and wallet
+mappings, and pins 550 refusals with exact UUID consumption. Seven new mutations
+are killed. Successful lazy decoding, lossless scalars and the full acceptance
+campaigns remain open.
 
 ### R5 pairing command checkpoint
 

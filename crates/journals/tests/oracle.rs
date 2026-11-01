@@ -87,6 +87,51 @@ fn legacy_audit_and_carry_floats_match_python() {
     check_cases(include_str!("data/render-legacy-floats.json"), None);
 }
 #[test]
+fn malformed_response_refusals_consume_exact_uuid_tapes() {
+    let cases: Vec<Value> =
+        serde_json::from_str(include_str!("data/render-response-refusals.json")).unwrap();
+    let mut failures = vec![];
+    for case in cases {
+        for native_first in [false, true] {
+            let ids = case["entry_ids"].as_array().unwrap();
+            let mut consumed = 0;
+            let mut next_id = || {
+                let id = ids.get(consumed).and_then(Value::as_str).unwrap_or("");
+                consumed += 1;
+                id.into()
+            };
+            let response = boundary::ledger_response(&case["response"]);
+            let error = match response.as_ref().ok().filter(|_| native_first) {
+                Some(response) => boundary::build(
+                    &case["profile"],
+                    &case["custody"],
+                    case["wallets"].as_array().unwrap(),
+                    response,
+                    &mut next_id,
+                )
+                .err(),
+                None => Some(boundary::response_refusal(
+                    &case["profile"],
+                    &case["custody"],
+                    case["wallets"].as_array().unwrap(),
+                    &case["response"],
+                    &mut next_id,
+                )),
+            };
+            let actual = serde_json::to_value(error).unwrap();
+            if actual != case["expected"]["error"] || consumed != ids.len() {
+                failures.push(format!(
+                    "{} (native first {native_first}): UUIDs {consumed}/{}, actual {actual}, expected {}",
+                    case["name"],
+                    ids.len(),
+                    case["expected"]["error"]
+                ));
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+#[test]
 fn ledger_rendering_matches_python() {
     corpus("ledger");
 }

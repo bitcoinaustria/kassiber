@@ -28,6 +28,35 @@ def operands():
     yield 'surrogate-scalar', capture_projection(
         dict(book['profile'], workspace_id='\ud800'), custody, response_override=response,
     )
+    yield 'literal-surrogate-spelling', capture_projection(
+        dict(book['profile'], workspace_id='\\ud800'), custody, response_override=response,
+    )
+    surrogate_response = deepcopy(response)
+    surrogate_response['entries'][0]['description'] = '\udfff'
+    yield 'surrogate-entry-description', capture_projection(
+        book['profile'], custody, response_override=surrogate_response,
+    )
+    surrogate_rows = tuple(dict(row, pricing_provider='\ud800')
+                           for row in custody.finalized_tax_projection.rows)
+    yield 'surrogate-source-provenance', capture_projection(
+        book['profile'], replace(custody, finalized_tax_projection=replace(
+            custody.finalized_tax_projection, rows=surrogate_rows)), response_override=response,
+    )
+    yield 'surrogate-pass-through-rate', capture_projection(
+        book['profile'], replace(custody, rates={'BTC': '\ud800'}), response_override=response,
+    )
+    shaped_response = deepcopy(response)
+    shaped_response['entries'][0]['description'] = ['opaque', {'value': 1}]
+    yield 'opaque-entry-description', capture_projection(
+        book['profile'], custody, response_override=shaped_response,
+    )
+    ignored_response = deepcopy(response)
+    ignored_response['holdings'].append(dict(
+        wallet='unknown', asset='BTC', quantity='00E-1', cost_basis='00E-1',
+    ))
+    yield 'unused-holding-decimals', capture_projection(
+        book['profile'], custody, response_override=ignored_response,
+    )
     quarantine_response = dict(
         schema_version=2, ok=True, entries=[], holdings=[], tax_summary=[],
         carried_rows=[], intra_audit=[], quarantines=[dict(
@@ -76,6 +105,7 @@ def main():
             actual = json.loads(probe.stdout)
             matched = (actual.get('state') == expected['state'] if 'state' in expected
                        else actual.get('error') == expected['error'])
+            matched = matched and actual.get('entry_ids_consumed') == len(record['entry_ids'])
             result = dict(matched=matched, expected=expected, actual=actual)
         summary[name] = result
         print(f"{name}: {'matched' if result['matched'] else 'DIFFERENT'}", flush=True)

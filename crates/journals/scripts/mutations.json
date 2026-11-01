@@ -2418,5 +2418,61 @@
       "nonfinite_entry_quantities_refuse_and_restore_every_table"
     ],
     "rule": "Nonfinite quantities refuse at the msat boundary and roll back every journal table."
+  },
+  {
+    "id": "JR-response-decimal-error",
+    "file": "crates/journals/src/render/response.rs",
+    "find": "not a canonical engine decimal: {}",
+    "replace": "invalid engine decimal: {}",
+    "expect_failing": ["malformed_response_refusals_consume_exact_uuid_tapes"],
+    "rule": "Malformed response decimals retain Python's ValueError message at consumption."
+  },
+  {
+    "id": "JR-response-quantity-before-uuid",
+    "file": "crates/journals/src/render/response.rs",
+    "find": "head(inputs, wallet, entry_type, asset, &mut ids)?;\n        dec_field(&value, \"quantity\")?;",
+    "replace": "dec_field(&value, \"quantity\")?;\n        head(inputs, wallet, entry_type, asset, &mut ids)?;",
+    "expect_failing": ["malformed_response_refusals_consume_exact_uuid_tapes"],
+    "rule": "Entry quantity decoding follows head UUID consumption."
+  },
+  {
+    "id": "JR-response-uuid-before-wallet-hash",
+    "file": "crates/journals/src/render/response.rs",
+    "find": "ensure_hashable(required(wallet, \"id\")?)?;\n    ensure_hashable(entry_type)?;",
+    "replace": "ids();\n    ensure_hashable(required(wallet, \"id\")?)?;\n    ensure_hashable(entry_type)?;",
+    "expect_failing": ["malformed_response_refusals_consume_exact_uuid_tapes"],
+    "rule": "The UUID tape consumes exactly one identity for each successfully admitted entry head."
+  },
+  {
+    "id": "JR-response-lot-preparation",
+    "file": "crates/journals/src/render/response.rs",
+    "find": "let crypto_in = truth(lot)\n        .then(|| dec_field(lot, \"crypto_in\"))\n        .transpose()?;",
+    "replace": "let crypto_in: Option<Decimal> = None;",
+    "expect_failing": ["malformed_response_refusals_consume_exact_uuid_tapes"],
+    "rule": "A fragment prepares its acquisition quantity before formatting basis and source fields."
+  },
+  {
+    "id": "JR-response-holdings-basis",
+    "file": "crates/journals/src/render/response.rs",
+    "find": "let basis = dec_field(&value, \"cost_basis\")?;",
+    "replace": "let basis = Decimal::zero();",
+    "expect_failing": ["malformed_response_refusals_consume_exact_uuid_tapes"],
+    "rule": "Known-wallet holding basis is decoded after quantity and before quarantines."
+  },
+  {
+    "id": "JR-response-malformed-list",
+    "file": "crates/journals/src/boundary.rs",
+    "find": ".and_then(Value::as_array)\n        .map(Vec::as_slice)",
+    "replace": ".map(|value| value.as_array().map(Vec::as_slice).unwrap_or(&[]))",
+    "expect_failing": ["malformed_response_refusals_consume_exact_uuid_tapes"],
+    "rule": "Malformed response sequences reach the ordered refusal path instead of becoming empty."
+  },
+  {
+    "id": "JR-response-wallet-shape",
+    "file": "crates/journals/src/render.rs",
+    "find": "let label = response::get(wallet, \"label\")?;",
+    "replace": "let label = &wallet[\"label\"];",
+    "expect_failing": ["malformed_response_refusals_consume_exact_uuid_tapes"],
+    "rule": "Malformed wallet mappings refuse while constructing labels before any entry UUID is consumed."
   }
 ]

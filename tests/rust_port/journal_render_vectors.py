@@ -355,20 +355,125 @@ def legacy_float_vectors():
     return cases
 
 
+def response_refusal_vectors():
+    cases = []
+    base = compute_custody_projection(snapshot(0))
+    templates = [('ordinary', snapshot(0)['profile'], base)]
+    template = next(case for case in corpus() if case.name == 'generic-ledger-fifo')
+    templates.append(('transfers', template.profile, replace(
+        base, finalized_tax_projection=template.inputs.finalized_tax_projection,
+        wallet_refs_by_id=template.inputs.wallet_refs_by_id,
+        direct_payout_records=template.inputs.direct_payout_records)))
+
+    def add(name, profile, custody, response):
+        with patch.object(uuid, 'uuid4', seeded_ids(name)):
+            record = capture_projection(profile, custody, response_override=response)
+        assert 'error' in record['expected'], name
+        cases.append(dict(name=name, **clean_record(record)))
+
+    decimal_fields = {
+        'quantity', 'fiat_value', 'unit_cost', 'proceeds', 'cost_basis', 'gain_loss',
+        'crypto_amount', 'unit_basis_override', 'spot_price', 'fiat_fee', 'crypto_fee',
+        'basis', 'crypto_in', 'sent', 'received', 'fee',
+    }
+
+    def paths(value, prefix=()):
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if key in decimal_fields and item is not None:
+                    yield (*prefix, key)
+                yield from paths(item, (*prefix, key))
+        elif isinstance(value, list):
+            for index, item in enumerate(value):
+                yield from paths(item, (*prefix, index))
+
+    for name, profile, custody in templates:
+        normal = capture_projection(profile, custody)['response']
+        for path in paths(normal):
+            for label, value in [('noncanonical', '00E-1'), ('wrong-type', [])]:
+                response = deepcopy(normal)
+                parent = response
+                for key in path[:-1]:
+                    parent = parent[key]
+                parent[path[-1]] = value
+                add(f'{name}-{path!r}-{label}', profile, custody, response)
+        for key in ('carried_rows', 'intra_audit', 'entries', 'holdings', 'quarantines', 'tax_summary'):
+            for label, value in [('null', None), ('integer', 1), ('string', 'x'), ('mapping', {'x': 1})]:
+                response = deepcopy(normal)
+                response[key] = value
+                add(f'{name}-{key}-{label}', profile, custody, response)
+            response = deepcopy(normal)
+            response.pop(key)
+            add(f'{name}-{key}-missing', profile, custody, response)
+        for entry_index, item in enumerate(normal['entries']):
+            for key in item:
+                response = deepcopy(normal)
+                del response['entries'][entry_index][key]
+                add(f'{name}-entry-{entry_index}-missing-{key}', profile, custody, response)
+        for key in ('workspace_id',):
+            modified = dict(profile)
+            del modified[key]
+            response = deepcopy(normal)
+            response['entries'][-1]['quantity'] = '00E-1'
+            add(f'{name}-profile-missing-{key}-before-decimal', modified, custody, response)
+        response = deepcopy(normal)
+        response['entries'][0]['wallet'] = 'unknown'
+        response['entries'][0]['quantity'] = '00E-1'
+        add(f'{name}-unknown-wallet-before-decimal', profile, custody, response)
+        response = deepcopy(normal)
+        response['carried_rows'] = [dict(row='unknown', value='1', rate='bad')]
+        response['entries'][-1]['quantity'] = '00E-1'
+        add(f'{name}-unknown-carried-row-before-decimal', profile, custody, response)
+        for shape in (None, [], 'x', 1, True):
+            response = deepcopy(normal)
+            response['entries'][-1]['quantity'] = '00E-1'
+            modified = dict(custody.wallet_refs_by_id)
+            modified[next(iter(modified))] = shape
+            add(f'{name}-wallet-shape-{shape!r}-before-decimal', profile,
+                replace(custody, wallet_refs_by_id=modified), response)
+        realized_index = next(i for i, item in enumerate(normal['entries'])
+                              if any(fragment.get('lot') for fragment in item.get('fragments', [])))
+        for shape in (None, [], 'x', 1, True):
+            response = deepcopy(normal)
+            response['entries'][realized_index]['fragments'] = [shape]
+            add(f'{name}-fragment-shape-{shape!r}', profile, custody, response)
+        fragment_index = next(i for i, fragment in enumerate(normal['entries'][realized_index]['fragments'])
+                              if fragment.get('lot'))
+        for path in [('crypto_amount',), ('unit_basis_override',), ('cost_basis',),
+                     ('event', 'crypto_fee'), ('event', 'spot_price'), ('lot', 'fiat_fee')]:
+            response = deepcopy(normal)
+            target = response['entries'][realized_index]['fragments'][fragment_index]
+            parent = target
+            for key in path[:-1]:
+                parent = parent[key]
+            parent[path[-1]] = '00E-1'
+            target['lot']['crypto_in'] = '01E0'
+            add(f'{name}-fragment-precedence-{path!r}', profile, custody, response)
+        response = deepcopy(normal)
+        response['tax_summary'][0]['quantity'] = '00E-1'
+        add(f'{name}-payout-before-summary-decimal', profile, replace(
+            custody, direct_payout_records=[dict(id='payout', out_transaction_id='source', payout_amount='bad')]), response)
+    return cases
+
+
 def main():
     result = json.dumps(vectors(), ensure_ascii=True, separators=(',', ':'), allow_nan=False) + '\n'
     machine = json.dumps(machine_msat_vectors(), separators=(',', ':')) + '\n'
     machine_path = PATH.with_name('msat-machine.json')
     legacy = json.dumps(legacy_float_vectors(), ensure_ascii=True, separators=(',', ':'), allow_nan=False) + '\n'
     legacy_path = PATH.with_name('render-legacy-floats.json')
+    response = json.dumps(response_refusal_vectors(), ensure_ascii=True, separators=(',', ':'), allow_nan=False) + '\n'
+    response_path = PATH.with_name('render-response-refusals.json')
     if '--accept' in sys.argv:
         PATH.write_text(result)
         machine_path.write_text(machine)
         legacy_path.write_text(legacy)
+        response_path.write_text(response)
     else:
         assert PATH.read_text() == result, 'render vectors changed; review then use --accept'
         assert machine_path.read_text() == machine, 'msat machine vectors changed'
         assert legacy_path.read_text() == legacy, 'legacy float vectors changed'
+        assert response_path.read_text() == response, 'response refusal vectors changed'
     print(f'{len(json.loads(result))} synthetic journal render vectors')
 
 

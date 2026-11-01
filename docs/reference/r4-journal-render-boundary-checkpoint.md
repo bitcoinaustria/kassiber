@@ -766,3 +766,103 @@ Remaining work, in the requested order:
 
 This speed checkpoint does not certify any of those outstanding gates. Python
 retains production accounting authority.
+
+## Ninth continuation: ordered response refusals
+
+This local continuation starts at `8a9492199` on `t3code/r4-11-render-9`.
+**R4-11 remains unaccepted.** This boundary repairs the malformed-decimal
+refusal repro and malformed wallet admission. Native lossless scalars and
+successful lazy response decoding remain open; Python retains production
+accounting authority.
+
+The diagnostic probe now calls `boundary::response_refusal` when the typed
+response decoder refuses. Its cold traversal follows Python's field consumption:
+carried rows, wallet labels, audits, entries and fragments, holdings,
+quarantines, compatibility payouts, and summaries. It consumes the caller's
+UUID tape at entry-head construction, including heads whose subsequent fields
+refuse. Decimal messages retain the malformed operand's Python representation.
+The traversal reuses exact Decimal/msat operations, the shared timestamp parser,
+and the existing payout adapter; it performs no tax computation or persistence.
+
+The typed decoder requires response lists and required keys instead of silently
+turning malformed or missing sequences into empty lists. Carried `rate` remains
+optional, as Python's `item.get("rate")` requires. Native wallet-label admission
+now refuses malformed mappings before consuming any entry UUID. The probe
+reports UUID consumption on both successful and refused builds, and the focused
+boundary checker compares that count as well as state/refusal bytes.
+
+The new immutable corpus has **550 Python-generated refusal cases**, declaring
+**3,187 UUID consumptions**. Its native test checks both the cold traversal and
+the probe's typed-decoder-first route. Witnesses cover malformed Decimal fields,
+missing entry fields, malformed response sequences and wallet mappings,
+fragment preparation order, competing failures, and payout-before-summary
+precedence. The original **383** cases and **39** audit/carry witnesses remain
+byte-identical after regeneration. All **seven** added mutation recipes are
+killed by `malformed_response_refusals_consume_exact_uuid_tapes`, with a passing
+baseline and no survivors or build failures. All **168** recipes apply: the
+existing 110 renderer and 51 persistence recipes, plus these seven additions.
+Applicability does not establish that the inherited recipes were rerun.
+
+This is a refusal repair, not a general lazy decoder. If Python successfully
+renders a shape the typed decoder cannot represent, the cold traversal cannot
+return its state. The expanded repro retains that distinction: an opaque list
+description and malformed decimals on an ignored, unknown-wallet holding still
+differ. Actual surrogate scalars in profile ids, entry descriptions, source
+provenance and pass-through rates still fail at the JSON boundary. A literal
+backslash-`u` spelling has a separate witness; no sentinel substitutes for a
+surrogate. These failures continue to block acceptance.
+
+The local evidence is under `target/r4-render-9/`. The focused mutation summary
+binds every named kill to source/test/fixture digests and its incremental log;
+its disposable source and build trees are deleted after summarizing.
+
+All **38 all-feature release journal tests** pass, including the existing
+SQLite/SQLCipher dump and rollback fixtures. All **six Python oracle/capture
+tests** pass. Scoped all-target/all-feature release clippy with `-D warnings`
+and workspace formatting pass. The required classifier update leaves the
+inventory unchanged; CI preflight passes all **57 tests**. The expanded boundary
+repro exits 1 with four matches and the six open differences listed above.
+These checks do not replace the repository quality gate or integrated campaigns.
+
+The single final CPU campaign uses seven alternating pairs pinned to CPU 0,
+the eighth continuation's identical operands, and its retained baseline probe
+(`3f0e6b8134ee075133ed906194491cec4f5e0389a7298419172ee981ffafec72`).
+The current probe is
+`cf31fc7b920548329c71bc86438646ece940808b3dc364f4d5f98047bbe7ff8b`.
+Both probes first pass the complete canonical-state comparison on both books.
+No build or other test job in this worktree overlaps the comparison. The
+measured boundary continues to exclude response decoding, canonical output,
+persistence and state destruction.
+
+| Book | Previous best CPU (s) | Current best CPU (s) | Previous median (s) | Current median (s) |
+| --- | ---: | ---: | ---: | ---: |
+| Generic 20k | 0.134103 | 0.121497 | 0.146467 | 0.199628 |
+| Multi-wallet 20k | 0.174094 | 0.159140 | 0.208056 | 0.208263 |
+
+The final multi-wallet run does **not** recertify 0.15 s; the unchanged baseline
+also misses. Current best samples improve on that baseline, while generic
+medians move in the opposite direction and individual samples vary substantially.
+These samples do not establish a genuine fidelity regression. There is no speed
+optimization or additional timing campaign in this continuation. Final integrated
+acceptance still requires its own CPU certification.
+
+`target/r4-render-9/verification-index.json` binds the source, fixtures, probes,
+operands, named mutation kills and check logs. Verification build trees are
+deleted after summarizing; the probes, operands and summaries remain local.
+
+Remaining work, in order:
+
+1. Replace the lossy scalar boundary across profiles, rows, entries, provenance,
+   joins and raw nonfinite stages. Finish successful lazy response decoding,
+   malformed shapes and refusal order with exact UUID consumption. The cold
+   traversal is not certification of all raw shapes or cumulative arithmetic.
+2. Complete the branch audit for component exclusions, ambiguous script owners,
+   scope/txid filtering, tolerances and graph refusal propagation.
+3. Run all 117 renderer, 51 persistence and 2,327 custody recipes in resumable,
+   source-bound shards, deleting each build tree after its summary. The seven
+   focused kills do not replace those complete campaigns.
+4. Rerun all 25,030 generated inputs, full census/shadow lanes and fresh
+   recordings against the final source.
+5. Complete typed loader/custody integration, integrated SQLite/SQLCipher
+   campaigns and the repository quality gate, then certify the final integrated
+   CPU boundary and write the acceptance record.

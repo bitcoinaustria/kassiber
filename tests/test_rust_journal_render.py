@@ -7,13 +7,14 @@ import sys
 
 import pytest
 
-from tests.rust_port.journal_render_vectors import PATH, vectors, machine_msat_vectors, legacy_float_vectors
+from tests.rust_port.journal_render_vectors import PATH, vectors, machine_msat_vectors, legacy_float_vectors, response_refusal_vectors
 
 
 def test_render_vectors_rebuild_from_python_build():
     assert json.loads(PATH.read_text()) == vectors()
     assert json.loads(PATH.with_name('msat-machine.json').read_text()) == [list(v) for v in machine_msat_vectors()]
     assert json.loads(PATH.with_name('render-legacy-floats.json').read_text()) == legacy_float_vectors()
+    assert json.loads(PATH.with_name('render-response-refusals.json').read_text()) == response_refusal_vectors()
 
 
 def test_uuid_tapes_are_bijections_and_cover_every_rendered_identity():

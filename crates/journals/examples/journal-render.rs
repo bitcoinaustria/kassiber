@@ -6,6 +6,7 @@ use std::{
     time::Instant,
 };
 fn run(v: &Value, timing_only: bool) -> Value {
+    let mut ids = v["entry_ids"].as_array().expect("entry_ids").iter();
     let response = if v["response"].is_null() {
         Ok(boundary::empty_response())
     } else {
@@ -13,9 +14,23 @@ fn run(v: &Value, timing_only: bool) -> Value {
     };
     let response = match response {
         Ok(r) => r,
-        Err(e) => return json!({"error":e}),
+        Err(_) => {
+            let error = boundary::response_refusal(
+                &v["profile"],
+                &v["custody"],
+                v["wallets"].as_array().expect("wallets"),
+                &v["response"],
+                || {
+                    ids.next()
+                        .expect("declared UUID tape exhausted")
+                        .as_str()
+                        .expect("UUID")
+                        .into()
+                },
+            );
+            return json!({"error":error,"entry_ids_consumed":v["entry_ids"].as_array().expect("entry_ids").len() - ids.len()});
+        }
     };
-    let mut ids = v["entry_ids"].as_array().expect("entry_ids").iter();
     let cpu_start = cpu_seconds();
     let start = Instant::now();
     let result = boundary::build(
@@ -33,14 +48,19 @@ fn run(v: &Value, timing_only: bool) -> Value {
     );
     let elapsed = start.elapsed().as_secs_f64();
     let cpu_elapsed = cpu_seconds() - cpu_start;
+    let consumed = v["entry_ids"].as_array().expect("entry_ids").len() - ids.len();
     #[cfg(feature = "timing")]
     eprintln!("{:?}", kassiber_custody::timing::take());
     match result {
-        Ok(_) if timing_only => json!({"seconds":elapsed,"cpu_seconds":cpu_elapsed}),
-        Ok(s) => {
-            json!({"state":boundary::canonical(&s).expect("canonical state"),"seconds":elapsed,"cpu_seconds":cpu_elapsed})
+        Ok(_) if timing_only => {
+            json!({"seconds":elapsed,"cpu_seconds":cpu_elapsed,"entry_ids_consumed":consumed})
         }
-        Err(e) => json!({"error":e,"seconds":elapsed,"cpu_seconds":cpu_elapsed}),
+        Ok(s) => {
+            json!({"state":boundary::canonical(&s).expect("canonical state"),"seconds":elapsed,"cpu_seconds":cpu_elapsed,"entry_ids_consumed":consumed})
+        }
+        Err(e) => {
+            json!({"error":e,"seconds":elapsed,"cpu_seconds":cpu_elapsed,"entry_ids_consumed":consumed})
+        }
     }
 }
 #[cfg(unix)]

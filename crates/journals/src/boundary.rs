@@ -143,8 +143,22 @@ pub fn finish_operands<'a>(
     })
 }
 fn get<T: DeserializeOwned>(v: &Value, k: &str) -> Result<T, Refusal> {
-    serde_json::from_value(v[k].clone())
+    let value = v
+        .get(k)
+        .ok_or_else(|| Refusal::new("KeyError", format!("'{k}'")))?;
+    serde_json::from_value(value.clone())
         .map_err(|e| Refusal::new("EngineContractError", format!("RequestError: {k}: {e}")))
+}
+fn response_array<'a>(v: &'a Value, key: &str) -> Result<&'a [Value], Refusal> {
+    v.get(key)
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .ok_or_else(|| {
+            Refusal::new(
+                "EngineContractError",
+                format!("RequestError: {key}: expected a list"),
+            )
+        })
 }
 fn entry_type(v: &Value) -> Result<EntryType, Refusal> {
     let s = v.as_str().unwrap_or("");
@@ -196,7 +210,7 @@ pub fn ledger_response(v: &Value) -> Result<LedgerResponse, Refusal> {
         return Err(ledger_error(&v["error"]));
     }
     let mut entries = vec![];
-    for e in array(&v["entries"]) {
+    for e in response_array(v, "entries")? {
         let t = entry_type(&e["entry_type"])?;
         entries.push(match t {
             EntryType::Acquisition => EntryOut::Acquisition(AcquisitionOut {
@@ -227,14 +241,14 @@ pub fn ledger_response(v: &Value) -> Result<LedgerResponse, Refusal> {
                 description: get(e, "description")?,
                 at_category: get(e, "at_category")?,
                 capital_gains_type: long_short(&e["capital_gains_type"])?,
-                fragments: array(&e["fragments"])
+                fragments: response_array(e, "fragments")?
                     .iter()
                     .map(fragment)
                     .collect::<Result<_, _>>()?,
             }),
         });
     }
-    let quarantines = array(&v["quarantines"])
+    let quarantines = response_array(v, "quarantines")?
         .iter()
         .map(|q| {
             Ok(QuarantineOut {
@@ -264,7 +278,7 @@ pub fn ledger_response(v: &Value) -> Result<LedgerResponse, Refusal> {
             })
         })
         .collect::<Result<_, Refusal>>()?;
-    let intra_audit = array(&v["intra_audit"])
+    let intra_audit = response_array(v, "intra_audit")?
         .iter()
         .map(|a| {
             Ok(AuditOut {
@@ -297,7 +311,7 @@ pub fn ledger_response(v: &Value) -> Result<LedgerResponse, Refusal> {
             })
         })
         .collect::<Result<_, Refusal>>()?;
-    let holdings = array(&v["holdings"])
+    let holdings = response_array(v, "holdings")?
         .iter()
         .map(|h| {
             Ok(HoldingOut {
@@ -308,7 +322,7 @@ pub fn ledger_response(v: &Value) -> Result<LedgerResponse, Refusal> {
             })
         })
         .collect::<Result<_, Refusal>>()?;
-    let tax_summary = array(&v["tax_summary"])
+    let tax_summary = response_array(v, "tax_summary")?
         .iter()
         .map(|s| {
             Ok(SummaryOut {
@@ -344,13 +358,13 @@ pub fn ledger_response(v: &Value) -> Result<LedgerResponse, Refusal> {
             })
         })
         .collect::<Result<_, Refusal>>()?;
-    let carried_rows = array(&v["carried_rows"])
+    let carried_rows = response_array(v, "carried_rows")?
         .iter()
         .map(|c| {
             Ok(CarriedRow {
                 row: get(c, "row")?,
                 value: get(c, "value")?,
-                rate: get(c, "rate")?,
+                rate: c.get("rate").map(|_| get(c, "rate")).transpose()?.flatten(),
             })
         })
         .collect::<Result<_, Refusal>>()?;
@@ -365,6 +379,27 @@ pub fn ledger_response(v: &Value) -> Result<LedgerResponse, Refusal> {
         holdings,
         carried_rows,
     })
+}
+pub fn response_refusal(
+    profile: &Value,
+    c: &Value,
+    wallets: &[Value],
+    response: &Value,
+    ids: impl FnMut() -> String,
+) -> Refusal {
+    let inputs = LedgerInputs {
+        profile,
+        projection: &c["finalized_tax_projection"],
+        wallets,
+        direct_payout_records: array(&c["direct_payout_records"]),
+    };
+    match crate::render::response_refusal(&inputs, response, ids) {
+        Err(error) => error,
+        Ok(()) => Refusal::new(
+            "EngineContractError",
+            "RequestError: response cannot be represented by the typed ledger boundary",
+        ),
+    }
 }
 fn long_short(v: &Value) -> Result<&'static str, Refusal> {
     match v.as_str() {
@@ -393,7 +428,7 @@ pub fn staged_error(error: kassiber_tax_core::ledger::response::StagedError) -> 
     ledger_error(&serde_json::to_value(error).expect("staged error fields"))
 }
 
-fn ledger_error(e: &Value) -> Refusal {
+pub(crate) fn ledger_error(e: &Value) -> Refusal {
     let class = string(&e["inner"]["class"]);
     let message = string(&e["inner"]["message"]);
     let family = match class.as_str() {
