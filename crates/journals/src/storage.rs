@@ -419,22 +419,30 @@ fn replace<const N: usize, T: BindingRow<N>>(
     if wanted.len() != rows.len() {
         return Err(rusqlite::Error::InvalidQuery.into());
     }
+    let retained: bool = conn.query_row(
+        &format!("SELECT EXISTS(SELECT 1 FROM {table} WHERE profile_id = ?)"),
+        [profile],
+        |row| row.get(0),
+    )?;
     let time_column = if N == 29 { 6 } else { 5 };
-    let mut ordered = rows
-        .iter()
-        .enumerate()
-        .map(|(index, row)| {
-            Some((
-                if N == 12 {
-                    ""
-                } else {
-                    row.cell(time_column).as_str().ok()?
-                },
-                row.cell(0).as_str().ok()?,
-                index,
-            ))
+    let mut ordered = retained
+        .then(|| {
+            rows.iter()
+                .enumerate()
+                .map(|(index, row)| {
+                    Some((
+                        if N == 12 {
+                            ""
+                        } else {
+                            row.cell(time_column).as_str().ok()?
+                        },
+                        row.cell(0).as_str().ok()?,
+                        index,
+                    ))
+                })
+                .collect::<Option<Vec<_>>>()
         })
-        .collect::<Option<Vec<_>>>();
+        .flatten();
     let mut shared_times = if tie.is_some() {
         vec![false; rows.len()]
     } else {
@@ -534,7 +542,14 @@ fn replace<const N: usize, T: BindingRow<N>>(
             }
         }
     }
-    if let Some(tie) = tie.filter(|_| {
+    if let Some(tie) = tie.filter(|_| !retained) {
+        for row in rows {
+            row.cell(tie)
+                .as_str()
+                .map_err(|_| rusqlite::Error::InvalidQuery)?;
+        }
+    }
+    if let Some(tie) = tie.filter(|_| retained).filter(|_| {
         changed.iter().any(|&changed| changed) || stamps.values().any(|(_, mixed)| *mixed)
     }) {
         let mut dirty_times = HashSet::new();

@@ -321,26 +321,30 @@ fn quarantine_deduplication_and_enrichment_match_lossless_python_json() {
 
 #[test]
 fn malformed_storage_id_and_tie_shapes_refuse_without_writes() {
-    let c = Connection::open_in_memory().unwrap();
-    table(&c, "journal_entries", &ENTRY_COLUMNS);
-    let a = entry("a", "same", "old");
-    replace_journal_entries(&c, "p", std::slice::from_ref(&a), &mut ()).unwrap();
-    let before = snapshot::<29>(&c, "journal_entries");
-    for value in [
-        Sql::Null,
-        Sql::Integer(1),
-        Sql::Real(1.0),
-        Sql::Blob(vec![0]),
-    ] {
-        for index in [0, 6] {
-            let mut invalid = a.clone();
-            invalid[index] = value.clone();
-            assert!(replace_journal_entries(&c, "p", &[invalid], &mut ()).is_err());
-            assert_eq!(snapshot::<29>(&c, "journal_entries"), before);
+    for retained in [false, true] {
+        let c = Connection::open_in_memory().unwrap();
+        table(&c, "journal_entries", &ENTRY_COLUMNS);
+        let a = entry("a", "same", "old");
+        if retained {
+            replace_journal_entries(&c, "p", std::slice::from_ref(&a), &mut ()).unwrap();
         }
+        let before = snapshot::<29>(&c, "journal_entries");
+        for value in [
+            Sql::Null,
+            Sql::Integer(1),
+            Sql::Real(1.0),
+            Sql::Blob(vec![0]),
+        ] {
+            for index in [0, 6] {
+                let mut invalid = a.clone();
+                invalid[index] = value.clone();
+                assert!(replace_journal_entries(&c, "p", &[invalid], &mut ()).is_err());
+                assert_eq!(snapshot::<29>(&c, "journal_entries"), before);
+            }
+        }
+        assert!(replace_journal_entries(&c, "p", &[a.clone(), a], &mut ()).is_err());
+        assert_eq!(snapshot::<29>(&c, "journal_entries"), before);
     }
-    assert!(replace_journal_entries(&c, "p", &[a.clone(), a], &mut ()).is_err());
-    assert_eq!(snapshot::<29>(&c, "journal_entries"), before);
 }
 
 #[test]

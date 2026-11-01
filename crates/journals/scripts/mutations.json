@@ -2678,5 +2678,15 @@
       "decimal_padding_validation_preserves_limits_without_formatting"
     ],
     "rule": "The no-digit-count shortcut never accepts an oversized positive exponent."
+  },
+  {
+    "id": "JP-fresh-tie-validation",
+    "file": "crates/journals/src/storage.rs",
+    "find": "tie.filter(|_| !retained)",
+    "replace": "tie.filter(|_| false)",
+    "expect_failing": [
+      "malformed_storage_id_and_tie_shapes_refuse_without_writes"
+    ],
+    "rule": "An empty retained table still validates timestamp scalar types before preparing or writing rows."
   }
 ]

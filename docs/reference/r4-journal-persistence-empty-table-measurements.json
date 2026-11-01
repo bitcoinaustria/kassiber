@@ -1,0 +1,1636 @@
+{
+  "base_commit": "ab67908b2",
+  "accepted": false,
+  "disposition": "Retain the byte-exact measured empty-table fresh-store improvement. The measured unchanged cell regresses and no acceptance gate is closed.",
+  "source_and_binary_sha256": {
+    "crates/journals/src/boundary/joins.rs": "58b06db41921c470886b1cd1e190f506d6fd9175645c58321340fc6dd464c68e",
+    "crates/journals/src/boundary.rs": "2ddc678761e48f07a4277b2c20622a94a631f2c7c3725eefa32370a71abd878d",
+    "crates/journals/src/compute.rs": "b50c57224fc536c3df0fdff7d4d465d396aed6f717c158fb668f0fee0d507102",
+    "crates/journals/src/lib.rs": "f3d8fc2ab7257405c56545dda5d0bf7b3c24d90be78b8ccdc219feda380a576d",
+    "crates/journals/src/loader/direct.rs": "6f4ff944e2dd1a053ae54807ad510094ffa7c6c72c7c97b25cb5b2a4b876b999",
+    "crates/journals/src/loader/ownership.rs": "e9fd153c3ddbc0b7ad836c280e2219d8c0285e46e80f457fb5039003d250c2c8",
+    "crates/journals/src/loader/receipts.rs": "08b0978e2fed949d12af142596d9c91f1e39436d6dd2665e62e374af69bb4453",
+    "crates/journals/src/loader/tests.rs": "c32901ad80222bb09c20979247c37cebc1801dfd26dfc5cddc430c7bc034b804",
+    "crates/journals/src/loader/worklist.rs": "64670923212f75666cf0496da7e4ff7a9073e85e382d715bdebf05776a5d3516",
+    "crates/journals/src/loader.rs": "42698dcb84c9f0aba04eef10a14ecdb2e8b0497960f8bdd4d48dd7a17c762465",
+    "crates/journals/src/model.rs": "68f10bb6e44e1283ccf887606562fd908ad764848e7a4f3fdbe5e2f196239f8b",
+    "crates/journals/src/persistence/entries.rs": "dc7f05fee56637b02bea63a907f8abb55e28ea0e727ee8cd6024fbe50df76e8e",
+    "crates/journals/src/persistence/filed.rs": "24206d69912e8b067199a1f42a3ba1ba257ed40ff99e1569d0dc9d4d3ff94432",
+    "crates/journals/src/persistence/quantity.rs": "947e1c3927fc943f0eb187604e82e06a37ded17ccbf617d51358abbdd0a4a094",
+    "crates/journals/src/persistence/quarantine.rs": "c9cb06f5e0b8ab54fc47c20d9b4f7dc63a54379444e864fb450d0ef2f8235c0d",
+    "crates/journals/src/persistence.rs": "d9b90aa760f761c365fa1fe89335480a5553d371a79934cb5b730c8ab2947513",
+    "crates/journals/src/render.rs": "afac4610917b0ed8ef320385b7f80ca5cb28bd69187e9c00b5dac5b998550d45",
+    "crates/journals/src/storage/calculation/compare.rs": "710b4e6bb35fcae468e7f29ca7d4227965aa9e1fdff1e603d89bc927d16af45f",
+    "crates/journals/src/storage/calculation.rs": "9ccbf092810fec1392096f9c6e4df6c8202af46c5458eb00c3828b7b9a1bce44",
+    "crates/journals/src/storage/tests.rs": "649f3b333e1249132bbd8f83f3bcf50ba878d1d42b70238083e14f10b5c365ee",
+    "crates/journals/src/storage.rs": "288d9a983f562df005b2dd6bed811bcfb7f2b304cba672556d2196a4dc0ce649",
+    "crates/pydecimal/src/lib.rs": "4d5dc4afb744ffcfecff30bddcf1b97f0251007e3c7e78c161b73aefe9f2bd33",
+    "crates/journals/scripts/mutations.json": "049b40e65e70a7c3b2ac49d68994c8c4c0aaf3be577fa5d53d4139ef79d836ef",
+    "crates/journals/examples/journal-persist.rs": "3b97ce2101ddb89105d2d4614e388b209a3aa7690ce0e120c9ba8ba32f81be48",
+    "target/journal-persist-padding": "cac46250d7ca9ec0d8ebf210e2d6900d52ff20a70ba0517172bd14faab68731a",
+    "target/journal-persist-empty": "a0708b6510c28b885be23063fb179adeb929a49c3fb332e72bef3ebb8d13291e",
+    "target/journal-read-floor-final": "0e435100d12f3670b9ff7ee0511b443ac792643e93623d5c9fbed8fdaa3fa92c"
+  },
+  "compiled_storage_prefix_sha256": "a08b051856020ec719a541f724462434c714326dd7218be18acc20912ea0cfba",
+  "timing_source_qualification": "The measured candidate was built after the production empty-table change and before expanding test-only cases in storage/tests.rs. The production storage prefix above is unchanged through final verification.",
+  "full_store_pairs": {
+    "scope": "Fresh native processes and identical physical copies; full frozen Python dumps checked on every operation. Original Python-generated DML floor is prepared and replayed in a fresh candidate process. Rendering/copies/dump checks outside CPU timer.",
+    "script": "from pathlib import Path\nimport argparse,hashlib,json,os,shutil,subprocess\nparser=argparse.ArgumentParser()\nparser.add_argument('captures',type=Path,nargs='+')\nparser.add_argument('--probe',type=Path,required=True)\nparser.add_argument('--baseline',type=Path,required=True)\nparser.add_argument('--out',type=Path,required=True)\nparser.add_argument('--runs',type=int,default=5)\nargs=parser.parse_args();target=Path('target').resolve();out=args.out.resolve()\nassert out.is_relative_to(target) and args.runs>0\nout.mkdir(parents=True,exist_ok=True)\nprobes={'rust':args.probe.resolve(),'baseline':args.baseline.resolve()}\nrecord={'scope':'Fresh native processes and identical physical copies; full frozen Python dumps checked on every operation. Original Python-generated DML floor is prepared and replayed in a fresh candidate process. Rendering/copies/dump checks outside CPU timer.','script':Path(__file__).read_text(),'probes':{n:hashlib.sha256(p.read_bytes()).hexdigest() for n,p in probes.items()},'cells':[]}\nfor capture in args.captures:\n assert capture.resolve().is_relative_to(target)\n dest=out/capture.name;dest.mkdir(exist_ok=True);runtime=dest/'runtime'\n request=json.loads((capture/'request.json').read_text());assert isinstance(request.get('expected'),dict)\n request['database']=str(runtime/'kassiber.sqlite3')\n request_file=dest/'request.json';request_file.write_text(json.dumps(request,separators=(',',':')))\n floor=json.loads((capture/'floor.json').read_text());assert isinstance(floor.get('expected'),dict)\n floor['database']=request['database'];floor_file=dest/'floor.json';floor_file.write_text(json.dumps(floor,separators=(',',':')))\n trials=[]\n for run in range(args.runs):\n  pair={}\n  for name in (['rust','baseline','floor'] if run%2==0 else ['baseline','rust','floor']):\n   if runtime.exists():shutil.rmtree(runtime)\n   shutil.copytree(capture/'base',runtime)\n   load=os.getloadavg();probe=probes['rust' if name=='floor' else name]\n   process=subprocess.run([str(probe)],input=str(floor_file if name=='floor' else request_file)+'\\n',capture_output=True,text=True,check=True)\n   result=json.loads(process.stdout)\n   assert result['ok'],(capture.name,name,result)\n   pair[name]={'cpu_seconds':result['cpu_seconds'],'seconds':result['seconds'],'phases':result.get('phases'),'loadavg':load}\n  trials.append(pair);print(capture.name,run,{n:t['cpu_seconds'] for n,t in pair.items()},flush=True)\n  cell={'capture':str(capture),'capture_hashes':{str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in [capture/'request.json',capture/'floor.json',capture/'base/kassiber.sqlite3']},'trials':trials,'best':{n:min(t[n]['cpu_seconds'] for t in trials) for n in ('rust','baseline','floor')}}\n  (dest/'summary.json').write_text(json.dumps(cell,indent=2)+'\\n')\n record['cells'].append(cell);(out/'summary.json').write_text(json.dumps(record,indent=2)+'\\n')\n shutil.rmtree(runtime)\n",
+    "probes": {
+      "rust": "a0708b6510c28b885be23063fb179adeb929a49c3fb332e72bef3ebb8d13291e",
+      "baseline": "cac46250d7ca9ec0d8ebf210e2d6900d52ff20a70ba0517172bd14faab68731a"
+    },
+    "cells": [
+      {
+        "capture": "target/captures/generic-20000-sqlite-fresh",
+        "capture_hashes": {
+          "target/captures/generic-20000-sqlite-fresh/request.json": "8531d07d645645507703d49c68f9ba81a5601a0e18d1babd4f89bec2e53c9e99",
+          "target/captures/generic-20000-sqlite-fresh/floor.json": "11a9cf87cba762302df7a9afa74ce651cfcc8e5cd7d997beb03c56c6515ab54c",
+          "target/captures/generic-20000-sqlite-fresh/base/kassiber.sqlite3": "bb679d78624c47831a12d29071beee71a7c18debf5fb0c1b011ac857ed70e84e"
+        },
+        "trials": [
+          {
+            "rust": {
+              "cpu_seconds": 0.8604349999999998,
+              "seconds": 0.933903866,
+              "phases": {
+                "begin": {
+                  "cpu": 1.6999999999933735e-05,
+                  "wall": 1.885e-05
+                },
+                "commit": {
+                  "cpu": 0.19966699999999982,
+                  "wall": 0.265748667
+                },
+                "complete": {
+                  "cpu": 0.011978000000000044,
+                  "wall": 0.012063979
+                },
+                "entries_prepare": {
+                  "cpu": 0.08278400000000019,
+                  "wall": 0.083368707
+                },
+                "entries_write": {
+                  "cpu": 0.24746199999999963,
+                  "wall": 0.250048131
+                },
+                "filed": {
+                  "cpu": 0.0001180000000000625,
+                  "wall": 0.000112683
+                },
+                "pricing": {
+                  "cpu": 0.019023000000000012,
+                  "wall": 0.019163739
+                },
+                "quantity": {
+                  "cpu": 0.0025129999999999875,
+                  "wall": 0.002525121
+                },
+                "quantity_other": {
+                  "cpu": 0.014812999999999965,
+                  "wall": 0.014910547
+                },
+                "quantity_postings_bind": {
+                  "cpu": 0.03351999999999977,
+                  "wall": 0.03381512
+                },
+                "quantity_postings_prepare": {
+                  "cpu": 0.013794000000000084,
+                  "wall": 0.013926234
+                },
+                "quantity_postings_write": {
+                  "cpu": 0.22922300000000018,
+                  "wall": 0.232579513
+                },
+                "setup": {
+                  "cpu": 0.0003049999999999997,
+                  "wall": 0.000307577
+                },
+                "small_tables": {
+                  "cpu": 0.005195000000000061,
+                  "wall": 0.005237806
+                }
+              },
+              "loadavg": [
+                16.111328125,
+                37.91259765625,
+                38.13818359375
+              ]
+            },
+            "baseline": {
+              "cpu_seconds": 0.901443,
+              "seconds": 0.941674461,
+              "phases": {
+                "begin": {
+                  "cpu": 1.8000000000073513e-05,
+                  "wall": 1.936e-05
+                },
+                "commit": {
+                  "cpu": 0.21145699999999978,
+                  "wall": 0.240444401
+                },
+                "complete": {
+                  "cpu": 0.012624999999999886,
+                  "wall": 0.012805527
+                },
+                "entries_prepare": {
+                  "cpu": 0.08430399999999993,
+                  "wall": 0.085064828
+                },
+                "entries_write": {
+                  "cpu": 0.24676800000000032,
+                  "wall": 0.250355499
+                },
+                "filed": {
+                  "cpu": 0.0001290000000002678,
+                  "wall": 0.000123483
+                },
+                "pricing": {
+                  "cpu": 0.020567000000000224,
+                  "wall": 0.020715646
+                },
+                "quantity": {
+                  "cpu": 0.0026399999999999757,
+                  "wall": 0.002665894
+                },
+                "quantity_other": {
+                  "cpu": 0.01816299999999993,
+                  "wall": 0.019546609
+                },
+                "quantity_postings_bind": {
+                  "cpu": 0.03590000000000004,
+                  "wall": 0.036307939
+                },
+                "quantity_postings_prepare": {
+                  "cpu": 0.015287999999999968,
+                  "wall": 0.01544984
+                },
+                "quantity_postings_write": {
+                  "cpu": 0.2475529999999999,
+                  "wall": 0.252005508
+                },
+                "setup": {
+                  "cpu": 0.00032399999999999096,
+                  "wall": 0.000321168
+                },
+                "small_tables": {
+                  "cpu": 0.005684999999999718,
+                  "wall": 0.005767388
+                }
+              },
+              "loadavg": [
+                15.78173828125,
+                37.48193359375,
+                37.99755859375
+              ]
+            },
+            "floor": {
+              "cpu_seconds": 0.6934170000000001,
+              "seconds": 0.771185926,
+              "phases": null,
+              "loadavg": [
+                15.318359375,
+                37.025390625,
+                37.84716796875
+              ]
+            }
+          },
+          {
+            "baseline": {
+              "cpu_seconds": 1.0786189999999998,
+              "seconds": 1.197488999,
+              "phases": {
+                "begin": {
+                  "cpu": 1.7999999999851468e-05,
+                  "wall": 1.8631e-05
+                },
+                "commit": {
+                  "cpu": 0.3518460000000001,
+                  "wall": 0.462860799
+                },
+                "complete": {
+                  "cpu": 0.012433999999999834,
+                  "wall": 0.012510789
+                },
+                "entries_prepare": {
+                  "cpu": 0.09663800000000045,
+                  "wall": 0.097678661
+                },
+                "entries_write": {
+                  "cpu": 0.2777829999999999,
+                  "wall": 0.280849948
+                },
+                "filed": {
+                  "cpu": 0.00014399999999969992,
+                  "wall": 0.000140414
+                },
+                "pricing": {
+                  "cpu": 0.020158999999999594,
+                  "wall": 0.020338757
+                },
+                "quantity": {
+                  "cpu": 0.0024699999999999722,
+                  "wall": 0.002489089
+                },
+                "quantity_other": {
+                  "cpu": 0.017908999999999953,
+                  "wall": 0.018132684
+                },
+                "quantity_postings_bind": {
+                  "cpu": 0.03459500000000015,
+                  "wall": 0.035100101
+                },
+                "quantity_postings_prepare": {
+                  "cpu": 0.015045999999999893,
+                  "wall": 0.015241665
+                },
+                "quantity_postings_write": {
+                  "cpu": 0.24378800000000012,
+                  "wall": 0.24626005
+                },
+                "setup": {
+                  "cpu": 0.000288000000000066,
+                  "wall": 0.000285197
+                },
+                "small_tables": {
+                  "cpu": 0.005475000000000119,
+                  "wall": 0.005510122
+                }
+              },
+              "loadavg": [
+                14.81201171875,
+                36.56005859375,
+                37.69189453125
+              ]
+            },
+            "rust": {
+              "cpu_seconds": 0.9152599999999997,
+              "seconds": 1.11450586,
+              "phases": {
+                "begin": {
+                  "cpu": 1.8999999999991246e-05,
+                  "wall": 2.0331e-05
+                },
+                "commit": {
+                  "cpu": 0.21233199999999997,
+                  "wall": 0.398446196
+                },
+                "complete": {
+                  "cpu": 0.015990999999999644,
+                  "wall": 0.016663019
+                },
+                "entries_prepare": {
+                  "cpu": 0.08569199999999988,
+                  "wall": 0.086776329
+                },
+                "entries_write": {
+                  "cpu": 0.27304700000000004,
+                  "wall": 0.280304385
+                },
+                "filed": {
+                  "cpu": 0.00012600000000029254,
+                  "wall": 0.000120803
+                },
+                "pricing": {
+                  "cpu": 0.018798000000000314,
+                  "wall": 0.018948754
+                },
+                "quantity": {
+                  "cpu": 0.002819000000000127,
+                  "wall": 0.002846058
+                },
+                "quantity_other": {
+                  "cpu": 0.014766999999999975,
+                  "wall": 0.014857016
+                },
+                "quantity_postings_bind": {
+                  "cpu": 0.036792999999999854,
+                  "wall": 0.037057508
+                },
+                "quantity_postings_prepare": {
+                  "cpu": 0.015395999999999965,
+                  "wall": 0.015494071
+                },
+                "quantity_postings_write": {
+                  "cpu": 0.23303699999999994,
+                  "wall": 0.236416734
+                },
+                "setup": {
+                  "cpu": 0.0002990000000000492,
+                  "wall": 0.000296787
+                },
+                "small_tables": {
+                  "cpu": 0.006121999999999961,
+                  "wall": 0.006163847
+                }
+              },
+              "loadavg": [
+                16.0283203125,
+                36.45068359375,
+                37.650390625
+              ]
+            },
+            "floor": {
+              "cpu_seconds": 0.7278980000000002,
+              "seconds": 0.980896468,
+              "phases": null,
+              "loadavg": [
+                16.02587890625,
+                36.11083984375,
+                37.53369140625
+              ]
+            }
+          },
+          {
+            "rust": {
+              "cpu_seconds": 0.8948910000000003,
+              "seconds": 1.086435266,
+              "phases": {
+                "begin": {
+                  "cpu": 2.0000000000131024e-05,
+                  "wall": 2.0781e-05
+                },
+                "commit": {
+                  "cpu": 0.21405899999999978,
+                  "wall": 0.398017525
+                },
+                "complete": {
+                  "cpu": 0.015126999999999668,
+                  "wall": 0.015241866
+                },
+                "entries_prepare": {
+                  "cpu": 0.09090500000000024,
+                  "wall": 0.093769186
+                },
+                "entries_write": {
+                  "cpu": 0.258448,
+                  "wall": 0.260826428
+                },
+                "filed": {
+                  "cpu": 0.0001230000000003173,
+                  "wall": 0.000116412
+                },
+                "pricing": {
+                  "cpu": 0.019449999999999967,
+                  "wall": 0.019561048
+                },
+                "quantity": {
+                  "cpu": 0.002542999999999962,
+                  "wall": 0.002561851
+                },
+                "quantity_other": {
+                  "cpu": 0.01577699999999993,
+                  "wall": 0.01587234
+                },
+                "quantity_postings_bind": {
+                  "cpu": 0.03465600000000002,
+                  "wall": 0.034851435
+                },
+                "quantity_postings_prepare": {
+                  "cpu": 0.013938999999999924,
+                  "wall": 0.014038167
+                },
+                "quantity_postings_write": {
+                  "cpu": 0.22373699999999985,
+                  "wall": 0.225363289
+                },
+                "setup": {
+                  "cpu": 0.0003009999999998847,
+                  "wall": 0.000298007
+                },
+                "small_tables": {
+                  "cpu": 0.005778999999999979,
+                  "wall": 0.0058089
+                }
+              },
+              "loadavg": [
+                16.02587890625,
+                36.11083984375,
+                37.53369140625
+              ]
+            },
+            "baseline": {
+              "cpu_seconds": 0.8544799999999997,
+              "seconds": 0.888347801,
+              "phases": {
+                "begin": {
+                  "cpu": 1.6999999999933735e-05,
+                  "wall": 1.9571e-05
+                },
+                "commit": {
+                  "cpu": 0.20953999999999962,
+                  "wall": 0.238884643
+                },
+                "complete": {
+                  "cpu": 0.012034000000000322,
+                  "wall": 0.01210487
+                },
+                "entries_prepare": {
+                  "cpu": 0.08709100000000003,
+                  "wall": 0.08769406
+                },
+                "entries_write": {
+                  "cpu": 0.2405269999999997,
+                  "wall": 0.242275004
+                },
+                "filed": {
+                  "cpu": 0.00011399999999994748,
+                  "wall": 0.000118863
+                },
+                "pricing": {
+                  "cpu": 0.02001300000000006,
+                  "wall": 0.020163243
+                },
+                "quantity": {
+                  "cpu": 0.002562999999999871,
+                  "wall": 0.002586472
+                },
+                "quantity_other": {
+                  "cpu": 0.014832999999999874,
+                  "wall": 0.014923878
+                },
+                "quantity_postings_bind": {
+                  "cpu": 0.035106000000000304,
+                  "wall": 0.035353126
+                },
+                "quantity_postings_prepare": {
+                  "cpu": 0.014839999999999964,
+                  "wall": 0.014941678
+                },
+                "quantity_postings_write": {
+                  "cpu": 0.21250899999999984,
+                  "wall": 0.213911534
+                },
+                "setup": {
+                  "cpu": 0.00031500000000006523,
+                  "wall": 0.000318237
+                },
+                "small_tables": {
+                  "cpu": 0.004955000000000265,
+                  "wall": 0.00498506
+                }
+              },
+              "loadavg": [
+                16.18408203125,
+                35.81005859375,
+                37.4287109375
+              ]
+            },
+            "floor": {
+              "cpu_seconds": 0.766336,
+              "seconds": 0.928802059,
+              "phases": null,
+              "loadavg": [
+                16.48974609375,
+                35.54736328125,
+                37.3349609375
+              ]
+            }
+          },
+          {
+            "baseline": {
+              "cpu_seconds": 0.8708040000000004,
+              "seconds": 0.930537989,
+              "phases": {
+                "begin": {
+                  "cpu": 1.7999999999851468e-05,
+                  "wall": 1.915e-05
+                },
+                "commit": {
+                  "cpu": 0.20766600000000013,
+                  "wall": 0.261983636
+                },
+                "complete": {
+                  "cpu": 0.012337000000000042,
+                  "wall": 0.012419627
+                },
+                "entries_prepare": {
+                  "cpu": 0.081893,
+                  "wall": 0.082521087
+                },
+                "entries_write": {
+                  "cpu": 0.24614000000000003,
+                  "wall": 0.248051442
+                },
+                "filed": {
+                  "cpu": 0.00011600000000022703,
+                  "wall": 0.000112073
+                },
+                "pricing": {
+                  "cpu": 0.019133000000000067,
+                  "wall": 0.019280102
+                },
+                "quantity": {
+                  "cpu": 0.002527000000000168,
+                  "wall": 0.002548561
+                },
+                "quantity_other": {
+                  "cpu": 0.01725299999999974,
+                  "wall": 0.017374086
+                },
+                "quantity_postings_bind": {
+                  "cpu": 0.03380199999999989,
+                  "wall": 0.034076656
+                },
+                "quantity_postings_prepare": {
+                  "cpu": 0.014585999999999988,
+                  "wall": 0.014672561
+                },
+                "quantity_postings_write": {
+                  "cpu": 0.22832300000000028,
+                  "wall": 0.230374548
+                },
+                "setup": {
+                  "cpu": 0.0003109999999999502,
+                  "wall": 0.000307818
+                },
+                "small_tables": {
+                  "cpu": 0.006675999999999682,
+                  "wall": 0.006716381
+                }
+              },
+              "loadavg": [
+                17.57177734375,
+                35.455078125,
+                37.29541015625
+              ]
+            },
+            "rust": {
+              "cpu_seconds": 0.8421919999999998,
+              "seconds": 0.895006897,
+              "phases": {
+                "begin": {
+                  "cpu": 1.7999999999851468e-05,
+                  "wall": 1.981e-05
+                },
+                "commit": {
+                  "cpu": 0.20524999999999993,
+                  "wall": 0.253537253
+                },
+                "complete": {
+                  "cpu": 0.012500999999999873,
+                  "wall": 0.012581612
+                },
+                "entries_prepare": {
+                  "cpu": 0.0781679999999998,
+                  "wall": 0.078692665
+                },
+                "entries_write": {
+                  "cpu": 0.23555800000000016,
+                  "wall": 0.237234063
+                },
+                "filed": {
+                  "cpu": 0.00012699999999998823,
+                  "wall": 0.000124293
+                },
+                "pricing": {
+                  "cpu": 0.018604999999999983,
+                  "wall": 0.018731359
+                },
+                "quantity": {
+                  "cpu": 0.0025780000000001912,
+                  "wall": 0.002592032
+                },
+                "quantity_other": {
+                  "cpu": 0.01422100000000004,
+                  "wall": 0.014329983
+                },
+                "quantity_postings_bind": {
+                  "cpu": 0.042986999999999886,
+                  "wall": 0.043299217
+                },
+                "quantity_postings_prepare": {
+                  "cpu": 0.01435799999999987,
+                  "wall": 0.014468306
+                },
+                "quantity_postings_write": {
+                  "cpu": 0.21169400000000005,
+                  "wall": 0.213188237
+                },
+                "setup": {
+                  "cpu": 0.00030900000000011474,
+                  "wall": 0.000311728
+                },
+                "small_tables": {
+                  "cpu": 0.005796000000000134,
+                  "wall": 0.005829599
+                }
+              },
+              "loadavg": [
+                18.0068359375,
+                35.248046875,
+                37.21826171875
+              ]
+            },
+            "floor": {
+              "cpu_seconds": 0.681762,
+              "seconds": 0.791685722,
+              "phases": null,
+              "loadavg": [
+                18.005859375,
+                34.96142578125,
+                37.11474609375
+              ]
+            }
+          },
+          {
+            "rust": {
+              "cpu_seconds": 0.876204,
+              "seconds": 1.101527453,
+              "phases": {
+                "begin": {
+                  "cpu": 1.6999999999933735e-05,
+                  "wall": 1.8881e-05
+                },
+                "commit": {
+                  "cpu": 0.21639099999999978,
+                  "wall": 0.435847629
+                },
+                "complete": {
+                  "cpu": 0.012808000000000153,
+                  "wall": 0.01291636
+                },
+                "entries_prepare": {
+                  "cpu": 0.08412599999999992,
+                  "wall": 0.084987556
+                },
+                "entries_write": {
+                  "cpu": 0.25389399999999984,
+                  "wall": 0.256573955
+                },
+                "filed": {
+                  "cpu": 0.0001289999999998237,
+                  "wall": 0.000122243
+                },
+                "pricing": {
+                  "cpu": 0.0181720000000003,
+                  "wall": 0.018322989
+                },
+                "quantity": {
+                  "cpu": 0.0027029999999999,
+                  "wall": 0.002731035
+                },
+                "quantity_other": {
+                  "cpu": 0.014604999999999535,
+                  "wall": 0.014700682
+                },
+                "quantity_postings_bind": {
+                  "cpu": 0.039948000000000095,
+                  "wall": 0.040191063
+                },
+                "quantity_postings_prepare": {
+                  "cpu": 0.01824300000000001,
+                  "wall": 0.01836337
+                },
+                "quantity_postings_write": {
+                  "cpu": 0.20917700000000017,
+                  "wall": 0.210629855
+                },
+                "setup": {
+                  "cpu": 0.00032300000000007323,
+                  "wall": 0.000318898
+                },
+                "small_tables": {
+                  "cpu": 0.005646000000000484,
+                  "wall": 0.005723837
+                }
+              },
+              "loadavg": [
+                18.005859375,
+                34.96142578125,
+                37.11474609375
+              ]
+            },
+            "baseline": {
+              "cpu_seconds": 0.8538229999999998,
+              "seconds": 0.927083204,
+              "phases": {
+                "begin": {
+                  "cpu": 1.7999999999851468e-05,
+                  "wall": 1.9e-05
+                },
+                "commit": {
+                  "cpu": 0.21236099999999958,
+                  "wall": 0.281194225
+                },
+                "complete": {
+                  "cpu": 0.01509600000000022,
+                  "wall": 0.015265725
+                },
+                "entries_prepare": {
+                  "cpu": 0.08631199999999994,
+                  "wall": 0.08683692
+                },
+                "entries_write": {
+                  "cpu": 0.24128799999999995,
+                  "wall": 0.242907358
+                },
+                "filed": {
+                  "cpu": 0.0001500000000000945,
+                  "wall": 0.000145894
+                },
+                "pricing": {
+                  "cpu": 0.017796000000000145,
+                  "wall": 0.017912729
+                },
+                "quantity": {
+                  "cpu": 0.002606999999999804,
+                  "wall": 0.002625192
+                },
+                "quantity_other": {
+                  "cpu": 0.014639999999999986,
+                  "wall": 0.014721923
+                },
+                "quantity_postings_bind": {
+                  "cpu": 0.0345209999999998,
+                  "wall": 0.034932626
+                },
+                "quantity_postings_prepare": {
+                  "cpu": 0.014483000000000246,
+                  "wall": 0.01456977
+                },
+                "quantity_postings_write": {
+                  "cpu": 0.208021,
+                  "wall": 0.209307793
+                },
+                "setup": {
+                  "cpu": 0.00031300000000022976,
+                  "wall": 0.000315658
+                },
+                "small_tables": {
+                  "cpu": 0.0061949999999999505,
+                  "wall": 0.00625584
+                }
+              },
+              "loadavg": [
+                18.00537109375,
+                34.6796875,
+                37.01171875
+              ]
+            },
+            "floor": {
+              "cpu_seconds": 0.6998940000000001,
+              "seconds": 0.788558316,
+              "phases": null,
+              "loadavg": [
+                18.0048828125,
+                34.40234375,
+                36.9091796875
+              ]
+            }
+          }
+        ],
+        "best": {
+          "rust": 0.8421919999999998,
+          "baseline": 0.8538229999999998,
+          "floor": 0.681762
+        },
+        "median_candidate_baseline_cpu_ratio": 0.9671430080707019
+      },
+      {
+        "capture": "target/captures/multi-wallet-20000-cipher-unchanged",
+        "capture_hashes": {
+          "target/captures/multi-wallet-20000-cipher-unchanged/request.json": "191aa95edf253b07ea07e1dc00ce9537258fa7c07b31edba7f76d5f66e986b1f",
+          "target/captures/multi-wallet-20000-cipher-unchanged/floor.json": "67dd97b7ecbec77c167207aa589216c13802cca2155f108661c9d0615f6b55ce",
+          "target/captures/multi-wallet-20000-cipher-unchanged/base/kassiber.sqlite3": "c3f533d245788b23fdc17e7b4b7d8ecf76e2f6c133c5e309e8b8be21ff15b294"
+        },
+        "trials": [
+          {
+            "rust": {
+              "cpu_seconds": 0.5415640000000002,
+              "seconds": 0.699374049,
+              "phases": {
+                "begin": {
+                  "cpu": 1.5000000000098268e-05,
+                  "wall": 1.6571e-05
+                },
+                "commit": {
+                  "cpu": 0.004596999999999518,
+                  "wall": 0.153767523
+                },
+                "complete": {
+                  "cpu": 0.004245000000000054,
+                  "wall": 0.004275702
+                },
+                "entries_prepare": {
+                  "cpu": 0.0432320000000006,
+                  "wall": 0.043543013
+                },
+                "entries_write": {
+                  "cpu": 0.16248099999999965,
+                  "wall": 0.16368995
+                },
+                "filed": {
+                  "cpu": 4.000000000115023e-06,
+                  "wall": 1.14e-06
+                },
+                "pricing": {
+                  "cpu": 0.06405099999999964,
+                  "wall": 0.064635848
+                },
+                "quantity": {
+                  "cpu": 0.008728000000000069,
+                  "wall": 0.0087978
+                },
+                "quantity_other": {
+                  "cpu": 0.04923300000000008,
+                  "wall": 0.049611778
+                },
+                "quantity_postings_bind": {
+                  "cpu": 0.040600000000000414,
+                  "wall": 0.040868888
+                },
+                "quantity_postings_prepare": {
+                  "cpu": 0.014134999999999565,
+                  "wall": 0.014218071
+                },
+                "quantity_postings_write": {
+                  "cpu": 0.13892999999999978,
+                  "wall": 0.139934251
+                },
+                "setup": {
+                  "cpu": 0.0012010000000000076,
+                  "wall": 0.001206929
+                },
+                "small_tables": {
+                  "cpu": 0.010101000000000138,
+                  "wall": 0.014766324
+                }
+              },
+              "loadavg": [
+                17.7958984375,
+                33.8134765625,
+                36.68994140625
+              ]
+            },
+            "baseline": {
+              "cpu_seconds": 0.5669650000000002,
+              "seconds": 0.630641432,
+              "phases": {
+                "begin": {
+                  "cpu": 1.6999999999933735e-05,
+                  "wall": 1.825e-05
+                },
+                "commit": {
+                  "cpu": 0.005436999999999692,
+                  "wall": 0.061872942
+                },
+                "complete": {
+                  "cpu": 0.004283000000000037,
+                  "wall": 0.004329514
+                },
+                "entries_prepare": {
+                  "cpu": 0.048956,
+                  "wall": 0.049506085
+                },
+                "entries_write": {
+                  "cpu": 0.1641250000000003,
+                  "wall": 0.166222031
+                },
+                "filed": {
+                  "cpu": 7.000000000090267e-06,
+                  "wall": 1.34e-06
+                },
+                "pricing": {
+                  "cpu": 0.06583300000000003,
+                  "wall": 0.066495863
+                },
+                "quantity": {
+                  "cpu": 0.008980999999999906,
+                  "wall": 0.009082228
+                },
+                "quantity_other": {
+                  "cpu": 0.05444199999999988,
+                  "wall": 0.056437472
+                },
+                "quantity_postings_bind": {
+                  "cpu": 0.04535100000000014,
+                  "wall": 0.045692314
+                },
+                "quantity_postings_prepare": {
+                  "cpu": 0.015137999999999874,
+                  "wall": 0.015250085
+                },
+                "quantity_postings_write": {
+                  "cpu": 0.14288100000000004,
+                  "wall": 0.14407432
+                },
+                "setup": {
+                  "cpu": 0.0011830000000001561,
+                  "wall": 0.001188759
+                },
+                "small_tables": {
+                  "cpu": 0.010318999999999967,
+                  "wall": 0.010429099
+                }
+              },
+              "loadavg": [
+                17.25146484375,
+                33.4345703125,
+                36.5517578125
+              ]
+            },
+            "floor": {
+              "cpu_seconds": 0.018847999999999976,
+              "seconds": 0.084412211,
+              "phases": null,
+              "loadavg": [
+                16.91064453125,
+                33.09521484375,
+                36.4248046875
+              ]
+            }
+          },
+          {
+            "baseline": {
+              "cpu_seconds": 0.5962990000000001,
+              "seconds": 0.88488152,
+              "phases": {
+                "begin": {
+                  "cpu": 2.0000000000131024e-05,
+                  "wall": 1.96e-05
+                },
+                "commit": {
+                  "cpu": 0.04628600000000027,
+                  "wall": 0.321836107
+                },
+                "complete": {
+                  "cpu": 0.004126999999999992,
+                  "wall": 0.00415834
+                },
+                "entries_prepare": {
+                  "cpu": 0.045682999999999474,
+                  "wall": 0.045983501
+                },
+                "entries_write": {
+                  "cpu": 0.16090000000000027,
+                  "wall": 0.161977529
+                },
+                "filed": {
+                  "cpu": 5.999999999950489e-06,
+                  "wall": 1.23e-06
+                },
+                "pricing": {
+                  "cpu": 0.06918500000000005,
+                  "wall": 0.07015548
+                },
+                "quantity": {
+                  "cpu": 0.00918999999999981,
+                  "wall": 0.009303603
+                },
+                "quantity_other": {
+                  "cpu": 0.050843000000000416,
+                  "wall": 0.051206106
+                },
+                "quantity_postings_bind": {
+                  "cpu": 0.04390600000000022,
+                  "wall": 0.044214239
+                },
+                "quantity_postings_prepare": {
+                  "cpu": 0.014825000000000088,
+                  "wall": 0.014933297
+                },
+                "quantity_postings_write": {
+                  "cpu": 0.13992999999999967,
+                  "wall": 0.141040208
+                },
+                "setup": {
+                  "cpu": 0.0011380000000000834,
+                  "wall": 0.001147378
+                },
+                "small_tables": {
+                  "cpu": 0.010248999999999953,
+                  "wall": 0.018867222
+                }
+              },
+              "loadavg": [
+                16.91064453125,
+                33.09521484375,
+                36.4248046875
+              ]
+            },
+            "rust": {
+              "cpu_seconds": 0.5643189999999998,
+              "seconds": 0.758025982,
+              "phases": {
+                "begin": {
+                  "cpu": 1.6000000000016e-05,
+                  "wall": 1.8241e-05
+                },
+                "commit": {
+                  "cpu": 0.012295000000000389,
+                  "wall": 0.199499037
+                },
+                "complete": {
+                  "cpu": 0.006213999999999942,
+                  "wall": 0.00624796
+                },
+                "entries_prepare": {
+                  "cpu": 0.04791100000000004,
+                  "wall": 0.048293446
+                },
+                "entries_write": {
+                  "cpu": 0.15717099999999995,
+                  "wall": 0.158489515
+                },
+                "filed": {
+                  "cpu": 3.9999999996709334e-06,
+                  "wall": 1.24e-06
+                },
+                "pricing": {
+                  "cpu": 0.06522200000000034,
+                  "wall": 0.065733274
+                },
+                "quantity": {
+                  "cpu": 0.009094999999999853,
+                  "wall": 0.009208931
+                },
+                "quantity_other": {
+                  "cpu": 0.05749699999999969,
+                  "wall": 0.059175487
+                },
+                "quantity_postings_bind": {
+                  "cpu": 0.041619000000000295,
+                  "wall": 0.042113778
+                },
+                "quantity_postings_prepare": {
+                  "cpu": 0.01569900000000013,
+                  "wall": 0.015920212
+                },
+                "quantity_postings_write": {
+                  "cpu": 0.13999499999999987,
+                  "wall": 0.141629641
+                },
+                "setup": {
+                  "cpu": 0.001206999999999958,
+                  "wall": 0.001235719
+                },
+                "small_tables": {
+                  "cpu": 0.01035699999999995,
+                  "wall": 0.01041671
+                }
+              },
+              "loadavg": [
+                16.43701171875,
+                32.72802734375,
+                36.2880859375
+              ]
+            },
+            "floor": {
+              "cpu_seconds": 0.019998000000000016,
+              "seconds": 0.089583755,
+              "phases": null,
+              "loadavg": [
+                17.203125,
+                32.6162109375,
+                36.232421875
+              ]
+            }
+          },
+          {
+            "rust": {
+              "cpu_seconds": 0.547607,
+              "seconds": 0.763956113,
+              "phases": {
+                "begin": {
+                  "cpu": 1.8999999999991246e-05,
+                  "wall": 2.0061e-05
+                },
+                "commit": {
+                  "cpu": 0.005089000000000343,
+                  "wall": 0.215297655
+                },
+                "complete": {
+                  "cpu": 0.005145999999999873,
+                  "wall": 0.005185834
+                },
+                "entries_prepare": {
+                  "cpu": 0.048277000000000125,
+                  "wall": 0.048773858
+                },
+                "entries_write": {
+                  "cpu": 0.15920699999999988,
+                  "wall": 0.160372351
+                },
+                "filed": {
+                  "cpu": 1.0000000000065512e-05,
+                  "wall": 1.69e-06
+                },
+                "pricing": {
+                  "cpu": 0.06411299999999986,
+                  "wall": 0.064964125
+                },
+                "quantity": {
+                  "cpu": 0.00913300000000028,
+                  "wall": 0.00919273
+                },
+                "quantity_other": {
+                  "cpu": 0.05033300000000018,
+                  "wall": 0.050913759
+                },
+                "quantity_postings_bind": {
+                  "cpu": 0.04276199999999997,
+                  "wall": 0.043738067
+                },
+                "quantity_postings_prepare": {
+                  "cpu": 0.015628999999999893,
+                  "wall": 0.016097836
+                },
+                "quantity_postings_write": {
+                  "cpu": 0.13628699999999982,
+                  "wall": 0.137689737
+                },
+                "setup": {
+                  "cpu": 0.0011299999999998533,
+                  "wall": 0.001133817
+                },
+                "small_tables": {
+                  "cpu": 0.010460000000000136,
+                  "wall": 0.010521312
+                }
+              },
+              "loadavg": [
+                17.203125,
+                32.6162109375,
+                36.232421875
+              ]
+            },
+            "baseline": {
+              "cpu_seconds": 0.5365469999999999,
+              "seconds": 0.610643772,
+              "phases": {
+                "begin": {
+                  "cpu": 1.8000000000073513e-05,
+                  "wall": 1.8681e-05
+                },
+                "commit": {
+                  "cpu": 0.004366999999999788,
+                  "wall": 0.074715819
+                },
+                "complete": {
+                  "cpu": 0.004606999999999584,
+                  "wall": 0.004642601
+                },
+                "entries_prepare": {
+                  "cpu": 0.04515199999999986,
+                  "wall": 0.045444288
+                },
+                "entries_write": {
+                  "cpu": 0.15678899999999985,
+                  "wall": 0.157901711
+                },
+                "filed": {
+                  "cpu": 7.000000000090267e-06,
+                  "wall": 1.43e-06
+                },
+                "pricing": {
+                  "cpu": 0.06438800000000011,
+                  "wall": 0.064810082
+                },
+                "quantity": {
+                  "cpu": 0.008654000000000162,
+                  "wall": 0.00873132
+                },
+                "quantity_other": {
+                  "cpu": 0.04917000000000016,
+                  "wall": 0.049502785
+                },
+                "quantity_postings_bind": {
+                  "cpu": 0.042386000000000035,
+                  "wall": 0.042679691
+                },
+                "quantity_postings_prepare": {
+                  "cpu": 0.014629000000000003,
+                  "wall": 0.014740933
+                },
+                "quantity_postings_write": {
+                  "cpu": 0.13499899999999965,
+                  "wall": 0.135980725
+                },
+                "setup": {
+                  "cpu": 0.0011539999999998773,
+                  "wall": 0.001158077
+                },
+                "small_tables": {
+                  "cpu": 0.01021500000000053,
+                  "wall": 0.010276106
+                }
+              },
+              "loadavg": [
+                16.5458984375,
+                32.22412109375,
+                36.0859375
+              ]
+            },
+            "floor": {
+              "cpu_seconds": 0.02093499999999998,
+              "seconds": 0.092342771,
+              "phases": null,
+              "loadavg": [
+                16.26171875,
+                31.90478515625,
+                35.9619140625
+              ]
+            }
+          },
+          {
+            "baseline": {
+              "cpu_seconds": 0.5995460000000001,
+              "seconds": 0.696955517,
+              "phases": {
+                "begin": {
+                  "cpu": 1.699999999971169e-05,
+                  "wall": 1.823e-05
+                },
+                "commit": {
+                  "cpu": 0.0046319999999999695,
+                  "wall": 0.069004362
+                },
+                "complete": {
+                  "cpu": 0.004078999999999944,
+                  "wall": 0.004111379
+                },
+                "entries_prepare": {
+                  "cpu": 0.04687000000000019,
+                  "wall": 0.04720219
+                },
+                "entries_write": {
+                  "cpu": 0.157235,
+                  "wall": 0.158733001
+                },
+                "filed": {
+                  "cpu": 4.999999999810711e-06,
+                  "wall": 1.16e-06
+                },
+                "pricing": {
+                  "cpu": 0.07453500000000002,
+                  "wall": 0.075695512
+                },
+                "quantity": {
+                  "cpu": 0.00955600000000012,
+                  "wall": 0.033310948
+                },
+                "quantity_other": {
+                  "cpu": 0.06585900000000011,
+                  "wall": 0.066493372
+                },
+                "quantity_postings_bind": {
+                  "cpu": 0.043579000000000256,
+                  "wall": 0.043914001
+                },
+                "quantity_postings_prepare": {
+                  "cpu": 0.015622999999999942,
+                  "wall": 0.015743337
+                },
+                "quantity_postings_write": {
+                  "cpu": 0.16602099999999975,
+                  "wall": 0.171072597
+                },
+                "setup": {
+                  "cpu": 0.0011849999999999916,
+                  "wall": 0.001195709
+                },
+                "small_tables": {
+                  "cpu": 0.010336999999999819,
+                  "wall": 0.010415039
+                }
+              },
+              "loadavg": [
+                16.26171875,
+                31.90478515625,
+                35.9619140625
+              ]
+            },
+            "rust": {
+              "cpu_seconds": 0.6398519999999999,
+              "seconds": 1.087062487,
+              "phases": {
+                "begin": {
+                  "cpu": 2.299999999966218e-05,
+                  "wall": 2.3641e-05
+                },
+                "commit": {
+                  "cpu": 0.07048900000000025,
+                  "wall": 0.42228346
+                },
+                "complete": {
+                  "cpu": 0.005859000000000059,
+                  "wall": 0.005904072
+                },
+                "entries_prepare": {
+                  "cpu": 0.06458399999999997,
+                  "wall": 0.066211975
+                },
+                "entries_write": {
+                  "cpu": 0.16062600000000016,
+                  "wall": 0.161831025
+                },
+                "filed": {
+                  "cpu": 8.999999999925734e-06,
+                  "wall": 2.7e-06
+                },
+                "pricing": {
+                  "cpu": 0.0626549999999999,
+                  "wall": 0.063127802
+                },
+                "quantity": {
+                  "cpu": 0.00928400000000007,
+                  "wall": 0.009357574
+                },
+                "quantity_other": {
+                  "cpu": 0.05105100000000018,
+                  "wall": 0.051453202
+                },
+                "quantity_postings_bind": {
+                  "cpu": 0.046180000000000554,
+                  "wall": 0.046535824
+                },
+                "quantity_postings_prepare": {
+                  "cpu": 0.015348999999999613,
+                  "wall": 0.015480711
+                },
+                "quantity_postings_write": {
+                  "cpu": 0.14231899999999964,
+                  "wall": 0.143363742
+                },
+                "setup": {
+                  "cpu": 0.0012720000000001619,
+                  "wall": 0.001288091
+                },
+                "small_tables": {
+                  "cpu": 0.01013799999999998,
+                  "wall": 0.100147748
+                }
+              },
+              "loadavg": [
+                15.76025390625,
+                31.541015625,
+                35.822265625
+              ]
+            },
+            "floor": {
+              "cpu_seconds": 0.02081700000000003,
+              "seconds": 0.123540967,
+              "phases": null,
+              "loadavg": [
+                15.5390625,
+                31.23291015625,
+                35.69921875
+              ]
+            }
+          },
+          {
+            "rust": {
+              "cpu_seconds": 0.5943679999999998,
+              "seconds": 0.646232152,
+              "phases": {
+                "begin": {
+                  "cpu": 2.199999999996649e-05,
+                  "wall": 2.2951e-05
+                },
+                "commit": {
+                  "cpu": 0.005249000000000059,
+                  "wall": 0.052095507
+                },
+                "complete": {
+                  "cpu": 0.006396999999999764,
+                  "wall": 0.006461985
+                },
+                "entries_prepare": {
+                  "cpu": 0.054238999999999926,
+                  "wall": 0.054655889
+                },
+                "entries_write": {
+                  "cpu": 0.16547500000000026,
+                  "wall": 0.166824894
+                },
+                "filed": {
+                  "cpu": 8.999999999925734e-06,
+                  "wall": 2.15e-06
+                },
+                "pricing": {
+                  "cpu": 0.06639500000000043,
+                  "wall": 0.066950713
+                },
+                "quantity": {
+                  "cpu": 0.009630999999999723,
+                  "wall": 0.009746463
+                },
+                "quantity_other": {
+                  "cpu": 0.05846899999999966,
+                  "wall": 0.058977242
+                },
+                "quantity_postings_bind": {
+                  "cpu": 0.04761799999999994,
+                  "wall": 0.048088521
+                },
+                "quantity_postings_prepare": {
+                  "cpu": 0.017117999999999967,
+                  "wall": 0.017265123
+                },
+                "quantity_postings_write": {
+                  "cpu": 0.15145300000000006,
+                  "wall": 0.152696546
+                },
+                "setup": {
+                  "cpu": 0.0012770000000004167,
+                  "wall": 0.001286321
+                },
+                "small_tables": {
+                  "cpu": 0.011000999999999816,
+                  "wall": 0.011104486
+                }
+              },
+              "loadavg": [
+                18.298828125,
+                31.544921875,
+                35.7763671875
+              ]
+            },
+            "baseline": {
+              "cpu_seconds": 0.5658339999999997,
+              "seconds": 0.722075827,
+              "phases": {
+                "begin": {
+                  "cpu": 1.8000000000295557e-05,
+                  "wall": 1.938e-05
+                },
+                "commit": {
+                  "cpu": 0.004379000000000133,
+                  "wall": 0.15661713
+                },
+                "complete": {
+                  "cpu": 0.005863999999999869,
+                  "wall": 0.005914072
+                },
+                "entries_prepare": {
+                  "cpu": 0.050985999999999976,
+                  "wall": 0.0513485
+                },
+                "entries_write": {
+                  "cpu": 0.16358400000000017,
+                  "wall": 0.164783535
+                },
+                "filed": {
+                  "cpu": 2.9999999999752447e-06,
+                  "wall": 1.23e-06
+                },
+                "pricing": {
+                  "cpu": 0.06354099999999985,
+                  "wall": 0.063994362
+                },
+                "quantity": {
+                  "cpu": 0.008933999999999997,
+                  "wall": 0.008999435
+                },
+                "quantity_other": {
+                  "cpu": 0.05366400000000038,
+                  "wall": 0.054071065
+                },
+                "quantity_postings_bind": {
+                  "cpu": 0.045726000000000155,
+                  "wall": 0.046059292
+                },
+                "quantity_postings_prepare": {
+                  "cpu": 0.01632200000000017,
+                  "wall": 0.016442174
+                },
+                "quantity_postings_write": {
+                  "cpu": 0.14147299999999952,
+                  "wall": 0.142401979
+                },
+                "setup": {
+                  "cpu": 0.0011569999999996305,
+                  "wall": 0.001162168
+                },
+                "small_tables": {
+                  "cpu": 0.010172999999999988,
+                  "wall": 0.010220224
+                }
+              },
+              "loadavg": [
+                18.1943359375,
+                31.30322265625,
+                35.67529296875
+              ]
+            },
+            "floor": {
+              "cpu_seconds": 0.02119700000000002,
+              "seconds": 0.094035952,
+              "phases": null,
+              "loadavg": [
+                18.1787109375,
+                31.08203125,
+                35.580078125
+              ]
+            }
+          }
+        ],
+        "best": {
+          "rust": 0.5415640000000002,
+          "baseline": 0.5365469999999999,
+          "floor": 0.018847999999999976
+        },
+        "median_candidate_baseline_cpu_ratio": 1.0206132920321986
+      }
+    ]
+  },
+  "exact_timed_dumps": 30,
+  "budget_checks": {
+    "generic_fresh_native": 0.842192,
+    "paired_write_floor": 0.681762,
+    "over_paired_floor_plus_015": 0.01043,
+    "lower_historical_write_floor": 0.639016,
+    "over_lower_floor_plus_015": 0.053176,
+    "multi_wallet_cipher_unchanged_native": 0.541564,
+    "lower_historical_read_floor": 0.208488,
+    "over_lower_read_floor_plus_015": 0.183076
+  },
+  "targeted_mutations": {
+    "recipes": [
+      {
+        "id": "JP-fresh-tie-validation",
+        "source_sha256": "288d9a983f562df005b2dd6bed811bcfb7f2b304cba672556d2196a4dc0ce649",
+        "build_returncode": 0,
+        "test_returncode": 101,
+        "stdout": "\nrunning 1 test\ntest storage::tests::malformed_storage_id_and_tie_shapes_refuse_without_writes ... FAILED\n\nfailures:\n\n---- storage::tests::malformed_storage_id_and_tie_shapes_refuse_without_writes stdout ----\n\nthread 'storage::tests::malformed_storage_id_and_tie_shapes_refuse_without_writes' (129) panicked at crates/journals/src/storage/tests.rs:341:17:\nassertion failed: replace_journal_entries(&c, \"p\", &[invalid], &mut ()).is_err()\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n\nfailures:\n    storage::tests::malformed_storage_id_and_tie_shapes_refuse_without_writes\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 36 filtered out; finished in 0.00s\n\n",
+        "stderr": "    Finished `release` profile [optimized] target(s) in 0.15s\n     Running unittests src/lib.rs (target/build/release/deps/kassiber_journals-ca160839e3966d7c)\nerror: test failed, to rerun pass `-p kassiber-journals --lib`\n"
+      }
+    ],
+    "restored_stdout": "\nrunning 1 test\ntest storage::tests::malformed_storage_id_and_tie_shapes_refuse_without_writes ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 36 filtered out; finished in 0.00s\n\n",
+    "restored_stderr": "   Compiling kassiber-journals v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-276e9ddd/crates/journals)\n    Finished `release` profile [optimized] target(s) in 6.50s\n     Running unittests src/lib.rs (target/build/release/deps/kassiber_journals-ca160839e3966d7c)\n"
+  },
+  "checks": [
+    {
+      "path": "target/evidence/empty-tests.log",
+      "sha256": "b26db3e94205446b760b5d47a2cee7abf177529ab16214428285f928292d0e68",
+      "log": "   Compiling kassiber-journals v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-276e9ddd/crates/journals)\n    Finished `release` profile [optimized] target(s) in 6.97s\n     Running unittests src/lib.rs (target/build/release/deps/kassiber_journals-ca160839e3966d7c)\n\nrunning 37 tests\ntest boundary::joins::tests::balance_current_keys_preserve_python_stringification ... ok\ntest boundary::joins::tests::balance_join_matches_existing_comparator_and_promotes_before_overflow ... ok\ntest loader::direct::tests::native_loader_reads_direct_columns_without_conversion ... ok\ntest loader::receipts::tests::native_loader_receipt_filter_never_rejects_possible_identities ... ok\ntest loader::tests::native_loader_bounds_gap_worklist ... ok\ntest loader::tests::native_loader_keeps_sql_values_and_refuses_blob_coercion ... ok\ntest loader::tests::native_loader_matches_python_database_bytes ... ok\ntest loader::tests::native_loader_preserves_receipt_error_precedence ... ok\ntest loader::tests::native_loader_requires_caller_write_transaction ... ok\ntest loader::tests::native_loader_selects_bounded_worklist_from_active_count ... ok\ntest persistence::entries::tests::decimal_padding_validation_preserves_limits_without_formatting ... ok\ntest persistence::entries::tests::typed_decimal_comparison_retains_every_fixed_digit_sign_and_scale ... ok\ntest persistence::entries::tests::typed_retained_columns_force_real_delta_writes_and_unchanged_rows_prepare_no_bindings ... ok\ntest persistence::filed::tests::filed_chain_resolution_requires_authoritative_retraction_or_confirmed_observation ... ok\ntest persistence::filed::tests::filed_summary_parsing_preserves_safe_fallbacks_and_scalar_refusals ... ok\ntest persistence::quantity::tests::economic_relation_source_ids_use_first_truthy_id_or_empty_string ... ok\ntest persistence::tests::scalar_bindings_preserve_types_signs_and_refuse_wide_or_structured_values ... ok\ntest persistence::tests::shared_decimal_spelling_preserves_float_bits_and_exact_text ... ok\ntest render::tests::msat_conversion_matches_python_at_rounding_and_width_boundaries ... ok\ntest storage::calculation::compare::tests::canonical_string_comparison_preserves_escaping_and_byte_boundaries ... ok\ntest storage::tests::compact_tuple_refuses_nonintegral_or_structured_scalars ... ok\ntest storage::tests::entry_deltas_rewrite_timestamp_groups_and_retain_untouched_rowids ... ok\ntest storage::tests::every_entry_real_column_preserves_the_negative_zero_rewrite_rule ... ok\ntest storage::tests::every_retained_content_column_forces_writes_but_the_build_clock_does_not ... ok\ntest storage::tests::malformed_storage_id_and_tie_shapes_refuse_without_writes ... ok\ntest storage::tests::mixed_timestamps_and_signed_zero_force_entry_rewrites ... ok\ntest storage::tests::posting_deltas_reject_duplicates_and_keep_unchanged_rows ... ok\ntest storage::tests::posting_time_order_keeps_identity_when_times_move_or_are_null ... ok\ntest storage::tests::processing_marker_refuses_datetime_overflow ... ok\ntest storage::tests::quarantine_deduplication_and_enrichment_match_lossless_python_json ... ok\ntest storage::tests::removing_a_mixed_clock_sibling_keeps_the_survivors_rowid_and_creation_time ... ok\ntest storage::tests::retained_comparisons_distinguish_cell_boundaries_blob_text_and_null_text ... ok\ntest storage::tests::scoped_cache_and_checkpoint_restore_exact_settings ... ok\ntest storage::tests::shared_calculation_encoder_keeps_every_source_operand_and_refusal ... ok\ntest storage::tests::storage_encodings_and_markers_match_python ... ok\ntest storage::tests::typed_calculation_source_dictionary_preserves_order_and_deduplicates_large_inputs ... ok\ntest storage::tests::typed_calculations_preserve_compact_bytes_and_all_dynamic_fallbacks ... ok\n\ntest result: ok. 37 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.47s\n\n     Running tests/crash.rs (target/build/release/deps/crash-be5276f1e6f72fd4)\n\nrunning 2 tests\ntest killed_writes_recover_complete_stale_books_on_sqlite_and_sqlcipher ... ok\ntest persistence_crash_child ... ok\n\ntest result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 123.74s\n\n     Running tests/fusion_parity.rs (target/build/release/deps/fusion_parity-c1752200b69dc095)\n\nrunning 2 tests\ntest decision_only_builds_skip_fusion ... ok\ntest pipeline_fusion_matches_the_harness ... ok\n\ntest result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s\n\n     Running tests/oracle.rs (target/build/release/deps/oracle-304d38fca1b9e43e)\n\nrunning 4 tests\ntest ledger_rendering_matches_python ... ok\ntest ownership_reviews_and_reconciliations_match_python ... ok\ntest quarantine_candidate_enrichment_is_compact_sorted_and_ascii ... ok\ntest refusal_mapping_matches_python ... ok\n\ntest result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.27s\n\n     Running tests/persistence.rs (target/build/release/deps/persistence-0ccafc1f6bba6ea8)\n\nrunning 18 tests\ntest absent_quantity_preserves_quantity_rows_and_clears_reconciliations ... ok\ntest binding_refusals_precede_decimal_formatting_and_roll_back_every_write ... ok\ntest component_blockers_keep_filed_impacts_pending_without_quarantines ... ok\ntest corrupt_filed_snapshot_refuses_and_rolls_back_freshness ... ok\ntest dump_comparison_preserves_scalar_types_and_every_real_bit ... ok\ntest economic_relation_fallbacks_and_nonpositive_amounts_preserve_exact_principal ... ok\ntest every_write_failure_and_panic_rolls_back_the_journal ... ok\ntest journal_persistence_matches_complete_python_dumps ... ok\ntest malformed_entry_and_holding_bindings_roll_back_before_freshness ... ok\ntest missing_inactive_or_changed_components_never_persist_reconciliations ... ok\ntest nested_cache_and_checkpoint_refusals_restore_signed_settings ... ok\ntest pending_chain_impacts_stay_open_without_dependencies_or_current_authority ... ok\ntest persistence_refuses_without_a_caller_transaction ... ok\ntest repeated_rebuilds_replace_small_tables_and_keep_sealed_resolutions ... ok\ntest sqlcipher_delete_full_preserves_complete_dumps_and_cache_settings ... ok\ntest synthetic_quarantines_are_filtered_before_readiness ... ok\ntest typed_entry_negative_zero_forces_rewrites_in_all_five_real_columns ... ok\ntest wal_checkpoint_waits_for_commit_and_retains_active_readers ... ok\n\ntest result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 24.22s\n\n   Doc-tests kassiber_journals\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n"
+    },
+    {
+      "path": "target/evidence/empty-mutations.log",
+      "sha256": "74bb153733023c586d75daed4019cdc84110ab15c851b8bed2d5582d250709b3",
+      "log": "killed JP-fresh-tie-validation\nall 1 targeted mutations killed; restored source passed\n"
+    },
+    {
+      "path": "target/evidence/empty-clippy.log",
+      "sha256": "453084815cea802538dd2280d93ecf6fcacdcece652ddb83011eb858f7fa9b9c",
+      "log": "    Checking kassiber-journals v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-276e9ddd/crates/journals)\n    Finished `release` profile [optimized] target(s) in 1.54s\n"
+    },
+    {
+      "path": "target/evidence/empty-applicability.log",
+      "sha256": "22927d93d0c755c76503c4f8b401ee051584e1ef3538d17fdaf24a06b41fbbd2",
+      "log": "201 entries apply\n"
+    },
+    {
+      "path": "target/evidence/empty-classifier.log",
+      "sha256": "6d5aec411b822716320386bd5a09a02e20eb087879bc27512f783043fa4d4896",
+      "log": "wrote tests/rust_port/dispositions.json\n"
+    },
+    {
+      "path": "target/evidence/empty-preflight.log",
+      "sha256": "4aba2c9c59e261a2032fd6df974a88d3b598daf9c2d16e84f697bd857df1dd18",
+      "log": "> /home/tg/.t3/worktrees/kassiber/t3-276e9ddd/.venv/bin/python -m pytest /home/tg/.t3/worktrees/kassiber/t3-276e9ddd/tests/rust_port/test_contracts.py /home/tg/.t3/worktrees/kassiber/t3-276e9ddd/tests/rust_port/test_inventory.py /home/tg/.t3/worktrees/kassiber/t3-276e9ddd/tests/test_ci_shards.py /home/tg/.t3/worktrees/kassiber/t3-276e9ddd/tests/test_connection_catalog_drift.py /home/tg/.t3/worktrees/kassiber/t3-276e9ddd/tests/test_dependency_drift.py /home/tg/.t3/worktrees/kassiber/t3-276e9ddd/tests/test_report_contract_drift.py /home/tg/.t3/worktrees/kassiber/t3-276e9ddd/tests/test_workflow_pins.py\n============================= test session starts ==============================\nplatform linux -- Python 3.11.17, pytest-9.1.1, pluggy-1.6.0\nrootdir: /home/tg/.t3/worktrees/kassiber/t3-276e9ddd\nconfigfile: pyproject.toml\nplugins: xdist-3.8.0\ncollected 57 items\n\ntests/rust_port/test_contracts.py ..                                     [  3%]\ntests/rust_port/test_inventory.py ........                               [ 17%]\ntests/test_ci_shards.py ..................                               [ 49%]\ntests/test_connection_catalog_drift.py ..................                [ 80%]\ntests/test_dependency_drift.py ....                                      [ 87%]\ntests/test_report_contract_drift.py .                                    [ 89%]\ntests/test_workflow_pins.py ......                                       [100%]\n\n======================== 57 passed in 85.34s (0:01:25) =========================\n"
+    }
+  ],
+  "prior_python_oracle_checks": {
+    "commit": "ab67908b2",
+    "record": "docs/reference/r4-journal-persistence-padding-measurements.json",
+    "passed": 65,
+    "qualification": "Python oracle/storage sources and frozen expected vectors are unchanged. These Python checks ran before the empty-table production change; all final-source native complete-dump witnesses were rerun."
+  },
+  "scratch_sources": {
+    "target/run-empty-mutations.py": "from pathlib import Path\nimport hashlib,json,re,subprocess\ncatalog=json.loads(Path('crates/journals/scripts/mutations.json').read_text())\nrecords=[]\nfor recipe in catalog:\n    if not recipe['id'] == 'JP-fresh-tie-validation': continue\n    path=Path(recipe['file']);original=path.read_text();assert original.count(recipe['find'])==1\n    try:\n        path.write_text(original.replace(recipe['find'],recipe['replace'],1))\n        build=subprocess.run(['cargo','test','--offline','--release','-p','kassiber-journals','--lib','--no-run'],capture_output=True,text=True)\n        assert build.returncode==0,(recipe['id'],'build failure',build.stderr)\n        test=subprocess.run(['cargo','test','--offline','--release','-p','kassiber-journals','--lib',recipe['expect_failing'][0],'--','--test-threads=1'],capture_output=True,text=True)\n        assert test.returncode!=0 and re.search(r'test result: FAILED\\. 0 passed; 1 failed',test.stdout),(recipe['id'],test.stdout,test.stderr)\n        records.append(dict(id=recipe['id'],source_sha256=hashlib.sha256(original.encode()).hexdigest(),build_returncode=build.returncode,test_returncode=test.returncode,stdout=test.stdout,stderr=test.stderr))\n        print('killed',recipe['id'],flush=True)\n    finally: path.write_text(original)\nrestored=subprocess.run(['cargo','test','--offline','--release','-p','kassiber-journals','--lib','malformed_storage_id_and_tie_shapes_refuse_without_writes','--','--test-threads=1'],capture_output=True,text=True)\nassert restored.returncode==0,(restored.stdout,restored.stderr)\nPath('target/empty-mutations.json').write_text(json.dumps(dict(recipes=records,restored_stdout=restored.stdout,restored_stderr=restored.stderr),indent=2)+'\\n')\nprint('all',len(records),'targeted mutations killed; restored source passed',flush=True)\n",
+    "target/compare-native-persistence.py": "from pathlib import Path\nimport argparse,hashlib,json,os,shutil,subprocess\nparser=argparse.ArgumentParser()\nparser.add_argument('captures',type=Path,nargs='+')\nparser.add_argument('--probe',type=Path,required=True)\nparser.add_argument('--baseline',type=Path,required=True)\nparser.add_argument('--out',type=Path,required=True)\nparser.add_argument('--runs',type=int,default=5)\nargs=parser.parse_args();target=Path('target').resolve();out=args.out.resolve()\nassert out.is_relative_to(target) and args.runs>0\nout.mkdir(parents=True,exist_ok=True)\nprobes={'rust':args.probe.resolve(),'baseline':args.baseline.resolve()}\nrecord={'scope':'Fresh native processes and identical physical copies; full frozen Python dumps checked on every operation. Original Python-generated DML floor is prepared and replayed in a fresh candidate process. Rendering/copies/dump checks outside CPU timer.','script':Path(__file__).read_text(),'probes':{n:hashlib.sha256(p.read_bytes()).hexdigest() for n,p in probes.items()},'cells':[]}\nfor capture in args.captures:\n assert capture.resolve().is_relative_to(target)\n dest=out/capture.name;dest.mkdir(exist_ok=True);runtime=dest/'runtime'\n request=json.loads((capture/'request.json').read_text());assert isinstance(request.get('expected'),dict)\n request['database']=str(runtime/'kassiber.sqlite3')\n request_file=dest/'request.json';request_file.write_text(json.dumps(request,separators=(',',':')))\n floor=json.loads((capture/'floor.json').read_text());assert isinstance(floor.get('expected'),dict)\n floor['database']=request['database'];floor_file=dest/'floor.json';floor_file.write_text(json.dumps(floor,separators=(',',':')))\n trials=[]\n for run in range(args.runs):\n  pair={}\n  for name in (['rust','baseline','floor'] if run%2==0 else ['baseline','rust','floor']):\n   if runtime.exists():shutil.rmtree(runtime)\n   shutil.copytree(capture/'base',runtime)\n   load=os.getloadavg();probe=probes['rust' if name=='floor' else name]\n   process=subprocess.run([str(probe)],input=str(floor_file if name=='floor' else request_file)+'\\n',capture_output=True,text=True,check=True)\n   result=json.loads(process.stdout)\n   assert result['ok'],(capture.name,name,result)\n   pair[name]={'cpu_seconds':result['cpu_seconds'],'seconds':result['seconds'],'phases':result.get('phases'),'loadavg':load}\n  trials.append(pair);print(capture.name,run,{n:t['cpu_seconds'] for n,t in pair.items()},flush=True)\n  cell={'capture':str(capture),'capture_hashes':{str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in [capture/'request.json',capture/'floor.json',capture/'base/kassiber.sqlite3']},'trials':trials,'best':{n:min(t[n]['cpu_seconds'] for t in trials) for n in ('rust','baseline','floor')}}\n  (dest/'summary.json').write_text(json.dumps(cell,indent=2)+'\\n')\n record['cells'].append(cell);(out/'summary.json').write_text(json.dumps(record,indent=2)+'\\n')\n shutil.rmtree(runtime)\n",
+    "target/record-empty.py": "from pathlib import Path\nimport hashlib,json,re,statistics,subprocess\n\ndef digest(path): return hashlib.sha256(Path(path).read_bytes()).hexdigest()\ndef read(path): return json.loads(Path(path).read_text())\nchecks=[]\nfor name in ['empty-tests','empty-mutations','empty-clippy','empty-applicability','empty-classifier','empty-preflight']:\n    path=Path('target/evidence')/(name+'.log');checks.append(dict(path=str(path),sha256=digest(path),log=path.read_text()))\nassert sum(map(int,re.findall(r'test result: ok\\. (\\d+) passed; 0 failed', checks[0]['log'])))==63\nassert 'all 1 targeted mutations killed' in checks[1]['log']\nassert '201 entries apply' in checks[3]['log']\nassert '57 passed' in checks[5]['log']\npairs=read('target/empty-pairs/summary.json')\nfor cell in pairs['cells']:\n    cell['median_candidate_baseline_cpu_ratio']=statistics.median(t['rust']['cpu_seconds']/t['baseline']['cpu_seconds'] for t in cell['trials'])\nassert pairs['probes']['rust']==digest('target/journal-persist-empty')\nassert pairs['probes']['baseline']==digest('target/journal-persist-padding')\npaths=[*sorted(Path('crates/journals/src').rglob('*.rs')),Path('crates/pydecimal/src/lib.rs'),Path('crates/journals/scripts/mutations.json'),Path('crates/journals/examples/journal-persist.rs'),Path('target/journal-persist-padding'),Path('target/journal-persist-empty'),Path('target/journal-read-floor-final')]\nrecord=dict(base_commit='ab67908b2',accepted=False,disposition='Retain the byte-exact measured empty-table fresh-store improvement. The measured unchanged cell regresses and no acceptance gate is closed.',source_and_binary_sha256={str(p):digest(p) for p in paths},compiled_storage_prefix_sha256=hashlib.sha256(Path('crates/journals/src/storage.rs').read_text().split('#[cfg(test)]')[0].encode()).hexdigest(),timing_source_qualification='The measured candidate was built after the production empty-table change and before expanding test-only cases in storage/tests.rs. The production storage prefix above is unchanged through final verification.',full_store_pairs=pairs,exact_timed_dumps=30,budget_checks=dict(generic_fresh_native=0.842192,paired_write_floor=0.681762,over_paired_floor_plus_015=0.010430,lower_historical_write_floor=0.639016,over_lower_floor_plus_015=0.053176,multi_wallet_cipher_unchanged_native=0.541564,lower_historical_read_floor=0.208488,over_lower_read_floor_plus_015=0.183076),targeted_mutations=read('target/empty-mutations.json'),checks=checks,prior_python_oracle_checks=dict(commit='ab67908b2',record='docs/reference/r4-journal-persistence-padding-measurements.json',passed=65,qualification='Python oracle/storage sources and frozen expected vectors are unchanged. These Python checks ran before the empty-table production change; all final-source native complete-dump witnesses were rerun.'),scratch_sources={str(p):p.read_text() for p in map(Path,['target/run-empty-mutations.py','target/compare-native-persistence.py','target/record-empty.py','target/run'])},remaining=['Pass all eight 20k CPU budgets and the complete 32-cell final-source 2k/20k generic/multi-wallet SQLite/SQLCipher fresh/unchanged/appended/changed matrix over five alternating pairs, with exact dumps; repeat five independent-connection read floors without replacing lower measurements with slower ones.','Complete the exhaustive persistence branch/refusal-to-mutation audit, including decimal helpers, unreachable paths and driver errors, and kill the complete final catalog. Current catalog: 201 recipes. This continuation kills only three new targeted recipes across its two commits.','Run resumable 24,000 generated books and 1,030 permutations; all retained recordings at /home/tg/.cache/kassiber-verify/custody-recordings/ and their permutations plus fresh recordings; full census and shadow preserving the known Python shadow read-budget reproduction; and all 2,285 custody mutations.','Verify integrated R4-13 transaction ownership before snapshots/repairs, whole pre-COMMIT rollback, settings restoration, committed visibility, response flush before checkpoint, dropped handles and post-COMMIT failures without a second failure response on both physical drivers, then write acceptance.'],manual_second_review='Checked profile-scoped emptiness, duplicate/id validation, empty timestamp validation before lazy binding preparation, retained ordering/fallback/mixed-clock behavior, unchanged DML/rowid/clock order, production-prefix identity during timings, the compiled runtime mutation kill and all evidence limitations.',cleanup=dict(build_tree_size_before='1.2 GiB target/build; target/release contains hard links',removed=['target/build','target/release'],completed=not Path('target/build').exists() and not Path('target/release').exists(),retained=['target/books','target/captures','target/evidence','target/empty-pairs','target/padding-pairs','target/journal-persist-base','target/journal-persist-padding','target/journal-persist-empty','target/journal-read-floor-final','target/earlier-indexed'],all_launched_jobs_completed=True),toolchain='MATURIN_NO_INSTALL_RUST=1 mise exec rust@1.99.1 uv@latest; locked Python 3.11 environment, offline cargo, CARGO_BUILD_JOBS=8, TMPDIR under worktree target; HOME unchanged')\nPath('docs/reference/r4-journal-persistence-empty-table-measurements.json').write_text(json.dumps(record,indent=2)+'\\n')\n",
+    "target/run": "#!/usr/bin/env bash\nset -euo pipefail\nexport MATURIN_NO_INSTALL_RUST=1 CARGO_BUILD_JOBS=8\nexport CARGO_TARGET_DIR=\"$PWD/target\" CARGO_BUILD_BUILD_DIR=\"$PWD/target/build\"\nexport TMPDIR=\"$PWD/target/tmp\" UV_CACHE_DIR=\"$PWD/target/uv-cache\" UV_NO_SYNC=1\nexport KASSIBER_NO_EGRESS=1\nexec mise exec rust@1.99.1 uv@latest -- \"$@\"\n"
+  },
+  "remaining": [
+    "Pass all eight 20k CPU budgets and the complete 32-cell final-source 2k/20k generic/multi-wallet SQLite/SQLCipher fresh/unchanged/appended/changed matrix over five alternating pairs, with exact dumps; repeat five independent-connection read floors without replacing lower measurements with slower ones.",
+    "Complete the exhaustive persistence branch/refusal-to-mutation audit, including decimal helpers, unreachable paths and driver errors, and kill the complete final catalog. Current catalog: 201 recipes. This continuation kills only three new targeted recipes across its two commits.",
+    "Run resumable 24,000 generated books and 1,030 permutations; all retained recordings at /home/tg/.cache/kassiber-verify/custody-recordings/ and their permutations plus fresh recordings; full census and shadow preserving the known Python shadow read-budget reproduction; and all 2,285 custody mutations.",
+    "Verify integrated R4-13 transaction ownership before snapshots/repairs, whole pre-COMMIT rollback, settings restoration, committed visibility, response flush before checkpoint, dropped handles and post-COMMIT failures without a second failure response on both physical drivers, then write acceptance."
+  ],
+  "manual_second_review": "Checked profile-scoped emptiness, duplicate/id validation, empty timestamp validation before lazy binding preparation, retained ordering/fallback/mixed-clock behavior, unchanged DML/rowid/clock order, production-prefix identity during timings, the compiled runtime mutation kill and all evidence limitations.",
+  "cleanup": {
+    "build_tree_size_before": "1.2 GiB target/build; target/release contains hard links",
+    "removed": [
+      "target/build",
+      "target/release"
+    ],
+    "completed": true,
+    "retained": [
+      "target/books",
+      "target/captures",
+      "target/evidence",
+      "target/empty-pairs",
+      "target/padding-pairs",
+      "target/journal-persist-base",
+      "target/journal-persist-padding",
+      "target/journal-persist-empty",
+      "target/journal-read-floor-final",
+      "target/earlier-indexed"
+    ],
+    "all_launched_jobs_completed": true
+  },
+  "toolchain": "MATURIN_NO_INSTALL_RUST=1 mise exec rust@1.99.1 uv@latest; locked Python 3.11 environment, offline cargo, CARGO_BUILD_JOBS=8, TMPDIR under worktree target; HOME unchanged"
+}

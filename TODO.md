@@ -686,8 +686,11 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   timing operations now use fresh processes so the SQL floor cannot bias
   allocator state. Bounded exponent validation also avoids coefficient digit
   counts; its focused pairs improve at every measured width, while complete
-  store timings remain contention-qualified. Finish the full eight-cell budget
-  gate, then the mutation audit and inherited campaigns.
+  store timings remain contention-qualified. Empty retained tables now skip
+  comparison sorting and timestamp-group construction; fresh paired CPU improves,
+  while the unchanged paired cell regresses slightly and acceptance stays open.
+  Finish the full eight-cell budget gate, then the mutation audit and inherited
+  campaigns.
   Historical signed-zero, retained-column and mixed-clock witnesses remain.
   Corrected appended inputs carry distinct raw identities and assert actual writes.
   R4-9's test-only loader now constructs the current custody records directly;

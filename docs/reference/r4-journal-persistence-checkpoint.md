@@ -14,6 +14,62 @@ the proposed-budget language in the historical probes below. Repeat the read
 floor over at least five independent connections with load averages and use its
 minimum. The implementation and all acceptance gates remain open.
 
+## Empty-table setup continuation from `ab67908b2`
+
+**R4-12 remains unaccepted.** Empty profile-scoped retained tables now skip
+desired-row sorting and dirty timestamp-group construction. The first-store
+path still validates ids, duplicates and timestamp scalar types before lazy
+bindings and writes. Retained tables keep the ordered comparison, identity
+fallback and mixed-clock group behavior. An added profile-scoped existence
+query chooses the path; write order, row identities and persisted bytes remain
+unchanged.
+
+Five alternating candidate/baseline pairs per cell start fresh native processes
+from identical physical copies. All thirty complete frozen Python dumps match,
+including the prepared DML floor. Generic SQLite 20k fresh CPU minima improve
+from 0.853823 to 0.842192 seconds; the median paired candidate/baseline ratio is
+0.967143, with three of five improved pairs. Its paired write floor is 0.681762,
+so even this allowance is missed by 0.010430 seconds. Using the earlier lower
+0.639016 floor, the excess remains 0.053176 seconds. No higher floor is used to
+claim acceptance.
+
+Multi-wallet SQLCipher 20k unchanged minima regress from 0.536547 to 0.541564,
+with median ratio 1.020613 and three of five slower pairs. The optimization is
+retained for its measured fresh-store improvement; it is not an unchanged-store
+speedup. The respective load ranges are 14.81–18.01 and 15.54–18.30. No other
+job ran in this worktree during measurement.
+
+All 63 journal tests pass, including both-driver physical crash recovery,
+every-write refusal/unwind rollback and exact dumps. The malformed id/timestamp
+witness now runs against both empty and populated tables. Its new empty-table
+timestamp mutation compiles and is killed; restored source passes again.
+Release all-target clippy and applicability for all 201 recipes pass. Classifier
+update leaves no generated diff, and all 57 required preflight checks pass.
+The unchanged Python oracle/storage sources passed all 65 checks at the preceding
+boundary. This continuation does not rerun or close the exhaustive mutation
+audit or the full catalog kill campaign.
+
+The [empty-table record](r4-journal-persistence-empty-table-measurements.json)
+binds every sample, load, source/binary/capture hash, scratch script and final
+verification result. Verification build trees are removed after summarizing.
+The stop state remains a verified partial boundary. Exactly what remains:
+
+1. Pass all eight 20k CPU cells and the complete final-source 32-cell
+   2k/20k, generic/multi-wallet, SQLite/SQLCipher matrix across unchanged, fresh,
+   appended and changed books, with exact dumps and five alternating pairs.
+   Repeat the independent-connection read floors without replacing lower ones.
+2. Complete the exhaustive branch/refusal audit, including decimal helpers,
+   unreachable paths and driver errors, then kill the complete final catalog.
+   Its current size is 201; only three new targeted recipes were killed here.
+3. Run resumable 24,000-book and 1,030-permutation campaigns, all retained
+   recordings and their permutations plus fresh recordings, full census/shadow
+   preserving the known Python read-budget reproduction, and all 2,285 custody
+   mutations. None of those full campaigns ran in this continuation.
+4. Verify both physical drivers' integrated R4-13 contracts: transaction before
+   snapshots/repairs, whole pre-COMMIT rollback, settings restoration, committed
+   visibility, success flush before checkpoint, dropped handles and post-COMMIT
+   failures without a second failure response. Then write acceptance.
+
 ## Padding validation continuation from `8cb7947cc`
 
 **R4-12 remains unaccepted.** Decimal padding validation now accepts the
