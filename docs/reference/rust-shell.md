@@ -14363,3 +14363,28 @@ Local summaries and logs live under `target/r5-analysis/`. Scratch roots remain
 inside this worktree, and the account `HOME` is preserved. Product Mirror
 registration, process/book handles, report composition and AI projections remain
 outside this boundary. No new dependency, schema or network route is introduced.
+
+## Mirror clustering algorithms (R5, partial)
+
+`analysis_index::analytics::analyze_clusters` ports script-reuse and co-spend
+findings, collaboration boundaries, explicitly enabled common-input/change
+hypotheses, authored cluster-defining labels and reversible connected components.
+The function consumes an already observer-scoped captured snapshot, selected
+node IDs and optional selected edge IDs. It does not read SQL, publish a durable
+index or establish ownership/accounting authority. Its result is the clustering
+projection of Python `analyze_index`; patterns, exposure and entropy are separate
+remaining boundaries. The report entry points remain unregistered.
+
+The unchanged-Python corpus has 128 clustering cases, with public/owner/disclosed
+views, incomplete/conflicting facts, script exclusions, private wallet change,
+label provenance and independent label/hypothesis budgets. Native tests compare
+canonical result bytes; a test-only driver compares literal stdout under strict
+no-consent observation with offline mode off/on. The native implementation uses
+ordered maps and stable source ordering. No new hash-seed-dependent Python
+ordering was found across recorded seeds 0, 1, 7 and 42. All nine clustering
+mutations are killed by
+`clustering_matches_python_captured_snapshots_byte_exact`, which passes
+unmutated. The five retained Python/native checks, formatting and wallet
+production/test-harness all-target Clippy pass without skips.
+Local logs and summaries remain under
+`target/r5-analysis/`; no dependency, storage or network changes are included.

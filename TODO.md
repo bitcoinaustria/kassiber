@@ -614,9 +614,12 @@ registers them; exit-tax preserves its reference no-registration boundary.
   byte-exact observer-aware traces/paths and named mutation killers; see the
   [traversal checkpoint](docs/reference/rust-shell.md#mirror-traversal-algorithms-r5-partial).
   This does not register Mirror or complete durable source orchestration.
+- [x] Port in-memory Mirror clustering, observed reuse/co-spend findings and
+  reversible opt-in hypotheses; see the
+  [clustering checkpoint](docs/reference/rust-shell.md#mirror-clustering-algorithms-r5-partial).
 - [ ] Finish Mirror's legacy non-finite JSON/lone-surrogate handling and durable
   projection synchronization/read view,
-  then clustering, patterns,
+  then patterns,
   attribution/dataset matching, conditional entropy, process/book-bound handles,
   report composition and CLI/daemon acceptance. Preserve deterministic native
   ambiguity ordering; retain the recorded Python reference repro.
