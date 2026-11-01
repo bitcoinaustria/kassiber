@@ -406,13 +406,15 @@ def get_rate_range(conn, pair, start=None, end=None, order="asc", limit=None):
 
 
 def get_cached_rate_at_or_before(conn, pair, occurred_at, *, exclusive=False):
+    """Last quote at a boundary; exclusive bounds support calendar closes."""
     normalized = require_supported_pair(pair)
     occurred_ts = _iso_z(_parse_iso_datetime(occurred_at, "occurred_at"))
+    operator = "<" if exclusive else "<="
     row = conn.execute(
         f"""
         SELECT pair, timestamp, rate, rate_exact, source, fetched_at, granularity, method
         FROM rates_cache
-        WHERE pair = ? AND {timestamp_predicate(conn, "timestamp", "<" if exclusive else "<=")}
+        WHERE pair = ? AND {timestamp_predicate(conn, "timestamp", operator)}
         ORDER BY kassiber_timestamp_us(timestamp) DESC,
                  CASE WHEN source = 'manual' THEN 0 ELSE 1 END ASC,
                  fetched_at DESC

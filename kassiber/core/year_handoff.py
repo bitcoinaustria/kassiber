@@ -473,9 +473,8 @@ def _year_end_rates(
     """
     fiat_currency = profile["fiat_currency"]
     end_iso = _Period.iso(period.end)
-    # The cache lookup is inclusive; a quote stamped exactly at the boundary
-    # opens the next year and must not value this one.
-    last_second_iso = _Period.iso(period.end - timedelta(seconds=1))
+    # A quote stamped exactly at the exclusive boundary opens the next year
+    # and must not value this one.
     rates: dict[str, dict[str, Any]] = {}
     for asset, spellings in sorted(spellings_by_asset.items()):
         spellings = sorted(spellings)
@@ -492,7 +491,7 @@ def _year_end_rates(
         cached = None
         if pair is not None:
             try:
-                cached = core_rates.get_cached_rate_at_or_before(conn, pair, last_second_iso)
+                cached = core_rates.get_cached_rate_at_or_before(conn, pair, end_iso, exclusive=True)
             except sqlite3.OperationalError:
                 cached = None
             except AppError as exc:
