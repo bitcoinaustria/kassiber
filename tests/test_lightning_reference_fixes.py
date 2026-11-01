@@ -10,6 +10,13 @@ from kassiber.core.lightning import build_profitability_report, profitability_cs
 from tests.test_lightning_scaffold import _snapshot_with_routing
 
 
+@pytest.mark.parametrize("value", [float("inf"), float("-inf")])
+def test_nonfinite_daemon_window_uses_malformed_window_default(value):
+    from kassiber.daemon import _coerce_int
+
+    assert _coerce_int(value, default=30, minimum=1, maximum=365) == 30
+
+
 def test_deep_lightning_config_uses_recoverable_malformed_config_path(tmp_path):
     from kassiber.core.lightning import resolve_lightning_connection
     from kassiber.db import open_db

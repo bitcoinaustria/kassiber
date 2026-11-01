@@ -12863,7 +12863,7 @@ def _coerce_int(
 ) -> int:
     try:
         result = int(value) if value is not None else default
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return default
     if minimum is not None and result < minimum:
         return minimum
