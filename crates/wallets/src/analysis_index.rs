@@ -12,6 +12,7 @@ pub mod entropy;
 pub mod fixture;
 pub mod handles;
 pub mod ingestion;
+pub mod mirror;
 mod observer;
 pub mod occurrences;
 pub mod sources;

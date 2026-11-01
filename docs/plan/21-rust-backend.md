@@ -4349,3 +4349,13 @@ identity and current-view subject revalidation. Forty-eight unchanged-Python
 replay vectors and actual process-restart tests preserve bytes, all 112 tables
 and the no-egress boundary. This does not register a product entry point or port
 generic AI projections. Report composition and durable integration follow.
+
+### R5 privacy: Mirror report projection (partial)
+
+The [report checkpoint](../reference/rust-shell.md#mirror-report-projection-r5-partial)
+composes SQL traversal, clusters, patterns, attribution, structural features and
+conditional entropy. Private ownership only selects relevance; every observer
+finding remains public. The 142-case unchanged-Python report corpus checks both
+local and redacted report bytes, all 112 tables, budgets and no-egress. Generic
+AI projections remain Python. CLI/daemon acceptance and registration still await
+the durable integration boundary.

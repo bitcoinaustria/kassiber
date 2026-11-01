@@ -638,8 +638,11 @@ registers them; exit-tax preserves its reference no-registration boundary.
 - [x] Port bounded RAM-only process/book-bound Mirror handles with byte, replay,
   restart, all-table and no-egress checks; see the
   [handle checkpoint](docs/reference/rust-shell.md#mirror-process-and-book-bound-handles-r5-partial).
+- [x] Compose the native Mirror report over SQL views and existing analytics,
+  preserving public observer knowledge, private relevance and bounded report
+  projection; see the [report checkpoint](docs/reference/rust-shell.md#mirror-report-projection-r5-partial).
 - [ ] Finish Mirror's durable triggers/contributions, incremental synchronization
-  and SQLite/SQLCipher kill recovery, report composition and CLI/daemon acceptance with
+  and SQLite/SQLCipher kill recovery and CLI/daemon acceptance with
   non-zero served-by counts. Preserve deterministic native
   ambiguity ordering; retain the recorded Python reference repro.
 - [x] Port full-report, Austrian bundle and transaction CSV artifacts, saved

@@ -14657,3 +14657,42 @@ only. Report composition, durable 5a integration and transport registration
 remain subsequent boundaries; product served-by counts remain zero. There are
 no dependency, lockfile, schema or egress-permission changes, and no full
 workspace, frontend or packaged acceptance claim.
+
+## Mirror report projection (R5, partial)
+
+`analysis_index::mirror` composes the borrowed SQL view with existing native
+traversal, clustering, patterns, attribution, structural rules and entropy. Its
+public graph never receives private wallet/custody facts. Owner output evidence
+selects relevance and actionable warnings only; path relevance uses the evidenced
+branches rather than unrelated sibling inputs or outputs. Unsafe observations
+appear in coverage rather than current findings. Report handoffs retain the
+canonical rule/source identities and observer domain.
+
+The report displays at most 100 findings while retaining full counts and the
+display-limit reason. Conditional entropy evaluates at most 12 transactions,
+5,000 states and 25 ms per transaction, inside a 300 ms total deadline. Coverage
+retains omitted work, local observations outside the selected graph, invalid or
+reconciling sources, missing tables and conditional-model limitations. Book-wide
+transaction, ownership, domain and public-label counts use SQL aggregates.
+
+The narrow report export projection replaces graph subjects, source identities
+and handoffs with the process/book references above, retains reviewed claim
+fields and omits attribution prose. This serves the existing CLI export audience;
+it does not register or port generic AI tools or AI result projection. Desktop
+reports retain the existing local audience. AI projections remain Python.
+
+The unchanged-Python corpus has 142 reports across 69 captured source/index
+books, local/redacted audiences, owned/unowned relevance, collaboration, missing
+amounts, observer/domain separation, attribution and display/entropy budgets.
+Canonical native/Python bytes match and all 112 logical tables remain unchanged.
+Guarded native replay adds 284 evaluations with offline mode off/on, zero
+Python fallback and no network attempts. Production uses a monotonic clock;
+fixed clocks only enter the test/harness paths. Eight report mutations compile
+and are killed by focused parity and unsafe-finding tests, with passing
+unmodified baselines.
+
+Formatting and wallet production/harness all-target Clippy pass. Local logs and
+mutation summaries remain under `target/r5-mirror-5b/`. This is the report
+boundary only: transports and durable 5a integration follow, with product
+served-by counts still zero. No dependency, lockfile, schema or network permission
+changes are included. Full workspace, frontend and platform gates are not claimed.
