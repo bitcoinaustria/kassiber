@@ -322,17 +322,35 @@ pub fn repair_journal_source_overlaps(
 ) -> Result<Option<Value>, Refusal> {
     super::require_writer(conn)?;
     super::atomic(conn, "r4_journal_sources", || {
-        run(conn, profile_id, clock, identity)
+        run(conn, profile_id, index(conn, profile_id)?, clock, identity)
+    })
+}
+
+pub(super) fn repair_and_warn(
+    conn: &Connection,
+    profile: &str,
+    clock: &mut impl FnMut() -> Result<String, Refusal>,
+    identity: &mut impl FnMut() -> Result<String, Refusal>,
+) -> Result<(Option<Value>, Option<Value>), Refusal> {
+    super::require_writer(conn)?;
+    super::atomic(conn, "r4_journal_sources", || {
+        let idx = index(conn, profile)?;
+        if idx.overlaps().is_empty() {
+            return Ok((None, None));
+        }
+        let repair = run(conn, profile, idx, clock, identity)?;
+        let warning = source_overlap_warning(conn, profile, repair.as_ref())?;
+        Ok((repair, warning))
     })
 }
 
 fn run(
     conn: &Connection,
     profile: &str,
+    idx: Index,
     clock: &mut impl FnMut() -> Result<String, Refusal>,
     identity: &mut impl FnMut() -> Result<String, Refusal>,
 ) -> Result<Option<Value>, Refusal> {
-    let idx = index(conn, profile)?;
     if idx.overlaps().is_empty() {
         return Ok(None);
     }

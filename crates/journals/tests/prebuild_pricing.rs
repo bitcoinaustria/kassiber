@@ -220,5 +220,6 @@ fn prebuild_pricing_special_division_and_date_witnesses() {
         "invalid-four-century-leap-hour",
         "invalid-month-short-time",
         "invalid-basic-hour",
+        "value-derived-overflow",
     ]);
 }

@@ -289,3 +289,55 @@ fn prebuild_legacy_missing_scope_refuses_before_callbacks_or_writes() {
         assert!(!c.is_autocommit());
     }
 }
+
+#[test]
+fn prebuild_legacy_profile_reload_refusal_restores_callback_writes() {
+    let c = fixture("kind-drift");
+    c.execute(
+        "INSERT INTO workspaces(id,label,created_at) SELECT 'replacement','Replacement workspace',created_at FROM workspaces WHERE id='w'",
+        [],
+    )
+    .unwrap();
+    let scope = profile(&c);
+    c.execute_batch("BEGIN IMMEDIATE;INSERT INTO settings(key,value) VALUES('caller','retained')")
+        .unwrap();
+    let before = support::snapshot(&c);
+    let mut ticks = 0;
+    let error = refresh_drifted_legacy_pair_components(&c, &scope, &mut || {
+        ticks += 1;
+        if ticks == 1 {
+            c.execute(
+                "UPDATE profiles SET workspace_id='replacement' WHERE id='p'",
+                [],
+            )
+            .unwrap();
+        }
+        Ok("2026-10-31T12:00:00Z".into())
+    })
+    .unwrap_err();
+    assert_eq!(ticks, 1);
+    assert_eq!(error.family, "RuntimeError");
+    assert_eq!(
+        error.message,
+        "journal profile disappeared during legacy refresh"
+    );
+    assert!(support::logical_equal(&support::snapshot(&c), &before));
+    assert!(!c.is_autocommit());
+}
+
+#[test]
+fn prebuild_legacy_missing_table_is_an_operational_refusal() {
+    let c = fixture("kind-drift");
+    let scope = profile(&c);
+    c.execute_batch("PRAGMA foreign_keys=OFF;DROP TABLE transaction_pairs;BEGIN IMMEDIATE")
+        .unwrap();
+    let before = support::snapshot(&c);
+    let error = refresh_drifted_legacy_pair_components(&c, &scope, &mut || {
+        panic!("missing table must not consume a clock tick")
+    })
+    .unwrap_err();
+    assert_eq!(error.family, "OperationalError");
+    assert!(error.message.contains("no such table"));
+    assert!(support::logical_equal(&support::snapshot(&c), &before));
+    assert!(!c.is_autocommit());
+}

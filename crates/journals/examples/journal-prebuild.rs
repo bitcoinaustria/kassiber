@@ -3,8 +3,8 @@
 mod support;
 use kassiber_journals::prebuild::{
     auto_price_transactions_from_rates_cache, prepare_journals,
-    refresh_drifted_legacy_pair_components, repair_journal_source_overlaps,
-    source_overlap_result_fields, source_overlap_warning, PricingScope,
+    refresh_drifted_legacy_pair_components, repair_journal_inputs, repair_journal_source_overlaps,
+    source_overlap_result_fields, source_overlap_warning, Prepared, PricingScope,
 };
 use kassiber_pydecimal::{Context, Rounding};
 use kassiber_store::rusqlite::config::DbConfig;
@@ -35,6 +35,7 @@ fn open(v: &Value) -> Result<Connection, Box<dyn std::error::Error>> {
     if let Some(passphrase) = v["passphrase"].as_str() {
         conn.pragma_update(None, "key", passphrase)?;
     }
+    conn.pragma_update(None, "foreign_keys", "ON")?;
     Ok(conn)
 }
 
@@ -54,6 +55,53 @@ fn clear(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
     conn.execute_batch("COMMIT")?;
     conn.pragma_update(None, "synchronous", "FULL")?;
     Ok(())
+}
+
+fn phase<T>(
+    phases: &mut serde_json::Map<String, Value>,
+    name: &str,
+    action: impl FnOnce() -> Result<T, kassiber_journals::Refusal>,
+) -> Result<T, kassiber_journals::Refusal> {
+    let start = cpu();
+    let result = action();
+    phases.insert(name.into(), json!(cpu() - start));
+    result
+}
+
+fn profiled_prebuild(
+    conn: &Connection,
+    profile: &Value,
+    clock: &mut impl FnMut() -> Result<String, kassiber_journals::Refusal>,
+    identity: &mut impl FnMut() -> Result<String, kassiber_journals::Refusal>,
+    phases: &mut serde_json::Map<String, Value>,
+) -> Result<Prepared, kassiber_journals::Refusal> {
+    conn.execute_batch("SAVEPOINT profile_prebuild")?;
+    let result = (|| {
+        let repaired = phase(phases, "repairs", || {
+            repair_journal_inputs(conn, profile, clock, identity)
+        })?;
+        let auto_priced = phase(phases, "pricing", || {
+            auto_price_transactions_from_rates_cache(
+                conn,
+                &PricingScope {
+                    profile_id: repaired.profile["id"].as_str().expect("profile ID"),
+                    fiat_currency: repaired.profile["fiat_currency"]
+                        .as_str()
+                        .expect("profile currency"),
+                    decimal_context: Context::new(32, Rounding::HalfEven),
+                },
+            )
+        })?;
+        Ok(Prepared {
+            repaired,
+            auto_priced,
+        })
+    })();
+    if result.is_err() {
+        conn.execute_batch("ROLLBACK TO profile_prebuild")?;
+    }
+    conn.execute_batch("RELEASE profile_prebuild")?;
+    result
 }
 
 fn run(
@@ -116,6 +164,16 @@ fn run(
     conn.execute_batch("BEGIN IMMEDIATE")?;
     let before = cpu();
     let start = std::time::Instant::now();
+    let mut phases = serde_json::Map::new();
+    let cache_start = v["phase_breakdown"].as_bool().unwrap_or(false).then(cpu);
+    let cache = if v["rebuild_cache"].as_bool().unwrap_or(false) {
+        Some(kassiber_journals::storage::RebuildCache::enter(conn)?)
+    } else {
+        None
+    };
+    if let Some(start) = cache_start {
+        phases.insert("cache_enter".into(), json!(cpu() - start));
+    }
     let mut ids = v["ids"].as_array().into_iter().flatten();
     let mut ticks = v["ticks"].as_array().into_iter().flatten();
     let mut clock = || {
@@ -158,7 +216,18 @@ fn run(
             Ok(json!({"repair":repair,"warning":warning}))
         })
     } else if v["stage"] == "pipeline" {
-        prepare_journals(conn, &v["profile"], Context::new(32, Rounding::HalfEven), &mut clock, &mut identity).and_then(|p| {
+        let prepared = if v["phase_breakdown"].as_bool().unwrap_or(false) {
+            profiled_prebuild(conn, &v["profile"], &mut clock, &mut identity, &mut phases)
+        } else {
+            prepare_journals(
+                conn,
+                &v["profile"],
+                Context::new(32, Rounding::HalfEven),
+                &mut clock,
+                &mut identity,
+            )
+        };
+        prepared.and_then(|p| {
             projection_wire = json!(kassiber_pyjson::dumps(&p.repaired.result_fields()?, &kassiber_pyjson::Options::new())
                 .map_err(|e| kassiber_journals::Refusal::from(e.to_string()))?);
             let r = p.repaired;
@@ -181,6 +250,13 @@ fn run(
         )
         .map(|count| json!(count))
     };
+    if let Some(cache) = cache {
+        let cache_start = v["phase_breakdown"].as_bool().unwrap_or(false).then(cpu);
+        cache.restore()?;
+        if let Some(start) = cache_start {
+            phases.insert("cache_restore".into(), json!(cpu() - start));
+        }
+    }
     let wall_seconds = start.elapsed().as_secs_f64();
     let cpu_seconds = cpu() - before;
     if v["stage"] == "pipeline" {
@@ -204,9 +280,11 @@ fn run(
         .unwrap_or(false)
         .then(|| support::snapshot(conn));
     conn.execute_batch("ROLLBACK")?;
-    Ok(
-        json!({"name":v["name"],"count":count,"result":count,"projection_wire":projection_wire,"error":error,"verified":verified,"dump":dump,"cpu_seconds":cpu_seconds,"wall_seconds":wall_seconds}),
-    )
+    let mut reply = json!({"name":v["name"],"count":count,"result":count,"projection_wire":projection_wire,"error":error,"verified":verified,"dump":dump,"cpu_seconds":cpu_seconds,"wall_seconds":wall_seconds});
+    if !phases.is_empty() {
+        reply["cpu_by_phase"] = Value::Object(phases);
+    }
+    Ok(reply)
 }
 
 fn main() {

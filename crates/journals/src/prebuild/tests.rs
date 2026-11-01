@@ -22,3 +22,45 @@ fn prebuild_pricing_requires_caller_write_transaction() {
     assert!(auto_price_transactions_from_rates_cache(&conn, &scope()).is_err());
     conn.execute_batch("ROLLBACK").unwrap();
 }
+
+#[test]
+fn prebuild_sources_invalid_storage_refuses_before_json_projection() {
+    let conn = Connection::open_in_memory().unwrap();
+    for (query, family, message) in [
+        (
+            "SELECT CAST(X'80' AS TEXT) AS raw_json",
+            "ValueError",
+            "invalid UTF-8",
+        ),
+        (
+            "SELECT X'ff' AS raw_json",
+            "TypeError",
+            "unexpected binary source field",
+        ),
+    ] {
+        let error = sources::rows(&conn, query, []).unwrap_err();
+        assert_eq!(error.family, family);
+        assert_eq!(error.message, message);
+    }
+}
+
+#[test]
+fn prebuild_sqlite_refusals_retain_python_families() {
+    for (code, family) in [
+        (rusqlite::ffi::SQLITE_CONSTRAINT_TRIGGER, "IntegrityError"),
+        (rusqlite::ffi::SQLITE_MISMATCH, "IntegrityError"),
+        (rusqlite::ffi::SQLITE_TOOBIG, "DataError"),
+        (rusqlite::ffi::SQLITE_NOMEM, "MemoryError"),
+        (rusqlite::ffi::SQLITE_MISUSE, "ProgrammingError"),
+        (rusqlite::ffi::SQLITE_CORRUPT, "DatabaseError"),
+        (rusqlite::ffi::SQLITE_ERROR, "OperationalError"),
+        (rusqlite::ffi::SQLITE_BUSY, "OperationalError"),
+    ] {
+        let refusal = Refusal::from(rusqlite::Error::SqliteFailure(
+            rusqlite::ffi::Error::new(code),
+            Some("original SQLite message".into()),
+        ));
+        assert_eq!(refusal.family, family);
+        assert_eq!(refusal.message, "original SQLite message");
+    }
+}

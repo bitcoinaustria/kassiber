@@ -13,7 +13,22 @@ pub use quarantine::{dedupe_quarantines, enrich_quarantine_detail};
 
 impl From<rusqlite::Error> for Refusal {
     fn from(e: rusqlite::Error) -> Self {
-        Self::new("DatabaseError", e.to_string())
+        if let rusqlite::Error::SqliteFailure(code, Some(message)) = &e {
+            let family = match code.code {
+                rusqlite::ErrorCode::ConstraintViolation => "IntegrityError",
+                rusqlite::ErrorCode::TypeMismatch => "IntegrityError",
+                rusqlite::ErrorCode::TooBig => "DataError",
+                rusqlite::ErrorCode::OutOfMemory => "MemoryError",
+                rusqlite::ErrorCode::ApiMisuse => "ProgrammingError",
+                rusqlite::ErrorCode::InternalMalfunction
+                | rusqlite::ErrorCode::NotADatabase
+                | rusqlite::ErrorCode::DatabaseCorrupt => "DatabaseError",
+                _ => "OperationalError",
+            };
+            Self::new(family, message)
+        } else {
+            Self::new("DatabaseError", e.to_string())
+        }
     }
 }
 pub(super) fn borrowed(v: &Value) -> Result<rusqlite::types::ValueRef<'_>, Refusal> {

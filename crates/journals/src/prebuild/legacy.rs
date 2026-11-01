@@ -67,19 +67,7 @@ pub fn refresh_drifted_legacy_pair_components(
                             legacy_refresh::Error::Python { family, message } => {
                                 Refusal::new(family, message)
                             }
-                            legacy_refresh::Error::Sqlite(e) => match e {
-                                rusqlite::Error::SqliteFailure(code, Some(message)) => {
-                                    Refusal::new(
-                                        if code.code == rusqlite::ErrorCode::ConstraintViolation {
-                                            "IntegrityError"
-                                        } else {
-                                            "OperationalError"
-                                        },
-                                        message,
-                                    )
-                                }
-                                e => e.into(),
-                            },
+                            legacy_refresh::Error::Sqlite(e) => e.into(),
                         })
                 })?;
         let profile = if consolidation.changed() {

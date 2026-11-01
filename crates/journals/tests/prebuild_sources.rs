@@ -202,7 +202,7 @@ fn prebuild_sources_requires_writer_and_rolls_back_refusal_or_unwind() {
     )
     .is_err());
     conn.execute_batch("BEGIN IMMEDIATE").unwrap();
-    for panic in [false, true] {
+    for (panic, fail_at) in [(false, 2), (true, 2), (false, 3), (true, 3)] {
         let mut n = 0;
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             repair_journal_source_overlaps(
@@ -211,7 +211,7 @@ fn prebuild_sources_requires_writer_and_rolls_back_refusal_or_unwind() {
                 &mut || Ok("clock".to_string()),
                 &mut || {
                     n += 1;
-                    if n == 3 {
+                    if n == fail_at {
                         assert!(!panic, "injected identity failure");
                         return Err("injected identity refusal".to_string().into());
                     }
@@ -219,7 +219,7 @@ fn prebuild_sources_requires_writer_and_rolls_back_refusal_or_unwind() {
                 },
             )
         }));
-        assert_eq!(n, 3);
+        assert_eq!(n, fail_at);
         if panic {
             assert!(result.is_err());
         } else {
@@ -249,6 +249,7 @@ fn prebuild_sources_late_sql_refusal_restores_all_tables() {
         })
         .unwrap_err();
     assert_eq!(error.message, "late repair failure");
+    assert_eq!(error.family, "IntegrityError");
     assert!(support::logical_equal(&support::snapshot(&conn), &before));
     conn.execute_batch("ROLLBACK").unwrap();
 }
@@ -373,15 +374,22 @@ fn prebuild_sources_branch_input_witnesses() {
         "checkpoint-merged-inventory",
         "xpub-script-types",
         "xpub-without-script-types",
+        "review-legacy-identity",
+        "unknown-network-scope",
+        "json-null-inventory-raw",
     ]);
 }
 
 #[test]
 fn prebuild_sources_unknown_projection_refuses() {
-    let invalid = json!({"unexpected":true});
-    for (repair, warning) in [(Some(&invalid), None), (None, Some(&invalid))] {
-        let error = source_overlap_result_fields(repair, warning).unwrap_err();
-        assert_eq!(error.family, "RuntimeError");
-        assert_eq!(error.message, "unknown source-overlap result projection");
+    for invalid in [
+        json!({"unexpected":true}),
+        json!({"duplicates_excluded":0,"wallets_updated":[{"unexpected":true}]}),
+    ] {
+        for (repair, warning) in [(Some(&invalid), None), (None, Some(&invalid))] {
+            let error = source_overlap_result_fields(repair, warning).unwrap_err();
+            assert_eq!(error.family, "RuntimeError");
+            assert_eq!(error.message, "unknown source-overlap result projection");
+        }
     }
 }

@@ -1,0 +1,904 @@
+{
+  "base_commit": "721e755d622ea445c730303e1455a4c66565b95c",
+  "coverage": {
+    "path": "docs/reference/r4-prebuild-branch-audit.json",
+    "sha256": "f65d49526b78444f88728353d4a19cf85b39612c1a210e55238ee7125de38034"
+  },
+  "cpu": {
+    "before": {
+      "path": "target/r4-10/cpu-before-cache.json",
+      "sha256": "67d720ea3c593dba5cc08aa2be644d18c5ad2b231e4272964f5d5ec241157aae"
+    },
+    "binary_sha256": "f52c80ba8b9ab9a0466df083efdbf2209e7f9ab93c5d15badb7499e52c146ce3",
+    "clock": "user plus system process CPU; validation and fixture/open work outside timer",
+    "intermediate": {
+      "path": "target/r4-10/cpu-after-cache.json",
+      "sha256": "07b869dc01c6ac8089473842915924fa7d447a41d8f07dc8096d9afe8f3534dd"
+    },
+    "raw": {
+      "path": "target/r4-10/cpu-final.json",
+      "sha256": "d8a6eb64a5ed143604000b3601b49a50fee91e97cdc03aa3ccdc71599a253354"
+    },
+    "records": [
+      {
+        "activity": {
+          "auto_priced": 0,
+          "consolidation": {
+            "activated": 0,
+            "skipped": 0,
+            "unchanged": 1
+          },
+          "profile": {
+            "bitcoin_rail_carrying_value": 1,
+            "cost_basis_pool_scope": "global",
+            "created_at": "2026-10-30T16:29:37Z",
+            "fiat_currency": "EUR",
+            "gains_algorithm": "FIFO",
+            "id": "b4eef0e3-02a7-480c-85e9-512c3b2fccbf",
+            "journal_input_version": 2,
+            "label": "Default",
+            "last_processed_at": "2026-10-30T16:29:53Z",
+            "last_processed_input_version": 2,
+            "last_processed_tx_count": 20000,
+            "ownership_review_counts_json": "{\"by_reason\": {}, \"total\": 0}",
+            "require_coarse_review": 0,
+            "swap_candidate_count": null,
+            "tax_country": "generic",
+            "tax_long_term_days": 365,
+            "workspace_id": "fbb8ea95-372c-4243-8ccd-6e597c6a0858"
+          },
+          "repair": null,
+          "warning": null
+        },
+        "database_sha256": "14d67d19b78c99b5fb3e9f3e4f629090b34d80ab84959014c7f18f3dca67e523",
+        "kind": "generic",
+        "manifest": {
+          "build_seconds": 19.7,
+          "built_by": "52b1e2b9425703bcb9ed83e9d76e959fe4af8ce6",
+          "csv_sha256": {
+            "book.csv": "7b09f4fd1d6fc465734d1c30db1e8ca2445577932c2fd924ab593106172cf6b1"
+          },
+          "journals": {
+            "cross_asset_pairs": 0,
+            "entries_created": 20000,
+            "processed_transactions": 20000,
+            "quarantined": 0
+          },
+          "kind": "generic",
+          "pegs": 0,
+          "pegs_paired": 0,
+          "schema": "kassiber.journals-bench-book.v1",
+          "seed": 1,
+          "transactions": 20000
+        },
+        "phase_samples": [
+          {
+            "cpu_by_phase": {
+              "cache_enter": 0.0,
+              "pricing": 0.006823999999999997,
+              "repairs": 0.015465000000000007
+            },
+            "load_average": [
+              5.04443359375,
+              9.55078125,
+              8.67041015625
+            ],
+            "native_cpu_seconds": 0.02231500000000003,
+            "rebuild_cache": false,
+            "repeat": 0
+          },
+          {
+            "cpu_by_phase": {
+              "cache_enter": 1.0000000000287557e-06,
+              "pricing": 0.006540000000000046,
+              "repairs": 0.01429999999999998
+            },
+            "load_average": [
+              4.88037109375,
+              9.44189453125,
+              8.6396484375
+            ],
+            "native_cpu_seconds": 0.020863999999999994,
+            "rebuild_cache": false,
+            "repeat": 1
+          },
+          {
+            "cpu_by_phase": {
+              "cache_enter": 1.0000000000287557e-06,
+              "pricing": 0.0071570000000000245,
+              "repairs": 0.014357999999999982
+            },
+            "load_average": [
+              4.88037109375,
+              9.44189453125,
+              8.6396484375
+            ],
+            "native_cpu_seconds": 0.02154600000000001,
+            "rebuild_cache": false,
+            "repeat": 2
+          },
+          {
+            "cpu_by_phase": {
+              "cache_enter": 0.0026570000000000205,
+              "cache_restore": 0.00022400000000000198,
+              "pricing": 0.005985000000000018,
+              "repairs": 0.01960799999999996
+            },
+            "load_average": [
+              4.88037109375,
+              9.44189453125,
+              8.6396484375
+            ],
+            "native_cpu_seconds": 0.02851300000000001,
+            "rebuild_cache": true,
+            "repeat": 0
+          },
+          {
+            "cpu_by_phase": {
+              "cache_enter": 0.0026740000000000097,
+              "cache_restore": 0.0006259999999999599,
+              "pricing": 0.007494999999999974,
+              "repairs": 0.021556999999999993
+            },
+            "load_average": [
+              4.89013671875,
+              9.36767578125,
+              8.61962890625
+            ],
+            "native_cpu_seconds": 0.03240799999999999,
+            "rebuild_cache": true,
+            "repeat": 1
+          },
+          {
+            "cpu_by_phase": {
+              "cache_enter": 0.0026289999999999925,
+              "cache_restore": 0.00023099999999998122,
+              "pricing": 0.005695000000000006,
+              "repairs": 0.019352000000000036
+            },
+            "load_average": [
+              4.89013671875,
+              9.36767578125,
+              8.61962890625
+            ],
+            "native_cpu_seconds": 0.027953000000000006,
+            "rebuild_cache": true,
+            "repeat": 2
+          }
+        ],
+        "representative_breakdown": [
+          {
+            "cpu_by_phase": {
+              "cache_enter": 1.0000000000287557e-06,
+              "pricing": 0.0071570000000000245,
+              "repairs": 0.014357999999999982
+            },
+            "load_average": [
+              4.88037109375,
+              9.44189453125,
+              8.6396484375
+            ],
+            "native_cpu_seconds": 0.02154600000000001,
+            "other_cpu_seconds": 2.999999999997449e-05,
+            "rebuild_cache": false,
+            "repeat": 2
+          },
+          {
+            "cpu_by_phase": {
+              "cache_enter": 0.0026570000000000205,
+              "cache_restore": 0.00022400000000000198,
+              "pricing": 0.005985000000000018,
+              "repairs": 0.01960799999999996
+            },
+            "load_average": [
+              4.88037109375,
+              9.44189453125,
+              8.6396484375
+            ],
+            "native_cpu_seconds": 0.02851300000000001,
+            "other_cpu_seconds": 3.900000000001125e-05,
+            "rebuild_cache": true,
+            "repeat": 0
+          }
+        ],
+        "samples": [
+          {
+            "load_average": [
+              6.09619140625,
+              10.43798828125,
+              8.89892578125
+            ],
+            "native_cpu_seconds": 0.02104600000000001,
+            "native_wall_seconds": 0.021335702,
+            "python_cpu_seconds": 0.026151201999999873,
+            "rebuild_cache": false,
+            "repeat": 0
+          },
+          {
+            "load_average": [
+              6.09619140625,
+              10.43798828125,
+              8.89892578125
+            ],
+            "native_cpu_seconds": 0.029069999999999985,
+            "native_wall_seconds": 0.029331184,
+            "python_cpu_seconds": 0.03206662600000065,
+            "rebuild_cache": true,
+            "repeat": 0
+          },
+          {
+            "load_average": [
+              5.84814453125,
+              10.314453125,
+              8.8671875
+            ],
+            "native_cpu_seconds": 0.02088699999999999,
+            "native_wall_seconds": 0.021186418,
+            "python_cpu_seconds": 0.0311222769999997,
+            "rebuild_cache": false,
+            "repeat": 1
+          },
+          {
+            "load_average": [
+              5.69970703125,
+              10.20947265625,
+              8.8408203125
+            ],
+            "native_cpu_seconds": 0.030449999999999977,
+            "native_wall_seconds": 0.030879751,
+            "python_cpu_seconds": 0.027177571999999373,
+            "rebuild_cache": true,
+            "repeat": 1
+          },
+          {
+            "load_average": [
+              5.69970703125,
+              10.20947265625,
+              8.8408203125
+            ],
+            "native_cpu_seconds": 0.022235000000000005,
+            "native_wall_seconds": 0.022605433,
+            "python_cpu_seconds": 0.028709129000001,
+            "rebuild_cache": false,
+            "repeat": 2
+          },
+          {
+            "load_average": [
+              5.6435546875,
+              10.12255859375,
+              8.81982421875
+            ],
+            "native_cpu_seconds": 0.028693999999999997,
+            "native_wall_seconds": 0.029122488,
+            "python_cpu_seconds": 0.032510717000000966,
+            "rebuild_cache": true,
+            "repeat": 2
+          },
+          {
+            "load_average": [
+              5.431640625,
+              10.00390625,
+              8.7880859375
+            ],
+            "native_cpu_seconds": 0.020570000000000033,
+            "native_wall_seconds": 0.02083482,
+            "python_cpu_seconds": 0.0312567700000006,
+            "rebuild_cache": false,
+            "repeat": 3
+          },
+          {
+            "load_average": [
+              5.431640625,
+              10.00390625,
+              8.7880859375
+            ],
+            "native_cpu_seconds": 0.030722000000000027,
+            "native_wall_seconds": 0.031065305,
+            "python_cpu_seconds": 0.02615243300000003,
+            "rebuild_cache": true,
+            "repeat": 3
+          },
+          {
+            "load_average": [
+              5.39697265625,
+              9.92041015625,
+              8.767578125
+            ],
+            "native_cpu_seconds": 0.02122099999999999,
+            "native_wall_seconds": 0.021399833,
+            "python_cpu_seconds": 0.030914136999999897,
+            "rebuild_cache": false,
+            "repeat": 4
+          },
+          {
+            "load_average": [
+              5.4453125,
+              9.85498046875,
+              8.75244140625
+            ],
+            "native_cpu_seconds": 0.031972,
+            "native_wall_seconds": 0.032218443,
+            "python_cpu_seconds": 0.028201930000001596,
+            "rebuild_cache": true,
+            "repeat": 4
+          },
+          {
+            "load_average": [
+              5.4453125,
+              9.85498046875,
+              8.75244140625
+            ],
+            "native_cpu_seconds": 0.021448999999999996,
+            "native_wall_seconds": 0.021585498,
+            "python_cpu_seconds": 0.025919592000001046,
+            "rebuild_cache": false,
+            "repeat": 5
+          },
+          {
+            "load_average": [
+              5.3291015625,
+              9.75732421875,
+              8.7265625
+            ],
+            "native_cpu_seconds": 0.027680999999999956,
+            "native_wall_seconds": 0.028068823,
+            "python_cpu_seconds": 0.029230369000000422,
+            "rebuild_cache": true,
+            "repeat": 5
+          },
+          {
+            "load_average": [
+              5.22265625,
+              9.66162109375,
+              8.701171875
+            ],
+            "native_cpu_seconds": 0.02185999999999999,
+            "native_wall_seconds": 0.022221452,
+            "python_cpu_seconds": 0.026088293000000817,
+            "rebuild_cache": false,
+            "repeat": 6
+          },
+          {
+            "load_average": [
+              5.22265625,
+              9.66162109375,
+              8.701171875
+            ],
+            "native_cpu_seconds": 0.02798400000000001,
+            "native_wall_seconds": 0.028157405,
+            "python_cpu_seconds": 0.025627021999998334,
+            "rebuild_cache": true,
+            "repeat": 6
+          }
+        ],
+        "summary": {
+          "False": {
+            "native_best": 0.020570000000000033,
+            "native_median": 0.02122099999999999,
+            "python_median": 0.028709129000001
+          },
+          "True": {
+            "native_best": 0.027680999999999956,
+            "native_median": 0.029069999999999985,
+            "python_median": 0.028201930000001596
+          }
+        },
+        "transactions": 20000
+      },
+      {
+        "activity": {
+          "auto_priced": 0,
+          "consolidation": {
+            "activated": 0,
+            "skipped": 0,
+            "unchanged": 1
+          },
+          "profile": {
+            "bitcoin_rail_carrying_value": 1,
+            "cost_basis_pool_scope": "global",
+            "created_at": "2026-10-30T16:36:32Z",
+            "fiat_currency": "EUR",
+            "gains_algorithm": "FIFO",
+            "id": "58aa22f2-ecbe-44c5-9d41-ccfea3219a0c",
+            "journal_input_version": 607,
+            "label": "Default",
+            "last_processed_at": "2026-10-30T16:51:32Z",
+            "last_processed_input_version": 607,
+            "last_processed_tx_count": 20000,
+            "ownership_review_counts_json": "{\"by_reason\": {}, \"total\": 0}",
+            "require_coarse_review": 0,
+            "swap_candidate_count": null,
+            "tax_country": "generic",
+            "tax_long_term_days": 365,
+            "workspace_id": "d6b18e5d-f75c-43bd-93b4-e09975025363"
+          },
+          "repair": null,
+          "warning": null
+        },
+        "database_sha256": "2168d5f48f34361636d2771172ef8dc813cf31cd5f5c4ff5bf750406ea53dfcd",
+        "kind": "multi-wallet",
+        "manifest": {
+          "build_seconds": 903.8,
+          "built_by": "ae79db2a6bbf66596dd9a17c984746d26d1a7b92",
+          "csv_sha256": {
+            "Cold.csv": "ed3a0928e98404316be9b9fa7e3b603f4d4e0d7577633bec06e441d8d0e8ff5f",
+            "Hot.csv": "8d3852c3bcdb36bdd425b76fb3a8e5f64bf462e57c6b61294ed774681ac81146",
+            "LCold.csv": "94adb338d7efdf3b52025c2ef85e0fb586a7f501ff446d6aef3572295f8fc748",
+            "LHot.csv": "0cdeee02cfd30c7a1bc950bb013c3bbe793b4f1c7f19bc7ab4a4569100117b7a"
+          },
+          "journals": {
+            "cross_asset_pairs": 300,
+            "entries_created": 19983,
+            "processed_transactions": 20000,
+            "quarantined": 17
+          },
+          "kind": "multi-wallet",
+          "pegs": 3306,
+          "pegs_paired": 300,
+          "schema": "kassiber.journals-bench-book.v1",
+          "seed": 7,
+          "transactions": 20000
+        },
+        "phase_samples": [
+          {
+            "cpu_by_phase": {
+              "cache_enter": 0.0,
+              "pricing": 0.009869000000000017,
+              "repairs": 0.01849999999999996
+            },
+            "load_average": [
+              4.923828125,
+              8.62841796875,
+              8.4091796875
+            ],
+            "native_cpu_seconds": 0.02840100000000001,
+            "rebuild_cache": false,
+            "repeat": 0
+          },
+          {
+            "cpu_by_phase": {
+              "cache_enter": 0.0,
+              "pricing": 0.010323000000000027,
+              "repairs": 0.01789799999999997
+            },
+            "load_average": [
+              4.76953125,
+              8.53466796875,
+              8.3798828125
+            ],
+            "native_cpu_seconds": 0.028266000000000013,
+            "rebuild_cache": false,
+            "repeat": 1
+          },
+          {
+            "cpu_by_phase": {
+              "cache_enter": 0.0,
+              "pricing": 0.009558000000000011,
+              "repairs": 0.01775199999999999
+            },
+            "load_average": [
+              4.76953125,
+              8.53466796875,
+              8.3798828125
+            ],
+            "native_cpu_seconds": 0.027344999999999953,
+            "rebuild_cache": false,
+            "repeat": 2
+          },
+          {
+            "cpu_by_phase": {
+              "cache_enter": 0.002644999999999953,
+              "cache_restore": 0.00036599999999997745,
+              "pricing": 0.009276000000000006,
+              "repairs": 0.02364900000000003
+            },
+            "load_average": [
+              4.70751953125,
+              8.458984375,
+              8.35595703125
+            ],
+            "native_cpu_seconds": 0.03597800000000001,
+            "rebuild_cache": true,
+            "repeat": 0
+          },
+          {
+            "cpu_by_phase": {
+              "cache_enter": 0.002605000000000024,
+              "cache_restore": 0.000248000000000026,
+              "pricing": 0.00797500000000001,
+              "repairs": 0.022704000000000002
+            },
+            "load_average": [
+              4.70751953125,
+              8.458984375,
+              8.35595703125
+            ],
+            "native_cpu_seconds": 0.03356300000000001,
+            "rebuild_cache": true,
+            "repeat": 1
+          },
+          {
+            "cpu_by_phase": {
+              "cache_enter": 0.002622000000000013,
+              "cache_restore": 0.0007059999999999844,
+              "pricing": 0.010207000000000022,
+              "repairs": 0.023863000000000023
+            },
+            "load_average": [
+              4.70751953125,
+              8.458984375,
+              8.35595703125
+            ],
+            "native_cpu_seconds": 0.03744400000000003,
+            "rebuild_cache": true,
+            "repeat": 2
+          }
+        ],
+        "representative_breakdown": [
+          {
+            "cpu_by_phase": {
+              "cache_enter": 0.0,
+              "pricing": 0.010323000000000027,
+              "repairs": 0.01789799999999997
+            },
+            "load_average": [
+              4.76953125,
+              8.53466796875,
+              8.3798828125
+            ],
+            "native_cpu_seconds": 0.028266000000000013,
+            "other_cpu_seconds": 4.500000000001725e-05,
+            "rebuild_cache": false,
+            "repeat": 1
+          },
+          {
+            "cpu_by_phase": {
+              "cache_enter": 0.002644999999999953,
+              "cache_restore": 0.00036599999999997745,
+              "pricing": 0.009276000000000006,
+              "repairs": 0.02364900000000003
+            },
+            "load_average": [
+              4.70751953125,
+              8.458984375,
+              8.35595703125
+            ],
+            "native_cpu_seconds": 0.03597800000000001,
+            "other_cpu_seconds": 4.2000000000042004e-05,
+            "rebuild_cache": true,
+            "repeat": 0
+          }
+        ],
+        "samples": [
+          {
+            "load_average": [
+              4.73876953125,
+              9.26171875,
+              8.58935546875
+            ],
+            "native_cpu_seconds": 0.026332999999999995,
+            "native_wall_seconds": 0.026505495,
+            "python_cpu_seconds": 0.037490372000000605,
+            "rebuild_cache": false,
+            "repeat": 0
+          },
+          {
+            "load_average": [
+              4.73876953125,
+              9.26171875,
+              8.58935546875
+            ],
+            "native_cpu_seconds": 0.034665999999999975,
+            "native_wall_seconds": 0.034998218,
+            "python_cpu_seconds": 0.03423285400000253,
+            "rebuild_cache": true,
+            "repeat": 0
+          },
+          {
+            "load_average": [
+              5.400390625,
+              9.32421875,
+              8.61328125
+            ],
+            "native_cpu_seconds": 0.026556000000000024,
+            "native_wall_seconds": 0.026957906,
+            "python_cpu_seconds": 0.039958127999994986,
+            "rebuild_cache": false,
+            "repeat": 1
+          },
+          {
+            "load_average": [
+              5.2080078125,
+              9.21875,
+              8.5830078125
+            ],
+            "native_cpu_seconds": 0.03359599999999996,
+            "native_wall_seconds": 0.034031906,
+            "python_cpu_seconds": 0.038514528999996855,
+            "rebuild_cache": true,
+            "repeat": 1
+          },
+          {
+            "load_average": [
+              5.03076171875,
+              9.115234375,
+              8.552734375
+            ],
+            "native_cpu_seconds": 0.026527999999999996,
+            "native_wall_seconds": 0.026744631,
+            "python_cpu_seconds": 0.04608733299999557,
+            "rebuild_cache": false,
+            "repeat": 2
+          },
+          {
+            "load_average": [
+              5.03076171875,
+              9.115234375,
+              8.552734375
+            ],
+            "native_cpu_seconds": 0.036173999999999984,
+            "native_wall_seconds": 0.036601826,
+            "python_cpu_seconds": 0.040195746999998505,
+            "rebuild_cache": true,
+            "repeat": 2
+          },
+          {
+            "load_average": [
+              4.94775390625,
+              9.0302734375,
+              8.52783203125
+            ],
+            "native_cpu_seconds": 0.02691300000000002,
+            "native_wall_seconds": 0.027110039,
+            "python_cpu_seconds": 0.03807821000000189,
+            "rebuild_cache": false,
+            "repeat": 3
+          },
+          {
+            "load_average": [
+              4.79150390625,
+              8.9296875,
+              8.498046875
+            ],
+            "native_cpu_seconds": 0.03389599999999998,
+            "native_wall_seconds": 0.034272131,
+            "python_cpu_seconds": 0.03854594799999944,
+            "rebuild_cache": true,
+            "repeat": 3
+          },
+          {
+            "load_average": [
+              4.80859375,
+              8.8642578125,
+              8.47900390625
+            ],
+            "native_cpu_seconds": 0.029052000000000022,
+            "native_wall_seconds": 0.029546408,
+            "python_cpu_seconds": 0.038098439999998845,
+            "rebuild_cache": false,
+            "repeat": 4
+          },
+          {
+            "load_average": [
+              4.80859375,
+              8.8642578125,
+              8.47900390625
+            ],
+            "native_cpu_seconds": 0.03310799999999997,
+            "native_wall_seconds": 0.033300607,
+            "python_cpu_seconds": 0.03973246900000049,
+            "rebuild_cache": true,
+            "repeat": 4
+          },
+          {
+            "load_average": [
+              4.74365234375,
+              8.783203125,
+              8.45458984375
+            ],
+            "native_cpu_seconds": 0.027384999999999993,
+            "native_wall_seconds": 0.027589011,
+            "python_cpu_seconds": 0.040831108999995536,
+            "rebuild_cache": false,
+            "repeat": 5
+          },
+          {
+            "load_average": [
+              5.0048828125,
+              8.77001953125,
+              8.45166015625
+            ],
+            "native_cpu_seconds": 0.038949999999999985,
+            "native_wall_seconds": 0.0392624,
+            "python_cpu_seconds": 0.033693155000001695,
+            "rebuild_cache": true,
+            "repeat": 5
+          },
+          {
+            "load_average": [
+              5.00439453125,
+              8.70703125,
+              8.43310546875
+            ],
+            "native_cpu_seconds": 0.02838500000000005,
+            "native_wall_seconds": 0.028954683,
+            "python_cpu_seconds": 0.04235683499999965,
+            "rebuild_cache": false,
+            "repeat": 6
+          },
+          {
+            "load_average": [
+              5.00439453125,
+              8.70703125,
+              8.43310546875
+            ],
+            "native_cpu_seconds": 0.037100999999999995,
+            "native_wall_seconds": 0.037344135,
+            "python_cpu_seconds": 0.04085346700000514,
+            "rebuild_cache": true,
+            "repeat": 6
+          }
+        ],
+        "summary": {
+          "False": {
+            "native_best": 0.026332999999999995,
+            "native_median": 0.02691300000000002,
+            "python_median": 0.039958127999994986
+          },
+          "True": {
+            "native_best": 0.03310799999999997,
+            "native_median": 0.034665999999999975,
+            "python_median": 0.03854594799999944
+          }
+        },
+        "transactions": 20000
+      }
+    ],
+    "schema": "kassiber.r4-prebuild-cpu.v1",
+    "script_sha256": "4f301f22ea904bfbb555f7834e8e06bcee1e9e34156a3af30749d290debd62d0",
+    "target_seconds": 0.03
+  },
+  "file_replay": {
+    "boundary": "ordered source repairs, drifted legacy pair refresh/profile reload, and cached pricing",
+    "full_dump_comparisons": 674,
+    "network": "native process killed on socket/connect/send syscalls; guard self-test passed",
+    "path": "target/r4-10/final-files.json",
+    "sha256": "c91ab073c13c909f37042c5f52f3785891c5ab1c8edf78cfb48b55af34fee556"
+  },
+  "implementation_sha256": {
+    "crates/journals/src/persistence.rs": "3c4a00c849a6cef59822b9038df8254c1341f2660c34389ea405b89148af9782",
+    "crates/journals/src/prebuild.rs": "40221ca89b394394f4bd7ce90246b26d0a4e6e36899f483b7e1d026d575f68d8",
+    "crates/journals/src/prebuild/legacy.rs": "fb960b601e5fa75cf3ed8d56cc802023c1100e45e9b81b9c23bc31023a9d772c",
+    "crates/journals/src/prebuild/overlap.rs": "b716aaa960ac3d872ab24d1cdd427cdd7837a1f231523de8600dd1842a32b550",
+    "crates/journals/src/prebuild/pipeline.rs": "485a5c38661a66a96fedf22b6bc1a46101874ae5dd0b8ffc4e5fd957266639c1",
+    "crates/journals/src/prebuild/pricing.rs": "de86b8a369da7488b715a88d32b9ca166ec46126e18e5c76c4b2ccdddc68c748",
+    "crates/journals/src/prebuild/sources.rs": "d34139e04e8257c78306cf7f1b066368283bb4e3aa6dd3b1407d02c93bc7563c",
+    "crates/journals/src/prebuild/tests.rs": "1e6e9e8a8b1c106ce7458149aff1272b4a98ef8d3fbb3c574d4ba7e84b9abc11"
+  },
+  "mutations": {
+    "baseline_selections": 57,
+    "catalog_sha256": "3ae04f1c94132b54c2b6867523e92fbfc00b97100860d046173fd0d779b73539",
+    "elapsed_seconds": 705.7448665130069,
+    "inherited_journals": 112,
+    "isolated_build_removed": true,
+    "log": {
+      "path": "target/r4-10/final-mutations-isolated.log",
+      "sha256": "f6e73459be8981bf8e3d584d93c6df96c5a017c416548bb9d78bca35d85f5090"
+    },
+    "prebuild": 116,
+    "recipes": 231,
+    "recorder": 3,
+    "result": 0,
+    "source_sha256": {
+      "crates/journals/src/boundary.rs": "2ddc678761e48f07a4277b2c20622a94a631f2c7c3725eefa32370a71abd878d",
+      "crates/journals/src/boundary/joins.rs": "58b06db41921c470886b1cd1e190f506d6fd9175645c58321340fc6dd464c68e",
+      "crates/journals/src/persistence.rs": "3c4a00c849a6cef59822b9038df8254c1341f2660c34389ea405b89148af9782",
+      "crates/journals/src/persistence/filed.rs": "ba5e5f16065308ebbaeebbd1153f74e094cab4be61c7050e57135893598b6dbe",
+      "crates/journals/src/persistence/quantity.rs": "85c931d09675800d5a63e66ebd843883abc027f6b6448cb7ff0b22630c11289a",
+      "crates/journals/src/persistence/quarantine.rs": "c9cb06f5e0b8ab54fc47c20d9b4f7dc63a54379444e864fb450d0ef2f8235c0d",
+      "crates/journals/src/prebuild.rs": "40221ca89b394394f4bd7ce90246b26d0a4e6e36899f483b7e1d026d575f68d8",
+      "crates/journals/src/prebuild/legacy.rs": "fb960b601e5fa75cf3ed8d56cc802023c1100e45e9b81b9c23bc31023a9d772c",
+      "crates/journals/src/prebuild/overlap.rs": "b716aaa960ac3d872ab24d1cdd427cdd7837a1f231523de8600dd1842a32b550",
+      "crates/journals/src/prebuild/pipeline.rs": "485a5c38661a66a96fedf22b6bc1a46101874ae5dd0b8ffc4e5fd957266639c1",
+      "crates/journals/src/prebuild/pricing.rs": "de86b8a369da7488b715a88d32b9ca166ec46126e18e5c76c4b2ccdddc68c748",
+      "crates/journals/src/prebuild/sources.rs": "d34139e04e8257c78306cf7f1b066368283bb4e3aa6dd3b1407d02c93bc7563c",
+      "crates/journals/src/render.rs": "afac4610917b0ed8ef320385b7f80ca5cb28bd69187e9c00b5dac5b998550d45",
+      "crates/journals/src/storage.rs": "486b6fc5fd605ac13a0212e4d09bfc506e086cd60eba6c71c3fba5ff874b9942",
+      "crates/journals/tests/support/mod.rs": "b08803499aa50a6687769235b4749580ee73df7dd4c229ced45a341690696150",
+      "crates/transfers/src/legacy_refresh.rs": "43d6c59182338a8efe90dec1b36dbb067bc8b6d942b70ab5b5e2d0bb7664cdbb",
+      "crates/transfers/src/pair_spec.rs": "aaaa5d8a2afcf0347131ff3dcfdf0606da7baf07e2a9b0e9261f5b03c473e950",
+      "scripts/check-journal-prebuild.py": "8c355d884082bd3b755ac3bd9f0057a65a8d2ce959a8f68a22a266339cd82b2b",
+      "tests/rust_port/journal_persistence_oracle.py": "0a243b400043e2678029d90beb817547a81fd62fa3890d82ddf2a258c7fc2ec5",
+      "tests/rust_port/journal_prebuild_recorder.py": "20ff8b1cec42710cb1eca18df69276050614d9fa014981cd4875ba37fd7d3414"
+    }
+  },
+  "native_tests": {
+    "passed": 118,
+    "path": "target/r4-10/audit-native-verified.log",
+    "sha256": "c43bf0c64c2785c44c3a171d4d0225a33a136aa8b099f06f0a85efe6d5208bef"
+  },
+  "python_reference_unchanged": true,
+  "remaining": [
+    "Complete 2327 inherited custody recipes across the verified 396-recipe prefix and the 1931-recipe continuation",
+    "Bind the generated, historical and complete-book campaign replays to the final native implementation",
+    "Write the acceptance record and run final required checks"
+  ],
+  "schema": "kassiber.r4-prebuild-finalization.v1",
+  "sql_refusal_repro": {
+    "cases": 2,
+    "complete_dumps_equal": true,
+    "path": "target/r4-10/sql-family-probe.json",
+    "python_and_native_families": "IntegrityError",
+    "sha256": "13ea479a76e7d4fc1c078871f7217ded05f28cf1194a6c9ef06661a757d64943"
+  },
+  "status": "Verified source/cache/refusal boundary; final campaign binding and custody continuation remain open",
+  "superseded_attempts": [
+    {
+      "path": "target/r4-10/final-mutations.log",
+      "reason": "Concatenated catalogues reused JP ids; validation rejected the local combined list before tests. Catalogue-qualified ids fix only the local list."
+    },
+    {
+      "path": "target/r4-10/final-mutations-verified.log",
+      "reason": "Two unmutated baselines used stale debug artifacts from a reused mutation build. A clean debug rebuild passes; the final isolated gate passes every baseline and all 231 recipes. No kill from this attempt is counted."
+    }
+  ],
+  "vectors": {
+    "pipeline": {
+      "cases": 104,
+      "new_cases": [
+        "pricing/value-derived-overflow",
+        "sources/review-legacy-identity",
+        "sources/unknown-network-scope",
+        "sources/json-null-inventory-raw"
+      ],
+      "path": "crates/journals/tests/data/prebuild-pipeline.json",
+      "previous_cases_unchanged": 100,
+      "sha256": "980bc69064059e78f84e2d88ad6cc9b1aaac38a7abcb5675279be76e928092f4"
+    },
+    "pricing": {
+      "cases": 97,
+      "new_cases": [
+        "value-derived-overflow"
+      ],
+      "path": "crates/journals/tests/data/prebuild-pricing.json",
+      "previous_cases_unchanged": 96,
+      "sha256": "d0989f4fd9bdb9ebbd7d98fbf90dc866465677dcfb7807a4cae3a6eae1d0f84e"
+    },
+    "sources": {
+      "cases": 78,
+      "new_cases": [
+        "review-legacy-identity",
+        "unknown-network-scope",
+        "json-null-inventory-raw"
+      ],
+      "path": "crates/journals/tests/data/prebuild-sources.json",
+      "previous_cases_unchanged": 75,
+      "sha256": "f847170191cd8608466dd2c2fcb48230e7aacd55a4c15778bdd77e865c6fced7"
+    }
+  },
+  "verification": {
+    "classifier": {
+      "path": "target/r4-10/final-classifier.log",
+      "sha256": "6d5aec411b822716320386bd5a09a02e20eb087879bc27512f783043fa4d4896"
+    },
+    "clippy": {
+      "path": "target/r4-10/final-clippy.log",
+      "sha256": "a70da5408e7a6da7efe97b23011504833b16a7875bda14543f2504b5b8c7d97a"
+    },
+    "formatting": {
+      "path": "target/r4-10/final-fmt.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "manual_second_pass": "Reviewed shared SQLite conversion, no-overlap cache lifetime, refresh after active repair, whole-stage timer/cache costs, old-vector stability, mutation baseline/kill logs, region dispositions and unchanged Python/product routing",
+    "preflight": {
+      "passed": 57,
+      "path": "target/r4-10/final-preflight.log",
+      "sha256": "bed08dafbe337875e7d8c0df8ecd4216ec5e5c71d27340425c10dc8513d2faa6"
+    },
+    "python_harness": {
+      "passed": 10,
+      "path": "target/r4-10/final-python-harness.log",
+      "sha256": "fcae2efc5c94f8bea5efae1f0740bbc4765937eef9c017cc29b2420ebd20dad5"
+    }
+  }
+}

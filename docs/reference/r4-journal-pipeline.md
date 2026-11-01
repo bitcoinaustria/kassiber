@@ -1014,6 +1014,75 @@ R4-10 remains **unaccepted**. The 2,327 custody recipes, remaining region audit,
 whole-stage cache/CPU work, final campaign binding and acceptance record stay open.
 The Python reference and product routing are unchanged.
 
+### R4-10 branch and cache checkpoint
+
+The final input expansion retains every previous frozen operand and expectation.
+It adds linked legacy-review identity, unknown-network fallback, JSON-null
+inventory and value-derived overflow witnesses. There are now **78 source,
+97 pricing, 58 legacy and 104 ordered cases**. All **674 complete-dump file
+comparisons** pass on SQLite and SQLCipher under the native socket guard.
+Native guards also cover the second audit identity, missing tables, invalid
+source storage and a scoped profile moved by an injected clock callback.
+
+The refusal audit found that source/pricing trigger failures returned native
+`DatabaseError` instead of Python's `IntegrityError`. The shared journal SQLite
+conversion now preserves the DB-API family and original SQLite message; legacy
+refresh uses the same conversion. Constraint and operational failures propagate
+and restore the stage instead of becoming domain skips. Two Python/native
+trigger probes match complete dumps and exact refusals. The Python reference,
+book schema and production routing are unchanged.
+
+The combined repair/warning path now shares the no-overlap result of its source
+index. This shortcut is confined to one reserved writer call: that repair
+cannot write or consume callbacks, and warning would observe the same index.
+Standalone calls still read fresh evidence. Active repairs retain the existing
+post-write index refreshes. Nothing is cached across calls, books or connections.
+
+All **116 pre-build recipes**, **112 inherited journal recipes** and **three
+recorder recipes** are killed in a fresh isolated build after all **57 named
+baseline selections** pass. Catalogue-qualified names disambiguate overlapping
+recipe ids in the local combined run. A preceding reused-debug-tree attempt
+failed two unmutated baselines; its results are excluded. The clean debug
+control and isolated gate pass. The mutation build tree is removed.
+
+Fresh LLVM instrumentation passes **44 pre-build tests**. It leaves **104
+zero-count executable-region entries**, each with a disposition in the
+[region audit](r4-prebuild-branch-audit.json). They include SQL/error propagation,
+closed-input invariants, defensive descriptor handling and shared allocation
+bounds. Stable LLVM emits no branch counters; this is not a claim of measured
+100% branch coverage. Allocation-failure behavior above the inherited Decimal
+formatting bound is outside the parity claim. The coverage build tree is removed.
+
+The whole ordered stage is measured on the existing disposable 20k benchmark
+books, with seven alternating Python/native pairs per cache setting. User plus
+system process CPU includes callbacks, optional result fields, and scoped cache
+entry/restoration; opening, fixture construction, writer acquisition, dump
+verification and final rollback are outside the timer. Each sample still checks
+its complete expected dump and result. Shared-machine load is retained in the
+raw record; these are process-CPU measurements, not quiet-machine wall gates.
+
+| 20k book | Before source-index reuse, default cache | Final default cache | Final scoped rebuild cache | Target |
+| --- | ---: | ---: | ---: | ---: |
+| Generic | 0.031240 s | 0.021221 s | 0.029070 s | 0.030000 s |
+| Multi-wallet | 0.040664 s | 0.026913 s | 0.034666 s | 0.030000 s |
+
+The scoped-cache multi-wallet median misses by **0.004666 s (15.6%)**. Its
+best sample is 0.033108 s, so selection of the fastest sample does not close the
+budget. The median diagnostic sample costs 0.023649 s in repairs, 0.009276 s
+in pricing, 0.002645 s entering the cache, 0.000366 s restoring it and 0.000042 s
+in other stage work (0.035978 s total). The larger cache adds entry cost and
+raises repair-scan CPU while reducing pricing reads. The 128 MiB setting also
+serves loading and persistence, so changing it for this read-heavy stage needs
+whole-pipeline measurement in R4-13. The default-cache books meet the target;
+the scoped-cache miss and complete costs remain recorded budget debt.
+
+All **118 release journal/transfer tests**, **10 Python harness tests**, release
+all-target Clippy, formatting, classifier refresh and **57 preflight checks**
+pass. The [finalization record](r4-prebuild-finalization-results.json) binds
+source hashes, vectors, logs, all CPU samples and coverage dispositions.
+R4-10 remains unaccepted pending the custody mutation continuation, final
+whole-campaign implementation binding and acceptance record.
+
 ## Performance budget
 
 The budget is for the Rust binary's `journals process` (no `--auto-pair`) on

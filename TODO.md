@@ -614,7 +614,12 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   file comparisons and 19 killed numeric/dump mutations. Remaining branch
   dispositions, inherited custody gates and final campaign binding still block
   acceptance. A further 32 input witnesses pass 658 file comparisons and 12
-  additional mutations; 122 zero-count executable regions remain for audit.
+  additional mutations. The [branch/cache checkpoint](docs/reference/r4-journal-pipeline.md#r4-10-branch-and-cache-checkpoint)
+  dispositions all 104 remaining executable-region entries and kills 116
+  pre-build, 112 journal and three recorder recipes in an isolated final-source
+  run. Whole-stage default-cache 20k medians meet 0.03 s; scoped-cache
+  multi-wallet is 0.034666 s, with its complete cost breakdown recorded.
+  Final custody continuation, campaign binding and acceptance remain open.
 - [ ] Reject fractional legacy msat before Python's source-overlap fingerprint
   conversion can collapse distinct amounts. The disposable repro is
   `python -m tests.rust_port.repro_journal_fractional_source_overlap`;

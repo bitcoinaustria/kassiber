@@ -174,6 +174,7 @@ def vectors():
         "invalid-four-century-leap-hour": ({"occurred_at": '2000-02-29T25:00:00Z'}, {}),
         "invalid-month-short-time": ({"occurred_at": '2025-13-01T12'}, {}),
         "invalid-basic-hour": ({"occurred_at": '20000101T24'}, {}),
+        "value-derived-overflow": ({"amount": 1, "fiat_value_exact": '1e999999', "fiat_price_source": 'rates_cache'}, {"rate_exact": '', "rate": ''}),
     }
     for name, (tx, cached) in cases.items():
         conn = sqlite3.connect(":memory:")

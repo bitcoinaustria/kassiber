@@ -118,5 +118,46 @@
       "prebuild_sources_branch_input_witnesses"
     ],
     "rule": "Include configured xpub source scripts in finite overlap evidence."
+  },
+  {
+    "id": "JA-review-identity",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "let id = if truth(&r[\"review_id\"]) { &r[\"review_id\"] } else { &r[\"component_id\"] };",
+    "replace": "let id = &r[\"component_id\"];",
+    "expect_failing": [
+      "prebuild_sources_branch_input_witnesses"
+    ],
+    "rule": "Retain the linked legacy review identity in active-review conflict warnings."
+  },
+  {
+    "id": "JA-profile-reload-refusal",
+    "file": "crates/journals/src/prebuild/legacy.rs",
+    "find": "\"journal profile disappeared during legacy refresh\",",
+    "replace": "\"journal profile was retained during legacy refresh\",",
+    "expect_failing": [
+      "prebuild_legacy_profile_reload_refusal_restores_callback_writes"
+    ],
+    "rule": "Refuse a missing scoped profile after successful legacy writes and restore callback writes."
+  },
+  {
+    "id": "JA-sqlite-family",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "rusqlite::ErrorCode::ConstraintViolation => \"IntegrityError\",",
+    "replace": "rusqlite::ErrorCode::ConstraintViolation => \"DatabaseError\",",
+    "expect_failing": [
+      "prebuild_sqlite_refusals_retain_python_families",
+      "prebuild_sources_late_sql_refusal_restores_all_tables"
+    ],
+    "rule": "Preserve the Python IntegrityError family for SQLite constraint failures."
+  },
+  {
+    "id": "JA-empty-index-warning",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "return Ok((None, None));",
+    "replace": "return Ok((None, Some(json!({}))));",
+    "expect_failing": [
+      "prebuild_pipeline_matches_complete_python_dumps_and_ordered_fields"
+    ],
+    "rule": "An unchanged source index without overlaps also has no warning."
   }
 ]

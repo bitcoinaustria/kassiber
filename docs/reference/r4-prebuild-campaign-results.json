@@ -44,6 +44,23 @@
       }
     }
   },
+  "finalization_checkpoint": {
+    "coverage_region_audit": "r4-prebuild-branch-audit.json",
+    "cpu_target_seconds": 0.03,
+    "default_cache_target_met": true,
+    "driver_file_comparisons": 674,
+    "inherited_journal_recipes_killed": 112,
+    "prebuild_recipes_killed": 116,
+    "record": "r4-prebuild-finalization-results.json",
+    "recorder_recipes_killed": 3,
+    "remaining": [
+      "Complete 2327 inherited custody recipes across the verified 396-recipe prefix and the 1931-recipe continuation",
+      "Bind the generated, historical and complete-book campaign replays to the final native implementation",
+      "Write the acceptance record and run final required checks"
+    ],
+    "scoped_cache_multi_wallet_median": 0.034666,
+    "zero_count_region_entries_dispositioned": 104
+  },
   "fresh_full_books": {
     "activity_path": "target/r4-10/fresh-files.activity.jsonl",
     "activity_sha256": "72a97a6ad9fbcf3fe8f984665f6b44d1bd8c3f9716d3e518d1a6606e59d21feb",
@@ -18908,10 +18925,9 @@
     "stale_directory": "A nonempty recording directory is refused"
   },
   "remaining": [
-    "Complete the uncovered-region/branch witness and disposition audit",
-    "Execute inherited custody (2327) mutation catalogue",
-    "Profile whole-stage 20k process CPU, optimize caches, compare with 0.03 seconds and record a breakdown if missed",
-    "Bind final whole-campaign gates to the final implementation and write the acceptance record"
+    "Complete 2327 inherited custody recipes across the verified 396-recipe prefix and the 1931-recipe continuation",
+    "Bind the generated, historical and complete-book campaign replays to the final native implementation",
+    "Write the acceptance record and run final required checks"
   ],
   "schema": "kassiber.r4-prebuild-campaign-checkpoint.v2",
   "status": "Generated, recorded, legacy/refusal and prebuild mutation/census checkpoints; R4-10 remains unaccepted",

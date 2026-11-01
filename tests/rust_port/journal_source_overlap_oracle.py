@@ -212,6 +212,9 @@ def branch_vectors(originals):
         ('checkpoint-merged-inventory', 'inventory-horizon'),
         ('xpub-script-types', 'duplicate'),
         ('xpub-without-script-types', 'duplicate'),
+        ('review-legacy-identity', 'review-conflict'),
+        ('unknown-network-scope', 'address-only'),
+        ('json-null-inventory-raw', 'invalid-inventory-script'),
     )
     output = []
     for name, template in recipes:
@@ -277,16 +280,19 @@ def branch_vectors(originals):
             duplicate['label'] = ''
         elif name == 'empty-wallet-kind':
             duplicate['kind'] = ''
-        elif name == 'unknown-chain-scope':
-            config.update(chain='unknown', network='unknown')
+        elif name in {'unknown-chain-scope', 'unknown-network-scope'}:
+            chain = 'unknown' if name == 'unknown-chain-scope' else 'bitcoin'
+            config.update(chain=chain, network='unknown')
             other = json.loads(canonical['config_json'])
-            other.update(chain='unknown', network='unknown')
+            other.update(chain=chain, network='unknown')
             canonical['config_json'] = json.dumps(other)
-        elif name in {'invalid-even-script', 'inventory-without-scope'}:
+        elif name in {'invalid-even-script', 'inventory-without-scope', 'json-null-inventory-raw'}:
             inventory = records('wallet_utxos')
             for row in inventory:
                 if name == 'invalid-even-script':
                     row['script_pubkey'] = 'zz'
+                elif name == 'json-null-inventory-raw':
+                    row['raw_json'] = 'null'
                 else:
                     row['chain'] = ''
             replace('wallet_utxos', inventory)
@@ -299,6 +305,18 @@ def branch_vectors(originals):
                 material['script_types'] = ['p2wpkh']
             canonical['kind'] = 'xpub'
             canonical['config_json'] = json.dumps(material)
+        elif name == 'review-legacy-identity':
+            legs = records('custody_component_legs')
+            legs.append(dict(legs[0], _rowid_=2, id='target-leg', role='destination',
+                             ordinal=1, transaction_id=None))
+            replace('custody_component_legs', legs)
+            term = {column: None for column in before['custody_component_economic_terms']['columns']}
+            term.update(_rowid_=1, id='term', component_id='review', workspace_id='ws',
+                        profile_id='pf', ordinal=0, source_leg_id='leg', target_leg_id='target-leg',
+                        term_kind='transaction_pair', legacy_source_id='legacy-review',
+                        source_row_hash='0' * 64, review_kind='manual', tax_policy='carrying-value',
+                        reviewed_source_amount_msat=1000000000, created_at=CLOCK)
+            replace('custody_component_economic_terms', [term])
         elif name.startswith('checkpoint-'):
             highest = {
                 'checkpoint-boolean-integer': True,

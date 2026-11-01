@@ -49,8 +49,7 @@ pub fn repair_journal_inputs(
         let id = profile["id"]
             .as_str()
             .ok_or_else(|| Refusal::new("KeyError", "id"))?;
-        let repair = repair_journal_source_overlaps(conn, id, clock, identity)?;
-        let warning = source_overlap_warning(conn, id, repair.as_ref())?;
+        let (repair, warning) = overlap::repair_and_warn(conn, id, clock, identity)?;
         let legacy = refresh_drifted_legacy_pair_components(conn, profile, clock)?;
         Ok(RepairedInputs {
             profile: legacy.profile,

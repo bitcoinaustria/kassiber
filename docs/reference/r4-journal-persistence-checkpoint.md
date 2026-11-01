@@ -367,6 +367,12 @@ without changing unchanged entry timestamps. Filed-impact summaries and chain
 authority checks reuse the existing reports and wallets services. Quarantines,
 component blockers and quantity issues retain the report-readiness barrier.
 
+The shared journal SQLite refusal conversion now preserves Python DB-API
+exception families and original SQLite messages, including trigger
+`IntegrityError` and missing-table `OperationalError`; see the
+[R4-10 refusal audit](r4-journal-pipeline.md#r4-10-branch-and-cache-checkpoint).
+This changes no stored representation or transaction ownership.
+
 The caller owns `BEGIN IMMEDIATE`, the encompassing `journals_process`
 savepoint, all pre-build repairs and COMMIT. The writer additionally holds a
 rollback-on-error/unwind savepoint. It cannot prove which BEGIN mode a caller
