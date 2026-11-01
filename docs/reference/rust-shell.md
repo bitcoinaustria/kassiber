@@ -14075,3 +14075,97 @@ applicability and the unchanged Python malformed-amount reproduction pass.
 The required test-classifier update records 5,727 definitions; the required
 CI preflight passes all 57 tests. Full workspace runtime, Python/frontend,
 packaged and platform gates are not run; this is not a push-ready claim.
+
+## Mirror index prerequisite (R5, partial)
+
+`t3code/r5-privacy-mirror` starts at `3291f143a`. This is a prerequisite within
+Mirror's first requested boundary, not completion of that boundary or the
+report slice. `kassiber-wallets::analysis_index` owns immutable captured
+snapshots with indexed identity lookup, physical occurrence resolution and the
+in-memory public observer projection. It does not call Python. Raw observation
+ingestion and the durable SQL projection remain unported.
+
+The resolver retains book/domain/instance separation, active block-hash-bound
+assertions, deduplicated occurrence candidates, explicit historical qualifiers
+and ambiguity. Acquisition grant IDs never become physical identity. Its
+connection is borrowed from the caller's snapshot; it opens no provider, writes
+no table, commits no caller work and supplies no consent or network route.
+Candidate caches are scoped to that resolver. Ordered native collections keep
+ambiguity output deterministic.
+
+The public projection removes private wallet/record/time identities, custody
+edges, private branch/ownership facts and authored/private dataset labels before
+future traversal. It rebuilds aliases and adjacency from visible physical
+nodes/edges, rebinds amounts to visible outputs and uses only explicit public
+Liquid amounts/assets. Private collaboration metadata becomes an observer
+exclusion, not an observer claim. Evidence keeps source classes and physical
+references while withholding record IDs and acquisition metadata. A projected
+snapshot cannot upgrade itself back to owner knowledge. Input evidence and
+finding order are retained; there is no native observation builder yet.
+
+The frozen unchanged-Python corpus has 195 cases:
+
+| Boundary | Cases | Named mutation killer | New recipes |
+| --- | ---: | --- | ---: |
+| Occurrence/domain resolution | 55 | `physical_occurrences_match_python_and_all_112_tables` | 8 |
+| Qualified transaction subjects | 44 | `physical_subjects_match_python_and_preserve_qualifiers` | 1 |
+| Observer projection | 96 | `public_observer_matches_python_and_all_112_tables` | 22 |
+| Captured-index structure/lookup | Native refusals | `immutable_snapshot_rejects_malformed_indexes_and_retains_lookup` | 3 |
+
+Native tests compare canonical result bytes and complete sorted rows in all 112
+seeded tables around every vector. The retained Python oracle recomputes every
+case without changing product Python and checks the same all-table invariants.
+Two native driver runs compare literal stdout bytes with offline mode off/on,
+strict egress observation and no consent. The driver checks all 112 tables per
+case and empty network attempt/ledger buffers. Observer inputs are captured
+Python snapshots; these tests do not establish native source ingestion,
+persistent-index publication, or report-service database parity. There are no
+Python fallbacks in this driver.
+
+| Newly accepted workload | Rust | Python fallback |
+| --- | ---: | ---: |
+| Index primitive evaluations (two driver runs) | 390 | 0 |
+| `reports.privacy-mirror` product invocations | 0 | No accepted workload |
+| `ui.reports.privacy_mirror` product requests | 0 | No accepted workload |
+
+Product inventory remains 154 CLI leaves (22 reports), with 15 report daemon
+kinds plus two transaction exports. Mirror stays unregistered and fails
+`not_implemented`. The parallel PSBT/legacy-scorer work and AI projections stay
+outside this checkpoint. No dependency, lockfile or product schema changes.
+
+The local reference bug is reproduced by
+`tests/rust_port/repro_analysis_index_hashseed.py --seeds`. Python's
+`_Builder.finish` iterates `occurrences.ambiguous & nodes.keys()` as a set. Eight
+recorded seeds produce seven finding orders for identical retained BIP30
+observations, while all eight snapshot IDs agree because findings are absent
+from that digest. `analysis_index_hashseeds.json` retains every seed's exact
+result, and a retained oracle verifies the reproduction. Python is unchanged.
+The native resolver exposes sorted ambiguity IDs; the future native builder
+must preserve deterministic finding order when consuming them.
+
+Remaining work, in order: raw transaction/inventory/reference observation
+normalization and merge/conflict logic; confirmation overlay; durable projection
+synchronization and the bounded SQL read view; traversal, clusters and patterns;
+attribution/dataset matching and conditional entropy; process/book-bound handles
+and Mirror report projection; CLI/daemon registration and acceptance. The AI
+projection remains Python. No Mirror completion or push-ready claim is made.
+
+All 34 entries in `crates/wallets/scripts/analysis_index_mutations.json` are
+killed by the four named selections above, which also pass unmutated. The
+unchanged shared scratch checker compiles mutations before counting actual
+named-test failures; there are no survivors, build errors or empty selections.
+The mutation build tree is removed after its JSON summary and log are retained.
+
+Local Linux verification uses Rust 1.99.1 offline/locked and Python 3.11.17.
+Workspace formatting and both production and test-harness workspace/all-target
+Clippy pass with warnings denied. All 159 wallet library tests are accepted:
+140 pass inside the sandbox; the other 19 initially fail at prohibited local
+socket binds and pass when rerun, alone, with disposable loopback sockets
+permitted. No product network policy changes. All five retained index-oracle
+tests pass without skips. The required classifier update records 5,716 test
+definitions, and the CI preflight passes all 57 tests without skips.
+`target/r5-mirror/{mutation-summary,verification-summary}.json` and `logs/`
+retain the local evidence; owned mutation/verification build trees are removed.
+All scratch/data roots stay under this worktree's `target/`, account `HOME` is
+preserved, and test jobs run serially. The full workspace runtime tests, full
+Python/frontend quality gate and packaged/platform gates are not run.

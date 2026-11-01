@@ -593,6 +593,17 @@ registers them; exit-tax preserves its reference no-registration boundary.
   Preserve native unhandled-debug semantics and kill all 21 transport/registration
   mutations. Product served-by counts are non-zero; see the
   [registration checkpoint](docs/reference/rust-shell.md#registered-psbt-privacy-reads-r5-privacy-psbt).
+- [x] Port immutable captured analysis snapshots, physical occurrence resolution
+  and the in-memory public observer projection as a Mirror prerequisite.
+  The 195-case oracle preserves all 112 tables and records Python's ambiguous
+  occurrence ordering across eight hash seeds. This does not ingest raw
+  observations, synchronize the durable index or register Mirror; see the
+  [index prerequisite](docs/reference/rust-shell.md#mirror-index-prerequisite-r5-partial).
+- [ ] Finish Mirror's observation builder, confirmation overlay and durable
+  projection synchronization/read view, then traversal, clustering, patterns,
+  attribution/dataset matching, conditional entropy, process/book-bound handles,
+  report composition and CLI/daemon acceptance. Preserve deterministic native
+  ambiguity ordering; retain the recorded Python reference repro.
 - [x] Port full-report, Austrian bundle and transaction CSV artifacts, saved
   export registration and their daemon kinds. Preserve
   sealed summaries, hashes and phase-4 append-only impact history.

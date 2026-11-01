@@ -4256,3 +4256,44 @@ is unchanged; this port adds no CLI command, permission or AI tool. Native CLI
 inventory remains 154 leaves (22 reports); the report daemon dispatcher adds
 one existing legacy snapshot to its 15 report kinds and two transaction exports.
 Mirror and PSBT product acceptance remain the parallel workstreams' scope.
+
+### R5 privacy: immutable-index and occurrence prerequisite (partial)
+
+The local continuation from `3291f143a` adds
+`kassiber-wallets::analysis_index`: immutable captured snapshots, scoped physical
+occurrence resolution and the in-memory public observer projection. Explicit
+block occurrences do not fall back to a different observation; grants do not
+become physical identity. Public views withhold private ownership, custody,
+labels and confidential Liquid facts before future graph analysis. No new
+network, storage-write or accounting authority is added.
+
+The [index prerequisite](../reference/rust-shell.md#mirror-index-prerequisite-r5-partial)
+records 195 unchanged-Python vectors, canonical result bytes, all-112-table
+invariants and 34 named mutation recipes. Two native driver runs evaluate 390
+primitives with zero fallback and no consent, with offline mode off/on. This
+proves the prerequisite only: observer inputs are captured Python snapshots;
+native observation ingestion and durable-index synchronization are still open.
+Mirror product served-by counts remain zero and both transports stay
+unregistered. Inventory remains 154 CLI leaves (22 reports), 15 report daemon
+kinds and two transaction exports. AI projections and Python product code stay
+unchanged; the separate PSBT/legacy worker owns its continuation.
+
+A local repro and eight frozen hash-seed results record a Python reference bug:
+ambiguous-occurrence findings have seven different orders while retaining the
+same snapshot ID. Native ambiguity collections are ordered. The future native
+builder must consume them deterministically; this branch does not fix Python.
+
+The first requested Mirror boundary still needs observation ingestion,
+confirmation overlays, durable-index synchronization and bounded SQL reads.
+Subsequent boundaries remain traversal/clustering/patterns;
+attribution/datasets/entropy; process/book-bound handles and report composition;
+then CLI/daemon acceptance and registration. No full Mirror acceptance is claimed.
+
+All 34 new mutations are killed with four passing unmutated selections. Local
+Linux verification passes formatting, production/test-harness workspace Clippy
+with warnings denied, all 159 wallet unit tests (19 socket-dependent cases need
+an isolated loopback-permitted rerun), and all five retained index-oracle tests.
+The required classifier update records 5,716 definitions; CI preflight passes
+57 tests without skips. Build trees are removed after summaries are retained.
+Full workspace runtime, full quality-gate and packaged/platform acceptance are
+not established by this partial checkpoint.
