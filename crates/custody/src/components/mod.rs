@@ -109,18 +109,15 @@ fn location(l: &Value) -> (String, String, String) {
         text(&l["conservation_unit"]),
     )
 }
-fn group<K: PartialEq>(
+fn group<K: Eq + std::hash::Hash + Clone>(
     items: impl IntoIterator<Item = Value>,
     key: impl Fn(&Value) -> K,
 ) -> Vec<(K, Vec<Value>)> {
-    let mut result: Vec<(K, Vec<Value>)> = Vec::new();
+    let mut result = Vec::new();
+    let mut index = HashMap::new();
     for item in items {
         let k = key(&item);
-        if let Some((_, ls)) = result.iter_mut().find(|(old, _)| *old == k) {
-            ls.push(item);
-        } else {
-            result.push((k, vec![item]));
-        }
+        codec::push_grouped(&mut result, &mut index, k, item);
     }
     result
 }

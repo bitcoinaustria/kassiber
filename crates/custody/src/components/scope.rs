@@ -337,20 +337,23 @@ pub(super) fn connectivity(legs: &[Value], allocs: &[Value], mode: &str) -> Vec<
         .cloned()
         .collect();
     // Dicts replace duplicate ids without changing their insertion slot.
-    let mut unique: Vec<Value> = Vec::new();
+    let mut unique: Vec<&Value> = Vec::new();
+    let mut positions = HashMap::new();
+    let mut ids = Vec::new();
     for l in &material {
-        if let Some(at) = unique
-            .iter()
-            .position(|v| pystr(&v["id"]) == pystr(&l["id"]))
-        {
-            unique[at] = l.clone();
+        let id = pystr(&l["id"]);
+        if let Some(&at) = positions.get(&id) {
+            unique[at] = l;
         } else {
-            unique.push(l.clone());
+            positions.insert(id.clone(), unique.len());
+            ids.push(id);
+            unique.push(l);
         }
     }
     let mut parent: Vec<usize> = (0..unique.len()).collect();
-    fn root(parent: &[usize], mut at: usize) -> usize {
+    fn root(parent: &mut [usize], mut at: usize) -> usize {
         while parent[at] != at {
+            parent[at] = parent[parent[at]];
             at = parent[at];
         }
         at
@@ -372,18 +375,11 @@ pub(super) fn connectivity(legs: &[Value], allocs: &[Value], mode: &str) -> Vec<
         }
     }
     for (a, b) in edges {
-        if let (Some(a), Some(b)) = (
-            unique.iter().position(|l| pystr(&l["id"]) == a),
-            unique.iter().position(|l| pystr(&l["id"]) == b),
-        ) {
-            let a = root(&parent, a);
-            let b = root(&parent, b);
+        if let (Some(a), Some(b)) = (positions.get(&a).copied(), positions.get(&b).copied()) {
+            let a = root(&mut parent, a);
+            let b = root(&mut parent, b);
             if a != b {
-                let (small, large) = if pystr(&unique[a]["id"]) < pystr(&unique[b]["id"]) {
-                    (a, b)
-                } else {
-                    (b, a)
-                };
+                let (small, large) = if ids[a] < ids[b] { (a, b) } else { (b, a) };
                 parent[large] = small;
             }
         }
@@ -391,8 +387,8 @@ pub(super) fn connectivity(legs: &[Value], allocs: &[Value], mode: &str) -> Vec<
     let mut groups: Vec<(usize, Vec<Value>)> = Vec::new();
     let mut index = std::collections::HashMap::new();
     for (i, l) in unique.iter().enumerate() {
-        let r = root(&parent, i);
-        crate::codec::push_grouped(&mut groups, &mut index, r, l.clone());
+        let r = root(&mut parent, i);
+        crate::codec::push_grouped(&mut groups, &mut index, r, (*l).clone());
     }
     let mut issues = Vec::new();
     for (_, ls) in groups {

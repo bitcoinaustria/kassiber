@@ -933,8 +933,8 @@
   {
     "id": "components-native-asset",
     "file": "crates/custody/src/components/commitments.rs",
-    "find": "&& v[\"direction\"] == opposite\n                    && v[\"event_key\"] == o[\"event_key\"]\n                    && v[\"asset\"] == o[\"asset\"]",
-    "replace": "&& v[\"direction\"] == opposite\n                    && v[\"event_key\"] == o[\"event_key\"]\n                    && v[\"asset\"] != o[\"asset\"]",
+    "find": "v.transaction.as_ref() != id && v.direction == opposite && v.asset == o.asset",
+    "replace": "v.transaction.as_ref() != id && v.direction == opposite && v.asset != o.asset",
     "expect_failing": [
       "components_native_other_asset"
     ],
@@ -1523,7 +1523,7 @@
   {
     "id": "X12-native-namespace-gate",
     "file": "crates/custody/src/components/commitments.rs",
-    "find": "o[\"event_key\"][\"native_namespace\"] != \"chain\"",
+    "find": "o.event.native_namespace != \"chain\"",
     "replace": "false",
     "expect_failing": [
       "components_native_namespace_gate"
@@ -23363,6 +23363,186 @@
       "embedded_json_readers_keep_conversion_and_mutation_isolation"
     ],
     "rule": "Shared transfer parses retain nonfinite identity separately from generic object conversions."
+  },
+  {
+    "id": "native-support-raw-escapes",
+    "file": "crates/custody/src/components/commitments.rs",
+    "find": "!s.contains('\\\\')",
+    "replace": "true",
+    "expect_failing": [
+      "native_support_preserves_observation_admission_and_hashes"
+    ],
+    "rule": "Escaped historical evidence retains canonical Unicode refusal."
+  },
+  {
+    "id": "native-support-detail-admission",
+    "file": "crates/custody/src/components/commitments.rs",
+    "find": "simple_detail(row)",
+    "replace": "true",
+    "expect_failing": [
+      "native_support_preserves_observation_admission_and_hashes"
+    ],
+    "rule": "Complex raw evidence retains canonical detail admission and refusals."
+  },
+  {
+    "id": "native-support-hash-utf8",
+    "file": "crates/custody/src/components/commitments.rs",
+    "find": "ensure_ascii: false,",
+    "replace": "ensure_ascii: true,",
+    "expect_failing": [
+      "native_support_preserves_observation_admission_and_hashes"
+    ],
+    "rule": "Typed quantity hash preimages retain UTF-8 strings."
+  },
+  {
+    "id": "native-support-hash-amount",
+    "file": "crates/custody/src/components/commitments.rs",
+    "find": "payload.push_str(&self.amount.to_string());",
+    "replace": "payload.push_str(&self.fee.to_string());",
+    "expect_failing": [
+      "native_support_preserves_observation_admission_and_hashes"
+    ],
+    "rule": "Typed quantity identities bind the full observed amount."
+  },
+  {
+    "id": "native-support-hash-fee",
+    "file": "crates/custody/src/components/commitments.rs",
+    "find": "payload.push_str(&self.fee.to_string());",
+    "replace": "payload.push_str(&self.amount.to_string());",
+    "expect_failing": [
+      "native_support_preserves_observation_admission_and_hashes"
+    ],
+    "rule": "Typed quantity identities bind the observed fee."
+  },
+  {
+    "id": "native-support-hash-wallet",
+    "file": "crates/custody/src/components/commitments.rs",
+    "find": "kassiber_pyjson::dumps_str_into(&self.wallet, &options, &mut payload);",
+    "replace": "kassiber_pyjson::dumps_str_into(&self.asset, &options, &mut payload);",
+    "expect_failing": [
+      "native_support_preserves_observation_admission_and_hashes"
+    ],
+    "rule": "Typed quantity identities retain wallet boundaries."
+  },
+  {
+    "id": "native-support-principal",
+    "file": "crates/custody/src/components/commitments.rs",
+    "find": "&amount - &fee",
+    "replace": "amount.clone()",
+    "expect_failing": [
+      "native_support_preserves_observation_admission_and_hashes"
+    ],
+    "rule": "Fee-inclusive support capacity counts principal once."
+  },
+  {
+    "id": "native-support-replacement",
+    "file": "crates/custody/src/components/commitments.rs",
+    "find": "observations[at] = o;",
+    "replace": "drop(o);",
+    "expect_failing": [
+      "native_support_keeps_replacement_slots_and_refusal_order"
+    ],
+    "rule": "Later valid observations replace facts without moving the first slot."
+  },
+  {
+    "id": "native-support-value-refusal",
+    "file": "crates/custody/src/components/commitments.rs",
+    "find": "Err(e) if e.is_value_or_type() => continue,",
+    "replace": "Err(e) if e.is_value_or_type() => return Err(e),",
+    "expect_failing": [
+      "native_support_keeps_replacement_slots_and_refusal_order"
+    ],
+    "rule": "Recoverable observation failures do not replace an admitted slot."
+  },
+  {
+    "id": "native-support-id",
+    "file": "crates/custody/src/components/commitments.rs",
+    "find": "&& !transaction.is_empty()\n                && !anchor.is_empty()",
+    "replace": "&& true",
+    "expect_failing": [
+      "native_support_preserves_observation_admission_and_hashes"
+    ],
+    "rule": "Typed support requires a nonempty transaction id."
+  },
+  {
+    "id": "native-support-wallet",
+    "file": "crates/custody/src/components/commitments.rs",
+    "find": "&& !wallet.is_empty()",
+    "replace": "&& true",
+    "expect_failing": [
+      "native_support_preserves_observation_admission_and_hashes"
+    ],
+    "rule": "Typed support requires a nonempty wallet id."
+  },
+  {
+    "id": "native-support-asset",
+    "file": "crates/custody/src/components/commitments.rs",
+    "find": "&& !asset.is_empty()",
+    "replace": "&& true",
+    "expect_failing": [
+      "native_support_preserves_observation_admission_and_hashes"
+    ],
+    "rule": "Typed support requires a nonempty asset."
+  },
+  {
+    "id": "native-support-direction",
+    "file": "crates/custody/src/components/commitments.rs",
+    "find": "&& matches!(direction.as_str(), \"inbound\" | \"outbound\")",
+    "replace": "&& true",
+    "expect_failing": [
+      "native_support_preserves_observation_admission_and_hashes"
+    ],
+    "rule": "Typed support requires an admitted direction."
+  },
+  {
+    "id": "native-support-negative-amount",
+    "file": "crates/custody/src/components/commitments.rs",
+    "find": "&& *amount >= 0",
+    "replace": "&& true",
+    "expect_failing": [
+      "native_support_preserves_observation_admission_and_hashes"
+    ],
+    "rule": "Typed support rejects negative quantities."
+  },
+  {
+    "id": "native-support-negative-fee",
+    "file": "crates/custody/src/components/commitments.rs",
+    "find": "&& *fee >= 0",
+    "replace": "&& true",
+    "expect_failing": [
+      "native_support_preserves_observation_admission_and_hashes"
+    ],
+    "rule": "Typed support rejects negative fees."
+  },
+  {
+    "id": "native-support-inbound-fee",
+    "file": "crates/custody/src/components/commitments.rs",
+    "find": "&& !(direction == \"inbound\" && includes_fee)",
+    "replace": "&& true",
+    "expect_failing": [
+      "native_support_preserves_observation_admission_and_hashes"
+    ],
+    "rule": "Inbound quantities cannot include a fee."
+  },
+  {
+    "id": "native-support-zero-amount",
+    "file": "crates/custody/src/components/commitments.rs",
+    "find": "&& (*amount != 0 || (direction == \"outbound\" && *fee > 0))",
+    "replace": "&& true",
+    "expect_failing": [
+      "native_support_preserves_observation_admission_and_hashes"
+    ],
+    "rule": "Only fee-only outbound observations may have zero amount."
+  },
+  {
+    "id": "native-support-included-fee",
+    "file": "crates/custody/src/components/commitments.rs",
+    "find": "&& (!includes_fee || *fee <= *amount)",
+    "replace": "&& true",
+    "expect_failing": [
+      "native_support_preserves_observation_admission_and_hashes"
+    ],
+    "rule": "Included fees cannot exceed observed quantities."
   },
   {
     "id": "projection-row-overlay-source",
