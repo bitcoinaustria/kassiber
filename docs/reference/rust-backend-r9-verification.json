@@ -1,8 +1,8 @@
 {
   "schema": "kassiber.r9-integration-verification.v1",
-  "generated_utc": "2026-11-01T13:16:48Z",
+  "generated_utc": "2026-11-01T14:33:26Z",
   "tested_source": "90d84e390510fc101f63800cb9fa7d43a7252fd8",
-  "source_code_sha256": "cd9c331dcdeba035757c28e103b66b2d7a4e6a382dfc5e238e8cdad3100079e2",
+  "source_code_sha256": "4c80898278d71c5ca8b86f708f926188db6a376928ee2e23e1438d831aa1692f",
   "integration_base": "9f7471bf7",
   "source_picks": 63,
   "skipped_occurrences": 123,
@@ -94,72 +94,101 @@
   "parity": {
     "schema": "kassiber.r9-parity-reconciliation.v1",
     "modules": 68,
-    "collected": 3452,
+    "collected": 3958,
     "counts": {
-      "passed": 3409
+      "passed": 3842,
+      "skipped": 29
     },
     "missing": [
-      "tests/test_rust_journal_process.py::test_killed_pipeline_writer_recovers_pricing_and_every_journal_table[1-False]",
-      "tests/test_rust_journal_process.py::test_killed_pipeline_writer_recovers_pricing_and_every_journal_table[1-True]",
-      "tests/test_rust_journal_process.py::test_killed_pipeline_writer_recovers_pricing_and_every_journal_table[15-False]",
-      "tests/test_rust_journal_process.py::test_killed_pipeline_writer_recovers_pricing_and_every_journal_table[15-True]",
-      "tests/test_rust_journal_process.py::test_killed_pipeline_writer_recovers_pricing_and_every_journal_table[8-False]",
-      "tests/test_rust_journal_process.py::test_killed_pipeline_writer_recovers_pricing_and_every_journal_table[8-True]",
-      "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[blocked-at-False]",
-      "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[blocked-at-True]",
-      "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[blocked-generic-False]",
-      "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[blocked-generic-True]",
-      "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[cached-price-at-False]",
-      "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[cached-price-at-True]",
-      "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[cached-price-generic-False]",
-      "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[cached-price-generic-True]",
-      "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[changed-at-False]",
-      "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[changed-at-True]",
-      "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[changed-generic-False]",
-      "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[changed-generic-True]",
-      "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[empty-at-False]",
-      "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[empty-at-True]",
-      "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[empty-generic-False]",
-      "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[empty-generic-True]",
-      "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[legacy-price-at-False]",
-      "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[legacy-price-at-True]",
-      "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[legacy-price-generic-False]",
-      "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[legacy-price-generic-True]",
-      "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[unchanged-at-False]",
-      "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[unchanged-at-True]",
-      "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[unchanged-generic-False]",
-      "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[unchanged-generic-True]",
-      "tests/test_rust_journal_process.py::test_native_real_prebuild_replays_complete_books_and_clock_uuid_tapes[False]",
-      "tests/test_rust_journal_process.py::test_native_real_prebuild_replays_complete_books_and_clock_uuid_tapes[True]",
-      "tests/test_rust_journal_process.py::test_native_real_prebuild_storage_failure_reverts_every_active_stage[1-False]",
-      "tests/test_rust_journal_process.py::test_native_real_prebuild_storage_failure_reverts_every_active_stage[1-True]",
-      "tests/test_rust_journal_process.py::test_native_real_prebuild_storage_failure_reverts_every_active_stage[8-False]",
-      "tests/test_rust_journal_process.py::test_native_real_prebuild_storage_failure_reverts_every_active_stage[8-True]",
-      "tests/test_rust_journal_process.py::test_real_prebuild_process_vectors_rebuild_from_python",
-      "tests/test_rust_journal_process.py::test_real_pricing_pipeline_refusals_restore_complete_book[building-False]",
-      "tests/test_rust_journal_process.py::test_real_pricing_pipeline_refusals_restore_complete_book[building-True]",
-      "tests/test_rust_journal_process.py::test_real_pricing_pipeline_refusals_restore_complete_book[pricing-False]",
-      "tests/test_rust_journal_process.py::test_real_pricing_pipeline_refusals_restore_complete_book[pricing-True]",
-      "tests/test_rust_journal_process.py::test_real_pricing_pipeline_refusals_restore_complete_book[storing-False]",
-      "tests/test_rust_journal_process.py::test_real_pricing_pipeline_refusals_restore_complete_book[storing-True]"
+      "tests/test_rust_shell_parity.py::RustCliParityTest::test_cli_oracle_rejects_formatting_discrepancies_from_a_child",
+      "tests/test_rust_shell_parity.py::RustCliParityTest::test_commands_describe_full_catalog",
+      "tests/test_rust_shell_parity.py::RustCliParityTest::test_flag_combination_errors",
+      "tests/test_rust_shell_parity.py::RustCliParityTest::test_machine_usage_errors",
+      "tests/test_rust_shell_parity.py::RustCliParityTest::test_output_failures_preserve_python_error_and_filename",
+      "tests/test_rust_shell_parity.py::RustCliParityTest::test_plain_usage_errors_and_help",
+      "tests/test_rust_shell_parity.py::RustCliParityTest::test_saved_json_matches_stdout_bytes",
+      "tests/test_rust_shell_parity.py::RustCliParityTest::test_unknown_commands",
+      "tests/test_rust_shell_parity.py::RustCliParityTest::test_unresolved_output_user_fails_before_creating_directories",
+      "tests/test_rust_shell_parity.py::RustCliParityTest::test_version",
+      "tests/test_rust_shell_parity.py::RustDaemonParityTest::test_a_carriage_return_inside_a_request_is_whitespace",
+      "tests/test_rust_shell_parity.py::RustDaemonParityTest::test_daemon_oracle_rejects_formatting_discrepancies_from_a_child",
+      "tests/test_rust_shell_parity.py::RustDaemonParityTest::test_end_of_input_stops_both",
+      "tests/test_rust_shell_parity.py::RustDaemonParityTest::test_handshake_protocol_errors_and_shutdown",
+      "tests/test_rust_shell_parity.py::RustDaemonParityTest::test_unicode_secret_redaction_matches_python_generated_inputs",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_backend_configuration_through_hybrid_and_daemon",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_binance_coordinator_wire_bytes_full_state_and_rollback",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_binance_default_wallet_wire_bytes_full_state_and_rollback",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_binance_nan_payload_timestamp_wire_bytes_full_state_and_rollback",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_binance_reference_files_wire_bytes_full_state_and_rollback",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_binance_relevant_coordinator_wire_bytes_full_state_and_rollback",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_blockpit_coordinator_wire_bytes_full_state_and_rollback",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_blockpit_reference_files_wire_bytes_full_state_and_rollback",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_btcpay_coordinator_wire_bytes_full_state_and_rollback",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_btcpay_csv_reference_files_wire_bytes_full_state_and_rollback",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_btcpay_json_reference_files_wire_bytes_full_state_and_rollback",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_btcpay_surrogate_currency_wire_bytes_full_state_and_rollback",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_bull_import_wire_bytes_full_state_and_rollback",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_bull_relevant_wire_order_and_full_state",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_coinfinity_import_wire_bytes_full_state_and_rollback",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_coinfinity_relevant_wire_order_and_full_state",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_cointracking_coordinator_wire_bytes_full_state_and_rollback",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_cointracking_import_wire_bytes_full_state_and_rollback",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_csv_import_wire_bytes_full_state_dedupe_enrichment_and_rollback",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_daemon_ownership_exclusion_both_directions_and_release",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_default_init_and_hidden_home_then_legacy_project_migration",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_descriptor_preview_daemon_wire_bytes_match_reference",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_fresh_daemon_retains_lock_after_schema_creation",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_historical_authored_consolidation_refuses_with_python_hint",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_historical_pair_free_fixture_matches_python_full_dump",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_import_run_cli_wire_bytes_match_reference",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_import_run_daemon_wire_bytes_confirmation_and_scope",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_import_run_rollback_matches_complete_state_in_both_codecs",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_init_and_status_cross_language_in_both_directions",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_init_backend_bootstrap_and_ephemeral_environment_match_python",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_json_import_wire_bytes_full_state_and_rollback",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_ledger_chartsheet_selection_import_and_preview_wire_bytes_and_full_state",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_ledger_column_map_order_wire_bytes_full_state_and_rollback",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_ledger_coordinator_wire_bytes_full_state_and_rollback",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_ledger_preview_bypasses_book_scope_and_parses_inline_and_file_maps",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_ledger_preview_reference_files_wire_bytes_and_no_mutations",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_ledger_reference_files_wire_bytes_full_state_and_rollback",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_ledger_spreadsheet_integrity_import_and_preview_wire_bytes_and_full_state",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_ledgerlive_import_wire_bytes_full_state_and_rollback",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_legacy_project_migration_refuses_held_owner_and_pending_journal",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_network_configuration_and_partition_export_through_hybrid",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_new_default_project_and_unported_commands_stay_closed",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_offline_preference_through_hybrid_and_locked_daemon",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_phoenix_import_wire_bytes_full_state_and_rollback",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_pocket_import_wire_bytes_full_state_and_rollback",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_pocket_relevant_wire_order_and_full_state",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_project_catalog_wire_and_state_match_through_hybrid",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_project_encrypted_creation_descriptor_matches_python",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_python_plaintext_book_with_selected_context_and_backend",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_river_import_wire_bytes_full_state_and_rollback",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_secret_store_control_channel_with_real_open_book",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_setup_services_match_python_at_process_boundaries",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_sqlcipher_daemon_unlock_status_lock_and_shutdown",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_sqlcipher_fd_unlock_and_no_journal_change",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_strike_import_wire_bytes_full_state_and_rollback",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_successful_wallet_create_matches_reference_clock_entropy_and_storage",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_twentyone_import_wire_bytes_full_state_and_rollback",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_wallet_birthday_and_malformed_config_wire_bytes_match_reference",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_wallet_derive_wire_bytes_match_reference",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_wallet_encrypted_daemon_requires_fresh_auth_for_each_mutation",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_wallet_lifecycle_cli_wire_bytes_and_state_match_reference",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_wallet_lifecycle_daemon_confirmation_wire_bytes_match_reference",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_wallet_list_snapshot_daemon_wire_bytes_match_reference",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_wasabi_coordinator_wire_bytes_full_state_and_rollback",
+      "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_wasabi_reference_files_wire_bytes_full_state_and_rollback",
+      "tests/test_rust_shell_parity.py::RustShellDriftTest::test_btcpay_vectors_match_python_reference",
+      "tests/test_rust_shell_parity.py::RustShellDriftTest::test_capability_tables_match",
+      "tests/test_rust_shell_parity.py::RustShellDriftTest::test_file_import_vectors_match_python",
+      "tests/test_rust_shell_parity.py::RustShellDriftTest::test_generated_grammar_matches_build_parser",
+      "tests/test_rust_shell_parity.py::RustShellDriftTest::test_ledger_vectors_match_python_reference",
+      "tests/test_rust_shell_parity.py::RustShellDriftTest::test_unicode_tables_match_this_interpreter",
+      "tests/test_rust_shell_parity.py::RustShellDriftTest::test_wasabi_import_vectors_match_reference"
     ],
     "uncollected_modules": [
-      "tests/test_rust_journal_render.py",
-      "tests/test_rust_lightning_acquisition.py",
-      "tests/test_rust_lightning_reports.py",
-      "tests/test_rust_metadata_services.py",
-      "tests/test_rust_observer_state.py",
-      "tests/test_rust_pairing_commands.py",
-      "tests/test_rust_platform_csv.py",
-      "tests/test_rust_rates_candidate.py",
-      "tests/test_rust_report_exports.py",
-      "tests/test_rust_reports.py",
-      "tests/test_rust_review_builds.py",
-      "tests/test_rust_review_cases.py",
-      "tests/test_rust_secrets_lifecycle.py",
-      "tests/test_rust_secrets_services.py",
-      "tests/test_rust_setup_desktop.py",
-      "tests/test_rust_shell_parity.py",
       "tests/test_rust_source_funds_case_writes.py",
       "tests/test_rust_source_funds_reads.py",
       "tests/test_rust_store_interop.py",
@@ -185,7 +214,182 @@
       "tests/rust_port/test_contracts.py"
     ],
     "auxiliary_receipt_nodes": 0,
-    "skips": [],
+    "skips": [
+      {
+        "nodeid": "tests/test_rust_secrets_lifecycle.py::test_disposable_keyring_interruption_resumes_in_either_runtime[forget-forget.after_item_delete-python-recovery]",
+        "status": "skipped",
+        "time": "0.000",
+        "xml": "target/r9-integration/parity-receipts/run-41-01/junit.xml"
+      },
+      {
+        "nodeid": "tests/test_rust_secrets_lifecycle.py::test_disposable_keyring_interruption_resumes_in_either_runtime[forget-forget.after_item_delete-rust-recovery]",
+        "status": "skipped",
+        "time": "0.000",
+        "xml": "target/r9-integration/parity-receipts/run-41-01/junit.xml"
+      },
+      {
+        "nodeid": "tests/test_rust_secrets_lifecycle.py::test_disposable_keyring_interruption_resumes_in_either_runtime[forget-forget.after_legacy_cli_delete-python-recovery]",
+        "status": "skipped",
+        "time": "0.000",
+        "xml": "target/r9-integration/parity-receipts/run-41-01/junit.xml"
+      },
+      {
+        "nodeid": "tests/test_rust_secrets_lifecycle.py::test_disposable_keyring_interruption_resumes_in_either_runtime[forget-forget.after_legacy_cli_delete-rust-recovery]",
+        "status": "skipped",
+        "time": "0.000",
+        "xml": "target/r9-integration/parity-receipts/run-41-01/junit.xml"
+      },
+      {
+        "nodeid": "tests/test_rust_secrets_lifecycle.py::test_disposable_keyring_interruption_resumes_in_either_runtime[forget-forget.after_legacy_shared_delete-python-recovery]",
+        "status": "skipped",
+        "time": "0.000",
+        "xml": "target/r9-integration/parity-receipts/run-41-01/junit.xml"
+      },
+      {
+        "nodeid": "tests/test_rust_secrets_lifecycle.py::test_disposable_keyring_interruption_resumes_in_either_runtime[forget-forget.after_legacy_shared_delete-rust-recovery]",
+        "status": "skipped",
+        "time": "0.000",
+        "xml": "target/r9-integration/parity-receipts/run-41-01/junit.xml"
+      },
+      {
+        "nodeid": "tests/test_rust_secrets_lifecycle.py::test_disposable_keyring_interruption_resumes_in_either_runtime[forget-forget.after_policy_publish-python-recovery]",
+        "status": "skipped",
+        "time": "0.000",
+        "xml": "target/r9-integration/parity-receipts/run-41-01/junit.xml"
+      },
+      {
+        "nodeid": "tests/test_rust_secrets_lifecycle.py::test_disposable_keyring_interruption_resumes_in_either_runtime[forget-forget.after_policy_publish-rust-recovery]",
+        "status": "skipped",
+        "time": "0.000",
+        "xml": "target/r9-integration/parity-receipts/run-41-01/junit.xml"
+      },
+      {
+        "nodeid": "tests/test_rust_secrets_lifecycle.py::test_disposable_keyring_interruption_resumes_in_either_runtime[remember-remember.after_item_write-python-recovery]",
+        "status": "skipped",
+        "time": "0.000",
+        "xml": "target/r9-integration/parity-receipts/run-41-01/junit.xml"
+      },
+      {
+        "nodeid": "tests/test_rust_secrets_lifecycle.py::test_disposable_keyring_interruption_resumes_in_either_runtime[remember-remember.after_item_write-rust-recovery]",
+        "status": "skipped",
+        "time": "0.000",
+        "xml": "target/r9-integration/parity-receipts/run-41-01/junit.xml"
+      },
+      {
+        "nodeid": "tests/test_rust_secrets_lifecycle.py::test_disposable_keyring_interruption_resumes_in_either_runtime[remember-remember.after_legacy_cli_delete-python-recovery]",
+        "status": "skipped",
+        "time": "0.000",
+        "xml": "target/r9-integration/parity-receipts/run-41-01/junit.xml"
+      },
+      {
+        "nodeid": "tests/test_rust_secrets_lifecycle.py::test_disposable_keyring_interruption_resumes_in_either_runtime[remember-remember.after_legacy_cli_delete-rust-recovery]",
+        "status": "skipped",
+        "time": "0.000",
+        "xml": "target/r9-integration/parity-receipts/run-41-01/junit.xml"
+      },
+      {
+        "nodeid": "tests/test_rust_secrets_lifecycle.py::test_disposable_keyring_interruption_resumes_in_either_runtime[remember-remember.after_legacy_shared_delete-python-recovery]",
+        "status": "skipped",
+        "time": "0.000",
+        "xml": "target/r9-integration/parity-receipts/run-41-01/junit.xml"
+      },
+      {
+        "nodeid": "tests/test_rust_secrets_lifecycle.py::test_disposable_keyring_interruption_resumes_in_either_runtime[remember-remember.after_legacy_shared_delete-rust-recovery]",
+        "status": "skipped",
+        "time": "0.000",
+        "xml": "target/r9-integration/parity-receipts/run-41-01/junit.xml"
+      },
+      {
+        "nodeid": "tests/test_rust_secrets_lifecycle.py::test_disposable_keyring_interruption_resumes_in_either_runtime[remember-remember.after_policy_publish-python-recovery]",
+        "status": "skipped",
+        "time": "0.000",
+        "xml": "target/r9-integration/parity-receipts/run-41-01/junit.xml"
+      },
+      {
+        "nodeid": "tests/test_rust_secrets_lifecycle.py::test_disposable_keyring_interruption_resumes_in_either_runtime[remember-remember.after_policy_publish-rust-recovery]",
+        "status": "skipped",
+        "time": "0.000",
+        "xml": "target/r9-integration/parity-receipts/run-41-01/junit.xml"
+      },
+      {
+        "nodeid": "tests/test_rust_secrets_lifecycle.py::test_disposable_keyring_interruption_resumes_in_either_runtime[remember-remember.after_prior_delete-python-recovery]",
+        "status": "skipped",
+        "time": "0.000",
+        "xml": "target/r9-integration/parity-receipts/run-41-01/junit.xml"
+      },
+      {
+        "nodeid": "tests/test_rust_secrets_lifecycle.py::test_disposable_keyring_interruption_resumes_in_either_runtime[remember-remember.after_prior_delete-rust-recovery]",
+        "status": "skipped",
+        "time": "0.000",
+        "xml": "target/r9-integration/parity-receipts/run-41-01/junit.xml"
+      },
+      {
+        "nodeid": "tests/test_rust_secrets_lifecycle.py::test_disposable_keyring_interruption_resumes_in_either_runtime[rotate-failed-refresh-rotation.after_item_delete-python-recovery]",
+        "status": "skipped",
+        "time": "0.000",
+        "xml": "target/r9-integration/parity-receipts/run-41-01/junit.xml"
+      },
+      {
+        "nodeid": "tests/test_rust_secrets_lifecycle.py::test_disposable_keyring_interruption_resumes_in_either_runtime[rotate-failed-refresh-rotation.after_item_delete-rust-recovery]",
+        "status": "skipped",
+        "time": "0.000",
+        "xml": "target/r9-integration/parity-receipts/run-41-01/junit.xml"
+      },
+      {
+        "nodeid": "tests/test_rust_secrets_lifecycle.py::test_disposable_keyring_interruption_resumes_in_either_runtime[rotate-failed-refresh-rotation.after_legacy_cli_delete-python-recovery]",
+        "status": "skipped",
+        "time": "0.000",
+        "xml": "target/r9-integration/parity-receipts/run-41-01/junit.xml"
+      },
+      {
+        "nodeid": "tests/test_rust_secrets_lifecycle.py::test_disposable_keyring_interruption_resumes_in_either_runtime[rotate-failed-refresh-rotation.after_legacy_cli_delete-rust-recovery]",
+        "status": "skipped",
+        "time": "0.000",
+        "xml": "target/r9-integration/parity-receipts/run-41-01/junit.xml"
+      },
+      {
+        "nodeid": "tests/test_rust_secrets_lifecycle.py::test_disposable_keyring_interruption_resumes_in_either_runtime[rotate-failed-refresh-rotation.after_legacy_shared_delete-python-recovery]",
+        "status": "skipped",
+        "time": "0.000",
+        "xml": "target/r9-integration/parity-receipts/run-41-01/junit.xml"
+      },
+      {
+        "nodeid": "tests/test_rust_secrets_lifecycle.py::test_disposable_keyring_interruption_resumes_in_either_runtime[rotate-failed-refresh-rotation.after_legacy_shared_delete-rust-recovery]",
+        "status": "skipped",
+        "time": "0.000",
+        "xml": "target/r9-integration/parity-receipts/run-41-01/junit.xml"
+      },
+      {
+        "nodeid": "tests/test_rust_secrets_lifecycle.py::test_disposable_keyring_interruption_resumes_in_either_runtime[rotate-failed-refresh-rotation.after_policy_disable-python-recovery]",
+        "status": "skipped",
+        "time": "0.000",
+        "xml": "target/r9-integration/parity-receipts/run-41-01/junit.xml"
+      },
+      {
+        "nodeid": "tests/test_rust_secrets_lifecycle.py::test_disposable_keyring_interruption_resumes_in_either_runtime[rotate-failed-refresh-rotation.after_policy_disable-rust-recovery]",
+        "status": "skipped",
+        "time": "0.002",
+        "xml": "target/r9-integration/parity-receipts/run-41-01/junit.xml"
+      },
+      {
+        "nodeid": "tests/test_rust_secrets_lifecycle.py::test_disposable_keyring_interruption_resumes_in_either_runtime[rotate-rotation.after_item_refresh-python-recovery]",
+        "status": "skipped",
+        "time": "0.000",
+        "xml": "target/r9-integration/parity-receipts/run-41-01/junit.xml"
+      },
+      {
+        "nodeid": "tests/test_rust_secrets_lifecycle.py::test_disposable_keyring_interruption_resumes_in_either_runtime[rotate-rotation.after_item_refresh-rust-recovery]",
+        "status": "skipped",
+        "time": "0.000",
+        "xml": "target/r9-integration/parity-receipts/run-41-01/junit.xml"
+      },
+      {
+        "nodeid": "tests/test_rust_secrets_lifecycle.py::test_disposable_keyring_python_and_rust_enrollment_rotation_and_revocation",
+        "status": "skipped",
+        "time": "5.424",
+        "xml": "target/r9-integration/parity-receipts/run-41-01/junit.xml"
+      }
+    ],
     "records": [
       {
         "module": "tests/test_rust_austrian_xlsx.py",
@@ -442,53 +646,242 @@
       {
         "module": "tests/test_rust_journal_process.py",
         "collected": 43,
+        "counts": {
+          "passed": 43
+        },
+        "missing": [],
+        "collected_sha256": "f1c9fba9937597a5d4ee98d551c0cbb597f3173c031412dcd269d5cf1a65212c"
+      },
+      {
+        "module": "tests/test_rust_journal_render.py",
+        "collected": 6,
+        "counts": {
+          "passed": 6
+        },
+        "missing": [],
+        "collected_sha256": "a5d3c913c31f4c4a6088c6b74acca927d6107e9b7841378ec121dc32c18fceac"
+      },
+      {
+        "module": "tests/test_rust_lightning_acquisition.py",
+        "collected": 21,
+        "counts": {
+          "passed": 21
+        },
+        "missing": [],
+        "collected_sha256": "8f4dfa1a6f07f7d5792484663b668482c8141c6d95a95fc7749f84080e36d5e9"
+      },
+      {
+        "module": "tests/test_rust_lightning_reports.py",
+        "collected": 2,
+        "counts": {
+          "passed": 2
+        },
+        "missing": [],
+        "collected_sha256": "e227105b887921ecce7cbac6d3616058924c6037678f6f5bf21d97c0d705fb3d"
+      },
+      {
+        "module": "tests/test_rust_metadata_services.py",
+        "collected": 7,
+        "counts": {
+          "passed": 7
+        },
+        "missing": [],
+        "collected_sha256": "08025f1f11efadaf974a86a89196af5c5a60a28d7ea48730701c4591353a5f2f"
+      },
+      {
+        "module": "tests/test_rust_observer_state.py",
+        "collected": 38,
+        "counts": {
+          "passed": 38
+        },
+        "missing": [],
+        "collected_sha256": "a2cf4399e35982adf5e3eb56320798d2c623edced510b541f487316b376fa7f2"
+      },
+      {
+        "module": "tests/test_rust_pairing_commands.py",
+        "collected": 2,
+        "counts": {
+          "passed": 2
+        },
+        "missing": [],
+        "collected_sha256": "90f162eb2d63bcb9b9a7a53e7893e4050b5932d46cf354334b73357ed988f014"
+      },
+      {
+        "module": "tests/test_rust_platform_csv.py",
+        "collected": 163,
+        "counts": {
+          "passed": 163
+        },
+        "missing": [],
+        "collected_sha256": "4722ca1cf97c68d25ede295a224600d5dd70402b95cb0df54a5ad4e909cba91b"
+      },
+      {
+        "module": "tests/test_rust_rates_candidate.py",
+        "collected": 9,
+        "counts": {
+          "passed": 9
+        },
+        "missing": [],
+        "collected_sha256": "0243eae39f204948ca76534722325256c1d04166397358664d15a8fcacd25c06"
+      },
+      {
+        "module": "tests/test_rust_report_exports.py",
+        "collected": 21,
+        "counts": {
+          "passed": 21
+        },
+        "missing": [],
+        "collected_sha256": "4228da87925559baef2ffd9076e110360bf60e64213e959f992e2993f94383bc"
+      },
+      {
+        "module": "tests/test_rust_reports.py",
+        "collected": 22,
+        "counts": {
+          "passed": 22
+        },
+        "missing": [],
+        "collected_sha256": "ac19e405c009e1d93e7e26efba1d679b4755819a2de18795bf3ce3964db74bc7"
+      },
+      {
+        "module": "tests/test_rust_review_builds.py",
+        "collected": 1,
+        "counts": {
+          "passed": 1
+        },
+        "missing": [],
+        "collected_sha256": "1da60605578529a11c0ae5213ceab8b97622389039095f7299e4dbd293b63a51"
+      },
+      {
+        "module": "tests/test_rust_review_cases.py",
+        "collected": 4,
+        "counts": {
+          "passed": 4
+        },
+        "missing": [],
+        "collected_sha256": "fd2b62e77f7a9ced969bd8c718f27bf05a094adba738dc9333b174a9676fc2dc"
+      },
+      {
+        "module": "tests/test_rust_secrets_lifecycle.py",
+        "collected": 58,
+        "counts": {
+          "skipped": 29,
+          "passed": 29
+        },
+        "missing": [],
+        "collected_sha256": "c613bec23617cb0b17f43cd638518f0af81b987fcf37673f8d6a4bc6572b2f1d"
+      },
+      {
+        "module": "tests/test_rust_secrets_services.py",
+        "collected": 62,
+        "counts": {
+          "passed": 62
+        },
+        "missing": [],
+        "collected_sha256": "61c9c8fa3040ffed564147c57e295fc675de7456a35dd979b1fb52028cc2fa22"
+      },
+      {
+        "module": "tests/test_rust_setup_desktop.py",
+        "collected": 3,
+        "counts": {
+          "passed": 3
+        },
+        "missing": [],
+        "collected_sha256": "874e1f6fbbf787dc9f980e91a3c1c9260399535bc4f61224bb0aa9174fcb5c9c"
+      },
+      {
+        "module": "tests/test_rust_shell_parity.py",
+        "collected": 87,
         "counts": {},
         "missing": [
-          "tests/test_rust_journal_process.py::test_killed_pipeline_writer_recovers_pricing_and_every_journal_table[1-False]",
-          "tests/test_rust_journal_process.py::test_killed_pipeline_writer_recovers_pricing_and_every_journal_table[1-True]",
-          "tests/test_rust_journal_process.py::test_killed_pipeline_writer_recovers_pricing_and_every_journal_table[15-False]",
-          "tests/test_rust_journal_process.py::test_killed_pipeline_writer_recovers_pricing_and_every_journal_table[15-True]",
-          "tests/test_rust_journal_process.py::test_killed_pipeline_writer_recovers_pricing_and_every_journal_table[8-False]",
-          "tests/test_rust_journal_process.py::test_killed_pipeline_writer_recovers_pricing_and_every_journal_table[8-True]",
-          "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[blocked-at-False]",
-          "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[blocked-at-True]",
-          "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[blocked-generic-False]",
-          "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[blocked-generic-True]",
-          "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[cached-price-at-False]",
-          "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[cached-price-at-True]",
-          "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[cached-price-generic-False]",
-          "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[cached-price-generic-True]",
-          "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[changed-at-False]",
-          "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[changed-at-True]",
-          "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[changed-generic-False]",
-          "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[changed-generic-True]",
-          "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[empty-at-False]",
-          "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[empty-at-True]",
-          "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[empty-generic-False]",
-          "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[empty-generic-True]",
-          "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[legacy-price-at-False]",
-          "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[legacy-price-at-True]",
-          "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[legacy-price-generic-False]",
-          "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[legacy-price-generic-True]",
-          "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[unchanged-at-False]",
-          "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[unchanged-at-True]",
-          "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[unchanged-generic-False]",
-          "tests/test_rust_journal_process.py::test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump[unchanged-generic-True]",
-          "tests/test_rust_journal_process.py::test_native_real_prebuild_replays_complete_books_and_clock_uuid_tapes[False]",
-          "tests/test_rust_journal_process.py::test_native_real_prebuild_replays_complete_books_and_clock_uuid_tapes[True]",
-          "tests/test_rust_journal_process.py::test_native_real_prebuild_storage_failure_reverts_every_active_stage[1-False]",
-          "tests/test_rust_journal_process.py::test_native_real_prebuild_storage_failure_reverts_every_active_stage[1-True]",
-          "tests/test_rust_journal_process.py::test_native_real_prebuild_storage_failure_reverts_every_active_stage[8-False]",
-          "tests/test_rust_journal_process.py::test_native_real_prebuild_storage_failure_reverts_every_active_stage[8-True]",
-          "tests/test_rust_journal_process.py::test_real_prebuild_process_vectors_rebuild_from_python",
-          "tests/test_rust_journal_process.py::test_real_pricing_pipeline_refusals_restore_complete_book[building-False]",
-          "tests/test_rust_journal_process.py::test_real_pricing_pipeline_refusals_restore_complete_book[building-True]",
-          "tests/test_rust_journal_process.py::test_real_pricing_pipeline_refusals_restore_complete_book[pricing-False]",
-          "tests/test_rust_journal_process.py::test_real_pricing_pipeline_refusals_restore_complete_book[pricing-True]",
-          "tests/test_rust_journal_process.py::test_real_pricing_pipeline_refusals_restore_complete_book[storing-False]",
-          "tests/test_rust_journal_process.py::test_real_pricing_pipeline_refusals_restore_complete_book[storing-True]"
+          "tests/test_rust_shell_parity.py::RustCliParityTest::test_cli_oracle_rejects_formatting_discrepancies_from_a_child",
+          "tests/test_rust_shell_parity.py::RustCliParityTest::test_commands_describe_full_catalog",
+          "tests/test_rust_shell_parity.py::RustCliParityTest::test_flag_combination_errors",
+          "tests/test_rust_shell_parity.py::RustCliParityTest::test_machine_usage_errors",
+          "tests/test_rust_shell_parity.py::RustCliParityTest::test_output_failures_preserve_python_error_and_filename",
+          "tests/test_rust_shell_parity.py::RustCliParityTest::test_plain_usage_errors_and_help",
+          "tests/test_rust_shell_parity.py::RustCliParityTest::test_saved_json_matches_stdout_bytes",
+          "tests/test_rust_shell_parity.py::RustCliParityTest::test_unknown_commands",
+          "tests/test_rust_shell_parity.py::RustCliParityTest::test_unresolved_output_user_fails_before_creating_directories",
+          "tests/test_rust_shell_parity.py::RustCliParityTest::test_version",
+          "tests/test_rust_shell_parity.py::RustDaemonParityTest::test_a_carriage_return_inside_a_request_is_whitespace",
+          "tests/test_rust_shell_parity.py::RustDaemonParityTest::test_daemon_oracle_rejects_formatting_discrepancies_from_a_child",
+          "tests/test_rust_shell_parity.py::RustDaemonParityTest::test_end_of_input_stops_both",
+          "tests/test_rust_shell_parity.py::RustDaemonParityTest::test_handshake_protocol_errors_and_shutdown",
+          "tests/test_rust_shell_parity.py::RustDaemonParityTest::test_unicode_secret_redaction_matches_python_generated_inputs",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_backend_configuration_through_hybrid_and_daemon",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_binance_coordinator_wire_bytes_full_state_and_rollback",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_binance_default_wallet_wire_bytes_full_state_and_rollback",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_binance_nan_payload_timestamp_wire_bytes_full_state_and_rollback",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_binance_reference_files_wire_bytes_full_state_and_rollback",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_binance_relevant_coordinator_wire_bytes_full_state_and_rollback",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_blockpit_coordinator_wire_bytes_full_state_and_rollback",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_blockpit_reference_files_wire_bytes_full_state_and_rollback",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_btcpay_coordinator_wire_bytes_full_state_and_rollback",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_btcpay_csv_reference_files_wire_bytes_full_state_and_rollback",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_btcpay_json_reference_files_wire_bytes_full_state_and_rollback",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_btcpay_surrogate_currency_wire_bytes_full_state_and_rollback",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_bull_import_wire_bytes_full_state_and_rollback",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_bull_relevant_wire_order_and_full_state",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_coinfinity_import_wire_bytes_full_state_and_rollback",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_coinfinity_relevant_wire_order_and_full_state",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_cointracking_coordinator_wire_bytes_full_state_and_rollback",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_cointracking_import_wire_bytes_full_state_and_rollback",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_csv_import_wire_bytes_full_state_dedupe_enrichment_and_rollback",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_daemon_ownership_exclusion_both_directions_and_release",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_default_init_and_hidden_home_then_legacy_project_migration",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_descriptor_preview_daemon_wire_bytes_match_reference",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_fresh_daemon_retains_lock_after_schema_creation",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_historical_authored_consolidation_refuses_with_python_hint",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_historical_pair_free_fixture_matches_python_full_dump",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_import_run_cli_wire_bytes_match_reference",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_import_run_daemon_wire_bytes_confirmation_and_scope",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_import_run_rollback_matches_complete_state_in_both_codecs",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_init_and_status_cross_language_in_both_directions",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_init_backend_bootstrap_and_ephemeral_environment_match_python",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_json_import_wire_bytes_full_state_and_rollback",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_ledger_chartsheet_selection_import_and_preview_wire_bytes_and_full_state",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_ledger_column_map_order_wire_bytes_full_state_and_rollback",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_ledger_coordinator_wire_bytes_full_state_and_rollback",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_ledger_preview_bypasses_book_scope_and_parses_inline_and_file_maps",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_ledger_preview_reference_files_wire_bytes_and_no_mutations",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_ledger_reference_files_wire_bytes_full_state_and_rollback",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_ledger_spreadsheet_integrity_import_and_preview_wire_bytes_and_full_state",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_ledgerlive_import_wire_bytes_full_state_and_rollback",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_legacy_project_migration_refuses_held_owner_and_pending_journal",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_network_configuration_and_partition_export_through_hybrid",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_new_default_project_and_unported_commands_stay_closed",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_offline_preference_through_hybrid_and_locked_daemon",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_phoenix_import_wire_bytes_full_state_and_rollback",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_pocket_import_wire_bytes_full_state_and_rollback",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_pocket_relevant_wire_order_and_full_state",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_project_catalog_wire_and_state_match_through_hybrid",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_project_encrypted_creation_descriptor_matches_python",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_python_plaintext_book_with_selected_context_and_backend",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_river_import_wire_bytes_full_state_and_rollback",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_secret_store_control_channel_with_real_open_book",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_setup_services_match_python_at_process_boundaries",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_sqlcipher_daemon_unlock_status_lock_and_shutdown",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_sqlcipher_fd_unlock_and_no_journal_change",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_strike_import_wire_bytes_full_state_and_rollback",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_successful_wallet_create_matches_reference_clock_entropy_and_storage",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_twentyone_import_wire_bytes_full_state_and_rollback",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_wallet_birthday_and_malformed_config_wire_bytes_match_reference",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_wallet_derive_wire_bytes_match_reference",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_wallet_encrypted_daemon_requires_fresh_auth_for_each_mutation",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_wallet_lifecycle_cli_wire_bytes_and_state_match_reference",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_wallet_lifecycle_daemon_confirmation_wire_bytes_match_reference",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_wallet_list_snapshot_daemon_wire_bytes_match_reference",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_wasabi_coordinator_wire_bytes_full_state_and_rollback",
+          "tests/test_rust_shell_parity.py::RustRealStoreParityTest::test_wasabi_reference_files_wire_bytes_full_state_and_rollback",
+          "tests/test_rust_shell_parity.py::RustShellDriftTest::test_btcpay_vectors_match_python_reference",
+          "tests/test_rust_shell_parity.py::RustShellDriftTest::test_capability_tables_match",
+          "tests/test_rust_shell_parity.py::RustShellDriftTest::test_file_import_vectors_match_python",
+          "tests/test_rust_shell_parity.py::RustShellDriftTest::test_generated_grammar_matches_build_parser",
+          "tests/test_rust_shell_parity.py::RustShellDriftTest::test_ledger_vectors_match_python_reference",
+          "tests/test_rust_shell_parity.py::RustShellDriftTest::test_unicode_tables_match_this_interpreter",
+          "tests/test_rust_shell_parity.py::RustShellDriftTest::test_wasabi_import_vectors_match_reference"
         ],
-        "collected_sha256": "f1c9fba9937597a5d4ee98d551c0cbb597f3173c031412dcd269d5cf1a65212c"
+        "collected_sha256": "74494f5ec95eb07e5d2043609f227ae3d07351becf196074e9e3e12717c0b67f"
       }
     ]
   },
@@ -834,8 +1227,8 @@
       "sha256": "aca4e671c9e10e6b0a4078a82e62fa2e894504984579b136cecdf0e2641d207c"
     },
     "parity-receipts/reconciliation.json": {
-      "bytes": 1481484,
-      "sha256": "b283872991df70940a90fb6c9b0b93d110bf36ded6d2380e9be7f924a48633fa"
+      "bytes": 1689624,
+      "sha256": "370c58f42cef67973f2fe90e9c282868198b28172c7323d26f06ad46c2c5bd80"
     },
     "process-performance.json": {
       "bytes": 777840,
