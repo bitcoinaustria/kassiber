@@ -158,6 +158,10 @@ shared by Settings -> Privacy, `kassiber reports privacy-hygiene`, and the
 assistant read tool `ui_reports_privacy_hygiene`. It performs no network probe,
 does not sync wallets, and does not refresh or mutate journals. Findings carry
 `evidence_level` (`exact`, `derived`, or `unknown`) plus count-only evidence.
+Unavailable counts remain `null`, retain an unknown limitation, and make their
+enclosing fact's evidence level `unknown`. An unreadable active transaction
+count also leaves journal freshness and processing need unknown rather than
+claiming an empty book.
 The payload is AI/export-safe by construction: it omits addresses, scripts,
 descriptors, xpubs, backend URLs/tokens, wallet config JSON, raw importer JSON,
 branch/index values, and derivation paths. The desktop Settings screen may

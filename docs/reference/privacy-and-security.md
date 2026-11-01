@@ -289,6 +289,9 @@ they require explicit self-hosted ownership to receive that label instead of
 the remote classification. Malformed endpoints remain unknown. Classification
 never resolves a hostname or probes a service.
 
+If a local privacy-report count cannot be read, it remains unknown (`null`),
+with an unknown evidence label and a limitation; it cannot claim an exact zero.
+
 **Offline** in the title-bar connection panel, **Settings → Privacy → Work
 offline**, and `kassiber offline on|off|status` set one machine-wide switch,
 in the manner of Sparrow Wallet's offline mode. It is stored in an owner-only

@@ -160,6 +160,7 @@ jobs:
           - core-accounting
           - wallets-sync
           - daemon-cli
+          - security-replication
           - reports-contracts
           - serial-network
           - serial-daemon

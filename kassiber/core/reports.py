@@ -498,14 +498,20 @@ def _privacy_finding(
     )
 
 
+def _count_evidence_level(*counts: int | None) -> str:
+    return "unknown" if any(count is None for count in counts) else "exact"
+
+
 def _journal_freshness_fact(
     profile: Mapping[str, Any],
-    active_transaction_count: int,
-    journal_entry_count: int,
-    quarantine_count: int,
+    active_transaction_count: int | None,
+    journal_entry_count: int | None,
+    quarantine_count: int | None,
 ) -> dict[str, Any]:
-    freshness = core_custody_journal.evaluate_projection_freshness(
-        profile, active_transaction_count
+    freshness = (
+        core_custody_journal.evaluate_projection_freshness(profile, active_transaction_count)
+        if active_transaction_count is not None
+        else {"status": "unknown", "needs_processing": None}
     )
     return {
         "status": freshness["status"],
@@ -513,7 +519,7 @@ def _journal_freshness_fact(
         "active_transaction_count": active_transaction_count,
         "journal_entry_count": journal_entry_count,
         "quarantine_count": quarantine_count,
-        "evidence_level": "exact",
+        "evidence_level": _count_evidence_level(active_transaction_count, journal_entry_count, quarantine_count),
     }
 
 
@@ -809,14 +815,14 @@ def report_privacy_hygiene(
         (profile_id,),
         limitations=limitations,
         code="transactions_count_unavailable",
-    ) or 0
+    )
     excluded_transactions = _safe_count(
         conn,
         "SELECT COUNT(*) AS count FROM transactions WHERE profile_id = ? AND excluded != 0",
         (profile_id,),
         limitations=limitations,
         code="excluded_transactions_count_unavailable",
-    ) or 0
+    )
     raw_json_transactions = _safe_count(
         conn,
         """
@@ -829,7 +835,7 @@ def report_privacy_hygiene(
         (profile_id,),
         limitations=limitations,
         code="transaction_raw_json_count_unavailable",
-    ) or 0
+    )
     privacy_boundary_transactions = _safe_count(
         conn,
         """
@@ -842,7 +848,7 @@ def report_privacy_hygiene(
         (profile_id,),
         limitations=limitations,
         code="privacy_boundary_count_unavailable",
-    ) or 0
+    )
     if privacy_boundary_transactions:
         _privacy_finding(
             findings,
@@ -879,14 +885,14 @@ def report_privacy_hygiene(
         (profile_id,),
         limitations=limitations,
         code="utxo_count_unavailable",
-    ) or 0
+    )
     active_utxo_count = _safe_count(
         conn,
         "SELECT COUNT(*) AS count FROM wallet_utxos WHERE profile_id = ? AND spent_at IS NULL",
         (profile_id,),
         limitations=limitations,
         code="active_utxo_count_unavailable",
-    ) or 0
+    )
     utxos_with_address = _safe_count(
         conn,
         """
@@ -899,7 +905,7 @@ def report_privacy_hygiene(
         (profile_id,),
         limitations=limitations,
         code="utxo_address_count_unavailable",
-    ) or 0
+    )
     utxos_with_script = _safe_count(
         conn,
         """
@@ -912,7 +918,7 @@ def report_privacy_hygiene(
         (profile_id,),
         limitations=limitations,
         code="utxo_script_count_unavailable",
-    ) or 0
+    )
     utxos_with_derivation = _safe_count(
         conn,
         """
@@ -924,7 +930,7 @@ def report_privacy_hygiene(
         (profile_id,),
         limitations=limitations,
         code="utxo_derivation_count_unavailable",
-    ) or 0
+    )
     if utxos_with_address or utxos_with_script or utxos_with_derivation:
         _privacy_finding(
             findings,
@@ -936,7 +942,7 @@ def report_privacy_hygiene(
                 "The local output inventory contains address, script, or "
                 "derivation metadata; this payload reports counts only."
             ),
-            evidence_level="exact",
+            evidence_level=_count_evidence_level(utxos_with_address, utxos_with_script, utxos_with_derivation),
             evidence={
                 "utxos_with_address_count": utxos_with_address,
                 "utxos_with_script_count": utxos_with_script,
@@ -950,14 +956,14 @@ def report_privacy_hygiene(
         (profile_id,),
         limitations=limitations,
         code="journal_entry_count_unavailable",
-    ) or 0
+    )
     quarantine_count = _safe_count(
         conn,
         "SELECT COUNT(*) AS count FROM journal_quarantines WHERE profile_id = ?",
         (profile_id,),
         limitations=limitations,
         code="quarantine_count_unavailable",
-    ) or 0
+    )
     privacy_quarantine_count = _safe_count(
         conn,
         """
@@ -969,7 +975,7 @@ def report_privacy_hygiene(
         (profile_id,),
         limitations=limitations,
         code="privacy_quarantine_count_unavailable",
-    ) or 0
+    )
     if privacy_quarantine_count:
         _privacy_finding(
             findings,
@@ -997,18 +1003,25 @@ def report_privacy_hygiene(
         "utxos_with_address_count": utxos_with_address,
         "utxos_with_script_count": utxos_with_script,
         "utxos_with_derivation_metadata_count": utxos_with_derivation,
-        "evidence_level": "exact",
+        "evidence_level": _count_evidence_level(
+            utxo_count, active_utxo_count, utxos_with_address, utxos_with_script, utxos_with_derivation,
+        ),
     }
     transactions = {
         "active_transaction_count": active_transactions,
         "excluded_transaction_count": excluded_transactions,
         "transaction_raw_json_count": raw_json_transactions,
         "privacy_boundary_transaction_count": privacy_boundary_transactions,
-        "evidence_level": "exact",
+        "evidence_level": _count_evidence_level(
+            active_transactions, excluded_transactions, raw_json_transactions, privacy_boundary_transactions,
+        ),
     }
     journals = {
         **journal_freshness,
         "privacy_quarantine_count": privacy_quarantine_count,
+        "evidence_level": _count_evidence_level(
+            active_transactions, journal_entry_count, quarantine_count, privacy_quarantine_count,
+        ),
     }
     summary = {
         "finding_count": len(findings),
