@@ -181,9 +181,9 @@
   },
   {
     "id": "JR-transfer-sign",
-    "file": "crates/journals/src/render.rs",
-    "find": "if outbound { qty.neg(&CTX)? } else { qty }",
-    "replace": "if outbound { qty } else { qty.neg(&CTX)? }",
+    "file": "crates/journals/src/model.rs",
+    "find": "quantity.neg(&kassiber_pydecimal::Context::RP2)?",
+    "replace": "quantity.clone()",
     "expect_failing": [
       "ledger_rendering_matches_python"
     ],
@@ -2318,5 +2318,105 @@
       "fixed_point_text_matches_decimal_formatting"
     ],
     "rule": "Sub-unit fixed-point text starts with zero and preserves leading fractional zeros."
+  },
+  {
+    "id": "JR-audit-native-sent",
+    "file": "crates/journals/src/render.rs",
+    "find": "crypto_sent: float(&a.sent.0),",
+    "replace": "crypto_sent: float(&a.received.0),",
+    "expect_failing": [
+      "legacy_audit_and_carry_floats_match_python"
+    ],
+    "rule": "Audit float projection preserves its own exact engine operand, including overflow and signed zero."
+  },
+  {
+    "id": "JR-audit-native-received",
+    "file": "crates/journals/src/render.rs",
+    "find": "crypto_received: float(&a.received.0),",
+    "replace": "crypto_received: float(&a.sent.0),",
+    "expect_failing": [
+      "legacy_audit_and_carry_floats_match_python"
+    ],
+    "rule": "Audit float projection preserves its own exact engine operand, including overflow and signed zero."
+  },
+  {
+    "id": "JR-audit-native-fee",
+    "file": "crates/journals/src/render.rs",
+    "find": "crypto_fee: float(&a.fee.0),",
+    "replace": "crypto_fee: float(&a.sent.0),",
+    "expect_failing": [
+      "legacy_audit_and_carry_floats_match_python"
+    ],
+    "rule": "Audit float projection preserves its own exact engine operand, including overflow and signed zero."
+  },
+  {
+    "id": "JR-audit-native-spot",
+    "file": "crates/journals/src/render.rs",
+    "find": "spot_price: a.spot_price.as_ref().map(|d| float(&d.0)).unwrap_or(0.0),",
+    "replace": "spot_price: 0.0,",
+    "expect_failing": [
+      "legacy_audit_and_carry_floats_match_python"
+    ],
+    "rule": "Audit prices preserve finite and nonfinite Decimal-to-float results."
+  },
+  {
+    "id": "JR-audit-nonfinite-serialization",
+    "file": "crates/journals/src/model.rs",
+    "find": "map.serialize_entry(\"$float\", &kassiber_pyjson::float_repr(*value))?;",
+    "replace": "map.serialize_entry(\"$float\", \"nan\")?;",
+    "expect_failing": [
+      "legacy_audit_and_carry_floats_match_python"
+    ],
+    "rule": "Audit nonfinite floats retain their actual scalar values in canonical state."
+  },
+  {
+    "id": "JR-transfer-nonfinite-sign",
+    "file": "crates/journals/src/model.rs",
+    "find": "value.is_sign_negative() != outbound",
+    "replace": "value.is_sign_negative() == outbound",
+    "expect_failing": [
+      "legacy_audit_and_carry_floats_match_python"
+    ],
+    "rule": "Transfer leg infinity signs follow Python Decimal negation."
+  },
+  {
+    "id": "JR-transfer-nonfinite-scalar",
+    "file": "crates/journals/src/model.rs",
+    "find": "NonFiniteDecimal::PositiveInfinity\n",
+    "replace": "NonFiniteDecimal::NaN\n",
+    "expect_failing": [
+      "legacy_audit_and_carry_floats_match_python"
+    ],
+    "rule": "An overflowed transfer quantity remains Infinity rather than NaN."
+  },
+  {
+    "id": "JR-carry-python-float",
+    "file": "crates/journals/src/render.rs",
+    "find": "kassiber_pytext::parse_float(s)",
+    "replace": "s.parse::<f64>()",
+    "expect_failing": [
+      "legacy_audit_and_carry_floats_match_python"
+    ],
+    "rule": "Carried rates use Python float string coercion, including Unicode digits and underscores."
+  },
+  {
+    "id": "JR-carry-float-error",
+    "file": "crates/journals/src/render.rs",
+    "find": "could not convert string to float: {}",
+    "replace": "invalid carried rate: {}",
+    "expect_failing": [
+      "legacy_audit_and_carry_floats_match_python"
+    ],
+    "rule": "Malformed carried rate text retains Python ValueError text before entry UUID consumption."
+  },
+  {
+    "id": "JR-persist-nonfinite-quantity",
+    "file": "crates/journals/src/model.rs",
+    "find": "\"cannot convert Infinity to integer\"",
+    "replace": "\"invalid quantity\"",
+    "expect_failing": [
+      "nonfinite_entry_quantities_refuse_and_restore_every_table"
+    ],
+    "rule": "Nonfinite quantities refuse at the msat boundary and roll back every journal table."
   }
 ]

@@ -584,3 +584,106 @@ UUID/refusal order and persistence callers. Mutation and verification build
 trees are removed after their summaries are saved. No background job, push,
 pull request or external comment is left; Python retains production accounting
 authority.
+
+## Seventh continuation: legacy transfer floats and carry refusals
+
+This local continuation starts at `e723aacbf` on `t3code/r4-11-render-7`.
+**R4-11 remains unaccepted.** This is a partial fidelity boundary; actual
+surrogate scalars and lazy malformed-response decoding remain open.
+
+Transfer audits now retain native `f64` values through entry consumption and
+canonical serialization. Decimal-to-float overflow no longer becomes JSON null
+or reaches the former `expect("audit float")` panic. Transfer quantities retain
+finite Decimal representations or a typed Infinity/NaN variant. They preserve
+Python's transfer-out negation, signed zero, underflow and float rounding.
+Persistence refuses a nonfinite quantity at its msat conversion, retaining the
+Python exception and restoring every table through the existing savepoint.
+No nonfinite quantity becomes an integer accounting fact.
+
+Carried rate strings use the existing Python-compatible float parser, including
+Unicode digits, underscores, whitespace, infinities and NaN. Malformed strings
+retain Python's `ValueError` message before consuming entry ids. Nonfinite
+carried-rate overlays use the existing canonical float representation in the
+transitional row tree. This does not complete the lossless typed row boundary.
+
+All **383 original cases remain byte-for-byte unchanged**. A separate
+`render-legacy-floats.json` corpus adds **39 cases: 35 states and four refusals**.
+Its generator observes unchanged Python `build()` and `render_audit()` behavior;
+the native oracle compares complete state bytes, every audit scalar and exact
+UUID-tape consumption. It exercises overflow of each audit amount and price,
+negative zero, underflow, float rounding, audits without entries, carried-rate
+coercion and malformed-rate refusal text. The first new run exposed a generator
+aliasing error between an audit-only variant and its preceding entry variant;
+the generator now copies each response before capturing it.
+
+All **37 all-feature journal tests** pass, including the existing complete
+SQLite/SQLCipher dump and rollback fixtures and the new nonfinite-quantity
+rollback test. Scoped all-target/all-feature Clippy passes with warnings denied.
+These fixtures do not replace the complete integrated database campaigns.
+
+All 151 inherited journal mutation ids remain. `JR-transfer-sign` moves to the
+same negation in `JournalQuantity::from_audit`. Ten new recipes cover native
+audit floats and serialization, infinity signs and identity, carried-rate
+coercion/refusals and nonfinite persistence refusal. All **161 recipes apply**:
+110 renderer recipes and 51 persistence recipes. The source-bound resumable
+shard kills the ten new recipes and the reanchored transfer recipe after three
+passing named baselines, without build errors. Its build trees are deleted
+after the incremental call log and summary are saved. This is eleven focused
+kills, not a complete mutation campaign.
+
+Fresh release probes use the pinned toolchain, offline Cargo, eight build jobs
+and `--release --features timing`. Both books first match complete state bytes.
+Each run alternates five inherited/candidate pairs and records every CPU sample,
+wall sample, load, probe digest and operand digest. CPU 18 is selected before
+its run from a recorded two-second per-core utilization sample; the earlier
+CPU-0 failure remains part of the evidence.
+
+| Affinity | Book | Inherited CPU, best of five (s) | Candidate CPU, best of five (s) |
+| --- | --- | ---: | ---: |
+| CPU 0 | Generic 20k | 0.166397 | 0.162323 |
+| CPU 0 | Multi-wallet 20k | 0.186418 | 0.181005 |
+| CPU 18 | Generic 20k | 0.126380 | 0.131175 |
+| CPU 18 | Multi-wallet 20k | 0.258975 | 0.270028 |
+
+These fresh runs **do not meet 0.15 s CPU on both books**. The inherited probe
+also misses that budget on multi-wallet 20k; these measurements do not establish
+a causal regression from this change. Host load and affinity are context, not
+exemptions. The sixth continuation's passing historical measurement does not
+certify this source. All field selection remains inside the measured build;
+decoding, canonical serialization, persistence and state destruction stay outside.
+
+The remaining work, in acceptance order, is:
+
+1. Close the actual surrogate-scalar and malformed-canonical-decimal repros,
+   including their complete UUID/refusal order. Complete the lossless typed
+   boundary across profile, rows, entries, provenance, joins and response
+   decoding; raw nonfinite stage operands and carry/audit malformed shapes and
+   refusal order remain open.
+2. Finish the exhaustive branch audit for component exclusions, ambiguous
+   script ownership, scope/txid filtering, amount tolerance and graph refusal
+   propagation.
+3. Run the complete source-bound catalogs: all 110 renderer recipes (the
+   inherited 100 plus this continuation's ten), all 51 persistence recipes and
+   all 2,327 custody recipes, in resumable shards with build-tree deletion.
+4. Run all 25,030 generated inputs, full census/shadow lanes and fresh recordings
+   against the final source.
+5. Complete typed loader/custody integration, full integrated SQLite/SQLCipher
+   campaigns and the repository quality gate.
+6. Reestablish 0.15 s CPU on both 20k books, repeat the final integrated CPU
+   measurements and write the acceptance record.
+
+The fresh boundary repro exits 1: actual surrogate decoding and malformed
+canonical-decimal refusals still differ; nonfinite quarantine detail and the
+malformed payout integer match. All six Python oracle/capture tests pass,
+including deterministic regeneration of both render corpora. Workspace
+formatting passes. The required classifier update leaves the inventory
+unchanged, and the required CI preflight passes all **57 tests** before commit.
+Manual second review checks quantity signs and scalar identity, exact finite
+representations, UUID consumption, persistence rollback and the unchanged
+production-route boundary. Source/probe/operand digests and all results live in
+`target/r4-render-7/verification-index.json`. Verification build trees are
+removed after saving the probes and summaries. No background job remains.
+
+Python product sources, dependencies, schema, routes and AI projections are
+unchanged. No Python reference bug has been identified. Python retains
+production accounting authority.

@@ -309,16 +309,66 @@ def machine_msat_vectors():
                 for text in (f'{coefficient}E{exponent}', f'-{coefficient}E{exponent}')]
 
 
+def legacy_float_vectors():
+    from kassiber.core.engines import ledger_response
+    from tests.custody_snapshot import to_jsonable
+
+    template = next(case for case in corpus() if case.name == 'generic-ledger-fifo')
+    base = compute_custody_projection(snapshot(0))
+    custody = replace(base, finalized_tax_projection=template.inputs.finalized_tax_projection,
+                      wallet_refs_by_id=template.inputs.wallet_refs_by_id,
+                      direct_payout_records=template.inputs.direct_payout_records)
+    normal = capture_projection(template.profile, custody)['response']
+    cases = []
+
+    def add(name, response):
+        response = deepcopy(response)
+        audits = []
+        original = ledger_response.render_audit
+
+        def observed(inputs, audit):
+            result = original(inputs, audit)
+            audits.append(result)
+            return result
+
+        with patch.object(ledger_response, 'render_audit', observed), \
+             patch.object(uuid, 'uuid4', seeded_ids(name)):
+            record = capture_projection(template.profile, custody, response_override=response)
+        cases.append(dict(name=name, **clean_record(record),
+                          expected_audit=to_jsonable(audits, redact_config=False)))
+
+    for field in ('sent', 'received', 'fee', 'spot_price'):
+        for value in ('1E999', '-1E999', '-0E0', '-1E-999', '12345678901234567E-20'):
+            response = deepcopy(normal)
+            response['intra_audit'][0][field] = value
+            add(f'audit-float-{field}-{value}', response)
+            if field in ('sent', 'received') and value.endswith('999'):
+                response['entries'] = []
+                add(f'audit-only-{field}-{value}', response)
+
+    for rate in (None, 'Infinity', '-Inf', 'NaN', '1e999', '-1e-999', '-0.0',
+                 '\u3000+１２_３.４\u3000', ' 1_000.5 ', 'bad', '', '1__0', '\x1c1'):
+        response = deepcopy(normal)
+        response['carried_rows'] = [dict(row=response['entries'][0]['row'],
+                                        value='123.4500', rate=rate)]
+        add(f'carry-rate-{rate!r}', response)
+    return cases
+
+
 def main():
     result = json.dumps(vectors(), ensure_ascii=True, separators=(',', ':'), allow_nan=False) + '\n'
     machine = json.dumps(machine_msat_vectors(), separators=(',', ':')) + '\n'
     machine_path = PATH.with_name('msat-machine.json')
+    legacy = json.dumps(legacy_float_vectors(), ensure_ascii=True, separators=(',', ':'), allow_nan=False) + '\n'
+    legacy_path = PATH.with_name('render-legacy-floats.json')
     if '--accept' in sys.argv:
         PATH.write_text(result)
         machine_path.write_text(machine)
+        legacy_path.write_text(legacy)
     else:
         assert PATH.read_text() == result, 'render vectors changed; review then use --accept'
         assert machine_path.read_text() == machine, 'msat machine vectors changed'
+        assert legacy_path.read_text() == legacy, 'legacy float vectors changed'
     print(f'{len(json.loads(result))} synthetic journal render vectors')
 
 

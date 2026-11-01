@@ -298,7 +298,7 @@ fn store<O: storage::WriteObserver>(
                 .map_or(ValueRef::Null, |s| ValueRef::Text(s.as_bytes())),
             ValueRef::Text(at.as_bytes()),
         ];
-        let quantity = amount(&e.quantity)?;
+        let quantity = bind(&e.quantity.msat()?)?;
         let (fiat, fiat_exact) = decimal_bindings(Some(&e.fiat_value))?;
         let (unit, unit_exact) = decimal_bindings(Some(&e.unit_cost))?;
         let (basis, basis_exact) = decimal_bindings(e.cost_basis.as_ref())?;

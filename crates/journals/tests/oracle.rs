@@ -1,9 +1,15 @@
 use kassiber_journals::{boundary, enrich_quarantine_detail};
 use serde_json::{json, Value};
 fn corpus(group: &str) {
-    let cases: Vec<Value> = serde_json::from_str(include_str!("data/render.json")).unwrap();
+    check_cases(include_str!("data/render.json"), Some(group));
+}
+fn check_cases(text: &str, group: Option<&str>) {
+    let cases: Vec<Value> = serde_json::from_str(text).unwrap();
     let mut count = 0;
-    for c in cases.iter().filter(|c| c["group"] == group) {
+    for c in cases
+        .iter()
+        .filter(|c| group.is_none_or(|g| c["group"] == g))
+    {
         count += 1;
         let response = if c["response"].is_null() {
             Ok(boundary::empty_response())
@@ -12,6 +18,37 @@ fn corpus(group: &str) {
         };
         let mut ids = c["entry_ids"].as_array().unwrap().iter();
         let state = match &response {
+            Ok(r) if c.get("expected_audit").is_some() => {
+                let inputs = kassiber_journals::LedgerInputs {
+                    profile: &c["profile"],
+                    projection: &c["custody"]["finalized_tax_projection"],
+                    wallets: c["wallets"].as_array().unwrap(),
+                    direct_payout_records: c["custody"]["direct_payout_records"]
+                        .as_array()
+                        .unwrap(),
+                };
+                kassiber_journals::render_ledger(&inputs, r, || {
+                    ids.next().unwrap().as_str().unwrap().to_owned()
+                })
+                .and_then(|ledger| {
+                    if let Some(expected) = c.get("expected_audit") {
+                        let canonical = |value: &Value| {
+                            kassiber_pyjson::dumps(
+                                &kassiber_custody::codec::from_json(value).unwrap(),
+                                &kassiber_pyjson::Options::new().sort_keys(true).compact(),
+                            )
+                            .unwrap()
+                        };
+                        assert_eq!(
+                            canonical(&serde_json::to_value(&ledger.intra_audit).unwrap()),
+                            canonical(expected),
+                            "{}",
+                            c["name"]
+                        );
+                    }
+                    boundary::finish(&c["custody"], ledger)
+                })
+            }
             Ok(r) => boundary::build(
                 &c["profile"],
                 &c["custody"],
@@ -44,6 +81,10 @@ fn corpus(group: &str) {
         );
     }
     assert!(count > 0);
+}
+#[test]
+fn legacy_audit_and_carry_floats_match_python() {
+    check_cases(include_str!("data/render-legacy-floats.json"), None);
 }
 #[test]
 fn ledger_rendering_matches_python() {

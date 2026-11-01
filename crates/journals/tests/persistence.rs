@@ -99,15 +99,72 @@ fn binding_refusals_precede_decimal_formatting_and_roll_back_every_write() {
         let result = store_with(&c, v, &mut Writes::default(), |state| {
             let entry = &mut state.entries[0];
             if bad_metadata {
-                entry.workspace_id = json!({"unsupported":true});
+                static BAD: std::sync::LazyLock<Value> = std::sync::LazyLock::new(|| json!({"unsupported":true}));
+                entry.workspace_id = &BAD;
             }
-            entry.quantity = JournalDecimal("1E+20".parse().unwrap());
+            entry.quantity = JournalDecimal("1E+20".parse().unwrap()).into();
             entry.fiat_value = JournalDecimal("1E+100000001".parse().unwrap());
         });
         assert_eq!(result.unwrap_err().family, expected);
         equal(&c, &v["before"], &v["name"]);
         c.execute_batch("ROLLBACK TO journals_process;RELEASE journals_process;ROLLBACK")
             .unwrap();
+    }
+}
+
+#[test]
+fn nonfinite_entry_quantities_refuse_and_restore_every_table() {
+    use kassiber_journals::{boundary, persistence, JournalQuantity, NonFiniteDecimal};
+    let v = &cases()[0];
+    let record = &v["record"];
+    let response = boundary::ledger_response(&record["response"]).unwrap();
+    for (text, family, message) in [
+        (
+            NonFiniteDecimal::PositiveInfinity,
+            "OverflowError",
+            "cannot convert Infinity to integer",
+        ),
+        (
+            NonFiniteDecimal::NegativeInfinity,
+            "OverflowError",
+            "cannot convert Infinity to integer",
+        ),
+        (
+            NonFiniteDecimal::NaN,
+            "ValueError",
+            "cannot convert NaN to integer",
+        ),
+    ] {
+        let mut state = boundary::build(
+            &record["profile"],
+            &record["custody"],
+            record["wallets"].as_array().unwrap(),
+            &response,
+            String::new,
+        )
+        .unwrap();
+        state.entries[0].quantity = JournalQuantity::NonFinite { text };
+        for encrypted in [false, true] {
+            let c = Connection::open_in_memory().unwrap();
+            if encrypted {
+                c.pragma_update(None, "key", "synthetic-test-only").unwrap();
+            }
+            load(&c, &v["before"]);
+            c.execute_batch("BEGIN IMMEDIATE").unwrap();
+            let error = persistence::store_ledger_state(
+                &c,
+                &record["profile"],
+                &state,
+                v["created_at"].as_str().unwrap(),
+                &mut || Ok(String::new()),
+                &mut Writes::default(),
+            )
+            .unwrap_err();
+            assert_eq!(error.family, family);
+            assert_eq!(error.message, message);
+            equal(&c, &v["before"], &v["name"]);
+            c.execute_batch("ROLLBACK").unwrap();
+        }
     }
 }
 

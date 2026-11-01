@@ -15,6 +15,66 @@ impl Serialize for JournalDecimal {
     }
 }
 #[derive(Clone, Debug, Serialize)]
+#[serde(untagged)]
+pub enum JournalQuantity {
+    Finite(JournalDecimal),
+    NonFinite {
+        #[serde(rename = "$decimal")]
+        text: NonFiniteDecimal,
+    },
+}
+#[derive(Clone, Copy, Debug, Serialize)]
+pub enum NonFiniteDecimal {
+    #[serde(rename = "Infinity")]
+    PositiveInfinity,
+    #[serde(rename = "-Infinity")]
+    NegativeInfinity,
+    NaN,
+}
+impl From<JournalDecimal> for JournalQuantity {
+    fn from(value: JournalDecimal) -> Self {
+        Self::Finite(value)
+    }
+}
+impl JournalQuantity {
+    pub(crate) fn from_audit(value: f64, outbound: bool) -> Result<Self, crate::Refusal> {
+        if value.is_finite() {
+            let quantity = kassiber_pyjson::float_repr(value).parse::<Decimal>()?;
+            Ok(JournalDecimal(if outbound {
+                quantity.neg(&kassiber_pydecimal::Context::RP2)?
+            } else {
+                quantity
+            })
+            .into())
+        } else {
+            Ok(Self::NonFinite {
+                text: if value.is_nan() {
+                    NonFiniteDecimal::NaN
+                } else if value.is_sign_negative() != outbound {
+                    NonFiniteDecimal::NegativeInfinity
+                } else {
+                    NonFiniteDecimal::PositiveInfinity
+                },
+            })
+        }
+    }
+    pub(crate) fn msat(&self) -> Result<Value, crate::Refusal> {
+        match self {
+            Self::Finite(value) => crate::render::msat(&value.0),
+            Self::NonFinite {
+                text: NonFiniteDecimal::NaN,
+            } => Err(crate::Refusal::new(
+                "ValueError",
+                "cannot convert NaN to integer",
+            )),
+            Self::NonFinite { .. } => Err(crate::Refusal::new(
+                "OverflowError",
+                "cannot convert Infinity to integer",
+            )),
+        }
+    }
+}
+#[derive(Clone, Debug, Serialize)]
 pub struct JournalEntryRow<'a> {
     pub id: String,
     pub workspace_id: &'a Value,
@@ -25,7 +85,7 @@ pub struct JournalEntryRow<'a> {
     pub occurred_at: Value,
     pub entry_type: &'static str,
     pub asset: Cow<'a, str>,
-    pub quantity: JournalDecimal,
+    pub quantity: JournalQuantity,
     pub fiat_value: JournalDecimal,
     pub unit_cost: JournalDecimal,
     pub cost_basis: Option<JournalDecimal>,
@@ -41,6 +101,19 @@ pub struct JournalEntryRow<'a> {
     pub capital_gains_type: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub calculation: Option<Calculation<'a>>,
+}
+#[derive(Clone, Debug, Serialize)]
+pub struct TransferAudit {
+    #[serde(flatten)]
+    pub facts: Value,
+    #[serde(serialize_with = "serialize_float")]
+    pub crypto_sent: f64,
+    #[serde(serialize_with = "serialize_float")]
+    pub crypto_received: f64,
+    #[serde(serialize_with = "serialize_float")]
+    pub crypto_fee: f64,
+    #[serde(serialize_with = "serialize_float")]
+    pub spot_price: f64,
 }
 #[derive(Clone, Debug, Serialize)]
 pub struct Calculation<'a> {

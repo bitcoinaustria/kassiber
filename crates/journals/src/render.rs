@@ -171,14 +171,10 @@ fn pricing_fields(row: &Value) -> [&Value; 12] {
         })
         .unwrap_or([&Value::Null; 12])
 }
-fn decimal_text(s: &str) -> Result<Decimal, Refusal> {
-    s.parse::<Decimal>().map_err(Refusal::from)
-}
-
 pub struct LedgerState<'i> {
     pub entries: Vec<JournalEntryRow<'i>>,
     pub quarantines: Vec<QuarantineRow>,
-    pub intra_audit: Vec<Value>,
+    pub intra_audit: Vec<TransferAudit>,
     pub tax_summary: Vec<TaxSummaryRow>,
     pub account_holdings: Holdings,
     pub wallet_holdings: Holdings,
@@ -442,7 +438,7 @@ impl<'a, 'i> Reader<'a, 'i> {
             occurred_at,
             entry_type: "acquisition",
             asset: Cow::Borrowed(""),
-            quantity: zero(),
+            quantity: zero().into(),
             fiat_value: zero(),
             unit_cost: zero(),
             cost_basis: None,
@@ -475,7 +471,7 @@ impl<'a, 'i> Reader<'a, 'i> {
     fn entry(
         &mut self,
         item: &'i EntryOut,
-        audits: &[Value],
+        audits: &[TransferAudit],
         response: &'i LedgerResponse,
         ids: &mut impl FnMut() -> String,
     ) -> Result<JournalEntryRow<'i>, Refusal> {
@@ -490,7 +486,7 @@ impl<'a, 'i> Reader<'a, 'i> {
                     ids,
                 )?;
                 e.asset = Cow::Borrowed(&a.asset);
-                e.quantity = jd(&a.quantity);
+                e.quantity = jd(&a.quantity).into();
                 e.fiat_value = jd(&a.fiat_value);
                 e.unit_cost = jd(&a.unit_cost);
                 e.description = Cow::Borrowed(&a.description);
@@ -507,7 +503,7 @@ impl<'a, 'i> Reader<'a, 'i> {
                 )?;
                 e.entry_type = a.entry_type.as_str();
                 e.asset = Cow::Borrowed(&a.asset);
-                e.quantity = jd(&a.quantity);
+                e.quantity = jd(&a.quantity).into();
                 e.fiat_value = jd(&a.proceeds);
                 e.cost_basis = Some(jd(&a.cost_basis));
                 e.proceeds = Some(jd(&a.proceeds));
@@ -550,9 +546,10 @@ impl<'a, 'i> Reader<'a, 'i> {
                 Ok(e)
             }
             EntryOut::TransferLeg(a) => {
-                let audit = audits
+                let rendered = audits
                     .get(a.audit)
                     .ok_or_else(|| Refusal::new("IndexError", "list index out of range"))?;
+                let audit = &rendered.facts;
                 let outbound = a.entry_type == EntryType::TransferOut;
                 let label = string(
                     &audit[if outbound {
@@ -564,19 +561,18 @@ impl<'a, 'i> Reader<'a, 'i> {
                 let wallet = lookup(&self.labels, &label)?;
                 let row_id = string(&audit[if outbound { "out_id" } else { "in_id" }]);
                 let row = self.row(&row_id).unwrap_or(&Value::Null);
-                let mut e = self.head(wallet, row, &row_id, audit["occurred_at"].clone(), ids)?;
-                let qty = decimal_text(&kassiber_pyjson::float_repr(
-                    audit[if outbound {
-                        "crypto_sent"
+                let qty = JournalQuantity::from_audit(
+                    if outbound {
+                        rendered.crypto_sent
                     } else {
-                        "crypto_received"
-                    }]
-                    .as_f64()
-                    .expect("audit float"),
-                ))?;
+                        rendered.crypto_received
+                    },
+                    outbound,
+                )?;
+                let mut e = self.head(wallet, row, &row_id, audit["occurred_at"].clone(), ids)?;
                 e.entry_type = a.entry_type.as_str();
                 e.asset = Cow::Owned(string(&audit["asset"]));
-                e.quantity = JournalDecimal(if outbound { qty.neg(&CTX)? } else { qty });
+                e.quantity = qty;
                 e.description = Cow::Borrowed(&response.intra_audit[a.audit].description);
                 Ok(e)
             }
@@ -610,9 +606,26 @@ pub fn render_ledger<'i>(
         row["fiat_rate"] = carry
             .rate
             .as_ref()
-            .map(|s| s.parse::<f64>().map(|n| json!(n)))
-            .transpose()
-            .map_err(|e| Refusal::new("ValueError", e.to_string()))?
+            .map(|s| {
+                kassiber_pytext::parse_float(s)
+                    .map(|n| {
+                        if n.is_finite() {
+                            json!(n)
+                        } else {
+                            json!({"$float":kassiber_pyjson::float_repr(n)})
+                        }
+                    })
+                    .map_err(|_| {
+                        Refusal::new(
+                            "ValueError",
+                            format!(
+                                "could not convert string to float: {}",
+                                kassiber_pytext::repr_str(s)
+                            ),
+                        )
+                    })
+            })
+            .transpose()?
             .unwrap_or(Value::Null);
         row["fiat_value"] = json!(carry.value);
         row["fiat_rate_exact"] = json!(carry.rate);
@@ -714,7 +727,7 @@ pub fn render_ledger<'i>(
         direct_swap_payouts,
     })
 }
-fn audit(inputs: &LedgerInputs<'_>, a: &AuditOut) -> Result<Value, Refusal> {
+fn audit(inputs: &LedgerInputs<'_>, a: &AuditOut) -> Result<TransferAudit, Refusal> {
     let pair = array(&inputs.projection["intra_pairs"])
         .get(a.pair)
         .ok_or_else(|| Refusal::new("IndexError", "list index out of range"))?;
@@ -730,7 +743,7 @@ fn audit(inputs: &LedgerInputs<'_>, a: &AuditOut) -> Result<Value, Refusal> {
         .iter()
         .find(|w| w["id"] == inbound["wallet_id"])
         .ok_or_else(|| Refusal::new("KeyError", format!("'{}'", string(&inbound["wallet_id"]))))?;
-    let mut v = json!({"out_id":out["id"],"in_id":inbound["id"],"out_anchor_transaction_id":string(fallback(&out["journal_transaction_id"],&out["id"])),"in_anchor_transaction_id":string(fallback(&inbound["journal_transaction_id"],&inbound["id"])),"from_wallet_id":from["id"],"from_wallet_label":from["label"],"to_wallet_id":to["id"],"to_wallet_label":to["label"],"asset":string(&out["asset"]),"occurred_at":out["occurred_at"],"external_id":out["external_id"],"crypto_sent":float(&a.sent.0),"crypto_received":float(&a.received.0),"crypto_fee":float(&a.fee.0),"crypto_sent_msat":a.sent_msat,"crypto_received_msat":a.received_msat,"crypto_fee_msat":a.fee_msat,"spot_price":a.spot_price.as_ref().map(|d|float(&d.0)).unwrap_or(0.0),"pairing_source":pair["source"]});
+    let mut v = json!({"out_id":out["id"],"in_id":inbound["id"],"out_anchor_transaction_id":string(fallback(&out["journal_transaction_id"],&out["id"])),"in_anchor_transaction_id":string(fallback(&inbound["journal_transaction_id"],&inbound["id"])),"from_wallet_id":from["id"],"from_wallet_label":from["label"],"to_wallet_id":to["id"],"to_wallet_label":to["label"],"asset":string(&out["asset"]),"occurred_at":out["occurred_at"],"external_id":out["external_id"],"crypto_sent_msat":a.sent_msat,"crypto_received_msat":a.received_msat,"crypto_fee_msat":a.fee_msat,"pairing_source":pair["source"]});
     if let Some(r) = a.at_regime {
         v["at_regime"] = json!(r);
     }
@@ -745,7 +758,13 @@ fn audit(inputs: &LedgerInputs<'_>, a: &AuditOut) -> Result<Value, Refusal> {
     if truth(&pair["group_id"]) {
         v["transfer_group_id"] = json!(string(&pair["group_id"]));
     }
-    Ok(v)
+    Ok(TransferAudit {
+        facts: v,
+        crypto_sent: float(&a.sent.0),
+        crypto_received: float(&a.received.0),
+        crypto_fee: float(&a.fee.0),
+        spot_price: a.spot_price.as_ref().map(|d| float(&d.0)).unwrap_or(0.0),
+    })
 }
 fn detail_value(v: &Value) -> Result<Py, Refusal> {
     Ok(match v {

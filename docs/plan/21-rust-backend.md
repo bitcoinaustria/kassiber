@@ -3015,6 +3015,11 @@ rendering/join mutations and full inherited campaign gates still need completion
 The [borrowed-pricing continuation](../reference/r4-journal-render-boundary-checkpoint.md#sixth-continuation-borrowed-pricing-and-entry-identities)
 meets the isolated 0.15 s render-and-join CPU budget on both 20k books; final
 fidelity and integration changes require a fresh measurement.
+The [legacy-float continuation](../reference/r4-journal-render-boundary-checkpoint.md#seventh-continuation-legacy-transfer-floats-and-carry-refusals)
+adds native audit-float consumption, nonfinite transfer quantities and exact
+carried-rate coercion/refusals. Thirty-nine new witnesses supplement the
+unchanged 383-case corpus. Surrogate and malformed-response fidelity remain
+open, and fresh CPU pairs do not recertify both 20k budgets.
 
 ### R5 pairing command checkpoint
 

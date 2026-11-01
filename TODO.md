@@ -668,6 +668,12 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   passes the isolated CPU budget with exact state bytes: 0.125116 s generic and
   0.145054 s multi-wallet in five alternating pinned pairs. Final fidelity and
   integration changes still need a fresh CPU check.
+  The [legacy-float continuation](docs/reference/r4-journal-render-boundary-checkpoint.md#seventh-continuation-legacy-transfer-floats-and-carry-refusals)
+  preserves those 383 cases and adds 39 audit/carry witnesses. Native audit
+  floats and nonfinite transfer quantities preserve overflow through rendering;
+  persistence refuses nonfinite msat and restores every table. Eleven focused
+  mutations are killed. Fresh CPU pairs do not recertify both 20k budgets;
+  surrogate/decimal refusal fidelity, typed integration and full gates remain open.
   Python retains production authority.
 - [x] R4-14: expose the native automatic-pairing journal stage by reusing
   transfer suggestions, rules and bulk exact pairing. Pin repeated-pass and
