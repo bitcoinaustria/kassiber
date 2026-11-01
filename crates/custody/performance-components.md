@@ -160,16 +160,28 @@ resumed from its 243 recorded kills. Interrupted logs and the pre-fix checkpoint
 are preserved separately. This was an audit failure, not a production-code failure
 or a mutation survivor.
 
-The T3 server later restarted after disk metadata exhaustion during shard 7. Its
-persisted checkpoint contains **2,307/2,352 verified kills**, including all **89
-touched-file recipes** and completed shards 0/8 through 6/8. The final **45 recipes
-remain unverified**. Interrupted logs and source/catalog-bound checkpoints remain
-available; no interrupted or unrecorded outcome is counted as a kill.
+The T3 server later restarted after disk metadata exhaustion during shard 7. The
+persisted checkpoint contained 2,307 verified kills. The first verified local
+source commit, `6f7b3c439`, preserves that boundary. After recovery, all remaining
+45 recipes pass against the same source and catalog fingerprints. Interrupted
+logs and checkpoints remain available; no interrupted or unrecorded outcome is
+counted as a kill.
 
-At this verified commit boundary, classification update passes without a
-disposition change and CI preflight passes all **57 tests**. Source and catalog
-fingerprints still match. Disposable verification builds are removed. The existing
-mutation tree is retained briefly to finish the last 45 recipes without rebuilding.
+The final candidate kills **2,352/2,352 catalog recipes**, including all **89
+touched-file recipes**, across the touched batch and eight resumable catalog
+shards. Rust mutants pass an offline `cargo check --locked --lib --tests` before
+their assigned tests fail. Python mutants pass compilation before positive pytest
+failure counts are recorded. Every assigned test has a positive failing-test
+count. There are no survivors or build/test errors in the completed runs. Resumed
+batch counts exclude recipes already counted in the touched batch.
+
+Classification update passes without a disposition change, and CI preflight
+passes all **57 tests**. Final source and catalog fingerprints match the completed
+mutation state. Disposable verification builds, mutation source/build trees and
+scratch copies are removed after summarizing their results. Saved benchmark
+binaries/books, raw CPU pairs, corpus activity and small logs/state remain under
+`target/custody-perf-components/`. No task or background test job remains running.
+
 Resumed verification uses **six build jobs and the shared uv cache**, with no
 worktree `UV_CACHE_DIR`. The earlier benchmarks and gates used eight build jobs.
 

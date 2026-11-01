@@ -13096,6 +13096,12 @@
         "after_server_restart": true,
         "passed_tests": 57,
         "test_wall_seconds": 62.98
+      },
+      {
+        "step": "mutations-7-8",
+        "status": 0,
+        "after_server_restart": true,
+        "resumed_new_kills": 45
       }
     ],
     "classification_updated": true,
@@ -13139,8 +13145,8 @@
     "source_sha256": "2f165333f1b85797af89638a35fe940c91a69844ef739bbca5b5662daca00d96",
     "catalog_sha256": "17964c599cfdc4abd99591fdb6293ddda236eed731af9388b8fdf53149f8c96c",
     "total": 2352,
-    "killed": 2307,
-    "remaining": 45,
+    "killed": 2352,
+    "remaining": 0,
     "touched_total": 89,
     "touched_killed": 89,
     "completed_shards": [
@@ -13151,7 +13157,8 @@
       "03-8",
       "04-8",
       "05-8",
-      "06-8"
+      "06-8",
+      "07-8"
     ],
     "per_recipe_compile_and_positive_failed_test_counts": {
       "components-lineage-active": {
@@ -36575,6 +36582,506 @@
             "failed_tests": 1
           }
         }
+      },
+      "R7-price-floor": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "finalized_prices_keep_exact_precision_floor": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "R7-payout-split": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "projection_selected_composition_vectors": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "R7-derived-zero-scale": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "projection_slice_pricing_vectors": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "R4-row-known-order": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "typed_rows_keep_presence_order_unknown_columns_and_storage_classes": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "R4-row-unknown-order": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "typed_rows_keep_presence_order_unknown_columns_and_storage_classes": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "R4-row-bool-storage": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "typed_scalars_preserve_historical_transport_shapes": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "R4-row-real-sign": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "typed_scalars_preserve_historical_transport_shapes": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "R4-row-wide-integer": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "typed_scalars_preserve_historical_transport_shapes": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "R4-row-exact-msat": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "typed_sql_quantities_refuse_float_bool_text_and_out_of_range": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "R4-row-book-interning": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "typed_identifiers_share_only_within_their_book": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "R4-network-conflicts": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "typed_network_inventory_admission": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "R4-network-binding": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "typed_network_inventory_admission": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "R4-network-empty-epoch": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "typed_network_inventory_admission": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "R4-network-inventory-type": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "typed_network_containers_wait_for_accounting_admission": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "R4-network-payload-domain": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "typed_network_evidence_matches_historical_semantics": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "R4-row-i128-storage": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "typed_scalars_preserve_historical_transport_shapes": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "R4-row-u128-storage": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "typed_scalars_preserve_historical_transport_shapes": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "R4-network-i128-storage": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "typed_network_scalar_storage_classes": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "R4-network-u128-storage": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "typed_network_scalar_storage_classes": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "R4-network-payload-object": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "typed_network_payload_arrays_are_not_object_facts": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "PERF-HOLDS-GRAPH": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "graphless_confirmation_facts_preserve_full_decoder": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "PERF-HOLDS-STATUS": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "graphless_confirmation_facts_preserve_full_decoder": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "PERF-HOLDS-INTEGER-LIMIT": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "graphless_confirmation_facts_preserve_full_decoder": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "PERF-GAP-DUPLICATE-IDS": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "gap_beam_unique_and_duplicate_id_python_hashes": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "PERF-GAP-NORMALIZED-LIMIT": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "gap_compute_retains_limit_and_admission_precedence": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "PERF-HOLDS-TRANSFER-HINT": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "graphless_confirmation_facts_preserve_full_decoder": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "PERF-GAP-STATE-PREFIX": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "gap_beam_unique_and_duplicate_id_python_hashes": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "PERF-GAP-INCREMENTAL-KEY": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "gap_beam_unique_and_duplicate_id_python_hashes": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "PERF-HOLDS-TRANSFER-PARSE-LIMIT": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "graphless_confirmation_facts_preserve_full_decoder": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "quantity-perf-issue-barrier": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "quantity_whole_state_vectors": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "quantity-perf-ascii-hash": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "quantity_arbitration_vectors": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "quantity-perf-native-event-order": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "quantity_native_borrowed_event_order": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "quantity-perf-default-decision-state": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "quantity_arbitration_vectors": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "quantity-perf-default-decision-barrier": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "quantity_whole_state_vectors": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "quantity-perf-unused-alias-validation": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "quantity_unused_alias_validation": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "quantity-perf-observation-order": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "quantity_arbitration_vectors": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "FUSION-GRAPHLESS-SCOPE": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "fusion_graphless_rows_keep_physical_confirmation_scope": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "FUSION-GRAPHLESS-GRAPH": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "fusion_builder_field_choice": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          },
+          "fusion_graphless_rows_match_confirmation_detectors": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "projection-borrowed-confirmation": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "projection_borrowed_rows_match_materialized_rows": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "projection-borrowed-empty-row": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "projection_borrowed_rows_match_materialized_rows": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "hash-borrowed-key-order": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "borrowed_hash_preimages_match_python_values": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "hash-borrowed-ascii": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "borrowed_hash_preimages_match_python_values": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "hash-borrowed-float": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "borrowed_hash_preimages_match_python_values": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "hash-borrowed-uint": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "borrowed_hash_preimages_match_python_values": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
+      },
+      "transfer-memo-kind-isolation": {
+        "compilation_succeeded": true,
+        "runner": "cargo",
+        "tests": {
+          "embedded_json_readers_keep_conversion_and_mutation_isolation": {
+            "status": "failed",
+            "passed_tests": 0,
+            "failed_tests": 1
+          }
+        }
       }
     },
     "initial_touched_run": {
@@ -36634,18 +37141,18 @@
       {
         "batch": "mutations-6-8",
         "unmutated_named_filters": 17,
-        "new_kills": 294,
+        "new_kills": 293,
         "complete": true,
-        "earlier_fingerprint_bound_kills": 243,
+        "earlier_fingerprint_bound_kills": 242,
         "resumed_new_kills": 51
       },
       {
         "batch": "mutations-7-8",
-        "unmutated_named_filters": null,
-        "new_kills": null,
-        "complete": false,
-        "earlier_fingerprint_bound_kills": 249,
-        "resumed_new_kills": null
+        "unmutated_named_filters": 25,
+        "new_kills": 276,
+        "complete": true,
+        "earlier_fingerprint_bound_kills": 231,
+        "resumed_new_kills": 45
       }
     ],
     "runner_counts": {
@@ -36656,7 +37163,10 @@
       "recorded_kills_before_fix": 2025,
       "reason": "Wrapper lacked pytest outcome recording; interrupted before recording first Python recipe. Source and catalog fingerprints unchanged; resumed shard6 with Python compilation and positive pytest-failure counts.",
       "initial_unrecorded_recipe": "R2-review-live-refusal"
-    }
+    },
+    "survivors": [],
+    "build_errors": 0,
+    "runner_errors": 0
   },
   "source_hashes": {
     "crates/custody/src/components/commitments.rs": "da0a60512d2e2bd738c76beb7768d8320819d672d443f2de4040f02bf586dac9",
@@ -36693,7 +37203,7 @@
     },
     {
       "path": "target/custody-perf-components/continuation-gate-steps.json",
-      "sha256": "4012d1bf3c6c76ea3d150ce9d3258da3df0ee2b3b7f291149f26c552b4faa2bf"
+      "sha256": "e97e1a8f25fec925f36db28d78b28163204c801208d9baeb5ca68a756da1a704"
     },
     {
       "path": "target/custody-perf-components/generated.log",
@@ -36761,11 +37271,11 @@
     },
     {
       "path": "target/custody-perf-components/mutations-7-8.log",
-      "sha256": "98bb6a14e75a1c0d740cb0567679cdfea089eac39dd5551477670fc0182557bd"
+      "sha256": "ade085aa46971c92324be0920d51e54fb2a5c0a78dfd532f06fea99121dd9535"
     },
     {
       "path": "target/custody-perf-components/mutation-state-final.json",
-      "sha256": "060a882a67f1664e6de930ec71855c12bf5fc2f584461d9c3f54363111a883c8"
+      "sha256": "fbf70d988305b24033abd142594544a60d2d171b30577f1472b66eb3bb8c9918"
     },
     {
       "path": "target/custody-perf-components/mutation-state-before-python-audit-fix.json",
@@ -36821,7 +37331,7 @@
     },
     {
       "path": "target/custody-perf-components/mutation-command-timings.jsonl",
-      "sha256": "6a961cffea3ad1639d3ce81e66bbec57d1b5c2a5df013c7d254eff8c9d77f880"
+      "sha256": "80b48a6faa98e5526184eed259c68a00dbd3416be668677f7615425cd9b08c93"
     },
     {
       "path": "target/custody-perf-components/classify.log",
@@ -36872,6 +37382,10 @@
       "sha256": "3376534f8f566e064f1f7b79222ef738247d51214e8066db6447f5096b538369"
     },
     {
+      "path": "target/custody-perf-components/cleanup.json",
+      "sha256": "9b1951c02bb6ae06572040601567edfaf6c85c0febea6565f8eeffd7ec6b5a8b"
+    },
+    {
       "path": "target/custody-perf-components/post-gates.py",
       "sha256": "9d70e3bbb010835940e4e50b2d98095e6bd90c4802db60ec937295cee9e46fd3"
     },
@@ -36881,7 +37395,7 @@
     },
     {
       "path": "target/custody-perf-components/make-record.py",
-      "sha256": "e41516b71a5e044ace6baca16a90c660a6ea3d629b35a6d326185fc48592e9b9"
+      "sha256": "81863934746b14c526fe7f540a6d5d4a1039a521a29091a1e5fdee687fe139f5"
     },
     {
       "path": "target/custody-perf-components/mutation-core.py",
@@ -36917,8 +37431,22 @@
     }
   ],
   "remaining_work": [
-    "Complete 45 remaining whole-catalog recipes from the persisted checkpoint.",
     "Full typed component/enrichment inputs and outputs; no JSON inside the entire stage.",
     "Integrated whole-custody 10x and controlled idle-host non-regression acceptance."
-  ]
+  ],
+  "cleanup": {
+    "summarized_before_deletion": true,
+    "verified_recipes": 2352,
+    "deleted_trees": [
+      "target/custody-perf-components/mutation-build",
+      "target/custody-perf-components/mutation-source",
+      "target/custody-perf-components/mutation-scratch",
+      "target/custody-perf-components/scratch"
+    ],
+    "retained": "saved benchmark binaries/books, raw CPU pairs, corpus activity, small logs and resumable source/catalog-bound state",
+    "no_test_job_running": true,
+    "cargo_build_jobs": 6,
+    "uv_cache": "shared default",
+    "time": 1793565319.3104513
+  }
 }
