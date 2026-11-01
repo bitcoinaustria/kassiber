@@ -565,6 +565,50 @@ def test_offset_departure_selects_jurisdiction_civil_day(engine_book, departure,
 
 
 @pytest.mark.parametrize("country", ("at", "generic"))
+@pytest.mark.parametrize("format", ("pdf", "xlsx"))
+@pytest.mark.parametrize(("caller", "departure"), (
+    ("desktop", "2024-03-31T23:30:00Z"), ("desktop", "2024-03-31"), ("desktop", None),
+    ("ai", "2024-03-31T23:30:00Z"), ("ai", "2024-03-31"),
+))
+def test_managed_exit_tax_filename_uses_resolved_civil_day(
+    engine_book, tmp_path, monkeypatch, country, format, caller, departure,
+):
+    import re
+    from datetime import datetime, timezone
+    from pathlib import Path
+
+    from kassiber import daemon
+    from kassiber.core import exit_tax
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2024, 3, 31, 23, 30, tzinfo=timezone.utc).astimezone(tz)
+
+    monkeypatch.setattr(exit_tax, "datetime", Clock)
+    conn = engine_book(regime_rows(), country=country, pair=True)
+    args = {"departure_date": departure, "destination": "eu_eea"}
+    kind = f"ui.reports.export_exit_tax_{format}"
+    if caller == "ai":
+        kind, args = daemon._ai_report_export_target({
+            "report": "exit_tax", "format": format, **args,
+        })
+    payload = daemon._ui_report_export_payload_from_conn(conn, str(tmp_path), kind, args)
+    day = "2024-04-01" if country == "at" and departure != "2024-03-31" else "2024-03-31"
+    assert payload["departure_date"] == day
+    assert re.fullmatch(rf"kassiber-exit-tax-{day}-\d{{8}}-\d{{6}}\.{format}", payload["filename"])
+    assert not re.search(r'[<>:"/\\|?*\x00-\x1f]', payload["filename"])
+    assert Path(payload["file"]).name == payload["filename"]
+    assert Path(payload["file"]).is_file()
+    if format == "xlsx":
+        workbook = openpyxl.load_workbook(payload["file"])
+        try:
+            assert day in workbook.properties.title
+        finally:
+            workbook.close()
+
+
+@pytest.mark.parametrize("country", ("at", "generic"))
 @pytest.mark.parametrize("departure", (
     "2024-03-31T23:30:00", "2024-10-27 02:30:00", "2025-01-01T00:30:00.123456",
 ))

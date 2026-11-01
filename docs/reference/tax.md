@@ -371,6 +371,8 @@ Timed departures require an explicit offset (`Z` or, for example, `+01:00`).
 A date-time without an offset is rejected with a typed `validation` error;
 use a date alone to name a civil day without specifying an instant.
 PDF and XLSX drafts stamp `departureTimezone` as well as the departure date.
+Managed desktop and AI export filenames use that resolved civil date
+(`YYYY-MM-DD`), so timed inputs cannot put offset punctuation in filenames.
 The desktop takes its default departure date from the core and displays that
 timezone; clearing the date asks the core for today's civil day again.
 This replaces the earlier open timezone question with the owner's decision.

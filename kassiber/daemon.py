@@ -4158,8 +4158,15 @@ def _ui_report_export_payload_from_conn(
         return payload
 
     if kind in {"ui.reports.export_exit_tax_pdf", "ui.reports.export_exit_tax_xlsx"}:
-        departure_date = args.get("departure_date")
         destination = args.get("destination")
+        report = core_reports.report_exit_tax(
+            conn, None, None, hooks,
+            departure_date=args.get("departure_date"),
+            destination=destination,
+        )
+        # Use the core's civil day for both the portable name and the export,
+        # including when today's day changes while the request is running.
+        departure_date = report["departureDate"]
         suffix = ".pdf" if kind == "ui.reports.export_exit_tax_pdf" else ".xlsx"
         exporter = (
             core_reports.export_exit_tax_pdf_report
@@ -4168,7 +4175,7 @@ def _ui_report_export_payload_from_conn(
         )
         path = _managed_report_export_path(
             data_root,
-            f"kassiber-exit-tax-{departure_date or 'today'}",
+            f"kassiber-exit-tax-{departure_date}",
             suffix,
         )
         payload = dict(
