@@ -52,6 +52,13 @@ def _report(conn):
     )
 
 
+@pytest.mark.parametrize("country", ("at", "generic"))
+@pytest.mark.parametrize("departure", ("20240331", "2024-03-31Z"))
+def test_malformed_date_only_departure_is_invalid_not_missing_an_offset(country, departure):
+    with pytest.raises(AppError, match="^Invalid exit-tax departure date$"):
+        exit_tax._resolve_departure(departure, country)
+
+
 @pytest.mark.parametrize("country", ["at", "generic"])
 def test_report_names_the_books_selected_method(country):
     with _conn_with_rate(60000) as conn:
