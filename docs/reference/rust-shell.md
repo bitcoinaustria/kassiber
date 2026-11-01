@@ -14416,3 +14416,49 @@ analytics composition, process/book-bound handles, the Mirror report projection
 and CLI/daemon acceptance/registration follow those algorithms and the parallel
 SQL/durable-index work. AI projections remain Python. There are no dependency,
 product schema or external-I/O changes in this boundary.
+
+## Mirror attribution and dataset algorithms (R5, partial)
+
+`analysis_index::analytics::analyze_attribution` ports direct sourced claims and
+bounded ancestor/descendant evidence paths. Explicit private custody relations
+can support a listed path; stale/conflicting relations cannot. Findings remain
+claims and topology, never payment, ownership, taint or accounting authority.
+Root selection, graph-edge depth, the 20,000-work limit and result stopping
+behavior match Python, including its end-of-target budget checks.
+
+`analysis_index::datasets` canonicalizes exact domain-qualified transaction,
+outpoint, script and validated Bitcoin/Liquid address subjects. Its
+`match_captured` kernel consumes caller-supplied, profile-bound normalized pack
+metadata, candidate claim rows and an explicit observation time. It retains
+source disagreements, half-open validity windows, per-visibility lookahead and
+independent public/private limits, exact claim order and UTF-8 metadata state
+hashes. Malformed captured source-record mappings fail closed. It opens no SQL,
+file, provider or network route. This is the in-memory matching kernel, not a
+port of dataset import/revoke/query services or the bounded SQL candidate read
+planner; those callers must supply complete candidate lookahead from their
+snapshot. It makes no full-pack memory or durable-store acceptance claim.
+
+The oracle adds 156 attribution cases and 124 dataset canonicalization/matching
+cases. There are now 404 analytical vectors plus 216 traversal vectors and 124
+dataset vectors: 744 new unchanged-Python cases. The native harnesses compare
+literal canonical bytes with strict no-consent observation and offline mode
+both off and on, with zero Python fallback. Four recorded hash seeds (0, 1, 7,
+42) reproduce the analytical and dataset corpora without variants. No new Python
+reference bug was found; the earlier occurrence-order reproduction is retained.
+
+All 11 new attribution/dataset mutations are killed by the named attribution,
+matching and malformed-source tests, whose unmutated baselines pass. Together
+with traversal, clustering and patterns, this branch has 46 killed recipes.
+Each boundary has a separate local commit and retained mutation summary/logs
+under `target/r5-analysis/`. Earlier fixture/recipe failures are retained there
+alongside their corrected verification runs. Mutation and verification build
+trees are removed after summaries are captured; all scratch/data roots remain
+inside this worktree and account `HOME` is unchanged.
+
+This is a clean partial handoff after requested boundary 4. Conditional entropy
+and full `analyze_index` composition remain unported. Process/book-bound handles,
+Mirror report composition, CLI/daemon acceptance and registration follow that
+work and the parallel SQL/durable-index branch. Product Mirror served-by counts
+remain zero and unsupported entry points continue to fail closed. AI projections
+remain Python. No dependency, lockfile, product schema or egress permission is
+changed. The full workspace runtime/frontend/platform gates are not claimed.
