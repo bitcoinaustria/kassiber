@@ -568,6 +568,10 @@ its reviewed `Fiat Value` in the book currency. Crypto-to-crypto rows (Bitcoin
 on both sides) are rejected. Amounts are in BTC (e.g. `0.05000000`) unless the asset is `SATS`,
 in which case whole satoshis are converted. Amount suffixes accept `L-BTC` as
 well as `LBTC` and case-insensitive unit spellings such as `sats`.
+An amount's unit must agree with its asset column: `1000 sats` with asset
+`BTC`, or `0.5 L-BTC` with asset `BTC`, is rejected. Use asset `SATS` for
+satoshi amounts; the importer converts them exactly to BTC (1 sat = 1,000 msat).
+The same check applies to sent amounts and fees, including a fee's default unit.
 Numbers may use either a dot or a
 comma decimal separator (`0,05` and `3.000,00` are read the same as `0.05` and
 `3000.00`), so a sheet exported from a German/Austrian-locale spreadsheet

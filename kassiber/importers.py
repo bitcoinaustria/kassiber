@@ -3256,7 +3256,7 @@ def _is_native_ledger(cells):
     )
 
 
-def _generic_ledger_decimal_cell(value, field, row_label):
+def _generic_ledger_decimal_cell(value, field, row_label, *, asset=None):
     """Parse a hand-typed number, accepting both ``1,234.56`` and European
     ``1.234,56`` / ``0,05`` decimal-comma formats. Raises a row-numbered
     ``validation`` error rather than a context-free one on non-numeric input."""
@@ -3268,9 +3268,23 @@ def _generic_ledger_decimal_cell(value, field, row_label):
     negative = text.startswith("(") and text.endswith(")")
     if negative:
         text = text[1:-1].strip()
+    def strip_unit(match):
+        unit = {"$": "USD", "€": "EUR", "£": "GBP"}.get(match.group().upper(), match.group().upper())
+        def canonical_unit(code):
+            if code in _GENERIC_LEDGER_SATS_ASSETS:
+                return "SATS"
+            return canonical_bitcoin_asset(code) or code
+        if asset and canonical_unit(unit) != canonical_unit(asset):
+            raise AppError(
+                f"{row_label}: {field} unit {unit} does not match asset {asset}",
+                code="validation",
+                hint="Use the amount unit named by the asset column; SATS and BTC have different units.",
+            )
+        return ""
+
     text = re.sub(
         "|".join(re.escape(symbol) for symbol in _GENERIC_LEDGER_CURRENCY_SYMBOLS),
-        "", text, flags=re.IGNORECASE,
+        strip_unit, text, flags=re.IGNORECASE,
     )
     text = text.replace("\xa0", "").replace(" ", "").strip()
     if not text:
@@ -3381,15 +3395,18 @@ def normalize_generic_ledger_record(record, index=0):
         _get_cell(sanitized, "Sent Asset", "Sent Cur.", "Sell Asset", "Sell Cur.")
     )
     received_amount = _generic_ledger_decimal_cell(
-        _get_cell(sanitized, "Received Amount", "Buy Amount"), "Received Amount", row_label
+        _get_cell(sanitized, "Received Amount", "Buy Amount"), "Received Amount", row_label,
+        asset=received_asset,
     )
     sent_amount = _generic_ledger_decimal_cell(
-        _get_cell(sanitized, "Sent Amount", "Sell Amount"), "Sent Amount", row_label
-    )
-    fee_amount = _generic_ledger_decimal_cell(
-        _get_cell(sanitized, "Fee Amount", "Fee"), "Fee Amount", row_label
+        _get_cell(sanitized, "Sent Amount", "Sell Amount"), "Sent Amount", row_label,
+        asset=sent_asset,
     )
     fee_asset = _generic_ledger_asset(_get_cell(sanitized, "Fee Asset", "Fee Cur."))
+    fee_amount = _generic_ledger_decimal_cell(
+        _get_cell(sanitized, "Fee Amount", "Fee"), "Fee Amount", row_label,
+        asset=fee_asset or (received_asset if _generic_ledger_is_crypto(received_asset) else sent_asset),
+    )
     explicit_fiat = _generic_ledger_decimal_cell(
         _get_cell(
             sanitized,
