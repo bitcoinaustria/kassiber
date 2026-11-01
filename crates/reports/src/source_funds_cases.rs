@@ -85,3 +85,131 @@ pub fn save_snapshot(
         ("created_at", s(created_at)),
     ]))
 }
+
+pub fn handles(command: &str, args: &Value) -> bool {
+    command == "ui.source_funds.cases.save"
+        || (command == "reports.source-funds" && truthy(value(args, "save_case")))
+}
+
+pub fn execute(
+    conn: &Connection,
+    command: &str,
+    args: &Value,
+    sources: &dyn Sources,
+) -> Result<Value> {
+    if command.starts_with("ui.") {
+        if !matches!(args, Value::Null | Value::Dict(_)) {
+            return Err(AppError::new("validation", "daemon args must be an object")
+                .with_details(dict([("type", s(kassiber_envelope::type_name(args)))])));
+        }
+        if !matches!(value(args,"target_transaction"),Value::Str(raw) if raw.as_str().is_some_and(|raw|!kassiber_pytext::strip(raw).is_empty()))
+        {
+            return Err(AppError::new(
+                "validation",
+                "ui.source_funds.cases.save requires args.target_transaction",
+            ));
+        }
+        if !matches!(value(args, "case_label"), Value::Null | Value::Str(_)) {
+            return Err(AppError::new(
+                "validation",
+                "ui.source_funds.cases.save case_label must be a string",
+            ));
+        }
+        if get(args, "expected_review_fingerprint").is_some() {
+            let (_, profile) = kassiber_setup::references::scope(conn, &dict::<&str>([]))?;
+            return super::source_funds_review::save_reviewed_case(
+                conn,
+                &profile,
+                args,
+                label(args),
+                sources,
+            );
+        }
+    }
+    crate::export::admitted(conn, || save_unreviewed(conn, command, args, sources))
+}
+
+fn label(args: &Value) -> Option<&str> {
+    match value(args, "case_label") {
+        Value::Str(raw) => raw.as_str(),
+        _ => None,
+    }
+}
+
+fn save_unreviewed(
+    conn: &Connection,
+    command: &str,
+    args: &Value,
+    sources: &dyn Sources,
+) -> Result<Value> {
+    let (workspace, profile, recipe) = super::source_funds_report::prepare(conn, command, args)?;
+    let report = super::source_funds_report::build(conn, &workspace, &profile, &recipe, None)?;
+    let report = save_report(conn, &workspace, &profile, report, label(args), sources)?;
+    super::source_funds_report::render(command, args, report)
+}
+
+pub(super) fn save_report(
+    conn: &Connection,
+    workspace: &Value,
+    profile: &Value,
+    mut report: Value,
+    label: Option<&str>,
+    sources: &dyn Sources,
+) -> Result<Value> {
+    let target_id = text(value(&report, "target"), "transaction_id");
+    let target = super::source_funds_report::transaction(conn, &text(profile, "id"), &target_id)?
+        .ok_or_else(|| AppError::new("internal_error", "transaction wallet missing"))?;
+    let external = if truthy(value(&target, "external_id")) {
+        text(&target, "external_id")
+    } else {
+        String::new()
+    };
+    let recipient = value(&report, "recipient");
+    let optional = |key| {
+        if matches!(value(recipient, key), Value::Null) {
+            None
+        } else {
+            Some(text(recipient, key))
+        }
+    };
+    let recipient_id = optional("id");
+    let recipient_label = optional("label");
+    let recipient_kind = optional("kind");
+    let recipient_mode = optional("default_reveal_mode");
+    let target_amount = i64::try_from(super::source_funds_projection::integer(value(
+        value(&report, "allocations"),
+        "target_amount_msat",
+    ))?)
+    .map_err(|_| {
+        AppError::new(
+            "internal_error",
+            "Python int too large to convert to SQLite INTEGER",
+        )
+    })?;
+    let receipt = save_snapshot(
+        conn,
+        &FrozenCase {
+            workspace_id: &text(workspace, "id"),
+            profile_id: &text(profile, "id"),
+            target_transaction_id: &target_id,
+            target_amount_msat: target_amount,
+            asset: &text(value(&report, "allocations"), "asset"),
+            reveal_mode: &text(&report, "reveal_mode"),
+            status: if truthy(value(value(&report, "explain_gates"), "exportable")) {
+                "exportable"
+            } else {
+                "blocked"
+            },
+            snapshot: &report,
+            label,
+            target_external_id: Some(&external),
+            recipient_id: recipient_id.as_deref(),
+            recipient_label_snapshot: recipient_label.as_deref(),
+            recipient_kind_snapshot: recipient_kind.as_deref(),
+            recipient_reveal_mode_snapshot: recipient_mode.as_deref(),
+        },
+        sources,
+    )?;
+    replace(&mut report, "case", receipt);
+    Ok(report)
+}

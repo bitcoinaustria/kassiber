@@ -162,8 +162,12 @@ fn source_funds_report_binds_inputs_to_book_and_refuses_case_mutation() {
         error.message,
         "Source-funds report inputs belong to a different book"
     );
-    let error =
-        kassiber_reports::execute(left.connection(), "reports.source-funds", &args).unwrap_err();
+    let error = kassiber_reports::source_funds_report::execute(
+        left.connection(),
+        "reports.source-funds",
+        &args,
+    )
+    .unwrap_err();
     assert_eq!(error.code, "not_implemented");
     assert_eq!(dump(left.connection()), before);
     assert_eq!(dump(right.connection()), right_before);

@@ -12789,3 +12789,86 @@ for offline build isolation; no dependency or lockfile changes result.
 Case saving, persisted suggest/assemble and native AI consent/once-only
 admission remain the next mutation boundaries. No AI execution loop is present
 in the native shell, so Python AI results cannot establish native acceptance.
+
+## Source-funds case-save checkpoint (R5 partial)
+
+The next `t3code/r5-sof-mutations-4` boundary composes the landed native report
+producer with the frozen case/snapshot writer. `reports source-funds --save-case`
+and `ui.source_funds.cases.save` now run natively. They retain complete report
+and SVG bytes, exact target msat, frozen recipient fields and the original
+external reference even when the displayed report hides it. Both rows bind the
+same canonical snapshot hash; the returned case receipt is appended only after
+the report has been frozen. Blocked reports remain saved as blocked cases.
+Provenance never establishes ownership, carrying basis or tax facts.
+
+The save dispatch precedes the report read savepoint. Ordinary saves acquire
+writer admission before scope resolution and report construction, then render
+the response before commit. Reviewed saves require an idle connection, acquire
+`BEGIN IMMEDIATE`, recompute the inspection fingerprint and reject stale or
+truncated scope before composing the frozen report with SVGs. The fingerprint
+binds the canonical recipe, report, reachable authored records, attachment
+metadata/hashes and journal input version; derived bulk eligibility remains
+outside it. The new native `ui.source_funds.review_context` uses the same
+producer and deterministic flow ordering as saving. The read-only producer
+still explicitly refuses direct saving without writer admission. Caller-owned
+transactions remain untouched when reviewed admission refuses them.
+
+The frozen oracle has 83 cases. The native corpus pins complete helper envelope
+encodings, full reports, SVGs, hashes and all 112 tables. Live differential
+helpers replay every case on SQLite and SQLCipher, preserving managed evidence
+bytes and SHA-256. The evidence consists of 144 passing comparisons for the
+first 72 cases and 22 passing comparisons for the appended daemon-inspection
+cases. An initial process assertion misclassified the existing other-book case
+as a generated identity; correcting the test identity allowlist and rerunning
+all four process scenarios passes. This test failure is not a product or
+Python-reference exception.
+
+Fresh whole-process verification passes twelve native CLI calls and 26 native
+daemon sessions: twenty save requests and six inspection requests, plus their
+shutdowns. Literal response bytes and all 112 tables match Python after only
+the declared generated case/snapshot identity mappings. Snapshot payloads
+exclude the receipt, retain diagrams and independently reproduce their stored
+SHA-256. Managed evidence bytes/hashes remain unchanged; no evidence file is
+opened by the producer. Every in-scope call routes natively with zero fallbacks.
+
+Second-insert ABORT/ROLLBACK and deferred-constraint refusals pin late rollback.
+Separate SQLite/SQLCipher witnesses block competing evidence writes during
+freezing, refuse commits while a peer reader holds a lock, and compare every
+table after rollback. Failed fingerprint, truncated-scope and active-transaction
+admission create no case or snapshot. Native AI execution remains unaccepted.
+
+All 26 new mutation entries pass six unmutated baselines and are killed without
+survivors, build errors or empty test selections. All 1,002 catalog entries
+apply; inherited kills retain their previous evidence.
+
+| Named test | New mutations killed |
+| --- | ---: |
+| `source_funds_saves_pin_reports_diagrams_fingerprints_receipts_and_all_112_tables` | 20 |
+| `source_funds_saves_hold_writer_admission_through_report_freezing_and_late_rollback` | 2 |
+| `source_funds_reviewed_saves_refuse_outer_transactions_and_keep_their_work` | 1 |
+| `source_funds_report_cli_forwards_recipe_and_keeps_mutation_boundary` | 1 |
+| `source_funds_case_save_daemon_preserves_recipe_fingerprint_and_registration` | 1 |
+| `source_funds_stored_daemon_preserves_arguments_and_registers_only_lists` | 1 |
+
+Logs, routing records, managed-file digests and mutation results are summarized
+in `target/r5-sof-mutations-4/save-verification-summary.json` and adjacent logs.
+All disposable data, preferences, owner roots, scratch and Cargo outputs remain
+under this worktree's `target/`; account `HOME` stays unchanged. Cargo uses eight
+jobs, verification runs serially, and owned build/data trees are deleted after
+summarizing. There are no new dependencies, schema changes, lockfile changes or
+Python product changes. This is Linux verification without full workspace,
+frontend, live-regtest or platform/package acceptance.
+
+Final verification passes all 28 source-funds Rust tests and 45 CLI/daemon
+library tests. Rust 1.99.1 locked/offline workspace formatting and
+reports/CLI/daemon all-target clippy with warnings denied pass. The 83-case
+generator verifies unchanged. The required classifier update records 5,729
+definitions and assigns the new oracle to the serial daemon lane. Required
+final CI preflight passes all 57 tests.
+
+There are now seventeen native source-funds daemon kinds. Persisted
+suggest/assemble, source AI consent/once-only admission and case-saving AI
+integration remain pending. The native shell has no AI execution loop; Python
+AI execution and isolated helpers do not establish native AI acceptance. CLI
+review-context, request-input and coverage remain with the read port. PDF and
+PDF-containing bundles remain Python by the owner's decision.

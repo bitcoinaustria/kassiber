@@ -107,6 +107,7 @@ _DAEMON_SERIAL_MODULES = frozenset(
         "test_rust_source_funds_links",
         "test_rust_source_funds_diagnostics",
         "test_rust_source_funds_batch",
+        "test_rust_source_funds_saves",
         "test_rust_source_funds_report",
         "test_rust_shell_parity",
         "test_rust_wallet_discovery",

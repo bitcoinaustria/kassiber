@@ -718,7 +718,7 @@ mod tests {
             },
         )
         .unwrap();
-        assert!(!crate::run::implemented("reports.source-funds", &saving));
+        assert!(crate::run::implemented("reports.source-funds", &saving));
     }
     #[test]
     fn cross_check_cli_forwards_filters_files_and_native_registration() {

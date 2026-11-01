@@ -150,15 +150,23 @@ recipient creation, updates and soft deletion, are
 available through the CLI and daemon. They retain the provenance boundary and
 roll back failed writes; native AI consent/once-only
 admission remains pending. The native report producer also
-serves `reports source-funds` without `--save-case` and
-`ui.source_funds.preview`, including disclosure, current stored custody and
+serves `reports source-funds` and `ui.source_funds.preview`, including
+disclosure, current stored custody and
 structural-lineage checks, recipients, explorer references, findings, text and
 SVG diagrams. These reads hold a database snapshot and open no evidence file
 or network connection. Native tied-flow order is deterministic; its complete
 bytes match a measured Python hash-seed variant. The known Python fee-attribution
 bug is retained for parity; see the [producer checkpoint](rust-shell.md#source-funds-report-producer-checkpoint-r5-partial).
-Review/input handoffs, coverage, suggest/assemble dry runs and case saving
-remain pending. Native batch review revalidates the target's
+Case saving through `reports source-funds --save-case` and
+`ui.source_funds.cases.save` freezes the complete report, SVG, recipient fields
+and target external reference. Report generation and both snapshot rows share
+writer admission. The native daemon
+`ui.source_funds.review_context` supplies the fingerprint used by reviewed saves;
+those saves reject stale or truncated inspections under the same write lock.
+CLI review-context, input handoffs, coverage and suggest/assemble remain pending.
+Native AI execution, consent and once-only admission remain pending too; see the
+[save checkpoint](rust-shell.md#source-funds-case-save-checkpoint-r5-partial).
+Native batch review revalidates the target's
 suggested links against current stored custody or authoritative, wallet-scoped
 structural lineage under the same write lock as approval. An explicit empty
 selection approves nothing; CLI dry runs return the proposed result and roll

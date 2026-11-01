@@ -47,6 +47,7 @@ pub mod source_funds_projection;
 mod source_funds_reads;
 pub mod source_funds_recipients;
 pub mod source_funds_report;
+pub mod source_funds_review;
 pub mod source_funds_svg;
 mod source_funds_text;
 pub mod source_funds_traversal;
@@ -135,6 +136,9 @@ pub fn execute_with_sources(
     args: &Value,
     sources: &dyn kassiber_setup::Sources,
 ) -> Result<Value> {
+    if source_funds_cases::handles(command, args) {
+        return source_funds_cases::execute(conn, command, args, sources);
+    }
     if source_funds_batch::handles(command) {
         return source_funds_batch::execute(conn, command, args, sources);
     }
@@ -154,6 +158,9 @@ pub fn execute_with_sources(
     conn.execute_batch("SAVEPOINT report_read")
         .map_err(sql_error)?;
     let result = (|| {
+        if command == "ui.source_funds.review_context" {
+            return source_funds_review::execute(conn, args);
+        }
         if matches!(command, "reports.source-funds" | "ui.source_funds.preview") {
             return source_funds_report::execute(conn, command, args);
         }

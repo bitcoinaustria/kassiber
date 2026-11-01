@@ -26,7 +26,16 @@ impl<'a> Fixed<'a> {
 }
 impl Sources for Fixed<'_> {
     fn uuid(&self, _: &Connection) -> Result<String, AppError> {
+        let index = self
+            .calls
+            .borrow()
+            .iter()
+            .filter(|v| **v == s("uuid"))
+            .count();
         self.calls.borrow_mut().push(s("uuid"));
+        if let Value::List(ids) = value(self.case, "ids") {
+            return Ok(kassiber_envelope::py_str(&ids[index]));
+        }
         Ok(kassiber_envelope::get(self.case, "id")
             .map(kassiber_envelope::py_str)
             .unwrap_or_else(|| "new-source".into()))
@@ -40,7 +49,19 @@ impl Sources for Fixed<'_> {
 pub fn outcome(conn: &Connection, case: &Value) -> Value {
     let fixed = Fixed::new(case);
     let command = text(case, "command");
-    let result = kassiber_reports::execute_with_sources(conn, command, value(case, "args"), &fixed);
+    let args = value(case, "args");
+    let result = if command == "helper.review_context" {
+        kassiber_setup::references::scope(conn, &dict::<&str>([])).and_then(|(_, profile)| {
+            kassiber_reports::source_funds_review::review_context(
+                conn,
+                &profile,
+                text(args, "target_transaction"),
+                value(args, "recipe"),
+            )
+        })
+    } else {
+        kassiber_reports::execute_with_sources(conn, command, args, &fixed)
+    };
     let (mut result, envelope) = match result {
         Ok(data) => (
             dict([("ok", data.clone())]),

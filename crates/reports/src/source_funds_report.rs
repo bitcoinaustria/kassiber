@@ -933,9 +933,19 @@ pub fn execute(conn: &Connection, command: &str, args: &Value) -> Result<Value> 
     if command == "reports.source-funds" && truthy(value(args, "save_case")) {
         return Err(AppError::new(
             "not_implemented",
-            "Source-funds case saving remains in Python",
+            "Source-funds case saving requires writer admission",
         ));
     }
+    let (workspace, profile, recipe) = prepare(conn, command, args)?;
+    let report = build(conn, &workspace, &profile, &recipe, None)?;
+    render(command, args, report)
+}
+
+pub(super) fn prepare(
+    conn: &Connection,
+    command: &str,
+    args: &Value,
+) -> Result<(Value, Value, Value)> {
     let desktop = command.starts_with("ui.");
     let empty = dict::<&str>([]);
     let scope = if desktop { &empty } else { args };
@@ -964,7 +974,7 @@ pub fn execute(conn: &Connection, command: &str, args: &Value) -> Result<Value> 
         {
             return Err(AppError::new(
                 "validation",
-                "ui.source_funds.preview requires args.target_transaction",
+                format!("{command} requires args.target_transaction"),
             ));
         }
         replace(
@@ -1027,8 +1037,11 @@ pub fn execute(conn: &Connection, command: &str, args: &Value) -> Result<Value> 
     }
     replace(&mut recipe, "include_diagrams", Value::Bool(true));
     let (workspace, profile) = kassiber_setup::references::scope(conn, scope)?;
-    let report = build(conn, &workspace, &profile, &recipe, None)?;
-    if !desktop && matches!(text(args, "format").as_str(), "table" | "plain") {
+    Ok((workspace, profile, recipe))
+}
+
+pub(super) fn render(command: &str, args: &Value, report: Value) -> Result<Value> {
+    if !command.starts_with("ui.") && matches!(text(args, "format").as_str(), "table" | "plain") {
         return super::source_funds_text::render(&report).map(s);
     }
     Ok(report)

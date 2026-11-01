@@ -23,6 +23,8 @@ pub const KINDS: &[&str] = &[
     "ui.reports.export_year_handoff",
     "ui.reports.export_cross_check",
     "ui.source_funds.preview",
+    "ui.source_funds.review_context",
+    "ui.source_funds.cases.save",
     "ui.source_funds.cases.list",
     "ui.source_funds.sources.list",
     "ui.source_funds.sources.create",
@@ -510,6 +512,7 @@ mod tests {
             "ui.source_funds.recipients.list",
             "ui.source_funds.evidence.list",
             "ui.source_funds.preview",
+            "ui.source_funds.review_context",
         ] {
             assert!(KINDS.contains(&kind));
             assert_eq!(cross_check_args(Some(&args)).unwrap(), args);
@@ -518,12 +521,10 @@ mod tests {
             assert_eq!(get(&actual, "args"), Some(&args));
         }
         for kind in [
-            "ui.source_funds.review_context",
             "ui.source_funds.request_input",
             "ui.source_funds.coverage",
             "ui.source_funds.export_pdf",
             "ui.source_funds.export_bundle",
-            "ui.source_funds.cases.save",
             "ui.source_funds.suggest",
             "ui.source_funds.assemble",
         ] {
@@ -537,6 +538,43 @@ mod tests {
         let error = cross_check_args(Some(&Value::Bool(false))).unwrap_err();
         assert_eq!(error.message, "daemon args must be an object");
         assert_eq!(error.details, Some(dict([("type", s("bool"))])));
+    }
+
+    #[test]
+    fn source_funds_case_save_daemon_preserves_recipe_fingerprint_and_registration() {
+        let args = dict([
+            ("target_transaction", s(" in ")),
+            ("expected_review_fingerprint", s("0".repeat(64))),
+            ("case_label", s("Reviewed Ω")),
+            ("recipient", s("r-a")),
+            ("target_amount", s("0.1")),
+            (
+                "report_options",
+                dict([("mask_recipient", Value::Bool(true))]),
+            ),
+        ]);
+        assert!(KINDS.contains(&"ui.source_funds.cases.save"));
+        let actual = execute(
+            &mut SourceFundsCapture,
+            "ui.source_funds.cases.save",
+            Some(&args),
+        )
+        .unwrap();
+        assert_eq!(
+            get(&actual, "command"),
+            Some(&s("ui.source_funds.cases.save"))
+        );
+        assert_eq!(get(&actual, "args"), Some(&args));
+        assert_eq!(
+            execute(
+                &mut SourceFundsCapture,
+                "ui.source_funds.cases.save",
+                Some(&Value::Bool(false))
+            )
+            .unwrap_err()
+            .code,
+            "validation"
+        );
     }
 
     #[test]

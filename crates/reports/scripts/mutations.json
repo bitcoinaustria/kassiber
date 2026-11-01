@@ -11259,5 +11259,265 @@
       "source_funds_report_binds_inputs_to_book_and_refuses_case_mutation"
     ],
     "rule": "Report authority and input binding fail closed."
+  },
+  {
+    "id": "sof-save-dispatch",
+    "file": "crates/reports/src/lib.rs",
+    "find": "if source_funds_cases::handles(command, args) {",
+    "replace": "if false && source_funds_cases::handles(command, args) {",
+    "expect_failing": [
+      "source_funds_saves_pin_reports_diagrams_fingerprints_receipts_and_all_112_tables"
+    ],
+    "rule": "Preserve frozen source-funds report bytes and writer-bound review admission."
+  },
+  {
+    "id": "sof-save-writer",
+    "file": "crates/reports/src/source_funds_cases.rs",
+    "find": "crate::export::admitted(conn, || save_unreviewed(conn, command, args, sources))",
+    "replace": "save_unreviewed(conn, command, args, sources)",
+    "expect_failing": [
+      "source_funds_saves_hold_writer_admission_through_report_freezing_and_late_rollback"
+    ],
+    "rule": "Preserve frozen source-funds report bytes and writer-bound review admission."
+  },
+  {
+    "id": "sof-save-reviewed-route",
+    "file": "crates/reports/src/source_funds_cases.rs",
+    "find": "if get(args, \"expected_review_fingerprint\").is_some() {",
+    "replace": "if false && get(args, \"expected_review_fingerprint\").is_some() {",
+    "expect_failing": [
+      "source_funds_saves_pin_reports_diagrams_fingerprints_receipts_and_all_112_tables"
+    ],
+    "rule": "Preserve frozen source-funds report bytes and writer-bound review admission."
+  },
+  {
+    "id": "sof-save-label-type",
+    "file": "crates/reports/src/source_funds_cases.rs",
+    "find": "if !matches!(value(args, \"case_label\"), Value::Null | Value::Str(_)) {",
+    "replace": "if false && !matches!(value(args, \"case_label\"), Value::Null | Value::Str(_)) {",
+    "expect_failing": [
+      "source_funds_saves_pin_reports_diagrams_fingerprints_receipts_and_all_112_tables"
+    ],
+    "rule": "Preserve frozen source-funds report bytes and writer-bound review admission."
+  },
+  {
+    "id": "sof-save-external",
+    "file": "crates/reports/src/source_funds_cases.rs",
+    "find": "target_external_id: Some(&external),",
+    "replace": "target_external_id: Some(\"\"),",
+    "expect_failing": [
+      "source_funds_saves_pin_reports_diagrams_fingerprints_receipts_and_all_112_tables"
+    ],
+    "rule": "Preserve frozen source-funds report bytes and writer-bound review admission."
+  },
+  {
+    "id": "sof-save-recipient-label",
+    "file": "crates/reports/src/source_funds_cases.rs",
+    "find": "recipient_label_snapshot: recipient_label.as_deref(),",
+    "replace": "recipient_label_snapshot: None,",
+    "expect_failing": [
+      "source_funds_saves_pin_reports_diagrams_fingerprints_receipts_and_all_112_tables"
+    ],
+    "rule": "Preserve frozen source-funds report bytes and writer-bound review admission."
+  },
+  {
+    "id": "sof-save-blocked-status",
+    "file": "crates/reports/src/source_funds_cases.rs",
+    "find": "status: if truthy(value(value(&report, \"explain_gates\"), \"exportable\")) {",
+    "replace": "status: if true {",
+    "expect_failing": [
+      "source_funds_saves_pin_reports_diagrams_fingerprints_receipts_and_all_112_tables"
+    ],
+    "rule": "Preserve frozen source-funds report bytes and writer-bound review admission."
+  },
+  {
+    "id": "sof-save-receipt",
+    "file": "crates/reports/src/source_funds_cases.rs",
+    "find": "replace(&mut report, \"case\", receipt);",
+    "replace": "let _ = receipt;",
+    "expect_failing": [
+      "source_funds_saves_pin_reports_diagrams_fingerprints_receipts_and_all_112_tables"
+    ],
+    "rule": "Preserve frozen source-funds report bytes and writer-bound review admission."
+  },
+  {
+    "id": "sof-save-inspection-recipe-keys",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "if fields.iter().any(|(key,_)| !matches!(key,kassiber_pyjson::Key::Str(raw) if raw.as_str().is_some_and(|s|RECIPE_KEYS.contains(&s))))",
+    "replace": "if false && fields.iter().any(|(key,_)| !matches!(key,kassiber_pyjson::Key::Str(raw) if raw.as_str().is_some_and(|s|RECIPE_KEYS.contains(&s))))",
+    "expect_failing": [
+      "source_funds_saves_pin_reports_diagrams_fingerprints_receipts_and_all_112_tables"
+    ],
+    "rule": "Preserve frozen source-funds report bytes and writer-bound review admission."
+  },
+  {
+    "id": "sof-save-inspection-text",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "if !matches!(value(recipe, key), Value::Null | Value::Str(_)) {",
+    "replace": "if false && !matches!(value(recipe, key), Value::Null | Value::Str(_)) {",
+    "expect_failing": [
+      "source_funds_saves_pin_reports_diagrams_fingerprints_receipts_and_all_112_tables"
+    ],
+    "rule": "Preserve frozen source-funds report bytes and writer-bound review admission."
+  },
+  {
+    "id": "sof-save-inspection-depth",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "if get(recipe, \"max_depth\")",
+    "replace": "if false && get(recipe, \"max_depth\")",
+    "expect_failing": [
+      "source_funds_saves_pin_reports_diagrams_fingerprints_receipts_and_all_112_tables"
+    ],
+    "rule": "Preserve frozen source-funds report bytes and writer-bound review admission."
+  },
+  {
+    "id": "sof-save-inspection-options",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "if get(recipe, \"report_options\").is_some_and(|v| !matches!(v, Value::Dict(_))) {",
+    "replace": "if false && get(recipe, \"report_options\").is_some_and(|v| !matches!(v, Value::Dict(_))) {",
+    "expect_failing": [
+      "source_funds_saves_pin_reports_diagrams_fingerprints_receipts_and_all_112_tables"
+    ],
+    "rule": "Preserve frozen source-funds report bytes and writer-bound review admission."
+  },
+  {
+    "id": "sof-save-inspection-size",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "if encoded.len() > 16_384 {",
+    "replace": "if false && encoded.len() > 16_384 {",
+    "expect_failing": [
+      "source_funds_saves_pin_reports_diagrams_fingerprints_receipts_and_all_112_tables"
+    ],
+    "rule": "Preserve frozen source-funds report bytes and writer-bound review admission."
+  },
+  {
+    "id": "sof-save-fingerprint-canonical",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": ".sort_keys(true)",
+    "replace": ".sort_keys(false)",
+    "expect_failing": [
+      "source_funds_saves_pin_reports_diagrams_fingerprints_receipts_and_all_112_tables"
+    ],
+    "rule": "Preserve frozen source-funds report bytes and writer-bound review admission."
+  },
+  {
+    "id": "sof-save-fingerprint-evidence",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "media_type,size_bytes,sha256,created_at FROM attachments",
+    "replace": "media_type,size_bytes,NULL AS sha256,created_at FROM attachments",
+    "expect_failing": [
+      "source_funds_saves_pin_reports_diagrams_fingerprints_receipts_and_all_112_tables"
+    ],
+    "rule": "Preserve frozen source-funds report bytes and writer-bound review admission."
+  },
+  {
+    "id": "sof-save-inspection-bound",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "link_rows.truncate(200);",
+    "replace": "link_rows.truncate(199);",
+    "expect_failing": [
+      "source_funds_saves_pin_reports_diagrams_fingerprints_receipts_and_all_112_tables"
+    ],
+    "rule": "Preserve frozen source-funds report bytes and writer-bound review admission."
+  },
+  {
+    "id": "sof-save-fingerprint-shape",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "if !matches!(fingerprint,",
+    "replace": "if false && !matches!(fingerprint,",
+    "expect_failing": [
+      "source_funds_saves_pin_reports_diagrams_fingerprints_receipts_and_all_112_tables"
+    ],
+    "rule": "Preserve frozen source-funds report bytes and writer-bound review admission."
+  },
+  {
+    "id": "sof-save-idle",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "if !conn.is_autocommit() {",
+    "replace": "if false && !conn.is_autocommit() {",
+    "expect_failing": [
+      "source_funds_reviewed_saves_refuse_outer_transactions_and_keep_their_work"
+    ],
+    "rule": "Preserve frozen source-funds report bytes and writer-bound review admission."
+  },
+  {
+    "id": "sof-save-revalidation",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "if value(&context, \"review_fingerprint\") != expected {",
+    "replace": "if false && value(&context, \"review_fingerprint\") != expected {",
+    "expect_failing": [
+      "source_funds_saves_pin_reports_diagrams_fingerprints_receipts_and_all_112_tables"
+    ],
+    "rule": "Preserve frozen source-funds report bytes and writer-bound review admission."
+  },
+  {
+    "id": "sof-save-truncated",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "if truthy(value(&context, \"scope_truncated\")) {",
+    "replace": "if false && truthy(value(&context, \"scope_truncated\")) {",
+    "expect_failing": [
+      "source_funds_saves_pin_reports_diagrams_fingerprints_receipts_and_all_112_tables"
+    ],
+    "rule": "Preserve frozen source-funds report bytes and writer-bound review admission."
+  },
+  {
+    "id": "sof-save-reviewed-writer",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "crate::export::admitted(conn, || {\n        let recipe = dict(",
+    "replace": "crate::export::admitted(conn, || {\n        conn.execute_batch(\"COMMIT\").map_err(sql_error)?;\n        let recipe = dict(",
+    "expect_failing": [
+      "source_funds_saves_hold_writer_admission_through_report_freezing_and_late_rollback"
+    ],
+    "rule": "Preserve frozen source-funds report bytes and writer-bound review admission."
+  },
+  {
+    "id": "sof-save-reviewed-diagrams",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "set(&mut recipe, \"include_diagrams\", Value::Bool(true))",
+    "replace": "set(&mut recipe, \"include_diagrams\", Value::Bool(false))",
+    "expect_failing": [
+      "source_funds_saves_pin_reports_diagrams_fingerprints_receipts_and_all_112_tables"
+    ],
+    "rule": "Preserve frozen source-funds report bytes and writer-bound review admission."
+  },
+  {
+    "id": "sof-save-cli-registration",
+    "file": "crates/cli/src/run.rs",
+    "find": "IMPLEMENTED.contains(&command)\n        && (command != \"transactions.export\"",
+    "replace": "IMPLEMENTED.contains(&command)\n        && (command != \"reports.source-funds\" || !args.flag(\"save_case\"))\n        && (command != \"transactions.export\"",
+    "expect_failing": [
+      "source_funds_report_cli_forwards_recipe_and_keeps_mutation_boundary"
+    ],
+    "rule": "Preserve frozen source-funds report bytes and writer-bound review admission."
+  },
+  {
+    "id": "sof-save-daemon-registration",
+    "file": "crates/daemon/src/reports.rs",
+    "find": "    \"ui.source_funds.cases.save\",\n    \"ui.source_funds.review_context\",\n];",
+    "replace": "    \"ui.source_funds.review_context\",\n];",
+    "expect_failing": [
+      "source_funds_case_save_daemon_preserves_recipe_fingerprint_and_registration"
+    ],
+    "rule": "Preserve frozen source-funds report bytes and writer-bound review admission."
+  },
+  {
+    "id": "sof-save-context-registration",
+    "file": "crates/daemon/src/reports.rs",
+    "find": "    \"ui.source_funds.cases.save\",\n    \"ui.source_funds.review_context\",\n];",
+    "replace": "    \"ui.source_funds.cases.save\",\n];",
+    "expect_failing": [
+      "source_funds_stored_daemon_preserves_arguments_and_registers_only_lists"
+    ],
+    "rule": "Inspection and saving use the same native report ordering and fingerprint producer."
+  },
+  {
+    "id": "sof-save-context-fields",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "if fields.iter().any(|(key,_)| !matches!(key,kassiber_pyjson::Key::Str(raw) if raw.as_str().is_some_and(|key|key==\"target_transaction\" || RECIPE_KEYS.contains(&key))))",
+    "replace": "if false && fields.iter().any(|(key,_)| !matches!(key,kassiber_pyjson::Key::Str(raw) if raw.as_str().is_some_and(|key|key==\"target_transaction\" || RECIPE_KEYS.contains(&key))))",
+    "expect_failing": [
+      "source_funds_saves_pin_reports_diagrams_fingerprints_receipts_and_all_112_tables"
+    ],
+    "rule": "The native inspection surface retains the strict daemon recipe allowlist."
   }
 ]

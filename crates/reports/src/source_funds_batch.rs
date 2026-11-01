@@ -179,6 +179,15 @@ fn eligible(conn: &Connection, profile: &str, considered: &[&Value]) -> Result<V
     Ok(result)
 }
 
+pub(super) fn eligible_ids(conn: &Connection, profile: &str, target: &str) -> Result<Vec<String>> {
+    let population = scoped(conn, profile, target)?;
+    let considered: Vec<_> = population.iter().collect();
+    Ok(eligible(conn, profile, &considered)?
+        .iter()
+        .map(|row| text(row, "id"))
+        .collect())
+}
+
 pub fn execute(
     conn: &Connection,
     command: &str,

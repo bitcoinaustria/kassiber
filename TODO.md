@@ -508,7 +508,7 @@ registers them; exit-tax preserves its reference no-registration boundary.
   Retain the known Python privacy-boundary fee-attribution bug for parity.
   Native tied-flow ordering is deterministic and compared with measured Python
   seed variants, without normalizing the output bytes.
-- [ ] Finish source-funds review-context/request-input, coverage and
+- [ ] Finish source-funds CLI review-context, request-input, coverage and
   suggest/assemble dry runs in separate verified commits. Each still requires
   byte/all-table comparisons, zero fallbacks and named mutation kills.
 - [x] Port link creation, review and managed-id evidence association through
@@ -522,14 +522,18 @@ registers them; exit-tax preserves its reference no-registration boundary.
   compare all 112 tables and attachment hashes on SQLite/SQLCipher, prove late
   rollback and zero transport fallback, and kill named mutations. Native AI
   admission remains separate.
-- [ ] Complete source-funds case saving and persisted suggest/assemble in separate
-  verified commits on `t3code/r5-sof-mutations-4`. Preserve consent, once-only execution
-  and SQLite/SQLCipher rollback.
-  A [native frozen-case persistence helper](docs/reference/rust-shell.md#source-funds-frozen-case-persistence-foundation-r5-partial)
-  now prepares the two-row case/snapshot write; full case saving still needs the
-  parallel native report/review producers, transport registration and consent.
-  Source creation/association now have their own transport checkpoint above;
-  case-saving native mutation CLI/daemon counts remain zero.
+- [x] Port complete source-funds report/SVG case saving through CLI and daemon,
+  including native daemon inspection fingerprints, frozen recipient/external
+  fields, same-lock revalidation, all 112 tables, attachment hashes and late
+  rollback on SQLite/SQLCipher, zero fallbacks and named mutation kills.
+  See the [case-save checkpoint](docs/reference/rust-shell.md#source-funds-case-save-checkpoint-r5-partial).
+- [ ] Port persisted source-funds suggest/assemble in separate verified commits.
+  Preserve exact provenance semantics, consent, once-only execution and
+  SQLite/SQLCipher rollback.
+- [ ] Complete source-funds case saving through native AI consent and once-only
+  admission. The Rust shell has no AI execution loop; Python tool runs cannot
+  establish native acceptance. Source mutation AI admission remains pending
+  under its separate task above.
 - [x] Port full-report, Austrian bundle and transaction CSV artifacts, saved
   export registration and their daemon kinds. Preserve
   sealed summaries, hashes and phase-4 append-only impact history.

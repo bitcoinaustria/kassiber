@@ -1437,6 +1437,12 @@ evidence. `ui_source_funds_assemble`, `ui_source_funds_cases_save`, and the
 virtual `ui_source_funds_export` complete that workflow; export results sent to
 the model include the filename/format but not the managed local path.
 
+The partial Rust R5 shell now provides the shared source-funds save and daemon
+inspection services, including fingerprint revalidation under writer admission.
+Its AI execution loop, consent and once-only admission remain unported. Native
+CLI/daemon save verification does not establish native AI tool acceptance; see
+the [case-save checkpoint](rust-shell.md#source-funds-case-save-checkpoint-r5-partial).
+
 Transaction review writes (`ui_transactions_metadata_update`,
 `ui_transactions_history_revert`, `ui_attachments_copy`) preserve the
 append-only edit/evidence audit trail and run only after consent. Commercial
