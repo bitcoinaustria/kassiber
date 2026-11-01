@@ -79,7 +79,7 @@ fn fallback(row: &Value, key: &str) -> Value {
     }
 }
 
-fn amount(v: &Value) -> Result<Value> {
+pub(super) fn amount(v: &Value) -> Result<Value> {
     if matches!(v, Value::Null) {
         Ok(Value::Null)
     } else {
@@ -514,7 +514,7 @@ fn clean(raw: &str) -> String {
         .join(" ")
 }
 
-fn attachment_label(row: &Value) -> Result<String> {
+pub(super) fn attachment_label(row: &Value) -> Result<String> {
     let label = clean(&py_str(&fallback(row, "label")));
     if !label.is_empty() {
         return Ok(label);

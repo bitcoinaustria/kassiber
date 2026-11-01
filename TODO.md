@@ -505,6 +505,8 @@ registers them; exit-tax preserves its reference no-registration boundary.
   `t3code/r5-sof-reads-2`; include diagrams and non-PDF output with report traversal.
   The native dependency planner is [preparation only](docs/reference/rust-shell.md#source-funds-dependency-traversal-preparation-r5-partial),
   with a 203-case plaintext/SQLCipher oracle and all 112 tables unchanged;
+  Pure [disclosure/report-shape preparation](docs/reference/rust-shell.md#source-funds-disclosure-projection-preparation-r5-partial)
+  is available; it does not yet register the producer or unblock case saving.
   report producers and their new transports remain unregistered. Resolve the
   recorded Python privacy-boundary fee-attribution discrepancy explicitly at
   the report parity boundary, without silently changing the reference here.

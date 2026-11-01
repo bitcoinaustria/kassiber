@@ -10639,5 +10639,315 @@
       "source_funds_batch_daemon_preserves_bounded_selection"
     ],
     "rule": "The batch daemon kind is registered through the shared native report adapter."
+  },
+  {
+    "id": "sof-projection-hide-id",
+    "file": "crates/reports/src/source_funds_disclosure.rs",
+    "find": "if decision == \"hide\" {",
+    "replace": "if decision == \"never\" {",
+    "expect_failing": [
+      "source_funds_projection_preserves_full_bytes_disclosure_flow_and_all_tables"
+    ],
+    "rule": "A hide override always withholds the public transaction id."
+  },
+  {
+    "id": "sof-projection-show-id",
+    "file": "crates/reports/src/source_funds_disclosure.rs",
+    "find": "if decision != \"show\" &&",
+    "replace": "if decision != \"never\" &&",
+    "expect_failing": [
+      "source_funds_projection_preserves_full_bytes_disclosure_flow_and_all_tables"
+    ],
+    "rule": "An explicit show override wins over the report reveal mode."
+  },
+  {
+    "id": "sof-projection-minimal-target",
+    "file": "crates/reports/src/source_funds_disclosure.rs",
+    "find": "mode == \"minimal\" && !is_target",
+    "replace": "mode == \"minimal\" && is_target",
+    "expect_failing": [
+      "source_funds_projection_preserves_full_bytes_disclosure_flow_and_all_tables"
+    ],
+    "rule": "Minimal mode discloses only the target unless explicitly overridden."
+  },
+  {
+    "id": "sof-projection-external-id",
+    "file": "crates/reports/src/source_funds_disclosure.rs",
+    "find": "let external = fallback(row, \"external_id\");",
+    "replace": "let external = fallback(row, \"id\");",
+    "expect_failing": [
+      "source_funds_projection_preserves_full_bytes_disclosure_flow_and_all_tables"
+    ],
+    "rule": "The disclosed public reference uses the external id before the internal id."
+  },
+  {
+    "id": "sof-projection-source-label",
+    "file": "crates/reports/src/source_funds_disclosure.rs",
+    "find": "if mode == \"labels_only\" {",
+    "replace": "if mode == \"never\" {",
+    "expect_failing": [
+      "source_funds_projection_preserves_full_bytes_disclosure_flow_and_all_tables"
+    ],
+    "rule": "Labels-only source names disclose the source type instead of free-text labels."
+  },
+  {
+    "id": "sof-projection-tx-full-id",
+    "file": "crates/reports/src/source_funds_disclosure.rs",
+    "find": "\"internal_transaction_id\",",
+    "replace": "\"changed_internal_transaction_id\",",
+    "expect_failing": [
+      "source_funds_projection_preserves_full_bytes_disclosure_flow_and_all_tables"
+    ],
+    "rule": "Only the original internal identity is retained in full transaction editor projections."
+  },
+  {
+    "id": "sof-projection-edge-hide",
+    "file": "crates/reports/src/source_funds_disclosure.rs",
+    "find": "if endpoint_ids.iter().any(|id| text(overrides, id) == \"hide\") {",
+    "replace": "if endpoint_ids.iter().any(|id| text(overrides, id) == \"never\") {",
+    "expect_failing": [
+      "source_funds_projection_preserves_full_bytes_disclosure_flow_and_all_tables"
+    ],
+    "rule": "A hidden endpoint also withholds identifiers embedded in its edge explanation."
+  },
+  {
+    "id": "sof-projection-edge-free-text",
+    "file": "crates/reports/src/source_funds_disclosure.rs",
+    "find": "if !truthy(explanation) || !matches!(mode, \"standard\" | \"full\") {",
+    "replace": "if !truthy(explanation) || !matches!(mode, \"standard\" | \"full\" | \"minimal\") {",
+    "expect_failing": [
+      "source_funds_projection_preserves_full_bytes_disclosure_flow_and_all_tables"
+    ],
+    "rule": "Minimal mode never discloses free-text edge explanations."
+  },
+  {
+    "id": "sof-projection-attachment-path",
+    "file": "crates/reports/src/source_funds_disclosure.rs",
+    "find": "replace(&mut item, \"stored_relpath\", fallback(row, \"stored_relpath\"));",
+    "replace": "replace(&mut item, \"stored_relpath\", s(\"\"));",
+    "expect_failing": [
+      "source_funds_projection_preserves_full_bytes_disclosure_flow_and_all_tables"
+    ],
+    "rule": "Full disclosure preserves the literal stored path without reading its evidence file."
+  },
+  {
+    "id": "sof-projection-attachment-standard",
+    "file": "crates/reports/src/source_funds_disclosure.rs",
+    "find": "if matches!(mode.as_str(), \"standard\" | \"full\") {",
+    "replace": "if matches!(mode.as_str(), \"minimal\" | \"standard\" | \"full\") {",
+    "expect_failing": [
+      "source_funds_projection_preserves_full_bytes_disclosure_flow_and_all_tables"
+    ],
+    "rule": "Minimal attachments withhold transaction identity, media type and evidence hash."
+  },
+  {
+    "id": "sof-projection-import-provenance",
+    "file": "crates/reports/src/source_funds_disclosure.rs",
+    "find": "truthy(value(&config, \"source_file\")) || truthy(value(&config, \"source_format\"))",
+    "replace": "truthy(value(&config, \"source_file\")) && truthy(value(&config, \"source_format\"))",
+    "expect_failing": [
+      "source_funds_projection_preserves_full_bytes_disclosure_flow_and_all_tables"
+    ],
+    "rule": "A descriptor imported from either file marker is classified as a platform export."
+  },
+  {
+    "id": "sof-projection-at-currency",
+    "file": "crates/reports/src/source_funds_disclosure.rs",
+    "find": "let at_eur = country == \"at\" && currency == \"EUR\";",
+    "replace": "let at_eur = country == \"at\";",
+    "expect_failing": [
+      "source_funds_projection_preserves_full_bytes_disclosure_flow_and_all_tables"
+    ],
+    "rule": "The Austrian EUR template requires both the country and EUR currency."
+  },
+  {
+    "id": "sof-projection-recipient-mask",
+    "file": "crates/reports/src/source_funds_disclosure.rs",
+    "find": "Value::Bool(truthy(value(options, \"mask_recipient\")))",
+    "replace": "Value::Bool(false)",
+    "expect_failing": [
+      "source_funds_projection_preserves_full_bytes_disclosure_flow_and_all_tables"
+    ],
+    "rule": "The frozen report options retain an explicitly selected recipient mask."
+  },
+  {
+    "id": "sof-projection-omit-sections",
+    "file": "crates/reports/src/source_funds_disclosure.rs",
+    "find": "omitted.insert(candidate);",
+    "replace": "omitted.insert(String::from(\"changed\"));",
+    "expect_failing": [
+      "source_funds_projection_preserves_full_bytes_disclosure_flow_and_all_tables"
+    ],
+    "rule": "Optional sections retain normalized, deduplicated section identities."
+  },
+  {
+    "id": "sof-projection-purpose-normalization",
+    "file": "crates/reports/src/source_funds_disclosure.rs",
+    "find": "normalized(&raw).replace('-', \"_\")",
+    "replace": "normalized(&raw)",
+    "expect_failing": [
+      "source_funds_projection_preserves_full_bytes_disclosure_flow_and_all_tables"
+    ],
+    "rule": "Report-purpose normalization accepts the documented hyphen spelling."
+  },
+  {
+    "id": "sof-projection-overview-tx-count",
+    "file": "crates/reports/src/source_funds_projection.rs",
+    "find": "(\"transaction_count\", count(tx_count)),",
+    "replace": "(\"transaction_count\", count(tx_count + 1)),",
+    "expect_failing": [
+      "source_funds_projection_preserves_full_bytes_disclosure_flow_and_all_tables"
+    ],
+    "rule": "The report overview counts only its disclosed transaction nodes."
+  },
+  {
+    "id": "sof-projection-overview-source-count",
+    "file": "crates/reports/src/source_funds_projection.rs",
+    "find": "(\"root_source_count\", count(source_count)),",
+    "replace": "(\"root_source_count\", count(source_count + 1)),",
+    "expect_failing": [
+      "source_funds_projection_preserves_full_bytes_disclosure_flow_and_all_tables"
+    ],
+    "rule": "The report overview counts distinct disclosed root nodes."
+  },
+  {
+    "id": "sof-projection-level-fiat-zero",
+    "file": "crates/reports/src/source_funds_projection.rs",
+    "find": ".fold(0.0, |total, value| total + value)",
+    "replace": ".fold(-0.0, |total, value| total + value)",
+    "expect_failing": [
+      "source_funds_projection_preserves_full_bytes_disclosure_flow_and_all_tables"
+    ],
+    "rule": "Fiat subtotals start with Python integer zero and retain the resulting positive zero."
+  },
+  {
+    "id": "sof-projection-allocated-fiat",
+    "file": "crates/reports/src/source_funds_projection.rs",
+    "find": "fiat * ratio(&integer(required)?, &integer(amount)?)?",
+    "replace": "fiat",
+    "expect_failing": [
+      "source_funds_projection_preserves_full_bytes_disclosure_flow_and_all_tables"
+    ],
+    "rule": "Fiat values scale to the reviewed slice instead of the complete original transaction."
+  },
+  {
+    "id": "sof-projection-exact-ratio",
+    "file": "crates/reports/src/source_funds_projection.rs",
+    "find": "ratio(&integer(required)?, &integer(amount)?)?",
+    "replace": "number(required)? / number(amount)?",
+    "expect_failing": [
+      "source_funds_projection_preserves_full_bytes_disclosure_flow_and_all_tables"
+    ],
+    "rule": "64-bit millisatoshi ratios round the exact integer quotient once before fiat scaling."
+  },
+  {
+    "id": "sof-projection-ratio-rounding",
+    "file": "crates/reports/src/source_funds_projection.rs",
+    "find": "if twice > denominator || twice == denominator &&",
+    "replace": "if twice > denominator && twice == denominator &&",
+    "expect_failing": [
+      "source_funds_projection_preserves_full_bytes_disclosure_flow_and_all_tables"
+    ],
+    "rule": "Integer-ratio conversion rounds binary64 to nearest instead of truncating the quotient."
+  },
+  {
+    "id": "sof-projection-fiat-rounding",
+    "file": "crates/reports/src/source_funds_projection.rs",
+    "find": "format!(\"{n:.places$}\").parse().expect(\"formatted float\")",
+    "replace": "n + (places as f64 * 0.0)",
+    "expect_failing": [
+      "source_funds_projection_preserves_full_bytes_disclosure_flow_and_all_tables"
+    ],
+    "rule": "Allocated fiat and percentages retain Python decimal-place rounding."
+  },
+  {
+    "id": "sof-projection-gross-share-gate",
+    "file": "crates/reports/src/source_funds_projection.rs",
+    "find": "let share = if truthy(value(allocations, \"gross_matches_target\"))",
+    "replace": "let share = if !truthy(value(allocations, \"gross_matches_target\"))",
+    "expect_failing": [
+      "source_funds_projection_preserves_full_bytes_disclosure_flow_and_all_tables"
+    ],
+    "rule": "A target composition share requires matching gross demand."
+  },
+  {
+    "id": "sof-projection-share-denomination",
+    "file": "crates/reports/src/source_funds_projection.rs",
+    "find": "&& normalized_asset(value(edge, \"asset\")) == target_asset",
+    "replace": "&& normalized_asset(value(edge, \"asset\")) != target_asset",
+    "expect_failing": [
+      "source_funds_projection_preserves_full_bytes_disclosure_flow_and_all_tables"
+    ],
+    "rule": "An edge claims target share only in the same asset denomination."
+  },
+  {
+    "id": "sof-projection-privacy-boundary",
+    "file": "crates/reports/src/source_funds_projection.rs",
+    "find": "if privacy(edge) {",
+    "replace": "if privacy(edge) && false {",
+    "expect_failing": [
+      "source_funds_projection_preserves_full_bytes_disclosure_flow_and_all_tables"
+    ],
+    "rule": "Privacy links remain deferred boundaries in the simplified flow."
+  },
+  {
+    "id": "sof-projection-privacy-hop-flag",
+    "file": "crates/reports/src/source_funds_projection.rs",
+    "find": "(\"deferred_privacy_hop\", Value::Bool(privacy(edge)))",
+    "replace": "(\"deferred_privacy_hop\", Value::Bool(false))",
+    "expect_failing": [
+      "source_funds_projection_preserves_full_bytes_disclosure_flow_and_all_tables"
+    ],
+    "rule": "Simplified privacy edges publish their explicit deferred flag."
+  },
+  {
+    "id": "sof-projection-flow-depth",
+    "file": "crates/reports/src/source_funds_projection.rs",
+    "find": "let next = depths[&child] + 1;",
+    "replace": "let next = depths[&child] + 2;",
+    "expect_failing": [
+      "source_funds_projection_preserves_full_bytes_disclosure_flow_and_all_tables"
+    ],
+    "rule": "Flow levels measure actual upstream edge distance from the target."
+  },
+  {
+    "id": "sof-projection-source-provenance",
+    "file": "crates/reports/src/source_funds_projection.rs",
+    "find": "\"attested_source\".into(),",
+    "replace": "\"chain_sync\".into(),",
+    "expect_failing": [
+      "source_funds_projection_preserves_full_bytes_disclosure_flow_and_all_tables"
+    ],
+    "rule": "Reviewed economic sources remain attestations rather than chain observation provenance."
+  },
+  {
+    "id": "sof-projection-fee-match",
+    "file": "crates/reports/src/source_funds_projection.rs",
+    "find": "|| consumed != zero_integer(node, \"fee_msat\")?",
+    "replace": "|| consumed == zero_integer(node, \"fee_msat\")?",
+    "expect_failing": [
+      "source_funds_projection_preserves_full_bytes_disclosure_flow_and_all_tables"
+    ],
+    "rule": "The network-fee explanation requires the consumed value to equal each recorded fee."
+  },
+  {
+    "id": "sof-projection-fee-total",
+    "file": "crates/reports/src/source_funds_projection.rs",
+    "find": "if hops == 0 || total != *difference {",
+    "replace": "if hops == 0 || total == *difference {",
+    "expect_failing": [
+      "source_funds_projection_preserves_full_bytes_disclosure_flow_and_all_tables"
+    ],
+    "rule": "Recorded route fees must sum exactly to the route difference."
+  },
+  {
+    "id": "sof-projection-tie-boundary",
+    "file": "crates/reports/src/source_funds_projection.rs",
+    "find": "if !keys.insert((",
+    "replace": "if keys.insert((",
+    "expect_failing": [
+      "source_funds_projection_refuses_reference_order_ties_without_mutation"
+    ],
+    "rule": "Process-dependent reference ordering is an explicit unported boundary."
   }
 ]

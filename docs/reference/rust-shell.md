@@ -6776,6 +6776,91 @@ loop. Case saving needs report/SVG production, fingerprint revalidation and
 writer admission across its callers. PDF rendering and PDF-containing bundles
 remain Python.
 
+## Source-funds disclosure projection preparation (R5 partial)
+
+`t3code/r5-sof-reads-3` starts at `ff1469f65`. The pure
+`kassiber_reports::source_funds_disclosure` helpers project transaction/source
+rows, attachment metadata, reveal overrides, report options and profile
+context. Hidden endpoints also withhold identifiers inside link explanations.
+`source_funds_projection::add_shape` composes an already reviewed report's
+overview, data-source/provenance rollups, allocated fiat subtotals, flow levels,
+privacy-deferred simplified-flow model and narrative. These are reusable
+preparation APIs, not a database report producer. They take no connection and
+perform no evidence-file read, acquisition, journal refresh, provenance write,
+ownership inference or tax interpretation. There is no new dependency, schema,
+lockfile, external I/O or Python product change.
+
+The frozen oracle contains 471 cases. Sixteen start with complete reports from
+the unchanged Python producer; the remainder exercise row disclosure,
+normalization and synthetic report shapes, including branching/cycles,
+unreachable nodes, multiple source denominations, privacy links, missing fiat,
+negative zero and 40 valid 64-bit millisatoshi ratios whose fiat values would
+change if the operands were converted to floats before division. Comparisons
+use complete ordered JSON bytes, including key order, number spelling and
+whitespace, with no sorting or normalization of the compared outputs. Python
+checks all 112 tables around every projection and complete reference report.
+Rust replays the corpus against plaintext and SQLCipher books and checks all
+112 tables before and after each projection. A second native test pins the
+explicit ordering boundary below and leaves the input envelope unchanged.
+
+All 811 report mutation entries apply. The 31 new `sof-projection-*` entries
+are killed: 30 by
+`source_funds_projection_preserves_full_bytes_disclosure_flow_and_all_tables`
+and one by
+`source_funds_projection_refuses_reference_order_ties_without_mutation`.
+The initial campaign exposed a nonbuilding mutation and a weak ordering-boundary
+test. Neither attempt counts as a kill; after correcting the mutation and
+adding an untied success witness, both separate reruns pass their unmutated
+baselines and kill the corrected entries. The 780 inherited entries retain
+their earlier evidence and were not rerun. Mutation sources are isolated
+copies; the worktree test targets are rebuilt after the campaign.
+
+Rust 1.99.1 offline/locked verification passes workspace formatting,
+reports/all-target clippy with warnings denied, all five stored-read/traversal/
+projection integration tests and all three source-funds CLI/daemon registration
+and diagnostic tests. The generator verifies under an alternate hash seed.
+The required classifier update leaves the inventory unchanged, and required CI
+preflight passes all 57 tests. Logs and per-entry mutation evidence are retained
+under `target/r5-sof-reads-3/`; owned build and disposable data trees are removed
+after summarizing. Verification preserves account `HOME`, uses eight Cargo jobs,
+and keeps both Cargo output directories and scratch under this worktree's
+`target/`. Full workspace tests, the Python/frontend quality gate, live regtest
+and platform checks are not claimed.
+
+The original Python privacy-boundary fee-attribution bug is retained for parity,
+including the corresponding network-fee narrative. The existing reproduction
+remains unchanged. A newly confirmed Python bug has a separate reproduction:
+
+```sh
+mise exec rust@1.99.1 uv@latest -- uv run --locked python \
+  -m crates.reports.scripts.repro_python_source_funds_flow_order
+```
+
+An exportable reviewed graph with eight parents sharing their disclosed label
+and timestamp produces different simplified-flow orders under hash seeds 1
+and 2. Python iterates a set and its sort key omits the transaction identity.
+The same report recipe can therefore change its later review fingerprint
+between Python processes. No Python fix or normalized-byte acceptance is
+introduced here. `add_shape` returns explicit `not_implemented` with boundary
+`reference_flow_order` when simplified-flow presentation keys tie, before
+changing the envelope. This is an unported case, not an accepted product
+behavior difference; full report acceptance still needs its resolution.
+
+This checkpoint does **not** complete the first requested read family or unblock
+the parallel case-saving worker. No CLI command, daemon kind or hybrid routing
+entry is added. The inventories remain 157 native CLI leaves (four source-funds
+listings) and five source-funds daemon reads. There are no new report routing
+counts or zero-fallback acceptance claims. The outstanding first boundary is
+the complete snapshot-bound database producer, including current custody and
+structural-lineage validation, configured explorer disclosure, recipient
+resolution, findings and gates, SVG diagrams, text/non-PDF output, CLI/daemon
+registration, refusal bytes, process/all-table comparisons and native routing.
+Review-context/request-input, coverage and suggest/assemble dry runs remain
+after it, each with their own byte/table/routing and mutation verification.
+Case saving and provenance mutations remain with
+`t3code/r5-sof-mutations-2`. PDF rendering and PDF-containing bundles stay
+explicitly in Python.
+
 ## Not yet ported
 
 The diagnostics slice now implements explicit public reports and native debug
