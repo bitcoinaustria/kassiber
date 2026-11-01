@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Reproduce the open R4-11 lossless-boundary gaps on synthetic operands.
+"""Check the R4-11 lossless-boundary regressions on synthetic operands.
 
 Build the journal-render example first. A nonzero result means at least one
-operand still differs from Python; these are not passing parity witnesses.
+operand differs from Python; every result retains the complete comparison.
 """
 from __future__ import annotations
 

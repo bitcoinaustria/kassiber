@@ -654,11 +654,12 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   cells. Unchanged builds still need a cheap comparison path. Corrected appended
   benchmark inputs carry distinct raw identities and assert actual writes.
 - [ ] Finish the [R4-11 rendering checkpoint](docs/reference/r4-journal-render-checkpoint.md):
-  close legacy-value/refusal gaps and complete exhaustive branch mutations
-  and the inherited campaign gates. The [performance follow-up](docs/reference/r4-journal-render-performance-checkpoint.md)
+  close scalar/refusal gaps and complete the final integrated mutation
+  and inherited campaign gates. The [performance follow-up](docs/reference/r4-journal-render-performance-checkpoint.md)
   meets the historical wall-clock targets. The [boundary continuation](docs/reference/r4-journal-render-boundary-checkpoint.md)
   repairs integer refusals, holding keys and nonfinite detail/summary values;
-  actual surrogate scalars and the remaining acceptance gates are open.
+  the later scalar continuations below close the actual-surrogate repros.
+  The complete acceptance gates remain open.
   The [allocation continuation](docs/reference/r4-journal-render-boundary-checkpoint.md#fifth-continuation-native-fragment-quantities-and-allocation-checkpoint)
   preserves all 379 prior records and expands the corpus to 383 cases. Eleven
   focused mutations are killed; the full campaigns remain open. Five alternating
@@ -707,8 +708,11 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
 <!-- inherited from render@f1712c625; pending r10 verification -->
   ownership graph consumption is completed by the
   [native ownership continuation](docs/reference/r4-journal-render-scalar-checkpoint.md#native-ownership-graph-continuation),
-  which compares 1,435 complete outcomes. The lossless probe handoff and final
-  acceptance remain open. Python retains production authority.
+  which compares 1,435 complete outcomes. The
+  [lossless probe handoff](docs/reference/r4-journal-render-scalar-checkpoint.md#lossless-probe-handoff-continuation)
+  closes all four actual-surrogate repros and matches all 1,435 cases through
+  fresh and cached executable reads. Complete nonfinite/lazy/shape/refusal/UUID
+  campaigns and final acceptance remain open. Python retains production authority.
 - [ ] R4-13 to R4-16: CLI and daemon commands, automatic pairing, the
   freshness journal job and the authority switch.
 

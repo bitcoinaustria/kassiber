@@ -377,3 +377,79 @@ fidelity; then the full renderer/persistence/custody mutation shards, all
 campaigns, repository gate, paired CPU checks against `8a9492199`, and the
 acceptance record. The focused native graph witnesses do not certify those
 campaigns. Python retains production accounting authority.
+
+## Lossless probe handoff continuation
+
+The next verified boundary on `t3code/r4-11-render-fidelity-4` wires
+`journal-render` to the lossless scalar decoder and native builder. Raw file
+decoding precedes the measured build span; canonical snapshot encoding and
+state destruction follow it. The probe retains native refusals and reports
+exact UUID consumption in normal and timing-only modes. Its path cache retains
+the lossless operands. No native product accounting route is enabled.
+
+All **four** end-to-end actual-surrogate repros now match Python: workspace id,
+entry description, source provenance and pass-through rate. The literal
+backslash-u witness remains distinct. All **ten** cases in
+`check-journal-render-boundary.py` pass, also covering opaque descriptions,
+ignored malformed holding decimals, nonfinite detail, malformed integer
+coercion and canonical-decimal refusal.
+
+`scripts/check-journal-render-corpus.py` replays all seven frozen corpora through
+the executable, then repeats each path to exercise cached operands. It compares
+complete state bytes or every refusal attribute/cause and exact UUID use. All
+**2,870 replies** match across **1,435 cases**: 691 successful states and 744
+refusals, each checked after fresh decoding and a cached read. The example also
+registers a Cargo test that checks all 1,435 outcomes in both normal and
+timing-only modes using the probe's decoder and handoff.
+
+### Verification and explicit stopping boundary
+
+All **48** all-feature release journal tests pass, including the registered
+probe test. Workspace formatting and scoped all-target/all-feature release
+clippy for custody and journals pass with `-D warnings`. The final release
+executable repeats the ten boundary repro matches and all 2,870 corpus replies.
+All **four** recipes in `crates/journals/scripts/probe_mutations.json` are killed
+by `lossless_probe_matches_python_states_refusals_and_uuid_consumption` after
+a passing baseline, with no survivors or compiler failures in the accepted run.
+The discovery recipe for the decoder initially called a private refusal
+constructor and did not compile; changing it to the existing public conversion
+and rerunning all four recipes closes that tooling error. The discovery run
+is excluded from kill evidence.
+
+The earlier graph-mutation run reused a Cargo build tree; a later
+all-feature probe test exposed its last compiled mutation artifact despite the
+restored source. That discovery baseline is excluded. Journal artifacts were
+cleaned, the unmutated probe test passed, and the probe mutation run uses a
+separate build tree. Final verification uses the original worktree build tree. The required
+classifier update leaves the inventory unchanged, and the final required CI
+preflight passes all **57 tests**. All **338** renderer/persistence/branch/scalar/
+native/probe recipes apply; only the ten graph and four probe recipes are run
+for new kills in this continuation.
+
+`target/r4-fidelity-4/verification-index.json` binds the final source, fixture,
+recipe, executable and passing-log hashes to the accepted mutation summaries
+and final executable replies. Mutation and verification build trees are
+removed after summarizing; the release probe, local logs and summaries remain.
+No background job remains at handoff. No push, PR or external comment is
+performed.
+
+Requested items **3–6 remain open**. The successful lazy and nonfinite witnesses
+above close their known repros, but they do not certify every consumed/ignored
+nonfinite stage, the full successful lazy-decoding campaign, arbitrary shape,
+wallet mapping/order, cumulative arithmetic, competing refusal order or UUID
+fidelity. Full renderer/persistence/custody mutation shards, all 25,030 inputs,
+census/shadow/fresh recordings, integrated SQLite/SQLCipher campaigns, repository
+gate, paired CPU checks against `8a9492199` and the acceptance record are still
+required. **R4-11 remains unaccepted.** No Python reference bug or product
+accounting change is identified.
+
+Reproduction uses the setup/environment specified above, with `TMPDIR`,
+`CARGO_TARGET_DIR`, `CARGO_BUILD_BUILD_DIR` and `UV_CACHE_DIR` inside this
+worktree's `target/`, Cargo offline and eight build jobs:
+
+```sh
+cargo test --offline --locked --release -p kassiber-journals --all-features -- --test-threads=1
+cargo build --offline --locked --release -p kassiber-journals --example journal-render
+uv run --locked python scripts/check-journal-render-boundary.py --probe PROBE --output target/r4-fidelity-4/probe-boundary
+uv run --locked python scripts/check-journal-render-corpus.py --probe PROBE --output target/r4-fidelity-4/probe-corpus
+```

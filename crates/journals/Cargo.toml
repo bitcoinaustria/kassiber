@@ -63,3 +63,7 @@ required-features = ["test-harness"]
 [[example]]
 name = "journals-bench"
 required-features = ["timing"]
+
+[[example]]
+name = "journal-render"
+test = true
