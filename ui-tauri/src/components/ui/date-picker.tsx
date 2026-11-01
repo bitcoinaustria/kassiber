@@ -53,6 +53,8 @@ function formatDisplay(value: string | undefined): string {
 interface DatePickerProps {
   /** ISO `yyyy-mm-dd`. */
   value: string;
+  /** Core civil day for the today outline; defaults to the browser's day. */
+  today?: string;
   onChange: (value: string) => void;
   className?: string;
   id?: string;
@@ -63,10 +65,10 @@ interface DatePickerProps {
  * primitives (no react-day-picker / date-fns dependency). Value is an ISO
  * `yyyy-mm-dd` string.
  */
-export function DatePicker({ value, onChange, className, id }: DatePickerProps) {
+export function DatePicker({ value, today: todayDate, onChange, className, id }: DatePickerProps) {
   const [open, setOpen] = React.useState(false);
   const selected = parseISO(value);
-  const today = parseISO(undefined);
+  const today = parseISO(todayDate);
   const [view, setView] = React.useState({ y: selected.y, m: selected.m });
 
   // Re-center on the selected month whenever the popover opens.
