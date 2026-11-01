@@ -451,7 +451,7 @@ registers them; exit-tax preserves its reference no-registration boundary.
   records non-zero served-by counts; node-snapshot/backend-test routes and AI
   projections remain separately scoped.
 - [ ] Finish the remaining report read inventory and desktop kinds, including
-  remaining non-PDF source funds and Privacy Mirror/PSBT. The reviewed commercial
+  remaining non-PDF source funds and Privacy Mirror. The reviewed commercial
   subledger CLI read and its CSV export run natively, with reference vectors,
   killed mutations and hybrid routing proof.
 - [x] Port configuration privacy hygiene through the native service, CLI and
@@ -466,10 +466,9 @@ registers them; exit-tax preserves its reference no-registration boundary.
   Six sessions cover all three markers with and without `--debug`, preserving
   all 112 tables with zero fallbacks; see the
   [diagnostic checkpoint](docs/reference/rust-shell.md#corrupt-marker-daemon-diagnostics-r5-privacy-continuation).
-- [ ] Port Privacy Mirror and the reduced PSBT privacy report through their
-  shared observation index, public-observer analytics, parser, categorical
-  features and inventory overlays before registering CLI/daemon reads. Preserve
-  process-bound redaction, conditional hypotheses and watch-only analysis.
+- [ ] Port Privacy Mirror through the shared observation index, public-observer
+  analytics, conditional entropy and process-bound redaction before registering
+  its CLI/daemon reads. Preserve conditional hypotheses and watch-only analysis.
 - [x] Port stored source-funds source/link/case/recipient listings and paginated
   desktop evidence listing, preserving full editor metadata, frozen case
   recipient fields and unchanged accounting state. This is a partial boundary;
@@ -551,40 +550,44 @@ registers them; exit-tax preserves its reference no-registration boundary.
   sanitizer and evidence-bound rule evaluator as a local native prerequisite.
   Frozen Python vectors and named mutations cover script-bound signature
   categories, signed versions, locks, exact amounts and collaboration exclusions.
-  This does not complete Mirror's observation index or register either report;
-  see the [feature checkpoint](docs/reference/rust-shell.md#public-feature-primitives-r5-privacy-continuation-partial).
+  Mirror delivery remains separate from this shared prerequisite; see the [feature checkpoint](docs/reference/rust-shell.md#public-feature-primitives-r5-privacy-continuation-partial).
 - [ ] Port the separate legacy `ui.privacy_hygiene.snapshot` scorer; the
   configuration report and shared public features do not replace that contract.
 - [x] Port the shared bounded PSBT v0/v2 parser, supplied-UTXO/script validation,
   required-locktime resolution and redacted public analysis as a native
   prerequisite. The transient script-bearing inventory adapter is local-only.
   Frozen Python vectors, complete 112-table reads and named mutations verify
-  this boundary; product inventory/linkage overlays, CLI/file/daemon acceptance
-  and registration remain outstanding. See the
+  this prerequisite boundary. The native report and its product transports are
+  completed below. See the
   [PSBT parser checkpoint](docs/reference/rust-shell.md#psbt-parser-prerequisite-r5-privacy-psbt-partial).
 - [x] Port reduced PSBT input/output inventory matching, observer-only component
   deltas, adversary scenarios and report scope redaction over an admitted graph
   baseline. Keep the scope and baseline callback in one SQLite read snapshot.
-  This prerequisite has no product routing; native graph construction,
-  CLI/file/daemon acceptance and registration remain outstanding. See the
+  The completed historical graph and registered product transports build on
+  this prerequisite below. See the
   [overlay checkpoint](docs/reference/rust-shell.md#psbt-inventorylinkage-overlay-prerequisite-r5-privacy-psbt-partial).
 - [x] Add native PSBT baseline capture for the bounded inventory-only domain,
   with explicit source admission and no injected graph in its Python oracle.
   Preserve one read snapshot, all 112 tables, ambiguous inventory, branch
   provenance and existing script-reuse hypotheses. Refuse books requiring
   historical observations, occurrence/binding services or dataset matching.
-  General graph capture/analytics, CLI/file/daemon acceptance, routing proof
-  and registration still block the parent PSBT task; served-by counts are zero.
+  The full historical constructor and registered transports below supersede
+  these source refusals for product reports; the bounded constructor is retained
+  only as a prerequisite checkpoint.
   See the [inventory checkpoint](docs/reference/rust-shell.md#psbt-native-inventory-admission-checkpoint-r5-privacy-psbt-partial).
 - [x] Capture PSBT historical/adversary baselines through Mirror's native index
   and SQL source interfaces. Preserve public-only components, reviewed anchor
   exposure and bounded uncertainty inside one scope snapshot; compare unchanged
-  Python bytes and all 112 tables. Product transports and registration follow;
-  see the [historical checkpoint](docs/reference/rust-shell.md#native-psbt-historical-baseline-r5-privacy-psbt).
+  Python bytes and all 112 tables; see the
+  [historical checkpoint](docs/reference/rust-shell.md#native-psbt-historical-baseline-r5-privacy-psbt).
 - [x] Verify the native PSBT CLI/file and daemon adapters against unchanged
-  Python bytes, both offline-switch states and all 112 tables. Product routing
-  remains unregistered pending transport mutations and hybrid served-by proof;
-  see the [adapter checkpoint](docs/reference/rust-shell.md#psbt-clifile-and-daemon-adapter-acceptance-r5-privacy-psbt).
+  Python bytes, both offline-switch states and all 112 tables; see the
+  [adapter checkpoint](docs/reference/rust-shell.md#psbt-clifile-and-daemon-adapter-acceptance-r5-privacy-psbt).
+- [x] Register the reduced PSBT privacy CLI/file and daemon reads with exact
+  whole-process bytes, all 112 tables, strict no-egress and zero hybrid fallbacks.
+  Preserve native unhandled-debug semantics and kill all 21 transport/registration
+  mutations. Product served-by counts are non-zero; see the
+  [registration checkpoint](docs/reference/rust-shell.md#registered-psbt-privacy-reads-r5-privacy-psbt).
 - [x] Port full-report, Austrian bundle and transaction CSV artifacts, saved
   export registration and their daemon kinds. Preserve
   sealed summaries, hashes and phase-4 append-only impact history.

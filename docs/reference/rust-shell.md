@@ -31,7 +31,7 @@ verification, including per-command Rust routing counts.
 | `crates/backup` | encrypted archive export, staging/install import and Python-compatible tar/manifest validation |
 | `crates/transfers` | pair/payout authoring, shared automatic pairing, component/gap reads and plans, matching rules, advisory dismissals and historical receipts |
 | `crates/transactions` | local loan marks, managed attachment evidence, metadata edits and append-only history shared by both transports |
-| `crates/reports` | stored-journal summaries, Austrian forms, exit-tax estimates, gains and retained explanations, live/historical holdings and journal listing, cross-check diagnostics, report readiness, CSV and transaction/Austrian/full-report/exit-tax/cross-check XLSX artifacts with full-report verification, and append-only saved/filed snapshot markers |
+| `crates/reports` | stored-journal summaries, Austrian forms, exit-tax estimates, gains and retained explanations, live/historical holdings and journal listing, cross-check diagnostics, report readiness, CSV and transaction/Austrian/full-report/exit-tax/cross-check XLSX artifacts with full-report verification, and append-only saved/filed snapshot markers, configuration privacy hygiene and reduced PSBT privacy reads |
 
 ## Command line
 
@@ -13455,8 +13455,8 @@ three additions are killed by these named tests:
 | Mutation | Named killer |
 | --- | --- |
 | `privacy-r5-native-debug-presence` | `corrupt_marker_native_debug_preserves_every_non_debug_field` |
-| `privacy-r5-native-debug-kind` | `corrupt_marker_daemon_classifies_only_unhandled_hygiene_failures` |
-| `privacy-r5-native-debug-class` | `corrupt_marker_daemon_classifies_only_unhandled_hygiene_failures` |
+| `privacy-r5-native-debug-kind` | `privacy_report_daemon_classifies_only_unhandled_failures` |
+| `privacy-r5-native-debug-class` | `privacy_report_daemon_classifies_only_unhandled_failures` |
 
 Both named selections pass unmutated. The unchanged shared scratch checker
 compiles each mutation and requires an actual failing named selection; build
@@ -13848,3 +13848,80 @@ plus two transaction exports. Transport mutations, whole-process hybrid routing
 and registration are the final boundary. No Python product behavior, dependency,
 AI exposure, signing or broadcasting authority changes. Evidence remains under
 `target/r5-psbt-4/artifacts/`; full repository and platform gates are not claimed.
+
+## Registered PSBT privacy reads (R5 privacy PSBT)
+
+The final `t3code/r5-privacy-psbt-4` boundary registers
+`reports.psbt-privacy` in both the CLI dispatcher and implementation probe, and
+`ui.reports.psbt_privacy` in the daemon dispatcher/ready capabilities. Both call
+the same native report and historical `AnalysisIndex` adapter accepted above.
+The inventory is now **155 CLI leaves (23 reports)** and **16 report daemon
+kinds plus two transaction exports**. Mirror and the separate legacy scorer
+remain unregistered in this branch.
+
+Whole-process acceptance compares CLI exit status, stdout/stderr, JSON/table/
+plain/CSV output and saved output bytes with unchanged Python. Direct text and
+literal local files retain scope and refusal precedence. Daemon terminal records
+match byte for byte after the independently checked ready capabilities, including
+unknown/surrogate keys, non-object/blank/wrong-type inputs, invalid proposals and
+expected-scope precedence. All 112 tables are compared as complete canonical
+contents after each process. Every run arms strict no-egress; both offline-switch
+states have zero egress attempts and zero in-scope Python fallbacks.
+
+| Accepted product surface | Rust served-by count | Python fallbacks |
+| --- | ---: | ---: |
+| `reports.psbt-privacy` (direct/file, formats, scopes and refusals) | 192 CLI calls | 0 |
+| `ui.reports.psbt_privacy` | 180 requests in 12 Rust daemon sessions | 0 |
+
+A separate fast registration/wire-order witness also requires successful CLI and
+daemon reports through the hybrid router. Global machine/non-JSON flag refusals
+are compared directly against the native process because they exit before the
+hybrid probe can classify a command. These refusals are excluded from the served
+report counts above. Guarded fixture calls are likewise excluded.
+
+Whole-process parity exposed a native projection-order gap: canonical report
+values already matched, but JSON object insertion order differed. The final
+closed projection now retains Python's order for every section and nested
+evidence map. An additional 816 historical adapter reads compare **unsorted**
+JSON bytes across the entire 408-case corpus and both offline states. Together
+with the 540 CLI/file/daemon adapter calls, this gives 1,356 final adapter
+comparisons, all preserving all 112 tables without egress or fallback dispatch.
+
+Manual review also restored Python universal-newline file decoding before the
+text-size bound. A valid proposal wrapped with enough CRLF pairs to cross the
+raw text limit remains accepted after normalization; a named mutation removes
+that normalization and must fail the native adapter witness.
+
+The retained embedded-decoder Python `RuntimeError` remains unchanged and has
+the earlier checked-in reproduction. Four daemon sessions, with/without debug
+and with/without offline mode, preserve every non-debug response byte. Native
+unhandled debug is the empty string and native stderr contains no Python
+traceback; typed errors retain null debug. No Python product fix is included.
+
+All 21 entries in `crates/reports/scripts/psbt_transport_mutations.json` are
+killed by their named native integration selections. They cover direct/file
+inputs, format projection, scope, error precedence, daemon allowlists/ordering,
+surrogate refusal, historical service routing, reviewed source-funds and
+counterparty exposure, wire order, all three registration points and diagnostics.
+The two inherited hygiene diagnostic recipes are updated for the shared privacy
+allowlist and killed by the daemon library classification test; the remaining
+inherited recipes retain their earlier evidence.
+The offline scratch-tree checker first passes every unmutated selection, builds
+each mutant, then requires its named test to fail; compiler errors and empty
+selections do not count as kills. Applicability remains a retained Python test.
+
+Verification uses Rust 1.99.1, locked Python 3.11, offline/locked Cargo and eight
+Cargo workers, one test job at a time. Report PSBT tests, CLI/daemon library
+tests, catalog drift, all-target test-harness Clippy with warnings denied and
+workspace formatting pass. The classifier is updated and the required CI
+preflight passes all 57 tests without skips before the final commit. Local summaries and logs remain under
+`target/r5-psbt-4/artifacts/`; owned build/mutation/scratch trees are removed
+after summarizing. Account `HOME` is preserved. Full workspace, Python/frontend,
+Docker/regtest and packaged/platform gates are not claimed.
+
+This completes the reduced PSBT privacy report's native historical, transport
+and registration boundaries. The separate chain-analysis proposal comparison,
+Payjoin verification and conditional entropy transports, Mirror delivery and
+legacy scorer are separate work. AI dispatch, schema, dependencies, lockfiles,
+spending-key authority, signing and broadcasting remain unchanged. No push, PR
+or remote comment is made.

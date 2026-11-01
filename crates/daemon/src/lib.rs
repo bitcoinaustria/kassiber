@@ -228,7 +228,11 @@ impl From<AppError> for Failure {
 }
 
 fn report_failure(kind: &str, error: AppError) -> Failure {
-    if kind == "ui.reports.privacy_hygiene" && error.code == "internal_error" {
+    if matches!(
+        kind,
+        "ui.reports.privacy_hygiene" | "ui.reports.psbt_privacy"
+    ) && error.code == "internal_error"
+    {
         Failure::Unhandled(error)
     } else {
         Failure::App(error)
@@ -1402,9 +1406,10 @@ mod diagnostic_tests {
     use super::*;
 
     #[test]
-    fn corrupt_marker_daemon_classifies_only_unhandled_hygiene_failures() {
+    fn privacy_report_daemon_classifies_only_unhandled_failures() {
         for kind in [
             "ui.reports.privacy_hygiene",
+            "ui.reports.psbt_privacy",
             "ui.reports.summary",
             "ui.reports.privacy_mirror",
         ] {
@@ -1412,7 +1417,10 @@ mod diagnostic_tests {
                 let failure = report_failure(kind, AppError::new(code, "failure"));
                 assert_eq!(
                     matches!(failure, Failure::Unhandled(_)),
-                    kind == "ui.reports.privacy_hygiene" && code == "internal_error"
+                    matches!(
+                        kind,
+                        "ui.reports.privacy_hygiene" | "ui.reports.psbt_privacy"
+                    ) && code == "internal_error"
                 );
             }
         }

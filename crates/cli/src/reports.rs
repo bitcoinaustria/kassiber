@@ -49,6 +49,7 @@ pub const COMMANDS: &[&str] = &[
     "source-funds.coverage",
     "source-funds.suggest",
     "source-funds.assemble",
+    "reports.psbt-privacy",
 ];
 pub fn kind(command: &str) -> Option<&'static str> {
     match command {
@@ -304,6 +305,7 @@ fn read_psbt_file(path: &str) -> Result<String, AppError> {
             },
         )
     })?;
+    let text = text.replace("\r\n", "\n").replace('\r', "\n");
     let text = kassiber_pytext::strip(&text);
     for (refused, message) in [
         (text.is_empty(), "PSBT file is empty"),
@@ -1235,7 +1237,8 @@ mod tests {
         assert!(COMMANDS.contains(&"reports.privacy-hygiene"));
         assert!(crate::describe::IMPLEMENTED.contains(&"reports.privacy-hygiene"));
         assert!(!COMMANDS.contains(&"reports.privacy-mirror"));
-        assert!(!COMMANDS.contains(&"reports.psbt-privacy"));
+        assert!(COMMANDS.contains(&"reports.psbt-privacy"));
+        assert!(crate::describe::IMPLEMENTED.contains(&"reports.psbt-privacy"));
     }
     #[test]
     fn source_funds_review_cli_forwards_fingerprint_file_and_handoff_fields() {

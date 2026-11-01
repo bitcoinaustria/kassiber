@@ -8543,22 +8543,22 @@
   {
     "id": "privacy-r5-native-debug-kind",
     "file": "crates/daemon/src/lib.rs",
-    "find": "kind == \"ui.reports.privacy_hygiene\" && error.code == \"internal_error\"",
-    "replace": "kind == \"ui.reports.summary\" && error.code == \"internal_error\"",
+    "find": "    if matches!(\n        kind,\n        \"ui.reports.privacy_hygiene\" | \"ui.reports.psbt_privacy\"\n    ) && error.code == \"internal_error\"",
+    "replace": "    if matches!(\n        kind,\n        \"ui.reports.summary\" | \"ui.reports.psbt_privacy\"\n    ) && error.code == \"internal_error\"",
     "expect_failing": [
-      "corrupt_marker_daemon_classifies_only_unhandled_hygiene_failures"
+      "privacy_report_daemon_classifies_only_unhandled_failures"
     ],
-    "rule": "Native unhandled conversion diagnostics are scoped to the accepted configuration-hygiene daemon kind."
+    "rule": "Native unhandled conversion diagnostics are scoped to the accepted privacy-report daemon kinds."
   },
   {
     "id": "privacy-r5-native-debug-class",
     "file": "crates/daemon/src/lib.rs",
-    "find": "kind == \"ui.reports.privacy_hygiene\" && error.code == \"internal_error\"",
-    "replace": "kind == \"ui.reports.privacy_hygiene\" && error.code != \"internal_error\"",
+    "find": "    if matches!(\n        kind,\n        \"ui.reports.privacy_hygiene\" | \"ui.reports.psbt_privacy\"\n    ) && error.code == \"internal_error\"",
+    "replace": "    if matches!(\n        kind,\n        \"ui.reports.privacy_hygiene\" | \"ui.reports.psbt_privacy\"\n    ) && error.code != \"internal_error\"",
     "expect_failing": [
-      "corrupt_marker_daemon_classifies_only_unhandled_hygiene_failures"
+      "privacy_report_daemon_classifies_only_unhandled_failures"
     ],
-    "rule": "Typed hygiene refusals never gain an unhandled diagnostic string."
+    "rule": "Typed privacy-report refusals never gain an unhandled diagnostic string."
   },
   {
     "id": "lightning-open-threshold",

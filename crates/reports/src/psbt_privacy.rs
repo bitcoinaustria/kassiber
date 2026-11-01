@@ -2,6 +2,7 @@ use super::*;
 use kassiber_wallets::psbt_privacy::{Baseline, Proposal};
 
 mod inventory;
+mod wire;
 
 /// Capture the shared native historical graph and adversary baseline in one read.
 pub fn report(conn: &Connection, args: &Value, psbt_text: &str) -> Result<Value> {
@@ -33,8 +34,9 @@ pub fn report_with_baseline(
         let mut payload = proposal.analyze(&baseline)?;
         payload["scope"] = serde_json::json!({"workspace":"active","profile":"active",
             "workspace_bound":truthy(value(&workspace,"id")),"profile_bound":truthy(value(&profile,"id"))});
-        kassiber_pytext::loads(&payload.to_string())
-            .map_err(|_| AppError::new("internal_error", "Invalid PSBT report projection"))
+        let payload = kassiber_pytext::loads(&payload.to_string())
+            .map_err(|_| AppError::new("internal_error", "Invalid PSBT report projection"))?;
+        Ok(wire::project(&payload))
     })();
     conn.execute_batch("RELEASE SAVEPOINT psbt_privacy_read")
         .map_err(sql_error)?;

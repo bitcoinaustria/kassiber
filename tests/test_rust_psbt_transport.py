@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import sqlite3
 import subprocess
+import sys
 
 import pytest
 
@@ -16,6 +17,7 @@ from kassiber.errors import AppError
 
 CLI = importlib.import_module("kassiber.cli.main")
 DAEMON = importlib.import_module("kassiber.daemon")
+PARSER = CLI.build_parser()
 
 
 def expected(conn, case):
@@ -24,7 +26,7 @@ def expected(conn, case):
             args = DAEMON._coerce_args_dict("fixture", case.get("args"))
             payload = DAEMON._reports_psbt_privacy_payload(conn, args)
         else:
-            args = CLI.build_parser().parse_args(case["argv"])
+            args = PARSER.parse_args(case["argv"])
             text = args.psbt
             if text is None:
                 text = CLI._read_optional_text_file(args.psbt_file, "PSBT")
@@ -44,7 +46,8 @@ def cases(root, proposal):
                   ["--machine", "--format", "table"], ["--machine", "--format", "plain"]]:
         for scope in ([], ["--workspace", "Main", "--profile", "Book"], ["--profile", "other"], ["--profile", "missing"]):
             yield dict(transport="cli", argv=[*flags, "reports", "psbt-privacy", "--psbt", proposal, *scope])
-    files = [("base64", proposal.encode()), ("whitespace", ("\x1c\n" + proposal + "\r\n ").encode()),
+    files = [("base64", proposal.encode()),
+        ("wrapped-crlf-at-text-bound", (proposal[:10] + "\r\n" * (3 * 1024 * 1024) + proposal[10:]).encode()), ("whitespace", ("\x1c\n" + proposal + "\r\n ").encode()),
         ("empty", b""), ("spaces", b" \n\r\t"), ("nul", b"before\0after"),
         ("invalid-utf8", b"\xff"), ("truncated-utf8", b"\xe2\x82"), ("continuation-utf8", b"abc\xe2\x82X"),
         ("bom", b"\xef\xbb\xbf" + proposal.encode()), ("invalid", b"not-a-PSBT"),
@@ -88,7 +91,7 @@ def test_psbt_cli_file_daemon_adapters_match_python_all_112_tables(tmp_path, off
             env.pop("KASSIBER_NO_EGRESS", None)
         with closing(sqlite3.connect(database)) as conn:
             conn.row_factory = sqlite3.Row
-            conn.executescript(REFERENCE.OVERLAY.SEED.read_text() + REFERENCE.OVERLAY.BOOK.read_text() + case["sql"])
+            conn.executescript("PRAGMA synchronous=OFF; PRAGMA journal_mode=MEMORY;" + REFERENCE.OVERLAY.SEED.read_text() + REFERENCE.OVERLAY.BOOK.read_text() + case["sql"])
             before = REFERENCE.OVERLAY.tables(conn)
             for request in cases(root, case["psbt"]):
                 actual = subprocess.run([str(Path(executable).resolve())], input=(json.dumps(dict(request, database=str(database))) + "\n").encode(),
@@ -99,4 +102,44 @@ def test_psbt_cli_file_daemon_adapters_match_python_all_112_tables(tmp_path, off
                 assert b"sentinel-private-" not in actual.stdout
                 assert REFERENCE.OVERLAY.tables(conn) == before
                 counts[request["transport"]] += 1
-    assert counts == {"cli": 204, "daemon": 60}
+    assert counts == {"cli": 210, "daemon": 60}
+
+
+def test_psbt_transport_mutations_stay_applicable(tmp_path):
+    root = Path(__file__).resolve().parents[1]
+    catalog = root / "crates/reports/scripts/psbt_transport_mutations.json"
+    result = subprocess.run([sys.executable, str(root / "crates/reports/scripts/psbt_transport_mutation_check.py"), "--check"],
+                            env=child_env(tmp_path), capture_output=True, check=True, timeout=30)
+    entries = json.loads(catalog.read_text())
+    assert result.stdout == f"{len(entries)} entries apply\n".encode()
+    source = (root / "crates/kassiber/tests/psbt_privacy.rs").read_text()
+    assert all(f"fn {name}()" in source for entry in entries for name in entry["expect_failing"])
+
+
+@pytest.mark.parametrize("offline", [False, True])
+def test_psbt_historical_transport_preserves_unsorted_wire_bytes(tmp_path, offline):
+    executable = os.environ.get("KASSIBER_PSBT_TRANSPORT_BIN")
+    if not executable:
+        pytest.skip("requires psbt_transport_fixture test-harness build")
+    env = child_env(tmp_path)
+    env["KASSIBER_TEST_NO_EGRESS"] = "strict"
+    env.pop("KASSIBER_NO_EGRESS", None)
+    if offline:
+        env["KASSIBER_NO_EGRESS"] = "1"
+    database = tmp_path / "book.sqlite"
+    for case in json.loads(REFERENCE.DEST.read_text()):
+        with closing(sqlite3.connect(database)) as conn:
+            conn.row_factory = sqlite3.Row
+            conn.executescript("PRAGMA synchronous=OFF; PRAGMA journal_mode=MEMORY;" + REFERENCE.OVERLAY.SEED.read_text() + REFERENCE.OVERLAY.BOOK.read_text() + case["sql"])
+            argv = ["--machine", "reports", "psbt-privacy", "--psbt", case["psbt"]]
+            for key, value in case["args"].items():
+                argv.extend(["--" + key, value])
+            request = dict(transport="cli", argv=argv, wire_order=True, database=str(database))
+            before = REFERENCE.OVERLAY.tables(conn)
+            reference = expected(conn, request)
+            actual = subprocess.run([str(Path(executable).resolve())], input=(json.dumps(request) + "\n").encode(),
+                                    env=env, capture_output=True, check=True, timeout=30)
+            assert actual.stdout == (json.dumps(reference, ensure_ascii=False, separators=(",", ":")) + "\n").encode(), case["name"]
+            assert actual.stderr == b""
+            assert REFERENCE.OVERLAY.tables(conn) == before
+        database.unlink()

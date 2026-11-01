@@ -4199,3 +4199,22 @@ offline-switch states and all 112 tables, with zero egress or fallback dispatch.
 Product registration remains unchanged; mutations and whole-process hybrid
 served-by proof precede the final registration boundary. See the
 [adapter checkpoint](../reference/rust-shell.md#psbt-clifile-and-daemon-adapter-acceptance-r5-privacy-psbt).
+
+### R5 privacy: registered reduced PSBT privacy reads
+
+The PSBT continuation completes the native historical/adversary baseline,
+CLI/file and daemon adapters, transport mutations and product registration in
+three verified local commit boundaries. `reports.psbt-privacy` and
+`ui.reports.psbt_privacy` now execute in Rust: 192 CLI calls and 180 daemon
+requests in 12 sessions match the unchanged reference with all 112 tables
+preserved, zero hybrid fallbacks and no egress in both offline-switch states.
+All 21 transport/registration mutations are killed; the full 408-case historical
+corpus also retains unsorted JSON wire order. Inventory is now 155 CLI leaves
+(23 reports), with 16 report daemon kinds plus two transaction exports.
+
+The retained decoder exception follows the explicit native diagnostic contract;
+Python remains unchanged. Mirror delivery, the legacy scorer, chain-analysis
+comparison/Payjoin/entropy transports and AI dispatch are separate work. No
+signing or broadcasting authority is introduced. The
+[registration checkpoint](../reference/rust-shell.md#registered-psbt-privacy-reads-r5-privacy-psbt)
+records routing counts, mutations, checks and the local-only verification limits.

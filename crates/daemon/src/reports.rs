@@ -13,6 +13,7 @@ pub const KINDS: &[&str] = &[
     "ui.reports.tax_summary",
     "ui.reports.balance_history",
     "ui.reports.privacy_hygiene",
+    "ui.reports.psbt_privacy",
     "ui.reports.exit_tax_preview",
     "ui.reports.export_csv",
     "ui.reports.export_xlsx",
@@ -889,7 +890,7 @@ mod tests {
         );
         assert!(KINDS.contains(&"ui.reports.privacy_hygiene"));
         assert!(!KINDS.contains(&"ui.reports.privacy_mirror"));
-        assert!(!KINDS.contains(&"ui.reports.psbt_privacy"));
+        assert!(KINDS.contains(&"ui.reports.psbt_privacy"));
     }
     #[test]
     fn lightning_daemon_preserves_alias_scope_window_and_registration() {

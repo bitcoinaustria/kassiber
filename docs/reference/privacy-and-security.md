@@ -1114,7 +1114,7 @@ AI providers. Neither classification grants network consent. The output omits
 endpoints, credentials, labels, watch-only material, raw metadata and exact
 amounts. AI dispatch remains Python. The
 [Rust privacy checkpoint](rust-shell.md#privacy-hygiene-checkpoint-r5-reports-privacy-partial)
-records parity and the unported Mirror/PSBT boundary.
+records that configuration-only checkpoint; Mirror remains unported.
 
 The native LND profitability acquisition client uses only
 `kassiber-net` HTTP routes. Its caller must provide current consent for the
@@ -1144,3 +1144,19 @@ command details are excluded from errors. It serves the same exact profitability
 actions through the shared book service; background and AI routes remain
 unported. See the
 [CLN subprocess boundary](rust-port-egress.md#cln-profitability-subprocess-acquisition-r5-preparation).
+
+## Native reduced PSBT privacy reads
+
+`reports psbt-privacy --psbt …` / `--psbt-file …` and
+`ui.reports.psbt_privacy` analyze the supplied proposal against a single local
+book snapshot, including the shared historical observer graph and reviewed
+anchor exposure. File paths are literal local UTF-8 text inputs; the daemon
+accepts only PSBT text and cannot receive a path, scope or graph baseline.
+Neither transport performs DNS, sockets, provider probes, signing or broadcast.
+The read does not persist proposal material or alter historical evidence. Its
+reduced result omits raw proposals, scripts, keys, derivations, wallet
+configuration and anchor contents.
+Exact wire and all-table comparisons run under strict no-egress in both
+offline-switch states. AI dispatch and the separate chain-analysis PSBT
+comparison/Payjoin/entropy routes retain their existing authority boundaries.
+See the [native acceptance checkpoint](rust-shell.md#registered-psbt-privacy-reads-r5-privacy-psbt).

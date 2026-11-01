@@ -63,7 +63,13 @@ fn main() {
         writeln!(
             stdout,
             "{}",
-            kassiber_pyjson::dumps(&response, &Options::new().sort_keys(true).compact()).unwrap()
+            kassiber_pyjson::dumps(
+                &response,
+                &Options::new()
+                    .sort_keys(field("wire_order") != &Value::Bool(true))
+                    .compact()
+            )
+            .unwrap()
         )
         .unwrap();
         assert!(gate.attempts().records.is_empty());
