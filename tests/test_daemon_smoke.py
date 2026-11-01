@@ -12590,7 +12590,9 @@ class DaemonSmokeTest(unittest.TestCase):
                             },
                         },
                     )
-                    self.assertEqual(_read_payload_timeout(proc)["kind"], "ui.secrets.init")
+                    self.assertEqual(
+                        _read_payload_timeout(proc, timeout=15.0)["kind"], "ui.secrets.init"
+                    )
                     _write_payload(
                         proc,
                         {
