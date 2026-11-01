@@ -1107,14 +1107,25 @@ Default-feature production clippy also passes. Static applicability passes for
 all 44 mutation catalogs, including the re-anchored freshness lifecycle and
 product entries.
 
+### Assistant tool disposition
+
+The assistant's `ui.journals.process` tool runs inside `ai.chat` through
+`_execute_mutating_ai_tool` and `_run_scoped_ai_mutation` on the Python
+daemon's main-thread connection, with `auto_pair=False`. The native daemon
+does not serve `ai.chat`. Registering only the tool's journal step natively
+would require either a Python product change that calls the binary or an
+in-process binding. The [R4 design](r4-journal-pipeline.md#what-stays-python)
+keeps the AI tool projections, including this tool, in Python under R6. Its
+[authority switch](r4-journal-pipeline.md#authority-switch-r4-16) leaves the
+Python product unchanged and rules out an early PyO3 path. The owner's scope
+also leaves R6 untouched. The tool therefore stays Python, and this continuation
+records that boundary instead of registering it. A public no-pairing daemon
+kind would not substitute for it. Both runtimes write identical stored state,
+so reports read either runtime's rebuild.
+
 ### Seventh-continuation remaining work
 
-The internal scoped AI mutation still calls Python's consent-bound main-thread
-dispatcher with `auto_pair=False`. Register that internal path while retaining
-its consent handling and Python chat loop; a new public daemon kind is not a
-substitute.
-
-Then run all **25,030 generated** and **318 recorded** operands through the
+Run all **25,030 generated** and **318 recorded** operands through the
 registered routes, including census/shadow and every inherited mutation catalog
 with source/binary manifests. Run the four-book benchmarks from process start
 to exit against Python and record load. Complete the refusal census for NaN,

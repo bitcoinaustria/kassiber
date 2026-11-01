@@ -3285,9 +3285,11 @@ execution slot as the native freshness journal job, with automatic pairing,
 ordered progress, cancellation and connection-owner retirement. Its direct
 processing preserves Python's table mutations without queueing a freshness job.
 The [seventh continuation](../reference/r4-journal-process-checkpoint.md#seventh-continuation-desktop-registration)
-records the separate verification boundary. Transitional JSON boundaries and
-the internal scoped AI registration remain open. AI consent covers a rebuild
-without automatic pairing; its chat loop remains Python. Registered-route
+records the separate verification boundary. Transitional JSON boundaries
+remain open. The assistant's internal tool, whose consent covers a rebuild
+without automatic pairing, stays in Python's chat loop under R6: the R4 design
+keeps AI projections in Python and rules out Python product changes and an
+early PyO3 path, so no native route can serve it before the R7 cutover. Registered-route
 campaigns, census/shadow, inherited mutation and performance acceptance are
 still required. Python retains production authority until R4-16.
 

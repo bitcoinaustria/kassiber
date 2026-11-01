@@ -1035,7 +1035,7 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   reaches 13.02× / 11.75× Python at 20k. Pairing journal routes remain Python.
 
   reaches 13.02× / 11.75× Python at 20k. CLI, desktop and freshness pairing are
-  integrated; scoped AI processing retains Python.
+  integrated; the assistant's no-pairing tool stays Python under R6.
 - [ ] R4-13 and R4-16: CLI and daemon journal commands, integration of
   automatic pairing and the authority switch.
   R4-13's [composition checkpoint](docs/reference/r4-journal-process-checkpoint.md)
@@ -1058,8 +1058,9 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   retaining Python's first stale-rebuild commit and rolling back pending pairs
   with a failed second rebuild. Desktop processing shares the freshness slot
   and native journal service, with scoped argument authority, ordered progress,
-  cancellation and connection-owner retirement. Register the internal scoped AI
-  mutation separately; finish registered-route campaigns, census/shadow, inherited
+  cancellation and connection-owner retirement. The assistant's internal
+  no-pairing mutation stays in Python's chat loop under R6, as the R4 design
+  requires; finish registered-route campaigns, census/shadow, inherited
   mutations and benchmarks.
   The third continuation integrates the requested loader/BLOB, pre-build,
   render and persistence tips, adds resumable complete-process shards, and
