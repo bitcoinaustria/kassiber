@@ -281,7 +281,7 @@ def call_core_lightning(
         )
     _refuse_commando(backend)
     # lightning-cli is an external process, outside the shared transport.
-    egress_policy.require_online("Core Lightning calls are")
+    egress_policy.require_egress_enabled("Core Lightning calls are")
     command = _base_command(backend, method, args)
     try:
         completed = subprocess.run(
@@ -574,6 +574,8 @@ def fetch_core_lightning_snapshot(
         try:
             return caller(method, None)
         except AppError as exc:
+            if exc.code == "network_egress_disabled":
+                raise
             errors[method] = str(exc)
             return None
 

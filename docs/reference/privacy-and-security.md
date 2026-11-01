@@ -252,7 +252,8 @@ transport configuration.
 
 `KASSIBER_NO_EGRESS=1` blocks the shared backend HTTP/SOCKS and Python Electrum
 connect boundaries, native BDK/LWK observer construction, and chain-analysis
-acquisition, including loopback nodes. Acquisition rechecks it for every
+acquisition and Core Lightning client subprocesses, including loopback nodes.
+Acquisition rechecks it for every
 request. It is not an OS firewall and does not govern external browsers or
 provider CLI processes. The update checker has its own
 `KASSIBER_DISABLE_UPDATE_CHECK` override. The test-suite socket guard uses the
