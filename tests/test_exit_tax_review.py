@@ -580,7 +580,9 @@ def test_dashboard_today_uses_the_same_vienna_civil_day(engine_book, monkeypatch
 
     conn = engine_book([
         ("buy", "Cold", "2022-01-01T00:00:00Z", "inbound", BTC, 0, 30000, "buy"),
-        ("night", "Cold", "2025-01-02T00:15:00+01:00", "inbound", BTC // 1000, 0, 65000, "buy"),
+        # After both the current UTC day ends and Vienna's new day starts:
+        # only choosing Jan 2 in Vienna includes this receipt in today's tile.
+        ("night", "Cold", "2025-01-02T12:00:00Z", "inbound", BTC // 1000, 0, 65000, "buy"),
     ])
     monkeypatch.setattr(exit_tax, "datetime", MidnightVienna)
     monkeypatch.setattr(ui_snapshot, "datetime", MidnightVienna)
