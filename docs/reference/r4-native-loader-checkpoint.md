@@ -1,6 +1,12 @@
 # R4-9 native custody loader checkpoint
 
-> Evidence inherited from t3code/r4-9-loader-determinism@aaf6216e3; pending fresh r9 verification.
+> Source acceptance is inherited from t3code/r4-9-loader-determinism@aaf6216e3.
+> Fresh R9 verification passes all 274 loader/BLOB cases, the 24,000-book
+> custody/render campaign with 1,030 permutations, 159 archived requests and
+> their permutations, and focused census/shadow. The
+> [R9 integration audit](rust-backend-r9-integration.md#fresh-r9-verification)
+> tracks the remaining combined gates; historical timings below retain their
+> source scope.
 
 R4-9 is **fully accepted, with no pending exceptions**. The integrated
 continuation combines loader-9's exhaustive branch map and stage campaigns,

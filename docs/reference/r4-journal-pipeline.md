@@ -19,13 +19,18 @@ timings supersede the engine line in this design's original measurements.
 R4-9 has a [test-only loader checkpoint](r4-native-loader-checkpoint.md)
 whose accepted determinism continuation combines loader-9's exhaustive map,
 lossless BLOB consumers and one exact typed revision refusal. All forty older
-seed-dependent message exceptions are closed in that source record. Evidence
-inherited from t3code/r4-9-loader-determinism@aaf6216e3; pending fresh r9 verification.
+seed-dependent message exceptions are closed in that source record, inherited
+from t3code/r4-9-loader-determinism@aaf6216e3. Fresh R9 verification passes
+274 loader/BLOB cases, generated and archived custody/render campaigns, and
+focused census/shadow; the [R9 audit](rust-backend-r9-integration.md#fresh-r9-verification)
+tracks the remaining combined gates. Historical timings keep their source scope.
 Python retains production authority.
 The [R4-14 pairing stage](rust-pairing.md) reuses the native transfer library;
 its 20k process CPU acceptance is 13.02× generic and 11.75× multi-wallet.
 Journal route activation remains with R4-13/R4-15/R4-16.
-Evidence inherited from t3code/r4-14-auto-pair@c47450757; pending fresh r9 verification.
+Those CPU measurements are inherited from t3code/r4-14-auto-pair@c47450757.
+The R9 workspace passes the integrated pairing stage tests; combined CPU and
+mutation results are tracked in the [R9 audit](rust-backend-r9-integration.md#fresh-r9-verification).
 R4-13 has a [test-only composition checkpoint](r4-journal-process-checkpoint.md):
 real ordered R4-10 repairs/pricing through native load and persistence with
 transactional rollback and progress, and no CLI or daemon registration. Its
@@ -369,7 +374,7 @@ byte parity; its CPU ceilings remain the stage acceptance targets.
 | R4-6 | Typed quantity state; remove the Python-model conversion | 1.58 / 1.82 | ≤ 1/4 |
 | R4-7 | Typed finalized projection; custody in-process total checked | 1.05 / 1.16 | custody ≤ 0.51 s generic, ≤ 1.21 s multi-wallet (10× Python) |
 | R4-8 | Typed fusion to `LedgerRequest`, `ledger_typed` in the engine, text only for refusal fidelity and comparison | builder 1.31 / 1.42, wire 0.19, engine parse and serialize about 0.08 | request ≤ 0.10 s; engine no slower |
-| R4-9 | Native SQLite loader to shared custody rows, with strict typed JSON admission retained separately; [accepted determinism continuation](r4-native-loader-checkpoint.md#deterministic-revision-reference-acceptance) combines lossless BLOB parity and exact typed revision refusals, closing all forty historical seed-dependent message exceptions. Evidence inherited from t3code/r4-9-loader-determinism@aaf6216e3; pending fresh r9 verification. Earlier acceptance, mutation and timing receipts remain historical; Python retains production authority | Python load 1.57 / 1.89 (historical floor 0.11; remeasured shell CPU 0.117) | ≤ 0.30 s |
+| R4-9 | Native SQLite loader to shared custody rows, with strict typed JSON admission retained separately; [accepted determinism continuation](r4-native-loader-checkpoint.md#deterministic-revision-reference-acceptance) combines lossless BLOB parity and exact typed revision refusals, closing all forty historical seed-dependent message exceptions. Source acceptance is inherited from t3code/r4-9-loader-determinism@aaf6216e3. Fresh R9 loader/BLOB, generated/replay and focused gates pass; the [R9 audit](rust-backend-r9-integration.md#fresh-r9-verification) tracks combined verification. Earlier mutation and timing receipts retain their historical scope; Python retains production authority | Python load 1.57 / 1.89 (historical floor 0.11; remeasured shell CPU 0.117) | ≤ 0.30 s |
 | R4-10 | Pre-build repairs and auto-pricing in Rust; database-dump parity. [Combined interface](#r4-10-combined-pre-build-contract) and later-failure rollback are implemented; campaign and CPU acceptance remain open. | Python 0.03 | ≤ 0.03 s |
 | R4-11 | Rendering and joins: entries, quarantine enrichment with ownership candidates, holdings, balance comparison, ownership review; [partial implementation](r4-journal-render-checkpoint.md), [boundary continuation](r4-journal-render-boundary-checkpoint.md); acceptance remains open | Python 1.38 / 1.71 | ≤ 0.15 s |
 | R4-12 | Persistence: typed rows to prepared statements, freshness markers, filed-report impact resolution, deferred checkpoint; database-dump parity. [Unregistered checkpoint](r4-journal-persistence-checkpoint.md); acceptance open. | Continuation plaintext 20k fresh CPU: Python 1.504 / 1.553; floor 0.854 / 0.951; native 0.931 / 1.117. Unchanged CPU 0.770 / 0.453 still misses. | ≤ floor + 0.15 s |
