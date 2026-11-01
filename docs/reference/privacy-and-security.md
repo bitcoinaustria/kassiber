@@ -262,6 +262,12 @@ sockets; native transport policy therefore also needs explicit routing tests.
 
 ### Offline mode
 
+The configuration-posture report labels only valid loopback endpoints as
+`on_device`. Private LAN addresses and `.local` names can reach another machine;
+they require explicit self-hosted ownership to receive that label instead of
+the remote classification. Malformed endpoints remain unknown. Classification
+never resolves a hostname or probes a service.
+
 **Offline** in the title-bar connection panel, **Settings → Privacy → Work
 offline**, and `kassiber offline on|off|status` set one machine-wide switch,
 in the manner of Sparrow Wallet's offline mode. It is stored in an owner-only
