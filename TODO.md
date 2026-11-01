@@ -576,6 +576,11 @@ registers them; exit-tax preserves its reference no-registration boundary.
   General graph capture/analytics, CLI/file/daemon acceptance, routing proof
   and registration still block the parent PSBT task; served-by counts are zero.
   See the [inventory checkpoint](docs/reference/rust-shell.md#psbt-native-inventory-admission-checkpoint-r5-privacy-psbt-partial).
+- [x] Capture PSBT historical/adversary baselines through Mirror's native index
+  and SQL source interfaces. Preserve public-only components, reviewed anchor
+  exposure and bounded uncertainty inside one scope snapshot; compare unchanged
+  Python bytes and all 112 tables. Product transports and registration follow;
+  see the [historical checkpoint](docs/reference/rust-shell.md#native-psbt-historical-baseline-r5-privacy-psbt).
 - [x] Port full-report, Austrian bundle and transaction CSV artifacts, saved
   export registration and their daemon kinds. Preserve
   sealed summaries, hashes and phase-4 append-only impact history.

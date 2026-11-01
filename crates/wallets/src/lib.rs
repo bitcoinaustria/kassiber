@@ -9,6 +9,7 @@ pub use snapshot::snapshot;
 
 pub mod acquisition;
 pub mod analysis_features;
+pub mod analysis_index;
 pub mod bdk;
 mod bdk_state;
 pub mod bitcoin_records;

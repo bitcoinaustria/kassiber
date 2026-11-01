@@ -12,7 +12,9 @@ fn main() {
             let case: serde_json::Value = serde_json::from_str(&line.unwrap()).unwrap();
             let conn = Connection::open(case["database"].as_str().unwrap()).unwrap();
             let args = kassiber_pytext::loads(&case["args"].to_string()).unwrap();
-            let result = if case["native_inventory"] == true {
+            let result = if case["native_history"] == true {
+                kassiber_reports::psbt_privacy::report(&conn, &args, case["psbt"].as_str().unwrap())
+            } else if case["native_inventory"] == true {
                 report_inventory(&conn, &args, case["psbt"].as_str().unwrap())
             } else {
                 report_with_baseline(

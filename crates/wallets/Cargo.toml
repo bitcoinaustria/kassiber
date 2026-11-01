@@ -97,3 +97,23 @@ kassiber-net = { path = "../net", features = ["test-support"] }
 
 [lints.rust]
 unsafe_code = "forbid"
+
+[[example]]
+name = "analysis_index_fixture"
+required-features = ["test-harness"]
+
+[[example]]
+name = "analysis_traversal_fixture"
+required-features = ["test-harness"]
+
+[[example]]
+name = "analysis_analytics_fixture"
+required-features = ["test-harness"]
+
+[[example]]
+name = "analysis_datasets_fixture"
+required-features = ["test-harness"]
+
+[[example]]
+name = "analysis_entropy_fixture"
+required-features = ["test-harness"]

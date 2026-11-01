@@ -447,3 +447,47 @@ REVIEWS["tests/test_rust_psbt.py"] = {"*": {"disposition": "oracle", "group": "c
 REVIEWS["tests/test_rust_psbt_privacy.py"] = {"*": {"disposition": "oracle", "group": "reports", "reason": "compares unchanged Python reduced PSBT inventory/linkage overlays and scoped report redaction against a guarded native service driver with an injected admitted graph; retains canonical bytes, all 112 tables and mutation applicability without claiming native graph capture, transport acceptance or product routing"}}
 
 REVIEWS["tests/test_rust_psbt_inventory.py"] = {"*": {"disposition": "oracle", "group": "reports", "reason": "compares native inventory-only PSBT baseline capture with the unchanged full Python graph, canonical report bytes and all 112 tables under a strict no-egress observer; pins fail-closed source admission and bounds without claiming historical graph, transport or product routing acceptance"}}
+
+
+REVIEWS["tests/test_rust_analysis_index.py"] = {"*": {
+    "disposition": "oracle", "group": "chain-sync",
+    "reason": "compares native occurrence and captured public-observer primitives with unchanged Python, exact canonical bytes and all 112 table read invariants; retains the Python hash-seed repro and named mutations; keeps durable-index and Mirror product acceptance separate",
+}}
+
+
+REVIEWS["tests/test_rust_analysis_ingestion.py"] = {"*": {
+    "disposition": "oracle", "group": "chain-sync",
+    "reason": "compares the native observation merge kernel and confirmation overlay with unchanged Python, exact bytes, eight ambiguity-order variants and all 112 tables; retains mutation killers and no-consent process checks; durable synchronization and Mirror routing remain separate",
+}}
+
+
+REVIEWS["tests/test_rust_analysis_traversal.py"] = {"*": {
+    "disposition": "oracle", "group": "chain-sync",
+    "reason": "compares native traversal over captured snapshots with unchanged Python canonical bytes, shared path budgets, named mutations and no-consent process checks; durable sourcing and Mirror product routing remain separate",
+}}
+
+
+REVIEWS["tests/test_rust_analysis_analytics.py"] = {"*": {
+    "disposition": "oracle", "group": "chain-sync",
+    "reason": "compares native clustering, topology patterns, attribution and full analytics composition with unchanged Python over captured observer snapshots; retains byte checks, fixed hash-seed replay and named mutations; conditional entropy and product report transports are checked separately",
+}}
+
+
+REVIEWS["tests/test_rust_analysis_datasets.py"] = {"*": {
+    "disposition": "oracle", "group": "chain-sync",
+    "reason": "compares native exact subject canonicalization and captured-row dataset matching with unchanged Python bytes, independent visibility limits, fixed hash seeds and named mutations; dataset lifecycle/query services remain separate",
+}}
+
+
+REVIEWS["tests/test_rust_analysis_entropy.py"] = {"*": {
+    "disposition": "oracle", "group": "chain-sync",
+    "reason": "compares native conditional financial-flow partitions with unchanged Python over captured transaction facts, exact count/link/example/progress bytes, forced cancellation/time/memory boundaries, large-integer logarithms, fixed hash seeds and named mutations; product routing remains separate",
+}}
+
+
+REVIEWS["tests/test_rust_analysis_sources.py"] = {"*": {
+    "disposition": "oracle", "group": "chain-sync",
+    "reason": "compares SQL source orchestration, canonical index bytes, dataset limits and coverage with unchanged Python and all 112 table read invariants; retains hash-seed variants, a reference script repro, named mutations and no-consent native process checks; legacy JSON, durable synchronization and Mirror product routing remain unported",
+}}
+
+REVIEWS["tests/test_rust_psbt_history.py"] = {"*": {"disposition": "oracle", "group": "reports", "reason": "compares native historical/adversary PSBT baselines with the unchanged database graph and exact report bytes; preserves all 112 tables under strict no-egress with both offline-switch states, without counting fixture calls as served product reads"}}

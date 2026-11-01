@@ -1,0 +1,252 @@
+[
+  {
+    "id": "source-profile",
+    "file": "crates/wallets/src/analysis_index/sources.rs",
+    "find": "SELECT * FROM {table} WHERE profile_id = ?",
+    "replace": "SELECT * FROM {table} WHERE profile_id != ?",
+    "expect_failing": [
+      "sql_sources_match_python_variants_and_all_112_tables"
+    ],
+    "rule": "Profile-scoped sources never contribute another book\u2019s rows."
+  },
+  {
+    "id": "source-wallet-kind",
+    "file": "crates/wallets/src/analysis_index/sources.rs",
+    "find": "row[\"wallet_kind\"] = wallet[\"kind\"].clone();",
+    "replace": "row[\"wallet_kind\"] = Value::Null;",
+    "expect_failing": [
+      "sql_sources_match_python_variants_and_all_112_tables"
+    ],
+    "rule": "Wallet kind enriches stored protocol scope."
+  },
+  {
+    "id": "source-wallet-config",
+    "file": "crates/wallets/src/analysis_index/sources.rs",
+    "find": "row[\"wallet_config_json\"] = wallet[\"config_json\"].clone();",
+    "replace": "row[\"wallet_config_json\"] = Value::Null;",
+    "expect_failing": [
+      "sql_sources_match_python_variants_and_all_112_tables"
+    ],
+    "rule": "Wallet configuration supplies network and chain instance facts."
+  },
+  {
+    "id": "source-cache",
+    "file": "crates/wallets/src/analysis_index/sources.rs",
+    "find": "builder.reference(&row, false)?;",
+    "replace": "builder.reference(&row, true)?;",
+    "expect_failing": [
+      "sql_sources_match_python_variants_and_all_112_tables"
+    ],
+    "rule": "The shared cache remains a reference without profile seed authority."
+  },
+  {
+    "id": "source-inventory",
+    "file": "crates/wallets/src/analysis_index/sources.rs",
+    "find": "builder.inventory(&row)?;",
+    "replace": "let _ = row;",
+    "expect_failing": [
+      "sql_sources_match_python_variants_and_all_112_tables"
+    ],
+    "rule": "Inventory contributes exact observations and separate ownership evidence."
+  },
+  {
+    "id": "source-reconciling",
+    "file": "crates/wallets/src/analysis_index/sources.rs",
+    "find": "row[\"active\"] == 2",
+    "replace": "row[\"active\"] == 0",
+    "expect_failing": [
+      "sql_sources_match_python_variants_and_all_112_tables"
+    ],
+    "rule": "Reconciling assertions remain visible as coverage."
+  },
+  {
+    "id": "source-active",
+    "file": "crates/wallets/src/analysis_index/sources.rs",
+    "find": "if row[\"active\"] == 1 {",
+    "replace": "if row[\"active\"] != 0 {",
+    "expect_failing": [
+      "sql_sources_match_python_variants_and_all_112_tables"
+    ],
+    "rule": "Only active assertions contribute physical references."
+  },
+  {
+    "id": "source-label-delete",
+    "file": "crates/wallets/src/analysis_index/sources.rs",
+    "find": "if truth(&row[\"deleted\"]) {",
+    "replace": "if !truth(&row[\"deleted\"]) {",
+    "expect_failing": [
+      "sql_sources_match_python_variants_and_all_112_tables"
+    ],
+    "rule": "Deleted authored labels cannot establish current attribution."
+  },
+  {
+    "id": "source-label-order",
+    "file": "crates/wallets/src/analysis_index/sources.rs",
+    "find": "builder.labels.sort_by_key(|row| text(&row[\"id\"]));",
+    "replace": "builder.labels.sort_by_key(|row| std::cmp::Reverse(text(&row[\"id\"])));",
+    "expect_failing": [
+      "sql_sources_match_python_variants_and_all_112_tables"
+    ],
+    "rule": "Authored labels retain canonical identity order."
+  },
+  {
+    "id": "source-custody-version",
+    "file": "crates/wallets/src/analysis_index/sources.rs",
+    "find": "profile_row[\"journal_input_version\"] == profile_row[\"last_processed_input_version\"]",
+    "replace": "profile_row[\"journal_input_version\"] != profile_row[\"last_processed_input_version\"]",
+    "expect_failing": [
+      "sql_sources_match_python_variants_and_all_112_tables"
+    ],
+    "rule": "Custody freshness requires the processed source version."
+  },
+  {
+    "id": "source-custody-count",
+    "file": "crates/wallets/src/analysis_index/sources.rs",
+    "find": ".filter(|row| !truth(&row[\"excluded\"]))",
+    "replace": ".filter(|_| true)",
+    "expect_failing": [
+      "sql_sources_match_python_variants_and_all_112_tables"
+    ],
+    "rule": "Only included transactions count toward custody freshness."
+  },
+  {
+    "id": "source-stale-finding",
+    "file": "crates/wallets/src/analysis_index/sources.rs",
+    "find": "if !fresh {",
+    "replace": "if fresh {",
+    "expect_failing": [
+      "sql_sources_match_python_variants_and_all_112_tables"
+    ],
+    "rule": "Stale custody explicitly reports its traversal barrier."
+  },
+  {
+    "id": "source-missing-tables",
+    "file": "crates/wallets/src/analysis_index/sources.rs",
+    "find": "if !tables.contains(table) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "sql_sources_match_python_variants_and_all_112_tables"
+    ],
+    "rule": "Missing required tables are retained coverage rather than SQL errors."
+  },
+  {
+    "id": "dataset-source-state",
+    "file": "crates/wallets/src/analysis_index/sources.rs",
+    "find": "status='active'{clause}",
+    "replace": "status!='staging'{clause}",
+    "expect_failing": [
+      "sql_sources_match_python_variants_and_all_112_tables"
+    ],
+    "rule": "Only active dataset versions supply claims or state commitments."
+  },
+  {
+    "id": "dataset-public-visibility",
+    "file": "crates/wallets/src/analysis_index/sources.rs",
+    "find": "\" AND visibility='public'\"",
+    "replace": "\" AND visibility='private'\"",
+    "expect_failing": [
+      "sql_sources_match_python_variants_and_all_112_tables"
+    ],
+    "rule": "Public source selection cannot expose private packs."
+  },
+  {
+    "id": "dataset-expiry",
+    "file": "crates/wallets/src/analysis_index/sources.rs",
+    "find": "instant >= v",
+    "replace": "instant > v",
+    "expect_failing": [
+      "sql_sources_match_python_variants_and_all_112_tables"
+    ],
+    "rule": "Pack validity ends at its exclusive bound."
+  },
+  {
+    "id": "dataset-claim-expiry",
+    "file": "crates/wallets/src/analysis_index/sources.rs",
+    "find": "valid_until>?",
+    "replace": "valid_until>=?",
+    "expect_failing": [
+      "sql_sources_match_python_variants_and_all_112_tables"
+    ],
+    "rule": "Claim validity ends at its exclusive bound."
+  },
+  {
+    "id": "dataset-script-bound",
+    "file": "crates/wallets/src/analysis_index/sources.rs",
+    "find": "script.len() <= MAX_SCRIPT_BYTES * 2",
+    "replace": "script.len() < MAX_SCRIPT_BYTES * 2",
+    "expect_failing": [
+      "sql_sources_match_python_variants_and_all_112_tables"
+    ],
+    "rule": "Scripts exactly at the accepted bound remain matchable."
+  },
+  {
+    "id": "dataset-subject-bound",
+    "file": "crates/wallets/src/analysis_index/sources.rs",
+    "find": "pub const MAX_SUBJECTS: usize = 100_000;",
+    "replace": "pub const MAX_SUBJECTS: usize = 1;",
+    "expect_failing": [
+      "sql_sources_match_python_variants_and_all_112_tables"
+    ],
+    "rule": "The subject budget is applied before exact indexed matches."
+  },
+  {
+    "id": "dataset-claim-bound",
+    "file": "crates/wallets/src/analysis_index/sources.rs",
+    "find": "const MATCH_LIMIT: usize = 5_000;",
+    "replace": "const MATCH_LIMIT: usize = 4_999;",
+    "expect_failing": [
+      "sql_sources_match_python_variants_and_all_112_tables"
+    ],
+    "rule": "Public and private populations each retain the full claim budget."
+  },
+  {
+    "id": "dataset-lookup-chunks",
+    "file": "crates/wallets/src/analysis_index/sources.rs",
+    "find": ".chunks(200)",
+    "replace": ".chunks(199)",
+    "expect_failing": [
+      "sql_sources_match_python_variants_and_all_112_tables"
+    ],
+    "rule": "Coverage accounts for each bounded lookup chunk."
+  },
+  {
+    "id": "dataset-invalid-script",
+    "file": "crates/wallets/src/analysis_index/sources.rs",
+    "find": "!script.bytes().all(|b| b.is_ascii_hexdigit())",
+    "replace": "false",
+    "expect_failing": [
+      "sql_sources_match_python_variants_and_all_112_tables"
+    ],
+    "rule": "Malformed observed exact keys fail the same closed validation as Python."
+  },
+  {
+    "id": "dataset-mapping-shape",
+    "file": "crates/wallets/src/analysis_index/sources.rs",
+    "find": "if parsed.is_object() {",
+    "replace": "if true {",
+    "expect_failing": [
+      "sql_sources_refuse_malformed_dataset_mappings_without_writes"
+    ],
+    "rule": "Malformed stored manifests and source records fail closed."
+  },
+  {
+    "id": "source-savepoint-release",
+    "file": "crates/wallets/src/analysis_index/sources.rs",
+    "find": "conn.execute_batch(\"RELEASE SAVEPOINT chain_analysis_read\")",
+    "replace": "conn.execute_batch(\"SELECT 1\")",
+    "expect_failing": [
+      "sql_sources_preserve_caller_writes_and_release_failed_reads"
+    ],
+    "rule": "Successful and failed captures release only their own read savepoint."
+  },
+  {
+    "id": "source-caller-commit",
+    "file": "crates/wallets/src/analysis_index/sources.rs",
+    "find": "conn.execute_batch(\"SAVEPOINT chain_analysis_read\")",
+    "replace": "conn.execute_batch(\"COMMIT; SAVEPOINT chain_analysis_read\")",
+    "expect_failing": [
+      "sql_sources_preserve_caller_writes_and_release_failed_reads"
+    ],
+    "rule": "Source capture cannot commit caller-owned writes."
+  }
+]

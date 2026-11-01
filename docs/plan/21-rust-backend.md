@@ -4179,3 +4179,13 @@ Integrating that shared graph remains necessary before CLI/file and
 daemon acceptance, transport mutations, hybrid routing proof and registration.
 PSBT product served-by counts remain zero; the legacy scorer and Mirror remain
 their separate workers' scope. Signing, finalizing and broadcasting are absent.
+
+### R5 privacy: native PSBT historical baseline
+
+The PSBT continuation reuses Mirror's native index and SQL source interfaces
+from `4d2e0c289` and `911f5d3e7`. The reduced report now captures historical
+public linkage, bounded coverage and reviewed source-funds/counterparty exposure
+inside its scope snapshot. Its 408-case unchanged-Python corpus compares exact
+report/error bytes and all 112 tables. Product routing remains unregistered;
+transport acceptance, mutations and served-by registration follow this boundary.
+See the [historical baseline checkpoint](../reference/rust-shell.md#native-psbt-historical-baseline-r5-privacy-psbt).

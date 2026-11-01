@@ -3,8 +3,17 @@ use kassiber_wallets::psbt_privacy::{Baseline, Proposal};
 
 mod inventory;
 
-/// Native inventory-only checkpoint. Product routes remain gated until the
-/// shared historical graph can be admitted, rather than silently omitted.
+/// Capture the shared native historical graph and adversary baseline in one read.
+pub fn report(conn: &Connection, args: &Value, psbt_text: &str) -> Result<Value> {
+    report_with_baseline(
+        conn,
+        args,
+        psbt_text,
+        kassiber_wallets::psbt_privacy::history::capture,
+    )
+}
+
+/// Retained inventory-only checkpoint with explicit historical-source refusal.
 pub fn report_inventory(conn: &Connection, args: &Value, psbt_text: &str) -> Result<Value> {
     report_with_baseline(conn, args, psbt_text, inventory::capture)
 }

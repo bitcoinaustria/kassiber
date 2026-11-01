@@ -1,0 +1,342 @@
+[
+  {
+    "id": "mirror-index-wallets",
+    "file": "crates/wallets/src/analysis_index/observer.rs",
+    "find": "set(&mut public, \"wallet_ids\", Value::List(vec![]));",
+    "replace": "set(&mut public, \"wallet_ids\", field(node, \"wallet_ids\").clone());",
+    "expect_failing": [
+      "public_observer_matches_python_and_all_112_tables"
+    ],
+    "rule": "Public nodes must withhold private wallet IDs."
+  },
+  {
+    "id": "mirror-index-transaction_id",
+    "file": "crates/wallets/src/analysis_index/observer.rs",
+    "find": "remove(&mut public, \"transaction_id\");",
+    "replace": "let _retained = field(&public, \"transaction_id\");",
+    "expect_failing": [
+      "public_observer_matches_python_and_all_112_tables"
+    ],
+    "rule": "Public projection must withhold transaction_id."
+  },
+  {
+    "id": "mirror-index-occurred_at",
+    "file": "crates/wallets/src/analysis_index/observer.rs",
+    "find": "remove(&mut public, \"occurred_at\");",
+    "replace": "let _retained = field(&public, \"occurred_at\");",
+    "expect_failing": [
+      "public_observer_matches_python_and_all_112_tables"
+    ],
+    "rule": "Public projection must withhold occurred_at."
+  },
+  {
+    "id": "mirror-index-address",
+    "file": "crates/wallets/src/analysis_index/observer.rs",
+    "find": "remove(&mut public, \"address\");",
+    "replace": "let _retained = field(&public, \"address\");",
+    "expect_failing": [
+      "public_observer_matches_python_and_all_112_tables"
+    ],
+    "rule": "Public projection must withhold address."
+  },
+  {
+    "id": "mirror-index-directions",
+    "file": "crates/wallets/src/analysis_index/observer.rs",
+    "find": "remove(&mut public, \"directions\");",
+    "replace": "let _retained = field(&public, \"directions\");",
+    "expect_failing": [
+      "public_observer_matches_python_and_all_112_tables"
+    ],
+    "rule": "Public projection must withhold directions."
+  },
+  {
+    "id": "mirror-index-transaction_ids",
+    "file": "crates/wallets/src/analysis_index/observer.rs",
+    "find": "remove(&mut public, \"transaction_ids\");",
+    "replace": "let _retained = field(&public, \"transaction_ids\");",
+    "expect_failing": [
+      "public_observer_matches_python_and_all_112_tables"
+    ],
+    "rule": "Public projection must withhold transaction_ids."
+  },
+  {
+    "id": "mirror-index-evidence-reference",
+    "file": "crates/wallets/src/analysis_index/observer.rs",
+    "find": "(\"reference\", subject.clone()),",
+    "replace": "(\"reference\", field(v, \"reference\").clone()),",
+    "expect_failing": [
+      "public_observer_matches_python_and_all_112_tables"
+    ],
+    "rule": "Public evidence must bind physical subjects rather than private database references."
+  },
+  {
+    "id": "mirror-index-protocol",
+    "file": "crates/wallets/src/analysis_index/observer.rs",
+    "find": "|| ![s(\"bitcoin\"), s(\"liquid\")].contains(field(node, \"chain\"))",
+    "replace": "|| false",
+    "expect_failing": [
+      "public_observer_matches_python_and_all_112_tables"
+    ],
+    "rule": "Public nodes must stay within supported physical protocols."
+  },
+  {
+    "id": "mirror-index-public-amount",
+    "file": "crates/wallets/src/analysis_index/observer.rs",
+    "find": "let amount = field(private, \"public_amount_msat\").clone();",
+    "replace": "let amount = field(node, \"amount_msat\").clone();",
+    "expect_failing": [
+      "public_observer_matches_python_and_all_112_tables"
+    ],
+    "rule": "Liquid unblinding must not add public amounts."
+  },
+  {
+    "id": "mirror-index-public-asset",
+    "file": "crates/wallets/src/analysis_index/observer.rs",
+    "find": "field(private, \"public_asset\").clone()",
+    "replace": "field(node, \"asset\").clone()",
+    "expect_failing": [
+      "public_observer_matches_python_and_all_112_tables"
+    ],
+    "rule": "Liquid private asset identity must not become public knowledge."
+  },
+  {
+    "id": "mirror-index-ownership",
+    "file": "crates/wallets/src/analysis_index/observer.rs",
+    "find": "(\"ownership_known\", Value::Bool(false)),",
+    "replace": "(\"ownership_known\", Value::Bool(true)),",
+    "expect_failing": [
+      "public_observer_matches_python_and_all_112_tables"
+    ],
+    "rule": "Public output facts must not inherit private ownership."
+  },
+  {
+    "id": "mirror-index-branch",
+    "file": "crates/wallets/src/analysis_index/observer.rs",
+    "find": "(\"branch_role\", Value::Null),",
+    "replace": "(\"branch_role\", field(private, \"branch_role\").clone()),",
+    "expect_failing": [
+      "public_observer_matches_python_and_all_112_tables"
+    ],
+    "rule": "Private branch roles must stay private."
+  },
+  {
+    "id": "mirror-index-custody",
+    "file": "crates/wallets/src/analysis_index/observer.rs",
+    "find": "if !(creates || field(edge, \"kind\") == &s(\"spends\"))",
+    "replace": "if !(creates || field(edge, \"kind\") == &s(\"spends\") || field(edge, \"kind\") == &s(\"custody\"))",
+    "expect_failing": [
+      "public_observer_matches_python_and_all_112_tables"
+    ],
+    "rule": "Private custody relations must not enter the public physical graph."
+  },
+  {
+    "id": "mirror-index-fact-amount",
+    "file": "crates/wallets/src/analysis_index/observer.rs",
+    "find": "set(&mut item, \"amount_msat\", amount);",
+    "replace": "set(&mut item, \"amount_msat\", Value::Null);",
+    "expect_failing": [
+      "public_observer_matches_python_and_all_112_tables"
+    ],
+    "rule": "Transaction facts must rebind amounts to observer-visible output facts."
+  },
+  {
+    "id": "mirror-index-fee",
+    "file": "crates/wallets/src/analysis_index/observer.rs",
+    "find": "set(&mut public, \"fee_msat\", Value::Null);",
+    "replace": "set(&mut public, \"fee_msat\", field(fact, \"fee_msat\").clone());",
+    "expect_failing": [
+      "public_observer_matches_python_and_all_112_tables"
+    ],
+    "rule": "Liquid private fee facts must not become public knowledge."
+  },
+  {
+    "id": "mirror-index-collaboration",
+    "file": "crates/wallets/src/analysis_index/observer.rs",
+    "find": "if truthy(marker)",
+    "replace": "if !truthy(marker)",
+    "expect_failing": [
+      "public_observer_matches_python_and_all_112_tables"
+    ],
+    "rule": "Private collaboration metadata must become an observer exclusion."
+  },
+  {
+    "id": "mirror-index-finding-nodes",
+    "file": "crates/wallets/src/analysis_index/observer.rs",
+    "find": ".filter(|id| id.as_str().is_some_and(|id| nodes.contains_key(id)))",
+    "replace": ".filter(|_| true)",
+    "expect_failing": [
+      "public_observer_matches_python_and_all_112_tables"
+    ],
+    "rule": "Findings must withhold private node identities."
+  },
+  {
+    "id": "mirror-index-finding-edges",
+    "file": "crates/wallets/src/analysis_index/observer.rs",
+    "find": ".filter(|id| id.as_str().is_some_and(|id| edge_ids.contains(id)))",
+    "replace": ".filter(|_| true)",
+    "expect_failing": [
+      "public_observer_matches_python_and_all_112_tables"
+    ],
+    "rule": "Findings must withhold private edge identities."
+  },
+  {
+    "id": "mirror-index-dataset-partition",
+    "file": "crates/wallets/src/analysis_index/observer.rs",
+    "find": "remove(&mut datasets, \"visibility_coverage\");",
+    "replace": "let _retained = field(&datasets, \"visibility_coverage\");",
+    "expect_failing": [
+      "public_observer_matches_python_and_all_112_tables"
+    ],
+    "rule": "Public dataset coverage must not retain private visibility partitions."
+  },
+  {
+    "id": "mirror-index-authored-label",
+    "file": "crates/wallets/src/analysis_index/observer.rs",
+    "find": "truthy(field(v, \"dataset_id\")) && field(v, \"visibility\") == &s(\"public\")",
+    "replace": "field(v, \"visibility\") == &s(\"public\")",
+    "expect_failing": [
+      "public_observer_matches_python_and_all_112_tables"
+    ],
+    "rule": "Only public dataset labels may enter public observer results."
+  },
+  {
+    "id": "mirror-index-private-dataset",
+    "file": "crates/wallets/src/analysis_index/observer.rs",
+    "find": "truthy(field(v, \"dataset_id\")) && field(v, \"visibility\") == &s(\"public\")",
+    "replace": "truthy(field(v, \"dataset_id\"))",
+    "expect_failing": [
+      "public_observer_matches_python_and_all_112_tables"
+    ],
+    "rule": "Private datasets must remain withheld."
+  },
+  {
+    "id": "mirror-index-private-seeds",
+    "file": "crates/wallets/src/analysis_index/observer.rs",
+    "find": ".filter(|v| v.as_str().is_some_and(|id| nodes.contains_key(id)))",
+    "replace": ".filter(|_| true)",
+    "expect_failing": [
+      "public_observer_matches_python_and_all_112_tables"
+    ],
+    "rule": "Public seeds must name visible physical nodes."
+  },
+  {
+    "id": "mirror-index-binding",
+    "file": "crates/wallets/src/analysis_index/occurrences.rs",
+    "find": "if !kassiber_setup::networks::observation_matches_binding(&self.binding, row, unscoped)",
+    "replace": "if false",
+    "expect_failing": [
+      "physical_occurrences_match_python_and_all_112_tables"
+    ],
+    "rule": "An observation must match its authored book environment and instance."
+  },
+  {
+    "id": "mirror-index-domain-admission",
+    "file": "crates/wallets/src/analysis_index/occurrences.rs",
+    "find": "|| self.domains.is_empty()",
+    "replace": "|| true",
+    "expect_failing": [
+      "physical_occurrences_match_python_and_all_112_tables"
+    ],
+    "rule": "A bound book must reject observations from another physical domain."
+  },
+  {
+    "id": "mirror-index-trusted-source",
+    "file": "crates/wallets/src/analysis_index/occurrences.rs",
+    "find": "trusted_reference: field(row, \"_index_reference\") == &Value::Bool(true),",
+    "replace": "trusted_reference: truthy(field(row, \"_index_reference\")),",
+    "expect_failing": [
+      "physical_occurrences_match_python_and_all_112_tables"
+    ],
+    "rule": "Only an explicit boolean establishes a trusted retained source."
+  },
+  {
+    "id": "mirror-index-active",
+    "file": "crates/wallets/src/analysis_index/occurrences.rs",
+    "find": "AND active=1 AND txid=?",
+    "replace": "AND active>=0 AND txid=?",
+    "expect_failing": [
+      "physical_occurrences_match_python_and_all_112_tables"
+    ],
+    "rule": "Retracted assertions must not resolve current occurrence identity."
+  },
+  {
+    "id": "mirror-index-anchor",
+    "file": "crates/wallets/src/analysis_index/occurrences.rs",
+    "find": "field(v, \"block_hash\") == &s(id.split(':').next().unwrap())",
+    "replace": "field(v, \"block_hash\") != &s(id.split(':').next().unwrap())",
+    "expect_failing": [
+      "physical_occurrences_match_python_and_all_112_tables"
+    ],
+    "rule": "An occurrence must be anchored to its exact block hash."
+  },
+  {
+    "id": "mirror-index-resolve-disabled",
+    "file": "crates/wallets/src/analysis_index/occurrences.rs",
+    "find": "let candidates = if resolve {",
+    "replace": "let candidates = if true {",
+    "expect_failing": [
+      "physical_occurrences_match_python_and_all_112_tables"
+    ],
+    "rule": "A missing trusted prevout occurrence must not borrow another occurrence."
+  },
+  {
+    "id": "mirror-index-ambiguity",
+    "file": "crates/wallets/src/analysis_index/occurrences.rs",
+    "find": "self.ambiguous.insert(id.clone());",
+    "replace": "self.ambiguous.remove(&id);",
+    "expect_failing": [
+      "physical_occurrences_match_python_and_all_112_tables"
+    ],
+    "rule": "Multiple retained occurrences must preserve explicit ambiguity."
+  },
+  {
+    "id": "mirror-index-explicit",
+    "file": "crates/wallets/src/analysis_index/occurrences.rs",
+    "find": "if let Some(occurrence) = occurrence(explicit) {",
+    "replace": "if let Some(occurrence) = occurrence(&Value::Null) {",
+    "expect_failing": [
+      "physical_occurrences_match_python_and_all_112_tables"
+    ],
+    "rule": "An explicit physical occurrence must not fall back to candidate resolution."
+  },
+  {
+    "id": "mirror-index-parse-qualifier",
+    "file": "crates/wallets/src/analysis_index/occurrences.rs",
+    "find": "[1, 2, 5, 3, 4]",
+    "replace": "[1, 2, 5, 4, 3]",
+    "expect_failing": [
+      "physical_subjects_match_python_and_preserve_qualifiers"
+    ],
+    "rule": "Physical subject parsing must retain domain and block qualifiers in their proper fields."
+  },
+  {
+    "id": "mirror-index-duplicate-map",
+    "file": "crates/wallets/src/analysis_index.rs",
+    "find": "index.insert(key.to_owned(), position).is_some()",
+    "replace": "{ index.insert(key.to_owned(), position); false }",
+    "expect_failing": [
+      "immutable_snapshot_rejects_malformed_indexes_and_retains_lookup"
+    ],
+    "rule": "An immutable index must reject duplicate map identities."
+  },
+  {
+    "id": "mirror-index-list-shape",
+    "file": "crates/wallets/src/analysis_index.rs",
+    "find": "!matches!(value, Value::List(_))",
+    "replace": "false",
+    "expect_failing": [
+      "immutable_snapshot_rejects_malformed_indexes_and_retains_lookup"
+    ],
+    "rule": "Adjacency and alias indexes require lists."
+  },
+  {
+    "id": "mirror-index-record-shape",
+    "file": "crates/wallets/src/analysis_index.rs",
+    "find": "!matches!(value, Value::Dict(_))",
+    "replace": "false",
+    "expect_failing": [
+      "immutable_snapshot_rejects_malformed_indexes_and_retains_lookup"
+    ],
+    "rule": "Node, edge and fact entries require records."
+  }
+]

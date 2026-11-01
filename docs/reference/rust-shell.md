@@ -13761,3 +13761,64 @@ The required classifier update and CI preflight complete; preflight passes all
 57 tests without skips. Owned build trees remain below 2 GiB and are removed
 after summarizing. Full workspace runtime, Python/frontend, packaged and
 platform gates are not run; this partial checkpoint makes no push-ready claim.
+
+## Native PSBT historical baseline (R5 privacy PSBT)
+
+`t3code/r5-privacy-psbt-4` starts at `cf1ae41c4`. The reduced PSBT report
+now captures its historical baseline through the same native `AnalysisIndex`
+interface as Mirror. The occurrence, ingestion, public observer, traversal,
+clustering, attribution and analytics modules are reused from local
+`4d2e0c289`; SQL source orchestration is reused from `911f5d3e7`.
+The PSBT adapter does not introduce an independent historical rule engine.
+
+`psbt_privacy::history::capture` projects admitted owned outputs and public
+hypotheses/clusters into the existing `Baseline`. Transitive components may
+pass through unowned observations. Collaborative physical co-spends do not
+become observer-control edges. Hypothesis and physical traversal limits retain
+Python's historical uncertainty. Private inventory branch roles never grant
+public linkage. Reviewed source-funds and local counterparty anchors contribute
+only component exposure IDs/counts to this reduced report; no anchor labels,
+source amounts, scripts or raw proposals enter its public payload.
+
+The report's read savepoint includes scope, index capture, analytics and anchor
+queries. A concurrent writer test changes the active profile, historical raw
+transaction, counterparty and reviewed anchor after scope resolution and proves
+that the report retains its original snapshot. No dependency, schema, Python
+product, AI allowlist, signing or egress changes are made.
+
+The unchanged-Python `psbt_history.json` corpus has 408 cases, including stored
+history, reference/acquired observations, occurrence/binding admission, datasets,
+collaboration, reviewed/unreviewed/excluded anchors, network isolation and
+hypothesis/node bounds. Every report/error and table projection is compared as
+canonical bytes, with complete sorted contents of all 112 tables before and
+after each read. The native baseline accepts no graph data from the request.
+The guarded service driver exercises both offline-switch states without
+consent, attempted egress or fallback dispatch. These are fixture reads, not
+served product counts.
+
+Parity exposed two issues in the reused native source path: branch labels used
+Rust's newer Unicode classes rather than Python 3.11's Unicode 14 table, and
+invalid attribution subjects used a different validation message. Both native
+paths now preserve the reference. Python remains unchanged, including the
+previously recorded embedded PSBT decoder and corrupt dataset-manifest bugs.
+
+Product registration is unchanged at this boundary: 154 CLI leaves (22 reports)
+and 15 report daemon kinds plus two transaction exports. PSBT product reads
+remain zero. CLI/file and daemon acceptance, transport mutations, hybrid routing
+proof and registration remain the next two boundaries. Mirror report delivery,
+proposal comparison, Payjoin verification, conditional PSBT entropy and the
+separate legacy scorer remain outside this reduced report task.
+
+Local evidence is retained under `target/r5-psbt-4/artifacts/`. Builds use eight
+Cargo workers, Rust 1.99.1 offline/locked, and disabled debug symbols; all scratch
+and disposable data roots are under this worktree's `target/`, with account
+`HOME` preserved. This local checkpoint makes no push-ready or platform claim.
+
+Historical-boundary verification passes all 12 PSBT report tests, 20 shared-index
+tests, and 21 retained Python oracle tests without skips. The guarded historical
+service performs 816 calls across the two offline-switch states, preserving
+all 112 tables with zero fallback dispatches and zero egress attempts. Wallet
+and report all-target test-harness Clippy passes with warnings denied; workspace
+formatting and the required classifier update also pass.
+The required CI preflight passes all 57 tests without skips. Full workspace
+runtime, full Python/frontend and packaged/platform gates are not run.

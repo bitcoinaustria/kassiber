@@ -87,7 +87,9 @@ fn run_cases(group: &str, corpus: &str) {
             );
             let changes = conn.total_changes();
             let args = kassiber_pytext::loads(&case["args"].to_string()).unwrap();
-            let actual = if case["native_inventory"] == true {
+            let actual = if case["native_history"] == true {
+                kassiber_reports::psbt_privacy::report(&conn, &args, case["psbt"].as_str().unwrap())
+            } else if case["native_inventory"] == true {
                 report_inventory(&conn, &args, case["psbt"].as_str().unwrap())
             } else {
                 report_with_baseline(
@@ -319,4 +321,43 @@ fn psbt_scope_and_baseline_share_one_database_snapshot() {
         .unwrap(),
         "other"
     );
+}
+
+#[test]
+fn psbt_native_history_matches_python_all_112_tables() {
+    run_cases("history", include_str!("data/psbt_history.json"));
+}
+
+#[test]
+fn psbt_historical_sources_and_adversary_anchors_share_the_scope_snapshot() {
+    fixture_no_egress(|| {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("book.sqlite");
+        let conn = Connection::open(&path).unwrap();
+        conn.execute_batch("PRAGMA journal_mode=WAL").unwrap();
+        conn.execute_batch(include_str!("data/privacy_hygiene_seed.sql"))
+            .unwrap();
+        conn.execute_batch(include_str!("data/book.sql")).unwrap();
+        let cases: Vec<serde_json::Value> =
+            serde_json::from_str(include_str!("data/psbt_history.json")).unwrap();
+        let case = cases
+            .iter()
+            .find(|c| c["name"] == "spend/2/None/confirmed/both")
+            .unwrap();
+        conn.execute_batch(case["sql"].as_str().unwrap()).unwrap();
+        let args = dict::<&str>([]);
+        let proposal = case["psbt"].as_str().unwrap();
+        let expected = kassiber_reports::psbt_privacy::report(&conn, &args, proposal).unwrap();
+        let payload = report_with_baseline(&conn, &args, proposal, |snapshot, profile| {
+            let writer = Connection::open(&path).unwrap();
+            writer.execute_batch("BEGIN; UPDATE settings SET value='other' WHERE key='context_profile'; UPDATE transactions SET counterparty=NULL,raw_json='{}' WHERE id='in'; UPDATE source_funds_links SET state='suggested'; COMMIT;").unwrap();
+            kassiber_wallets::psbt_privacy::history::capture(snapshot, profile)
+        }).unwrap();
+        assert_eq!(canonical(&payload), canonical(&expected));
+        assert!(conn.is_autocommit());
+        assert_ne!(
+            canonical(&kassiber_reports::psbt_privacy::report(&conn, &args, proposal).unwrap()),
+            canonical(&expected)
+        );
+    });
 }

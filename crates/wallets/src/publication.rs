@@ -10,7 +10,7 @@ use std::collections::BTreeSet;
 mod balance;
 pub mod insert;
 pub mod inventory;
-mod physical;
+pub(crate) mod physical;
 pub mod policy;
 pub mod provenance;
 pub mod reports;

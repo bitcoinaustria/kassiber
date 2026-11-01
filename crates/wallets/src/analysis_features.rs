@@ -259,7 +259,7 @@ fn number(n: &BigInt) -> Value {
     Value::Number(n.to_string().parse().unwrap())
 }
 
-fn value_sats(v: &Value) -> Option<BigInt> {
+pub(crate) fn value_sats(v: &Value) -> Option<BigInt> {
     let explicit = !v["value_sats"].is_null();
     let v = if explicit {
         &v["value_sats"]
