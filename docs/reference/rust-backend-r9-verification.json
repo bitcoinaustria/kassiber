@@ -1,0 +1,1115 @@
+{
+  "schema": "kassiber.r9-integration-verification.v1",
+  "generated_utc": "2026-11-01T12:12:51Z",
+  "tested_source": "90d84e390510fc101f63800cb9fa7d43a7252fd8",
+  "source_code_sha256": "cd9c331dcdeba035757c28e103b66b2d7a4e6a382dfc5e238e8cdad3100079e2",
+  "integration_base": "9f7471bf7",
+  "source_picks": 63,
+  "skipped_occurrences": 123,
+  "source_candidate_occurrences": 186,
+  "consolidated_stage_adaptations": 1,
+  "workspace": {
+    "head": "90d84e390510fc101f63800cb9fa7d43a7252fd8",
+    "log_sha256": "f755874d93f57ff758f018b1951864d814cfab54f8f93e3ab8d454941b593d9c",
+    "harness_results": 143,
+    "passed": 1890,
+    "failed": 0,
+    "ignored": 0
+  },
+  "generated": {
+    "books": 24000,
+    "custody_compared": 24852,
+    "active_requests": 16757,
+    "compared": 24705,
+    "render_refusals": 0,
+    "matched": 24705,
+    "entries": 4907,
+    "quarantines": 125117,
+    "ownership_review_candidates": 328,
+    "quantity_differences": 45441,
+    "refusals": 0,
+    "permutations": 1030,
+    "pre_render_refusals": 147,
+    "upstream_refusals": 178,
+    "upstream_AppError": 178,
+    "custody_refusals_matched": 178
+  },
+  "archived_render": {
+    "books": 159,
+    "custody_compared": 318,
+    "active_requests": 312,
+    "compared": 318,
+    "render_refusals": 0,
+    "matched": 318,
+    "entries": 3076,
+    "quarantines": 750,
+    "ownership_review_candidates": 0,
+    "quantity_differences": 222,
+    "refusals": 0,
+    "permutations": 159
+  },
+  "archived_custody": {
+    "requests": 159,
+    "permutations": 159,
+    "differences": 0
+  },
+  "full_census_shadow": "Owner will run the full shards afterwards; only focused modes are included here.",
+  "native_builds": {
+    "head": "90d84e390510fc101f63800cb9fa7d43a7252fd8",
+    "cargo_lock_sha256": "75b6c886ca03c9ddf9c0761dd1e5a3e2eac25b6049bd7a0779ded8cf0202608b",
+    "binaries": {
+      "target/r9-build/debug/kassiber": "57e753a1df79e5b7d1f4b8dff6d0b8057bcefd5060812ce116ef40dab2ff17f5",
+      ".venv/lib/python3.11/site-packages/kassiber_tax/kassiber_tax.abi3.so": "37254e819e0354ddc78150119b42a2d432b4e0154ae778196e7552826209e9d5",
+      "target/r9-build/release/examples/custody-load": "84ba8069751900b81ab5b4b151b8833fdf4a1df625a464d84fe97055dd71fef6",
+      "target/r9-build/release/examples/journal-process": "11a3ec401bd3440d83186b4a0fc840cd49036afdea7805e6defd11ec93e45c4f",
+      "target/r9-build/release/examples/journal-render": "a12b0beceec99fafd2fd0932d678ae655392b4e37d07c1d5fc512c1c27bb3485",
+      "target/r9-build/release/examples/journal-prebuild": "1029dc416330394229727d277f97c4b954f785eae6dc3fd1518fb1a09739920d",
+      "target/r9-build/release/examples/journal-persist": "07a39e0458ad3b7a78a4a61f36e769540a1d4a9e6f7f73cda945546530074fff",
+      "target/r9-build/release/examples/journal-fusion": "0feb4a4f3500e18c0e21f3c84ab800e6e8d115865730e9aa5a6aab28c2da3145",
+      "target/r9-build/release/examples/journals-bench": "02453ab1e1dd32cb32057783e2a92d6fbaf7cd1af9f4383e3b4de9548d71e545",
+      "target/r9-build/release/examples/review-build": "eab504aeb72f2a6348d51f122a752643f6ea4d826d39562024f8b5b3f5aa6325"
+    },
+    "built_from": "90d84e390510fc101f63800cb9fa7d43a7252fd8"
+  },
+  "focused": {
+    "census": {
+      "tests": 333,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 1,
+      "passed_nodes": 300,
+      "passed_subtests": 32,
+      "native_loader_matches": 75
+    },
+    "shadow": {
+      "tests": 333,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 1,
+      "passed_nodes": 300,
+      "passed_subtests": 32,
+      "native_loader_matches": 75
+    }
+  },
+  "parity": {
+    "schema": "kassiber.r9-parity-reconciliation.v1",
+    "modules": 68,
+    "collected": 3061,
+    "counts": {
+      "passed": 2864
+    },
+    "missing": [
+      "tests/test_rust_freshness_product.py::test_product_argument_coercions_match_reference[ui.freshness.run-extra1-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_argument_coercions_match_reference[ui.freshness.run-extra1-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_argument_coercions_match_reference[ui.wallets.sync-extra0-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_argument_coercions_match_reference[ui.wallets.sync-extra0-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_argument_coercions_match_reference[ui.workspace.freshness.run-extra2-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_argument_coercions_match_reference[ui.workspace.freshness.run-extra2-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_argument_errors_match_reference_without_effects[ui.freshness.run-extra10]",
+      "tests/test_rust_freshness_product.py::test_product_argument_errors_match_reference_without_effects[ui.freshness.run-extra6]",
+      "tests/test_rust_freshness_product.py::test_product_argument_errors_match_reference_without_effects[ui.freshness.run-extra7]",
+      "tests/test_rust_freshness_product.py::test_product_argument_errors_match_reference_without_effects[ui.freshness.run-extra8]",
+      "tests/test_rust_freshness_product.py::test_product_argument_errors_match_reference_without_effects[ui.freshness.run-extra9]",
+      "tests/test_rust_freshness_product.py::test_product_argument_errors_match_reference_without_effects[ui.wallets.sync-extra0]",
+      "tests/test_rust_freshness_product.py::test_product_argument_errors_match_reference_without_effects[ui.wallets.sync-extra1]",
+      "tests/test_rust_freshness_product.py::test_product_argument_errors_match_reference_without_effects[ui.wallets.sync-extra2]",
+      "tests/test_rust_freshness_product.py::test_product_argument_errors_match_reference_without_effects[ui.wallets.sync-extra3]",
+      "tests/test_rust_freshness_product.py::test_product_argument_errors_match_reference_without_effects[ui.wallets.sync-extra4]",
+      "tests/test_rust_freshness_product.py::test_product_argument_errors_match_reference_without_effects[ui.wallets.sync-extra5]",
+      "tests/test_rust_freshness_product.py::test_product_argument_errors_match_reference_without_effects[ui.workspace.freshness.run-extra11]",
+      "tests/test_rust_freshness_product.py::test_product_argument_errors_match_reference_without_effects[ui.workspace.freshness.run-extra12]",
+      "tests/test_rust_freshness_product.py::test_product_argument_errors_match_reference_without_effects[ui.workspace.freshness.run-extra13]",
+      "tests/test_rust_freshness_product.py::test_product_automatic_graph_lookup_matches_reference[ui.freshness.run-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_automatic_graph_lookup_matches_reference[ui.freshness.run-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_automatic_graph_lookup_matches_reference[ui.wallets.sync-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_automatic_graph_lookup_matches_reference[ui.wallets.sync-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_automatic_graph_lookup_matches_reference[ui.workspace.freshness.run-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_automatic_graph_lookup_matches_reference[ui.workspace.freshness.run-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_consent_fences_before_transport[early-cancel-ui.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_consent_fences_before_transport[early-cancel-ui.wallets.sync]",
+      "tests/test_rust_freshness_product.py::test_product_consent_fences_before_transport[early-cancel-ui.workspace.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_consent_fences_before_transport[malformed-scope-ui.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_consent_fences_before_transport[malformed-scope-ui.wallets.sync]",
+      "tests/test_rust_freshness_product.py::test_product_consent_fences_before_transport[malformed-scope-ui.workspace.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_consent_fences_before_transport[no-egress-ui.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_consent_fences_before_transport[no-egress-ui.wallets.sync]",
+      "tests/test_rust_freshness_product.py::test_product_consent_fences_before_transport[no-egress-ui.workspace.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_consent_fences_before_transport[offline-ui.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_consent_fences_before_transport[offline-ui.wallets.sync]",
+      "tests/test_rust_freshness_product.py::test_product_consent_fences_before_transport[offline-ui.workspace.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_consent_fences_before_transport[stale-scope-ui.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_consent_fences_before_transport[stale-scope-ui.wallets.sync]",
+      "tests/test_rust_freshness_product.py::test_product_consent_fences_before_transport[stale-scope-ui.workspace.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_enqueue_only_and_run_limit[False-ui.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_enqueue_only_and_run_limit[False-ui.workspace.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_enqueue_only_and_run_limit[True-ui.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_enqueue_only_and_run_limit[True-ui.workspace.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_hybrid_declines_defaults_before_reference_enqueue[ui.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_hybrid_declines_defaults_before_reference_enqueue[ui.workspace.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_matching_scope_is_removed_before_argument_validation[ui.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_matching_scope_is_removed_before_argument_validation[ui.wallets.sync]",
+      "tests/test_rust_freshness_product.py::test_product_matching_scope_is_removed_before_argument_validation[ui.workspace.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_selection_does_not_initialize_a_book[ui.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_selection_does_not_initialize_a_book[ui.wallets.sync]",
+      "tests/test_rust_freshness_product.py::test_product_selection_does_not_initialize_a_book[ui.workspace.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[array-id-ui.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[array-id-ui.wallets.sync]",
+      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[array-id-ui.workspace.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[boolean-id-ui.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[boolean-id-ui.wallets.sync]",
+      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[boolean-id-ui.workspace.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[default-journals-ui.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[default-journals-ui.wallets.sync]",
+      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[default-journals-ui.workspace.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[empty-id-ui.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[empty-id-ui.wallets.sync]",
+      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[empty-id-ui.workspace.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[invalid-default-ui.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[invalid-default-ui.wallets.sync]",
+      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[invalid-default-ui.workspace.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[missing-id-ui.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[missing-id-ui.wallets.sync]",
+      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[missing-id-ui.workspace.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[null-id-ui.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[null-id-ui.wallets.sync]",
+      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[null-id-ui.workspace.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[null-journals-ui.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[null-journals-ui.wallets.sync]",
+      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[null-journals-ui.workspace.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[number-id-ui.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[number-id-ui.wallets.sync]",
+      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[number-id-ui.workspace.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[object-id-ui.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[object-id-ui.wallets.sync]",
+      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[object-id-ui.workspace.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[rates-ui.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[rates-ui.wallets.sync]",
+      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[rates-ui.workspace.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[surrogate-id-ui.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[surrogate-id-ui.wallets.sync]",
+      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[surrogate-id-ui.workspace.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[unported-ui.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[unported-ui.wallets.sync]",
+      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[unported-ui.workspace.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_product_source_controls_remain_available_during_fetch[cancel-ui.freshness.run-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_source_controls_remain_available_during_fetch[cancel-ui.freshness.run-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_source_controls_remain_available_during_fetch[cancel-ui.wallets.sync-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_source_controls_remain_available_during_fetch[cancel-ui.wallets.sync-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_source_controls_remain_available_during_fetch[cancel-ui.workspace.freshness.run-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_source_controls_remain_available_during_fetch[cancel-ui.workspace.freshness.run-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_source_controls_remain_available_during_fetch[pause-ui.freshness.run-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_source_controls_remain_available_during_fetch[pause-ui.freshness.run-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_source_controls_remain_available_during_fetch[pause-ui.wallets.sync-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_source_controls_remain_available_during_fetch[pause-ui.wallets.sync-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_source_controls_remain_available_during_fetch[pause-ui.workspace.freshness.run-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_source_controls_remain_available_during_fetch[pause-ui.workspace.freshness.run-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_envelopes_events_and_all_tables[coinbase-ui.freshness.run-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_envelopes_events_and_all_tables[coinbase-ui.freshness.run-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_envelopes_events_and_all_tables[coinbase-ui.wallets.sync-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_envelopes_events_and_all_tables[coinbase-ui.wallets.sync-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_envelopes_events_and_all_tables[coinbase-ui.workspace.freshness.run-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_envelopes_events_and_all_tables[coinbase-ui.workspace.freshness.run-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_envelopes_events_and_all_tables[mempool-ui.freshness.run-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_envelopes_events_and_all_tables[mempool-ui.workspace.freshness.run-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_envelopes_events_and_all_tables[mempool-ui.workspace.freshness.run-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[force-full-ui.freshness.run-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[force-full-ui.freshness.run-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[force-full-ui.wallets.sync-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[force-full-ui.wallets.sync-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[force-full-ui.workspace.freshness.run-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[force-full-ui.workspace.freshness.run-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[force-without-state-ui.freshness.run-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[force-without-state-ui.freshness.run-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[force-without-state-ui.wallets.sync-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[force-without-state-ui.wallets.sync-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[force-without-state-ui.workspace.freshness.run-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[force-without-state-ui.workspace.freshness.run-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[height-change-ui.freshness.run-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[height-change-ui.freshness.run-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[height-change-ui.wallets.sync-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[height-change-ui.wallets.sync-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[height-change-ui.workspace.freshness.run-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[height-change-ui.workspace.freshness.run-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[mempool-drop-return-ui.freshness.run-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[mempool-drop-return-ui.freshness.run-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[mempool-drop-return-ui.wallets.sync-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[mempool-drop-return-ui.wallets.sync-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[mempool-drop-return-ui.workspace.freshness.run-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[mempool-drop-return-ui.workspace.freshness.run-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[preflight-race-ui.freshness.run-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[preflight-race-ui.freshness.run-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[preflight-race-ui.wallets.sync-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[preflight-race-ui.wallets.sync-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[preflight-race-ui.workspace.freshness.run-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[preflight-race-ui.workspace.freshness.run-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[reanchor-ui.freshness.run-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[reanchor-ui.freshness.run-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[reanchor-ui.wallets.sync-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[reanchor-ui.wallets.sync-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[reanchor-ui.workspace.freshness.run-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[reanchor-ui.workspace.freshness.run-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[reorg-drop-ui.freshness.run-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[reorg-drop-ui.freshness.run-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[reorg-drop-ui.wallets.sync-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[reorg-drop-ui.wallets.sync-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[reorg-drop-ui.workspace.freshness.run-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[reorg-drop-ui.workspace.freshness.run-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[replacement-ui.freshness.run-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[replacement-ui.freshness.run-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[replacement-ui.wallets.sync-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[replacement-ui.wallets.sync-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[replacement-ui.workspace.freshness.run-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[replacement-ui.workspace.freshness.run-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[authority-ui.freshness.run-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[authority-ui.freshness.run-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[authority-ui.wallets.sync-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[authority-ui.wallets.sync-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[authority-ui.workspace.freshness.run-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[authority-ui.workspace.freshness.run-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[checkpoint-ui.freshness.run-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[checkpoint-ui.freshness.run-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[checkpoint-ui.wallets.sync-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[checkpoint-ui.wallets.sync-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[checkpoint-ui.workspace.freshness.run-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[checkpoint-ui.workspace.freshness.run-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[mempool-ui.freshness.run-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[mempool-ui.freshness.run-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[mempool-ui.wallets.sync-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[mempool-ui.wallets.sync-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[mempool-ui.workspace.freshness.run-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[mempool-ui.workspace.freshness.run-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[reorg-ui.freshness.run-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[reorg-ui.freshness.run-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[reorg-ui.wallets.sync-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[reorg-ui.wallets.sync-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[reorg-ui.workspace.freshness.run-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[reorg-ui.workspace.freshness.run-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[retraction-ui.freshness.run-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[retraction-ui.freshness.run-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[retraction-ui.wallets.sync-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[retraction-ui.wallets.sync-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[retraction-ui.workspace.freshness.run-electrum]",
+      "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[retraction-ui.workspace.freshness.run-esplora]",
+      "tests/test_rust_freshness_product.py::test_product_wallet_selection_refuses_direct_sync_reference_path[no-source]",
+      "tests/test_rust_freshness_product.py::test_product_wallet_selection_refuses_direct_sync_reference_path[paused]",
+      "tests/test_rust_freshness_product.py::test_product_workspace_preserves_active_context_and_book_order[electrum]",
+      "tests/test_rust_freshness_product.py::test_product_workspace_preserves_active_context_and_book_order[esplora]",
+      "tests/test_rust_freshness_product.py::test_reference_all_false_without_wallet_repro_and_native_refusal[ui.freshness.run]",
+      "tests/test_rust_freshness_product.py::test_reference_all_false_without_wallet_repro_and_native_refusal[ui.wallets.sync]"
+    ],
+    "uncollected_modules": [
+      "tests/test_rust_freshness_queue.py",
+      "tests/test_rust_full_xlsx.py",
+      "tests/test_rust_gain_reads.py",
+      "tests/test_rust_gap_services.py",
+      "tests/test_rust_grouped_metadata_services.py",
+      "tests/test_rust_hybrid_candidate.py",
+      "tests/test_rust_journal_persistence.py",
+      "tests/test_rust_journal_process.py",
+      "tests/test_rust_journal_render.py",
+      "tests/test_rust_lightning_acquisition.py",
+      "tests/test_rust_lightning_reports.py",
+      "tests/test_rust_metadata_services.py",
+      "tests/test_rust_observer_state.py",
+      "tests/test_rust_pairing_commands.py",
+      "tests/test_rust_platform_csv.py",
+      "tests/test_rust_rates_candidate.py",
+      "tests/test_rust_report_exports.py",
+      "tests/test_rust_reports.py",
+      "tests/test_rust_review_builds.py",
+      "tests/test_rust_review_cases.py",
+      "tests/test_rust_secrets_lifecycle.py",
+      "tests/test_rust_secrets_services.py",
+      "tests/test_rust_setup_desktop.py",
+      "tests/test_rust_shell_parity.py",
+      "tests/test_rust_source_funds_case_writes.py",
+      "tests/test_rust_source_funds_reads.py",
+      "tests/test_rust_store_interop.py",
+      "tests/test_rust_store_migrations.py",
+      "tests/test_rust_store_partition_reference.py",
+      "tests/test_rust_sync_hybrid_routing.py",
+      "tests/test_rust_transaction_desktop.py",
+      "tests/test_rust_transaction_listing.py",
+      "tests/test_rust_transaction_services.py",
+      "tests/test_rust_transfer_reads.py",
+      "tests/test_rust_transfer_services.py",
+      "tests/test_rust_wallet_acquisition.py",
+      "tests/test_rust_wallet_discovery.py",
+      "tests/test_rust_wallet_fetch.py",
+      "tests/test_rust_wallet_publication.py",
+      "tests/test_rust_wallet_sync_cli.py",
+      "tests/test_rust_wallet_sync_service.py",
+      "tests/test_rust_xlsx.py",
+      "tests/test_rust_xlsx_exports.py",
+      "tests/test_rust_year_handoff.py",
+      "tests/test_journal_prebuild_campaign.py",
+      "tests/rust_port/test_inventory.py",
+      "tests/rust_port/test_contracts.py"
+    ],
+    "auxiliary_receipt_nodes": 0,
+    "skips": [],
+    "records": [
+      {
+        "module": "tests/test_rust_austrian_xlsx.py",
+        "collected": 52,
+        "counts": {
+          "passed": 52
+        },
+        "missing": [],
+        "collected_sha256": "6b5ef3bd5788a5e0a44b118563267f41416417db5140169b5a2addefad041f0d"
+      },
+      {
+        "module": "tests/test_rust_backup_desktop.py",
+        "collected": 11,
+        "counts": {
+          "passed": 11
+        },
+        "missing": [],
+        "collected_sha256": "73dc4a9e578c363f2424f498957ae78d338162e39dd67cbf5afbc561520cc11f"
+      },
+      {
+        "module": "tests/test_rust_backup_install.py",
+        "collected": 1370,
+        "counts": {
+          "passed": 1370
+        },
+        "missing": [],
+        "collected_sha256": "e4826eb323de828adb08330b946f928f867d0958f40e3cc6b967b2fc879fa981"
+      },
+      {
+        "module": "tests/test_rust_backup_services.py",
+        "collected": 27,
+        "counts": {
+          "passed": 27
+        },
+        "missing": [],
+        "collected_sha256": "224c546e6005fbc1fccf5ac1b069f2d3e8ca5e13eff509bf7b8a2c45b880dc58"
+      },
+      {
+        "module": "tests/test_rust_bdk_execution.py",
+        "collected": 32,
+        "counts": {
+          "passed": 32
+        },
+        "missing": [],
+        "collected_sha256": "28183cb1d2e86c7e2588dafea181696686444a22d88b29ff96de726a6c5e8c7e"
+      },
+      {
+        "module": "tests/test_rust_bip329_services.py",
+        "collected": 3,
+        "counts": {
+          "passed": 3
+        },
+        "missing": [],
+        "collected_sha256": "6be6ac95e4adf2c7f1d347f5233aeb55f27e9fb0e2d937cbe0574ded6d45b4a8"
+      },
+      {
+        "module": "tests/test_rust_bitcoin_records.py",
+        "collected": 3,
+        "counts": {
+          "passed": 3
+        },
+        "missing": [],
+        "collected_sha256": "74469f84b671064fda613ce220837e73e82a1c606ce8b1c296df46ffb455412e"
+      },
+      {
+        "module": "tests/test_rust_chain_candidate.py",
+        "collected": 5,
+        "counts": {
+          "passed": 5
+        },
+        "missing": [],
+        "collected_sha256": "7134d891c025e6839f374ac9706b4a5d5a4dcba3360936bc31869db6d758fef2"
+      },
+      {
+        "module": "tests/test_rust_cln_acquisition.py",
+        "collected": 5,
+        "counts": {
+          "passed": 5
+        },
+        "missing": [],
+        "collected_sha256": "628f1748caa5fb86280e501b449e91c0ee82762a15aabf46e7898e9cbfbebd7c"
+      },
+      {
+        "module": "tests/test_rust_cross_check.py",
+        "collected": 464,
+        "counts": {
+          "passed": 464
+        },
+        "missing": [],
+        "collected_sha256": "d395eefb1d5fed00fd2432f41e6c8de898654238548e101258fa05669bdecae7"
+      },
+      {
+        "module": "tests/test_rust_custody_loader.py",
+        "collected": 231,
+        "counts": {
+          "passed": 231
+        },
+        "missing": [],
+        "collected_sha256": "6b2a9e82177df0f8eb3b9260aac39b1f014fb7dd9d97948cb64ca2bd101913ed"
+      },
+      {
+        "module": "tests/test_rust_custody_loader_blobs.py",
+        "collected": 43,
+        "counts": {
+          "passed": 43
+        },
+        "missing": [],
+        "collected_sha256": "dcad1ea5f1262e0597e64e44604969f852b1c9a7b26f5851203887f43880834e"
+      },
+      {
+        "module": "tests/test_rust_diagnostics.py",
+        "collected": 13,
+        "counts": {
+          "passed": 13
+        },
+        "missing": [],
+        "collected_sha256": "3069c0d64658ff49c2cde97ef3c41d01874399aea8bc926d1e0527ddedcf03da"
+      },
+      {
+        "module": "tests/test_rust_document_services.py",
+        "collected": 4,
+        "counts": {
+          "passed": 4
+        },
+        "missing": [],
+        "collected_sha256": "ff454161932c8f349776a3088604b05965ad11ae0cecb5379f3473f37ffef63f"
+      },
+      {
+        "module": "tests/test_rust_exit_tax.py",
+        "collected": 204,
+        "counts": {
+          "passed": 204
+        },
+        "missing": [],
+        "collected_sha256": "5376585c5ebebc20e3c94fc2493efdd6bc0535b9aa3627999d440f174d95064d"
+      },
+      {
+        "module": "tests/test_rust_freshness_admission.py",
+        "collected": 63,
+        "counts": {
+          "passed": 63
+        },
+        "missing": [],
+        "collected_sha256": "ed893e9d659b84c120fb21599aeb99cc96bb3ab65132f2df4d30481a3ad01c16"
+      },
+      {
+        "module": "tests/test_rust_freshness_execution.py",
+        "collected": 74,
+        "counts": {
+          "passed": 74
+        },
+        "missing": [],
+        "collected_sha256": "92102db972c25b770097415c4add009c7c0dfde0eacc8602d2358b5739335408"
+      },
+      {
+        "module": "tests/test_rust_freshness_graph.py",
+        "collected": 88,
+        "counts": {
+          "passed": 88
+        },
+        "missing": [],
+        "collected_sha256": "a873c066ef38d3afed71874a6d4deb613e5b21ef4485ed84a468f5f090770f28"
+      },
+      {
+        "module": "tests/test_rust_freshness_lifecycle.py",
+        "collected": 49,
+        "counts": {
+          "passed": 49
+        },
+        "missing": [],
+        "collected_sha256": "7d2a941dbe079ace6056189cc9e99cb524f8a045d8476908c19c8aae1a7e2ef9"
+      },
+      {
+        "module": "tests/test_rust_freshness_native.py",
+        "collected": 72,
+        "counts": {
+          "passed": 72
+        },
+        "missing": [],
+        "collected_sha256": "b536607eb06cc75940acd89cd420a8084f98696fcc84285cd9c0e6822f35b026"
+      },
+      {
+        "module": "tests/test_rust_freshness_product.py",
+        "collected": 248,
+        "counts": {
+          "passed": 51
+        },
+        "missing": [
+          "tests/test_rust_freshness_product.py::test_product_argument_coercions_match_reference[ui.freshness.run-extra1-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_argument_coercions_match_reference[ui.freshness.run-extra1-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_argument_coercions_match_reference[ui.wallets.sync-extra0-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_argument_coercions_match_reference[ui.wallets.sync-extra0-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_argument_coercions_match_reference[ui.workspace.freshness.run-extra2-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_argument_coercions_match_reference[ui.workspace.freshness.run-extra2-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_argument_errors_match_reference_without_effects[ui.freshness.run-extra10]",
+          "tests/test_rust_freshness_product.py::test_product_argument_errors_match_reference_without_effects[ui.freshness.run-extra6]",
+          "tests/test_rust_freshness_product.py::test_product_argument_errors_match_reference_without_effects[ui.freshness.run-extra7]",
+          "tests/test_rust_freshness_product.py::test_product_argument_errors_match_reference_without_effects[ui.freshness.run-extra8]",
+          "tests/test_rust_freshness_product.py::test_product_argument_errors_match_reference_without_effects[ui.freshness.run-extra9]",
+          "tests/test_rust_freshness_product.py::test_product_argument_errors_match_reference_without_effects[ui.wallets.sync-extra0]",
+          "tests/test_rust_freshness_product.py::test_product_argument_errors_match_reference_without_effects[ui.wallets.sync-extra1]",
+          "tests/test_rust_freshness_product.py::test_product_argument_errors_match_reference_without_effects[ui.wallets.sync-extra2]",
+          "tests/test_rust_freshness_product.py::test_product_argument_errors_match_reference_without_effects[ui.wallets.sync-extra3]",
+          "tests/test_rust_freshness_product.py::test_product_argument_errors_match_reference_without_effects[ui.wallets.sync-extra4]",
+          "tests/test_rust_freshness_product.py::test_product_argument_errors_match_reference_without_effects[ui.wallets.sync-extra5]",
+          "tests/test_rust_freshness_product.py::test_product_argument_errors_match_reference_without_effects[ui.workspace.freshness.run-extra11]",
+          "tests/test_rust_freshness_product.py::test_product_argument_errors_match_reference_without_effects[ui.workspace.freshness.run-extra12]",
+          "tests/test_rust_freshness_product.py::test_product_argument_errors_match_reference_without_effects[ui.workspace.freshness.run-extra13]",
+          "tests/test_rust_freshness_product.py::test_product_automatic_graph_lookup_matches_reference[ui.freshness.run-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_automatic_graph_lookup_matches_reference[ui.freshness.run-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_automatic_graph_lookup_matches_reference[ui.wallets.sync-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_automatic_graph_lookup_matches_reference[ui.wallets.sync-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_automatic_graph_lookup_matches_reference[ui.workspace.freshness.run-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_automatic_graph_lookup_matches_reference[ui.workspace.freshness.run-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_consent_fences_before_transport[early-cancel-ui.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_consent_fences_before_transport[early-cancel-ui.wallets.sync]",
+          "tests/test_rust_freshness_product.py::test_product_consent_fences_before_transport[early-cancel-ui.workspace.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_consent_fences_before_transport[malformed-scope-ui.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_consent_fences_before_transport[malformed-scope-ui.wallets.sync]",
+          "tests/test_rust_freshness_product.py::test_product_consent_fences_before_transport[malformed-scope-ui.workspace.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_consent_fences_before_transport[no-egress-ui.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_consent_fences_before_transport[no-egress-ui.wallets.sync]",
+          "tests/test_rust_freshness_product.py::test_product_consent_fences_before_transport[no-egress-ui.workspace.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_consent_fences_before_transport[offline-ui.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_consent_fences_before_transport[offline-ui.wallets.sync]",
+          "tests/test_rust_freshness_product.py::test_product_consent_fences_before_transport[offline-ui.workspace.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_consent_fences_before_transport[stale-scope-ui.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_consent_fences_before_transport[stale-scope-ui.wallets.sync]",
+          "tests/test_rust_freshness_product.py::test_product_consent_fences_before_transport[stale-scope-ui.workspace.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_enqueue_only_and_run_limit[False-ui.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_enqueue_only_and_run_limit[False-ui.workspace.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_enqueue_only_and_run_limit[True-ui.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_enqueue_only_and_run_limit[True-ui.workspace.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_hybrid_declines_defaults_before_reference_enqueue[ui.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_hybrid_declines_defaults_before_reference_enqueue[ui.workspace.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_matching_scope_is_removed_before_argument_validation[ui.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_matching_scope_is_removed_before_argument_validation[ui.wallets.sync]",
+          "tests/test_rust_freshness_product.py::test_product_matching_scope_is_removed_before_argument_validation[ui.workspace.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_selection_does_not_initialize_a_book[ui.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_selection_does_not_initialize_a_book[ui.wallets.sync]",
+          "tests/test_rust_freshness_product.py::test_product_selection_does_not_initialize_a_book[ui.workspace.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[array-id-ui.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[array-id-ui.wallets.sync]",
+          "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[array-id-ui.workspace.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[boolean-id-ui.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[boolean-id-ui.wallets.sync]",
+          "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[boolean-id-ui.workspace.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[default-journals-ui.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[default-journals-ui.wallets.sync]",
+          "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[default-journals-ui.workspace.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[empty-id-ui.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[empty-id-ui.wallets.sync]",
+          "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[empty-id-ui.workspace.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[invalid-default-ui.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[invalid-default-ui.wallets.sync]",
+          "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[invalid-default-ui.workspace.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[missing-id-ui.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[missing-id-ui.wallets.sync]",
+          "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[missing-id-ui.workspace.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[null-id-ui.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[null-id-ui.wallets.sync]",
+          "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[null-id-ui.workspace.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[null-journals-ui.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[null-journals-ui.wallets.sync]",
+          "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[null-journals-ui.workspace.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[number-id-ui.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[number-id-ui.wallets.sync]",
+          "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[number-id-ui.workspace.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[object-id-ui.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[object-id-ui.wallets.sync]",
+          "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[object-id-ui.workspace.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[rates-ui.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[rates-ui.wallets.sync]",
+          "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[rates-ui.workspace.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[surrogate-id-ui.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[surrogate-id-ui.wallets.sync]",
+          "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[surrogate-id-ui.workspace.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[unported-ui.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[unported-ui.wallets.sync]",
+          "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[unported-ui.workspace.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_product_source_controls_remain_available_during_fetch[cancel-ui.freshness.run-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_source_controls_remain_available_during_fetch[cancel-ui.freshness.run-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_source_controls_remain_available_during_fetch[cancel-ui.wallets.sync-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_source_controls_remain_available_during_fetch[cancel-ui.wallets.sync-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_source_controls_remain_available_during_fetch[cancel-ui.workspace.freshness.run-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_source_controls_remain_available_during_fetch[cancel-ui.workspace.freshness.run-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_source_controls_remain_available_during_fetch[pause-ui.freshness.run-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_source_controls_remain_available_during_fetch[pause-ui.freshness.run-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_source_controls_remain_available_during_fetch[pause-ui.wallets.sync-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_source_controls_remain_available_during_fetch[pause-ui.wallets.sync-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_source_controls_remain_available_during_fetch[pause-ui.workspace.freshness.run-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_source_controls_remain_available_during_fetch[pause-ui.workspace.freshness.run-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_envelopes_events_and_all_tables[coinbase-ui.freshness.run-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_envelopes_events_and_all_tables[coinbase-ui.freshness.run-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_envelopes_events_and_all_tables[coinbase-ui.wallets.sync-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_envelopes_events_and_all_tables[coinbase-ui.wallets.sync-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_envelopes_events_and_all_tables[coinbase-ui.workspace.freshness.run-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_envelopes_events_and_all_tables[coinbase-ui.workspace.freshness.run-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_envelopes_events_and_all_tables[mempool-ui.freshness.run-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_envelopes_events_and_all_tables[mempool-ui.workspace.freshness.run-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_envelopes_events_and_all_tables[mempool-ui.workspace.freshness.run-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[force-full-ui.freshness.run-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[force-full-ui.freshness.run-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[force-full-ui.wallets.sync-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[force-full-ui.wallets.sync-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[force-full-ui.workspace.freshness.run-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[force-full-ui.workspace.freshness.run-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[force-without-state-ui.freshness.run-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[force-without-state-ui.freshness.run-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[force-without-state-ui.wallets.sync-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[force-without-state-ui.wallets.sync-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[force-without-state-ui.workspace.freshness.run-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[force-without-state-ui.workspace.freshness.run-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[height-change-ui.freshness.run-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[height-change-ui.freshness.run-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[height-change-ui.wallets.sync-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[height-change-ui.wallets.sync-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[height-change-ui.workspace.freshness.run-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[height-change-ui.workspace.freshness.run-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[mempool-drop-return-ui.freshness.run-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[mempool-drop-return-ui.freshness.run-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[mempool-drop-return-ui.wallets.sync-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[mempool-drop-return-ui.wallets.sync-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[mempool-drop-return-ui.workspace.freshness.run-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[mempool-drop-return-ui.workspace.freshness.run-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[preflight-race-ui.freshness.run-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[preflight-race-ui.freshness.run-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[preflight-race-ui.wallets.sync-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[preflight-race-ui.wallets.sync-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[preflight-race-ui.workspace.freshness.run-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[preflight-race-ui.workspace.freshness.run-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[reanchor-ui.freshness.run-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[reanchor-ui.freshness.run-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[reanchor-ui.wallets.sync-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[reanchor-ui.wallets.sync-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[reanchor-ui.workspace.freshness.run-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[reanchor-ui.workspace.freshness.run-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[reorg-drop-ui.freshness.run-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[reorg-drop-ui.freshness.run-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[reorg-drop-ui.wallets.sync-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[reorg-drop-ui.wallets.sync-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[reorg-drop-ui.workspace.freshness.run-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[reorg-drop-ui.workspace.freshness.run-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[replacement-ui.freshness.run-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[replacement-ui.freshness.run-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[replacement-ui.wallets.sync-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[replacement-ui.wallets.sync-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[replacement-ui.workspace.freshness.run-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[replacement-ui.workspace.freshness.run-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[authority-ui.freshness.run-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[authority-ui.freshness.run-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[authority-ui.wallets.sync-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[authority-ui.wallets.sync-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[authority-ui.workspace.freshness.run-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[authority-ui.workspace.freshness.run-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[checkpoint-ui.freshness.run-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[checkpoint-ui.freshness.run-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[checkpoint-ui.wallets.sync-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[checkpoint-ui.wallets.sync-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[checkpoint-ui.workspace.freshness.run-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[checkpoint-ui.workspace.freshness.run-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[mempool-ui.freshness.run-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[mempool-ui.freshness.run-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[mempool-ui.wallets.sync-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[mempool-ui.wallets.sync-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[mempool-ui.workspace.freshness.run-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[mempool-ui.workspace.freshness.run-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[reorg-ui.freshness.run-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[reorg-ui.freshness.run-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[reorg-ui.wallets.sync-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[reorg-ui.wallets.sync-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[reorg-ui.workspace.freshness.run-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[reorg-ui.workspace.freshness.run-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[retraction-ui.freshness.run-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[retraction-ui.freshness.run-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[retraction-ui.wallets.sync-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[retraction-ui.wallets.sync-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[retraction-ui.workspace.freshness.run-electrum]",
+          "tests/test_rust_freshness_product.py::test_product_sync_reviewed_books[retraction-ui.workspace.freshness.run-esplora]",
+          "tests/test_rust_freshness_product.py::test_product_wallet_selection_refuses_direct_sync_reference_path[no-source]",
+          "tests/test_rust_freshness_product.py::test_product_wallet_selection_refuses_direct_sync_reference_path[paused]",
+          "tests/test_rust_freshness_product.py::test_product_workspace_preserves_active_context_and_book_order[electrum]",
+          "tests/test_rust_freshness_product.py::test_product_workspace_preserves_active_context_and_book_order[esplora]",
+          "tests/test_rust_freshness_product.py::test_reference_all_false_without_wallet_repro_and_native_refusal[ui.freshness.run]",
+          "tests/test_rust_freshness_product.py::test_reference_all_false_without_wallet_repro_and_native_refusal[ui.wallets.sync]"
+        ],
+        "collected_sha256": "9e720544641bb48956ca347895ff4c12ebef4de675bc42d7c81be53213a7d179"
+      }
+    ]
+  },
+  "performance": {
+    "process": {
+      "scope": "Unregistered prepared-book test harness with native pre-build; subprocess CPU includes startup and exit. Integrated finalized custody compares Python _compute_snapshot against native snapshot_load plus custody CPU spans; compute-only subtracts Python load and excludes native load. Stage-output destruction outside those spans stays in complete-process CPU. Complete payload, phase sequence and persisted scalar comparisons run outside timing.",
+      "records": [
+        {
+          "book": {
+            "schema": "kassiber.journals-bench-book.v1",
+            "kind": "generic",
+            "transactions": 2000,
+            "seed": 1,
+            "csv_sha256": {
+              "book.csv": "11b9ae7166f9ca46e8eea1fe82465380d70d6f194cd215649a2ab31647aa1352"
+            },
+            "pegs": 0,
+            "pegs_paired": 0,
+            "journals": {
+              "entries_created": 2000,
+              "quarantined": 0,
+              "cross_asset_pairs": 0,
+              "processed_transactions": 2000
+            },
+            "built_by": "95fb8222a768fab83f462c69c3bbc94de38d5e70",
+            "build_seconds": 4.8
+          },
+          "pairs": 5,
+          "python_cpu_median": 1.6388070000000003,
+          "native_cpu_median": 0.7247530000000002,
+          "cpu_ratio": 2.261193813616501,
+          "load_1min_range": [
+            5.14697265625,
+            6.04345703125
+          ],
+          "integrated_finalized_custody_cpu_medians": {
+            "python_builder": 0.954801364,
+            "python_load": 0.16010647099999997,
+            "python_compute": 0.7946948930000001,
+            "native_load": 0.027829,
+            "native_compute": 0.387718,
+            "native_builder": 0.41403100000000004,
+            "compute_ratio": 2.0496724242877558,
+            "builder_ratio": 2.306110808127894
+          },
+          "complete_dump_equal": true
+        },
+        {
+          "book": {
+            "schema": "kassiber.journals-bench-book.v1",
+            "kind": "multi-wallet",
+            "transactions": 2000,
+            "seed": 7,
+            "csv_sha256": {
+              "Hot.csv": "e106b0aa2628699a1bff2b7fa4705a94ff8aa3c52761582e69baee21090e0d6c",
+              "Cold.csv": "e65f77cd25ab4e5de41f831eccc073c12b9cd2c5b9909fdca5ae4bea88eabdca",
+              "LHot.csv": "77da8aad0da7f1401e6ed0d8663299c669a05b5a194e2c6fd6c2d3ac9299ab98",
+              "LCold.csv": "94adb338d7efdf3b52025c2ef85e0fb586a7f501ff446d6aef3572295f8fc748"
+            },
+            "pegs": 342,
+            "pegs_paired": 171,
+            "journals": {
+              "entries_created": 2000,
+              "quarantined": 0,
+              "cross_asset_pairs": 171,
+              "processed_transactions": 2000
+            },
+            "built_by": "95fb8222a768fab83f462c69c3bbc94de38d5e70",
+            "build_seconds": 125.8
+          },
+          "pairs": 5,
+          "python_cpu_median": 1.9914050000000003,
+          "native_cpu_median": 1.0396419999999982,
+          "cpu_ratio": 1.91547186435331,
+          "load_1min_range": [
+            4.32666015625,
+            5.14697265625
+          ],
+          "integrated_finalized_custody_cpu_medians": {
+            "python_builder": 1.3110832099999998,
+            "python_load": 0.202042086,
+            "python_compute": 1.1084055759999998,
+            "native_load": 0.053959999999999994,
+            "native_compute": 0.640124,
+            "native_builder": 0.691061,
+            "compute_ratio": 1.7315482250313998,
+            "builder_ratio": 1.8972033004322335
+          },
+          "complete_dump_equal": true
+        },
+        {
+          "book": {
+            "schema": "kassiber.journals-bench-book.v1",
+            "kind": "generic",
+            "transactions": 20000,
+            "seed": 1,
+            "csv_sha256": {
+              "book.csv": "7b09f4fd1d6fc465734d1c30db1e8ca2445577932c2fd924ab593106172cf6b1"
+            },
+            "pegs": 0,
+            "pegs_paired": 0,
+            "journals": {
+              "entries_created": 20000,
+              "quarantined": 0,
+              "cross_asset_pairs": 0,
+              "processed_transactions": 20000
+            },
+            "built_by": "95fb8222a768fab83f462c69c3bbc94de38d5e70",
+            "build_seconds": 18.4
+          },
+          "pairs": 5,
+          "python_cpu_median": 12.106378999999999,
+          "native_cpu_median": 7.334835000000008,
+          "cpu_ratio": 1.6505318797219004,
+          "load_1min_range": [
+            3.7958984375,
+            4.68310546875
+          ],
+          "integrated_finalized_custody_cpu_medians": {
+            "python_builder": 6.985475846,
+            "python_load": 1.5315637450000001,
+            "python_compute": 5.453912101,
+            "native_load": 0.29039000000000004,
+            "native_compute": 4.019832999999999,
+            "native_builder": 4.3079209999999994,
+            "compute_ratio": 1.3567509150255748,
+            "builder_ratio": 1.6215422348738524
+          },
+          "complete_dump_equal": true
+        },
+        {
+          "book": {
+            "schema": "kassiber.journals-bench-book.v1",
+            "kind": "multi-wallet",
+            "transactions": 20000,
+            "seed": 7,
+            "csv_sha256": {
+              "Hot.csv": "8d3852c3bcdb36bdd425b76fb3a8e5f64bf462e57c6b61294ed774681ac81146",
+              "Cold.csv": "ed3a0928e98404316be9b9fa7e3b603f4d4e0d7577633bec06e441d8d0e8ff5f",
+              "LHot.csv": "0cdeee02cfd30c7a1bc950bb013c3bbe793b4f1c7f19bc7ab4a4569100117b7a",
+              "LCold.csv": "94adb338d7efdf3b52025c2ef85e0fb586a7f501ff446d6aef3572295f8fc748"
+            },
+            "pegs": 3306,
+            "pegs_paired": 300,
+            "journals": {
+              "entries_created": 19983,
+              "quarantined": 17,
+              "cross_asset_pairs": 300,
+              "processed_transactions": 20000
+            },
+            "built_by": "95fb8222a768fab83f462c69c3bbc94de38d5e70",
+            "build_seconds": 830.4
+          },
+          "pairs": 5,
+          "python_cpu_median": 21.473603999999977,
+          "native_cpu_median": 9.964953999999999,
+          "cpu_ratio": 2.1549125063698216,
+          "load_1min_range": [
+            3.2841796875,
+            12.1865234375
+          ],
+          "integrated_finalized_custody_cpu_medians": {
+            "python_builder": 15.350617301,
+            "python_load": 1.880438309,
+            "python_compute": 13.417785965,
+            "native_load": 0.437073,
+            "native_compute": 6.128099,
+            "native_builder": 6.565172,
+            "compute_ratio": 2.1895511095692157,
+            "builder_ratio": 2.338189662205347
+          },
+          "complete_dump_equal": true
+        }
+      ]
+    },
+    "custody_binding_diagnostics": {
+      "schema": "kassiber.r9-custody-cpu.v2",
+      "scope": "Python decision computation on a preloaded snapshot versus native binding including JSON parse, admission, response encoding and deferred native cleanup; database load, Python request encoding, comparison and destruction of returned results excluded from timing. Both modes use the same /proc task-settlement check.",
+      "qualification": "Supplemental decision-only diagnostic binding round trip emits stage JSON; this is separate from the integrated finalized custody spans above.",
+      "records": [
+        {
+          "book": "generic-2000",
+          "pairs": 5,
+          "snapshot_sha256": "93b69136749cbdb594ba8e260416b77d3882a61a0dd87d8cf173790cde27e67b",
+          "python_cpu_median": 0.7560074770000007,
+          "native_cpu_median": 1.092759601,
+          "cpu_ratio": 0.6918332964616988,
+          "load_1min_range": [
+            8.7568359375,
+            9.2734375
+          ],
+          "compared_stages": [
+            "components",
+            "evidence",
+            "interpretation",
+            "gaps",
+            "quantity"
+          ],
+          "skipped": [
+            "finalized_projection",
+            "fusion"
+          ]
+        },
+        {
+          "book": "multi-wallet-2000",
+          "pairs": 5,
+          "snapshot_sha256": "68a0657a86f649babe1c0848b8c3bcabdf9441e59841e4b8c2366e23ce13d6d0",
+          "python_cpu_median": 1.1014451210000011,
+          "native_cpu_median": 1.585913644999998,
+          "cpu_ratio": 0.6945177150550353,
+          "load_1min_range": [
+            8.0986328125,
+            8.7568359375
+          ],
+          "compared_stages": [
+            "components",
+            "evidence",
+            "interpretation",
+            "gaps",
+            "quantity"
+          ],
+          "skipped": [
+            "finalized_projection",
+            "fusion"
+          ]
+        },
+        {
+          "book": "generic-20000",
+          "pairs": 5,
+          "snapshot_sha256": "46f92374ac697c9d2548019c56a22c21676c7dfe28f5a13237818338c5414e66",
+          "python_cpu_median": 5.111443038999994,
+          "native_cpu_median": 10.221845402999989,
+          "cpu_ratio": 0.5000509044579999,
+          "load_1min_range": [
+            5.02294921875,
+            7.115234375
+          ],
+          "compared_stages": [
+            "components",
+            "evidence",
+            "interpretation",
+            "gaps",
+            "quantity"
+          ],
+          "skipped": [
+            "finalized_projection",
+            "fusion"
+          ]
+        },
+        {
+          "book": "multi-wallet-20000",
+          "pairs": 5,
+          "snapshot_sha256": "c04ad79d6d6278ae0160c0fdd04c31d081fae81e7301d4eaa1fcc80f904bfa16",
+          "python_cpu_median": 13.418366839000015,
+          "native_cpu_median": 12.312960180999994,
+          "cpu_ratio": 1.0897758655717706,
+          "load_1min_range": [
+            3.8203125,
+            5.6826171875
+          ],
+          "compared_stages": [
+            "components",
+            "evidence",
+            "interpretation",
+            "gaps",
+            "quantity"
+          ],
+          "skipped": [
+            "finalized_projection",
+            "fusion"
+          ]
+        }
+      ]
+    }
+  },
+  "mutations": {
+    "catalogs": 42,
+    "recipes": 6544,
+    "completed": 0,
+    "pending": 6544,
+    "extra": [],
+    "pending_by_catalog": {
+      "crates/backup/scripts/mutations.json": 107,
+      "crates/chain/scripts/mutations.json": 78,
+      "crates/custody/scripts/mutations.json": 2334,
+      "crates/diagnostics/scripts/mutations.json": 98,
+      "crates/imports/scripts/mutations.json": 14,
+      "crates/journals/scripts/legacy_mutations.json": 21,
+      "crates/journals/scripts/loader_blob_mutations.json": 47,
+      "crates/journals/scripts/loader_mutations.json": 310,
+      "crates/journals/scripts/mutations.json": 225,
+      "crates/journals/scripts/pipeline_mutations.json": 7,
+      "crates/journals/scripts/prebuild_mutations.json": 46,
+      "crates/journals/scripts/process_native_mutations.json": 11,
+      "crates/journals/scripts/review_mutations.json": 15,
+      "crates/rates/scripts/mutations.json": 9,
+      "crates/reports/scripts/mutations.json": 925,
+      "crates/secrets/scripts/mutations.json": 18,
+      "crates/setup/scripts/mutations.json": 59,
+      "crates/transactions/scripts/mutations.json": 227,
+      "crates/transfers/scripts/mutations.json": 280,
+      "crates/transfers/scripts/pairing_mutations.json": 38,
+      "crates/transfers/scripts/review_cases_mutations.json": 13,
+      "crates/transfers/scripts/review_effects_mutations.json": 9,
+      "crates/transfers/scripts/review_operations_mutations.json": 4,
+      "crates/wallets/scripts/acquisition_mutations.json": 32,
+      "crates/wallets/scripts/bdk_mutations.json": 114,
+      "crates/wallets/scripts/discovery_mutations.json": 20,
+      "crates/wallets/scripts/fetch_mutations.json": 36,
+      "crates/wallets/scripts/freshness_admission_mutations.json": 12,
+      "crates/wallets/scripts/freshness_execution_mutations.json": 19,
+      "crates/wallets/scripts/freshness_graph_mutations.json": 23,
+      "crates/wallets/scripts/freshness_lifecycle_mutations.json": 18,
+      "crates/wallets/scripts/freshness_mutations.json": 29,
+      "crates/wallets/scripts/freshness_product_mutations.json": 18,
+      "crates/wallets/scripts/freshness_progress_mutations.json": 16,
+      "crates/wallets/scripts/mutations.json": 780,
+      "crates/wallets/scripts/observer_mutations.json": 82,
+      "crates/wallets/scripts/persistence_mutations.json": 112,
+      "crates/wallets/scripts/record_mutations.json": 83,
+      "crates/wallets/scripts/routing_mutations.json": 14,
+      "crates/wallets/scripts/service_mutations.json": 46,
+      "crates/xlsx/scripts/mutations.json": 6,
+      "tax-engine/scripts/mutations.json": 189
+    },
+    "shards": []
+  },
+  "artifacts": {
+    "fmt-owned-codec.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "clippy-owned-codec.log": {
+      "bytes": 1129,
+      "sha256": "69f45aa056341df121a3cba8c8eb66d72b5d3b0234038c1be040840d1ce77339"
+    },
+    "workspace-owned-codec.log": {
+      "bytes": 165607,
+      "sha256": "f755874d93f57ff758f018b1951864d814cfab54f8f93e3ab8d454941b593d9c"
+    },
+    "custody-post-fix-receipt.json": {
+      "bytes": 1021,
+      "sha256": "aca4e671c9e10e6b0a4078a82e62fa2e894504984579b136cecdf0e2641d207c"
+    },
+    "parity-receipts/reconciliation.json": {
+      "bytes": 1313621,
+      "sha256": "715d18b83b03009ec066d969cbecf8534620aad2d32cd0e903a4407924095ead"
+    },
+    "process-performance.json": {
+      "bytes": 777840,
+      "sha256": "dfd05516c4f466ab0395dd87a8d279134ca53635e0be1994df296c25bcfd4d57"
+    },
+    "custody-performance.json": {
+      "bytes": 16513,
+      "sha256": "787c0c1a6c8ee8a6d80698a24c17ae4895b8ad7eeef445b866f8ed4632ec8a6d"
+    },
+    "classifier-final-update.log": {
+      "bytes": 40,
+      "sha256": "6d5aec411b822716320386bd5a09a02e20eb087879bc27512f783043fa4d4896"
+    },
+    "classifier-check.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "preflight.log": {
+      "bytes": 1512,
+      "sha256": "1b5196eeb9a842ecff33f4fc402afb5a410352471aefaa75f9e5bf8afd937d80"
+    },
+    "mutation-catalog-check.json": {
+      "bytes": 4542,
+      "sha256": "2d2d6da2d4566cca80613d76316bd9a1aaa6ecfbee261439ae22ac69a4b9f3b5"
+    },
+    "history-check.json": {
+      "bytes": 160,
+      "sha256": "5f3fbf75c9ad64155513cf09f8d022881c46b3be36f489c57a8bc742d5d45723"
+    }
+  }
+}

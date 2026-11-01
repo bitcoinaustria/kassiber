@@ -24,9 +24,10 @@ requested continuation boundaries for the later branch lines.
 
 ## Source provenance and replay counts
 
-Each row's acceptance, campaign, mutation and timing evidence is
-**inherited from the listed branch@sha; pending fresh r9 verification**.
-The fresh R9 verification section below records the checks rerun here.
+Each row's source acceptance, mutation and timing evidence is inherited from
+the listed branch@sha. Fresh combined R9 results are recorded below and in the
+[verification summary](rust-backend-r9-verification.json); unfinished combined
+checks are listed explicitly. Historical source measurements keep their scope.
 Source checkpoint documents retain historical results and their original scope.
 
 | Line / inherited provenance | Picked | Skipped |
@@ -133,13 +134,13 @@ at a time. Task-owned build trees must be summarized and removed at completion.
 | All-target workspace clippy `-D warnings` | Passed with journal harness/timing, binary, chain/wallet harnesses and network observer features |
 | Workspace tests | Post-fix stack at `90d84e390`: 1,890 passed across 143 harness results; zero failed or ignored, with the combined harness/observer features |
 | Binary / network-observer harness tests | 86 passed across nine harness results; zero failed or ignored |
-| Mutation catalog anchors | All 6,543 integrated recipes across 42 catalogs apply with zero problems; the owned-converter fix adds one recipe (6,544 total), with final applicability and full kills pending |
-| Test classification | Regenerated 6,022 definitions; final contract check/preflight pending |
+| Mutation catalog anchors | All 6,544 integrated recipes across 42 catalogs apply with zero problems; full kills pending |
+| Test classification and preflight | Updated 6,022 definitions; classifier check passes, and preflight passes all 57 checks |
 | Custody generated/replay/focused lanes | Refreshed after the owned-converter fix: 24,000 books + 1,030 permutations yield 24,852 complete stage matches and 178 matching refusals; 159 archived requests + 159 permutations match. Focused census and shadow each pass 300 tests and 32 subtests, with 75 native-loader byte matches and one explained panic-hook skip |
 | Complete renderer campaign | Refreshed after the owned-converter fix: 24,705 / 24,705 generated admitted cases and 318 / 318 archived cases match |
-| Slice/hybrid parity and no-fallback assertions | In progress: 2,246 distinct nodes pass through the loader/BLOB suites. Four BLOB-note failures are corrected and the full 274-case loader/BLOB rerun passes; remaining modules pending |
+| Slice/hybrid parity and no-fallback assertions | In progress: 2,864 exact collected nodes have completed passing receipts, through native freshness and 51 product cases. Product resumption and later modules continue serially; the 274-case loader/BLOB rerun includes all four corrected cases |
 | Full mutation kills in resumable shards | Pending fresh run |
-| Combined journals process / custody CPU | Pending fresh run |
+| Combined journals process / custody CPU | All four books complete five alternating pairs, with exact payload, phase and persisted scalar comparisons. Process CPU improves 1.65–2.26×; integrated finalized custody compute CPU improves 1.36–2.19×. The diagnostic binding round trip uses more CPU on three books; scope and load are detailed below |
 
 The fresh post-fix workspace run uses the combined harness and observer features and passes all 1,890 tests in one uninterrupted run. The earlier 1,889-test result remains a historical receipt. The earlier run and its 73
 initial failures/rechecks remain historical receipts, rather than the final
@@ -152,12 +153,45 @@ suite separately exercises SQLite revision loading, which the generated
 snapshots do not cover. The owner will run full census and shadow shards
 afterwards; those full shards are outside this integration's focused lanes.
 
+## Combined performance
+
+The [verification summary](rust-backend-r9-verification.json) retains medians,
+input/binary hashes and load ranges. The process entry point is the unregistered
+prepared-book harness with native pre-build. Five alternating Python/native
+pairs run on fresh copies of each committed-seed book; complete payload, phase
+sequence and scalar-exact persisted comparisons pass in all twenty pairs.
+Subprocess CPU includes startup, exit and deferred cleanup.
+
+| Book | Process CPU, Python/native (s) | Ratio | Custody compute CPU, Python/native (s) | Ratio | One-minute load range |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Generic 2,000 | 1.639 / 0.725 | 2.26× | 0.795 / 0.388 | 2.05× | 5.15–6.04 |
+| Multi-wallet 2,000 | 1.991 / 1.040 | 1.92× | 1.108 / 0.640 | 1.73× | 4.33–5.15 |
+| Generic 20,000 | 12.106 / 7.335 | 1.65× | 5.454 / 4.020 | 1.36× | 3.80–4.68 |
+| Multi-wallet 20,000 | 21.474 / 9.965 | 2.15× | 13.418 / 6.128 | 2.19× | 3.28–12.19 |
+
+Custody compute compares the finalized Python `_compute_snapshot` sample minus
+its measured loader CPU against the native `custody` CPU span. Including the
+loader on both sides gives 2.31×, 1.90×, 1.62× and 2.34×, respectively. Stage
+output destruction after those spans remains included in complete-process CPU.
+These results retain the partial production acceptance of rendering, persistence
+and process; the 10× custody target remains open.
+
+A supplemental decision-only binding benchmark uses a preloaded snapshot and
+includes native JSON parsing, admission, stage-export encoding and deferred
+cleanup. Its median Python/native CPU is 0.756/1.093, 1.101/1.586,
+5.111/10.222 and 13.418/12.313 seconds in the same book order. One-minute loads
+span 3.82–9.27. The installed binding's hash matches the release library. This
+diagnostic round trip and the integrated finalized custody spans have different
+output boundaries; both measurements are retained.
+
 ## Remaining verification
 
-Finish every slice's hybrid parity with no fallback for registered shapes, all mutation
-recipes in resumable serial shards, combined process/custody benchmarks on four
-books with host load, final classifier/preflight and manual review. Update this
-audit with exact receipts and remove inherited-pending labels for rerun checks.
+Finish every slice's hybrid parity with no fallback for registered shapes and
+all mutation recipes in resumable serial shards, then summarize cleanup and the
+final manual review. The saved partial parity reconciliation contains 197
+uncovered product nodes and 47 later modules awaiting collection; the active
+resumer continues from those receipts. Update this audit at each verified
+boundary rather than treating an interrupted run as a full pass.
 
 ## Original-to-integrated replay map
 
