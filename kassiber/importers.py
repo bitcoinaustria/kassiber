@@ -4106,7 +4106,7 @@ def _remap_byo_row_to_ledger(row, plan):
         rate = _byo_number(row.get(plan["fiat_rate"]))
         magnitude = _byo_number(btc_cell)
         if rate is not None and magnitude is not None:
-            fiat_value = format(rate * magnitude, "f")
+            fiat_value = format(rate * _generic_ledger_btc_amount(magnitude, asset), "f")
 
     if direction == "outbound":
         out["Sent Asset"], out["Sent Amount"] = asset, btc_cell
