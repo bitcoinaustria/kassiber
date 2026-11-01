@@ -86,11 +86,11 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
   "Recalculate", "Process ledger"), and a book with any quarantine shows the
   first-sync card on every refresh. Done when the bell carries events only and
   one verb is used everywhere.
-- [ ] Finish folding the old review pages into Review and its neighbours:
-  paired-transfer history as a Transactions filter, matching rules in book
-  settings, the address/txid ownership lookup in Search, the CoinTracking/
-  Blockpit comparison and Journals under Extras. Done when the sidebar's Tools
-  group is gone and every old route redirects.
+- [ ] Finish folding the old review pages into Review and its neighbours: the
+  sidebar's Tools group is gone (its pages sit under Extras), but paired-transfer
+  history still lives on Transfers & Custody rather than as a Transactions
+  filter, matching rules are not in book settings yet, and the address/txid
+  ownership lookup is not reachable from Search.
 
 ## Imports, source evidence, and wallet workflows
 

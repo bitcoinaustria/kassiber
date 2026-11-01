@@ -396,16 +396,16 @@ const NAV_GROUPS: NavGroup[] = [
       { labelKey: "book.assistant", icon: MessageSquareText, href: "/assistant" },
     ],
   },
-  {
-    titleKey: "section.tools",
-    items: [
-      { labelKey: "book.reconcile", icon: Fingerprint, href: "/reconcile" },
-      { labelKey: "book.sourceFunds", icon: BadgeCheck, href: "/source-of-funds" },
-      { labelKey: "book.swaps", icon: ArrowLeftRight, href: "/swaps" },
-      { labelKey: "book.ledger", icon: BookOpen, href: "/journals" },
-    ],
-  },
 ];
+
+// Pages for occasional, deeper work. Review lists every decision; these keep
+// the full tools behind it, under Extras with the calculators.
+const EXTRA_BOOK_PAGES = [
+  { labelKey: "book.swaps", icon: ArrowLeftRight, href: "/swaps" },
+  { labelKey: "book.ledger", icon: BookOpen, href: "/journals" },
+  { labelKey: "book.reconcile", icon: Fingerprint, href: "/reconcile" },
+  { labelKey: "book.sourceFunds", icon: BadgeCheck, href: "/source-of-funds" },
+] as const;
 
 // `titleKey` is a fully-qualified i18n key (nav:* for breadcrumb titles that
 // reuse the sidebar names, chrome:routeMeta.* for shell-only titles).
@@ -2300,7 +2300,15 @@ function SidebarActions({
     devLockProps(rowLocked(route), `${label} — ${t("nav:devLocked")}`);
   const activityLocked = rowLocked("/activity");
   const [supportOpen, setSupportOpen] = React.useState(supportActive);
-  const [extrasOpen, setExtrasOpen] = React.useState(false);
+  // Open on a page that lives there, so the current page shows in the nav.
+  const extrasActive = [
+    ...EXTRA_BOOK_PAGES.map((page) => page.href),
+    "/exit-tax",
+    "/privacy-mirror",
+    "/chain-analysis",
+    "/egress",
+  ].some((route) => pathname === route || pathname.startsWith(`${route}/`));
+  const [extrasOpen, setExtrasOpen] = React.useState(extrasActive);
   const onSupportClick = useRailSubmenuTrigger(setSupportOpen);
   const onExtrasClick = useRailSubmenuTrigger(setExtrasOpen);
 
@@ -2409,6 +2417,24 @@ function SidebarActions({
             </CollapsibleTrigger>
             <CollapsibleContent>
               <SidebarMenuSub>
+                {EXTRA_BOOK_PAGES.map((page) => {
+                  const label = t(`nav:${page.labelKey}`);
+                  const Icon = page.icon;
+                  return (
+                    <SidebarMenuSubItem key={page.href}>
+                      <SidebarMenuSubButton
+                        asChild
+                        className={cn(navSubRowClassName, rowLocked(page.href) && navLockClassName)}
+                        isActive={pathname === page.href}
+                      >
+                        <Link to={page.href} {...lockRow(page.href, label)}>
+                          <Icon className="size-3.5" aria-hidden="true" />
+                          <span>{label}</span>
+                        </Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                  );
+                })}
                 <SidebarMenuSubItem>
                   <SidebarMenuSubButton
                     asChild
