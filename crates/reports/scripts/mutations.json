@@ -11519,5 +11519,395 @@
       "source_funds_saves_pin_reports_diagrams_fingerprints_receipts_and_all_112_tables"
     ],
     "rule": "The native inspection surface retains the strict daemon recipe allowlist."
+  },
+  {
+    "id": "sof-debug-presence",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "kassiber_envelope::set(&mut fields, \"debug\", s(\"\"));",
+    "replace": "kassiber_envelope::set(&mut fields, \"debug\", Value::Null);",
+    "expect_failing": [
+      "source_funds_internal_diagnostics_preserve_native_debug_presence_and_redaction"
+    ],
+    "rule": "Unhandled source-funds errors include an honest empty native debug string instead of a missing traceback field."
+  },
+  {
+    "id": "sof-debug-internal-only",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "if error.code == \"internal_error\"",
+    "replace": "if true",
+    "expect_failing": [
+      "source_funds_internal_diagnostics_preserve_native_debug_presence_and_redaction"
+    ],
+    "rule": "Typed source-funds refusals keep null debug while uncaught reference failures include native debug."
+  },
+  {
+    "id": "sof-debug-family-boundary",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "kind.starts_with(\"ui.source_funds.\") && reports::KINDS.contains(&kind)",
+    "replace": "kind.starts_with(\"ui.\") && reports::KINDS.contains(&kind)",
+    "expect_failing": [
+      "source_funds_internal_diagnostics_preserve_native_debug_presence_and_redaction"
+    ],
+    "rule": "The source-funds diagnostic contract does not alter unrelated report kinds."
+  },
+  {
+    "id": "sof-debug-registered-only",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "kind.starts_with(\"ui.source_funds.\") && reports::KINDS.contains(&kind)",
+    "replace": "kind.starts_with(\"ui.source_funds.\")",
+    "expect_failing": [
+      "source_funds_internal_diagnostics_preserve_native_debug_presence_and_redaction"
+    ],
+    "rule": "Only admitted native source-funds routes receive the native internal-failure diagnostic contract."
+  },
+  {
+    "id": "sof-debug-normalization-scope",
+    "file": "tests/test_rust_source_funds_reads.py",
+    "find": "return line.replace(field, b'\"debug\":\"<native-stack>\"', 1)",
+    "replace": "return json.dumps({**envelope, \"error\": {**envelope[\"error\"], \"message\": \"<native-message>\", \"debug\": \"<native-stack>\"}}, separators=(\",\", \":\")).encode()",
+    "expect_failing": [
+      "tests/test_rust_source_funds_reads.py::test_source_funds_internal_debug_normalization_preserves_other_wire_bytes"
+    ],
+    "rule": "The approved native-stack difference permits normalization of error.debug only; message changes remain byte differences."
+  },
+  {
+    "id": "sof-review-digest-order",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "sort_keys: true,",
+    "replace": "sort_keys: false,",
+    "expect_failing": [
+      "source_funds_review_mutation_witnesses"
+    ],
+    "rule": "Review fingerprints use sorted canonical keys."
+  },
+  {
+    "id": "sof-review-recipe-size",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "> 16_384",
+    "replace": "> 32_768",
+    "expect_failing": [
+      "source_funds_review_mutation_witnesses"
+    ],
+    "rule": "Review recipe size is bounded before report generation."
+  },
+  {
+    "id": "sof-review-depth",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "*n <= 32.into()",
+    "replace": "*n <= 64.into()",
+    "expect_failing": [
+      "source_funds_review_mutation_witnesses"
+    ],
+    "rule": "Review depth is bounded independently of the report cap."
+  },
+  {
+    "id": "sof-review-exclude",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "if truthy(value(&target, \"excluded\")) {",
+    "replace": "if false && truthy(value(&target, \"excluded\")) {",
+    "expect_failing": [
+      "source_funds_review_mutation_witnesses"
+    ],
+    "rule": "Excluded targets cannot anchor investigations."
+  },
+  {
+    "id": "sof-review-canonical-depth",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": ".unwrap_or(Value::Int(8.into())),",
+    "replace": ".unwrap_or(Value::Int(7.into())),",
+    "expect_failing": [
+      "source_funds_review_mutation_witnesses"
+    ],
+    "rule": "Canonical recipes retain default depth."
+  },
+  {
+    "id": "sof-review-link-state",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "AND to_transaction_id IN ({}) ORDER BY id LIMIT 201",
+    "replace": "AND to_transaction_id IN ({}) AND state!='rejected' ORDER BY id LIMIT 201",
+    "expect_failing": [
+      "source_funds_review_mutation_witnesses"
+    ],
+    "rule": "The inspection includes rejected authored links."
+  },
+  {
+    "id": "sof-review-link-order",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "ORDER BY id LIMIT 201\",marks(transaction_ids.len())",
+    "replace": "ORDER BY id DESC LIMIT 201\",marks(transaction_ids.len())",
+    "expect_failing": [
+      "source_funds_review_mutation_witnesses"
+    ],
+    "rule": "Inspection link ordering is canonical."
+  },
+  {
+    "id": "sof-review-link-cap",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "ORDER BY id LIMIT 201\",marks(transaction_ids.len())",
+    "replace": "ORDER BY id LIMIT 200\",marks(transaction_ids.len())",
+    "expect_failing": [
+      "source_funds_review_mutation_witnesses"
+    ],
+    "rule": "The inspection probes beyond its link limit."
+  },
+  {
+    "id": "sof-review-evidence-associated",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "params.extend(attachment_ids);",
+    "replace": "params.extend(attachment_ids.iter().map(|_| String::new()));",
+    "expect_failing": [
+      "source_funds_review_mutation_witnesses"
+    ],
+    "rule": "Evidence includes attachments associated with reachable authored sources and links."
+  },
+  {
+    "id": "sof-review-evidence-cap",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "ORDER BY id LIMIT 201\"),kassiber_store",
+    "replace": "ORDER BY id LIMIT 200\"),kassiber_store",
+    "expect_failing": [
+      "source_funds_review_mutation_witnesses"
+    ],
+    "rule": "The inspection probes beyond its evidence limit."
+  },
+  {
+    "id": "sof-review-attestation-needs",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "needs.insert(\"documentary_origin_attested\".into());",
+    "replace": "needs.insert(\"documentary_origin_missing\".into());",
+    "expect_failing": [
+      "source_funds_review_mutation_witnesses"
+    ],
+    "rule": "Attested origins remain explicit documentary needs."
+  },
+  {
+    "id": "sof-review-evidence-needs",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "needs.insert(\"documentary_evidence_missing\".into());",
+    "replace": "needs.insert(\"documentary_evidence_absent\".into());",
+    "expect_failing": [
+      "source_funds_review_mutation_witnesses"
+    ],
+    "rule": "Missing evidence remains an explicit documentary need."
+  },
+  {
+    "id": "sof-review-fingerprint",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "replace(&mut packet, \"review_fingerprint\", fingerprint);",
+    "replace": "replace(&mut packet, \"review_fingerprint\", s(\"wrong\"));",
+    "expect_failing": [
+      "source_funds_review_mutation_witnesses"
+    ],
+    "rule": "The context binds the exact reviewed packet digest."
+  },
+  {
+    "id": "sof-review-eligibility-method",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "\"custody_component\" | \"utxo_spend\"",
+    "replace": "\"custody_component\"",
+    "expect_failing": [
+      "source_funds_review_mutation_witnesses"
+    ],
+    "rule": "The deterministic allowlist includes native structural suggestions."
+  },
+  {
+    "id": "sof-review-eligibility-chain",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "|| truthy(value(&row, \"uses_chain_observation\"))",
+    "replace": "|| false && truthy(value(&row, \"uses_chain_observation\"))",
+    "expect_failing": [
+      "source_funds_review_mutation_witnesses"
+    ],
+    "rule": "Chain observations remain manual review items."
+  },
+  {
+    "id": "sof-review-eligibility-gross",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "*a == amount && *b == gross",
+    "replace": "*a == amount && (*b == gross || true)",
+    "expect_failing": [
+      "source_funds_review_mutation_witnesses"
+    ],
+    "rule": "Custody eligibility requires the exact source allocation."
+  },
+  {
+    "id": "sof-review-eligibility-confidence",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "&& text(&row, \"confidence\") == \"exact\"",
+    "replace": "&& (text(&row, \"confidence\") == \"exact\" || true)",
+    "expect_failing": [
+      "source_funds_review_mutation_witnesses"
+    ],
+    "rule": "Structural eligibility requires exact confidence."
+  },
+  {
+    "id": "sof-review-action",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "\"connect_wallet\" | \"import_history\" | \"attach_evidence\"",
+    "replace": "\"connect_wallet\" | \"import_history\" | \"attach_evidence\" | \"invalid\"",
+    "expect_failing": [
+      "source_funds_review_mutation_witnesses"
+    ],
+    "rule": "Input action names form an explicit allowlist."
+  },
+  {
+    "id": "sof-review-fingerprint-format",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "v.len()==64",
+    "replace": "v.len()>=63",
+    "expect_failing": [
+      "source_funds_review_mutation_witnesses"
+    ],
+    "rule": "Input fingerprints require exactly 64 lowercase hex digits."
+  },
+  {
+    "id": "sof-review-explanation",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "(1..=1000)",
+    "replace": "(1..=2000)",
+    "expect_failing": [
+      "source_funds_review_mutation_witnesses"
+    ],
+    "rule": "Input explanations are bounded plain text."
+  },
+  {
+    "id": "sof-review-stale",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "if value(&context, \"review_fingerprint\") != fingerprint {",
+    "replace": "if false && value(&context, \"review_fingerprint\") != fingerprint {",
+    "expect_failing": [
+      "source_funds_review_mutation_witnesses"
+    ],
+    "rule": "Stale provenance cannot authorize an input handoff."
+  },
+  {
+    "id": "sof-review-truncated",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "if truthy(value(&context, \"scope_truncated\")) {",
+    "replace": "if false && truthy(value(&context, \"scope_truncated\")) {",
+    "expect_failing": [
+      "source_funds_review_mutation_witnesses"
+    ],
+    "rule": "Truncated investigations cannot authorize input handoffs."
+  },
+  {
+    "id": "sof-review-no-needs",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "if list(&context, \"input_needs\").is_empty() {",
+    "replace": "if false && list(&context, \"input_needs\").is_empty() {",
+    "expect_failing": [
+      "source_funds_review_mutation_witnesses"
+    ],
+    "rule": "A handoff requires missing documentary input."
+  },
+  {
+    "id": "sof-review-request-id",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "replace(&mut packet, \"request_id\", request_id);",
+    "replace": "replace(&mut packet, \"request_id\", s(\"wrong\"));",
+    "expect_failing": [
+      "source_funds_review_mutation_witnesses"
+    ],
+    "rule": "Input request ids bind the complete handoff packet."
+  },
+  {
+    "id": "sof-review-cli-handoff",
+    "file": "crates/cli/src/reports.rs",
+    "find": "\"expected_review_fingerprint\",\n                        \"explanation\",",
+    "replace": "\"expected_review_fingerprint\",\n                        \"explanation_omitted\",",
+    "expect_failing": [
+      "source_funds_review_cli_forwards_fingerprint_file_and_handoff_fields"
+    ],
+    "rule": "CLI input handoffs retain the user explanation."
+  },
+  {
+    "id": "sof-review-daemon-registration",
+    "file": "crates/daemon/src/reports.rs",
+    "find": "    \"ui.source_funds.review_context\",\n    \"ui.source_funds.request_input\",",
+    "replace": "    \"ui.source_funds.review_context\",",
+    "expect_failing": [
+      "source_funds_stored_daemon_preserves_arguments_and_registers_only_lists"
+    ],
+    "rule": "The native daemon registers the advisory request-input read."
+  },
+  {
+    "id": "sof-review-planned-text",
+    "file": "crates/reports/src/source_funds_report.rs",
+    "find": "Value::Str(text) => Value::Str(kassiber_pytext::strip_py(text)),",
+    "replace": "Value::Str(_) => s(strip(&fallback(row, key))),",
+    "expect_failing": [
+      "source_funds_review_mutation_witnesses"
+    ],
+    "rule": "Review recipes preserve all Python text codepoints in planned fields."
+  },
+  {
+    "id": "sof-review-file-size",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "if bytes.len() > 1_000_000 {",
+    "replace": "if bytes.len() > 2_000_000 {",
+    "expect_failing": [
+      "source_funds_review_recipe_file_preserves_encodings_surrogates_and_limits"
+    ],
+    "rule": "Explicit recipe files retain the one-megabyte intake limit."
+  },
+  {
+    "id": "sof-review-file-endian",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "(&bytes[2..], 2, true)",
+    "replace": "(&bytes[2..], 2, false)",
+    "expect_failing": [
+      "source_funds_review_recipe_file_preserves_encodings_surrogates_and_limits"
+    ],
+    "rule": "Recipe byte decoding honors the UTF-16 little-endian BOM."
+  },
+  {
+    "id": "sof-review-file-surrogates",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "kassiber_pytext::loads_py(&raw)",
+    "replace": "kassiber_pytext::loads(raw.as_str().unwrap_or_default())",
+    "expect_failing": [
+      "source_funds_review_recipe_file_preserves_encodings_surrogates_and_limits"
+    ],
+    "rule": "Recipe byte decoding preserves literal unpaired surrogates accepted by Python."
+  },
+  {
+    "id": "sof-review-fractional-allocation",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "decimal(value(&row, \"allocation_amount\"))?",
+    "replace": "decimal(&Value::Int(amount.clone()))?",
+    "expect_failing": [
+      "source_funds_review_mutation_witnesses"
+    ],
+    "rule": "Bulk eligibility checks the stored allocation before truncation."
+  },
+  {
+    "id": "sof-review-fractional-from",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "decimal(required)?",
+    "replace": "decimal(&Value::Int(super::source_funds_projection::integer(required)?))?",
+    "expect_failing": [
+      "source_funds_review_mutation_witnesses"
+    ],
+    "rule": "Bulk eligibility checks the stored parent demand before truncation."
+  },
+  {
+    "id": "sof-review-beyond-inspection",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": "Value::Int(beyond.into())",
+    "replace": "Value::Int(0.into())",
+    "expect_failing": [
+      "source_funds_review_mutation_witnesses"
+    ],
+    "rule": "Bulk review reports eligible links outside the inspected record cap."
+  },
+  {
+    "id": "sof-review-file-expansion",
+    "file": "crates/reports/src/source_funds_review.rs",
+    "find": ".and_then(|context| context.expand_user(std::path::Path::new(&raw)))",
+    "replace": ".and_then(|_| Ok(std::path::PathBuf::from(&raw)))",
+    "expect_failing": [
+      "source_funds_review_recipe_file_preserves_encodings_surrogates_and_limits"
+    ],
+    "rule": "Expand an explicitly selected recipe path with the shared account path resolver while preserving HOME."
   }
 ]

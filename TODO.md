@@ -508,7 +508,10 @@ registers them; exit-tax preserves its reference no-registration boundary.
   Retain the known Python privacy-boundary fee-attribution bug for parity.
   Native tied-flow ordering is deterministic and compared with measured Python
   seed variants, without normalizing the output bytes.
-- [ ] Finish source-funds CLI review-context, request-input, coverage and
+- [x] Port source-funds review-context/request-input with fingerprint-bound
+  advisory handoffs, bounded inspection and current bulk eligibility; see the
+  [review checkpoint](docs/reference/rust-shell.md#source-funds-review-and-input-checkpoint-r5-partial).
+- [ ] Finish source-funds coverage and
   suggest/assemble dry runs in separate verified commits. Each still requires
   byte/all-table comparisons, zero fallbacks and named mutation kills.
 - [x] Port link creation, review and managed-id evidence association through

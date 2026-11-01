@@ -42,6 +42,8 @@ pub const COMMANDS: &[&str] = &[
     "source-funds.links.review",
     "source-funds.links.attach",
     "source-funds.links.bulk-review",
+    "source-funds.review-context",
+    "source-funds.request-input",
 ];
 pub fn kind(command: &str) -> Option<&'static str> {
     match command {
@@ -55,6 +57,26 @@ pub fn execute(book: &mut dyn Book, command: &str, args: &Namespace) -> Result<V
         return book.reports(command, &source_funds_report_request(args));
     }
     if command.starts_with("source-funds.") {
+        if matches!(
+            command,
+            "source-funds.review-context" | "source-funds.request-input"
+        ) {
+            return book.reports(
+                command,
+                &dict(
+                    [
+                        "workspace",
+                        "profile",
+                        "target_transaction",
+                        "recipe_file",
+                        "action",
+                        "expected_review_fingerprint",
+                        "explanation",
+                    ]
+                    .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null))),
+                ),
+            );
+        }
         return book.reports(command, &source_funds_request(args));
     }
     if command == "reports.cross-check" {
@@ -1043,5 +1065,59 @@ mod tests {
         assert!(crate::describe::IMPLEMENTED.contains(&"reports.privacy-hygiene"));
         assert!(!COMMANDS.contains(&"reports.privacy-mirror"));
         assert!(!COMMANDS.contains(&"reports.psbt-privacy"));
+    }
+    #[test]
+    fn source_funds_review_cli_forwards_fingerprint_file_and_handoff_fields() {
+        for command in ["review-context", "request-input"] {
+            let mut argv = vec![
+                "source-funds",
+                command,
+                "--target-transaction",
+                "in",
+                "--recipe-file",
+                "inspection.json",
+                "--workspace",
+                "Main",
+                "--profile",
+                "Book",
+            ];
+            if command == "request-input" {
+                argv.extend([
+                    "--action",
+                    "attach_evidence",
+                    "--expected-review-fingerprint",
+                    "hash",
+                    "--explanation",
+                    "Evidence",
+                ]);
+            }
+            let args = crate::argparse::parse_args(
+                &argv.into_iter().map(String::from).collect::<Vec<_>>(),
+                crate::argparse::Context {
+                    width: 78,
+                    version: "test",
+                },
+            )
+            .unwrap();
+            let command = format!("source-funds.{command}");
+            assert!(COMMANDS.contains(&command.as_str()));
+            assert!(crate::describe::IMPLEMENTED.contains(&command.as_str()));
+            assert!(crate::run::implemented(&command, &args));
+            let actual = execute(&mut SourceFundsCapture, &command, &args).unwrap();
+            for key in [
+                "workspace",
+                "profile",
+                "target_transaction",
+                "recipe_file",
+                "action",
+                "expected_review_fingerprint",
+                "explanation",
+            ] {
+                assert_eq!(
+                    get(get(&actual, "args").unwrap(), key),
+                    Some(&args.get(key).cloned().unwrap_or(Value::Null))
+                );
+            }
+        }
     }
 }

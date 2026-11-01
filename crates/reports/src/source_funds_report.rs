@@ -21,6 +21,12 @@ fn fallback(row: &Value, key: &str) -> String {
         .map(py_str)
         .unwrap_or_default()
 }
+fn planned_text(row: &Value, key: &str) -> Value {
+    match value(row, key) {
+        Value::Str(text) => Value::Str(kassiber_pytext::strip_py(text)),
+        _ => s(strip(&fallback(row, key))),
+    }
+}
 fn json(row: &Value) -> serde_json::Value {
     kassiber_custody::codec::to_json(row)
 }
@@ -44,8 +50,8 @@ pub fn resolve_transaction(conn: &Connection, profile: &str, reference: &str) ->
 pub struct Inputs<'a> {
     connection: &'a Connection,
     profile_id: String,
-    active: Vec<Value>,
-    allocations: BTreeMap<(String, String, String), (BigInt, BigInt)>,
+    pub(super) active: Vec<Value>,
+    pub(super) allocations: BTreeMap<(String, String, String), (BigInt, BigInt)>,
 }
 
 pub fn load_inputs<'a>(conn: &'a Connection, profile: &Value) -> Result<Inputs<'a>> {
@@ -150,7 +156,7 @@ fn attachments(conn: &Connection, table: &str, column: &str, id: &str) -> Result
     rows(conn,&format!("SELECT a.* FROM {table} j JOIN attachments a ON a.id=j.attachment_id WHERE j.{column}=?"),[id])
 }
 
-fn timestamp_after(left: &Value, right: &Value) -> bool {
+pub(super) fn timestamp_after(left: &Value, right: &Value) -> bool {
     fn timestamp(v: &Value) -> Option<String> {
         let raw = py_str(v);
         if raw == "0001-01-01T00:00:00Z" {
@@ -906,7 +912,7 @@ pub fn build(
     let planned = purpose == "planned_exchange_sale";
     let mut report=dict([
         ("workspace",value(workspace,"label").clone()),("profile",value(profile,"label").clone()),("report_context",disclosure::report_context(profile)),("report_options",options.clone()),
-        ("purpose",dict([("type",s(purpose)),("label",s(if planned{"Planned exchange sale"}else{"Already completed transaction"})),("anchor_role",s(if planned{"funds_history_anchor"}else{"completed_transaction"})),("planned_destination",s(strip(&fallback(args,"planned_destination")))),("planned_note",s(strip(&fallback(args,"planned_note")))),("fiat_purchase_note",s(if planned{"If the bitcoin was bought on an exchange, fiat-source evidence for that original purchase is a separate supporting document and should be attached to the root source."}else{""}))])),
+        ("purpose",dict([("type",s(purpose)),("label",s(if planned{"Planned exchange sale"}else{"Already completed transaction"})),("anchor_role",s(if planned{"funds_history_anchor"}else{"completed_transaction"})),("planned_destination",planned_text(args,"planned_destination")),("planned_note",planned_text(args,"planned_note")),("fiat_purchase_note",s(if planned{"If the bitcoin was bought on an exchange, fiat-source evidence for that original purchase is a separate supporting document and should be attached to the root source."}else{""}))])),
         ("target",disclosure::transaction_node(&target,&mode,&q(target_amount.clone()),true,overrides)?),("reveal_mode",s(mode)),("graph",dict([("nodes",Value::List(nodes)),("edges",Value::List(edges.clone()))])),
         ("allocations",dict([("target_amount",amount(&target_amount)?),("target_amount_msat",q(target_amount)),("asset",value(&target,"asset").clone()),("reviewed_edge_count",q(edges.len())),("gross_source_requirement",Value::List(gross.into_iter().map(|(asset,quantity)|Ok(dict([("asset",s(asset)),("amount",amount(&quantity)?),("amount_msat",q(quantity))]))).collect::<Result<_>>()?)),("gross_matches_target",Value::Bool(matches)),("route_difference_msat",difference.as_ref().map(|n|q(n.clone())).unwrap_or(Value::Null)),("route_difference",difference.as_ref().map(amount).transpose()?.unwrap_or(Value::Null))])),
         ("source_mix",Value::List(mix)),("gaps",Value::List(findings.iter().filter(|r|["missing_history","unknown_origin","ambiguous_allocation","privacy_hop_unresolved","path_truncated"].contains(&text(r,"code").as_str())).cloned().collect())),("findings",Value::List(findings)),("explain_gates",dict([("exportable",Value::Bool(blockers.is_empty())),("blockers",Value::List(blockers)),("warnings",Value::List(warnings))])),

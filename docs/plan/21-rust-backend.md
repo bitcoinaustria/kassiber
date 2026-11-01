@@ -1444,6 +1444,18 @@ case saving remain pending. The report producer is now available on the reads
 branch for the next cherry-pick. PDF rendering and PDF-containing bundles remain
 Python; dependencies, schema and tax rules are unchanged.
 
+The `t3code/r5-sof-reads-5` continuation starts at `6e63d400a`, after the
+complete report producer, and ports review-context/request-input through the
+shared native service, CLI and daemon. Canonical recipes, inspection caps,
+fingerprints, current deterministic bulk eligibility and advisory handoffs
+retain the Python contract. The
+[review checkpoint](../reference/rust-shell.md#source-funds-review-and-input-checkpoint-r5-partial)
+records byte/all-table comparisons, native routing and the 34 new mutation
+kills. Coverage and suggest/assemble dry runs remain separate read boundaries;
+Python has no assemble dry-run CLI/daemon contract at this base. Case saving
+and persisted provenance operations stay with the parallel mutations worker.
+PDF and PDF-containing bundles remain Python.
+
 ### Service slice contract (R4 onward)
 
 From R4 on, work lands as vertical slices: one command family, or one

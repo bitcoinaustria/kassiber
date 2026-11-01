@@ -6969,6 +6969,93 @@ all-table, routing and mutation acceptance. Case saving and all provenance
 mutations remain with `t3code/r5-sof-mutations-2`. PDF and PDF-containing bundles
 stay explicitly in Python.
 
+## Source-funds review and input checkpoint (R5 partial)
+
+`t3code/r5-sof-reads-5` starts at `6e63d400a`. The native shared reports
+service now implements CLI `source-funds review-context` and `request-input`
+and desktop `ui.source_funds.review_context` and `request_input`. One read
+snapshot binds the canonical book, report recipe, reachable authored records,
+attachment metadata, findings, journal input version and review fingerprint.
+Bulk eligibility uses the current stored custody and structural derivations,
+retains explicit rejections and raw allocation bounds, and reports eligible
+links beyond the 200-record inspection frontier. It remains outside the
+fingerprint, as in Python. Input requests revalidate the exact recipe and
+fingerprint, reject truncated/no-needs investigations and return advisory
+handoffs without changing provenance, custody or tax facts.
+
+The CLI reads only the explicitly named, bounded recipe file, using the shared
+account path resolver. UTF-8/16/32
+BOM and byte-order handling preserves Python text, including literal lone
+surrogates. The existing pytext scanner now also accepts its Python string
+type directly, without changing ordinary string parsing. This fixes the
+native report producer's previously dropped surrogate text in planned fields.
+No evidence file is opened and no network, schema, dependency, lockfile or
+Python product change is introduced. PDF and PDF-containing bundles remain
+Python. Case saving remains with the parallel mutations worker.
+
+The frozen corpus contains 138 complete outcomes measured under Python hash
+seeds 0, 1 and 2. Native tests replay it against plaintext and SQLCipher,
+compare complete JSON bytes and retain all 112 tables around each operation.
+The focused mutation witnesses include rejected/excluded targets, current and
+stale custody/structural eligibility, fractional raw allocations, inspection
+caps, fingerprint changes and request refusals. Explicit recipe-file witnesses
+cover UTF-8/16/32, literal surrogates, envelope unwrapping and the byte limit.
+
+The final whole-process suite passes ten tests. It compares all 138 service
+outcomes, 166 native CLI calls (146 review-context and 20 request-input), eight
+output files and 84 handoffs across four native daemon sessions. CLI scenarios
+cover ready, stale, source-blocked and no-context books, plus explicitly
+selected account-relative and named-user recipe paths. Literal stdout/stderr,
+status, output files and daemon response lines retain parity; all 112 tables
+remain unchanged and in-scope fallback is zero. Raw routing records and output
+hashes are retained in `target/r5-sof-reads-5/routing-accepted/` and
+`routing-accepted.json`. Inventories now have 160 native CLI leaves, including
+seven source-funds leaves, and eight source-funds daemon reads.
+
+All 876 report mutation entries apply. The 34 appended `sof-review-*` entries
+pass their unmutated baselines and are killed: 28 by
+`source_funds_review_mutation_witnesses`, four by
+`source_funds_review_recipe_file_preserves_encodings_surrogates_and_limits`,
+one by `source_funds_review_cli_forwards_fingerprint_file_and_handoff_fields`
+and one by
+`source_funds_stored_daemon_preserves_arguments_and_registers_only_lists`.
+The initial campaign killed 32 entries; its excluded-target mutation survived
+because the focused selection omitted that existing corpus case. Adding the
+case and rerunning the baseline kills the remaining entry. Build errors and
+empty selections are not counted as kills. The 842 inherited entries retain
+prior evidence. Per-entry results are in
+`target/r5-sof-reads-5/mutation-summary.json`; the isolated mutation source and
+build directories are removed after summarizing. A separate path-expansion
+baseline kills the added shared-resolver mutation. Its initial catalog-format
+validation failure is excluded from acceptance.
+
+Rust 1.99.1 offline/locked checks pass workspace formatting, production
+store/pytext/reports/CLI/daemon all-target clippy and binary harness all-target
+clippy with warnings denied, all six review/producer/lineage integration tests,
+five source-funds CLI/daemon tests and all pytext tests and CPython vectors.
+The inherited producer and structural corpora retain all 278 and 32 cases.
+Locked Python 3.11 regressions pass 35 review, AI disclosure/reference and
+capability tests; these reference regressions are separate from the native
+process acceptance above. The generator verifies all 138 outcomes across the
+three hash seeds. The required classifier update reviews all four new Python
+definitions as retained oracles in the serial daemon lane; required CI
+preflight passes all 57 tests.
+
+`target/r5-sof-reads-5/verification-summary.json` records accepted checks and
+excluded earlier attempts. Verification preserves account `HOME`, activates
+pinned tools before isolating XDG paths, redirects owner/preferences/data roots
+under `target/` and uses eight Cargo jobs with both Cargo output directories
+in this worktree. Owned mutation and verification build/data trees are removed
+after summarizing; logs, routing records and summaries remain. Verification is
+Linux-only; the full workspace/frontend gate, regtest and packaged/platform
+checks are not claimed.
+
+Coverage and suggest/assemble dry runs remain ordered follow-ups, each needing
+its own byte/all-table comparisons, zero fallbacks and mutation kills. At this
+base Python has a CLI suggest dry run but no assemble dry-run CLI/daemon
+contract. Persisted assembly, case saving and all provenance mutations remain
+with the parallel mutations worker. PDF and PDF-containing bundles stay Python.
+
 ## Not yet ported
 
 The diagnostics slice now implements explicit public reports and native debug

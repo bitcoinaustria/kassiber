@@ -218,6 +218,7 @@ REVIEWS = {
     "tests/test_rust_transaction_listing.py": {"*": {"disposition": "oracle", "group": "transactions", "reason": "compares observed Rust CLI pages, all filters, sort and cursor bytes, exact msat values and fail-closed export/desktop barriers with Python on disposable books"}},
     "tests/test_rust_grouped_metadata_services.py": {"*": {"disposition": "oracle", "group": "transactions", "reason": "compares grouped Rust desktop saves, typed validation, exact price strings, append-only audit fields and version transitions against Python on disposable books"}},
     "tests/test_rust_hybrid_candidate.py": {"*": {"disposition": "oracle", "group": "cli-shell", "reason": "pins the hybrid candidate that routes each CLI call to Rust or the Python reference during the port"}},
+    "tests/test_rust_source_funds_review.py": {"*": {"disposition": "oracle", "group": "reports", "reason": "compares complete fingerprint-bound native review and input packets with unchanged Python bytes, recipe files and CLI/daemon envelopes; checks all 112 tables and requires zero in-scope fallbacks while retaining account HOME"}},
 }
 
 # R5 wallet lifecycle replacements. Mixed sync/observer obligations remain

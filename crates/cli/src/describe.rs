@@ -209,6 +209,8 @@ pub const IMPLEMENTED: &[&str] = &[
     "source-funds.links.review",
     "source-funds.links.attach",
     "source-funds.links.bulk-review",
+    "source-funds.review-context",
+    "source-funds.request-input",
 ];
 
 /// `_NO_BOOTSTRAP_DATABASE_PREFIXES`.

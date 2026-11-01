@@ -582,3 +582,23 @@ mod tests {
         ));
     }
 }
+
+#[cfg(test)]
+mod literal_surrogate_tests {
+    use super::*;
+
+    #[test]
+    fn loads_py_preserves_literal_surrogates_without_escape_pairing() {
+        let raw = PyStr::from_code_points([34, 0xd800, 0xdc00, 34]).unwrap();
+        assert_eq!(
+            loads_py(&raw).unwrap(),
+            Value::Str(PyStr::from_code_points([0xd800, 0xdc00]).unwrap())
+        );
+        assert_eq!(
+            loads(r#""\ud800\udc00""#).unwrap(),
+            Value::Str(PyStr::from_code_points([0x10000]).unwrap())
+        );
+        let invalid = PyStr::from_code_points([34, 92, 0xd800, 34]).unwrap();
+        assert!(loads_py(&invalid).is_err());
+    }
+}

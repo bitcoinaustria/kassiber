@@ -270,7 +270,7 @@ pub mod test_hooks {
 }
 use kassiber_ownership::{CanonicalProject, OwnerNamespace};
 use kassiber_paths::{canonicalize_allow_missing, looks_like_plaintext, resolve_database_path};
-pub use kassiber_paths::{Error, ErrorKind, Result};
+pub use kassiber_paths::{Context as PathContext, Error, ErrorKind, Result};
 pub use rusqlite;
 use rusqlite::{
     backup::{Backup, StepResult},

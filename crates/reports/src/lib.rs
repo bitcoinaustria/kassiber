@@ -158,8 +158,8 @@ pub fn execute_with_sources(
     conn.execute_batch("SAVEPOINT report_read")
         .map_err(sql_error)?;
     let result = (|| {
-        if command == "ui.source_funds.review_context" {
-            return source_funds_review::execute(conn, args);
+        if source_funds_review::handles(command) {
+            return source_funds_review::execute(conn, command, args);
         }
         if matches!(command, "reports.source-funds" | "ui.source_funds.preview") {
             return source_funds_report::execute(conn, command, args);

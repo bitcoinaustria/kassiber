@@ -175,6 +175,17 @@ PDF rendering and PDF-containing
 bundles remain in Python by the owner's decision; their routes are not
 registered natively.
 
+Native `source-funds review-context` / `request-input` and the corresponding
+daemon kinds bind the recipe, reachable editor records, evidence metadata and
+input version to the same review fingerprint. The 200-record inspection caps,
+truncation refusals and advisory input handoffs retain the Python contract.
+Current deterministic bulk eligibility is computed outside that fingerprint.
+Only an explicitly selected, bounded CLI recipe file is read; evidence files
+remain unopened. See the [review checkpoint](rust-shell.md#source-funds-review-and-input-checkpoint-r5-partial).
+Coverage, suggest/assemble dry runs and all source-funds mutations remain
+pending in Rust. PDF rendering and PDF-containing bundles remain in
+Python by the owner's decision; their routes are not registered natively.
+
 Uncaught failures on the native source-funds daemon reads include an empty
 native debug string; typed refusals retain null. Python-only traceback frames
 and stderr are not fabricated. Non-debug response fields retain exact parity.
