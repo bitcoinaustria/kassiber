@@ -135,8 +135,8 @@ at a time. Task-owned build trees must be summarized and removed at completion.
 | Binary / network-observer harness tests | 86 passed across nine harness results; zero failed or ignored |
 | Mutation catalog anchors | All 6,543 integrated recipes across 42 catalogs apply with zero problems; the owned-converter fix adds one recipe (6,544 total), with final applicability and full kills pending |
 | Test classification | Regenerated 6,022 definitions; final contract check/preflight pending |
-| Custody generated/replay/focused lanes | 24,000 books + 1,030 permutations: 24,852 complete stage matches and 178 matching refusals; 159 archived requests + 159 permutations match. Focused census and shadow each pass 300 tests and 32 subtests, with 75 native-loader byte matches and one explained panic-hook skip |
-| Complete renderer campaign | 24,705 / 24,705 generated admitted cases and 318 / 318 archived cases match |
+| Custody generated/replay/focused lanes | Refreshed after the owned-converter fix: 24,000 books + 1,030 permutations yield 24,852 complete stage matches and 178 matching refusals; 159 archived requests + 159 permutations match. Focused census and shadow each pass 300 tests and 32 subtests, with 75 native-loader byte matches and one explained panic-hook skip |
+| Complete renderer campaign | Refreshed after the owned-converter fix: 24,705 / 24,705 generated admitted cases and 318 / 318 archived cases match |
 | Slice/hybrid parity and no-fallback assertions | In progress: 2,246 distinct nodes pass through the loader/BLOB suites. Four BLOB-note failures are corrected and the full 274-case loader/BLOB rerun passes; remaining modules pending |
 | Full mutation kills in resumable shards | Pending fresh run |
 | Combined journals process / custody CPU | Pending fresh run |
@@ -146,15 +146,15 @@ initial failures/rechecks remain historical receipts, rather than the final
 coverage claim. The all-target feature check had also exposed a freshness
 fixture with obsolete `AppError` fields; the fixture is adapted and clippy passes.
 After saving the exact post-fix log hash and counts, completed test executables were removed (2.537 GB unlinked), bringing the verification build tree to 7.6 GiB. Debug fixtures, the hybrid candidate, optimized journal probes and the Python binding are rebuilt from the corrected source.
-The custody/render receipts above precede the late mixed-revision guard; the
-generated snapshots do not exercise SQLite revision loading. The 274-case loader/BLOB suite reruns the affected boundary; the owned-converter fix also requires refreshed custody/render campaigns and native builds. The owner will run full census and shadow shards afterwards; focused lanes
-remain part of this integration's required work.
+The custody/render campaigns, archived replays and both focused modes above
+are refreshed from the rebuilt, byte-preserving stack. The 274-case loader/BLOB
+suite separately exercises SQLite revision loading, which the generated
+snapshots do not cover. The owner will run full census and shadow shards
+afterwards; those full shards are outside this integration's focused lanes.
 
 ## Remaining verification
 
-Finish workspace checks and harness builds; run 24,000 generated books and 1,030
-permutations, 159 retained recordings and permutations, focused census/shadow,
-every slice's hybrid parity with no fallback for registered shapes, all mutation
+Finish every slice's hybrid parity with no fallback for registered shapes, all mutation
 recipes in resumable serial shards, combined process/custody benchmarks on four
 books with host load, final classifier/preflight and manual review. Update this
 audit with exact receipts and remove inherited-pending labels for rerun checks.
