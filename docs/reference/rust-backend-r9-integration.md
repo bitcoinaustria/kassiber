@@ -19,8 +19,8 @@ The inventory contains **183 candidate occurrences**, **82 distinct subjects**,
 and **64 provisionally new subjects**. **62 source commits were picked and
 121 occurrences skipped**, plus one consolidated stage-adaptation commit
 (`e4a0d9fd3`). This gives **63 replay commits above `9f7471bf7`**, before the
-subsequent integration-fix and verification commits. Range inventories exclude
-already-satisfied ancestry before the requested continuation boundaries.
+subsequent integration-fix and verification commits. The inventory records repeated ancestry as skipped occurrences and uses the
+requested continuation boundaries for the later branch lines.
 
 ## Source provenance and replay counts
 
@@ -75,7 +75,9 @@ occurrences and 39 distinct paths**, including the skipped `59c5f062f`.
 The seven initial loader picks add **26 path occurrences**. These are separately
 recorded counts; the manual stage adaptation is not counted as an additional
 cherry-pick conflict. Rerere resolutions were inspected rather than trusted.
-No irreconcilable code-behavior conflict was found.
+No irreconcilable code-behavior conflict was found. All 62 retained source
+commit messages are byte-identical to their originals; no merge commit occurs
+above the requested starting checkpoint.
 
 Resolutions preserve shared-column `Record` storage and private cached row views,
 strict typed JSON admission, native SQLite scalar fidelity, and literal mapping
@@ -119,8 +121,9 @@ at a time. Task-owned build trees must be summarized and removed at completion.
 | --- | --- |
 | Locked environment | Passed, offline, CPython 3.11.17 |
 | Workspace formatting | Passed after compatibility fixes |
-| All-target workspace clippy `-D warnings` | Initial pass; daemon ordering changed afterwards, final rerun pending |
-| Workspace tests | Initial run in progress; restricted loopback fixture failures require elevated rerun |
+| All-target workspace clippy `-D warnings` | Passed with journal harness/timing, binary, chain/wallet harnesses and network observer features |
+| Workspace tests | 1,873 nodes verified: 1,800 passed in the full run plus all 73 failed nodes passed on exact elevated reruns; zero ignored |
+| Binary / network-observer harness tests | 86 passed across nine harness results; zero failed or ignored |
 | Mutation catalog anchors | 6,541 / 6,541 apply exactly once across 42 catalogs; kills pending |
 | Test classification | Regenerated 6,020 definitions; final contract check/preflight pending |
 | Custody generated/replay/focused lanes | Pending fresh run |
@@ -128,8 +131,12 @@ at a time. Task-owned build trees must be summarized and removed at completion.
 | Full mutation kills in resumable shards | Pending fresh run |
 | Combined journals process / custody CPU | Pending fresh run |
 
-Initial workspace failures and successful reruns will remain distinct receipts;
-restricted-environment failures are not counted as successful coverage.
+The full workspace run has 143 harness results. Its initial 73 failures across
+six targets are retained separately: loopback restrictions, the combined daemon
+registration expectation and dependency/source review entries. Exact reruns
+select and pass every failed node after the narrow fixes. Restricted results
+are not counted as successful coverage. The all-target feature check also exposed
+a freshness fixture with obsolete `AppError` fields; it is adapted and clippy passes.
 The owner will run full census and shadow shards afterwards; focused lanes
 remain part of this integration's required work.
 
