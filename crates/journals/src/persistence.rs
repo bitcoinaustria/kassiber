@@ -53,7 +53,12 @@ pub(super) fn borrowed(v: &Value) -> Result<rusqlite::types::ValueRef<'_>, Refus
                 )
             }
         }
-        _ => return Err(Refusal::new("ProgrammingError", "unsupported SQLite binding")),
+        _ => {
+            return Err(Refusal::new(
+                "ProgrammingError",
+                "unsupported SQLite binding",
+            ))
+        }
     })
 }
 pub(super) fn bind(v: &Value) -> Result<Sql, Refusal> {
@@ -579,7 +584,14 @@ mod tests {
                 )
             };
             let refusal = result.unwrap_err();
-            assert_eq!(refusal.family, "DatabaseError", "{mode}: {refusal}");
+            // SQLite failures keep Python's sqlite3 subclass; other driver
+            // and observer failures keep the generic DatabaseError family.
+            let family = match mode {
+                "clear_prepare" | "insert_prepare" => "OperationalError",
+                "clear_execute" | "insert_execute" => "IntegrityError",
+                _ => "DatabaseError",
+            };
+            assert_eq!(refusal.family, family, "{mode}: {refusal}");
             assert_eq!(
                 observer.calls,
                 usize::from(mode.ends_with("observer") || mode == "insert_execute"),

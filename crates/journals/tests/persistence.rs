@@ -910,10 +910,12 @@ fn physical_driver_refusals_roll_back_partial_writes_and_preserve_caller_repairs
             let error = store(&c, &input, &mut writes).unwrap_err();
             assert_eq!(
                 error.family,
-                if mode == "uuid" {
-                    "RuntimeError"
-                } else {
-                    "DatabaseError"
+                // Python's sqlite3 subclass for each driver refusal.
+                match mode {
+                    "uuid" => "RuntimeError",
+                    "read" => "DatabaseError",
+                    "insert" | "update" => "IntegrityError",
+                    _ => "OperationalError",
                 },
                 "cipher={cipher} {mode}: {error}"
             );
@@ -1055,7 +1057,7 @@ fn physical_savepoint_driver_failures_require_whole_caller_rollback() {
             assert!(pending.next().unwrap().is_some());
             let mut writes = Writes::default();
             let error = store(&c, v, &mut writes).unwrap_err();
-            assert_eq!(error.family, "DatabaseError");
+            assert_eq!(error.family, "OperationalError");
             assert!(error.message.contains("SQL statements in progress"));
             assert_eq!(writes.count, 0);
         }
@@ -1068,7 +1070,7 @@ fn physical_savepoint_driver_failures_require_whole_caller_rollback() {
             writes: 0,
         };
         let error = store(&c, v, &mut release).unwrap_err();
-        assert_eq!(error.family, "DatabaseError");
+        assert_eq!(error.family, "OperationalError");
         assert!(error.message.contains("no such savepoint"));
         assert!(release.writes > 10);
         assert!(!c.is_autocommit());
@@ -1352,7 +1354,7 @@ fn physical_automatic_outer_rollback_keeps_original_refusal_and_stale_dump() {
             c.execute_batch("BEGIN IMMEDIATE;SAVEPOINT journals_process;UPDATE profiles SET last_processed_tx_count=-1").unwrap();
             let mut writes = Writes::default();
             let refusal = store(&c, v, &mut writes).unwrap_err();
-            assert_eq!(refusal.family, "DatabaseError");
+            assert_eq!(refusal.family, "IntegrityError");
             assert!(refusal.message.contains("driver rolled back caller"));
             assert!(writes.count > 0);
             assert!(c.is_autocommit());

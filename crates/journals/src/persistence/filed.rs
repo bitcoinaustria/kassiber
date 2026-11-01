@@ -251,12 +251,12 @@ mod tests {
             assert_eq!(refusal.family, "RuntimeError");
             assert_eq!(refusal.message, "invalid report year");
         }
-        for query in [
-            "SELECT x'00' AS blob",
-            "SELECT CAST(x'ff' AS TEXT) AS invalid",
-            "SELECT absent FROM missing",
+        for (query, family) in [
+            ("SELECT x'00' AS blob", "DatabaseError"),
+            ("SELECT CAST(x'ff' AS TEXT) AS invalid", "DatabaseError"),
+            ("SELECT absent FROM missing", "OperationalError"),
         ] {
-            assert_eq!(rows(&c, query, []).unwrap_err().family, "DatabaseError");
+            assert_eq!(rows(&c, query, []).unwrap_err().family, family);
         }
         assert_eq!(
             rows(&c, "SELECT ? AS absent", []).unwrap_err().family,

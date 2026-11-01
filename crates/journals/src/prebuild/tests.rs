@@ -26,22 +26,15 @@ fn prebuild_pricing_requires_caller_write_transaction() {
 #[test]
 fn prebuild_sources_invalid_storage_refuses_before_json_projection() {
     let conn = Connection::open_in_memory().unwrap();
-    for (query, family, message) in [
-        (
-            "SELECT CAST(X'80' AS TEXT) AS raw_json",
-            "ValueError",
-            "invalid UTF-8",
-        ),
-        (
-            "SELECT X'ff' AS raw_json",
-            "TypeError",
-            "unexpected binary source field",
-        ),
-    ] {
-        let error = sources::rows(&conn, query, []).unwrap_err();
-        assert_eq!(error.family, family);
-        assert_eq!(error.message, message);
-    }
+    let error = sources::rows(&conn, "SELECT CAST(X'80' AS TEXT) AS raw_json", []).unwrap_err();
+    assert_eq!(error.family, "ValueError");
+    assert_eq!(error.message, "invalid UTF-8");
+    // The merged process stages keep native byte identity: BLOB evidence is
+    // carried through the lossless codec rather than refused here.
+    assert_eq!(
+        sources::rows(&conn, "SELECT X'ff' AS raw_json", []).unwrap(),
+        [serde_json::json!({"raw_json": {"$kassiber_bytes": "ff"}})]
+    );
 }
 
 #[test]

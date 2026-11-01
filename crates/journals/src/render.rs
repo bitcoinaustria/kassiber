@@ -973,6 +973,7 @@ enum HoldingKey {
     Integer(kassiber_pyjson::BigInt),
     Float(u64),
     String(String),
+    Bytes(Vec<u8>),
 }
 fn unhashable(value: &Value) -> Refusal {
     Refusal::new(
@@ -984,7 +985,10 @@ fn unhashable(value: &Value) -> Refusal {
     )
 }
 fn ensure_hashable(value: &Value) -> Result<(), Refusal> {
-    if value.is_array() || value.is_object() {
+    // Loaded SQLite BLOBs stay Python bytes, which are hashable.
+    if (value.is_array() || value.is_object())
+        && kassiber_custody::codec::raw_bytes(value).is_none()
+    {
         return Err(unhashable(value));
     }
     Ok(())
@@ -1007,7 +1011,10 @@ fn holding_key(value: &Value) -> Result<HoldingKey, Refusal> {
             }
         }
         Value::String(text) => HoldingKey::String(text.clone()),
-        _ => return Err(unhashable(value)),
+        _ => match kassiber_custody::codec::raw_bytes(value) {
+            Some(bytes) => HoldingKey::Bytes(bytes),
+            None => return Err(unhashable(value)),
+        },
     })
 }
 fn direct_payouts(inputs: &LedgerInputs<'_>) -> Result<Value, Refusal> {
