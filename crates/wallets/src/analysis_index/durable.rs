@@ -1,5 +1,5 @@
 use super::ingestion::ObservationBuilder;
-use super::value::Value;
+use super::value::{json, Value};
 use crate::{database_error, publication::row::rows};
 use kassiber_envelope::AppError;
 use kassiber_pyjson::Options;
@@ -28,6 +28,17 @@ pub const OVERLAYS: [&str; 9] = [
     "book_network_bindings",
     "chain_analysis_acquisition_grants",
 ];
+
+fn write(
+    conn: &Connection,
+    sql: &str,
+    params: impl Params,
+) -> kassiber_store::rusqlite::Result<usize> {
+    let result = conn.execute(sql, params)?;
+    #[cfg(any(test, feature = "test-harness"))]
+    fixture::after_write(sql);
+    Ok(result)
+}
 
 fn read(conn: &Connection, sql: &str, params: impl Params) -> Result<Vec<Value>, AppError> {
     Ok(rows(conn, sql, params)?
@@ -88,15 +99,14 @@ pub fn install(conn: &Connection) -> Result<BTreeSet<String>, AppError> {
                     "profile_id TEXT PRIMARY KEY",
                     "profile_id TEXT PRIMARY KEY REFERENCES profiles(id) ON DELETE CASCADE",
                 );
-            conn.execute(&sql, []).map_err(database_error)?;
+            write(conn, &sql, []).map_err(database_error)?;
         }
-        conn.execute("UPDATE chain_index_state SET version=0", [])
-            .map_err(database_error)?;
+        write(conn, "UPDATE chain_index_state SET version=0", []).map_err(database_error)?;
     }
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_chain_index_label_subject ON chain_index_labels(profile_id,json_extract(payload_json,'$.subject'))", []).map_err(database_error)?;
+    write(conn, "CREATE INDEX IF NOT EXISTS idx_chain_index_label_subject ON chain_index_labels(profile_id,json_extract(payload_json,'$.subject'))", []).map_err(database_error)?;
     if objects.contains("chain_analysis_dataset_claims") {
         for field in ["valid_from", "valid_until"] {
-            conn.execute(&format!("CREATE INDEX IF NOT EXISTS idx_chain_index_claim_{field} ON chain_analysis_dataset_claims({field},dataset_id) WHERE {field} IS NOT NULL"), []).map_err(database_error)?;
+            write(conn, &format!("CREATE INDEX IF NOT EXISTS idx_chain_index_claim_{field} ON chain_analysis_dataset_claims({field},dataset_id) WHERE {field} IS NOT NULL"), []).map_err(database_error)?;
         }
     }
     let mut tables = BTreeSet::new();
@@ -141,16 +151,17 @@ pub fn install(conn: &Connection) -> Result<BTreeSet<String>, AppError> {
             } else {
                 String::new()
             };
-            conn.execute(&format!("CREATE TRIGGER {name} AFTER {operation} ON {table}{when} BEGIN UPDATE chain_index_clock SET revision=revision+1 WHERE id=1; {writes} END"), []).map_err(database_error)?;
+            write(conn, &format!("CREATE TRIGGER {name} AFTER {operation} ON {table}{when} BEGIN UPDATE chain_index_clock SET revision=revision+1 WHERE id=1; {writes} END"), []).map_err(database_error)?;
             added = true;
         }
         if added {
-            conn.execute(
+            write(
+                conn,
                 "UPDATE chain_index_clock SET revision=revision+1 WHERE id=1",
                 [],
             )
             .map_err(database_error)?;
-            conn.execute("INSERT OR REPLACE INTO chain_index_dirty SELECT ?,-1,revision FROM chain_index_clock WHERE id=1", [table]).map_err(database_error)?;
+            write(conn, "INSERT OR REPLACE INTO chain_index_dirty SELECT ?,-1,revision FROM chain_index_clock WHERE id=1", [table]).map_err(database_error)?;
         }
     }
     Ok(tables)
@@ -220,8 +231,9 @@ fn contribute(
     row: Option<Value>,
 ) -> Result<BTreeSet<String>, AppError> {
     let mut old: BTreeSet<String> = read(conn, "SELECT node_id FROM chain_index_source_nodes WHERE profile_id=? AND source_table=? AND source_key=?", params![profile,table,key])?.iter().map(|row| text(&row["node_id"])).collect();
-    conn.execute("DELETE FROM chain_index_source_nodes WHERE profile_id=? AND source_table=? AND source_key=?", params![profile,table,key]).map_err(database_error)?;
-    conn.execute(
+    write(conn, "DELETE FROM chain_index_source_nodes WHERE profile_id=? AND source_table=? AND source_key=?", params![profile,table,key]).map_err(database_error)?;
+    write(
+        conn,
         "DELETE FROM chain_index_sources WHERE profile_id=? AND source_table=? AND source_key=?",
         params![profile, table, key],
     )
@@ -244,7 +256,8 @@ fn contribute(
     }
     let mut builder = ObservationBuilder::read(conn, profile)?;
     apply(&mut builder, table, &row)?;
-    conn.execute(
+    write(
+        conn,
         "INSERT INTO chain_index_sources VALUES(?,?,?,?,?,?)",
         params![
             profile,
@@ -257,7 +270,8 @@ fn contribute(
     )
     .map_err(database_error)?;
     for node in builder.nodes.keys() {
-        conn.execute(
+        write(
+            conn,
             "INSERT INTO chain_index_source_nodes VALUES(?,?,?,?)",
             params![profile, table, key, node],
         )
@@ -304,3 +318,6 @@ fn contributors(
 
 #[cfg(any(test, feature = "test-harness"))]
 pub mod fixture;
+
+mod synchronize;
+pub use synchronize::{synchronize, synchronize_with_sources};

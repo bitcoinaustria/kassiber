@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import sys
+from unittest.mock import patch
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
@@ -49,6 +51,16 @@ def evaluate(case, conn=None):
             elif operation == 'contributors':
                 selected = durable._contributors(conn, profile, set(action['nodes']) if 'nodes' in action else None)
                 value = [[table, key, row] for (table, key), row in sorted(selected.items(), key=lambda pair: (durable.PHYSICAL.index(pair[0][0]), pair[0][1]))]
+            elif operation == 'synchronize':
+                conn.execute('SAVEPOINT durable_fixture')
+                try:
+                    with patch.object(durable, 'now_iso', return_value=action.get('as_of', '2026-01-01T00:00:00Z')), patch.object(durable.uuid, 'uuid4', return_value=SimpleNamespace(hex='0123456789abcdef0123456789abcdef')), patch('kassiber.core.chain_analysis_datasets.now_iso', return_value=action.get('as_of', '2026-01-01T00:00:00Z')):
+                        value = durable.synchronize(conn, profile, rebuild=action.get('rebuild', False))
+                except BaseException:
+                    conn.execute('ROLLBACK TO durable_fixture')
+                    raise
+                finally:
+                    conn.execute('RELEASE durable_fixture')
             else:
                 raise ValueError(operation)
             results.append({'result': value, 'state': capture(conn)})

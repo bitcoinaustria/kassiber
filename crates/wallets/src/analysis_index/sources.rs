@@ -227,7 +227,7 @@ fn add(value: &mut Value, key: &str) {
     value[key] = json!(value[key].as_u64().unwrap() + 1);
 }
 
-fn attach_datasets(
+pub(super) fn attach_datasets(
     conn: &Connection,
     profile: &str,
     observer: &str,

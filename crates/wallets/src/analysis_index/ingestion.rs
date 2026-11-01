@@ -20,7 +20,7 @@ pub(super) struct ObservationBuilder<'a> {
     profile: String,
     occurrences: OccurrenceResolver<'a>,
     pub(super) nodes: BTreeMap<String, Value>,
-    edges: BTreeMap<String, Value>,
+    pub(super) edges: BTreeMap<String, Value>,
     edge_order: Vec<String>,
     orders: BTreeMap<&'static str, Vec<String>>,
     subjects: BTreeMap<PyStr, BTreeSet<String>>,
@@ -32,7 +32,7 @@ pub(super) struct ObservationBuilder<'a> {
     ranks: BTreeMap<(String, String), u32>,
     shapes: BTreeMap<String, BTreeSet<String>>,
     complete_members: BTreeMap<String, Members>,
-    records: BTreeMap<String, String>,
+    pub(super) records: BTreeMap<String, String>,
     seeds: BTreeSet<String>,
     pub(super) labels: Vec<Value>,
 }
@@ -59,6 +59,21 @@ fn point(item: &Value) -> Option<(String, BigInt)> {
 }
 
 impl<'a> ObservationBuilder<'a> {
+    pub(super) fn restore_node(&mut self, id: &str, value: Value) {
+        if !self.nodes.contains_key(id) {
+            self.orders.entry("nodes").or_default().push(id.to_owned());
+        }
+        self.nodes.insert(id.to_owned(), value);
+    }
+    pub(super) fn restore_output(&mut self, id: &str, value: Value) {
+        if !self.output_facts.contains_key(id) {
+            self.orders
+                .entry("output_facts")
+                .or_default()
+                .push(id.to_owned());
+        }
+        self.output_facts.insert(id.to_owned(), value);
+    }
     pub fn read(conn: &'a Connection, profile: &str) -> Result<Self, AppError> {
         Ok(Self {
             conn,

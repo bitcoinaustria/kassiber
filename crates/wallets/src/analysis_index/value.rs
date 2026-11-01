@@ -270,7 +270,7 @@ macro_rules! numbers {
         fn capture(&self) -> Value { Value::Int(BigInt::from(*self)) }
     })* };
 }
-numbers!(i32, u32, u64, usize);
+numbers!(i32, i64, u32, u64, usize);
 impl<T: Capture> Capture for Option<T> {
     fn capture(&self) -> Value {
         self.as_ref().map_or(Value::Null, Capture::capture)

@@ -17283,6 +17283,7 @@
     },
     "tests/test_rust_analysis_durable.py": {
       "test_durable_sources_match_unchanged_python": {"disposition": "rust-test", "flags": [], "group": "journals", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 1},
+      "test_incremental_synchronization_matches_unchanged_python": {"disposition": "rust-test", "flags": [], "group": "journals", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 1},
       "test_durable_native_bytes_all_tables_without_network_consent": {"disposition": "rust-test", "flags": ["subprocess"], "group": "journals", "reason": "runs helper processes without the product entry", "reviewed": false, "tests": 1},
       "test_durable_mutation_catalog_stays_applicable": {"disposition": "rust-test", "flags": ["subprocess"], "group": "journals", "reason": "runs helper processes without the product entry", "reviewed": false, "tests": 1}
     },

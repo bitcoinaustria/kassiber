@@ -648,8 +648,10 @@ registers them; exit-tax preserves its reference no-registration boundary.
 - [x] Port Mirror's durable source triggers and replaceable contributions with
   canonical bytes, all-112-table commitments and no-consent native driver checks;
   see the [durable checkpoint](docs/reference/rust-shell.md#mirror-durable-triggers-and-contributions-r5-partial).
-- [ ] Finish Mirror's incremental synchronization, SQLite/SQLCipher kill recovery
-  and CLI/daemon acceptance with
+- [x] Port Mirror's incremental synchronization and generation publication,
+  retaining affected-region context, tip-only generations and attribution expiry;
+  see the [synchronization checkpoint](docs/reference/rust-shell.md#mirror-incremental-synchronization-r5-partial).
+- [ ] Finish Mirror's SQLite/SQLCipher kill recovery and CLI/daemon acceptance with
   non-zero served-by counts. Preserve deterministic native
   ambiguity ordering; retain the recorded Python reference repro.
 - [x] Port full-report, Austrian bundle and transaction CSV artifacts, saved

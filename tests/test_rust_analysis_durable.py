@@ -13,6 +13,9 @@ ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location("analysis_durable_vectors", ROOT / "crates/wallets/scripts/generate_analysis_durable.py")
 REFERENCE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(REFERENCE)
+SYNC_SPEC = importlib.util.spec_from_file_location("analysis_sync_vectors", ROOT / "crates/wallets/scripts/generate_analysis_synchronize.py")
+SYNC = importlib.util.module_from_spec(SYNC_SPEC)
+SYNC_SPEC.loader.exec_module(SYNC)
 
 
 def test_durable_sources_match_unchanged_python():
@@ -22,12 +25,20 @@ def test_durable_sources_match_unchanged_python():
     assert all(step["state"]["table_count"] == 112 for case in cases for step in case["expected"])
 
 
+def test_incremental_synchronization_matches_unchanged_python():
+    cases = SYNC.vectors()
+    assert len(cases) >= 35
+    assert json.loads(SYNC.DEST.read_text()) == cases
+    assert all(step["state"]["table_count"] == 112 for case in cases for action, step in zip(case["actions"], case["expected"]) if action["operation"] == "synchronize")
+    assert all(111 <= step["state"]["table_count"] <= 112 for case in cases for step in case["expected"])
+
+
 @pytest.mark.parametrize("offline", [False, True])
 def test_durable_native_bytes_all_tables_without_network_consent(tmp_path, offline):
     executable = os.environ.get("KASSIBER_ANALYSIS_DURABLE_BIN")
     if not executable:
         pytest.skip("requires analysis_durable_fixture test-harness build")
-    cases = json.loads(REFERENCE.DEST.read_text())
+    cases = json.loads(REFERENCE.DEST.read_text()) + json.loads(SYNC.DEST.read_text())
     env = child_env(tmp_path)
     env["KASSIBER_TEST_NO_EGRESS"] = "strict"
     if offline:
@@ -41,7 +52,8 @@ def test_durable_native_bytes_all_tables_without_network_consent(tmp_path, offli
 
 
 def test_durable_mutation_catalog_stays_applicable(tmp_path):
-    catalog = ROOT / "crates/wallets/scripts/analysis_durable_mutations.json"
-    entries = json.loads(catalog.read_text())
-    result = subprocess.run([sys.executable, str(ROOT / "crates/wallets/scripts/record_mutation_check.py"), "--mutations", str(catalog), "--check"], env=child_env(tmp_path), check=True, capture_output=True, timeout=30)
-    assert result.stdout == f"{len(entries)} entries apply\n".encode()
+    for name in ("analysis_durable_mutations.json", "analysis_synchronize_mutations.json"):
+        catalog = ROOT / "crates/wallets/scripts" / name
+        entries = json.loads(catalog.read_text())
+        result = subprocess.run([sys.executable, str(ROOT / "crates/wallets/scripts/record_mutation_check.py"), "--mutations", str(catalog), "--check"], env=child_env(tmp_path), check=True, capture_output=True, timeout=30)
+        assert result.stdout == f"{len(entries)} entries apply\n".encode()

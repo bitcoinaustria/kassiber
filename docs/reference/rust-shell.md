@@ -14765,3 +14765,46 @@ All ten durable-trigger/contribution mutation recipes compile and are killed
 by the named 112-table oracle test, which passes unmutated. The two native tests
 and four Python/native checks pass without skips. Verification uses Rust
 1.99.1, offline locked Cargo with eight jobs, and locked Python 3.11.17.
+
+## Mirror incremental synchronization (R5, partial)
+
+The durable layer now publishes generation state through
+`analysis_index::durable::synchronize(conn, profile, rebuild)`. Like the existing
+publication writers, it requires the caller's active transaction; the caller
+owns its savepoint, rollback and commit. `synchronize_with_sources` uses the
+existing clock/identity seam for reproducible verification. Neither entry point
+reads a provider or delegates to Python.
+
+The implementation retains rowid-based physical invalidation, wallet/book
+configuration invalidation, occurrence rebinding, one-step output/spender
+closure, retained context outside the affected region and global custody
+freshness. Publication replaces the affected nodes, public projections, edges,
+aliases and findings, then refreshes bounded dataset/authored-label matches and
+validity transitions before publishing the watermark and generation. Tip-only
+changes retain materialization; unrelated dirty keys advance only the watermark.
+Warm reads retain their generation. An explicit rebuild with unchanged inputs
+retains its revision and snapshot identity. The source interpreter remains the
+existing native observation builder.
+
+The unchanged-Python corpus adds 40 scenarios and 157 action snapshots. They
+compare canonical state bytes, schema objects and every logical table, including
+explicit missing-table state before repair and all 112 tables after publication.
+Both guarded native runs reproduce literal canonical stdout with offline mode
+off/on and no fallback or network attempts. Four native durability tests pin
+caller rollback, failed publication rollback, transaction admission and warm
+source retention. The full 28-test native analysis-index selection passes.
+
+All eleven synchronization mutation recipes compile and are killed by the two
+named durability selections. The initial corpus did not distinguish redundant
+source work, ancestor context or the output dependency step: retained logs show
+those survivors. A warm-source guard and physical-only same-domain ancestor and
+spender fixtures now kill them, with passing unmutated baselines. Production
+and test-harness wallet all-target Clippy pass with warnings denied. A single
+write adapter provides a harness-only after-statement observer for the following
+process-kill boundary; production contains no observer or new I/O route.
+
+Durable recovery is still a separate acceptance boundary at this commit. Bounded
+views, handles, report projections and product registration remain outside this
+worker's scope. No dependency, lockfile, product schema or network permission
+changes are included. Local verification/mutation logs, including corrected
+fixture failures, remain under `target/r5-mirror-5a/`.
