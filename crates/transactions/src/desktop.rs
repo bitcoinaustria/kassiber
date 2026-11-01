@@ -244,7 +244,7 @@ fn wallet_args(args: &mut Vec<SqlValue>, wallet: &str) {
     }
 }
 fn current(conn: &Connection, scope: &Scope<'_>) -> Result<bool> {
-    let result = rows(conn, "SELECT CASE WHEN (SELECT COUNT(*) FROM transactions WHERE profile_id=p.id AND excluded=0)=0 THEN 1 ELSE COALESCE(p.last_processed_at,'')<>'' AND p.last_processed_tx_count=(SELECT COUNT(*) FROM transactions WHERE profile_id=p.id AND excluded=0) AND p.journal_input_version=p.last_processed_input_version END AS current FROM profiles p WHERE p.id=?", [scope.profile_id])?;
+    let result = rows(conn, &format!("SELECT CASE WHEN (SELECT COUNT(*) FROM transactions WHERE profile_id=p.id AND excluded=0)=0 THEN 1 ELSE COALESCE(p.last_processed_at,'')<>'' AND p.last_processed_tx_count=(SELECT COUNT(*) FROM transactions WHERE profile_id=p.id AND excluded=0) AND p.journal_input_version=p.last_processed_input_version AND {} END AS current FROM profiles p WHERE p.id=?",kassiber_store::semantics::current_sql("p")), [scope.profile_id])?;
     Ok(result.first().is_some_and(|r| truthy(&val(r, "current"))))
 }
 fn group(current: bool) -> &'static str {

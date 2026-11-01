@@ -32,14 +32,14 @@
       "chain_index_clock": [
        [
         1,
-        7
+        8
        ]
       ],
       "chain_index_dirty": [
        [
         "profiles",
         -1,
-        7
+        8
        ],
        [
         "transactions",
@@ -168,6 +168,8 @@
         "global",
         5,
         4,
+        1,
+        0,
         null,
         0,
         null,
@@ -185,6 +187,8 @@
         0,
         1,
         "global",
+        0,
+        0,
         0,
         0,
         null,
@@ -320,7 +324,7 @@
        "rows": [
         [
          1,
-         7
+         8
         ]
        ]
       },
@@ -334,7 +338,7 @@
         [
          "profiles",
          -1,
-         7
+         8
         ],
         [
          "wallets",
@@ -460,6 +464,8 @@
         "cost_basis_pool_scope",
         "journal_input_version",
         "last_processed_input_version",
+        "required_journal_semantics_version",
+        "journal_semantics_version",
         "last_processed_at",
         "last_processed_tx_count",
         "ownership_review_counts_json",
@@ -480,6 +486,8 @@
          "global",
          5,
          4,
+         1,
+         0,
          null,
          0,
          null,
@@ -497,6 +505,8 @@
          0,
          1,
          "global",
+         0,
+         0,
          0,
          0,
          null,
@@ -719,19 +729,19 @@
       "chain_index_clock": [
        [
         1,
-        9
+        11
        ]
       ],
       "chain_index_dirty": [
        [
         "profiles",
         -1,
-        9
+        11
        ],
        [
         "transactions",
         1,
-        8
+        9
        ],
        [
         "wallets",
@@ -864,6 +874,8 @@
         "global",
         6,
         4,
+        1,
+        0,
         null,
         0,
         null,
@@ -881,6 +893,8 @@
         0,
         1,
         "global",
+        0,
+        0,
         0,
         0,
         null,
@@ -1016,7 +1030,7 @@
        "rows": [
         [
          1,
-         9
+         11
         ]
        ]
       },
@@ -1030,7 +1044,7 @@
         [
          "profiles",
          -1,
-         9
+         11
         ],
         [
          "wallets",
@@ -1040,7 +1054,7 @@
         [
          "transactions",
          1,
-         8
+         9
         ]
        ]
       },
@@ -1156,6 +1170,8 @@
         "cost_basis_pool_scope",
         "journal_input_version",
         "last_processed_input_version",
+        "required_journal_semantics_version",
+        "journal_semantics_version",
         "last_processed_at",
         "last_processed_tx_count",
         "ownership_review_counts_json",
@@ -1176,6 +1192,8 @@
          "global",
          6,
          4,
+         1,
+         0,
          null,
          0,
          null,
@@ -1193,6 +1211,8 @@
          0,
          1,
          "global",
+         0,
+         0,
          0,
          0,
          null,
@@ -1415,19 +1435,19 @@
       "chain_index_clock": [
        [
         1,
-        9
+        11
        ]
       ],
       "chain_index_dirty": [
        [
         "profiles",
         -1,
-        9
+        11
        ],
        [
         "transactions",
         1,
-        8
+        9
        ],
        [
         "wallets",
@@ -1560,6 +1580,8 @@
         "global",
         6,
         4,
+        1,
+        0,
         null,
         0,
         null,
@@ -1577,6 +1599,8 @@
         0,
         1,
         "global",
+        0,
+        0,
         0,
         0,
         null,
@@ -1712,7 +1736,7 @@
        "rows": [
         [
          1,
-         9
+         11
         ]
        ]
       },
@@ -1726,7 +1750,7 @@
         [
          "profiles",
          -1,
-         9
+         11
         ],
         [
          "wallets",
@@ -1736,7 +1760,7 @@
         [
          "transactions",
          1,
-         8
+         9
         ]
        ]
       },
@@ -1852,6 +1876,8 @@
         "cost_basis_pool_scope",
         "journal_input_version",
         "last_processed_input_version",
+        "required_journal_semantics_version",
+        "journal_semantics_version",
         "last_processed_at",
         "last_processed_tx_count",
         "ownership_review_counts_json",
@@ -1872,6 +1898,8 @@
          "global",
          6,
          4,
+         1,
+         0,
          null,
          0,
          null,
@@ -1889,6 +1917,8 @@
          0,
          1,
          "global",
+         0,
+         0,
          0,
          0,
          null,
@@ -2111,19 +2141,19 @@
       "chain_index_clock": [
        [
         1,
-        8
+        9
        ]
       ],
       "chain_index_dirty": [
        [
         "profiles",
         -1,
-        7
+        8
        ],
        [
         "transactions",
         1,
-        8
+        9
        ],
        [
         "wallets",
@@ -2238,6 +2268,8 @@
         "global",
         5,
         4,
+        1,
+        0,
         null,
         0,
         null,
@@ -2255,6 +2287,8 @@
         0,
         1,
         "global",
+        0,
+        0,
         0,
         0,
         null,
@@ -2340,7 +2374,7 @@
        "rows": [
         [
          1,
-         8
+         9
         ]
        ]
       },
@@ -2354,7 +2388,7 @@
         [
          "profiles",
          -1,
-         7
+         8
         ],
         [
          "wallets",
@@ -2364,7 +2398,7 @@
         [
          "transactions",
          1,
-         8
+         9
         ]
        ]
       },
@@ -2442,6 +2476,8 @@
         "cost_basis_pool_scope",
         "journal_input_version",
         "last_processed_input_version",
+        "required_journal_semantics_version",
+        "journal_semantics_version",
         "last_processed_at",
         "last_processed_tx_count",
         "ownership_review_counts_json",
@@ -2462,6 +2498,8 @@
          "global",
          5,
          4,
+         1,
+         0,
          null,
          0,
          null,
@@ -2479,6 +2517,8 @@
          0,
          1,
          "global",
+         0,
+         0,
          0,
          0,
          null,
@@ -2599,19 +2639,19 @@
       "chain_index_clock": [
        [
         1,
-        8
+        9
        ]
       ],
       "chain_index_dirty": [
        [
         "profiles",
         -1,
-        7
+        8
        ],
        [
         "transactions",
         1,
-        8
+        9
        ],
        [
         "wallets",
@@ -2726,6 +2766,8 @@
         "global",
         5,
         4,
+        1,
+        0,
         null,
         0,
         null,
@@ -2743,6 +2785,8 @@
         0,
         1,
         "global",
+        0,
+        0,
         0,
         0,
         null,
@@ -2828,7 +2872,7 @@
        "rows": [
         [
          1,
-         8
+         9
         ]
        ]
       },
@@ -2842,7 +2886,7 @@
         [
          "profiles",
          -1,
-         7
+         8
         ],
         [
          "wallets",
@@ -2852,7 +2896,7 @@
         [
          "transactions",
          1,
-         8
+         9
         ]
        ]
       },
@@ -2930,6 +2974,8 @@
         "cost_basis_pool_scope",
         "journal_input_version",
         "last_processed_input_version",
+        "required_journal_semantics_version",
+        "journal_semantics_version",
         "last_processed_at",
         "last_processed_tx_count",
         "ownership_review_counts_json",
@@ -2950,6 +2996,8 @@
          "global",
          5,
          4,
+         1,
+         0,
          null,
          0,
          null,
@@ -2967,6 +3015,8 @@
          0,
          1,
          "global",
+         0,
+         0,
          0,
          0,
          null,
@@ -3089,19 +3139,19 @@
       "chain_index_clock": [
        [
         1,
-        8
+        9
        ]
       ],
       "chain_index_dirty": [
        [
         "profiles",
         -1,
-        7
+        8
        ],
        [
         "transactions",
         1,
-        8
+        9
        ],
        [
         "wallets",
@@ -3216,6 +3266,8 @@
         "global",
         5,
         4,
+        1,
+        0,
         null,
         0,
         null,
@@ -3233,6 +3285,8 @@
         0,
         1,
         "global",
+        0,
+        0,
         0,
         0,
         null,
@@ -3318,7 +3372,7 @@
        "rows": [
         [
          1,
-         8
+         9
         ]
        ]
       },
@@ -3332,7 +3386,7 @@
         [
          "profiles",
          -1,
-         7
+         8
         ],
         [
          "wallets",
@@ -3342,7 +3396,7 @@
         [
          "transactions",
          1,
-         8
+         9
         ]
        ]
       },
@@ -3420,6 +3474,8 @@
         "cost_basis_pool_scope",
         "journal_input_version",
         "last_processed_input_version",
+        "required_journal_semantics_version",
+        "journal_semantics_version",
         "last_processed_at",
         "last_processed_tx_count",
         "ownership_review_counts_json",
@@ -3440,6 +3496,8 @@
          "global",
          5,
          4,
+         1,
+         0,
          null,
          0,
          null,
@@ -3457,6 +3515,8 @@
          0,
          1,
          "global",
+         0,
+         0,
          0,
          0,
          null,
@@ -3574,19 +3634,19 @@
       "chain_index_clock": [
        [
         1,
-        8
+        9
        ]
       ],
       "chain_index_dirty": [
        [
         "profiles",
         -1,
-        7
+        8
        ],
        [
         "transactions",
         1,
-        8
+        9
        ],
        [
         "wallets",
@@ -3701,6 +3761,8 @@
         "global",
         5,
         4,
+        1,
+        0,
         null,
         0,
         null,
@@ -3718,6 +3780,8 @@
         0,
         1,
         "global",
+        0,
+        0,
         0,
         0,
         null,
@@ -3829,7 +3893,7 @@
        "rows": [
         [
          1,
-         8
+         9
         ]
        ]
       },
@@ -3843,7 +3907,7 @@
         [
          "profiles",
          -1,
-         7
+         8
         ],
         [
          "wallets",
@@ -3853,7 +3917,7 @@
         [
          "transactions",
          1,
-         8
+         9
         ]
        ]
       },
@@ -3951,6 +4015,8 @@
         "cost_basis_pool_scope",
         "journal_input_version",
         "last_processed_input_version",
+        "required_journal_semantics_version",
+        "journal_semantics_version",
         "last_processed_at",
         "last_processed_tx_count",
         "ownership_review_counts_json",
@@ -3971,6 +4037,8 @@
          "global",
          5,
          4,
+         1,
+         0,
          null,
          0,
          null,
@@ -3988,6 +4056,8 @@
          0,
          1,
          "global",
+         0,
+         0,
          0,
          0,
          null,
@@ -4108,19 +4178,19 @@
       "chain_index_clock": [
        [
         1,
-        8
+        9
        ]
       ],
       "chain_index_dirty": [
        [
         "profiles",
         -1,
-        7
+        8
        ],
        [
         "transactions",
         1,
-        8
+        9
        ],
        [
         "wallets",
@@ -4253,6 +4323,8 @@
         "global",
         5,
         4,
+        1,
+        0,
         null,
         0,
         null,
@@ -4270,6 +4342,8 @@
         0,
         1,
         "global",
+        0,
+        0,
         0,
         0,
         null,
@@ -4405,7 +4479,7 @@
        "rows": [
         [
          1,
-         8
+         9
         ]
        ]
       },
@@ -4419,7 +4493,7 @@
         [
          "profiles",
          -1,
-         7
+         8
         ],
         [
          "wallets",
@@ -4429,7 +4503,7 @@
         [
          "transactions",
          1,
-         8
+         9
         ]
        ]
       },
@@ -4545,6 +4619,8 @@
         "cost_basis_pool_scope",
         "journal_input_version",
         "last_processed_input_version",
+        "required_journal_semantics_version",
+        "journal_semantics_version",
         "last_processed_at",
         "last_processed_tx_count",
         "ownership_review_counts_json",
@@ -4565,6 +4641,8 @@
          "global",
          5,
          4,
+         1,
+         0,
          null,
          0,
          null,
@@ -4582,6 +4660,8 @@
          0,
          1,
          "global",
+         0,
+         0,
          0,
          0,
          null,
@@ -4804,19 +4884,19 @@
       "chain_index_clock": [
        [
         1,
-        8
+        9
        ]
       ],
       "chain_index_dirty": [
        [
         "profiles",
         -1,
-        7
+        8
        ],
        [
         "transactions",
         1,
-        8
+        9
        ],
        [
         "wallets",
@@ -4949,6 +5029,8 @@
         "global",
         5,
         4,
+        1,
+        0,
         null,
         0,
         null,
@@ -4966,6 +5048,8 @@
         0,
         1,
         "global",
+        0,
+        0,
         0,
         0,
         null,
@@ -5101,7 +5185,7 @@
        "rows": [
         [
          1,
-         8
+         9
         ]
        ]
       },
@@ -5115,7 +5199,7 @@
         [
          "profiles",
          -1,
-         7
+         8
         ],
         [
          "wallets",
@@ -5125,7 +5209,7 @@
         [
          "transactions",
          1,
-         8
+         9
         ]
        ]
       },
@@ -5241,6 +5325,8 @@
         "cost_basis_pool_scope",
         "journal_input_version",
         "last_processed_input_version",
+        "required_journal_semantics_version",
+        "journal_semantics_version",
         "last_processed_at",
         "last_processed_tx_count",
         "ownership_review_counts_json",
@@ -5261,6 +5347,8 @@
          "global",
          5,
          4,
+         1,
+         0,
          null,
          0,
          null,
@@ -5278,6 +5366,8 @@
          0,
          1,
          "global",
+         0,
+         0,
          0,
          0,
          null,
@@ -5511,14 +5601,14 @@
       "chain_index_clock": [
        [
         1,
-        10
+        12
        ]
       ],
       "chain_index_dirty": [
        [
         "profiles",
         -1,
-        10
+        12
        ],
        [
         "transactions",
@@ -5528,7 +5618,7 @@
        [
         "transactions",
         2,
-        9
+        10
        ],
        [
         "wallets",
@@ -5732,6 +5822,8 @@
         "global",
         6,
         4,
+        1,
+        0,
         null,
         0,
         null,
@@ -5749,6 +5841,8 @@
         0,
         1,
         "global",
+        0,
+        0,
         0,
         0,
         null,
@@ -5933,7 +6027,7 @@
        "rows": [
         [
          1,
-         10
+         12
         ]
        ]
       },
@@ -5947,7 +6041,7 @@
         [
          "profiles",
          -1,
-         10
+         12
         ],
         [
          "wallets",
@@ -5962,7 +6056,7 @@
         [
          "transactions",
          2,
-         9
+         10
         ]
        ]
       },
@@ -6141,6 +6235,8 @@
         "cost_basis_pool_scope",
         "journal_input_version",
         "last_processed_input_version",
+        "required_journal_semantics_version",
+        "journal_semantics_version",
         "last_processed_at",
         "last_processed_tx_count",
         "ownership_review_counts_json",
@@ -6161,6 +6257,8 @@
          "global",
          6,
          4,
+         1,
+         0,
          null,
          0,
          null,
@@ -6178,6 +6276,8 @@
          0,
          1,
          "global",
+         0,
+         0,
          0,
          0,
          null,
@@ -6461,19 +6561,19 @@
       "chain_index_clock": [
        [
         1,
-        8
+        9
        ]
       ],
       "chain_index_dirty": [
        [
         "book_network_bindings",
         -1,
-        8
+        9
        ],
        [
         "profiles",
         -1,
-        7
+        8
        ],
        [
         "transactions",
@@ -6611,6 +6711,8 @@
         "global",
         5,
         4,
+        1,
+        0,
         null,
         0,
         null,
@@ -6628,6 +6730,8 @@
         0,
         1,
         "global",
+        0,
+        0,
         0,
         0,
         null,
@@ -6789,7 +6893,7 @@
        "rows": [
         [
          1,
-         8
+         9
         ]
        ]
       },
@@ -6803,7 +6907,7 @@
         [
          "profiles",
          -1,
-         7
+         8
         ],
         [
          "wallets",
@@ -6818,7 +6922,7 @@
         [
          "book_network_bindings",
          -1,
-         8
+         9
         ]
        ]
       },
@@ -6934,6 +7038,8 @@
         "cost_basis_pool_scope",
         "journal_input_version",
         "last_processed_input_version",
+        "required_journal_semantics_version",
+        "journal_semantics_version",
         "last_processed_at",
         "last_processed_tx_count",
         "ownership_review_counts_json",
@@ -6954,6 +7060,8 @@
          "global",
          5,
          4,
+         1,
+         0,
          null,
          0,
          null,
@@ -6971,6 +7079,8 @@
          0,
          1,
          "global",
+         0,
+         0,
          0,
          0,
          null,
@@ -7205,19 +7315,19 @@
       "chain_index_clock": [
        [
         1,
-        8
+        9
        ]
       ],
       "chain_index_dirty": [
        [
         "book_network_bindings",
         -1,
-        8
+        9
        ],
        [
         "profiles",
         -1,
-        7
+        8
        ],
        [
         "transactions",
@@ -7355,6 +7465,8 @@
         "global",
         5,
         4,
+        1,
+        0,
         null,
         0,
         null,
@@ -7372,6 +7484,8 @@
         0,
         1,
         "global",
+        0,
+        0,
         0,
         0,
         null,
@@ -7533,7 +7647,7 @@
        "rows": [
         [
          1,
-         8
+         9
         ]
        ]
       },
@@ -7547,7 +7661,7 @@
         [
          "profiles",
          -1,
-         7
+         8
         ],
         [
          "wallets",
@@ -7562,7 +7676,7 @@
         [
          "book_network_bindings",
          -1,
-         8
+         9
         ]
        ]
       },
@@ -7678,6 +7792,8 @@
         "cost_basis_pool_scope",
         "journal_input_version",
         "last_processed_input_version",
+        "required_journal_semantics_version",
+        "journal_semantics_version",
         "last_processed_at",
         "last_processed_tx_count",
         "ownership_review_counts_json",
@@ -7698,6 +7814,8 @@
          "global",
          5,
          4,
+         1,
+         0,
          null,
          0,
          null,
@@ -7715,6 +7833,8 @@
          0,
          1,
          "global",
+         0,
+         0,
          0,
          0,
          null,
@@ -7937,14 +8057,14 @@
       "chain_index_clock": [
        [
         1,
-        7
+        8
        ]
       ],
       "chain_index_dirty": [
        [
         "profiles",
         -1,
-        7
+        8
        ],
        [
         "transactions",
@@ -8082,6 +8202,8 @@
         "global",
         5,
         4,
+        1,
+        0,
         null,
         0,
         null,
@@ -8099,6 +8221,8 @@
         0,
         1,
         "global",
+        0,
+        0,
         0,
         0,
         null,
@@ -8234,7 +8358,7 @@
        "rows": [
         [
          1,
-         7
+         8
         ]
        ]
       },
@@ -8248,7 +8372,7 @@
         [
          "profiles",
          -1,
-         7
+         8
         ],
         [
          "wallets",
@@ -8374,6 +8498,8 @@
         "cost_basis_pool_scope",
         "journal_input_version",
         "last_processed_input_version",
+        "required_journal_semantics_version",
+        "journal_semantics_version",
         "last_processed_at",
         "last_processed_tx_count",
         "ownership_review_counts_json",
@@ -8394,6 +8520,8 @@
          "global",
          5,
          4,
+         1,
+         0,
          null,
          0,
          null,
@@ -8411,6 +8539,8 @@
          0,
          1,
          "global",
+         0,
+         0,
          0,
          0,
          null,
@@ -8621,14 +8751,14 @@
       "chain_index_clock": [
        [
         1,
-        7
+        8
        ]
       ],
       "chain_index_dirty": [
        [
         "profiles",
         -1,
-        7
+        8
        ],
        [
         "transactions",
@@ -8746,6 +8876,8 @@
         "global",
         5,
         4,
+        1,
+        0,
         null,
         0,
         null,
@@ -8763,6 +8895,8 @@
         0,
         1,
         "global",
+        0,
+        0,
         0,
         0,
         null,
@@ -8898,7 +9032,7 @@
        "rows": [
         [
          1,
-         7
+         8
         ]
        ]
       },
@@ -8912,7 +9046,7 @@
         [
          "profiles",
          -1,
-         7
+         8
         ],
         [
          "wallets",
@@ -9014,6 +9148,8 @@
         "cost_basis_pool_scope",
         "journal_input_version",
         "last_processed_input_version",
+        "required_journal_semantics_version",
+        "journal_semantics_version",
         "last_processed_at",
         "last_processed_tx_count",
         "ownership_review_counts_json",
@@ -9034,6 +9170,8 @@
          "global",
          5,
          4,
+         1,
+         0,
          null,
          0,
          null,
@@ -9051,6 +9189,8 @@
          0,
          1,
          "global",
+         0,
+         0,
          0,
          0,
          null,
@@ -9273,19 +9413,19 @@
       "chain_index_clock": [
        [
         1,
-        9
+        11
        ]
       ],
       "chain_index_dirty": [
        [
         "profiles",
         -1,
-        9
+        11
        ],
        [
         "transactions",
         1,
-        8
+        9
        ],
        [
         "wallets",
@@ -9418,6 +9558,8 @@
         "global",
         6,
         4,
+        1,
+        0,
         null,
         0,
         null,
@@ -9435,6 +9577,8 @@
         0,
         1,
         "global",
+        0,
+        0,
         0,
         0,
         null,
@@ -9570,7 +9714,7 @@
        "rows": [
         [
          1,
-         9
+         11
         ]
        ]
       },
@@ -9584,7 +9728,7 @@
         [
          "profiles",
          -1,
-         9
+         11
         ],
         [
          "wallets",
@@ -9594,7 +9738,7 @@
         [
          "transactions",
          1,
-         8
+         9
         ]
        ]
       },
@@ -9710,6 +9854,8 @@
         "cost_basis_pool_scope",
         "journal_input_version",
         "last_processed_input_version",
+        "required_journal_semantics_version",
+        "journal_semantics_version",
         "last_processed_at",
         "last_processed_tx_count",
         "ownership_review_counts_json",
@@ -9730,6 +9876,8 @@
          "global",
          6,
          4,
+         1,
+         0,
          null,
          0,
          null,
@@ -9747,6 +9895,8 @@
          0,
          1,
          "global",
+         0,
+         0,
          0,
          0,
          null,
@@ -9975,19 +10125,19 @@
       "chain_index_clock": [
        [
         1,
-        11
+        14
        ]
       ],
       "chain_index_dirty": [
        [
         "profiles",
         -1,
-        11
+        14
        ],
        [
         "transactions",
         1,
-        10
+        12
        ],
        [
         "wallets",
@@ -10128,6 +10278,8 @@
         "global",
         7,
         4,
+        1,
+        0,
         null,
         0,
         null,
@@ -10145,6 +10297,8 @@
         0,
         1,
         "global",
+        0,
+        0,
         0,
         0,
         null,
@@ -10306,7 +10460,7 @@
        "rows": [
         [
          1,
-         11
+         14
         ]
        ]
       },
@@ -10320,7 +10474,7 @@
         [
          "profiles",
          -1,
-         11
+         14
         ],
         [
          "wallets",
@@ -10330,7 +10484,7 @@
         [
          "transactions",
          1,
-         10
+         12
         ]
        ]
       },
@@ -10466,6 +10620,8 @@
         "cost_basis_pool_scope",
         "journal_input_version",
         "last_processed_input_version",
+        "required_journal_semantics_version",
+        "journal_semantics_version",
         "last_processed_at",
         "last_processed_tx_count",
         "ownership_review_counts_json",
@@ -10486,6 +10642,8 @@
          "global",
          7,
          4,
+         1,
+         0,
          null,
          0,
          null,
@@ -10503,6 +10661,8 @@
          0,
          1,
          "global",
+         0,
+         0,
          0,
          0,
          null,
@@ -10731,19 +10891,19 @@
       "chain_index_clock": [
        [
         1,
-        11
+        14
        ]
       ],
       "chain_index_dirty": [
        [
         "profiles",
         -1,
-        11
+        14
        ],
        [
         "transactions",
         1,
-        10
+        12
        ],
        [
         "wallets",
@@ -10884,6 +11044,8 @@
         "global",
         7,
         4,
+        1,
+        0,
         null,
         0,
         null,
@@ -10901,6 +11063,8 @@
         0,
         1,
         "global",
+        0,
+        0,
         0,
         0,
         null,
@@ -11073,7 +11237,7 @@
        "rows": [
         [
          1,
-         11
+         14
         ]
        ]
       },
@@ -11087,7 +11251,7 @@
         [
          "profiles",
          -1,
-         11
+         14
         ],
         [
          "wallets",
@@ -11097,7 +11261,7 @@
         [
          "transactions",
          1,
-         10
+         12
         ]
        ]
       },
@@ -11241,6 +11405,8 @@
         "cost_basis_pool_scope",
         "journal_input_version",
         "last_processed_input_version",
+        "required_journal_semantics_version",
+        "journal_semantics_version",
         "last_processed_at",
         "last_processed_tx_count",
         "ownership_review_counts_json",
@@ -11261,6 +11427,8 @@
          "global",
          7,
          4,
+         1,
+         0,
          null,
          0,
          null,
@@ -11278,6 +11446,8 @@
          0,
          1,
          "global",
+         0,
+         0,
          0,
          0,
          null,

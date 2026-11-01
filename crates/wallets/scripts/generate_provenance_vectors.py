@@ -8,6 +8,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from kassiber.core import imports, sync
+from kassiber.core.custody_journal import projection_freshness
 from kassiber.core.chain_observer import provenance
 from generate_insert_vectors import SEED, insert, observe, record, txid
 from publication_books import deterministic, dump, error, new_book, snapshot
@@ -49,7 +50,7 @@ def scenarios():
         {"name": "identity-mismatch", "setup": [("observe", [send])], "records": [receive], "skip_insert": True, "resolved_from": txid(2)},
         {"name": "non-native-chain", "setup": [("sql", "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,external_id,fingerprint,occurred_at,direction,asset,amount,fee,created_at) VALUES('ln','w','p','a','" + txid(1) + "','fp','2023-11-14T22:13:20Z','inbound','BTC',90000000,0,'0000')")],
          "records": [receive], "skip_insert": True, "chain": "lightning", "resolved": [{"transaction_id": "ln", "external_id": txid(1), "asset": "BTC", "direction": "inbound"}]},
-        {"name": "processed-journal", "setup": [("observe", [receive]), ("sql", "UPDATE profiles SET last_processed_at='x', last_processed_input_version=journal_input_version WHERE id='p'")],
+        {"name": "processed-journal", "setup": [("observe", [receive]), ("sql", "UPDATE profiles SET last_processed_at='x',last_processed_tx_count=(SELECT COUNT(*) FROM transactions WHERE profile_id='p' AND excluded=0),last_processed_input_version=journal_input_version WHERE id='p'; UPDATE profiles SET journal_semantics_version=2 WHERE id='p'")],
          "records": [receive]},
     ]
 
@@ -96,7 +97,7 @@ def run(case):
         return {"name": case["name"], "entries": entries, "resolved": resolved, "before": before_dump,
                 "clock": list(ids_before), "inputs_before": before_inputs, "outcome": outcome,
                 "inputs_after": inputs(conn, entries), "after": snapshot(conn),
-                "journal_current": bool(conn.execute("SELECT 1 FROM profiles WHERE id='p' AND last_processed_at IS NOT NULL AND journal_input_version = last_processed_input_version").fetchone())}
+                "journal_current": projection_freshness(conn, "p")["is_current"]}
 
 
 def vectors():

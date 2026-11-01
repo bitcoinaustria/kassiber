@@ -350,8 +350,15 @@ fn transaction_flows_use_only_fresh_profile_scoped_custody_projections() {
     assert_eq!(filtered(&book, "flow", "incoming"), ["b"]);
     book.connection()
         .execute(
-            "UPDATE profiles SET last_processed_input_version=2 WHERE id='p'",
+            "UPDATE profiles SET last_processed_input_version=2,last_processed_tx_count=4 WHERE id='p'",
             [],
+        )
+        .unwrap();
+    assert_eq!(filtered(&book, "flow", "incoming"), ["b"]);
+    book.connection()
+        .execute(
+            "UPDATE profiles SET journal_semantics_version=? WHERE id='p'",
+            [kassiber_store::semantics::JOURNAL_CALCULATION_SEMANTICS_VERSION],
         )
         .unwrap();
     assert_eq!(filtered(&book, "flow", "incoming"), Vec::<String>::new());

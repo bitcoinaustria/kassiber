@@ -8,7 +8,8 @@ import sys
 import pytest
 
 from kassiber.core.report_explanation import result_reference
-from kassiber.db import open_db
+from kassiber.core.custody_journal import projection_freshness
+from kassiber.db import JOURNAL_CALCULATION_SEMANTICS_VERSION, open_db
 from crates.reports.scripts.gen_gain_vectors import BASE, outcome
 from tests import cli_runner
 from tests.test_rust_report_exports import _dump, REFERENCE, STAMP
@@ -49,6 +50,9 @@ def book(tmp_path,monkeypatch,variant='ready'):
     database=Path(conn.execute('PRAGMA database_list').fetchone()[2]);conn.close()
     conn=open_db(root)
     conn.execute("UPDATE profiles SET last_processed_at=?,last_processed_tx_count=4,last_processed_input_version=journal_input_version WHERE id='p'",(STAMP,))
+    conn.execute("UPDATE profiles SET journal_semantics_version=? WHERE id='p'",
+                 (JOURNAL_CALCULATION_SEMANTICS_VERSION,))
+    assert projection_freshness(conn, 'p')['is_current']
     if variant=='at':
         conn.execute("UPDATE profiles SET tax_country='at',gains_algorithm='HIFO' WHERE id='p'")
     if variant=='legacy':

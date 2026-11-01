@@ -118,8 +118,17 @@ fn ensure_schema_compat(
     columns_between(
         conn,
         ("chain_observer_instances", "state_epoch"),
-        ("profiles", "swap_candidate_count"),
+        ("profiles", "journal_semantics_version"),
     )?;
+    crate::semantics::adopt(conn, observer)?;
+    execute(
+        conn,
+        repairs::statement(
+            "ensure_schema_compat",
+            "CREATE TRIGGER IF NOT EXISTS trg_journal_semantics_unstamped",
+        ),
+    )?;
+    ensure_column(conn, "profiles", "swap_candidate_count", "INTEGER")?;
     if ensure_column(conn, "profiles", "ownership_review_counts_json", "TEXT")? {
         execute(
             conn,

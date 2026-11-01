@@ -24,7 +24,9 @@ pub struct ProjectionGuards {
 impl ProjectionGuards {
     pub fn load(c: &Connection, scope: &Scope<'_>) -> Result<Self> {
         let profile=rows(c,"SELECT p.*, (SELECT COUNT(*) FROM transactions WHERE profile_id=p.id AND excluded=0) AS active_count FROM profiles p WHERE p.id=?",[scope.profile_id])?.into_iter().next().ok_or_else(||AppError::new("not_found","Review profile was not found"))?;
-        if !truthy(&value(&profile, "last_processed_at"))
+        if !kassiber_store::semantics::journal_current(c, scope.profile_id)
+            .map_err(|e| AppError::new("internal_error", e.to_string()))?
+            || !truthy(&value(&profile, "last_processed_at"))
             || n(&value(&profile, "last_processed_tx_count"))?
                 != n(&value(&profile, "active_count"))?
             || n(&value(&profile, "journal_input_version"))?

@@ -1,363 +1,5 @@
 {
   "states": {
-    "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf": [
-      {
-        "id": 1,
-        "revision": 39
-      }
-    ],
-    "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53": [
-      {
-        "source_table": "transactions",
-        "source_key": -1,
-        "revision": 1
-      },
-      {
-        "source_table": "chain_analysis_labels",
-        "source_key": -1,
-        "revision": 10
-      },
-      {
-        "source_table": "chain_analysis_datasets",
-        "source_key": -1,
-        "revision": 11
-      },
-      {
-        "source_table": "chain_analysis_dataset_claims",
-        "source_key": -1,
-        "revision": 12
-      },
-      {
-        "source_table": "book_network_bindings",
-        "source_key": -1,
-        "revision": 13
-      },
-      {
-        "source_table": "chain_analysis_acquisition_grants",
-        "source_key": -1,
-        "revision": 14
-      },
-      {
-        "source_table": "wallets",
-        "source_key": -1,
-        "revision": 19
-      },
-      {
-        "source_table": "transaction_graph_cache",
-        "source_key": -1,
-        "revision": 2
-      },
-      {
-        "source_table": "transactions",
-        "source_key": 1,
-        "revision": 20
-      },
-      {
-        "source_table": "transactions",
-        "source_key": 2,
-        "revision": 21
-      },
-      {
-        "source_table": "transactions",
-        "source_key": 3,
-        "revision": 22
-      },
-      {
-        "source_table": "transactions",
-        "source_key": 4,
-        "revision": 23
-      },
-      {
-        "source_table": "transactions",
-        "source_key": 5,
-        "revision": 24
-      },
-      {
-        "source_table": "transactions",
-        "source_key": 6,
-        "revision": 25
-      },
-      {
-        "source_table": "transactions",
-        "source_key": 7,
-        "revision": 26
-      },
-      {
-        "source_table": "transactions",
-        "source_key": 8,
-        "revision": 27
-      },
-      {
-        "source_table": "transactions",
-        "source_key": 9,
-        "revision": 28
-      },
-      {
-        "source_table": "transactions",
-        "source_key": 10,
-        "revision": 29
-      },
-      {
-        "source_table": "wallet_utxos",
-        "source_key": -1,
-        "revision": 3
-      },
-      {
-        "source_table": "transactions",
-        "source_key": 11,
-        "revision": 30
-      },
-      {
-        "source_table": "transactions",
-        "source_key": 12,
-        "revision": 31
-      },
-      {
-        "source_table": "transactions",
-        "source_key": 13,
-        "revision": 32
-      },
-      {
-        "source_table": "transactions",
-        "source_key": 14,
-        "revision": 33
-      },
-      {
-        "source_table": "transactions",
-        "source_key": 16,
-        "revision": 35
-      },
-      {
-        "source_table": "transactions",
-        "source_key": 17,
-        "revision": 36
-      },
-      {
-        "source_table": "transactions",
-        "source_key": 15,
-        "revision": 37
-      },
-      {
-        "source_table": "profiles",
-        "source_key": -1,
-        "revision": 39
-      },
-      {
-        "source_table": "chain_analysis_observations",
-        "source_key": -1,
-        "revision": 4
-      },
-      {
-        "source_table": "chain_analysis_reference_assertions",
-        "source_key": -1,
-        "revision": 5
-      },
-      {
-        "source_table": "journal_custody_decisions",
-        "source_key": -1,
-        "revision": 8
-      },
-      {
-        "source_table": "journal_custody_economic_relations",
-        "source_key": -1,
-        "revision": 9
-      }
-    ],
-    "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906": [
-      {
-        "id": "p",
-        "workspace_id": "w",
-        "label": "Book",
-        "fiat_currency": "EUR",
-        "tax_country": "at",
-        "tax_long_term_days": 365,
-        "gains_algorithm": "FIFO",
-        "require_coarse_review": 0,
-        "bitcoin_rail_carrying_value": 1,
-        "cost_basis_pool_scope": "global",
-        "journal_input_version": 2,
-        "last_processed_input_version": 0,
-        "last_processed_at": null,
-        "last_processed_tx_count": 0,
-        "ownership_review_counts_json": null,
-        "created_at": "2025-01-01T00:00:00Z",
-        "swap_candidate_count": null
-      },
-      {
-        "id": "other",
-        "workspace_id": "w",
-        "label": "Other",
-        "fiat_currency": "USD",
-        "tax_country": "generic",
-        "tax_long_term_days": 365,
-        "gains_algorithm": "FIFO",
-        "require_coarse_review": 0,
-        "bitcoin_rail_carrying_value": 1,
-        "cost_basis_pool_scope": "global",
-        "journal_input_version": 0,
-        "last_processed_input_version": 0,
-        "last_processed_at": null,
-        "last_processed_tx_count": 0,
-        "ownership_review_counts_json": null,
-        "created_at": "2025-01-01T00:00:00Z",
-        "swap_candidate_count": null
-      }
-    ],
-    "3112aa55b5884dfa9c5d5cd27084b67db4d7bfff040fce4109b86ef9e00f5901": [
-      {
-        "id": "08278910-19fb-5e34-9bd7-3801756e29cb",
-        "lineage_id": "d548fdf8-e2a7-5d9b-856e-7c5802119f6c",
-        "workspace_id": "w",
-        "profile_id": "p",
-        "revision": 1,
-        "component_type": "swap",
-        "conservation_mode": "conversion",
-        "state": "active",
-        "evidence_kind": "reviewed_custody",
-        "evidence_grade": "reviewed",
-        "evidence_json": "{\"review_id\":\"dd8032b3-1303-5939-9eb2-3cd67f381cb2\",\"term_kind\":\"direct_swap_payout\"}",
-        "conversion_policy": "carrying-value",
-        "conversion_reviewed": 1,
-        "conversion_metadata_json": "{}",
-        "expected_leg_count": 2,
-        "expected_allocation_count": 1,
-        "expected_economic_term_count": 1,
-        "expected_evidence_count": 1,
-        "authored_source": "cli",
-        "notes": "\u20ac \ud83d\ude80",
-        "change_reason": null,
-        "supersedes_component_id": null,
-        "superseded_by_component_id": null,
-        "activated_at": "2025-06-01T00:00:00Z",
-        "superseded_at": null,
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
-    "3ffa760f47017291d4c4abb28a09f31a2ffa67bbe953e1bb47ec7fc67ccd6eb7": [
-      {
-        "id": "e919f04b-bbc9-5d06-b84e-51991f666eba",
-        "component_id": "08278910-19fb-5e34-9bd7-3801756e29cb",
-        "workspace_id": "w",
-        "profile_id": "p",
-        "ordinal": 0,
-        "role": "source",
-        "rail": "bitcoin",
-        "chain": "bitcoin",
-        "network": "main",
-        "asset": "BTC",
-        "exposure": "bitcoin",
-        "conservation_unit": "msat",
-        "amount_msat": 1000,
-        "valuation_unit": "reviewed_source_msat",
-        "valuation_amount": 1000,
-        "occurred_at": "2025-02-01T00:00:00Z",
-        "transaction_id": "d",
-        "anchor_transaction_id": "d",
-        "wallet_id": "source",
-        "location_ref": null,
-        "notes": null,
-        "created_at": "2025-06-01T00:00:00Z"
-      },
-      {
-        "id": "13a74938-db59-5d4b-b1da-f2c49b8bb542",
-        "component_id": "08278910-19fb-5e34-9bd7-3801756e29cb",
-        "workspace_id": "w",
-        "profile_id": "p",
-        "ordinal": 1,
-        "role": "retained",
-        "rail": "untracked",
-        "chain": null,
-        "network": null,
-        "asset": "ETH",
-        "exposure": "asset:eth",
-        "conservation_unit": "msat",
-        "amount_msat": 800,
-        "valuation_unit": "reviewed_source_msat",
-        "valuation_amount": 1000,
-        "occurred_at": "2025-02-01T00:00:00Z",
-        "transaction_id": null,
-        "anchor_transaction_id": null,
-        "wallet_id": null,
-        "location_ref": "legacy-payout:dd8032b3-1303-5939-9eb2-3cd67f381cb2",
-        "notes": null,
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
-    "adb5f653b99d43e4de2af9af722c296edeff48163f615d94e997ed8199fac6fe": [
-      {
-        "id": "88bee711-bd08-5ddd-adce-4562ecb0a26e",
-        "component_id": "08278910-19fb-5e34-9bd7-3801756e29cb",
-        "workspace_id": "w",
-        "profile_id": "p",
-        "ordinal": 0,
-        "source_leg_id": "e919f04b-bbc9-5d06-b84e-51991f666eba",
-        "sink_leg_id": "13a74938-db59-5d4b-b1da-f2c49b8bb542",
-        "source_amount_msat": 1000,
-        "sink_amount_msat": 800,
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
-    "b02df9eaa072c480e06f2f2b64bba82cb5985abc9fe5d3ad1f12b9a952769231": [
-      {
-        "id": "00aca6bf-2e04-55a6-9180-beee4aebdf91",
-        "component_id": "08278910-19fb-5e34-9bd7-3801756e29cb",
-        "workspace_id": "w",
-        "profile_id": "p",
-        "ordinal": 0,
-        "source_leg_id": "e919f04b-bbc9-5d06-b84e-51991f666eba",
-        "target_leg_id": "13a74938-db59-5d4b-b1da-f2c49b8bb542",
-        "term_kind": "direct_swap_payout",
-        "legacy_source_id": "dd8032b3-1303-5939-9eb2-3cd67f381cb2",
-        "source_row_hash": "8b4c57ce477ad960f7950e10bd1beb02226eadc6ee2da525cb04dc5a7f24fb03",
-        "review_kind": "direct-swap-payout",
-        "tax_policy": "carrying-value",
-        "reviewed_source_amount_msat": 1000,
-        "swap_fee_msat": 200,
-        "swap_fee_kind": "combined",
-        "confidence_at_review": null,
-        "review_source": null,
-        "review_notes": "\u20ac \ud83d\ude80",
-        "payout_asset": "ETH",
-        "payout_amount_msat": 800,
-        "payout_occurred_at": null,
-        "payout_fiat_value_exact": "1.2345",
-        "payout_external_id": null,
-        "counterparty": null,
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
-    "6844c888fe5dff54c47e50ee9d0d860d38834acf3b2514df4f7b1d214d8e2c69": [
-      {
-        "component_id": "08278910-19fb-5e34-9bd7-3801756e29cb",
-        "profile_id": "p",
-        "transaction_id": "d",
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
-    "2462d0a57a702ca60ac0f5132bf96ca3e12eaa1b41039f1eb6bcdabf63b41db4": [
-      {
-        "workspace_id": "w",
-        "profile_id": "p",
-        "subject_kind": "custody_component",
-        "subject_id": "08278910-19fb-5e34-9bd7-3801756e29cb",
-        "detail_hash": "46fc8f328cd8b01525937578093a97dcde14f75a95ecaf68fd439a2919def67f",
-        "quantity_hash": "bf1ffa1940246cb43df6e172be31685a84d5208188994bc7671aae501bc7f9f6",
-        "payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fp-d\",\"kind\":\"deposit\",\"occurred_at\":\"2025-02-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":1000,\"asset\":\"BTC\",\"direction\":\"outbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"d-ext\",\"native_namespace\":\"source\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"source\"},\"raw_json\":{},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
-    "841be6d5d187b5537991ba93c6ab7a11bcbabd58a0b2303ccc12d11b2835bc86": [
-      {
-        "id": "1e10b2693c1456f8cbb5ef59b60329981791f9b6910f33282225e9aa618ecd6d",
-        "component_id": "08278910-19fb-5e34-9bd7-3801756e29cb",
-        "workspace_id": "w",
-        "profile_id": "p",
-        "ordinal": 0,
-        "quantity_hash": "bf1ffa1940246cb43df6e172be31685a84d5208188994bc7671aae501bc7f9f6",
-        "detail_hash": "961e2d01e04c7c535eac237f311cafd9437796d86733a9eba4a25d6f77435fde",
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
     "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f": [
       {
         "id": 1,
@@ -521,7 +163,7 @@
         "revision": 9
       }
     ],
-    "1efad4205b33618b8ebfbb5ee153bd9229aa5fe57d02a439fe319d0ad7b9170c": [
+    "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961": [
       {
         "id": "p",
         "workspace_id": "w",
@@ -533,8 +175,10 @@
         "require_coarse_review": 0,
         "bitcoin_rail_carrying_value": 1,
         "cost_basis_pool_scope": "global",
-        "journal_input_version": 4,
+        "journal_input_version": 2,
         "last_processed_input_version": 0,
+        "required_journal_semantics_version": 1,
+        "journal_semantics_version": 0,
         "last_processed_at": null,
         "last_processed_tx_count": 0,
         "ownership_review_counts_json": null,
@@ -554,6 +198,8 @@
         "cost_basis_pool_scope": "global",
         "journal_input_version": 0,
         "last_processed_input_version": 0,
+        "required_journal_semantics_version": 0,
+        "journal_semantics_version": 0,
         "last_processed_at": null,
         "last_processed_tx_count": 0,
         "ownership_review_counts_json": null,
@@ -561,7 +207,7 @@
         "swap_candidate_count": null
       }
     ],
-    "91930391f0151a69a384f93055b70bd1afa2c92d6befcf14117705f2387af29e": [
+    "3112aa55b5884dfa9c5d5cd27084b67db4d7bfff040fce4109b86ef9e00f5901": [
       {
         "id": "08278910-19fb-5e34-9bd7-3801756e29cb",
         "lineage_id": "d548fdf8-e2a7-5d9b-856e-7c5802119f6c",
@@ -570,7 +216,7 @@
         "revision": 1,
         "component_type": "swap",
         "conservation_mode": "conversion",
-        "state": "superseded",
+        "state": "active",
         "evidence_kind": "reviewed_custody",
         "evidence_grade": "reviewed",
         "evidence_json": "{\"review_id\":\"dd8032b3-1303-5939-9eb2-3cd67f381cb2\",\"term_kind\":\"direct_swap_payout\"}",
@@ -583,22 +229,146 @@
         "expected_evidence_count": 1,
         "authored_source": "cli",
         "notes": "\u20ac \ud83d\ude80",
-        "change_reason": "direct_swap_payout review deleted by cli",
+        "change_reason": null,
         "supersedes_component_id": null,
         "superseded_by_component_id": null,
         "activated_at": "2025-06-01T00:00:00Z",
-        "superseded_at": "2025-06-01T02:00:00Z",
+        "superseded_at": null,
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945": [],
-    "3875ea87f5c9538f104a60c72e23207a7bac7560d3866f12606ad4dba4f8174e": [
+    "3ffa760f47017291d4c4abb28a09f31a2ffa67bbe953e1bb47ec7fc67ccd6eb7": [
       {
-        "id": 1,
-        "revision": 43
+        "id": "e919f04b-bbc9-5d06-b84e-51991f666eba",
+        "component_id": "08278910-19fb-5e34-9bd7-3801756e29cb",
+        "workspace_id": "w",
+        "profile_id": "p",
+        "ordinal": 0,
+        "role": "source",
+        "rail": "bitcoin",
+        "chain": "bitcoin",
+        "network": "main",
+        "asset": "BTC",
+        "exposure": "bitcoin",
+        "conservation_unit": "msat",
+        "amount_msat": 1000,
+        "valuation_unit": "reviewed_source_msat",
+        "valuation_amount": 1000,
+        "occurred_at": "2025-02-01T00:00:00Z",
+        "transaction_id": "d",
+        "anchor_transaction_id": "d",
+        "wallet_id": "source",
+        "location_ref": null,
+        "notes": null,
+        "created_at": "2025-06-01T00:00:00Z"
+      },
+      {
+        "id": "13a74938-db59-5d4b-b1da-f2c49b8bb542",
+        "component_id": "08278910-19fb-5e34-9bd7-3801756e29cb",
+        "workspace_id": "w",
+        "profile_id": "p",
+        "ordinal": 1,
+        "role": "retained",
+        "rail": "untracked",
+        "chain": null,
+        "network": null,
+        "asset": "ETH",
+        "exposure": "asset:eth",
+        "conservation_unit": "msat",
+        "amount_msat": 800,
+        "valuation_unit": "reviewed_source_msat",
+        "valuation_amount": 1000,
+        "occurred_at": "2025-02-01T00:00:00Z",
+        "transaction_id": null,
+        "anchor_transaction_id": null,
+        "wallet_id": null,
+        "location_ref": "legacy-payout:dd8032b3-1303-5939-9eb2-3cd67f381cb2",
+        "notes": null,
+        "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "ce694aebad09f1a544898292d0be066430a51cb43cd6212527d18d39db632512": [
+    "adb5f653b99d43e4de2af9af722c296edeff48163f615d94e997ed8199fac6fe": [
+      {
+        "id": "88bee711-bd08-5ddd-adce-4562ecb0a26e",
+        "component_id": "08278910-19fb-5e34-9bd7-3801756e29cb",
+        "workspace_id": "w",
+        "profile_id": "p",
+        "ordinal": 0,
+        "source_leg_id": "e919f04b-bbc9-5d06-b84e-51991f666eba",
+        "sink_leg_id": "13a74938-db59-5d4b-b1da-f2c49b8bb542",
+        "source_amount_msat": 1000,
+        "sink_amount_msat": 800,
+        "created_at": "2025-06-01T00:00:00Z"
+      }
+    ],
+    "b02df9eaa072c480e06f2f2b64bba82cb5985abc9fe5d3ad1f12b9a952769231": [
+      {
+        "id": "00aca6bf-2e04-55a6-9180-beee4aebdf91",
+        "component_id": "08278910-19fb-5e34-9bd7-3801756e29cb",
+        "workspace_id": "w",
+        "profile_id": "p",
+        "ordinal": 0,
+        "source_leg_id": "e919f04b-bbc9-5d06-b84e-51991f666eba",
+        "target_leg_id": "13a74938-db59-5d4b-b1da-f2c49b8bb542",
+        "term_kind": "direct_swap_payout",
+        "legacy_source_id": "dd8032b3-1303-5939-9eb2-3cd67f381cb2",
+        "source_row_hash": "8b4c57ce477ad960f7950e10bd1beb02226eadc6ee2da525cb04dc5a7f24fb03",
+        "review_kind": "direct-swap-payout",
+        "tax_policy": "carrying-value",
+        "reviewed_source_amount_msat": 1000,
+        "swap_fee_msat": 200,
+        "swap_fee_kind": "combined",
+        "confidence_at_review": null,
+        "review_source": null,
+        "review_notes": "\u20ac \ud83d\ude80",
+        "payout_asset": "ETH",
+        "payout_amount_msat": 800,
+        "payout_occurred_at": null,
+        "payout_fiat_value_exact": "1.2345",
+        "payout_external_id": null,
+        "counterparty": null,
+        "created_at": "2025-06-01T00:00:00Z"
+      }
+    ],
+    "6844c888fe5dff54c47e50ee9d0d860d38834acf3b2514df4f7b1d214d8e2c69": [
+      {
+        "component_id": "08278910-19fb-5e34-9bd7-3801756e29cb",
+        "profile_id": "p",
+        "transaction_id": "d",
+        "created_at": "2025-06-01T00:00:00Z"
+      }
+    ],
+    "2462d0a57a702ca60ac0f5132bf96ca3e12eaa1b41039f1eb6bcdabf63b41db4": [
+      {
+        "workspace_id": "w",
+        "profile_id": "p",
+        "subject_kind": "custody_component",
+        "subject_id": "08278910-19fb-5e34-9bd7-3801756e29cb",
+        "detail_hash": "46fc8f328cd8b01525937578093a97dcde14f75a95ecaf68fd439a2919def67f",
+        "quantity_hash": "bf1ffa1940246cb43df6e172be31685a84d5208188994bc7671aae501bc7f9f6",
+        "payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fp-d\",\"kind\":\"deposit\",\"occurred_at\":\"2025-02-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":1000,\"asset\":\"BTC\",\"direction\":\"outbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"d-ext\",\"native_namespace\":\"source\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"source\"},\"raw_json\":{},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+        "created_at": "2025-06-01T00:00:00Z"
+      }
+    ],
+    "841be6d5d187b5537991ba93c6ab7a11bcbabd58a0b2303ccc12d11b2835bc86": [
+      {
+        "id": "1e10b2693c1456f8cbb5ef59b60329981791f9b6910f33282225e9aa618ecd6d",
+        "component_id": "08278910-19fb-5e34-9bd7-3801756e29cb",
+        "workspace_id": "w",
+        "profile_id": "p",
+        "ordinal": 0,
+        "quantity_hash": "bf1ffa1940246cb43df6e172be31685a84d5208188994bc7671aae501bc7f9f6",
+        "detail_hash": "961e2d01e04c7c535eac237f311cafd9437796d86733a9eba4a25d6f77435fde",
+        "created_at": "2025-06-01T00:00:00Z"
+      }
+    ],
+    "a7f0169bf926a545e9082bb952a507397e711aa39352d535e65aed3e316473ed": [
+      {
+        "id": 1,
+        "revision": 45
+      }
+    ],
+    "501d350b84c8aa7023a2c6dbb5698433baa21bfbbfd8c926182163fedfce5f94": [
       {
         "source_table": "transactions",
         "source_key": -1,
@@ -737,7 +507,7 @@
       {
         "source_table": "profiles",
         "source_key": -1,
-        "revision": 43
+        "revision": 45
       },
       {
         "source_table": "chain_analysis_reference_assertions",
@@ -755,7 +525,7 @@
         "revision": 9
       }
     ],
-    "b611a900bce1b7fcb8c0be377fa811d26292b44f8aa51c243f5a5223fa60236b": [
+    "b3fc988928586ef782d6531bde5eddb0c420d54f883d441398c767f935f4e2fd": [
       {
         "id": "p",
         "workspace_id": "w",
@@ -767,8 +537,10 @@
         "require_coarse_review": 0,
         "bitcoin_rail_carrying_value": 1,
         "cost_basis_pool_scope": "global",
-        "journal_input_version": 6,
+        "journal_input_version": 4,
         "last_processed_input_version": 0,
+        "required_journal_semantics_version": 1,
+        "journal_semantics_version": 0,
         "last_processed_at": null,
         "last_processed_tx_count": 0,
         "ownership_review_counts_json": null,
@@ -788,6 +560,246 @@
         "cost_basis_pool_scope": "global",
         "journal_input_version": 0,
         "last_processed_input_version": 0,
+        "required_journal_semantics_version": 0,
+        "journal_semantics_version": 0,
+        "last_processed_at": null,
+        "last_processed_tx_count": 0,
+        "ownership_review_counts_json": null,
+        "created_at": "2025-01-01T00:00:00Z",
+        "swap_candidate_count": null
+      }
+    ],
+    "91930391f0151a69a384f93055b70bd1afa2c92d6befcf14117705f2387af29e": [
+      {
+        "id": "08278910-19fb-5e34-9bd7-3801756e29cb",
+        "lineage_id": "d548fdf8-e2a7-5d9b-856e-7c5802119f6c",
+        "workspace_id": "w",
+        "profile_id": "p",
+        "revision": 1,
+        "component_type": "swap",
+        "conservation_mode": "conversion",
+        "state": "superseded",
+        "evidence_kind": "reviewed_custody",
+        "evidence_grade": "reviewed",
+        "evidence_json": "{\"review_id\":\"dd8032b3-1303-5939-9eb2-3cd67f381cb2\",\"term_kind\":\"direct_swap_payout\"}",
+        "conversion_policy": "carrying-value",
+        "conversion_reviewed": 1,
+        "conversion_metadata_json": "{}",
+        "expected_leg_count": 2,
+        "expected_allocation_count": 1,
+        "expected_economic_term_count": 1,
+        "expected_evidence_count": 1,
+        "authored_source": "cli",
+        "notes": "\u20ac \ud83d\ude80",
+        "change_reason": "direct_swap_payout review deleted by cli",
+        "supersedes_component_id": null,
+        "superseded_by_component_id": null,
+        "activated_at": "2025-06-01T00:00:00Z",
+        "superseded_at": "2025-06-01T02:00:00Z",
+        "created_at": "2025-06-01T00:00:00Z"
+      }
+    ],
+    "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945": [],
+    "bddf6f68a3462122fb7951f9773cc01ee23f099d574e31145cfaad8cd8c3649a": [
+      {
+        "id": 1,
+        "revision": 49
+      }
+    ],
+    "b0d63e321cb6d5f252eb29348501c603b4099f69e333d6edade577cdab767f2d": [
+      {
+        "source_table": "transactions",
+        "source_key": -1,
+        "revision": 1
+      },
+      {
+        "source_table": "chain_analysis_labels",
+        "source_key": -1,
+        "revision": 10
+      },
+      {
+        "source_table": "chain_analysis_datasets",
+        "source_key": -1,
+        "revision": 11
+      },
+      {
+        "source_table": "chain_analysis_dataset_claims",
+        "source_key": -1,
+        "revision": 12
+      },
+      {
+        "source_table": "book_network_bindings",
+        "source_key": -1,
+        "revision": 13
+      },
+      {
+        "source_table": "chain_analysis_acquisition_grants",
+        "source_key": -1,
+        "revision": 14
+      },
+      {
+        "source_table": "wallets",
+        "source_key": -1,
+        "revision": 19
+      },
+      {
+        "source_table": "transaction_graph_cache",
+        "source_key": -1,
+        "revision": 2
+      },
+      {
+        "source_table": "transactions",
+        "source_key": 1,
+        "revision": 20
+      },
+      {
+        "source_table": "transactions",
+        "source_key": 2,
+        "revision": 21
+      },
+      {
+        "source_table": "transactions",
+        "source_key": 3,
+        "revision": 22
+      },
+      {
+        "source_table": "transactions",
+        "source_key": 4,
+        "revision": 23
+      },
+      {
+        "source_table": "transactions",
+        "source_key": 5,
+        "revision": 24
+      },
+      {
+        "source_table": "transactions",
+        "source_key": 6,
+        "revision": 25
+      },
+      {
+        "source_table": "transactions",
+        "source_key": 7,
+        "revision": 26
+      },
+      {
+        "source_table": "transactions",
+        "source_key": 8,
+        "revision": 27
+      },
+      {
+        "source_table": "transactions",
+        "source_key": 9,
+        "revision": 28
+      },
+      {
+        "source_table": "transactions",
+        "source_key": 10,
+        "revision": 29
+      },
+      {
+        "source_table": "wallet_utxos",
+        "source_key": -1,
+        "revision": 3
+      },
+      {
+        "source_table": "transactions",
+        "source_key": 11,
+        "revision": 30
+      },
+      {
+        "source_table": "transactions",
+        "source_key": 12,
+        "revision": 31
+      },
+      {
+        "source_table": "transactions",
+        "source_key": 13,
+        "revision": 32
+      },
+      {
+        "source_table": "transactions",
+        "source_key": 14,
+        "revision": 33
+      },
+      {
+        "source_table": "transactions",
+        "source_key": 16,
+        "revision": 35
+      },
+      {
+        "source_table": "transactions",
+        "source_key": 17,
+        "revision": 36
+      },
+      {
+        "source_table": "transactions",
+        "source_key": 15,
+        "revision": 37
+      },
+      {
+        "source_table": "chain_analysis_observations",
+        "source_key": -1,
+        "revision": 4
+      },
+      {
+        "source_table": "profiles",
+        "source_key": -1,
+        "revision": 49
+      },
+      {
+        "source_table": "chain_analysis_reference_assertions",
+        "source_key": -1,
+        "revision": 5
+      },
+      {
+        "source_table": "journal_custody_decisions",
+        "source_key": -1,
+        "revision": 8
+      },
+      {
+        "source_table": "journal_custody_economic_relations",
+        "source_key": -1,
+        "revision": 9
+      }
+    ],
+    "579bd53aed25313f176573f4c4781d06d4446f48f74c7776fb1df6340931cc8a": [
+      {
+        "id": "p",
+        "workspace_id": "w",
+        "label": "Book",
+        "fiat_currency": "EUR",
+        "tax_country": "at",
+        "tax_long_term_days": 365,
+        "gains_algorithm": "FIFO",
+        "require_coarse_review": 0,
+        "bitcoin_rail_carrying_value": 1,
+        "cost_basis_pool_scope": "global",
+        "journal_input_version": 6,
+        "last_processed_input_version": 0,
+        "required_journal_semantics_version": 1,
+        "journal_semantics_version": 0,
+        "last_processed_at": null,
+        "last_processed_tx_count": 0,
+        "ownership_review_counts_json": null,
+        "created_at": "2025-01-01T00:00:00Z",
+        "swap_candidate_count": null
+      },
+      {
+        "id": "other",
+        "workspace_id": "w",
+        "label": "Other",
+        "fiat_currency": "USD",
+        "tax_country": "generic",
+        "tax_long_term_days": 365,
+        "gains_algorithm": "FIFO",
+        "require_coarse_review": 0,
+        "bitcoin_rail_carrying_value": 1,
+        "cost_basis_pool_scope": "global",
+        "journal_input_version": 0,
+        "last_processed_input_version": 0,
+        "required_journal_semantics_version": 0,
+        "journal_semantics_version": 0,
         "last_processed_at": null,
         "last_processed_tx_count": 0,
         "ownership_review_counts_json": null,
@@ -2630,7 +2642,7 @@
         "revision": 9
       }
     ],
-    "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df": [
+    "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db": [
       {
         "id": "p",
         "workspace_id": "w",
@@ -2644,6 +2656,8 @@
         "cost_basis_pool_scope": "global",
         "journal_input_version": 0,
         "last_processed_input_version": 0,
+        "required_journal_semantics_version": 0,
+        "journal_semantics_version": 0,
         "last_processed_at": "2025-01-01T00:00:00Z",
         "last_processed_tx_count": 42,
         "ownership_review_counts_json": "{\"owned\":7}",
@@ -2663,6 +2677,8 @@
         "cost_basis_pool_scope": "global",
         "journal_input_version": 0,
         "last_processed_input_version": 0,
+        "required_journal_semantics_version": 0,
+        "journal_semantics_version": 0,
         "last_processed_at": null,
         "last_processed_tx_count": 0,
         "ownership_review_counts_json": null,
@@ -2980,364 +2996,6 @@
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "d30434229242e65e33dc5da3f61b8673f630a3fed3f0d9b06349a471dc7680a9": [
-      {
-        "id": 1,
-        "revision": 40
-      }
-    ],
-    "7734b6a54e2bb5b60431f116673f0dfce71f81dee57db6a4d4a8ba02f5c7cdd6": [
-      {
-        "source_table": "transactions",
-        "source_key": -1,
-        "revision": 1
-      },
-      {
-        "source_table": "chain_analysis_labels",
-        "source_key": -1,
-        "revision": 10
-      },
-      {
-        "source_table": "chain_analysis_datasets",
-        "source_key": -1,
-        "revision": 11
-      },
-      {
-        "source_table": "chain_analysis_dataset_claims",
-        "source_key": -1,
-        "revision": 12
-      },
-      {
-        "source_table": "book_network_bindings",
-        "source_key": -1,
-        "revision": 13
-      },
-      {
-        "source_table": "chain_analysis_acquisition_grants",
-        "source_key": -1,
-        "revision": 14
-      },
-      {
-        "source_table": "wallets",
-        "source_key": -1,
-        "revision": 19
-      },
-      {
-        "source_table": "transaction_graph_cache",
-        "source_key": -1,
-        "revision": 2
-      },
-      {
-        "source_table": "transactions",
-        "source_key": 1,
-        "revision": 20
-      },
-      {
-        "source_table": "transactions",
-        "source_key": 2,
-        "revision": 21
-      },
-      {
-        "source_table": "transactions",
-        "source_key": 3,
-        "revision": 22
-      },
-      {
-        "source_table": "transactions",
-        "source_key": 4,
-        "revision": 23
-      },
-      {
-        "source_table": "transactions",
-        "source_key": 5,
-        "revision": 24
-      },
-      {
-        "source_table": "transactions",
-        "source_key": 6,
-        "revision": 25
-      },
-      {
-        "source_table": "transactions",
-        "source_key": 7,
-        "revision": 26
-      },
-      {
-        "source_table": "transactions",
-        "source_key": 8,
-        "revision": 27
-      },
-      {
-        "source_table": "transactions",
-        "source_key": 9,
-        "revision": 28
-      },
-      {
-        "source_table": "transactions",
-        "source_key": 10,
-        "revision": 29
-      },
-      {
-        "source_table": "wallet_utxos",
-        "source_key": -1,
-        "revision": 3
-      },
-      {
-        "source_table": "transactions",
-        "source_key": 11,
-        "revision": 30
-      },
-      {
-        "source_table": "transactions",
-        "source_key": 12,
-        "revision": 31
-      },
-      {
-        "source_table": "transactions",
-        "source_key": 13,
-        "revision": 32
-      },
-      {
-        "source_table": "transactions",
-        "source_key": 14,
-        "revision": 33
-      },
-      {
-        "source_table": "transactions",
-        "source_key": 16,
-        "revision": 35
-      },
-      {
-        "source_table": "transactions",
-        "source_key": 17,
-        "revision": 36
-      },
-      {
-        "source_table": "transactions",
-        "source_key": 15,
-        "revision": 37
-      },
-      {
-        "source_table": "chain_analysis_observations",
-        "source_key": -1,
-        "revision": 4
-      },
-      {
-        "source_table": "profiles",
-        "source_key": -1,
-        "revision": 40
-      },
-      {
-        "source_table": "chain_analysis_reference_assertions",
-        "source_key": -1,
-        "revision": 5
-      },
-      {
-        "source_table": "journal_custody_decisions",
-        "source_key": -1,
-        "revision": 8
-      },
-      {
-        "source_table": "journal_custody_economic_relations",
-        "source_key": -1,
-        "revision": 9
-      }
-    ],
-    "ad9073ba76894d1e3e4567c2a160ac5134499d9da3bbb18b1e95a462cde8e4fe": [
-      {
-        "id": "p",
-        "workspace_id": "w",
-        "label": "Book",
-        "fiat_currency": "EUR",
-        "tax_country": "generic",
-        "tax_long_term_days": 365,
-        "gains_algorithm": "FIFO",
-        "require_coarse_review": 0,
-        "bitcoin_rail_carrying_value": 0,
-        "cost_basis_pool_scope": "global",
-        "journal_input_version": 2,
-        "last_processed_input_version": 0,
-        "last_processed_at": null,
-        "last_processed_tx_count": 0,
-        "ownership_review_counts_json": null,
-        "created_at": "2025-01-01T00:00:00Z",
-        "swap_candidate_count": null
-      },
-      {
-        "id": "other",
-        "workspace_id": "w",
-        "label": "Other",
-        "fiat_currency": "USD",
-        "tax_country": "generic",
-        "tax_long_term_days": 365,
-        "gains_algorithm": "FIFO",
-        "require_coarse_review": 0,
-        "bitcoin_rail_carrying_value": 1,
-        "cost_basis_pool_scope": "global",
-        "journal_input_version": 0,
-        "last_processed_input_version": 0,
-        "last_processed_at": null,
-        "last_processed_tx_count": 0,
-        "ownership_review_counts_json": null,
-        "created_at": "2025-01-01T00:00:00Z",
-        "swap_candidate_count": null
-      }
-    ],
-    "7d23eb11e84d36de08d18e16f925ad55ec36ed849e7f39e90d54434635d642bb": [
-      {
-        "id": "453a1085-1cfb-576d-9475-8c5b9a8a6cc9",
-        "lineage_id": "c0d6da14-6adb-5fe4-88e0-704dafc0ab41",
-        "workspace_id": "w",
-        "profile_id": "p",
-        "revision": 1,
-        "component_type": "swap",
-        "conservation_mode": "conversion",
-        "state": "active",
-        "evidence_kind": "reviewed_custody",
-        "evidence_grade": "reviewed",
-        "evidence_json": "{\"review_id\":\"e9f4fe30-9411-50cf-8405-9f61ea4964bd\",\"term_kind\":\"direct_swap_payout\"}",
-        "conversion_policy": "taxable",
-        "conversion_reviewed": 1,
-        "conversion_metadata_json": "{}",
-        "expected_leg_count": 2,
-        "expected_allocation_count": 1,
-        "expected_economic_term_count": 1,
-        "expected_evidence_count": 1,
-        "authored_source": "cli",
-        "notes": null,
-        "change_reason": null,
-        "supersedes_component_id": null,
-        "superseded_by_component_id": null,
-        "activated_at": "2025-06-01T00:00:00Z",
-        "superseded_at": null,
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
-    "2c343689e001cbe135be07f0663d332b419ae7174f1e0c15572de76e666fd82b": [
-      {
-        "id": "43543a9b-29cb-521f-a70f-d449169cf8f5",
-        "component_id": "453a1085-1cfb-576d-9475-8c5b9a8a6cc9",
-        "workspace_id": "w",
-        "profile_id": "p",
-        "ordinal": 0,
-        "role": "source",
-        "rail": "bitcoin",
-        "chain": "bitcoin",
-        "network": "main",
-        "asset": "BTC",
-        "exposure": "bitcoin",
-        "conservation_unit": "msat",
-        "amount_msat": 1000,
-        "valuation_unit": "reviewed_source_msat",
-        "valuation_amount": 1000,
-        "occurred_at": "2025-02-01T00:00:00Z",
-        "transaction_id": "d",
-        "anchor_transaction_id": "d",
-        "wallet_id": "source",
-        "location_ref": null,
-        "notes": null,
-        "created_at": "2025-06-01T00:00:00Z"
-      },
-      {
-        "id": "62f2fe83-7d3c-5861-9d51-e5814e42761b",
-        "component_id": "453a1085-1cfb-576d-9475-8c5b9a8a6cc9",
-        "workspace_id": "w",
-        "profile_id": "p",
-        "ordinal": 1,
-        "role": "retained",
-        "rail": "untracked",
-        "chain": null,
-        "network": null,
-        "asset": "ETH",
-        "exposure": "asset:eth",
-        "conservation_unit": "msat",
-        "amount_msat": 800,
-        "valuation_unit": "reviewed_source_msat",
-        "valuation_amount": 1000,
-        "occurred_at": "2025-02-01T00:00:00Z",
-        "transaction_id": null,
-        "anchor_transaction_id": null,
-        "wallet_id": null,
-        "location_ref": "legacy-payout:e9f4fe30-9411-50cf-8405-9f61ea4964bd",
-        "notes": null,
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
-    "46b20268238f1f6ffcace408366200466490b1d2dee486413e14eac8b62ff6ba": [
-      {
-        "id": "8546efeb-6c17-52fd-a8e2-9527981a0e5c",
-        "component_id": "453a1085-1cfb-576d-9475-8c5b9a8a6cc9",
-        "workspace_id": "w",
-        "profile_id": "p",
-        "ordinal": 0,
-        "source_leg_id": "43543a9b-29cb-521f-a70f-d449169cf8f5",
-        "sink_leg_id": "62f2fe83-7d3c-5861-9d51-e5814e42761b",
-        "source_amount_msat": 1000,
-        "sink_amount_msat": 800,
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
-    "bae34a841b6698037cd9236d3ceec260ad04c50f264de31456978cba6effe4f2": [
-      {
-        "id": "ea54d77d-ebec-5e6c-8e93-9d9d3da7c1c6",
-        "component_id": "453a1085-1cfb-576d-9475-8c5b9a8a6cc9",
-        "workspace_id": "w",
-        "profile_id": "p",
-        "ordinal": 0,
-        "source_leg_id": "43543a9b-29cb-521f-a70f-d449169cf8f5",
-        "target_leg_id": "62f2fe83-7d3c-5861-9d51-e5814e42761b",
-        "term_kind": "direct_swap_payout",
-        "legacy_source_id": "e9f4fe30-9411-50cf-8405-9f61ea4964bd",
-        "source_row_hash": "dccf69f4cc2074391f3403b09b402d0fb362ee0ee1ed215c68866e967d0de2fd",
-        "review_kind": "direct-swap-payout",
-        "tax_policy": "taxable",
-        "reviewed_source_amount_msat": 1000,
-        "swap_fee_msat": 200,
-        "swap_fee_kind": "combined",
-        "confidence_at_review": null,
-        "review_source": null,
-        "review_notes": null,
-        "payout_asset": "ETH",
-        "payout_amount_msat": 800,
-        "payout_occurred_at": null,
-        "payout_fiat_value_exact": null,
-        "payout_external_id": null,
-        "counterparty": null,
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
-    "75bfbbec326afc51217c75110f1b0f7b28f973da8942c512f2e5f64f4f472b0b": [
-      {
-        "component_id": "453a1085-1cfb-576d-9475-8c5b9a8a6cc9",
-        "profile_id": "p",
-        "transaction_id": "d",
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
-    "4ce28e0207da11e2785b7f7bcd88702f780238e6a27161f6e5d0519a4c39306e": [
-      {
-        "workspace_id": "w",
-        "profile_id": "p",
-        "subject_kind": "custody_component",
-        "subject_id": "453a1085-1cfb-576d-9475-8c5b9a8a6cc9",
-        "detail_hash": "46fc8f328cd8b01525937578093a97dcde14f75a95ecaf68fd439a2919def67f",
-        "quantity_hash": "bf1ffa1940246cb43df6e172be31685a84d5208188994bc7671aae501bc7f9f6",
-        "payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fp-d\",\"kind\":\"deposit\",\"occurred_at\":\"2025-02-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":1000,\"asset\":\"BTC\",\"direction\":\"outbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"d-ext\",\"native_namespace\":\"source\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"source\"},\"raw_json\":{},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
-    "69aa2922b42e28231820415de70d5a2ba3736b6e60a13e6d5e074f4fba9b4772": [
-      {
-        "id": "6dce334527b0cec449a02e3db67b2ce17201e86acbe0dc4bd7e5ad6b99be4e93",
-        "component_id": "453a1085-1cfb-576d-9475-8c5b9a8a6cc9",
-        "workspace_id": "w",
-        "profile_id": "p",
-        "ordinal": 0,
-        "quantity_hash": "bf1ffa1940246cb43df6e172be31685a84d5208188994bc7671aae501bc7f9f6",
-        "detail_hash": "961e2d01e04c7c535eac237f311cafd9437796d86733a9eba4a25d6f77435fde",
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
     "5bda9e25a649a0fd61c7ca57ce075eb34649c6f38ccc73759aed6d2cf7289acf": [
       {
         "id": 1,
@@ -3501,7 +3159,7 @@
         "revision": 9
       }
     ],
-    "2989ee45bbb73728cf22e7038015fe6d625c8db82daa91a80897c9a537ff7dc8": [
+    "10c07161ab43138d4aa5f892303dfac6f0752f041da509d49403b0f846c4a16c": [
       {
         "id": "p",
         "workspace_id": "w",
@@ -3513,8 +3171,10 @@
         "require_coarse_review": 0,
         "bitcoin_rail_carrying_value": 0,
         "cost_basis_pool_scope": "global",
-        "journal_input_version": 4,
+        "journal_input_version": 2,
         "last_processed_input_version": 0,
+        "required_journal_semantics_version": 1,
+        "journal_semantics_version": 0,
         "last_processed_at": null,
         "last_processed_tx_count": 0,
         "ownership_review_counts_json": null,
@@ -3534,6 +3194,8 @@
         "cost_basis_pool_scope": "global",
         "journal_input_version": 0,
         "last_processed_input_version": 0,
+        "required_journal_semantics_version": 0,
+        "journal_semantics_version": 0,
         "last_processed_at": null,
         "last_processed_tx_count": 0,
         "ownership_review_counts_json": null,
@@ -3541,7 +3203,7 @@
         "swap_candidate_count": null
       }
     ],
-    "9b2b3d6061e63f485480c00efe1d6480e7668cb4c159015d9110f0be1fc329af": [
+    "7d23eb11e84d36de08d18e16f925ad55ec36ed849e7f39e90d54434635d642bb": [
       {
         "id": "453a1085-1cfb-576d-9475-8c5b9a8a6cc9",
         "lineage_id": "c0d6da14-6adb-5fe4-88e0-704dafc0ab41",
@@ -3550,7 +3212,7 @@
         "revision": 1,
         "component_type": "swap",
         "conservation_mode": "conversion",
-        "state": "superseded",
+        "state": "active",
         "evidence_kind": "reviewed_custody",
         "evidence_grade": "reviewed",
         "evidence_json": "{\"review_id\":\"e9f4fe30-9411-50cf-8405-9f61ea4964bd\",\"term_kind\":\"direct_swap_payout\"}",
@@ -3563,21 +3225,146 @@
         "expected_evidence_count": 1,
         "authored_source": "cli",
         "notes": null,
-        "change_reason": "direct_swap_payout review deleted by cli",
+        "change_reason": null,
         "supersedes_component_id": null,
         "superseded_by_component_id": null,
         "activated_at": "2025-06-01T00:00:00Z",
-        "superseded_at": "2025-06-01T01:00:00Z",
+        "superseded_at": null,
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "6960388ef193d5326eaea5d5f803aa7cdbe2fc142df3557b92989a286bcce392": [
+    "2c343689e001cbe135be07f0663d332b419ae7174f1e0c15572de76e666fd82b": [
       {
-        "id": 1,
-        "revision": 44
+        "id": "43543a9b-29cb-521f-a70f-d449169cf8f5",
+        "component_id": "453a1085-1cfb-576d-9475-8c5b9a8a6cc9",
+        "workspace_id": "w",
+        "profile_id": "p",
+        "ordinal": 0,
+        "role": "source",
+        "rail": "bitcoin",
+        "chain": "bitcoin",
+        "network": "main",
+        "asset": "BTC",
+        "exposure": "bitcoin",
+        "conservation_unit": "msat",
+        "amount_msat": 1000,
+        "valuation_unit": "reviewed_source_msat",
+        "valuation_amount": 1000,
+        "occurred_at": "2025-02-01T00:00:00Z",
+        "transaction_id": "d",
+        "anchor_transaction_id": "d",
+        "wallet_id": "source",
+        "location_ref": null,
+        "notes": null,
+        "created_at": "2025-06-01T00:00:00Z"
+      },
+      {
+        "id": "62f2fe83-7d3c-5861-9d51-e5814e42761b",
+        "component_id": "453a1085-1cfb-576d-9475-8c5b9a8a6cc9",
+        "workspace_id": "w",
+        "profile_id": "p",
+        "ordinal": 1,
+        "role": "retained",
+        "rail": "untracked",
+        "chain": null,
+        "network": null,
+        "asset": "ETH",
+        "exposure": "asset:eth",
+        "conservation_unit": "msat",
+        "amount_msat": 800,
+        "valuation_unit": "reviewed_source_msat",
+        "valuation_amount": 1000,
+        "occurred_at": "2025-02-01T00:00:00Z",
+        "transaction_id": null,
+        "anchor_transaction_id": null,
+        "wallet_id": null,
+        "location_ref": "legacy-payout:e9f4fe30-9411-50cf-8405-9f61ea4964bd",
+        "notes": null,
+        "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "84dbbcb8a53f30d7215151b3c580cfe62ea30f164b7ea1c7b90e16b70b964a74": [
+    "46b20268238f1f6ffcace408366200466490b1d2dee486413e14eac8b62ff6ba": [
+      {
+        "id": "8546efeb-6c17-52fd-a8e2-9527981a0e5c",
+        "component_id": "453a1085-1cfb-576d-9475-8c5b9a8a6cc9",
+        "workspace_id": "w",
+        "profile_id": "p",
+        "ordinal": 0,
+        "source_leg_id": "43543a9b-29cb-521f-a70f-d449169cf8f5",
+        "sink_leg_id": "62f2fe83-7d3c-5861-9d51-e5814e42761b",
+        "source_amount_msat": 1000,
+        "sink_amount_msat": 800,
+        "created_at": "2025-06-01T00:00:00Z"
+      }
+    ],
+    "bae34a841b6698037cd9236d3ceec260ad04c50f264de31456978cba6effe4f2": [
+      {
+        "id": "ea54d77d-ebec-5e6c-8e93-9d9d3da7c1c6",
+        "component_id": "453a1085-1cfb-576d-9475-8c5b9a8a6cc9",
+        "workspace_id": "w",
+        "profile_id": "p",
+        "ordinal": 0,
+        "source_leg_id": "43543a9b-29cb-521f-a70f-d449169cf8f5",
+        "target_leg_id": "62f2fe83-7d3c-5861-9d51-e5814e42761b",
+        "term_kind": "direct_swap_payout",
+        "legacy_source_id": "e9f4fe30-9411-50cf-8405-9f61ea4964bd",
+        "source_row_hash": "dccf69f4cc2074391f3403b09b402d0fb362ee0ee1ed215c68866e967d0de2fd",
+        "review_kind": "direct-swap-payout",
+        "tax_policy": "taxable",
+        "reviewed_source_amount_msat": 1000,
+        "swap_fee_msat": 200,
+        "swap_fee_kind": "combined",
+        "confidence_at_review": null,
+        "review_source": null,
+        "review_notes": null,
+        "payout_asset": "ETH",
+        "payout_amount_msat": 800,
+        "payout_occurred_at": null,
+        "payout_fiat_value_exact": null,
+        "payout_external_id": null,
+        "counterparty": null,
+        "created_at": "2025-06-01T00:00:00Z"
+      }
+    ],
+    "75bfbbec326afc51217c75110f1b0f7b28f973da8942c512f2e5f64f4f472b0b": [
+      {
+        "component_id": "453a1085-1cfb-576d-9475-8c5b9a8a6cc9",
+        "profile_id": "p",
+        "transaction_id": "d",
+        "created_at": "2025-06-01T00:00:00Z"
+      }
+    ],
+    "4ce28e0207da11e2785b7f7bcd88702f780238e6a27161f6e5d0519a4c39306e": [
+      {
+        "workspace_id": "w",
+        "profile_id": "p",
+        "subject_kind": "custody_component",
+        "subject_id": "453a1085-1cfb-576d-9475-8c5b9a8a6cc9",
+        "detail_hash": "46fc8f328cd8b01525937578093a97dcde14f75a95ecaf68fd439a2919def67f",
+        "quantity_hash": "bf1ffa1940246cb43df6e172be31685a84d5208188994bc7671aae501bc7f9f6",
+        "payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fp-d\",\"kind\":\"deposit\",\"occurred_at\":\"2025-02-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":1000,\"asset\":\"BTC\",\"direction\":\"outbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"d-ext\",\"native_namespace\":\"source\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"source\"},\"raw_json\":{},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+        "created_at": "2025-06-01T00:00:00Z"
+      }
+    ],
+    "69aa2922b42e28231820415de70d5a2ba3736b6e60a13e6d5e074f4fba9b4772": [
+      {
+        "id": "6dce334527b0cec449a02e3db67b2ce17201e86acbe0dc4bd7e5ad6b99be4e93",
+        "component_id": "453a1085-1cfb-576d-9475-8c5b9a8a6cc9",
+        "workspace_id": "w",
+        "profile_id": "p",
+        "ordinal": 0,
+        "quantity_hash": "bf1ffa1940246cb43df6e172be31685a84d5208188994bc7671aae501bc7f9f6",
+        "detail_hash": "961e2d01e04c7c535eac237f311cafd9437796d86733a9eba4a25d6f77435fde",
+        "created_at": "2025-06-01T00:00:00Z"
+      }
+    ],
+    "e066565737bb2c0ff689db42483d4ad7f8700b421423e2be3082b1f351b63503": [
+      {
+        "id": 1,
+        "revision": 46
+      }
+    ],
+    "e9aa78f40da9c2ef700f9b7a0151375434e92e1ff363704d3a7856a698676ca8": [
       {
         "source_table": "transactions",
         "source_key": -1,
@@ -3716,7 +3503,7 @@
       {
         "source_table": "profiles",
         "source_key": -1,
-        "revision": 44
+        "revision": 46
       },
       {
         "source_table": "chain_analysis_reference_assertions",
@@ -3734,7 +3521,7 @@
         "revision": 9
       }
     ],
-    "c019320e1be38b0c861c07e6b30c352a40a51ff58aa05b17d534198008bddd9d": [
+    "22ee63b011934a6e49ee2e30a17c47f1c8b6dd63fcb31f74308196e10c3de31d": [
       {
         "id": "p",
         "workspace_id": "w",
@@ -3746,8 +3533,10 @@
         "require_coarse_review": 0,
         "bitcoin_rail_carrying_value": 0,
         "cost_basis_pool_scope": "global",
-        "journal_input_version": 6,
+        "journal_input_version": 4,
         "last_processed_input_version": 0,
+        "required_journal_semantics_version": 1,
+        "journal_semantics_version": 0,
         "last_processed_at": null,
         "last_processed_tx_count": 0,
         "ownership_review_counts_json": null,
@@ -3767,6 +3556,245 @@
         "cost_basis_pool_scope": "global",
         "journal_input_version": 0,
         "last_processed_input_version": 0,
+        "required_journal_semantics_version": 0,
+        "journal_semantics_version": 0,
+        "last_processed_at": null,
+        "last_processed_tx_count": 0,
+        "ownership_review_counts_json": null,
+        "created_at": "2025-01-01T00:00:00Z",
+        "swap_candidate_count": null
+      }
+    ],
+    "9b2b3d6061e63f485480c00efe1d6480e7668cb4c159015d9110f0be1fc329af": [
+      {
+        "id": "453a1085-1cfb-576d-9475-8c5b9a8a6cc9",
+        "lineage_id": "c0d6da14-6adb-5fe4-88e0-704dafc0ab41",
+        "workspace_id": "w",
+        "profile_id": "p",
+        "revision": 1,
+        "component_type": "swap",
+        "conservation_mode": "conversion",
+        "state": "superseded",
+        "evidence_kind": "reviewed_custody",
+        "evidence_grade": "reviewed",
+        "evidence_json": "{\"review_id\":\"e9f4fe30-9411-50cf-8405-9f61ea4964bd\",\"term_kind\":\"direct_swap_payout\"}",
+        "conversion_policy": "taxable",
+        "conversion_reviewed": 1,
+        "conversion_metadata_json": "{}",
+        "expected_leg_count": 2,
+        "expected_allocation_count": 1,
+        "expected_economic_term_count": 1,
+        "expected_evidence_count": 1,
+        "authored_source": "cli",
+        "notes": null,
+        "change_reason": "direct_swap_payout review deleted by cli",
+        "supersedes_component_id": null,
+        "superseded_by_component_id": null,
+        "activated_at": "2025-06-01T00:00:00Z",
+        "superseded_at": "2025-06-01T01:00:00Z",
+        "created_at": "2025-06-01T00:00:00Z"
+      }
+    ],
+    "e60c010a68c1496d92d5cd71ded98a26b564263b774f57271e6c5ea0b37e69fe": [
+      {
+        "id": 1,
+        "revision": 50
+      }
+    ],
+    "bf7093a01ae8359723da7224c7f46bb0f9c2d861b113ceac4d4c992359af3487": [
+      {
+        "source_table": "transactions",
+        "source_key": -1,
+        "revision": 1
+      },
+      {
+        "source_table": "chain_analysis_labels",
+        "source_key": -1,
+        "revision": 10
+      },
+      {
+        "source_table": "chain_analysis_datasets",
+        "source_key": -1,
+        "revision": 11
+      },
+      {
+        "source_table": "chain_analysis_dataset_claims",
+        "source_key": -1,
+        "revision": 12
+      },
+      {
+        "source_table": "book_network_bindings",
+        "source_key": -1,
+        "revision": 13
+      },
+      {
+        "source_table": "chain_analysis_acquisition_grants",
+        "source_key": -1,
+        "revision": 14
+      },
+      {
+        "source_table": "wallets",
+        "source_key": -1,
+        "revision": 19
+      },
+      {
+        "source_table": "transaction_graph_cache",
+        "source_key": -1,
+        "revision": 2
+      },
+      {
+        "source_table": "transactions",
+        "source_key": 1,
+        "revision": 20
+      },
+      {
+        "source_table": "transactions",
+        "source_key": 2,
+        "revision": 21
+      },
+      {
+        "source_table": "transactions",
+        "source_key": 3,
+        "revision": 22
+      },
+      {
+        "source_table": "transactions",
+        "source_key": 4,
+        "revision": 23
+      },
+      {
+        "source_table": "transactions",
+        "source_key": 5,
+        "revision": 24
+      },
+      {
+        "source_table": "transactions",
+        "source_key": 6,
+        "revision": 25
+      },
+      {
+        "source_table": "transactions",
+        "source_key": 7,
+        "revision": 26
+      },
+      {
+        "source_table": "transactions",
+        "source_key": 8,
+        "revision": 27
+      },
+      {
+        "source_table": "transactions",
+        "source_key": 9,
+        "revision": 28
+      },
+      {
+        "source_table": "transactions",
+        "source_key": 10,
+        "revision": 29
+      },
+      {
+        "source_table": "wallet_utxos",
+        "source_key": -1,
+        "revision": 3
+      },
+      {
+        "source_table": "transactions",
+        "source_key": 11,
+        "revision": 30
+      },
+      {
+        "source_table": "transactions",
+        "source_key": 12,
+        "revision": 31
+      },
+      {
+        "source_table": "transactions",
+        "source_key": 13,
+        "revision": 32
+      },
+      {
+        "source_table": "transactions",
+        "source_key": 14,
+        "revision": 33
+      },
+      {
+        "source_table": "transactions",
+        "source_key": 16,
+        "revision": 35
+      },
+      {
+        "source_table": "transactions",
+        "source_key": 17,
+        "revision": 36
+      },
+      {
+        "source_table": "transactions",
+        "source_key": 15,
+        "revision": 37
+      },
+      {
+        "source_table": "chain_analysis_observations",
+        "source_key": -1,
+        "revision": 4
+      },
+      {
+        "source_table": "chain_analysis_reference_assertions",
+        "source_key": -1,
+        "revision": 5
+      },
+      {
+        "source_table": "profiles",
+        "source_key": -1,
+        "revision": 50
+      },
+      {
+        "source_table": "journal_custody_decisions",
+        "source_key": -1,
+        "revision": 8
+      },
+      {
+        "source_table": "journal_custody_economic_relations",
+        "source_key": -1,
+        "revision": 9
+      }
+    ],
+    "f8339214c6b176fd7042c5ee27254b425f9810a97e33601e23541fd388c96890": [
+      {
+        "id": "p",
+        "workspace_id": "w",
+        "label": "Book",
+        "fiat_currency": "EUR",
+        "tax_country": "generic",
+        "tax_long_term_days": 365,
+        "gains_algorithm": "FIFO",
+        "require_coarse_review": 0,
+        "bitcoin_rail_carrying_value": 0,
+        "cost_basis_pool_scope": "global",
+        "journal_input_version": 6,
+        "last_processed_input_version": 0,
+        "required_journal_semantics_version": 1,
+        "journal_semantics_version": 0,
+        "last_processed_at": null,
+        "last_processed_tx_count": 0,
+        "ownership_review_counts_json": null,
+        "created_at": "2025-01-01T00:00:00Z",
+        "swap_candidate_count": null
+      },
+      {
+        "id": "other",
+        "workspace_id": "w",
+        "label": "Other",
+        "fiat_currency": "USD",
+        "tax_country": "generic",
+        "tax_long_term_days": 365,
+        "gains_algorithm": "FIFO",
+        "require_coarse_review": 0,
+        "bitcoin_rail_carrying_value": 1,
+        "cost_basis_pool_scope": "global",
+        "journal_input_version": 0,
+        "last_processed_input_version": 0,
+        "required_journal_semantics_version": 0,
+        "journal_semantics_version": 0,
         "last_processed_at": null,
         "last_processed_tx_count": 0,
         "ownership_review_counts_json": null,
@@ -6303,9 +6331,9 @@
             "created_at": "2025-06-01T00:00:00Z"
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "3112aa55b5884dfa9c5d5cd27084b67db4d7bfff040fce4109b86ef9e00f5901",
             "custody_component_legs": "3ffa760f47017291d4c4abb28a09f31a2ffa67bbe953e1bb47ec7fc67ccd6eb7",
             "custody_component_allocations": "adb5f653b99d43e4de2af9af722c296edeff48163f615d94e997ed8199fac6fe",
@@ -6333,9 +6361,9 @@
             "details": null
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "3112aa55b5884dfa9c5d5cd27084b67db4d7bfff040fce4109b86ef9e00f5901",
             "custody_component_legs": "3ffa760f47017291d4c4abb28a09f31a2ffa67bbe953e1bb47ec7fc67ccd6eb7",
             "custody_component_allocations": "adb5f653b99d43e4de2af9af722c296edeff48163f615d94e997ed8199fac6fe",
@@ -6379,9 +6407,9 @@
             "created_at": "2025-06-01T00:00:00Z"
           },
           "rows": {
-            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
-            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
-            "profiles": "1efad4205b33618b8ebfbb5ee153bd9229aa5fe57d02a439fe319d0ad7b9170c",
+            "chain_index_clock": "a7f0169bf926a545e9082bb952a507397e711aa39352d535e65aed3e316473ed",
+            "chain_index_dirty": "501d350b84c8aa7023a2c6dbb5698433baa21bfbbfd8c926182163fedfce5f94",
+            "profiles": "b3fc988928586ef782d6531bde5eddb0c420d54f883d441398c767f935f4e2fd",
             "custody_components": "91930391f0151a69a384f93055b70bd1afa2c92d6befcf14117705f2387af29e",
             "custody_component_legs": "3ffa760f47017291d4c4abb28a09f31a2ffa67bbe953e1bb47ec7fc67ccd6eb7",
             "custody_component_allocations": "adb5f653b99d43e4de2af9af722c296edeff48163f615d94e997ed8199fac6fe",
@@ -6428,9 +6456,9 @@
             "created_at": "2025-06-01T03:00:00Z"
           },
           "rows": {
-            "chain_index_clock": "3875ea87f5c9538f104a60c72e23207a7bac7560d3866f12606ad4dba4f8174e",
-            "chain_index_dirty": "ce694aebad09f1a544898292d0be066430a51cb43cd6212527d18d39db632512",
-            "profiles": "b611a900bce1b7fcb8c0be377fa811d26292b44f8aa51c243f5a5223fa60236b",
+            "chain_index_clock": "bddf6f68a3462122fb7951f9773cc01ee23f099d574e31145cfaad8cd8c3649a",
+            "chain_index_dirty": "b0d63e321cb6d5f252eb29348501c603b4099f69e333d6edade577cdab767f2d",
+            "profiles": "579bd53aed25313f176573f4c4781d06d4446f48f74c7776fb1df6340931cc8a",
             "custody_components": "4f057e3b177959e243ec71044c77720a2dccf6b6b172b0603ac9f053bff56602",
             "custody_component_legs": "5439e810fb0657b7ade43e9e20902562161f651e48d5c6ececa24268f5cbbc7d",
             "custody_component_allocations": "4474e6ced23cb041e4ffbbbfe921c642e5d4945c0c231e41e433ee5f47a8d910",
@@ -6507,9 +6535,9 @@
             "created_at": "2025-06-01T00:00:00Z"
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "8156e9b7633af32817fae83119e206ab2b5f700f10fab7f5d08421c472f1aa33",
             "custody_component_legs": "9eca32004cbc665ca2d0c97881d23342426dd87bd12511c351aa0a76185e4eb5",
             "custody_component_allocations": "65e6f2d32bd8f108a0233146f3448874391428d0238b89ab427e7589c8d84d4e",
@@ -6553,9 +6581,9 @@
             "created_at": "2025-06-01T00:00:00Z"
           },
           "rows": {
-            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
-            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
-            "profiles": "1efad4205b33618b8ebfbb5ee153bd9229aa5fe57d02a439fe319d0ad7b9170c",
+            "chain_index_clock": "a7f0169bf926a545e9082bb952a507397e711aa39352d535e65aed3e316473ed",
+            "chain_index_dirty": "501d350b84c8aa7023a2c6dbb5698433baa21bfbbfd8c926182163fedfce5f94",
+            "profiles": "b3fc988928586ef782d6531bde5eddb0c420d54f883d441398c767f935f4e2fd",
             "custody_components": "999a7cf3430eb9299d8b8c7e77019918ae77b27544f62e0777715f2c77e923e6",
             "custody_component_legs": "9eca32004cbc665ca2d0c97881d23342426dd87bd12511c351aa0a76185e4eb5",
             "custody_component_allocations": "65e6f2d32bd8f108a0233146f3448874391428d0238b89ab427e7589c8d84d4e",
@@ -6602,9 +6630,9 @@
             "created_at": "2025-06-01T02:00:00Z"
           },
           "rows": {
-            "chain_index_clock": "3875ea87f5c9538f104a60c72e23207a7bac7560d3866f12606ad4dba4f8174e",
-            "chain_index_dirty": "ce694aebad09f1a544898292d0be066430a51cb43cd6212527d18d39db632512",
-            "profiles": "b611a900bce1b7fcb8c0be377fa811d26292b44f8aa51c243f5a5223fa60236b",
+            "chain_index_clock": "bddf6f68a3462122fb7951f9773cc01ee23f099d574e31145cfaad8cd8c3649a",
+            "chain_index_dirty": "b0d63e321cb6d5f252eb29348501c603b4099f69e333d6edade577cdab767f2d",
+            "profiles": "579bd53aed25313f176573f4c4781d06d4446f48f74c7776fb1df6340931cc8a",
             "custody_components": "d2ce3f20b98fb2adc830c3acd2d1fb28e3ecf395a5bfc98a7ea0bf3cfe8d137b",
             "custody_component_legs": "97b0500ef710033b75e188ae584999510a6b76790a6ff6d238fd15780ea143cb",
             "custody_component_allocations": "7b7a6815bee52fb760f62790f2df104b49d65b1f1611fc651edd9e4abdd0766d",
@@ -6681,9 +6709,9 @@
             "created_at": "2025-06-01T00:00:00Z"
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "7191ff9f043479055474061b7a4c82aa79d77973af4cd164ea6c7d00d4bb2fee",
             "custody_component_legs": "b1812d68ca8500f454f9b1f1f10699d9123e5ff58a347d5a61c1345905333ff7",
             "custody_component_allocations": "23778e387052327bed82116e16bb67b7dbd4c6a554957c824f94bf402a279fc6",
@@ -6727,9 +6755,9 @@
             "created_at": "2025-06-01T00:00:00Z"
           },
           "rows": {
-            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
-            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
-            "profiles": "1efad4205b33618b8ebfbb5ee153bd9229aa5fe57d02a439fe319d0ad7b9170c",
+            "chain_index_clock": "a7f0169bf926a545e9082bb952a507397e711aa39352d535e65aed3e316473ed",
+            "chain_index_dirty": "501d350b84c8aa7023a2c6dbb5698433baa21bfbbfd8c926182163fedfce5f94",
+            "profiles": "b3fc988928586ef782d6531bde5eddb0c420d54f883d441398c767f935f4e2fd",
             "custody_components": "2baeb96a807dc168cfe5fca07fdc88c73f93673ca8a14960b20957d713987bd1",
             "custody_component_legs": "b1812d68ca8500f454f9b1f1f10699d9123e5ff58a347d5a61c1345905333ff7",
             "custody_component_allocations": "23778e387052327bed82116e16bb67b7dbd4c6a554957c824f94bf402a279fc6",
@@ -6775,9 +6803,9 @@
             "created_at": "2025-06-01T02:00:00Z"
           },
           "rows": {
-            "chain_index_clock": "3875ea87f5c9538f104a60c72e23207a7bac7560d3866f12606ad4dba4f8174e",
-            "chain_index_dirty": "ce694aebad09f1a544898292d0be066430a51cb43cd6212527d18d39db632512",
-            "profiles": "b611a900bce1b7fcb8c0be377fa811d26292b44f8aa51c243f5a5223fa60236b",
+            "chain_index_clock": "bddf6f68a3462122fb7951f9773cc01ee23f099d574e31145cfaad8cd8c3649a",
+            "chain_index_dirty": "b0d63e321cb6d5f252eb29348501c603b4099f69e333d6edade577cdab767f2d",
+            "profiles": "579bd53aed25313f176573f4c4781d06d4446f48f74c7776fb1df6340931cc8a",
             "custody_components": "0d32f207343a1e60a803dfb86daee8b483d326af2adba0a92a22830771b06808",
             "custody_component_legs": "c6cd35aaacc520ba0bc583c893a4c83fe0d6fc079f444e4558d2fcb4df05e44c",
             "custody_component_allocations": "3f5d1507f30b1cfa2c0f15e6f997a32a5e774ac40032533638ca94f55e028c52",
@@ -6855,9 +6883,9 @@
             "created_at": "2025-06-01T00:00:00Z"
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "a69a9d79e1a6129986fa4a167bdfcddcd3c32aef81a287d9dc6fc1de9a673a93",
             "custody_component_legs": "c4c0394e75c5c1866afbf296eaadf0a54db60329a374bf2820302eb65923b570",
             "custody_component_allocations": "6bd3b47a31846a8ac5121017c1da4bebf1b501089590fdb4dc6843c894e5bdc9",
@@ -6901,9 +6929,9 @@
             "created_at": "2025-06-01T00:00:00Z"
           },
           "rows": {
-            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
-            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
-            "profiles": "1efad4205b33618b8ebfbb5ee153bd9229aa5fe57d02a439fe319d0ad7b9170c",
+            "chain_index_clock": "a7f0169bf926a545e9082bb952a507397e711aa39352d535e65aed3e316473ed",
+            "chain_index_dirty": "501d350b84c8aa7023a2c6dbb5698433baa21bfbbfd8c926182163fedfce5f94",
+            "profiles": "b3fc988928586ef782d6531bde5eddb0c420d54f883d441398c767f935f4e2fd",
             "custody_components": "445d01b0bbafe5e8a82c87126c257daca0861aa7dba229fe7a2b8936da66b1a3",
             "custody_component_legs": "c4c0394e75c5c1866afbf296eaadf0a54db60329a374bf2820302eb65923b570",
             "custody_component_allocations": "6bd3b47a31846a8ac5121017c1da4bebf1b501089590fdb4dc6843c894e5bdc9",
@@ -6981,9 +7009,9 @@
             "created_at": "2025-06-01T00:00:00Z"
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "22107dd64c7237389ab50fd6de80ffaaf43d67c8c91afe7cf744146dc43def5a",
             "custody_component_legs": "232b570b7e74bed4b0927c4fe5cee970f51db67dc064c7362850e6b85a1ac357",
             "custody_component_allocations": "e89235314bf0f4fc147352e76a4800b99d22fb1bf7c031b78a53927e1da6acf7",
@@ -7027,9 +7055,9 @@
             "created_at": "2025-06-01T00:00:00Z"
           },
           "rows": {
-            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
-            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
-            "profiles": "1efad4205b33618b8ebfbb5ee153bd9229aa5fe57d02a439fe319d0ad7b9170c",
+            "chain_index_clock": "a7f0169bf926a545e9082bb952a507397e711aa39352d535e65aed3e316473ed",
+            "chain_index_dirty": "501d350b84c8aa7023a2c6dbb5698433baa21bfbbfd8c926182163fedfce5f94",
+            "profiles": "b3fc988928586ef782d6531bde5eddb0c420d54f883d441398c767f935f4e2fd",
             "custody_components": "b28dc77373a027284f264831fe012d73498df06929e477037b4994bade130fa6",
             "custody_component_legs": "232b570b7e74bed4b0927c4fe5cee970f51db67dc064c7362850e6b85a1ac357",
             "custody_component_allocations": "e89235314bf0f4fc147352e76a4800b99d22fb1bf7c031b78a53927e1da6acf7",
@@ -7090,7 +7118,7 @@
           "rows": {
             "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
             "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
-            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
             "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -7136,9 +7164,9 @@
             "created_at": "2025-06-01T01:00:00Z"
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "dd32c0d0342104b4002525001547ec00a053c0225b6aeb770a253bf81e7fae9c",
             "custody_component_legs": "335fc5e9a027ed1ab055eadcb32ea7a5d79ce706b4d2af4ee8fcb9a70b3baf2d",
             "custody_component_allocations": "851bf9f17838b11ff763a5c66d911d123bc6450b67e4f3b2c9931d76c596e217",
@@ -7166,9 +7194,9 @@
             "details": null
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "dd32c0d0342104b4002525001547ec00a053c0225b6aeb770a253bf81e7fae9c",
             "custody_component_legs": "335fc5e9a027ed1ab055eadcb32ea7a5d79ce706b4d2af4ee8fcb9a70b3baf2d",
             "custody_component_allocations": "851bf9f17838b11ff763a5c66d911d123bc6450b67e4f3b2c9931d76c596e217",
@@ -7249,9 +7277,9 @@
             "created_at": "2025-06-01T00:00:00Z"
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "f59d71cebf0750ee0b2cc8dda3dfb1c5b8a55fdb391e3791d5b170a4b2a12346",
             "custody_component_legs": "e76cc77e830622334d71dc3ab8d59fb28901ba2ba8ef4961032154b3be722a5f",
             "custody_component_allocations": "d07600606d7cef8a545209b33c29b7aaddd9fe8e7666d0ce49735670fb2d3e40",
@@ -7330,9 +7358,9 @@
             "created_at": "2025-06-01T00:00:00Z"
           },
           "rows": {
-            "chain_index_clock": "d30434229242e65e33dc5da3f61b8673f630a3fed3f0d9b06349a471dc7680a9",
-            "chain_index_dirty": "7734b6a54e2bb5b60431f116673f0dfce71f81dee57db6a4d4a8ba02f5c7cdd6",
-            "profiles": "ad9073ba76894d1e3e4567c2a160ac5134499d9da3bbb18b1e95a462cde8e4fe",
+            "chain_index_clock": "5bda9e25a649a0fd61c7ca57ce075eb34649c6f38ccc73759aed6d2cf7289acf",
+            "chain_index_dirty": "ec999cd61739b548fba63155ada3cd904a412c7a02aaadb64881887e680704e6",
+            "profiles": "10c07161ab43138d4aa5f892303dfac6f0752f041da509d49403b0f846c4a16c",
             "custody_components": "7d23eb11e84d36de08d18e16f925ad55ec36ed849e7f39e90d54434635d642bb",
             "custody_component_legs": "2c343689e001cbe135be07f0663d332b419ae7174f1e0c15572de76e666fd82b",
             "custody_component_allocations": "46b20268238f1f6ffcace408366200466490b1d2dee486413e14eac8b62ff6ba",
@@ -7376,9 +7404,9 @@
             "created_at": "2025-06-01T00:00:00Z"
           },
           "rows": {
-            "chain_index_clock": "5bda9e25a649a0fd61c7ca57ce075eb34649c6f38ccc73759aed6d2cf7289acf",
-            "chain_index_dirty": "ec999cd61739b548fba63155ada3cd904a412c7a02aaadb64881887e680704e6",
-            "profiles": "2989ee45bbb73728cf22e7038015fe6d625c8db82daa91a80897c9a537ff7dc8",
+            "chain_index_clock": "e066565737bb2c0ff689db42483d4ad7f8700b421423e2be3082b1f351b63503",
+            "chain_index_dirty": "e9aa78f40da9c2ef700f9b7a0151375434e92e1ff363704d3a7856a698676ca8",
+            "profiles": "22ee63b011934a6e49ee2e30a17c47f1c8b6dd63fcb31f74308196e10c3de31d",
             "custody_components": "9b2b3d6061e63f485480c00efe1d6480e7668cb4c159015d9110f0be1fc329af",
             "custody_component_legs": "2c343689e001cbe135be07f0663d332b419ae7174f1e0c15572de76e666fd82b",
             "custody_component_allocations": "46b20268238f1f6ffcace408366200466490b1d2dee486413e14eac8b62ff6ba",
@@ -7407,9 +7435,9 @@
             "details": null
           },
           "rows": {
-            "chain_index_clock": "5bda9e25a649a0fd61c7ca57ce075eb34649c6f38ccc73759aed6d2cf7289acf",
-            "chain_index_dirty": "ec999cd61739b548fba63155ada3cd904a412c7a02aaadb64881887e680704e6",
-            "profiles": "2989ee45bbb73728cf22e7038015fe6d625c8db82daa91a80897c9a537ff7dc8",
+            "chain_index_clock": "e066565737bb2c0ff689db42483d4ad7f8700b421423e2be3082b1f351b63503",
+            "chain_index_dirty": "e9aa78f40da9c2ef700f9b7a0151375434e92e1ff363704d3a7856a698676ca8",
+            "profiles": "22ee63b011934a6e49ee2e30a17c47f1c8b6dd63fcb31f74308196e10c3de31d",
             "custody_components": "9b2b3d6061e63f485480c00efe1d6480e7668cb4c159015d9110f0be1fc329af",
             "custody_component_legs": "2c343689e001cbe135be07f0663d332b419ae7174f1e0c15572de76e666fd82b",
             "custody_component_allocations": "46b20268238f1f6ffcace408366200466490b1d2dee486413e14eac8b62ff6ba",
@@ -7455,9 +7483,9 @@
             "created_at": "2025-06-01T03:00:00Z"
           },
           "rows": {
-            "chain_index_clock": "6960388ef193d5326eaea5d5f803aa7cdbe2fc142df3557b92989a286bcce392",
-            "chain_index_dirty": "84dbbcb8a53f30d7215151b3c580cfe62ea30f164b7ea1c7b90e16b70b964a74",
-            "profiles": "c019320e1be38b0c861c07e6b30c352a40a51ff58aa05b17d534198008bddd9d",
+            "chain_index_clock": "e60c010a68c1496d92d5cd71ded98a26b564263b774f57271e6c5ea0b37e69fe",
+            "chain_index_dirty": "bf7093a01ae8359723da7224c7f46bb0f9c2d861b113ceac4d4c992359af3487",
+            "profiles": "f8339214c6b176fd7042c5ee27254b425f9810a97e33601e23541fd388c96890",
             "custody_components": "50fda0ab7b761c7a63dbd68cf7280034954f187886bae1cd4312fbca4b54e6d5",
             "custody_component_legs": "4759c128fe0c31bf48c35fbe6e3d3bed50cfdb3c4bf503fe3a2ae18668a1fbe5",
             "custody_component_allocations": "db4b75fde15fbb1e20353d55d2908f66a916715fd6b863ccdca916d0f464e6f0",
@@ -7518,7 +7546,7 @@
           "rows": {
             "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
             "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
-            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
             "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -7549,7 +7577,7 @@
           "rows": {
             "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
             "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
-            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
             "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -7580,7 +7608,7 @@
           "rows": {
             "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
             "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
-            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
             "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -7610,7 +7638,7 @@
           "rows": {
             "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
             "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
-            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
             "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -7640,7 +7668,7 @@
           "rows": {
             "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
             "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
-            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
             "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -7670,7 +7698,7 @@
           "rows": {
             "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
             "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
-            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
             "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -7701,7 +7729,7 @@
           "rows": {
             "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
             "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
-            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
             "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -7732,7 +7760,7 @@
           "rows": {
             "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
             "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
-            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
             "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -7763,7 +7791,7 @@
           "rows": {
             "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
             "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
-            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
             "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -7796,7 +7824,7 @@
           "rows": {
             "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
             "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
-            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
             "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -7829,7 +7857,7 @@
           "rows": {
             "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
             "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
-            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
             "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -7862,7 +7890,7 @@
           "rows": {
             "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
             "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
-            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
             "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -8006,7 +8034,7 @@
           "rows": {
             "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
             "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
-            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
             "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -8052,9 +8080,9 @@
             "created_at": "2025-06-01T13:00:00Z"
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "d288f11f5591a8cde9103e19c06229c2ac3608481094364c5898441d7f19e114",
             "custody_component_legs": "c55e8d4167893312437df9ce928a830824ab45ba26145b57bf2d66d40511660b",
             "custody_component_allocations": "4a755dd66505131da5dfdaf5c33e77a6687409f85ba5028a1d50a66bfa921779",
@@ -8117,7 +8145,7 @@
           "rows": {
             "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
             "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
-            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
             "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -8178,7 +8206,7 @@
           "rows": {
             "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
             "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
-            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
             "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -8208,7 +8236,7 @@
           "rows": {
             "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
             "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
-            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
             "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -8238,7 +8266,7 @@
           "rows": {
             "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
             "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
-            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
             "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -8268,7 +8296,7 @@
           "rows": {
             "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
             "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
-            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
             "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -8298,7 +8326,7 @@
           "rows": {
             "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
             "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
-            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
             "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -8328,7 +8356,7 @@
           "rows": {
             "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
             "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
-            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
             "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -8358,7 +8386,7 @@
           "rows": {
             "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
             "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
-            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
             "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -8388,7 +8416,7 @@
           "rows": {
             "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
             "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
-            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
             "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -8434,9 +8462,9 @@
             "created_at": "2025-06-01T08:00:00Z"
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "94c1a8414fb13291a56134f16cfa363f64913a3a4719230525b0476cabc07840",
             "custody_component_legs": "3e584226e0a69c3bc5579be649b592f9d63fdc05c3768c54803eb340533a4d7c",
             "custody_component_allocations": "32a6ac867ee718d411666db09a2d22bf48deeea4195eb2092d5ef24c3a9bbf4f",
@@ -8464,9 +8492,9 @@
             "details": null
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "94c1a8414fb13291a56134f16cfa363f64913a3a4719230525b0476cabc07840",
             "custody_component_legs": "3e584226e0a69c3bc5579be649b592f9d63fdc05c3768c54803eb340533a4d7c",
             "custody_component_allocations": "32a6ac867ee718d411666db09a2d22bf48deeea4195eb2092d5ef24c3a9bbf4f",
@@ -8494,9 +8522,9 @@
             "details": null
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "94c1a8414fb13291a56134f16cfa363f64913a3a4719230525b0476cabc07840",
             "custody_component_legs": "3e584226e0a69c3bc5579be649b592f9d63fdc05c3768c54803eb340533a4d7c",
             "custody_component_allocations": "32a6ac867ee718d411666db09a2d22bf48deeea4195eb2092d5ef24c3a9bbf4f",
@@ -8524,9 +8552,9 @@
             "details": null
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "94c1a8414fb13291a56134f16cfa363f64913a3a4719230525b0476cabc07840",
             "custody_component_legs": "3e584226e0a69c3bc5579be649b592f9d63fdc05c3768c54803eb340533a4d7c",
             "custody_component_allocations": "32a6ac867ee718d411666db09a2d22bf48deeea4195eb2092d5ef24c3a9bbf4f",
@@ -8604,9 +8632,9 @@
             "created_at": "2025-06-01T00:00:00Z"
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "885db2c723ebd25195fd78780af2febee2cc5516a6b5491becf7b75806e6f29a",
             "custody_component_legs": "16f2975ca125be443ca5bb60b91cb9174818c4aabea1b89cd5f07d2e4568aeb3",
             "custody_component_allocations": "0416b58b72838e55e8bfa30d0b344a07ee18627e12961e9bb2a50ffb3af58b16",
@@ -8635,9 +8663,9 @@
             "details": null
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "885db2c723ebd25195fd78780af2febee2cc5516a6b5491becf7b75806e6f29a",
             "custody_component_legs": "16f2975ca125be443ca5bb60b91cb9174818c4aabea1b89cd5f07d2e4568aeb3",
             "custody_component_allocations": "0416b58b72838e55e8bfa30d0b344a07ee18627e12961e9bb2a50ffb3af58b16",
@@ -8666,9 +8694,9 @@
             "details": null
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "885db2c723ebd25195fd78780af2febee2cc5516a6b5491becf7b75806e6f29a",
             "custody_component_legs": "16f2975ca125be443ca5bb60b91cb9174818c4aabea1b89cd5f07d2e4568aeb3",
             "custody_component_allocations": "0416b58b72838e55e8bfa30d0b344a07ee18627e12961e9bb2a50ffb3af58b16",
@@ -8697,9 +8725,9 @@
             "details": null
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "885db2c723ebd25195fd78780af2febee2cc5516a6b5491becf7b75806e6f29a",
             "custody_component_legs": "16f2975ca125be443ca5bb60b91cb9174818c4aabea1b89cd5f07d2e4568aeb3",
             "custody_component_allocations": "0416b58b72838e55e8bfa30d0b344a07ee18627e12961e9bb2a50ffb3af58b16",
@@ -8728,9 +8756,9 @@
             "details": null
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "885db2c723ebd25195fd78780af2febee2cc5516a6b5491becf7b75806e6f29a",
             "custody_component_legs": "16f2975ca125be443ca5bb60b91cb9174818c4aabea1b89cd5f07d2e4568aeb3",
             "custody_component_allocations": "0416b58b72838e55e8bfa30d0b344a07ee18627e12961e9bb2a50ffb3af58b16",
@@ -8759,9 +8787,9 @@
             "details": null
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "885db2c723ebd25195fd78780af2febee2cc5516a6b5491becf7b75806e6f29a",
             "custody_component_legs": "16f2975ca125be443ca5bb60b91cb9174818c4aabea1b89cd5f07d2e4568aeb3",
             "custody_component_allocations": "0416b58b72838e55e8bfa30d0b344a07ee18627e12961e9bb2a50ffb3af58b16",
@@ -8790,9 +8818,9 @@
             "details": null
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "885db2c723ebd25195fd78780af2febee2cc5516a6b5491becf7b75806e6f29a",
             "custody_component_legs": "16f2975ca125be443ca5bb60b91cb9174818c4aabea1b89cd5f07d2e4568aeb3",
             "custody_component_allocations": "0416b58b72838e55e8bfa30d0b344a07ee18627e12961e9bb2a50ffb3af58b16",
@@ -8821,9 +8849,9 @@
             "details": null
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "885db2c723ebd25195fd78780af2febee2cc5516a6b5491becf7b75806e6f29a",
             "custody_component_legs": "16f2975ca125be443ca5bb60b91cb9174818c4aabea1b89cd5f07d2e4568aeb3",
             "custody_component_allocations": "0416b58b72838e55e8bfa30d0b344a07ee18627e12961e9bb2a50ffb3af58b16",
@@ -8852,9 +8880,9 @@
             "details": null
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "885db2c723ebd25195fd78780af2febee2cc5516a6b5491becf7b75806e6f29a",
             "custody_component_legs": "16f2975ca125be443ca5bb60b91cb9174818c4aabea1b89cd5f07d2e4568aeb3",
             "custody_component_allocations": "0416b58b72838e55e8bfa30d0b344a07ee18627e12961e9bb2a50ffb3af58b16",
@@ -8883,9 +8911,9 @@
             "details": null
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "885db2c723ebd25195fd78780af2febee2cc5516a6b5491becf7b75806e6f29a",
             "custody_component_legs": "16f2975ca125be443ca5bb60b91cb9174818c4aabea1b89cd5f07d2e4568aeb3",
             "custody_component_allocations": "0416b58b72838e55e8bfa30d0b344a07ee18627e12961e9bb2a50ffb3af58b16",
@@ -8914,9 +8942,9 @@
             "details": null
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "885db2c723ebd25195fd78780af2febee2cc5516a6b5491becf7b75806e6f29a",
             "custody_component_legs": "16f2975ca125be443ca5bb60b91cb9174818c4aabea1b89cd5f07d2e4568aeb3",
             "custody_component_allocations": "0416b58b72838e55e8bfa30d0b344a07ee18627e12961e9bb2a50ffb3af58b16",
@@ -8945,9 +8973,9 @@
             "details": null
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "885db2c723ebd25195fd78780af2febee2cc5516a6b5491becf7b75806e6f29a",
             "custody_component_legs": "16f2975ca125be443ca5bb60b91cb9174818c4aabea1b89cd5f07d2e4568aeb3",
             "custody_component_allocations": "0416b58b72838e55e8bfa30d0b344a07ee18627e12961e9bb2a50ffb3af58b16",
@@ -9025,9 +9053,9 @@
             "created_at": "2025-06-01T00:00:00Z"
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "5d74e6608a7df473d99e3185cc70c158a898faa7b2d0b84b378f8541391fd271",
             "custody_component_legs": "c9a205316e3269dfbdd7b6648deee834d04bcd0e2bc11fb9f9d5fc519197cedb",
             "custody_component_allocations": "ecd6c405b8e794305018ed463ecfe0954cd794ac153451c39be70f136fcf5a2a",
@@ -9056,9 +9084,9 @@
             "details": null
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "5d74e6608a7df473d99e3185cc70c158a898faa7b2d0b84b378f8541391fd271",
             "custody_component_legs": "c9a205316e3269dfbdd7b6648deee834d04bcd0e2bc11fb9f9d5fc519197cedb",
             "custody_component_allocations": "ecd6c405b8e794305018ed463ecfe0954cd794ac153451c39be70f136fcf5a2a",
@@ -9087,9 +9115,9 @@
             "details": null
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "5d74e6608a7df473d99e3185cc70c158a898faa7b2d0b84b378f8541391fd271",
             "custody_component_legs": "c9a205316e3269dfbdd7b6648deee834d04bcd0e2bc11fb9f9d5fc519197cedb",
             "custody_component_allocations": "ecd6c405b8e794305018ed463ecfe0954cd794ac153451c39be70f136fcf5a2a",
@@ -9118,9 +9146,9 @@
             "details": null
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "5d74e6608a7df473d99e3185cc70c158a898faa7b2d0b84b378f8541391fd271",
             "custody_component_legs": "c9a205316e3269dfbdd7b6648deee834d04bcd0e2bc11fb9f9d5fc519197cedb",
             "custody_component_allocations": "ecd6c405b8e794305018ed463ecfe0954cd794ac153451c39be70f136fcf5a2a",
@@ -9149,9 +9177,9 @@
             "details": null
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "5d74e6608a7df473d99e3185cc70c158a898faa7b2d0b84b378f8541391fd271",
             "custody_component_legs": "c9a205316e3269dfbdd7b6648deee834d04bcd0e2bc11fb9f9d5fc519197cedb",
             "custody_component_allocations": "ecd6c405b8e794305018ed463ecfe0954cd794ac153451c39be70f136fcf5a2a",
@@ -9180,9 +9208,9 @@
             "details": null
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "5d74e6608a7df473d99e3185cc70c158a898faa7b2d0b84b378f8541391fd271",
             "custody_component_legs": "c9a205316e3269dfbdd7b6648deee834d04bcd0e2bc11fb9f9d5fc519197cedb",
             "custody_component_allocations": "ecd6c405b8e794305018ed463ecfe0954cd794ac153451c39be70f136fcf5a2a",
@@ -9211,9 +9239,9 @@
             "details": null
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "5d74e6608a7df473d99e3185cc70c158a898faa7b2d0b84b378f8541391fd271",
             "custody_component_legs": "c9a205316e3269dfbdd7b6648deee834d04bcd0e2bc11fb9f9d5fc519197cedb",
             "custody_component_allocations": "ecd6c405b8e794305018ed463ecfe0954cd794ac153451c39be70f136fcf5a2a",
@@ -9242,9 +9270,9 @@
             "details": null
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "5d74e6608a7df473d99e3185cc70c158a898faa7b2d0b84b378f8541391fd271",
             "custody_component_legs": "c9a205316e3269dfbdd7b6648deee834d04bcd0e2bc11fb9f9d5fc519197cedb",
             "custody_component_allocations": "ecd6c405b8e794305018ed463ecfe0954cd794ac153451c39be70f136fcf5a2a",
@@ -9273,9 +9301,9 @@
             "details": null
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "5d74e6608a7df473d99e3185cc70c158a898faa7b2d0b84b378f8541391fd271",
             "custody_component_legs": "c9a205316e3269dfbdd7b6648deee834d04bcd0e2bc11fb9f9d5fc519197cedb",
             "custody_component_allocations": "ecd6c405b8e794305018ed463ecfe0954cd794ac153451c39be70f136fcf5a2a",
@@ -9304,9 +9332,9 @@
             "details": null
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "5d74e6608a7df473d99e3185cc70c158a898faa7b2d0b84b378f8541391fd271",
             "custody_component_legs": "c9a205316e3269dfbdd7b6648deee834d04bcd0e2bc11fb9f9d5fc519197cedb",
             "custody_component_allocations": "ecd6c405b8e794305018ed463ecfe0954cd794ac153451c39be70f136fcf5a2a",
@@ -9335,9 +9363,9 @@
             "details": null
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "5d74e6608a7df473d99e3185cc70c158a898faa7b2d0b84b378f8541391fd271",
             "custody_component_legs": "c9a205316e3269dfbdd7b6648deee834d04bcd0e2bc11fb9f9d5fc519197cedb",
             "custody_component_allocations": "ecd6c405b8e794305018ed463ecfe0954cd794ac153451c39be70f136fcf5a2a",
@@ -9366,9 +9394,9 @@
             "details": null
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "5d74e6608a7df473d99e3185cc70c158a898faa7b2d0b84b378f8541391fd271",
             "custody_component_legs": "c9a205316e3269dfbdd7b6648deee834d04bcd0e2bc11fb9f9d5fc519197cedb",
             "custody_component_allocations": "ecd6c405b8e794305018ed463ecfe0954cd794ac153451c39be70f136fcf5a2a",
@@ -9429,7 +9457,7 @@
           "rows": {
             "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
             "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
-            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
             "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -9490,7 +9518,7 @@
           "rows": {
             "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
             "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
-            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
             "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -9551,7 +9579,7 @@
           "rows": {
             "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
             "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
-            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
             "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -9615,7 +9643,7 @@
           "rows": {
             "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
             "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
-            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
             "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -9692,9 +9720,9 @@
             "created_at": "2025-06-01T00:00:00Z"
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "8f2c967ea6bfaa9f6648461f9fc279c2fc82d3a313a4a1889b11da71dfc8f5ed",
             "custody_component_legs": "e7b27221a3a82e8726cd1709da19cf741f2577415b61f680ae1bcee894f057c1",
             "custody_component_allocations": "26bf7e857b234079a1e9196767fafa4143caa02958f9770dd3b7ef6fca8edbe7",
@@ -9771,9 +9799,9 @@
             "created_at": "2025-06-01T00:00:00Z"
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "b106cdaf53f33e0ff274146ba2f6781dc472b700a089f28c902ca10c482d30d1",
             "custody_component_legs": "fc8761f667bb6bf66acb7b514edc4bf5262efd76714e654e9354b1d136d185d1",
             "custody_component_allocations": "12e3bf470bb0302ab064670e8c44d0da02d588cf443c131b8e65266b5b0b62c1",
@@ -9834,7 +9862,7 @@
           "rows": {
             "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
             "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
-            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
             "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -9895,7 +9923,7 @@
           "rows": {
             "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
             "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
-            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
             "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -9957,7 +9985,7 @@
           "rows": {
             "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
             "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
-            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
             "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -10019,7 +10047,7 @@
           "rows": {
             "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
             "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
-            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
             "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -10081,7 +10109,7 @@
           "rows": {
             "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
             "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
-            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
             "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -10159,9 +10187,9 @@
             "created_at": "2025-06-01T00:00:00Z"
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "627400a7f12273fd4b73b72bfc296cf7bcfef0fe63b3caa9e76215ec578701c7",
             "custody_component_legs": "11ba295e241ec96d905cd95f52f2ddacd3e38f2a78a28f23da8a355ba983c14e",
             "custody_component_allocations": "cc1f3cb7d006c7d8904567fb22a699af167fda7aa39c37a9219c82c005c5bfcc",
@@ -10239,9 +10267,9 @@
             "created_at": "2025-06-01T00:00:00Z"
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "a9f40d5d22b7b45d797de83084de5e8410e1f3f8011a5953e8d3ddf4a11ba744",
             "custody_component_legs": "3e84e8f7eed99702e4ca2dadbef7633247ae2bb951b09c08f275b7a80fb73bc7",
             "custody_component_allocations": "599799f00e8bfd95fbbb7ac56325b0f2db1807a1a6f1f8d12c63ce027ef2f409",
@@ -10319,9 +10347,9 @@
             "created_at": "2025-06-01T00:00:00Z"
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "8c7cfce1cea02a02bdcd5b46f48b12179869a49b57e8d96d18e4429aa55706c0",
             "custody_component_legs": "00474309a7b94802b9fd28974301ef42ad155dc647fe4b2f48228030b3c5691a",
             "custody_component_allocations": "6f6ec74852063142dbbd9d2d82685f231cdad3cf483d6f55ac19d7f7dba50e49",
@@ -10399,9 +10427,9 @@
             "created_at": "2025-06-01T00:00:00Z"
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "e63120c573971ef0276e57b92e552e49c9200aa8c2e36c2718d0019c2fececd2",
             "custody_component_legs": "77586df1426f7601b0f288bc9c563ff1fe88d48b72fb126b7465becd4296f97d",
             "custody_component_allocations": "1fc25d0ba8be7f983567dfdc8ab4bf1c53aae2e51af260055377a2fe8705a194",
@@ -10463,7 +10491,7 @@
           "rows": {
             "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
             "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
-            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
             "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -10655,7 +10683,7 @@
           "rows": {
             "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
             "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
-            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
             "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -10847,7 +10875,7 @@
           "rows": {
             "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
             "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
-            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
             "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -10909,7 +10937,7 @@
           "rows": {
             "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
             "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
-            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
             "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -10971,7 +10999,7 @@
           "rows": {
             "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
             "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
-            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
             "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -11033,7 +11061,7 @@
           "rows": {
             "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
             "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
-            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
             "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -11095,7 +11123,7 @@
           "rows": {
             "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
             "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
-            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
             "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -11173,9 +11201,9 @@
             "created_at": "2025-06-01T00:00:00Z"
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "651d958569c0fc6795634120163ae580474af25d0946e1780d557cd96b8e8fcc",
             "custody_component_legs": "4034c45f5a51dee1146ca4f5f03b604c43625b2110d6dd3b0d18326e86084c1c",
             "custody_component_allocations": "8ace932a2c92674a7c67f03be5a4cdf0e950ad0904ab06a7ef24763ad44e56e1",
@@ -11253,9 +11281,9 @@
             "created_at": "2025-06-01T00:00:00Z"
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "28a2f4754b022fe9ca6985bca3da049b5c509c017e789f98dbd45789a04f1a81",
             "custody_component_legs": "32d042602e0305569b2cc88cb4b2fe161d7085d9d97fb33d349a3797b19a2047",
             "custody_component_allocations": "ae6b44eeeb169dd7f945058072e51c47f630f686d84b4943482b7cf1165dd541",
@@ -11333,9 +11361,9 @@
             "created_at": "2025-06-01T00:00:00Z"
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "16386ca096f1e311ef02c4b07d7b1dd9cb348b8fd245cc263fcf3521ce04dad3",
             "custody_component_legs": "8fdbbff4a012a3f368f012c92e682576de102980d6b5fff07ce275745d9effff",
             "custody_component_allocations": "0a0e62c9a553bd65d44502f6493e6584becc25768ef934179835c451aa3755f1",
@@ -11413,9 +11441,9 @@
             "created_at": "2025-06-01T00:00:00Z"
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "ceb0507a67cd4185bce108c97542aed07d000d2b7be4862a2dd6134343784db1",
             "custody_component_legs": "c912736f6b1ba8862832b63e3a824a17aee7cd1d654e6e76889a6ddc65406845",
             "custody_component_allocations": "6c41c37374b25614f9f613793187de031f29cc97442ef3dc870339fc13ea4b9c",

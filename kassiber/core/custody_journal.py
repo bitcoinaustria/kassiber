@@ -53,12 +53,13 @@ def evaluate_projection_freshness(
     processed_count = int(profile["last_processed_tx_count"] or 0)
     input_version = int(profile["journal_input_version"] or 0)
     processed_version = int(profile["last_processed_input_version"] or 0)
-    required_semantics = int(profile["required_journal_semantics_version"] or 0) if "required_journal_semantics_version" in profile.keys() else 0
-    built_semantics = int(profile["journal_semantics_version"] or 0) if "journal_semantics_version" in profile.keys() else 0
-    semantics_current = not required_semantics or (
+    has_semantics = {"required_journal_semantics_version", "journal_semantics_version"} <= set(profile.keys())
+    required_semantics = int(profile["required_journal_semantics_version"] or 0) if has_semantics else 0
+    built_semantics = int(profile["journal_semantics_version"] or 0) if has_semantics else 0
+    semantics_current = has_semantics and (not required_semantics or (
         built_semantics == JOURNAL_CALCULATION_SEMANTICS_VERSION
         and built_semantics >= required_semantics
-    )
+    ))
     is_current = bool(
         processed_at
         and processed_count == active_count
@@ -82,7 +83,7 @@ def evaluate_projection_freshness(
         reason = "journal calculation semantics changed; rebuild with current Kassiber"
     else:
         status = "current"
-        reason = "journals match the active transaction count and input version"
+        reason = "journals match the active transaction count, input version and calculation semantics"
     return {
         "status": status,
         "is_current": is_current,
@@ -96,6 +97,27 @@ def evaluate_projection_freshness(
     }
 
 
+def projection_freshness_sql(profile_alias: str) -> str:
+    """SQL form of canonical freshness for transaction-list predicates.
+
+    Keep SQL consumers here rather than maintaining private, partial checks.
+    ``profile_alias`` is an internal SQL identifier, never user input.
+    """
+    p = profile_alias
+    return f"""(
+        {p}.last_processed_at IS NOT NULL
+        AND {p}.last_processed_tx_count = (
+            SELECT COUNT(*) FROM transactions freshness_tx
+            WHERE freshness_tx.profile_id = {p}.id AND freshness_tx.excluded = 0
+        )
+        AND {p}.journal_input_version = {p}.last_processed_input_version
+        AND ({p}.required_journal_semantics_version = 0 OR (
+            {p}.journal_semantics_version = {JOURNAL_CALCULATION_SEMANTICS_VERSION}
+            AND {p}.journal_semantics_version >= {p}.required_journal_semantics_version
+        ))
+    )"""
+
+
 def projection_freshness(
     conn: sqlite3.Connection,
     profile: str | Mapping[str, Any],
@@ -105,9 +127,7 @@ def projection_freshness(
     if isinstance(profile, str):
         row = conn.execute(
             """
-            SELECT p.last_processed_at, p.last_processed_tx_count,
-                   p.journal_input_version, p.last_processed_input_version,
-                   p.required_journal_semantics_version, p.journal_semantics_version,
+            SELECT p.*,
                    (SELECT COUNT(*) FROM transactions t
                     WHERE t.profile_id = p.id AND t.excluded = 0)
                        AS active_transaction_count

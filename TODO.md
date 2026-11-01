@@ -424,8 +424,8 @@ registers them; exit-tax preserves its reference no-registration boundary.
 - [x] Port exit-tax reads and XLSX through native CLI/desktop services, preserving
   estimate disclosures, exact workbook content and all database tables. The
   [exit-tax checkpoint](docs/reference/rust-shell.md#exit-tax-service-checkpoint-r5-fourteenth-reports-continuation-partial)
-  records Python's absent snapshot registration and amendment disclosure with
-  a repro.
+  records the corrected round-6/6b/6c/6d mirror, native reviewer matrix and
+  version-2 journal migration; valuation snapshot registration remains separate.
 - [x] Port historical balance/holdings reads and the desktop balance-history
   kind with native parity and killed mutations.
 - [x] Reduce Rust read startup and report scaling costs without changing schema,

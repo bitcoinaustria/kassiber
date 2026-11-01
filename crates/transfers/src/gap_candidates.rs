@@ -101,7 +101,12 @@ pub(super) fn load(c: &Connection, scope: &Scope<'_>) -> Result<Loaded> {
                 .unwrap_or(&Value::Int(0.into())),
         )
     };
-    let current = count > 0
+    let current = kassiber_store::semantics::compatible(
+        i64::try_from(version("required_journal_semantics_version")?)
+            .map_err(|_| internal("semantics overflow"))?,
+        i64::try_from(version("journal_semantics_version")?)
+            .map_err(|_| internal("semantics overflow"))?,
+    ) && count > 0
         && truthy(&value(&profile, "last_processed_at"))
         && version("last_processed_tx_count")? == count.into()
         && version("journal_input_version")? == version("last_processed_input_version")?;

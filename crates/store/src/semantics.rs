@@ -8,6 +8,35 @@ use std::collections::{BTreeMap, BTreeSet};
 
 const WAGES: &str = "lower(trim(coalesce(kind, ''))) = 'wages'";
 const PARTIAL_PAYOUT: &str = "custody-partial-payout-pricing-v1";
+const ADOPTION: &str = "journal-calculation-semantics-adoption-v1";
+const OUTFLOW: &str = "at-outflow-consumed-regime-v2";
+pub const JOURNAL_CALCULATION_SEMANTICS_VERSION: i64 = 2;
+
+/// Compatibility shared by all retained-journal readers.
+pub fn compatible(required: i64, built: i64) -> bool {
+    required == 0 || (built == JOURNAL_CALCULATION_SEMANTICS_VERSION && built >= required)
+}
+
+/// SQL equivalent for internal profile aliases, never user-supplied SQL.
+pub fn current_sql(profile: &str) -> String {
+    format!("({profile}.required_journal_semantics_version=0 OR ({profile}.journal_semantics_version={JOURNAL_CALCULATION_SEMANTICS_VERSION} AND {profile}.journal_semantics_version>={profile}.required_journal_semantics_version))")
+}
+
+pub fn journal_current(conn: &Connection, profile: &str) -> Result<bool> {
+    conn.query_row(
+        &format!("SELECT {} FROM profiles p WHERE id=?", current_sql("p")),
+        [profile],
+        |r| r.get(0),
+    )
+    .map_err(map_sqlite_error)
+}
+
+pub(crate) fn adopt(
+    conn: &mut Connection,
+    observer: &mut impl FnMut(&str) -> Result<()>,
+) -> Result<()> {
+    migrate_selected(conn, "adoption", observer)
+}
 
 /// Run only after the compatibility pass has established the referenced
 /// columns. The order is the order in Python ensure_schema_compat, with the
@@ -20,6 +49,7 @@ pub(crate) fn migrate_with_observer(
     conn: &mut Connection,
     observer: &mut impl FnMut(&str) -> Result<()>,
 ) -> Result<()> {
+    adopt(conn, observer)?;
     migrate_stage(conn, false, observer)?;
     migrate_stage(conn, true, observer)?;
     partial_payout(conn, observer)
@@ -32,6 +62,22 @@ pub(crate) fn migrate_stage(
     valuation_stage: bool,
     observer: &mut impl FnMut(&str) -> Result<()>,
 ) -> Result<()> {
+    migrate_selected(
+        conn,
+        if valuation_stage {
+            "valuation"
+        } else {
+            "ordinary"
+        },
+        observer,
+    )
+}
+
+fn migrate_selected(
+    conn: &mut Connection,
+    stage: &str,
+    observer: &mut impl FnMut(&str) -> Result<()>,
+) -> Result<()> {
     let migrations: Vec<Value> = serde_json::from_str(include_str!("../fixtures/semantics.json"))
         .expect("semantic manifest");
     for migration in migrations {
@@ -39,7 +85,14 @@ pub(crate) fn migrate_stage(
         if name == PARTIAL_PAYOUT {
             continue;
         }
-        if (name == "at-acquisition-valuation-support-v1") != valuation_stage {
+        let selected_stage = if name == ADOPTION {
+            "adoption"
+        } else if name == "at-acquisition-valuation-support-v1" {
+            "valuation"
+        } else {
+            "ordinary"
+        };
+        if stage != selected_stage {
             continue;
         }
         let tx = conn
@@ -79,6 +132,16 @@ pub(crate) fn migrate_stage(
                 ),
             ];
             dumps(&PyValue::Dict(fields), &Options::default())
+        } else if name == ADOPTION || name == OUTFLOW {
+            impact["affected_profile_count"] = count.into();
+            dumps(
+                &python_value(&impact),
+                &if name == OUTFLOW {
+                    Options::default().sort_keys(true)
+                } else {
+                    Options::default().sort_keys(true).compact()
+                },
+            )
         } else {
             impact["changes"][0]["affected_profile_count"] = count.into();
             if name == "wages-acquisition-semantics-v1" {
@@ -101,7 +164,13 @@ pub(crate) fn migrate_stage(
         let inserted = tx.execute("INSERT OR IGNORE INTO schema_migration_audits(id,migration_name,schema_version,impact_json,created_at) VALUES(?1,?1,1,?2,strftime('%Y-%m-%dT%H:%M:%fZ','now'))", [name, &impact_json]).map_err(map_sqlite_error)?;
         observer(&format!("{name}.after_audit"))?;
         if inserted != 0 {
-            tx.execute(&format!("UPDATE profiles SET last_processed_at=NULL,last_processed_tx_count=0,journal_input_version=journal_input_version+1,ownership_review_counts_json=NULL WHERE {affected}"), []).map_err(map_sqlite_error)?;
+            let required = if name == OUTFLOW { 2 } else { 1 };
+            let invalidate = if name == ADOPTION {
+                ""
+            } else {
+                "last_processed_at=NULL,last_processed_tx_count=0,journal_input_version=journal_input_version+1,ownership_review_counts_json=NULL,"
+            };
+            tx.execute(&format!("UPDATE profiles SET {invalidate}required_journal_semantics_version=MAX(required_journal_semantics_version,{required}) WHERE {affected}"), []).map_err(map_sqlite_error)?;
         }
         observer(&format!("{name}.before_commit"))?;
         tx.commit().map_err(map_sqlite_error)?;
@@ -182,7 +251,7 @@ pub(crate) fn partial_payout(
     tx.execute("INSERT INTO schema_migration_audits(id,migration_name,schema_version,impact_json,created_at) VALUES(?1,?1,1,?2,strftime('%Y-%m-%dT%H:%M:%fZ','now'))", [PARTIAL_PAYOUT, &impact]).map_err(map_sqlite_error)?;
     observer(&format!("{PARTIAL_PAYOUT}.after_audit"))?;
     for profile in affected {
-        tx.execute("UPDATE profiles SET last_processed_at=NULL,last_processed_tx_count=0,journal_input_version=journal_input_version+1,ownership_review_counts_json=NULL WHERE id=?", [profile]).map_err(map_sqlite_error)?;
+        tx.execute("UPDATE profiles SET last_processed_at=NULL,last_processed_tx_count=0,journal_input_version=journal_input_version+1,ownership_review_counts_json=NULL,required_journal_semantics_version=MAX(required_journal_semantics_version,1) WHERE id=?", [profile]).map_err(map_sqlite_error)?;
     }
     observer(&format!("{PARTIAL_PAYOUT}.before_commit"))?;
     tx.commit().map_err(map_sqlite_error)?;
@@ -192,6 +261,32 @@ pub(crate) fn partial_payout(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn global_version_refuses_older_stamps_even_with_a_lower_requirement() {
+        let conn = Connection::open_in_memory().unwrap();
+        for required in [1, 2] {
+            assert!(!compatible(required, 0));
+            assert!(!compatible(required, 1));
+            assert!(compatible(required, 2));
+            assert!(!compatible(required, 3));
+        }
+        assert!(compatible(0, 0));
+        assert!(!compatible(3, 2));
+        for required in 0..=3 {
+            for built in 0..=3 {
+                let sql = format!("SELECT {} FROM (SELECT ?1 AS required_journal_semantics_version, ?2 AS journal_semantics_version) p", current_sql("p"));
+                let actual: bool = conn
+                    .query_row(&sql, [required, built], |r| r.get(0))
+                    .unwrap();
+                assert_eq!(
+                    actual,
+                    compatible(required, built),
+                    "required={required} built={built}"
+                );
+            }
+        }
+    }
     fn book() -> (tempfile::TempDir, crate::Book) {
         let root = tempfile::tempdir().unwrap();
         let book = crate::Book::create(root.path(), None).unwrap();
@@ -203,6 +298,47 @@ mod tests {
             INSERT INTO wallets(id,workspace_id,profile_id,label,kind,created_at) VALUES('wal','ws','at','Wallet','custom','fixed');
             INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,occurred_at,direction,asset,amount,kind,created_at) VALUES('wage','ws','at','wal','wage','fixed','inbound','BTC',1,' WAGES ','fixed'),('airdrop','ws','at','wal','airdrop','fixed','inbound','BTC',1,'airdrop','fixed');").unwrap();
     }
+    #[test]
+    fn outflow_v2_preserves_evidence_and_rejects_old_writer_publication() {
+        for kind in ["disposal", "fee", "transfer_fee"] {
+            let (_root, mut book) = book();
+            seed(&book.connection);
+            book.connection.execute("INSERT INTO journal_entries(id,workspace_id,profile_id,wallet_id,transaction_id,entry_type,occurred_at,asset,quantity,created_at) VALUES('out','ws','at','wal','wage',?,'2024-01-01','BTC',-1,'fixed')",[kind]).unwrap();
+            book.connection.execute_batch("INSERT INTO schema_migration_audits VALUES('at-fee-consumed-regime-v1','at-fee-consumed-regime-v1',1,'{}','fixed'); DELETE FROM schema_migration_audits WHERE migration_name='at-outflow-consumed-regime-v2'; UPDATE profiles SET journal_semantics_version=1,required_journal_semantics_version=1;").unwrap();
+            migrate(&mut book.connection).unwrap();
+            let conn = &book.connection;
+            assert_eq!(conn.query_row("SELECT required_journal_semantics_version,journal_input_version FROM profiles WHERE id='at'",[],|r|Ok((r.get::<_,i64>(0)?,r.get::<_,i64>(1)?))).unwrap(),(2,1));
+            assert_eq!(
+                conn.query_row(
+                    "SELECT COUNT(*) FROM journal_entries WHERE id='out' AND quantity=-1",
+                    [],
+                    |r| r.get::<_, i64>(0)
+                )
+                .unwrap(),
+                1
+            );
+            assert_eq!(
+                conn.query_row("SELECT COUNT(*) FROM transactions", [], |r| r
+                    .get::<_, i64>(0))
+                    .unwrap(),
+                2
+            );
+            for writer in [0, 1, 2, 1, 2] {
+                conn.execute_batch("UPDATE profiles SET last_processed_at='same',last_processed_input_version=journal_input_version WHERE id='at'").unwrap();
+                assert!(!journal_current(conn, "at").unwrap());
+                conn.execute(
+                    "UPDATE profiles SET journal_semantics_version=? WHERE id='at'",
+                    [writer],
+                )
+                .unwrap();
+                assert_eq!(journal_current(conn, "at").unwrap(), writer == 2);
+            }
+            let changes = conn.total_changes();
+            migrate(&mut book.connection).unwrap();
+            assert_eq!(book.connection.total_changes(), changes);
+        }
+    }
+
     #[test]
     fn every_semantic_step_is_one_shot_and_preserves_retained_rows() {
         let (_root, mut book) = book();

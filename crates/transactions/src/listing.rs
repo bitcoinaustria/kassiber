@@ -59,7 +59,7 @@ fn projection(relation: Option<&str>) -> String {
         Some("swap") => swaps.into(),
         _ => format!("({moves} OR {swaps})"),
     };
-    format!("(EXISTS(SELECT 1 FROM profiles custody_profile WHERE custody_profile.id=t.profile_id AND custody_profile.last_processed_at IS NOT NULL AND custody_profile.journal_input_version=custody_profile.last_processed_input_version) AND {relation})")
+    format!("(EXISTS(SELECT 1 FROM profiles custody_profile WHERE custody_profile.id=t.profile_id AND custody_profile.last_processed_at IS NOT NULL AND custody_profile.journal_input_version=custody_profile.last_processed_input_version AND custody_profile.last_processed_tx_count=(SELECT COUNT(*) FROM transactions freshness_tx WHERE freshness_tx.profile_id=custody_profile.id AND freshness_tx.excluded=0) AND {}) AND {relation})", kassiber_store::semantics::current_sql("custody_profile"))
 }
 
 fn payment(value: &str) -> Option<&'static str> {

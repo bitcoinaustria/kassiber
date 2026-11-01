@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reproduce Python's omitted single-column report title on disposable data."""
+"""Verify Python's corrected single-column report title on disposable data."""
 from pathlib import Path
 import tempfile
 import warnings
@@ -16,11 +16,11 @@ with tempfile.TemporaryDirectory(dir=ROOT / "target", prefix="xlsx-title-repro-"
     workbook = xlsxwriter.Workbook(path)
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        _generic_report_xlsx_write_sheet(workbook, dict(sheet_name="Assumptions", title="Missing title",
+        _generic_report_xlsx_write_sheet(workbook, dict(sheet_name="Assumptions", title="Assumptions",
             headers=["note"], rows=[dict(note="Review")]), _generic_report_xlsx_formats(workbook))
     workbook.close()
     book = openpyxl.load_workbook(path)
-    assert book.active["A1"].value is None
-    assert any("single cell" in str(w.message) for w in caught)
+    assert book.active["A1"].value == "Assumptions"
+    assert not caught
     book.close()
-    print("Reproduced: Python warns about a one-cell merge and omits the sheet title.")
+    print("Verified: the single-column sheet has a title without merge warnings.")

@@ -6,8 +6,8 @@
   "_ASSUMPTION_UNTAGGED_DISPOSAL": "EXIT-010: A disposal marked non-reportable carries no Alt/Neu tag; its regime was inferred from the disposal date and may misattribute Altbestand sold after 2021-03-01. Review those rows.",
   "_ASSUMPTION_DEFERRAL_EU": "EXIT-002: EU/EEA destination \u2014 tax is assessed but, on application, not collected until you actually sell (Nichtfestsetzung, \u00a7 27 Abs 6 Z 1 lit a). Not the 7-year business-asset Ratenzahlung.",
   "_ASSUMPTION_DEFERRAL_THIRD": "EXIT-002: Third-country (non-EU/EEA) destination \u2014 tax is due immediately on departure.",
-  "_ASSUMPTION_FMV": "EXIT-005: Fair market value uses the best available cached rate at or before the departure date; it does not imply intraday coverage.",
+  "_ASSUMPTION_FMV": "EXIT-005: Fair market value uses the closest cached or transaction quote strictly before the exclusive departure cutoff, at most 24 hours old. Older, future or undated quotes leave the asset unpriced. It does not imply intraday coverage.",
   "_ASSUMPTION_FUTURE_TIGHTENING": "EXIT-003: A planned 1 July 2026 tightening (annual proof when deferred gains exceed EUR 100,000) is not modelled \u2014 verify against enacted law.",
   "_ASSUMPTION_GENERIC": "EXIT: Non-Austrian profile \u2014 no Altbestand grandfathering or special rate is applied; this shows the total unrealized gain only. Have a local adviser set the applicable exit-tax treatment.",
-  "missing": "EXIT-005: No cached rate found for one or more assets \u2014 run `kassiber rates sync`; market value, gain, and estimated tax stay incomplete (null) until those holdings are priced."
+  "missing": "EXIT-005: No usable cached or transaction quote found for one or more assets \u2014 run `kassiber rates sync`; market value, gain, and estimated tax stay incomplete (null) until those holdings are priced."
 }

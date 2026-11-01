@@ -5281,9 +5281,9 @@ and removes those unsolicited print hints. Bold, widths, formulas, caches,
 merges, panes, names and timestamps compare without remaining differences in
 this corpus. Container bytes intentionally differ from Python.
 
-`crates/xlsx/scripts/repro_python_single_column_title.py` reproduces the Python
-reference bug where merging a one-cell title warns and silently omits it.
-Rust preserves that omission for parity; Python product code is unchanged.
+The low-level renderer follows each requested merge operation. Report writers
+now write a one-column title as a real cell, matching the corrected Python
+reference; see the exit-tax checkpoint below.
 
 All six renderer mutations are killed by the named tests in
 `crates/xlsx/tests/content.rs`; their catalog and offline scratch-tree runner
@@ -5579,143 +5579,77 @@ Python. No dependency, lockfile, schema or Python product code changes here.
 
 ## Exit-tax service checkpoint (R5 fourteenth reports continuation, partial)
 
-`t3code/r5-reports-14` starts at `bcde492ff`. The native report service now
-registers `reports exit-tax`, `reports export-exit-tax-xlsx`,
-`ui.reports.exit_tax_preview` and `ui.reports.export_exit_tax_xlsx`.
-The inventory walk consumes stored signed integer-msat journal quantities and
-exact engine basis, preserving marker/category/date regime precedence, the
-Vienna grandfathering cutoff, skipped income/owned transfers, independent
-quantity/basis clamping, loss flooring and the reference presentation estimate.
-It does not run the tax engine, reinterpret custody or acquire prices.
+The native CLI and daemon exit-tax read/XLSX family follows Python reference
+rounds 6, 6b, 6c and 6d (`826f01d4f` through `9a3fe17e6`), on top of the
+`t3code/r5-reports-16` port. It reports the configured normalized method and
+reconstructs historical global inventory and wallet quantities from stored
+journal entries. Income is counted once; transfers move wallet context, and
+transfer fees are not deducted from that context twice. Consumed-lot markers
+precede overrideable disposal categories. Acquisitions use their own regime
+marker or date; a disposal category never reclassifies an acquisition.
 
-Cache candidates use parsed instant bounds, then Python's stored timestamp,
-manual-source and fetched-time ordering. Malformed persisted dates are excluded.
-Transaction-derived fallback retains exact-field presence, including empty
-exact values becoming zero instead of selecting a legacy price. Generic policy
-integer conversion and holding-period refusals, departure-date parsing,
-destination aliases, unpriced/null values, quarantine status and all estimate
-assumptions retain the reference behavior. Readiness gates run before report
-construction. Desktop export additionally retains its source-freshness barrier;
-export admission spans native publication. Existing saved/filed/amendment history
-is unchanged by either runtime.
+Austrian departure dates use the Europe/Vienna civil day, including winter,
+summer, 23-hour spring and 25-hour autumn days; generic dates use UTC. Timed
+inputs require an explicit offset and select the jurisdiction's civil day;
+naive times return the same typed validation error and hint. One exclusive
+next-midnight instant bounds inventory and both local quote sources. The closest usable cache or
+transaction quote strictly before that instant wins, at most 24 elapsed hours
+old inclusive. Cache wins equal instants with manual-provider priority. Quote
+`asOf` is the source time in UTC Z, retaining microseconds. No rate is acquired
+by these reads. Held wallet-only assets are priced too; any missing FMV leaves
+aggregate market/gain/tax totals null with explicit incomplete readiness.
 
-The approved `rust_xlsxwriter` renderer emits Overview, Deemed disposal, Wallet
-holdings and Assumptions with matching typed values, meaningful styles,
-dimensions, row heights, panes, filters, properties and literal text. The oracle
-loads formulas and cached values through openpyxl and validates ZIP/XML. Each
-runtime's reported byte count is independently checked against its own file;
-only that ZIP-container size is normalized. Reports and other response bytes,
-including errors, compare without masking. No saved digest or generated identity
-normalization is needed for exit-tax.
+The text/PDF projection and XLSX disclose departure timezone, journal input
+version and FMV source/time. XLSX adds an FMV quotes worksheet, quarantine and
+missing-price warnings, and a real cell title on the one-column Assumptions
+sheet. Missing-FMV workbooks remain available as incomplete drafts. Native
+PDF publication and AI projections remain on Python. The overview dashboard
+Alt flags are not ported natively; Python retains round 6d's per-asset, consumed-lot
+wallet flags and Vienna default date. The native wallet-list snapshot exposes
+no Alt flag.
 
-Reference bugs/omissions are preserved, not repaired in Python or Rust:
+Journal builds stamp calculation semantics version 2. The audited
+`at-outflow-consumed-regime-v2` migration covers retained Austrian disposals,
+fees and transfer fees independently of the older fee-v1 audit. It preserves
+observations, authored evidence, journals and saved/filed artifacts while
+requiring a rebuild. The adoption audit and processing-marker trigger protect
+freshness after an older writer rebuilds, including repeated timestamps.
+Native storage and retained-journal readers share this stamp requirement.
+The native tax engine splits consumed Alt/Neu fragments before taxability or
+category overrides, preserving fee zero-gain behavior and realized overrides.
 
-- The reported method is the jurisdiction's policy default even when HIFO is
-  selected on the book.
-- Journal cutoff selection compares stored timestamp text, so a legacy offset
-  can exclude a row whose UTC instant is within the departure day.
-- Transaction-rate fallback is not bounded by departure, and its `asOf` still
-  reports the departure cutoff. Wallet holdings are the current stored context,
-  independent of the historical inventory cutoff; wallet-only assets can remain
-  unpriced despite an available cache quote.
-- The XLSX omits the report's quarantine warning. Its one-column Assumptions
-  title is absent because Python attempts a single-cell merge. The existing
-  recorder suppresses that library's `Can't merge single cell` warning; process
-  tests apply the same narrowly scoped warning filter. Openpyxl load warnings
-  remain unsuppressed.
-- Exit-tax XLSX creates no saved snapshot or dependency capture. The report and
-  workbook disclose no existing pending filed-report amendment impact. A frozen
-  history fixture retains the original saved commitment and pending impact in
-  every compared database table.
+Exit-tax drafts retain their deliberate exclusion from ordinary realized-report
+snapshot/capture registration. Existing saved commitments and pending amendment
+history remain unchanged. A replayable valuation snapshot design remains
+separate work; a historical bug is no longer a parity target.
 
-Reproduce all of these on synthetic data under `target/`, preserving account
-`HOME`:
+Verification commands and local logs are recorded under `target/r5-exit-tax/`.
+The regenerated corpus pins every method/jurisdiction, civil-day/DST and quote
+boundary, exact values, historical context, null totals, disclosures, stamps,
+readiness and refusals. Real service comparisons cover normalized response
+bytes, openpyxl workbook content and canonical bytes of all 112 SQLite tables.
+Only each independently checked XLSX container byte count is normalized.
+Native CLI/daemon scenarios assert zero in-scope Python fallbacks. The native
+reviewer matrix pins the independent EUR 65,000 figures with every disposal
+override and also retains the original timestamps that put two receipts on
+April 1 in Vienna. Mutation catalogs name the native test for each new rule.
+
+The corrected corpus contains 182 cases. Native reviewer comparisons add 132
+method/override/timestamp scenarios, 66 large-disposal scenarios, all 30 quote
+boundary scenarios and nine Vienna/DST valuation scenarios. The six Austrian
+`moving_average_at` large-disposal calculation refusals are unchanged from the
+reviewer's baseline and are explicitly asserted. The native mutation checks
+kill 76 distinct report/store/composition mutations, including offset rejection,
+the Vienna default day and the global version check in direct and SQL readers.
+
+To regenerate the reference vectors locally, preserving account `HOME`:
 
 ```sh
 mise exec rust@1.99.1 uv@latest -- uv run --locked python \
+  crates/reports/scripts/gen_exit_tax_vectors.py
+mise exec rust@1.99.1 uv@latest -- uv run --locked python \
   crates/reports/scripts/repro_python_exit_tax.py
 ```
-
-The output includes `reported_method: moving_average_at` with configured HIFO,
-a 2024 departure using the 2025 transaction's `60000.123` rate, current wallet
-holdings, an absent Assumptions title, no quarantine disclosure in the workbook,
-no registered snapshot and `amendment_disclosed: false` with one pending impact.
-
-| Parity boundary | Evidence |
-| --- | --- |
-| Frozen exit-tax projections | 99 cases: 78 workbook documents and 21 exact refusals |
-| Real native service | 198 read/workbook comparisons, including canonical bytes of every one of the 112 database tables |
-| CLI | Four Austrian/generic, ready/stale/raw-hex scenarios; JSON, table, plain, CSV, machine and XLSX outputs |
-| Desktop | Two sessions, each comparing 15 previews and 15 exports, including collisions, malformed args, ignored scope overrides and blocked source freshness |
-| Existing history | Literal preexisting saved digest and pending amendment impact remain unchanged |
-
-The final `tests/test_rust_exit_tax.py` run passes all 204 cases without skips.
-The corpus includes exact/legacy price precedence, manual/cache timestamp ties,
-offset and fractional cache bounds, unpriced assets, material marker/category/date
-conflicts, independent basis/quantity clamps, cent/sat ties, large msat values,
-legacy generic holding-period coercion/refusals and reference loader error order.
-
-| Exit-tax-family routing | Rust | Python fallback |
-| --- | ---: | ---: |
-| `reports.exit-tax` | 80 | 0 |
-| `reports.export-exit-tax-xlsx` | 16 | 0 |
-| Native daemon sessions (60 exit-tax requests in total) | 2 | 0 |
-
-The report mutation catalog now has 640 applicable entries. All 40 new
-`exit-*` mutations are killed by these named tests:
-
-| Named test | New mutations killed |
-| --- | ---: |
-| `exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness` | 37 |
-| `exit_xlsx_managed_publication_preserves_reference_without_snapshots` | 2 |
-| `exit_tax_transport_forwards_departure_and_destination` | 1 |
-
-All three named selections pass unmutated against the final corpus. The 600
-inherited entries retain their preceding checkpoint evidence; the shared
-`csv-at-projection-gate` recipe is narrowed to its Austrian branch after adding
-exit CSV projection, and is freshly killed by `report_csv_projection_vectors`.
-The first category-authority run exposed a rounded-away fee fixture; the final
-material acquisition/category conflict kills that recipe. Per-entry killers and
-logs are recorded in `target/r5-reports14/mutation-summary.json`. Mutation scratch
-trees are removed by the runner. Native probes are rebuilt from the real
-worktree after mutation verification.
-
-Rust 1.99.1 offline/locked verification passes workspace formatting, production
-and test-harness workspace/all-target clippy with `-D warnings`, all 1,515
-workspace tests and all 14 harness tests. After the final exact-price and
-holding-period cases, the three affected named selections pass again. The
-binary smoke test uses still-unported privacy hygiene as its unsupported-command
-witness now that exit-tax is native. Owned-loopback fixtures run with sandbox
-access.
-
-The broader locked Python 3.11 regression passes all 1,048 tests, including the
-preceding exit corpus, inherited full/Austrian/transaction workbooks, renderer,
-CSV artifacts, report reads and original exit-tax/ledger contracts. The expanded
-exit corpus then passes the 204 cases above. Thirteen selected AI catalog,
-capability and redaction tests plus four subtests pass. The distinct broader
-hybrid logs record 609 report/transaction CLI calls and 17 daemon sessions
-served by Rust, with zero in-scope fallback. Its 23 Python `journals.process`
-calls are setup outside the report scope. Routing totals exclude pytest symlink
-aliases; per-command counts are in `target/r5-reports14/routing-summary.json`.
-
-The oracle generator checks cleanly. The required classifier update records
-5,703 definitions, with the three new tests reviewed as retained report oracles;
-the module is in the serial daemon CI lane. Required CI preflight passes all
-57 tests. `target/r5-reports14/verification-summary.json` retains gates,
-routing and reference-bug evidence. Verification inherits account `HOME` and
-isolates books, preferences, owner locks and scratch under `target/`. Owned
-verification build trees are removed after writing the summaries. Verification
-is Linux-only; the full Python/frontend quality gate, Docker regtest and
-packaged/platform checks are not run.
-
-This is a clean boundary after the exit-tax family. The remaining ordered work
-is gain explanations (compact and legacy) and desktop gains; cross-check reads
-and workbooks; Lightning reads and CSV; non-PDF source-funds reads; year-handoff
-XLSX; CoinTracking/Blockpit CSV and other permitted non-PDF artifacts; privacy
-hygiene, mirror and PSBT reads. Individual snapshot/amendment reads retain the
-prior process-caller deferral. PDF rendering, PDF-containing source-funds bundles
-and audit packages, and AI projections stay Python. No dependency, lockfile,
-schema or Python product code changes are part of this continuation.
 
 ## Gain explanation checkpoint (R5 fifteenth reports continuation, partial)
 
@@ -5870,7 +5804,8 @@ in RAM. All I/O is local and explicitly requested. No new egress is introduced.
 The owner explicitly defers desktop gains refresh and daemon registration until
 the accepted native R4 journal producer is available. This supersedes the prior
 checkpoint's instruction to finish that dependency before starting cross-check.
-The exit-tax port is unchanged; Python fixes on other branches are not mirrored.
+The corrected Python exit-tax rounds are mirrored in the
+[exit-tax checkpoint](#exit-tax-service-checkpoint-r5-fourteenth-reports-continuation-partial).
 
 The approved `rust_xlsxwriter` renderer emits Summary, Differences, Only in tool,
 Only in Kassiber, Excluded in Kassiber, Matched and Not comparable sheets with

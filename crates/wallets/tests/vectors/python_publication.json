@@ -176,6 +176,8 @@
             "global",
             7,
             7,
+            0,
+            0,
             "processed",
             8,
             "{\"kept\":true}",
@@ -195,6 +197,8 @@
             "global",
             3,
             3,
+            0,
+            0,
             "processed",
             1,
             "{}",
@@ -690,6 +694,8 @@
             "global",
             7,
             7,
+            0,
+            0,
             "processed",
             8,
             "{\"kept\":true}",
@@ -709,6 +715,8 @@
             "global",
             3,
             3,
+            0,
+            0,
             "processed",
             1,
             "{}",
@@ -1110,14 +1118,14 @@
         "chain_index_clock": [
           [
             1,
-            13
+            14
           ]
         ],
         "chain_index_dirty": [
           [
             "profiles",
             -1,
-            12
+            13
           ],
           [
             "transactions",
@@ -1147,7 +1155,7 @@
           [
             "wallets",
             -1,
-            13
+            14
           ]
         ],
         "chain_index_edges": [],
@@ -1243,6 +1251,8 @@
             "global",
             8,
             7,
+            1,
+            0,
             null,
             0,
             null,
@@ -1262,6 +1272,8 @@
             "global",
             3,
             3,
+            0,
+            0,
             "processed",
             1,
             "{}",
@@ -1616,14 +1628,14 @@
         "chain_index_clock": [
           [
             1,
-            14
+            15
           ]
         ],
         "chain_index_dirty": [
           [
             "profiles",
             -1,
-            13
+            14
           ],
           [
             "transactions",
@@ -1653,7 +1665,7 @@
           [
             "wallets",
             -1,
-            14
+            15
           ]
         ],
         "chain_index_edges": [],
@@ -1749,6 +1761,8 @@
             "global",
             8,
             7,
+            1,
+            0,
             null,
             0,
             null,
@@ -1768,6 +1782,8 @@
             "global",
             3,
             3,
+            0,
+            0,
             "processed",
             1,
             "{}",
@@ -2057,14 +2073,14 @@
         "chain_index_clock": [
           [
             1,
-            13
+            14
           ]
         ],
         "chain_index_dirty": [
           [
             "profiles",
             -1,
-            12
+            13
           ],
           [
             "transactions",
@@ -2094,7 +2110,7 @@
           [
             "wallets",
             -1,
-            13
+            14
           ]
         ],
         "chain_index_edges": [],
@@ -2190,6 +2206,8 @@
             "global",
             8,
             7,
+            1,
+            0,
             null,
             0,
             null,
@@ -2209,6 +2227,8 @@
             "global",
             3,
             3,
+            0,
+            0,
             "processed",
             1,
             "{}",
@@ -2671,6 +2691,8 @@
             "global",
             7,
             7,
+            0,
+            0,
             "processed",
             8,
             "{\"kept\":true}",
@@ -2690,6 +2712,8 @@
             "global",
             3,
             3,
+            0,
+            0,
             "processed",
             1,
             "{}",
@@ -3086,14 +3110,14 @@
         "chain_index_clock": [
           [
             1,
-            13
+            14
           ]
         ],
         "chain_index_dirty": [
           [
             "profiles",
             -1,
-            12
+            13
           ],
           [
             "transactions",
@@ -3123,7 +3147,7 @@
           [
             "wallets",
             -1,
-            13
+            14
           ]
         ],
         "chain_index_edges": [],
@@ -3219,6 +3243,8 @@
             "global",
             8,
             7,
+            1,
+            0,
             null,
             0,
             null,
@@ -3238,6 +3264,8 @@
             "global",
             3,
             3,
+            0,
+            0,
             "processed",
             1,
             "{}",
@@ -3704,6 +3732,8 @@
             "global",
             7,
             7,
+            0,
+            0,
             "processed",
             8,
             "{\"kept\":true}",
@@ -3723,6 +3753,8 @@
             "global",
             3,
             3,
+            0,
+            0,
             "processed",
             1,
             "{}",

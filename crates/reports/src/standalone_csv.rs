@@ -76,7 +76,8 @@ pub(super) fn project(
             |r| r.get(0),
         )
         .map_err(sql_error)?;
-    let current = truthy(value(profile, "last_processed_at"))
+    let current = semantics_current(profile)
+        && truthy(value(profile, "last_processed_at"))
         && int(profile, "last_processed_tx_count") == active
         && int(profile, "journal_input_version") == int(profile, "last_processed_input_version");
     let wallet = if wallets.len() == 1 {

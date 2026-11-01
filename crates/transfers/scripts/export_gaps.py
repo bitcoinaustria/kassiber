@@ -40,6 +40,7 @@ def seed(c, name):
     if name in ('large','large-untyped'):sql.append('DELETE FROM chain_index_dirty')
     if name.startswith('current') or name=='stale-inputs':
         sql.append("UPDATE profiles SET last_processed_at='2025-01-01T00:00:00Z',last_processed_tx_count=3,last_processed_input_version=journal_input_version WHERE id='p'")
+        sql.append("UPDATE profiles SET journal_semantics_version=2 WHERE id='p'")
         ids='{}' if name=='current-malformed' else '["out"]'
         version='journal_input_version+1' if name=='stale-inputs' else 'journal_input_version'
         sql.append(f"INSERT INTO journal_custody_gap_inputs(workspace_id,profile_id,input_version,ignored_ids_json,accounting_ignored_ids_json,created_at) SELECT 'w','p',{version},'{ids}','[]','2025-01-01T00:00:00Z' FROM profiles WHERE id='p'")

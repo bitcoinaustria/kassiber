@@ -157,6 +157,8 @@ def main():
     clock.close()
     for seed_id,scenario,rows,setup,pre,opts in jobs:
         c=sqlite3.connect(':memory:');template.backup(c);c.row_factory=sqlite3.Row;c.execute('PRAGMA foreign_keys=ON');seed(c,rows)
+        if any("last_processed_at=" in q for q in setup):
+            setup.append("UPDATE profiles SET journal_semantics_version=2 WHERE id='p'")
         for q in setup:c.execute(q)
         c.commit()
         cases=[];sequence=0;pair=None

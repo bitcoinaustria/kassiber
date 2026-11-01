@@ -1,12 +1,12 @@
 {
   "states": {
-    "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f": [
+    "a7f0169bf926a545e9082bb952a507397e711aa39352d535e65aed3e316473ed": [
       {
         "id": 1,
-        "revision": 41
+        "revision": 45
       }
     ],
-    "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a": [
+    "501d350b84c8aa7023a2c6dbb5698433baa21bfbbfd8c926182163fedfce5f94": [
       {
         "source_table": "transactions",
         "source_key": -1,
@@ -145,7 +145,7 @@
       {
         "source_table": "profiles",
         "source_key": -1,
-        "revision": 41
+        "revision": 45
       },
       {
         "source_table": "chain_analysis_reference_assertions",
@@ -163,7 +163,7 @@
         "revision": 9
       }
     ],
-    "1efad4205b33618b8ebfbb5ee153bd9229aa5fe57d02a439fe319d0ad7b9170c": [
+    "b3fc988928586ef782d6531bde5eddb0c420d54f883d441398c767f935f4e2fd": [
       {
         "id": "p",
         "workspace_id": "w",
@@ -177,6 +177,8 @@
         "cost_basis_pool_scope": "global",
         "journal_input_version": 4,
         "last_processed_input_version": 0,
+        "required_journal_semantics_version": 1,
+        "journal_semantics_version": 0,
         "last_processed_at": null,
         "last_processed_tx_count": 0,
         "ownership_review_counts_json": null,
@@ -196,6 +198,8 @@
         "cost_basis_pool_scope": "global",
         "journal_input_version": 0,
         "last_processed_input_version": 0,
+        "required_journal_semantics_version": 0,
+        "journal_semantics_version": 0,
         "last_processed_at": null,
         "last_processed_tx_count": 0,
         "ownership_review_counts_json": null,
@@ -351,13 +355,13 @@
         "created_at": "2025-01-01T00:00:00Z"
       }
     ],
-    "3875ea87f5c9538f104a60c72e23207a7bac7560d3866f12606ad4dba4f8174e": [
+    "bddf6f68a3462122fb7951f9773cc01ee23f099d574e31145cfaad8cd8c3649a": [
       {
         "id": 1,
-        "revision": 43
+        "revision": 49
       }
     ],
-    "ce694aebad09f1a544898292d0be066430a51cb43cd6212527d18d39db632512": [
+    "b0d63e321cb6d5f252eb29348501c603b4099f69e333d6edade577cdab767f2d": [
       {
         "source_table": "transactions",
         "source_key": -1,
@@ -496,7 +500,7 @@
       {
         "source_table": "profiles",
         "source_key": -1,
-        "revision": 43
+        "revision": 49
       },
       {
         "source_table": "chain_analysis_reference_assertions",
@@ -514,7 +518,7 @@
         "revision": 9
       }
     ],
-    "b611a900bce1b7fcb8c0be377fa811d26292b44f8aa51c243f5a5223fa60236b": [
+    "579bd53aed25313f176573f4c4781d06d4446f48f74c7776fb1df6340931cc8a": [
       {
         "id": "p",
         "workspace_id": "w",
@@ -528,6 +532,8 @@
         "cost_basis_pool_scope": "global",
         "journal_input_version": 6,
         "last_processed_input_version": 0,
+        "required_journal_semantics_version": 1,
+        "journal_semantics_version": 0,
         "last_processed_at": null,
         "last_processed_tx_count": 0,
         "ownership_review_counts_json": null,
@@ -547,6 +553,8 @@
         "cost_basis_pool_scope": "global",
         "journal_input_version": 0,
         "last_processed_input_version": 0,
+        "required_journal_semantics_version": 0,
+        "journal_semantics_version": 0,
         "last_processed_at": null,
         "last_processed_tx_count": 0,
         "ownership_review_counts_json": null,
@@ -942,13 +950,13 @@
         "created_at": "2025-01-01T00:00:00Z"
       }
     ],
-    "5bda9e25a649a0fd61c7ca57ce075eb34649c6f38ccc73759aed6d2cf7289acf": [
+    "e066565737bb2c0ff689db42483d4ad7f8700b421423e2be3082b1f351b63503": [
       {
         "id": 1,
-        "revision": 42
+        "revision": 46
       }
     ],
-    "ca66a38161a641692176da73126a094848a593e2bc93dfbe7292f9dd4b12a9e3": [
+    "0062755a6244bf5bd6b1ea66807ea2bec5b82d324047eb3f099c996fec0b27cf": [
       {
         "source_table": "transactions",
         "source_key": -1,
@@ -1082,12 +1090,12 @@
       {
         "source_table": "transactions",
         "source_key": 4,
-        "revision": 40
+        "revision": 42
       },
       {
         "source_table": "profiles",
         "source_key": -1,
-        "revision": 42
+        "revision": 46
       },
       {
         "source_table": "chain_analysis_reference_assertions",
@@ -1105,13 +1113,13 @@
         "revision": 9
       }
     ],
-    "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf": [
+    "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f": [
       {
         "id": 1,
-        "revision": 39
+        "revision": 41
       }
     ],
-    "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53": [
+    "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a": [
       {
         "source_table": "transactions",
         "source_key": -1,
@@ -1243,14 +1251,14 @@
         "revision": 37
       },
       {
-        "source_table": "profiles",
-        "source_key": -1,
-        "revision": 39
-      },
-      {
         "source_table": "chain_analysis_observations",
         "source_key": -1,
         "revision": 4
+      },
+      {
+        "source_table": "profiles",
+        "source_key": -1,
+        "revision": 41
       },
       {
         "source_table": "chain_analysis_reference_assertions",
@@ -1268,7 +1276,7 @@
         "revision": 9
       }
     ],
-    "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906": [
+    "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961": [
       {
         "id": "p",
         "workspace_id": "w",
@@ -1282,6 +1290,8 @@
         "cost_basis_pool_scope": "global",
         "journal_input_version": 2,
         "last_processed_input_version": 0,
+        "required_journal_semantics_version": 1,
+        "journal_semantics_version": 0,
         "last_processed_at": null,
         "last_processed_tx_count": 0,
         "ownership_review_counts_json": null,
@@ -1301,6 +1311,8 @@
         "cost_basis_pool_scope": "global",
         "journal_input_version": 0,
         "last_processed_input_version": 0,
+        "required_journal_semantics_version": 0,
+        "journal_semantics_version": 0,
         "last_processed_at": null,
         "last_processed_tx_count": 0,
         "ownership_review_counts_json": null,
@@ -1450,7 +1462,7 @@
         "\n            UPDATE custody_components\n            SET superseded_by_component_id = '4936b54b-f5f6-566b-8afc-20c68cf5db6c'\n            WHERE id = NULL AND state = 'superseded'\n            ",
         "\n        UPDATE profiles\n        SET last_processed_at = NULL,\n            last_processed_tx_count = 0,\n            journal_input_version = journal_input_version + 1,\n            ownership_review_counts_json = NULL\n        WHERE id = 'p'\n        ",
         "UPDATE profiles SET journal_input_version=2 WHERE id='p'",
-        "UPDATE chain_index_clock SET revision=39 WHERE id=1",
+        "UPDATE chain_index_clock SET revision=41 WHERE id=1",
         "DELETE FROM chain_index_dirty",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('transactions',-1,1)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('chain_analysis_labels',-1,10)",
@@ -1478,8 +1490,8 @@
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('transactions',16,35)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('transactions',17,36)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('transactions',15,37)",
-        "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('profiles',-1,39)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('chain_analysis_observations',-1,4)",
+        "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('profiles',-1,41)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('chain_analysis_reference_assertions',-1,5)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('journal_custody_decisions',-1,8)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('journal_custody_economic_relations',-1,9)"
@@ -1496,9 +1508,9 @@
           "id": "unused",
           "now": "2025-06-01T00:00:00Z",
           "rows": {
-            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
-            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
-            "profiles": "1efad4205b33618b8ebfbb5ee153bd9229aa5fe57d02a439fe319d0ad7b9170c",
+            "chain_index_clock": "a7f0169bf926a545e9082bb952a507397e711aa39352d535e65aed3e316473ed",
+            "chain_index_dirty": "501d350b84c8aa7023a2c6dbb5698433baa21bfbbfd8c926182163fedfce5f94",
+            "profiles": "b3fc988928586ef782d6531bde5eddb0c420d54f883d441398c767f935f4e2fd",
             "custody_components": "cbe87ef7f831854482821fc41122c97d64113f4cfd02fd15bb14391369c902ab",
             "custody_component_legs": "caebf1e20da96a1e17c49ccc315e01a51adc70e97745112fd5bd6e9626cf3c71",
             "custody_component_allocations": "71763bbaf8872b015684b651f21204958c9d7deb429745da6671b40d0d783f6c",
@@ -1543,9 +1555,9 @@
           "id": "unused",
           "now": "2025-06-01T00:00:00Z",
           "rows": {
-            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
-            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
-            "profiles": "1efad4205b33618b8ebfbb5ee153bd9229aa5fe57d02a439fe319d0ad7b9170c",
+            "chain_index_clock": "a7f0169bf926a545e9082bb952a507397e711aa39352d535e65aed3e316473ed",
+            "chain_index_dirty": "501d350b84c8aa7023a2c6dbb5698433baa21bfbbfd8c926182163fedfce5f94",
+            "profiles": "b3fc988928586ef782d6531bde5eddb0c420d54f883d441398c767f935f4e2fd",
             "custody_components": "cbe87ef7f831854482821fc41122c97d64113f4cfd02fd15bb14391369c902ab",
             "custody_component_legs": "caebf1e20da96a1e17c49ccc315e01a51adc70e97745112fd5bd6e9626cf3c71",
             "custody_component_allocations": "71763bbaf8872b015684b651f21204958c9d7deb429745da6671b40d0d783f6c",
@@ -1590,9 +1602,9 @@
           "id": "unused",
           "now": "2025-06-01T00:00:00Z",
           "rows": {
-            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
-            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
-            "profiles": "1efad4205b33618b8ebfbb5ee153bd9229aa5fe57d02a439fe319d0ad7b9170c",
+            "chain_index_clock": "a7f0169bf926a545e9082bb952a507397e711aa39352d535e65aed3e316473ed",
+            "chain_index_dirty": "501d350b84c8aa7023a2c6dbb5698433baa21bfbbfd8c926182163fedfce5f94",
+            "profiles": "b3fc988928586ef782d6531bde5eddb0c420d54f883d441398c767f935f4e2fd",
             "custody_components": "cbe87ef7f831854482821fc41122c97d64113f4cfd02fd15bb14391369c902ab",
             "custody_component_legs": "caebf1e20da96a1e17c49ccc315e01a51adc70e97745112fd5bd6e9626cf3c71",
             "custody_component_allocations": "71763bbaf8872b015684b651f21204958c9d7deb429745da6671b40d0d783f6c",
@@ -1637,9 +1649,9 @@
           "id": "unused",
           "now": "2025-06-01T00:00:00Z",
           "rows": {
-            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
-            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
-            "profiles": "1efad4205b33618b8ebfbb5ee153bd9229aa5fe57d02a439fe319d0ad7b9170c",
+            "chain_index_clock": "a7f0169bf926a545e9082bb952a507397e711aa39352d535e65aed3e316473ed",
+            "chain_index_dirty": "501d350b84c8aa7023a2c6dbb5698433baa21bfbbfd8c926182163fedfce5f94",
+            "profiles": "b3fc988928586ef782d6531bde5eddb0c420d54f883d441398c767f935f4e2fd",
             "custody_components": "cbe87ef7f831854482821fc41122c97d64113f4cfd02fd15bb14391369c902ab",
             "custody_component_legs": "caebf1e20da96a1e17c49ccc315e01a51adc70e97745112fd5bd6e9626cf3c71",
             "custody_component_allocations": "71763bbaf8872b015684b651f21204958c9d7deb429745da6671b40d0d783f6c",
@@ -1720,7 +1732,7 @@
         "\n            UPDATE custody_components\n            SET superseded_by_component_id = '9bb6cfcf-ffba-5129-8fb0-b31aa5638f0f'\n            WHERE id = NULL AND state = 'superseded'\n            ",
         "\n        UPDATE profiles\n        SET last_processed_at = NULL,\n            last_processed_tx_count = 0,\n            journal_input_version = journal_input_version + 1,\n            ownership_review_counts_json = NULL\n        WHERE id = 'p'\n        ",
         "UPDATE profiles SET journal_input_version=4 WHERE id='p'",
-        "UPDATE chain_index_clock SET revision=41 WHERE id=1",
+        "UPDATE chain_index_clock SET revision=45 WHERE id=1",
         "DELETE FROM chain_index_dirty",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('transactions',-1,1)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('chain_analysis_labels',-1,10)",
@@ -1749,7 +1761,7 @@
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('transactions',17,36)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('transactions',15,37)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('chain_analysis_observations',-1,4)",
-        "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('profiles',-1,41)",
+        "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('profiles',-1,45)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('chain_analysis_reference_assertions',-1,5)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('journal_custody_decisions',-1,8)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('journal_custody_economic_relations',-1,9)"
@@ -1766,9 +1778,9 @@
           "id": "unused",
           "now": "2025-06-01T00:00:00Z",
           "rows": {
-            "chain_index_clock": "3875ea87f5c9538f104a60c72e23207a7bac7560d3866f12606ad4dba4f8174e",
-            "chain_index_dirty": "ce694aebad09f1a544898292d0be066430a51cb43cd6212527d18d39db632512",
-            "profiles": "b611a900bce1b7fcb8c0be377fa811d26292b44f8aa51c243f5a5223fa60236b",
+            "chain_index_clock": "bddf6f68a3462122fb7951f9773cc01ee23f099d574e31145cfaad8cd8c3649a",
+            "chain_index_dirty": "b0d63e321cb6d5f252eb29348501c603b4099f69e333d6edade577cdab767f2d",
+            "profiles": "579bd53aed25313f176573f4c4781d06d4446f48f74c7776fb1df6340931cc8a",
             "custody_components": "8298709f66f563eac1071231f178a3d5c4ad20c35818597b861112ce3c6ee204",
             "custody_component_legs": "31b0c89ac7ff238172294f38981458fd2a63091c959a22c6e4c54df2f085e39f",
             "custody_component_allocations": "f260230fca1c0c14f082bde2c792e4c7c9fe1d28b0336ce2eed42dad8d8d1b73",
@@ -1813,9 +1825,9 @@
           "id": "unused",
           "now": "2025-06-01T00:00:00Z",
           "rows": {
-            "chain_index_clock": "3875ea87f5c9538f104a60c72e23207a7bac7560d3866f12606ad4dba4f8174e",
-            "chain_index_dirty": "ce694aebad09f1a544898292d0be066430a51cb43cd6212527d18d39db632512",
-            "profiles": "b611a900bce1b7fcb8c0be377fa811d26292b44f8aa51c243f5a5223fa60236b",
+            "chain_index_clock": "bddf6f68a3462122fb7951f9773cc01ee23f099d574e31145cfaad8cd8c3649a",
+            "chain_index_dirty": "b0d63e321cb6d5f252eb29348501c603b4099f69e333d6edade577cdab767f2d",
+            "profiles": "579bd53aed25313f176573f4c4781d06d4446f48f74c7776fb1df6340931cc8a",
             "custody_components": "8298709f66f563eac1071231f178a3d5c4ad20c35818597b861112ce3c6ee204",
             "custody_component_legs": "31b0c89ac7ff238172294f38981458fd2a63091c959a22c6e4c54df2f085e39f",
             "custody_component_allocations": "f260230fca1c0c14f082bde2c792e4c7c9fe1d28b0336ce2eed42dad8d8d1b73",
@@ -1860,9 +1872,9 @@
           "id": "unused",
           "now": "2025-06-01T00:00:00Z",
           "rows": {
-            "chain_index_clock": "3875ea87f5c9538f104a60c72e23207a7bac7560d3866f12606ad4dba4f8174e",
-            "chain_index_dirty": "ce694aebad09f1a544898292d0be066430a51cb43cd6212527d18d39db632512",
-            "profiles": "b611a900bce1b7fcb8c0be377fa811d26292b44f8aa51c243f5a5223fa60236b",
+            "chain_index_clock": "bddf6f68a3462122fb7951f9773cc01ee23f099d574e31145cfaad8cd8c3649a",
+            "chain_index_dirty": "b0d63e321cb6d5f252eb29348501c603b4099f69e333d6edade577cdab767f2d",
+            "profiles": "579bd53aed25313f176573f4c4781d06d4446f48f74c7776fb1df6340931cc8a",
             "custody_components": "8298709f66f563eac1071231f178a3d5c4ad20c35818597b861112ce3c6ee204",
             "custody_component_legs": "31b0c89ac7ff238172294f38981458fd2a63091c959a22c6e4c54df2f085e39f",
             "custody_component_allocations": "f260230fca1c0c14f082bde2c792e4c7c9fe1d28b0336ce2eed42dad8d8d1b73",
@@ -1907,9 +1919,9 @@
           "id": "unused",
           "now": "2025-06-01T00:00:00Z",
           "rows": {
-            "chain_index_clock": "3875ea87f5c9538f104a60c72e23207a7bac7560d3866f12606ad4dba4f8174e",
-            "chain_index_dirty": "ce694aebad09f1a544898292d0be066430a51cb43cd6212527d18d39db632512",
-            "profiles": "b611a900bce1b7fcb8c0be377fa811d26292b44f8aa51c243f5a5223fa60236b",
+            "chain_index_clock": "bddf6f68a3462122fb7951f9773cc01ee23f099d574e31145cfaad8cd8c3649a",
+            "chain_index_dirty": "b0d63e321cb6d5f252eb29348501c603b4099f69e333d6edade577cdab767f2d",
+            "profiles": "579bd53aed25313f176573f4c4781d06d4446f48f74c7776fb1df6340931cc8a",
             "custody_components": "8298709f66f563eac1071231f178a3d5c4ad20c35818597b861112ce3c6ee204",
             "custody_component_legs": "31b0c89ac7ff238172294f38981458fd2a63091c959a22c6e4c54df2f085e39f",
             "custody_component_allocations": "f260230fca1c0c14f082bde2c792e4c7c9fe1d28b0336ce2eed42dad8d8d1b73",
@@ -1969,7 +1981,7 @@
         "\n            UPDATE custody_components\n            SET superseded_by_component_id = '4936b54b-f5f6-566b-8afc-20c68cf5db6c'\n            WHERE id = NULL AND state = 'superseded'\n            ",
         "\n        UPDATE profiles\n        SET last_processed_at = NULL,\n            last_processed_tx_count = 0,\n            journal_input_version = journal_input_version + 1,\n            ownership_review_counts_json = NULL\n        WHERE id = 'p'\n        ",
         "UPDATE profiles SET journal_input_version=2 WHERE id='p'",
-        "UPDATE chain_index_clock SET revision=39 WHERE id=1",
+        "UPDATE chain_index_clock SET revision=41 WHERE id=1",
         "DELETE FROM chain_index_dirty",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('transactions',-1,1)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('chain_analysis_labels',-1,10)",
@@ -1997,8 +2009,8 @@
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('transactions',16,35)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('transactions',17,36)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('transactions',15,37)",
-        "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('profiles',-1,39)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('chain_analysis_observations',-1,4)",
+        "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('profiles',-1,41)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('chain_analysis_reference_assertions',-1,5)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('journal_custody_decisions',-1,8)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('journal_custody_economic_relations',-1,9)",
@@ -2016,9 +2028,9 @@
           "id": "unused",
           "now": "2025-06-01T00:00:00Z",
           "rows": {
-            "chain_index_clock": "5bda9e25a649a0fd61c7ca57ce075eb34649c6f38ccc73759aed6d2cf7289acf",
-            "chain_index_dirty": "ca66a38161a641692176da73126a094848a593e2bc93dfbe7292f9dd4b12a9e3",
-            "profiles": "1efad4205b33618b8ebfbb5ee153bd9229aa5fe57d02a439fe319d0ad7b9170c",
+            "chain_index_clock": "e066565737bb2c0ff689db42483d4ad7f8700b421423e2be3082b1f351b63503",
+            "chain_index_dirty": "0062755a6244bf5bd6b1ea66807ea2bec5b82d324047eb3f099c996fec0b27cf",
+            "profiles": "b3fc988928586ef782d6531bde5eddb0c420d54f883d441398c767f935f4e2fd",
             "custody_components": "cbe87ef7f831854482821fc41122c97d64113f4cfd02fd15bb14391369c902ab",
             "custody_component_legs": "caebf1e20da96a1e17c49ccc315e01a51adc70e97745112fd5bd6e9626cf3c71",
             "custody_component_allocations": "71763bbaf8872b015684b651f21204958c9d7deb429745da6671b40d0d783f6c",
@@ -2063,9 +2075,9 @@
           "id": "unused",
           "now": "2025-06-01T00:00:00Z",
           "rows": {
-            "chain_index_clock": "5bda9e25a649a0fd61c7ca57ce075eb34649c6f38ccc73759aed6d2cf7289acf",
-            "chain_index_dirty": "ca66a38161a641692176da73126a094848a593e2bc93dfbe7292f9dd4b12a9e3",
-            "profiles": "1efad4205b33618b8ebfbb5ee153bd9229aa5fe57d02a439fe319d0ad7b9170c",
+            "chain_index_clock": "e066565737bb2c0ff689db42483d4ad7f8700b421423e2be3082b1f351b63503",
+            "chain_index_dirty": "0062755a6244bf5bd6b1ea66807ea2bec5b82d324047eb3f099c996fec0b27cf",
+            "profiles": "b3fc988928586ef782d6531bde5eddb0c420d54f883d441398c767f935f4e2fd",
             "custody_components": "cbe87ef7f831854482821fc41122c97d64113f4cfd02fd15bb14391369c902ab",
             "custody_component_legs": "caebf1e20da96a1e17c49ccc315e01a51adc70e97745112fd5bd6e9626cf3c71",
             "custody_component_allocations": "71763bbaf8872b015684b651f21204958c9d7deb429745da6671b40d0d783f6c",
@@ -2110,9 +2122,9 @@
           "id": "unused",
           "now": "2025-06-01T00:00:00Z",
           "rows": {
-            "chain_index_clock": "5bda9e25a649a0fd61c7ca57ce075eb34649c6f38ccc73759aed6d2cf7289acf",
-            "chain_index_dirty": "ca66a38161a641692176da73126a094848a593e2bc93dfbe7292f9dd4b12a9e3",
-            "profiles": "1efad4205b33618b8ebfbb5ee153bd9229aa5fe57d02a439fe319d0ad7b9170c",
+            "chain_index_clock": "e066565737bb2c0ff689db42483d4ad7f8700b421423e2be3082b1f351b63503",
+            "chain_index_dirty": "0062755a6244bf5bd6b1ea66807ea2bec5b82d324047eb3f099c996fec0b27cf",
+            "profiles": "b3fc988928586ef782d6531bde5eddb0c420d54f883d441398c767f935f4e2fd",
             "custody_components": "cbe87ef7f831854482821fc41122c97d64113f4cfd02fd15bb14391369c902ab",
             "custody_component_legs": "caebf1e20da96a1e17c49ccc315e01a51adc70e97745112fd5bd6e9626cf3c71",
             "custody_component_allocations": "71763bbaf8872b015684b651f21204958c9d7deb429745da6671b40d0d783f6c",
@@ -2157,9 +2169,9 @@
           "id": "unused",
           "now": "2025-06-01T00:00:00Z",
           "rows": {
-            "chain_index_clock": "5bda9e25a649a0fd61c7ca57ce075eb34649c6f38ccc73759aed6d2cf7289acf",
-            "chain_index_dirty": "ca66a38161a641692176da73126a094848a593e2bc93dfbe7292f9dd4b12a9e3",
-            "profiles": "1efad4205b33618b8ebfbb5ee153bd9229aa5fe57d02a439fe319d0ad7b9170c",
+            "chain_index_clock": "e066565737bb2c0ff689db42483d4ad7f8700b421423e2be3082b1f351b63503",
+            "chain_index_dirty": "0062755a6244bf5bd6b1ea66807ea2bec5b82d324047eb3f099c996fec0b27cf",
+            "profiles": "b3fc988928586ef782d6531bde5eddb0c420d54f883d441398c767f935f4e2fd",
             "custody_components": "cbe87ef7f831854482821fc41122c97d64113f4cfd02fd15bb14391369c902ab",
             "custody_component_legs": "caebf1e20da96a1e17c49ccc315e01a51adc70e97745112fd5bd6e9626cf3c71",
             "custody_component_allocations": "71763bbaf8872b015684b651f21204958c9d7deb429745da6671b40d0d783f6c",
@@ -2219,7 +2231,7 @@
         "\n            UPDATE custody_components\n            SET superseded_by_component_id = '4936b54b-f5f6-566b-8afc-20c68cf5db6c'\n            WHERE id = NULL AND state = 'superseded'\n            ",
         "\n        UPDATE profiles\n        SET last_processed_at = NULL,\n            last_processed_tx_count = 0,\n            journal_input_version = journal_input_version + 1,\n            ownership_review_counts_json = NULL\n        WHERE id = 'p'\n        ",
         "UPDATE profiles SET journal_input_version=2 WHERE id='p'",
-        "UPDATE chain_index_clock SET revision=39 WHERE id=1",
+        "UPDATE chain_index_clock SET revision=41 WHERE id=1",
         "DELETE FROM chain_index_dirty",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('transactions',-1,1)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('chain_analysis_labels',-1,10)",
@@ -2247,8 +2259,8 @@
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('transactions',16,35)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('transactions',17,36)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('transactions',15,37)",
-        "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('profiles',-1,39)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('chain_analysis_observations',-1,4)",
+        "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('profiles',-1,41)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('chain_analysis_reference_assertions',-1,5)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('journal_custody_decisions',-1,8)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('journal_custody_economic_relations',-1,9)"
@@ -2265,9 +2277,9 @@
           "id": "unused",
           "now": "2025-06-01T00:00:00Z",
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "36f287bd696c3c3306ce6e8cc26fb38a7faf4b847e813af0ee12ead00fac4e2a",
             "custody_component_legs": "caebf1e20da96a1e17c49ccc315e01a51adc70e97745112fd5bd6e9626cf3c71",
             "custody_component_allocations": "71763bbaf8872b015684b651f21204958c9d7deb429745da6671b40d0d783f6c",
@@ -2294,9 +2306,9 @@
           "id": "unused",
           "now": "2025-06-01T00:00:00Z",
           "rows": {
-            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
-            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
-            "profiles": "1efad4205b33618b8ebfbb5ee153bd9229aa5fe57d02a439fe319d0ad7b9170c",
+            "chain_index_clock": "a7f0169bf926a545e9082bb952a507397e711aa39352d535e65aed3e316473ed",
+            "chain_index_dirty": "501d350b84c8aa7023a2c6dbb5698433baa21bfbbfd8c926182163fedfce5f94",
+            "profiles": "b3fc988928586ef782d6531bde5eddb0c420d54f883d441398c767f935f4e2fd",
             "custody_components": "cbe87ef7f831854482821fc41122c97d64113f4cfd02fd15bb14391369c902ab",
             "custody_component_legs": "caebf1e20da96a1e17c49ccc315e01a51adc70e97745112fd5bd6e9626cf3c71",
             "custody_component_allocations": "71763bbaf8872b015684b651f21204958c9d7deb429745da6671b40d0d783f6c",
@@ -2341,9 +2353,9 @@
           "id": "unused",
           "now": "2025-06-01T00:00:00Z",
           "rows": {
-            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
-            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
-            "profiles": "1efad4205b33618b8ebfbb5ee153bd9229aa5fe57d02a439fe319d0ad7b9170c",
+            "chain_index_clock": "a7f0169bf926a545e9082bb952a507397e711aa39352d535e65aed3e316473ed",
+            "chain_index_dirty": "501d350b84c8aa7023a2c6dbb5698433baa21bfbbfd8c926182163fedfce5f94",
+            "profiles": "b3fc988928586ef782d6531bde5eddb0c420d54f883d441398c767f935f4e2fd",
             "custody_components": "cbe87ef7f831854482821fc41122c97d64113f4cfd02fd15bb14391369c902ab",
             "custody_component_legs": "caebf1e20da96a1e17c49ccc315e01a51adc70e97745112fd5bd6e9626cf3c71",
             "custody_component_allocations": "71763bbaf8872b015684b651f21204958c9d7deb429745da6671b40d0d783f6c",
@@ -2388,9 +2400,9 @@
           "id": "unused",
           "now": "2025-06-01T00:00:00Z",
           "rows": {
-            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
-            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
-            "profiles": "1efad4205b33618b8ebfbb5ee153bd9229aa5fe57d02a439fe319d0ad7b9170c",
+            "chain_index_clock": "a7f0169bf926a545e9082bb952a507397e711aa39352d535e65aed3e316473ed",
+            "chain_index_dirty": "501d350b84c8aa7023a2c6dbb5698433baa21bfbbfd8c926182163fedfce5f94",
+            "profiles": "b3fc988928586ef782d6531bde5eddb0c420d54f883d441398c767f935f4e2fd",
             "custody_components": "cbe87ef7f831854482821fc41122c97d64113f4cfd02fd15bb14391369c902ab",
             "custody_component_legs": "caebf1e20da96a1e17c49ccc315e01a51adc70e97745112fd5bd6e9626cf3c71",
             "custody_component_allocations": "71763bbaf8872b015684b651f21204958c9d7deb429745da6671b40d0d783f6c",
@@ -2450,7 +2462,7 @@
         "\n            UPDATE custody_components\n            SET superseded_by_component_id = '4936b54b-f5f6-566b-8afc-20c68cf5db6c'\n            WHERE id = NULL AND state = 'superseded'\n            ",
         "\n        UPDATE profiles\n        SET last_processed_at = NULL,\n            last_processed_tx_count = 0,\n            journal_input_version = journal_input_version + 1,\n            ownership_review_counts_json = NULL\n        WHERE id = 'p'\n        ",
         "UPDATE profiles SET journal_input_version=2 WHERE id='p'",
-        "UPDATE chain_index_clock SET revision=39 WHERE id=1",
+        "UPDATE chain_index_clock SET revision=41 WHERE id=1",
         "DELETE FROM chain_index_dirty",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('transactions',-1,1)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('chain_analysis_labels',-1,10)",
@@ -2478,8 +2490,8 @@
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('transactions',16,35)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('transactions',17,36)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('transactions',15,37)",
-        "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('profiles',-1,39)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('chain_analysis_observations',-1,4)",
+        "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('profiles',-1,41)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('chain_analysis_reference_assertions',-1,5)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('journal_custody_decisions',-1,8)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('journal_custody_economic_relations',-1,9)",
@@ -2497,9 +2509,9 @@
           "id": "unused",
           "now": "2025-06-01T00:00:00Z",
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "66de8de4836f8c6741e8ea3284a183d954dc1220544ce7fb868b98b8d81cffae",
             "custody_component_legs": "caebf1e20da96a1e17c49ccc315e01a51adc70e97745112fd5bd6e9626cf3c71",
             "custody_component_allocations": "71763bbaf8872b015684b651f21204958c9d7deb429745da6671b40d0d783f6c",
@@ -2544,9 +2556,9 @@
           "id": "unused",
           "now": "2025-06-01T00:00:00Z",
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "66de8de4836f8c6741e8ea3284a183d954dc1220544ce7fb868b98b8d81cffae",
             "custody_component_legs": "caebf1e20da96a1e17c49ccc315e01a51adc70e97745112fd5bd6e9626cf3c71",
             "custody_component_allocations": "71763bbaf8872b015684b651f21204958c9d7deb429745da6671b40d0d783f6c",
@@ -2591,9 +2603,9 @@
           "id": "unused",
           "now": "2025-06-01T00:00:00Z",
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "66de8de4836f8c6741e8ea3284a183d954dc1220544ce7fb868b98b8d81cffae",
             "custody_component_legs": "caebf1e20da96a1e17c49ccc315e01a51adc70e97745112fd5bd6e9626cf3c71",
             "custody_component_allocations": "71763bbaf8872b015684b651f21204958c9d7deb429745da6671b40d0d783f6c",
@@ -2638,9 +2650,9 @@
           "id": "unused",
           "now": "2025-06-01T00:00:00Z",
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "66de8de4836f8c6741e8ea3284a183d954dc1220544ce7fb868b98b8d81cffae",
             "custody_component_legs": "caebf1e20da96a1e17c49ccc315e01a51adc70e97745112fd5bd6e9626cf3c71",
             "custody_component_allocations": "71763bbaf8872b015684b651f21204958c9d7deb429745da6671b40d0d783f6c",
@@ -2700,7 +2712,7 @@
         "\n            UPDATE custody_components\n            SET superseded_by_component_id = '4936b54b-f5f6-566b-8afc-20c68cf5db6c'\n            WHERE id = NULL AND state = 'superseded'\n            ",
         "\n        UPDATE profiles\n        SET last_processed_at = NULL,\n            last_processed_tx_count = 0,\n            journal_input_version = journal_input_version + 1,\n            ownership_review_counts_json = NULL\n        WHERE id = 'p'\n        ",
         "UPDATE profiles SET journal_input_version=2 WHERE id='p'",
-        "UPDATE chain_index_clock SET revision=39 WHERE id=1",
+        "UPDATE chain_index_clock SET revision=41 WHERE id=1",
         "DELETE FROM chain_index_dirty",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('transactions',-1,1)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('chain_analysis_labels',-1,10)",
@@ -2728,8 +2740,8 @@
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('transactions',16,35)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('transactions',17,36)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('transactions',15,37)",
-        "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('profiles',-1,39)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('chain_analysis_observations',-1,4)",
+        "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('profiles',-1,41)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('chain_analysis_reference_assertions',-1,5)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('journal_custody_decisions',-1,8)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('journal_custody_economic_relations',-1,9)"
@@ -2746,9 +2758,9 @@
           "id": "unused",
           "now": "2025-06-01T00:00:00Z",
           "rows": {
-            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
-            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
-            "profiles": "1efad4205b33618b8ebfbb5ee153bd9229aa5fe57d02a439fe319d0ad7b9170c",
+            "chain_index_clock": "a7f0169bf926a545e9082bb952a507397e711aa39352d535e65aed3e316473ed",
+            "chain_index_dirty": "501d350b84c8aa7023a2c6dbb5698433baa21bfbbfd8c926182163fedfce5f94",
+            "profiles": "b3fc988928586ef782d6531bde5eddb0c420d54f883d441398c767f935f4e2fd",
             "custody_components": "129baf9f206c9397cb7b980fd628caa4551f5af59021e2153f5e9582e3e2e7c0",
             "custody_component_legs": "caebf1e20da96a1e17c49ccc315e01a51adc70e97745112fd5bd6e9626cf3c71",
             "custody_component_allocations": "71763bbaf8872b015684b651f21204958c9d7deb429745da6671b40d0d783f6c",
@@ -2793,9 +2805,9 @@
           "id": "unused",
           "now": "2025-06-01T00:00:00Z",
           "rows": {
-            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
-            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
-            "profiles": "1efad4205b33618b8ebfbb5ee153bd9229aa5fe57d02a439fe319d0ad7b9170c",
+            "chain_index_clock": "a7f0169bf926a545e9082bb952a507397e711aa39352d535e65aed3e316473ed",
+            "chain_index_dirty": "501d350b84c8aa7023a2c6dbb5698433baa21bfbbfd8c926182163fedfce5f94",
+            "profiles": "b3fc988928586ef782d6531bde5eddb0c420d54f883d441398c767f935f4e2fd",
             "custody_components": "129baf9f206c9397cb7b980fd628caa4551f5af59021e2153f5e9582e3e2e7c0",
             "custody_component_legs": "caebf1e20da96a1e17c49ccc315e01a51adc70e97745112fd5bd6e9626cf3c71",
             "custody_component_allocations": "71763bbaf8872b015684b651f21204958c9d7deb429745da6671b40d0d783f6c",
@@ -2840,9 +2852,9 @@
           "id": "unused",
           "now": "2025-06-01T00:00:00Z",
           "rows": {
-            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
-            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
-            "profiles": "1efad4205b33618b8ebfbb5ee153bd9229aa5fe57d02a439fe319d0ad7b9170c",
+            "chain_index_clock": "a7f0169bf926a545e9082bb952a507397e711aa39352d535e65aed3e316473ed",
+            "chain_index_dirty": "501d350b84c8aa7023a2c6dbb5698433baa21bfbbfd8c926182163fedfce5f94",
+            "profiles": "b3fc988928586ef782d6531bde5eddb0c420d54f883d441398c767f935f4e2fd",
             "custody_components": "129baf9f206c9397cb7b980fd628caa4551f5af59021e2153f5e9582e3e2e7c0",
             "custody_component_legs": "caebf1e20da96a1e17c49ccc315e01a51adc70e97745112fd5bd6e9626cf3c71",
             "custody_component_allocations": "71763bbaf8872b015684b651f21204958c9d7deb429745da6671b40d0d783f6c",
@@ -2887,9 +2899,9 @@
           "id": "unused",
           "now": "2025-06-01T00:00:00Z",
           "rows": {
-            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
-            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
-            "profiles": "1efad4205b33618b8ebfbb5ee153bd9229aa5fe57d02a439fe319d0ad7b9170c",
+            "chain_index_clock": "a7f0169bf926a545e9082bb952a507397e711aa39352d535e65aed3e316473ed",
+            "chain_index_dirty": "501d350b84c8aa7023a2c6dbb5698433baa21bfbbfd8c926182163fedfce5f94",
+            "profiles": "b3fc988928586ef782d6531bde5eddb0c420d54f883d441398c767f935f4e2fd",
             "custody_components": "129baf9f206c9397cb7b980fd628caa4551f5af59021e2153f5e9582e3e2e7c0",
             "custody_component_legs": "caebf1e20da96a1e17c49ccc315e01a51adc70e97745112fd5bd6e9626cf3c71",
             "custody_component_allocations": "71763bbaf8872b015684b651f21204958c9d7deb429745da6671b40d0d783f6c",
@@ -2949,7 +2961,7 @@
         "\n            UPDATE custody_components\n            SET superseded_by_component_id = '4936b54b-f5f6-566b-8afc-20c68cf5db6c'\n            WHERE id = NULL AND state = 'superseded'\n            ",
         "\n        UPDATE profiles\n        SET last_processed_at = NULL,\n            last_processed_tx_count = 0,\n            journal_input_version = journal_input_version + 1,\n            ownership_review_counts_json = NULL\n        WHERE id = 'p'\n        ",
         "UPDATE profiles SET journal_input_version=2 WHERE id='p'",
-        "UPDATE chain_index_clock SET revision=39 WHERE id=1",
+        "UPDATE chain_index_clock SET revision=41 WHERE id=1",
         "DELETE FROM chain_index_dirty",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('transactions',-1,1)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('chain_analysis_labels',-1,10)",
@@ -2977,8 +2989,8 @@
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('transactions',16,35)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('transactions',17,36)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('transactions',15,37)",
-        "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('profiles',-1,39)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('chain_analysis_observations',-1,4)",
+        "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('profiles',-1,41)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('chain_analysis_reference_assertions',-1,5)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('journal_custody_decisions',-1,8)",
         "INSERT INTO chain_index_dirty (source_table,source_key,revision) VALUES ('journal_custody_economic_relations',-1,9)"
@@ -2997,9 +3009,9 @@
           "id": "unused",
           "now": "2025-06-01T00:00:00Z",
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
+            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
+            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
+            "profiles": "03965d456cd1ca990384ae39e11a8a12240cbf8e0597b11f80274581ebded961",
             "custody_components": "36f287bd696c3c3306ce6e8cc26fb38a7faf4b847e813af0ee12ead00fac4e2a",
             "custody_component_legs": "caebf1e20da96a1e17c49ccc315e01a51adc70e97745112fd5bd6e9626cf3c71",
             "custody_component_allocations": "71763bbaf8872b015684b651f21204958c9d7deb429745da6671b40d0d783f6c",
@@ -3028,9 +3040,9 @@
           "id": "unused",
           "now": "2025-06-01T00:00:00Z",
           "rows": {
-            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
-            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
-            "profiles": "1efad4205b33618b8ebfbb5ee153bd9229aa5fe57d02a439fe319d0ad7b9170c",
+            "chain_index_clock": "a7f0169bf926a545e9082bb952a507397e711aa39352d535e65aed3e316473ed",
+            "chain_index_dirty": "501d350b84c8aa7023a2c6dbb5698433baa21bfbbfd8c926182163fedfce5f94",
+            "profiles": "b3fc988928586ef782d6531bde5eddb0c420d54f883d441398c767f935f4e2fd",
             "custody_components": "cbe87ef7f831854482821fc41122c97d64113f4cfd02fd15bb14391369c902ab",
             "custody_component_legs": "caebf1e20da96a1e17c49ccc315e01a51adc70e97745112fd5bd6e9626cf3c71",
             "custody_component_allocations": "71763bbaf8872b015684b651f21204958c9d7deb429745da6671b40d0d783f6c",
@@ -3075,9 +3087,9 @@
           "id": "unused",
           "now": "2025-06-01T00:00:00Z",
           "rows": {
-            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
-            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
-            "profiles": "1efad4205b33618b8ebfbb5ee153bd9229aa5fe57d02a439fe319d0ad7b9170c",
+            "chain_index_clock": "a7f0169bf926a545e9082bb952a507397e711aa39352d535e65aed3e316473ed",
+            "chain_index_dirty": "501d350b84c8aa7023a2c6dbb5698433baa21bfbbfd8c926182163fedfce5f94",
+            "profiles": "b3fc988928586ef782d6531bde5eddb0c420d54f883d441398c767f935f4e2fd",
             "custody_components": "cbe87ef7f831854482821fc41122c97d64113f4cfd02fd15bb14391369c902ab",
             "custody_component_legs": "caebf1e20da96a1e17c49ccc315e01a51adc70e97745112fd5bd6e9626cf3c71",
             "custody_component_allocations": "71763bbaf8872b015684b651f21204958c9d7deb429745da6671b40d0d783f6c",
@@ -3122,9 +3134,9 @@
           "id": "unused",
           "now": "2025-06-01T00:00:00Z",
           "rows": {
-            "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
-            "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
-            "profiles": "1efad4205b33618b8ebfbb5ee153bd9229aa5fe57d02a439fe319d0ad7b9170c",
+            "chain_index_clock": "a7f0169bf926a545e9082bb952a507397e711aa39352d535e65aed3e316473ed",
+            "chain_index_dirty": "501d350b84c8aa7023a2c6dbb5698433baa21bfbbfd8c926182163fedfce5f94",
+            "profiles": "b3fc988928586ef782d6531bde5eddb0c420d54f883d441398c767f935f4e2fd",
             "custody_components": "cbe87ef7f831854482821fc41122c97d64113f4cfd02fd15bb14391369c902ab",
             "custody_component_legs": "caebf1e20da96a1e17c49ccc315e01a51adc70e97745112fd5bd6e9626cf3c71",
             "custody_component_allocations": "71763bbaf8872b015684b651f21204958c9d7deb429745da6671b40d0d783f6c",

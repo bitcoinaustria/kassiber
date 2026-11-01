@@ -36,7 +36,11 @@ def cases():
         ['third_country', 'eu', 'EEA', ' eU-eEa ', 'euea', 'third', 'non-eu', 'noneu', '', None, 'bad', 1])]
     result += [(f'departure-{i}', {'departure_date': value}, '') for i, value in enumerate(
         ['2020-01-01', '2024-12-31', '2025-01-01T00:30:00+02:00', '20240101', '2025-W01-1',
-         '2025-01-01T00:00:00.123Z', ' 2025-02-01 ', '', None, 'bad', '2025-02-30', 20250101, 0])]
+         '2025-01-01T00:00:00.123Z', ' 2025-02-01 ', '', None, 'bad', '2025-02-30', 20250101, 0,
+         '2025-01-01T12:00:00', '2025-01-01 12:00:00', '2025-01-01T12:00:00.123456',
+         '2025-01-01T12', '20250101T120000', '2025-01-01Z12:00:00',
+         '2025-01-01T12:00:00+01:00', '20250101T120000+0100',
+         '2025-01-01T12:00:00Z', '2025-01-01T12:00:00-05:30'])]
     changes = [
         ('generic', "UPDATE profiles SET tax_country='generic',gains_algorithm='HIFO',fiat_currency='USD';"),
         ('generic-invalid-days', "UPDATE profiles SET tax_country='generic',tax_long_term_days=-1;"),
@@ -95,6 +99,52 @@ def cases():
     result += [(name, {}, sql) for name, sql in changes]
     result.append(('entry-offset-lexical', {'departure_date': '2023-12-31'}, "UPDATE journal_entries SET occurred_at='2024-01-01T00:30:00+02:00' WHERE id='new';"))
     result.append(('invalid-ledger-before-date', {'departure_date': 'bad'}, "UPDATE journal_entries SET proceeds_exact='invalid' WHERE id='new';"))
+    # Round 6/6b/6c/6d boundaries use explicit civil days and source instants.
+    clear = "DELETE FROM rates_cache; UPDATE transactions SET fiat_rate=NULL,fiat_rate_exact=NULL,fiat_value=NULL,fiat_value_exact=NULL;"
+    def cache(at, rate=65000, source='manual'):
+        return f"INSERT INTO rates_cache(pair,timestamp,rate,source,fetched_at) VALUES('BTC-EUR','{at}',{rate},'{source}','fixed');"
+    for country in ('at', 'generic'):
+        for method in ('fifo','lifo','hifo','lofo','moving_average') + (('moving_average_at',) if country == 'at' else ()):
+            result.append((f'method-{country}-{method}', {'departure_date':'2024-12-31'}, clear + f"UPDATE profiles SET tax_country='{country}',gains_algorithm=' {method.upper()} ';" + cache('2024-12-31T12:00:00Z')))
+    for day, cut in [('2024-01-15','2024-01-15T23:00:00Z'),('2024-07-15','2024-07-15T22:00:00Z'),('2024-03-31','2024-03-31T22:00:00Z'),('2024-10-27','2024-10-27T23:00:00Z')]:
+        from datetime import timedelta
+        instant = datetime.fromisoformat(cut.replace('Z','+00:00'))
+        for delta in (-1,0,1):
+            at = (instant + timedelta(microseconds=delta)).isoformat().replace('+00:00','Z')
+            result.append((f'vienna-{day}-{delta}', {'departure_date':day}, clear + f"UPDATE journal_entries SET occurred_at='{at}' WHERE id='new';" + cache(at)))
+        for source in ('cache','transaction'):
+            for older in (0,1):
+                at = (instant - timedelta(hours=24,microseconds=older)).isoformat().replace('+00:00','Z')
+                sql = cache(at) if source == 'cache' else f"UPDATE transactions SET occurred_at='{at}',fiat_rate=70000 WHERE id='in';"
+                result.append((f'vienna-age-{day}-{source}-{older}', {'departure_date':day},clear+sql))
+    for departure in ('2024-03-31T22:30:00Z','2024-03-31T23:30:00-01:00','2024-10-27T23:30:00Z'):
+        result.append(('civil-input-'+departure, {'departure_date':departure},clear))
+    for source in ('cache','transaction'):
+        for label, at in [('24h','2024-12-30T23:00:00Z'),('too-old','2024-12-30T22:59:59.999999Z'),('inside','2024-12-31T22:59:59.999999Z'),('cutoff','2024-12-31T23:00:00Z'),('future','2024-12-31T23:00:00.000001Z'),('offset','2025-01-01T00:59:59.123456+02:00')]:
+            sql = cache(at) if source == 'cache' else f"UPDATE transactions SET occurred_at='{at}',fiat_rate=70000 WHERE id='in';"
+            result.append((f'quote-{source}-{label}', {'departure_date':'2024-12-31'}, clear + sql))
+    for name, sql in [
+        ('zero-cache',cache('2024-12-31T13:00:00Z',0)),
+        ('zero-transaction',"UPDATE transactions SET occurred_at='2024-12-31T13:00:00Z',fiat_rate=0 WHERE id='in';"),
+        ('closest-transaction',cache('2024-01-01T00:00:00Z',1)+"UPDATE transactions SET occurred_at='2024-12-31T12:00:00Z',fiat_rate=70000 WHERE id='in';"),
+        ('closest-cache',cache('2024-12-31T13:00:00Z')+"UPDATE transactions SET occurred_at='2024-12-31T12:00:00Z',fiat_rate=70000 WHERE id='in';"),
+        ('equal-cache-priority',cache('2024-12-31T13:00:00Z',66000,'provider')+cache('2024-12-31T14:00:00+01:00')+"UPDATE transactions SET occurred_at='2024-12-31T13:00:00Z',fiat_rate=70000 WHERE id='in';"),
+        ('cache-instant-order',cache('2024-12-31T22:30:00+02:00',61000)+cache('2024-12-31T21:00:00Z',62000)),
+        ('transaction-instant-order',"UPDATE transactions SET occurred_at='2024-12-31T21:00:00Z',fiat_rate=62000 WHERE id='in'; UPDATE transactions SET occurred_at='2024-12-31T22:30:00+02:00',fiat_rate=61000 WHERE id='out';"),
+        ('transaction-cutoff-does-not-mask-earlier',"UPDATE transactions SET occurred_at='2024-12-31T22:59:59.999999Z',fiat_rate=62000 WHERE id='in'; UPDATE transactions SET occurred_at='2024-12-31T23:00:00Z',fiat_rate=61000 WHERE id='out';"),
+        ('cache-cutoff-does-not-mask-earlier',cache('2024-12-31T22:59:59.999999Z',62000)+cache('2024-12-31T23:00:00Z',61000)),
+        ('wallet-transfer-only',"UPDATE journal_entries SET entry_type='transfer_in',asset='OTHER' WHERE id='new';"),
+        ('wallet-transfer-priced',"UPDATE journal_entries SET entry_type='transfer_in',asset='OTHER' WHERE id='new'; INSERT INTO rates_cache(pair,timestamp,rate,source,fetched_at) VALUES('OTHER-EUR','2024-12-31T12:00:00Z',12,'manual','fixed');"),
+        ('current-holdings-ignored',"UPDATE journal_wallet_holdings SET quantity=999999999999;"),
+        ('wallet-transfer-fee',"UPDATE journal_entries SET entry_type='transfer_out',quantity=-150000000000,occurred_at='2024-12-31T12:00:00Z' WHERE id='z'; UPDATE journal_entries SET entry_type='transfer_fee',quantity=-50000000000,occurred_at='2024-12-31T12:00:00Z' WHERE id='fee';"),
+        ('outflow-marker-override',"UPDATE journal_entries SET description='at_regime=alt',at_category='neu_gain',occurred_at='2024-12-31T12:00:00Z' WHERE id='z';"),
+        ('legacy-outflow-category',"UPDATE journal_entries SET quantity=-100000000000,cost_basis=8000,at_category='alt_taxfree',occurred_at='2024-12-31T12:00:00Z' WHERE id='z';"),
+        ('bad-journal-instant',"UPDATE journal_entries SET occurred_at='bad' WHERE id='new';"),
+        ('missing-journal-instant',"UPDATE journal_entries SET occurred_at='' WHERE id='new';"),
+        ('old-semantics',"UPDATE profiles SET required_journal_semantics_version=2,journal_semantics_version=1;"),
+        ('unstamped',"UPDATE profiles SET required_journal_semantics_version=2,journal_semantics_version=0;"),
+    ]:
+        result.append((name,{'departure_date':'2024-12-31'},clear+sql))
     inherited = json.loads((ROOT / 'crates/reports/tests/data/full_xlsx.json').read_text())
     result += [('gate-' + c['name'], json.loads(c['args_json']), c['sql']) for c in inherited if 'error' in c['expected'] and 'history' not in c['name'] and 'wallet' not in c['name']]
     return result
@@ -132,7 +182,7 @@ if __name__ == '__main__':
     scratch = ROOT / 'target/r5-reports14/scratch'
     scratch.mkdir(parents=True, exist_ok=True)
     meta = {k: v for k, v in vars(exit_tax).items() if k.startswith('_ASSUMPTION_') or k == 'EXIT_TAX_REVIEW_GATE'}
-    meta['missing'] = ('EXIT-005: No cached rate found for one or more assets — run '
+    meta['missing'] = ('EXIT-005: No usable cached or transaction quote found for one or more assets — run '
         '`kassiber rates sync`; market value, gain, and estimated tax stay '
         'incomplete (null) until those holdings are priced.')
     with tempfile.TemporaryDirectory(dir=scratch) as root:

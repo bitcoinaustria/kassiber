@@ -112,6 +112,10 @@ R4-12 writer, not migration termination or the R4-13 pipeline caller; see the
 
 ### Journal calculation semantics and older writers
 
+Python and native storage install the same semantics columns, adoption audit,
+processing-marker trigger and version-2 outflow migration. Native retained-journal
+readers apply the same calculation-stamp requirement as the Python core.
+
 Journal builds now stamp `profiles.journal_semantics_version` separately after
 publishing their input markers. A trigger clears that stamp whenever a writer
 updates the processing markers, including an older binary that cannot stamp

@@ -11,7 +11,8 @@ import uuid
 
 import pytest
 
-from kassiber.db import DEFAULT_DB_FILENAME, open_db
+from kassiber.db import DEFAULT_DB_FILENAME, JOURNAL_CALCULATION_SEMANTICS_VERSION, open_db
+from kassiber.core.custody_journal import projection_freshness
 from tests import cli_runner
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -58,6 +59,9 @@ def _book(tmp_path, monkeypatch, country, algorithm, variant="ready"):
     conn = open_db(root)
     conn.execute("""UPDATE profiles SET last_processed_at=?,last_processed_tx_count=6,
         last_processed_input_version=journal_input_version WHERE id='p'""", (STAMP,))
+    conn.execute("UPDATE profiles SET journal_semantics_version=? WHERE id='p'",
+                 (JOURNAL_CALCULATION_SEMANTICS_VERSION,))
+    assert projection_freshness(conn, 'p')['is_current']
     if variant == "stale":
         conn.execute("UPDATE profiles SET journal_input_version=journal_input_version+1 WHERE id='p'")
     conn.commit()

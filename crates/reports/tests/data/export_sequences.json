@@ -800,6 +800,8 @@
           "cost_basis_pool_scope": "global",
           "journal_input_version": 7,
           "last_processed_input_version": 7,
+          "required_journal_semantics_version": 0,
+          "journal_semantics_version": 0,
           "last_processed_at": "2026-01-01T00:00:00Z",
           "last_processed_tx_count": 6,
           "ownership_review_counts_json": null,
@@ -819,6 +821,8 @@
           "cost_basis_pool_scope": "global",
           "journal_input_version": 0,
           "last_processed_input_version": 0,
+          "required_journal_semantics_version": 0,
+          "journal_semantics_version": 0,
           "last_processed_at": null,
           "last_processed_tx_count": 0,
           "ownership_review_counts_json": null,
@@ -839,6 +843,13 @@
           "created_at": "seeded"
         },
         {
+          "id": "at-outflow-consumed-regime-v2",
+          "migration_name": "at-outflow-consumed-regime-v2",
+          "schema_version": 1,
+          "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+          "created_at": "seeded"
+        },
+        {
           "id": "custody-fail-closed-holds-v1",
           "migration_name": "custody-fail-closed-holds-v1",
           "schema_version": 1,
@@ -850,6 +861,13 @@
           "migration_name": "custody-partial-payout-pricing-v1",
           "schema_version": 1,
           "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+          "created_at": "seeded"
+        },
+        {
+          "id": "journal-calculation-semantics-adoption-v1",
+          "migration_name": "journal-calculation-semantics-adoption-v1",
+          "schema_version": 1,
+          "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
           "created_at": "seeded"
         },
         {
@@ -2265,6 +2283,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -2284,6 +2304,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -2304,6 +2326,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -2315,6 +2344,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -3772,6 +3808,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -3791,6 +3829,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -3811,6 +3851,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -3822,6 +3869,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -5230,6 +5284,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -5249,6 +5305,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -5269,6 +5327,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -5280,6 +5345,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -6763,6 +6835,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -6782,6 +6856,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -6802,6 +6878,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -6813,6 +6896,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -8338,6 +8428,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -8357,6 +8449,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -8377,6 +8471,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -8388,6 +8489,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -9700,6 +9808,8 @@
           "cost_basis_pool_scope": "global",
           "journal_input_version": 7,
           "last_processed_input_version": 7,
+          "required_journal_semantics_version": 0,
+          "journal_semantics_version": 0,
           "last_processed_at": "2026-01-01T00:00:00Z",
           "last_processed_tx_count": 6,
           "ownership_review_counts_json": null,
@@ -9719,6 +9829,8 @@
           "cost_basis_pool_scope": "global",
           "journal_input_version": 0,
           "last_processed_input_version": 0,
+          "required_journal_semantics_version": 0,
+          "journal_semantics_version": 0,
           "last_processed_at": null,
           "last_processed_tx_count": 0,
           "ownership_review_counts_json": null,
@@ -9739,6 +9851,13 @@
           "created_at": "seeded"
         },
         {
+          "id": "at-outflow-consumed-regime-v2",
+          "migration_name": "at-outflow-consumed-regime-v2",
+          "schema_version": 1,
+          "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+          "created_at": "seeded"
+        },
+        {
           "id": "custody-fail-closed-holds-v1",
           "migration_name": "custody-fail-closed-holds-v1",
           "schema_version": 1,
@@ -9750,6 +9869,13 @@
           "migration_name": "custody-partial-payout-pricing-v1",
           "schema_version": 1,
           "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+          "created_at": "seeded"
+        },
+        {
+          "id": "journal-calculation-semantics-adoption-v1",
+          "migration_name": "journal-calculation-semantics-adoption-v1",
+          "schema_version": 1,
+          "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
           "created_at": "seeded"
         },
         {
@@ -11067,6 +11193,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -11086,6 +11214,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -11106,6 +11236,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -11117,6 +11254,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -12438,6 +12582,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -12457,6 +12603,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -12477,6 +12625,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -12488,6 +12643,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -13809,6 +13971,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -13828,6 +13992,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -13848,6 +14014,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -13859,6 +14032,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -15171,6 +15351,8 @@
           "cost_basis_pool_scope": "global",
           "journal_input_version": 8,
           "last_processed_input_version": 7,
+          "required_journal_semantics_version": 0,
+          "journal_semantics_version": 0,
           "last_processed_at": "2026-01-01T00:00:00Z",
           "last_processed_tx_count": 6,
           "ownership_review_counts_json": null,
@@ -15190,6 +15372,8 @@
           "cost_basis_pool_scope": "global",
           "journal_input_version": 0,
           "last_processed_input_version": 0,
+          "required_journal_semantics_version": 0,
+          "journal_semantics_version": 0,
           "last_processed_at": null,
           "last_processed_tx_count": 0,
           "ownership_review_counts_json": null,
@@ -15210,6 +15394,13 @@
           "created_at": "seeded"
         },
         {
+          "id": "at-outflow-consumed-regime-v2",
+          "migration_name": "at-outflow-consumed-regime-v2",
+          "schema_version": 1,
+          "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+          "created_at": "seeded"
+        },
+        {
           "id": "custody-fail-closed-holds-v1",
           "migration_name": "custody-fail-closed-holds-v1",
           "schema_version": 1,
@@ -15221,6 +15412,13 @@
           "migration_name": "custody-partial-payout-pricing-v1",
           "schema_version": 1,
           "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+          "created_at": "seeded"
+        },
+        {
+          "id": "journal-calculation-semantics-adoption-v1",
+          "migration_name": "journal-calculation-semantics-adoption-v1",
+          "schema_version": 1,
+          "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
           "created_at": "seeded"
         },
         {
@@ -16538,6 +16736,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 8,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -16557,6 +16757,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -16577,6 +16779,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -16588,6 +16797,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -17907,6 +18123,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 8,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -17926,6 +18144,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -17946,6 +18166,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -17957,6 +18184,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -19277,6 +19511,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 8,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -19296,6 +19532,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -19316,6 +19554,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -19327,6 +19572,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -20637,6 +20889,8 @@
           "cost_basis_pool_scope": "global",
           "journal_input_version": 7,
           "last_processed_input_version": 7,
+          "required_journal_semantics_version": 0,
+          "journal_semantics_version": 0,
           "last_processed_at": "2026-01-01T00:00:00Z",
           "last_processed_tx_count": 6,
           "ownership_review_counts_json": null,
@@ -20656,6 +20910,8 @@
           "cost_basis_pool_scope": "global",
           "journal_input_version": 0,
           "last_processed_input_version": 0,
+          "required_journal_semantics_version": 0,
+          "journal_semantics_version": 0,
           "last_processed_at": null,
           "last_processed_tx_count": 0,
           "ownership_review_counts_json": null,
@@ -20676,6 +20932,13 @@
           "created_at": "seeded"
         },
         {
+          "id": "at-outflow-consumed-regime-v2",
+          "migration_name": "at-outflow-consumed-regime-v2",
+          "schema_version": 1,
+          "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+          "created_at": "seeded"
+        },
+        {
           "id": "custody-fail-closed-holds-v1",
           "migration_name": "custody-fail-closed-holds-v1",
           "schema_version": 1,
@@ -20687,6 +20950,13 @@
           "migration_name": "custody-partial-payout-pricing-v1",
           "schema_version": 1,
           "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+          "created_at": "seeded"
+        },
+        {
+          "id": "journal-calculation-semantics-adoption-v1",
+          "migration_name": "journal-calculation-semantics-adoption-v1",
+          "schema_version": 1,
+          "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
           "created_at": "seeded"
         },
         {
@@ -22092,6 +22362,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -22111,6 +22383,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -22131,6 +22405,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -22142,6 +22423,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -23579,6 +23867,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -23598,6 +23888,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -23618,6 +23910,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -23629,6 +23928,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -25017,6 +25323,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -25036,6 +25344,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -25056,6 +25366,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -25067,6 +25384,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -26520,6 +26844,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -26539,6 +26865,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -26559,6 +26887,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -26570,6 +26905,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -28055,6 +28397,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -28074,6 +28418,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -28094,6 +28440,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -28105,6 +28458,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -29417,6 +29777,8 @@
           "cost_basis_pool_scope": "global",
           "journal_input_version": 7,
           "last_processed_input_version": 7,
+          "required_journal_semantics_version": 0,
+          "journal_semantics_version": 0,
           "last_processed_at": "2026-01-01T00:00:00Z",
           "last_processed_tx_count": 6,
           "ownership_review_counts_json": null,
@@ -29436,6 +29798,8 @@
           "cost_basis_pool_scope": "global",
           "journal_input_version": 0,
           "last_processed_input_version": 0,
+          "required_journal_semantics_version": 0,
+          "journal_semantics_version": 0,
           "last_processed_at": null,
           "last_processed_tx_count": 0,
           "ownership_review_counts_json": null,
@@ -29456,6 +29820,13 @@
           "created_at": "seeded"
         },
         {
+          "id": "at-outflow-consumed-regime-v2",
+          "migration_name": "at-outflow-consumed-regime-v2",
+          "schema_version": 1,
+          "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+          "created_at": "seeded"
+        },
+        {
           "id": "custody-fail-closed-holds-v1",
           "migration_name": "custody-fail-closed-holds-v1",
           "schema_version": 1,
@@ -29467,6 +29838,13 @@
           "migration_name": "custody-partial-payout-pricing-v1",
           "schema_version": 1,
           "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+          "created_at": "seeded"
+        },
+        {
+          "id": "journal-calculation-semantics-adoption-v1",
+          "migration_name": "journal-calculation-semantics-adoption-v1",
+          "schema_version": 1,
+          "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
           "created_at": "seeded"
         },
         {
@@ -30882,6 +31260,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -30901,6 +31281,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -30921,6 +31303,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -30932,6 +31321,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -32389,6 +32785,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -32408,6 +32806,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -32428,6 +32828,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -32439,6 +32846,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -33847,6 +34261,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -33866,6 +34282,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -33886,6 +34304,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -33897,6 +34322,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -35380,6 +35812,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -35399,6 +35833,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -35419,6 +35855,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -35430,6 +35873,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -36955,6 +37405,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -36974,6 +37426,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -36994,6 +37448,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -37005,6 +37466,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -38317,6 +38785,8 @@
           "cost_basis_pool_scope": "global",
           "journal_input_version": 7,
           "last_processed_input_version": 7,
+          "required_journal_semantics_version": 0,
+          "journal_semantics_version": 0,
           "last_processed_at": "2026-01-01T00:00:00Z",
           "last_processed_tx_count": 6,
           "ownership_review_counts_json": null,
@@ -38336,6 +38806,8 @@
           "cost_basis_pool_scope": "global",
           "journal_input_version": 0,
           "last_processed_input_version": 0,
+          "required_journal_semantics_version": 0,
+          "journal_semantics_version": 0,
           "last_processed_at": null,
           "last_processed_tx_count": 0,
           "ownership_review_counts_json": null,
@@ -38356,6 +38828,13 @@
           "created_at": "seeded"
         },
         {
+          "id": "at-outflow-consumed-regime-v2",
+          "migration_name": "at-outflow-consumed-regime-v2",
+          "schema_version": 1,
+          "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+          "created_at": "seeded"
+        },
+        {
           "id": "custody-fail-closed-holds-v1",
           "migration_name": "custody-fail-closed-holds-v1",
           "schema_version": 1,
@@ -38367,6 +38846,13 @@
           "migration_name": "custody-partial-payout-pricing-v1",
           "schema_version": 1,
           "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+          "created_at": "seeded"
+        },
+        {
+          "id": "journal-calculation-semantics-adoption-v1",
+          "migration_name": "journal-calculation-semantics-adoption-v1",
+          "schema_version": 1,
+          "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
           "created_at": "seeded"
         },
         {
@@ -39684,6 +40170,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -39703,6 +40191,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -39723,6 +40213,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -39734,6 +40231,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -41055,6 +41559,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -41074,6 +41580,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -41094,6 +41602,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -41105,6 +41620,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -42426,6 +42948,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -42445,6 +42969,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -42465,6 +42991,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -42476,6 +43009,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -43788,6 +44328,8 @@
           "cost_basis_pool_scope": "global",
           "journal_input_version": 8,
           "last_processed_input_version": 7,
+          "required_journal_semantics_version": 0,
+          "journal_semantics_version": 0,
           "last_processed_at": "2026-01-01T00:00:00Z",
           "last_processed_tx_count": 6,
           "ownership_review_counts_json": null,
@@ -43807,6 +44349,8 @@
           "cost_basis_pool_scope": "global",
           "journal_input_version": 0,
           "last_processed_input_version": 0,
+          "required_journal_semantics_version": 0,
+          "journal_semantics_version": 0,
           "last_processed_at": null,
           "last_processed_tx_count": 0,
           "ownership_review_counts_json": null,
@@ -43827,6 +44371,13 @@
           "created_at": "seeded"
         },
         {
+          "id": "at-outflow-consumed-regime-v2",
+          "migration_name": "at-outflow-consumed-regime-v2",
+          "schema_version": 1,
+          "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+          "created_at": "seeded"
+        },
+        {
           "id": "custody-fail-closed-holds-v1",
           "migration_name": "custody-fail-closed-holds-v1",
           "schema_version": 1,
@@ -43838,6 +44389,13 @@
           "migration_name": "custody-partial-payout-pricing-v1",
           "schema_version": 1,
           "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+          "created_at": "seeded"
+        },
+        {
+          "id": "journal-calculation-semantics-adoption-v1",
+          "migration_name": "journal-calculation-semantics-adoption-v1",
+          "schema_version": 1,
+          "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
           "created_at": "seeded"
         },
         {
@@ -45155,6 +45713,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 8,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -45174,6 +45734,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -45194,6 +45756,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -45205,6 +45774,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -46524,6 +47100,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 8,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -46543,6 +47121,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -46563,6 +47143,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -46574,6 +47161,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -47894,6 +48488,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 8,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -47913,6 +48509,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -47933,6 +48531,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -47944,6 +48549,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -49254,6 +49866,8 @@
           "cost_basis_pool_scope": "global",
           "journal_input_version": 7,
           "last_processed_input_version": 7,
+          "required_journal_semantics_version": 0,
+          "journal_semantics_version": 0,
           "last_processed_at": "2026-01-01T00:00:00Z",
           "last_processed_tx_count": 6,
           "ownership_review_counts_json": null,
@@ -49273,6 +49887,8 @@
           "cost_basis_pool_scope": "global",
           "journal_input_version": 0,
           "last_processed_input_version": 0,
+          "required_journal_semantics_version": 0,
+          "journal_semantics_version": 0,
           "last_processed_at": null,
           "last_processed_tx_count": 0,
           "ownership_review_counts_json": null,
@@ -49293,6 +49909,13 @@
           "created_at": "seeded"
         },
         {
+          "id": "at-outflow-consumed-regime-v2",
+          "migration_name": "at-outflow-consumed-regime-v2",
+          "schema_version": 1,
+          "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+          "created_at": "seeded"
+        },
+        {
           "id": "custody-fail-closed-holds-v1",
           "migration_name": "custody-fail-closed-holds-v1",
           "schema_version": 1,
@@ -49304,6 +49927,13 @@
           "migration_name": "custody-partial-payout-pricing-v1",
           "schema_version": 1,
           "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+          "created_at": "seeded"
+        },
+        {
+          "id": "journal-calculation-semantics-adoption-v1",
+          "migration_name": "journal-calculation-semantics-adoption-v1",
+          "schema_version": 1,
+          "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
           "created_at": "seeded"
         },
         {
@@ -50709,6 +51339,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -50728,6 +51360,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -50748,6 +51382,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -50759,6 +51400,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -52196,6 +52844,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -52215,6 +52865,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -52235,6 +52887,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -52246,6 +52905,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -53634,6 +54300,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -53653,6 +54321,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -53673,6 +54343,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -53684,6 +54361,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -55137,6 +55821,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -55156,6 +55842,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -55176,6 +55864,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -55187,6 +55882,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -56672,6 +57374,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -56691,6 +57395,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -56711,6 +57417,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -56722,6 +57435,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -58034,6 +58754,8 @@
           "cost_basis_pool_scope": "global",
           "journal_input_version": 7,
           "last_processed_input_version": 7,
+          "required_journal_semantics_version": 0,
+          "journal_semantics_version": 0,
           "last_processed_at": "2026-01-01T00:00:00Z",
           "last_processed_tx_count": 6,
           "ownership_review_counts_json": null,
@@ -58053,6 +58775,8 @@
           "cost_basis_pool_scope": "global",
           "journal_input_version": 0,
           "last_processed_input_version": 0,
+          "required_journal_semantics_version": 0,
+          "journal_semantics_version": 0,
           "last_processed_at": null,
           "last_processed_tx_count": 0,
           "ownership_review_counts_json": null,
@@ -58073,6 +58797,13 @@
           "created_at": "seeded"
         },
         {
+          "id": "at-outflow-consumed-regime-v2",
+          "migration_name": "at-outflow-consumed-regime-v2",
+          "schema_version": 1,
+          "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+          "created_at": "seeded"
+        },
+        {
           "id": "custody-fail-closed-holds-v1",
           "migration_name": "custody-fail-closed-holds-v1",
           "schema_version": 1,
@@ -58084,6 +58815,13 @@
           "migration_name": "custody-partial-payout-pricing-v1",
           "schema_version": 1,
           "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+          "created_at": "seeded"
+        },
+        {
+          "id": "journal-calculation-semantics-adoption-v1",
+          "migration_name": "journal-calculation-semantics-adoption-v1",
+          "schema_version": 1,
+          "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
           "created_at": "seeded"
         },
         {
@@ -59499,6 +60237,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -59518,6 +60258,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -59538,6 +60280,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -59549,6 +60298,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -61006,6 +61762,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -61025,6 +61783,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -61045,6 +61805,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -61056,6 +61823,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -62464,6 +63238,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -62483,6 +63259,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -62503,6 +63281,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -62514,6 +63299,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -64101,6 +64893,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -64120,6 +64914,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -64140,6 +64936,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -64151,6 +64954,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -65691,6 +66501,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -65710,6 +66522,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -65730,6 +66544,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -65741,6 +66562,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -67323,6 +68151,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -67342,6 +68172,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -67362,6 +68194,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -67373,6 +68212,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -68700,6 +69546,8 @@
           "cost_basis_pool_scope": "global",
           "journal_input_version": 7,
           "last_processed_input_version": 7,
+          "required_journal_semantics_version": 0,
+          "journal_semantics_version": 0,
           "last_processed_at": "2026-01-01T00:00:00Z",
           "last_processed_tx_count": 6,
           "ownership_review_counts_json": null,
@@ -68719,6 +69567,8 @@
           "cost_basis_pool_scope": "global",
           "journal_input_version": 0,
           "last_processed_input_version": 0,
+          "required_journal_semantics_version": 0,
+          "journal_semantics_version": 0,
           "last_processed_at": null,
           "last_processed_tx_count": 0,
           "ownership_review_counts_json": null,
@@ -68739,6 +69589,13 @@
           "created_at": "seeded"
         },
         {
+          "id": "at-outflow-consumed-regime-v2",
+          "migration_name": "at-outflow-consumed-regime-v2",
+          "schema_version": 1,
+          "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+          "created_at": "seeded"
+        },
+        {
           "id": "custody-fail-closed-holds-v1",
           "migration_name": "custody-fail-closed-holds-v1",
           "schema_version": 1,
@@ -68750,6 +69607,13 @@
           "migration_name": "custody-partial-payout-pricing-v1",
           "schema_version": 1,
           "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+          "created_at": "seeded"
+        },
+        {
+          "id": "journal-calculation-semantics-adoption-v1",
+          "migration_name": "journal-calculation-semantics-adoption-v1",
+          "schema_version": 1,
+          "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
           "created_at": "seeded"
         },
         {
@@ -70067,6 +70931,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -70086,6 +70952,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -70106,6 +70974,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -70117,6 +70992,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -71438,6 +72320,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -71457,6 +72341,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -71477,6 +72363,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -71488,6 +72381,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -72809,6 +73709,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -72828,6 +73730,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -72848,6 +73752,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -72859,6 +73770,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -74181,6 +75099,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -74200,6 +75120,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -74220,6 +75142,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -74231,6 +75160,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -75558,6 +76494,8 @@
           "cost_basis_pool_scope": "global",
           "journal_input_version": 8,
           "last_processed_input_version": 7,
+          "required_journal_semantics_version": 0,
+          "journal_semantics_version": 0,
           "last_processed_at": "2026-01-01T00:00:00Z",
           "last_processed_tx_count": 6,
           "ownership_review_counts_json": null,
@@ -75577,6 +76515,8 @@
           "cost_basis_pool_scope": "global",
           "journal_input_version": 0,
           "last_processed_input_version": 0,
+          "required_journal_semantics_version": 0,
+          "journal_semantics_version": 0,
           "last_processed_at": null,
           "last_processed_tx_count": 0,
           "ownership_review_counts_json": null,
@@ -75597,6 +76537,13 @@
           "created_at": "seeded"
         },
         {
+          "id": "at-outflow-consumed-regime-v2",
+          "migration_name": "at-outflow-consumed-regime-v2",
+          "schema_version": 1,
+          "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+          "created_at": "seeded"
+        },
+        {
           "id": "custody-fail-closed-holds-v1",
           "migration_name": "custody-fail-closed-holds-v1",
           "schema_version": 1,
@@ -75608,6 +76555,13 @@
           "migration_name": "custody-partial-payout-pricing-v1",
           "schema_version": 1,
           "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+          "created_at": "seeded"
+        },
+        {
+          "id": "journal-calculation-semantics-adoption-v1",
+          "migration_name": "journal-calculation-semantics-adoption-v1",
+          "schema_version": 1,
+          "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
           "created_at": "seeded"
         },
         {
@@ -76925,6 +77879,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 8,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -76944,6 +77900,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -76964,6 +77922,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -76975,6 +77940,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -78294,6 +79266,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 8,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -78313,6 +79287,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -78333,6 +79309,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -78344,6 +79327,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -79664,6 +80654,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 8,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -79683,6 +80675,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -79703,6 +80697,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -79714,6 +80715,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -81034,6 +82042,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 8,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -81053,6 +82063,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -81073,6 +82085,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -81084,6 +82103,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -82394,6 +83420,8 @@
           "cost_basis_pool_scope": "global",
           "journal_input_version": 7,
           "last_processed_input_version": 7,
+          "required_journal_semantics_version": 0,
+          "journal_semantics_version": 0,
           "last_processed_at": "2026-01-01T00:00:00Z",
           "last_processed_tx_count": 6,
           "ownership_review_counts_json": null,
@@ -82413,6 +83441,8 @@
           "cost_basis_pool_scope": "global",
           "journal_input_version": 0,
           "last_processed_input_version": 0,
+          "required_journal_semantics_version": 0,
+          "journal_semantics_version": 0,
           "last_processed_at": null,
           "last_processed_tx_count": 0,
           "ownership_review_counts_json": null,
@@ -82433,6 +83463,13 @@
           "created_at": "seeded"
         },
         {
+          "id": "at-outflow-consumed-regime-v2",
+          "migration_name": "at-outflow-consumed-regime-v2",
+          "schema_version": 1,
+          "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+          "created_at": "seeded"
+        },
+        {
           "id": "custody-fail-closed-holds-v1",
           "migration_name": "custody-fail-closed-holds-v1",
           "schema_version": 1,
@@ -82444,6 +83481,13 @@
           "migration_name": "custody-partial-payout-pricing-v1",
           "schema_version": 1,
           "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+          "created_at": "seeded"
+        },
+        {
+          "id": "journal-calculation-semantics-adoption-v1",
+          "migration_name": "journal-calculation-semantics-adoption-v1",
+          "schema_version": 1,
+          "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
           "created_at": "seeded"
         },
         {
@@ -83849,6 +84893,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -83868,6 +84914,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -83888,6 +84936,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -83899,6 +84954,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -85336,6 +86398,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -85355,6 +86419,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -85375,6 +86441,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -85386,6 +86459,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -86774,6 +87854,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -86793,6 +87875,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -86813,6 +87897,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -86824,6 +87915,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -88381,6 +89479,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -88400,6 +89500,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -88420,6 +89522,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -88431,6 +89540,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -89931,6 +91047,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -89950,6 +91068,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -89970,6 +91090,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -89981,6 +91108,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {
@@ -91513,6 +92647,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 7,
               "last_processed_input_version": 7,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": "2026-01-01T00:00:00Z",
               "last_processed_tx_count": 6,
               "ownership_review_counts_json": null,
@@ -91532,6 +92668,8 @@
               "cost_basis_pool_scope": "global",
               "journal_input_version": 0,
               "last_processed_input_version": 0,
+              "required_journal_semantics_version": 0,
+              "journal_semantics_version": 0,
               "last_processed_at": null,
               "last_processed_tx_count": 0,
               "ownership_review_counts_json": null,
@@ -91552,6 +92690,13 @@
               "created_at": "seeded"
             },
             {
+              "id": "at-outflow-consumed-regime-v2",
+              "migration_name": "at-outflow-consumed-regime-v2",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
               "id": "custody-fail-closed-holds-v1",
               "migration_name": "custody-fail-closed-holds-v1",
               "schema_version": 1,
@@ -91563,6 +92708,13 @@
               "migration_name": "custody-partial-payout-pricing-v1",
               "schema_version": 1,
               "impact_json": "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+              "created_at": "seeded"
+            },
+            {
+              "id": "journal-calculation-semantics-adoption-v1",
+              "migration_name": "journal-calculation-semantics-adoption-v1",
+              "schema_version": 1,
+              "impact_json": "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
               "created_at": "seeded"
             },
             {

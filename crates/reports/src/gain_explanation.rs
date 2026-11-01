@@ -98,7 +98,8 @@ pub(super) fn fresh(conn: &Connection, profile: &Value) -> Result<(bool, bool)> 
     let processed_count = profile_number(profile, "last_processed_tx_count")?;
     let input_version = profile_number(profile, "journal_input_version")?;
     let processed_version = profile_number(profile, "last_processed_input_version")?;
-    let current = truthy(value(profile, "last_processed_at"))
+    let current = semantics_current(profile)
+        && truthy(value(profile, "last_processed_at"))
         && processed_count == Value::Int(active.into())
         && input_version == processed_version;
     Ok((current, active != 0 && !current))

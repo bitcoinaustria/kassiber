@@ -356,6 +356,15 @@ pub fn execute_with_sources(
     }
 }
 
+fn semantics_current(profile: &Value) -> bool {
+    get(profile, "required_journal_semantics_version").is_some()
+        && get(profile, "journal_semantics_version").is_some()
+        && kassiber_store::semantics::compatible(
+            int(profile, "required_journal_semantics_version"),
+            int(profile, "journal_semantics_version"),
+        )
+}
+
 fn require_context(conn: &Connection, profile: &Value, austrian: bool) -> Result<()> {
     let id = text(profile, "id");
     kassiber_setup::networks::require_accounting(conn, &id)?;
@@ -394,7 +403,8 @@ fn require_context(conn: &Connection, profile: &Value, austrian: bool) -> Result
             |r| r.get(0),
         )
         .map_err(sql_error)?;
-    if !truthy(value(profile, "last_processed_at"))
+    if !semantics_current(profile)
+        || !truthy(value(profile, "last_processed_at"))
         || int(profile, "last_processed_tx_count") != active
         || int(profile, "journal_input_version") != int(profile, "last_processed_input_version")
     {

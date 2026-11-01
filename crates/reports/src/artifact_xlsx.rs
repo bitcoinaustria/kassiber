@@ -180,14 +180,23 @@ pub(super) fn sheet(section: &Section) -> Result<Sheet> {
         row: 0,
         height: 28.0,
     });
-    ops.push(Operation::Merge {
-        first_row: 0,
-        first_col: 0,
-        last_row: 0,
-        last_col: headers.len().saturating_sub(1) as u16,
-        text: section.title.clone(),
-        style: 0,
-    });
+    if headers.len() == 1 {
+        ops.push(Operation::Cell {
+            row: 0,
+            col: 0,
+            value: Cell::String(section.title.clone()),
+            style: 0,
+        });
+    } else {
+        ops.push(Operation::Merge {
+            first_row: 0,
+            first_col: 0,
+            last_row: 0,
+            last_col: headers.len().saturating_sub(1) as u16,
+            text: section.title.clone(),
+            style: 0,
+        });
+    }
     let height = headers
         .iter()
         .enumerate()

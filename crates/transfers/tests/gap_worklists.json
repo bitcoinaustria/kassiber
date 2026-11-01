@@ -16,7 +16,7 @@
     "custody_filed_report_impacts"
   ],
   "states": {
-    "029a50917531f0e15a8ab39f334ca85e5a3c2a1f3db03323d399ddcc056f9252": [
+    "0c673988609cc53f962dc3fd34a9c94f6a543e72027923e4815cbd416d976f38": [
       {
         "id": "other",
         "workspace_id": "w",
@@ -30,6 +30,8 @@
         "cost_basis_pool_scope": "global",
         "journal_input_version": 0,
         "last_processed_input_version": 0,
+        "required_journal_semantics_version": 0,
+        "journal_semantics_version": 0,
         "last_processed_at": null,
         "last_processed_tx_count": 0,
         "ownership_review_counts_json": null,
@@ -49,6 +51,8 @@
         "cost_basis_pool_scope": "global",
         "journal_input_version": 0,
         "last_processed_input_version": 0,
+        "required_journal_semantics_version": 0,
+        "journal_semantics_version": 0,
         "last_processed_at": "2025-01-01T00:00:00Z",
         "last_processed_tx_count": 42,
         "ownership_review_counts_json": "{\"owned\":7}",
@@ -204,7 +208,7 @@
           "rows": {
             "chain_index_clock": "e25e95cb618e67f53a624d333b411b957df53051e82c8433cb122fbdf06e56be",
             "chain_index_dirty": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-            "profiles": "029a50917531f0e15a8ab39f334ca85e5a3c2a1f3db03323d399ddcc056f9252",
+            "profiles": "0c673988609cc53f962dc3fd34a9c94f6a543e72027923e4815cbd416d976f38",
             "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -354,7 +358,7 @@
           "rows": {
             "chain_index_clock": "b4055316075e20405d64697080ab632667c8b22d2b86f09fafa9ebed7333515c",
             "chain_index_dirty": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-            "profiles": "029a50917531f0e15a8ab39f334ca85e5a3c2a1f3db03323d399ddcc056f9252",
+            "profiles": "0c673988609cc53f962dc3fd34a9c94f6a543e72027923e4815cbd416d976f38",
             "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",

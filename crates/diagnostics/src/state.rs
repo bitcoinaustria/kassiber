@@ -141,11 +141,18 @@ pub fn state(conn: &Connection, backends: Value) -> Result<Value> {
     ]))
 }
 fn profiles(conn: &Connection) -> Result<Value> {
-    let rows=rows(conn,"SELECT p.id,p.tax_country,p.fiat_currency,p.gains_algorithm,p.last_processed_at,p.last_processed_tx_count,p.journal_input_version,p.last_processed_input_version,COUNT(t.id) AS active_transactions FROM profiles p LEFT JOIN transactions t ON t.profile_id=p.id AND t.excluded=0 GROUP BY p.id")?;
+    let rows=rows(conn,"SELECT p.id,p.tax_country,p.fiat_currency,p.gains_algorithm,p.last_processed_at,p.last_processed_tx_count,p.journal_input_version,p.last_processed_input_version,p.required_journal_semantics_version,p.journal_semantics_version,COUNT(t.id) AS active_transactions FROM profiles p LEFT JOIN transactions t ON t.profile_id=p.id AND t.excluded=0 GROUP BY p.id")?;
     let processed = rows
         .iter()
         .filter(|r| {
-            truthy(val(r, "last_processed_at"))
+            kassiber_store::semantics::compatible(
+                py_str(val(r, "required_journal_semantics_version"))
+                    .parse()
+                    .unwrap_or(-1),
+                py_str(val(r, "journal_semantics_version"))
+                    .parse()
+                    .unwrap_or(-1),
+            ) && truthy(val(r, "last_processed_at"))
                 && val(r, "active_transactions") == val(r, "last_processed_tx_count")
                 && val(r, "journal_input_version") == val(r, "last_processed_input_version")
         })

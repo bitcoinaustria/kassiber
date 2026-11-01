@@ -400,12 +400,12 @@ pub fn accounting_inputs(
     Ok(AccountingInputs { states, bindings })
 }
 
-/// `SELECT 1 FROM profiles WHERE ... journal_input_version = last_processed_input_version`.
+/// Canonical journal freshness, including transaction count and calculation semantics.
 pub fn journal_current(conn: &Connection, profile_id: &str) -> Result<bool> {
     Ok(first(
         conn,
-        "SELECT 1 FROM profiles WHERE id = ? AND last_processed_at IS NOT NULL
-            AND journal_input_version = last_processed_input_version",
+        &format!("SELECT 1 FROM profiles p WHERE id = ? AND last_processed_at IS NOT NULL
+            AND journal_input_version = last_processed_input_version AND last_processed_tx_count=(SELECT COUNT(*) FROM transactions t WHERE t.profile_id=p.id AND t.excluded=0) AND {}",kassiber_store::semantics::current_sql("p")),
         [profile_id],
     )?
     .is_some())

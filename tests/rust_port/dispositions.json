@@ -9853,6 +9853,50 @@
         "tests": 2
       }
     },
+    "tests/test_exit_tax_reference_fixes.py": {
+      "test_report_names_the_books_selected_method": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.core.exit_tax directly", "reviewed": false, "tests": 1},
+      "test_departure_cutoff_compares_exact_instants": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.cli.handlers, kassiber.core.reports directly", "reviewed": false, "tests": 1},
+      "test_transaction_fallback_is_bounded_and_discloses_its_source_time": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.cli.handlers, kassiber.core.reports directly", "reviewed": false, "tests": 1},
+      "test_future_only_transaction_price_leaves_historical_estimate_unpriced": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.cli.handlers, kassiber.core.reports directly", "reviewed": false, "tests": 1},
+      "test_excluded_transaction_cannot_supply_a_historical_price": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.cli.handlers, kassiber.core.reports directly", "reviewed": false, "tests": 1},
+      "test_undated_or_future_state_fallback_cannot_price_a_past_departure": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.core.exit_tax directly", "reviewed": false, "tests": 1},
+      "test_wallet_context_replays_cutoff_transfers_and_ignores_current_holdings": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.cli.handlers, kassiber.core.reports directly", "reviewed": false, "tests": 1},
+      "test_wallet_only_asset_gets_its_cached_quote": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.cli.handlers, kassiber.core.reports directly", "reviewed": false, "tests": 1},
+      "test_xlsx_keeps_assumptions_title_and_quarantine_disclosure": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.cli.handlers, kassiber.core.reports directly", "reviewed": false, "tests": 1},
+      "test_exit_estimate_does_not_register_realized_journal_snapshot": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.cli.handlers, kassiber.db directly", "reviewed": false, "tests": 1},
+      "test_exit_estimate_still_requires_fresh_journals": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.cli.handlers, kassiber.core.reports directly", "reviewed": false, "tests": 1}
+    },
+    "tests/test_exit_tax_review.py": {
+      "test_regime_inventory_matches_realized_lots_and_dashboard": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.cli.handlers, kassiber.core.accounts directly", "reviewed": false, "tests": 1},
+      "test_reviewer_headline_also_accounts_for_the_consumed_alt_fee": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.cli.handlers, kassiber.core.accounts directly", "reviewed": false, "tests": 1},
+      "test_old_fee_journals_require_one_rebuild_without_rewriting_evidence": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.cli.handlers, kassiber.core.accounts directly", "reviewed": false, "tests": 1},
+      "test_generic_book_requires_one_rebuild_after_semantics_version_upgrade": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.cli.handlers, kassiber.core.accounts directly", "reviewed": false, "tests": 1},
+      "test_full_departure_day_includes_fractional_inventory_and_quotes": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.cli.handlers, kassiber.core.accounts directly", "reviewed": false, "tests": 1},
+      "test_transaction_fmv_age_limit_through_real_engine": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.cli.handlers, kassiber.core.accounts directly", "reviewed": false, "tests": 1},
+      "test_handoffs_always_show_fmv_source_and_actual_quote_time": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.cli.handlers, kassiber.core.accounts directly", "reviewed": false, "tests": 1},
+      "test_unpriced_wallet_only_rail_keeps_all_valuation_totals_incomplete": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.cli.handlers, kassiber.core.accounts directly", "reviewed": false, "tests": 1},
+      "test_handoff_stamps_current_input_version_and_quotes_without_snapshot": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.cli.handlers, kassiber.core.accounts directly", "reviewed": false, "tests": 1},
+      "test_reviewer_method_jurisdiction_override_matrix": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.cli.handlers, kassiber.core.accounts directly", "reviewed": false, "tests": 1},
+      "test_disposal_override_keeps_separate_consumed_regime_rows": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.cli.handlers, kassiber.core.accounts directly", "reviewed": false, "tests": 1},
+      "test_at_outflow_semantics_upgrade_includes_disposals_without_fees": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.cli.handlers, kassiber.core.accounts directly", "reviewed": false, "tests": 1},
+      "test_downgrade_and_rebuild_cannot_reuse_outflow_semantics": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.cli.handlers, kassiber.core.accounts directly", "reviewed": false, "tests": 1},
+      "test_cached_fmv_uses_the_same_age_limit": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.cli.handlers, kassiber.core.accounts directly", "reviewed": false, "tests": 1},
+      "test_closest_fmv_quote_wins_across_sources": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.cli.handlers, kassiber.core.accounts directly", "reviewed": false, "tests": 1},
+      "test_cached_fmv_chooses_closest_instant_across_offsets": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.cli.handlers, kassiber.core.accounts directly", "reviewed": false, "tests": 1},
+      "test_civil_day_cutoff_bounds_inventory_and_both_quote_sources": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.cli.handlers, kassiber.core.accounts directly", "reviewed": false, "tests": 1},
+      "test_offset_departure_selects_jurisdiction_civil_day": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.cli.handlers, kassiber.core.accounts directly", "reviewed": false, "tests": 1},
+      "test_timed_departure_requires_explicit_offset": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.cli.handlers, kassiber.core.accounts directly", "reviewed": false, "tests": 1},
+      "test_exit_tax_help_requires_offset_for_timed_departures": {"disposition": "rust-test", "flags": [], "group": "reports", "reason": "calls kassiber.cli.main directly", "reviewed": false, "tests": 1},
+      "test_dst_day_keeps_quote_age_at_24_elapsed_hours": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.cli.handlers, kassiber.core.accounts directly", "reviewed": false, "tests": 1},
+      "test_handoffs_stamp_departure_timezone": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.cli.handlers, kassiber.core.accounts directly", "reviewed": false, "tests": 1},
+      "test_original_reviewer_timestamps_obey_new_vienna_cutoff": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.cli.handlers, kassiber.core.accounts directly", "reviewed": false, "tests": 1},
+      "test_dashboard_today_uses_the_same_vienna_civil_day": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.core.accounts, kassiber.cli.handlers directly", "reviewed": false, "tests": 1},
+      "test_dashboard_entry_has_alt_regime_uses_consumed_marker": {"disposition": "rust-test", "flags": [], "group": "reports", "reason": "calls kassiber.core.ui_snapshot directly", "reviewed": false, "tests": 1},
+      "test_dashboard_wallet_flags_follow_real_consumption_despite_override": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.core.accounts, kassiber.core.ui_snapshot directly", "reviewed": false, "tests": 1},
+      "test_dashboard_wallet_flags_clear_after_cross_wallet_alt_exhaustion": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.cli.handlers, kassiber.core.accounts directly", "reviewed": false, "tests": 1},
+      "test_dashboard_wallet_flags_gate_each_asset_by_remaining_alt_inventory": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.core.accounts, kassiber.cli.handlers directly", "reviewed": false, "tests": 1},
+      "test_fmv_asof_renders_utc_in_payload_pdf_and_xlsx": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.cli.handlers, kassiber.core.accounts directly", "reviewed": false, "tests": 1}
+    },
     "tests/test_export_range.py": {
       "ExportRangeTests": {
         "disposition": "rust-test",
@@ -10862,6 +10906,14 @@
         "reviewed": true,
         "tests": 1
       }
+    },
+    "tests/test_journal_freshness_readers.py": {
+      "test_chain_readers_withhold_current_custody_without_a_stamp": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "journals", "reason": "canonical calculation-stamp freshness must gate retained graph, AI, diagnostic and SQL-list projections; native report/store regressions cover the shared stamp and affected readers retain their own contracts", "reviewed": true, "tests": 1},
+      "test_diagnostics_counts_unstamped_book_as_stale": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "journals", "reason": "canonical calculation-stamp freshness must gate retained graph, AI, diagnostic and SQL-list projections; native report/store regressions cover the shared stamp and affected readers retain their own contracts", "reviewed": true, "tests": 1},
+      "test_sql_predicate_matches_shared_evaluator": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "journals", "reason": "canonical calculation-stamp freshness must gate retained graph, AI, diagnostic and SQL-list projections; native report/store regressions cover the shared stamp and affected readers retain their own contracts", "reviewed": true, "tests": 1}
+    },
+    "tests/test_journal_semantics_adoption.py": {
+      "test_adoption_requires_stamped_rebuild_and_records_one_audit": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "journals", "reason": "calls kassiber.cli.handlers, kassiber.core.custody_journal directly", "reviewed": false, "tests": 1}
     },
     "tests/test_journal_storage_format.py": {
       "test_realized_entries_store_compact_calculations_that_restore_legacy_bytes": {

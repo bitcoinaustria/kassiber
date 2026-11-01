@@ -13,10 +13,12 @@ from kassiber.core import acquisition_review
 
 DESTINATION = Path(__file__).resolve().parents[1] / "fixtures/semantics.json"
 MIGRATIONS = (
+    (db.JOURNAL_SEMANTICS_ADOPTION_MIGRATION, db._migrate_journal_semantics_adoption),
     (db.WAGES_ACQUISITION_SEMANTICS_MIGRATION, db._migrate_wages_acquisition_semantics),
     (db.RP2_POOL_BASIS_SEMANTICS_MIGRATION, db._migrate_rp2_pool_basis_semantics),
     (db.CUSTODY_HOLD_SEMANTICS_MIGRATION, db._migrate_custody_hold_semantics),
     (db.TAX_ENGINE_SEMANTICS_MIGRATION, db._migrate_tax_engine_semantics),
+    (db.AT_OUTFLOW_REGIME_SEMANTICS_MIGRATION, db._migrate_at_outflow_regime_semantics),
     (acquisition_review.VALUATION_MIGRATION, acquisition_review.migrate_valuation_support),
     (db.PARTIAL_PAYOUT_SEMANTICS_MIGRATION, db._migrate_partial_payout_semantics),
 )

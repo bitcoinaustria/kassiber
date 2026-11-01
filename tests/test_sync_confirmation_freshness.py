@@ -110,7 +110,7 @@ def test_esplora_does_not_reuse_histories_without_a_valid_tip(tip):
     history.assert_called_once()
 
 
-@pytest.mark.parametrize("scenario", ["chronology", "authority"])
+@pytest.mark.parametrize("scenario", ["chronology", "authority", "semantics"])
 def test_duplicate_sync_invalidates_only_changed_observation_inputs(tmp_path, scenario):
     conn = open_db(tmp_path)
     try:
@@ -156,6 +156,16 @@ def test_duplicate_sync_invalidates_only_changed_observation_inputs(tmp_path, sc
         process_journals(conn, "Main", "Default")
         assert projection_freshness(conn, "profile-1")["is_current"]
         assert conn.execute("SELECT COUNT(*) FROM journal_entries").fetchone()[0] == 2
+
+        if scenario == "semantics":
+            conn.execute("UPDATE profiles SET journal_semantics_version=0 WHERE id='profile-1'")
+            before = projection_freshness(conn, "profile-1")
+            assert not before["is_current"]
+            with patch("kassiber.core.sync._observed_accounting_inputs") as inputs:
+                sync("wallet-a", 3)
+            inputs.assert_not_called()
+            assert projection_freshness(conn, "profile-1")["journal_input_version"] == before["journal_input_version"]
+            return
 
         if scenario == "authority":
             for day, mutation in enumerate((

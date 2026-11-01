@@ -262,7 +262,8 @@ def test_creation_transcript_cannot_drift_from_python():
 @pytest.mark.parametrize("migration", [
     "wages-acquisition-semantics-v1", "rp2-pool-basis-semantics-v1",
     "custody-fail-closed-holds-v1", "kassiber-tax-engine-v1", "at-acquisition-valuation-support-v1",
-    "custody-partial-payout-pricing-v1", "all",
+    "custody-partial-payout-pricing-v1", "journal-calculation-semantics-adoption-v1",
+    "at-outflow-consumed-regime-v2", "all",
 ])
 def test_semantic_audits_profile_changes_and_idempotency_match_python(storage_probe, tmp_path, migration):
     source = tmp_path / "source/data"
@@ -278,6 +279,12 @@ def test_semantic_audits_profile_changes_and_idempotency_match_python(storage_pr
             VALUES('wage','ws','at','wal','wage','fixed','inbound','BTC',1,' WAGES ','fixed'),
                   ('airdrop','ws','at','wal','airdrop','fixed','inbound','BTC',1,'airdrop','fixed');
     """)
+    if migration in ("at-outflow-consumed-regime-v2", "all"):
+        conn.execute("""INSERT INTO journal_entries(id,workspace_id,profile_id,wallet_id,
+            transaction_id,entry_type,occurred_at,asset,quantity,created_at)
+            VALUES('sale','ws','at','wal','wage','disposal','2024-01-01','BTC',-1,'fixed')""")
+        conn.execute("""INSERT INTO schema_migration_audits VALUES(
+            'at-fee-consumed-regime-v1','at-fee-consumed-regime-v1',1,'{}','fixed')""")
     if migration == "all":
         conn.execute("DELETE FROM schema_migration_audits")
     else:

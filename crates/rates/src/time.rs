@@ -120,11 +120,16 @@ fn clock(s: &[u8], offset: bool) -> Option<i64> {
     (!offset || result < 86_400_000_000).then_some(result)
 }
 pub fn parse(raw: &str) -> Option<i64> {
+    parse_with_offset(raw).map(|(instant, _)| instant)
+}
+
+/// Parse an ISO instant and retain whether its spelling includes a UTC offset.
+pub fn parse_with_offset(raw: &str) -> Option<(i64, bool)> {
     let s = kassiber_pytext::strip(raw);
     let (day, used) = date(s.as_bytes())?;
     let rest = s.get(used..)?;
     if rest.is_empty() {
-        return Some(day * 86_400_000_000);
+        return Some((day * 86_400_000_000, false));
     }
     let separator = rest.chars().next()?;
     let rest = &rest[separator.len_utf8()..];
@@ -155,7 +160,9 @@ pub fn parse(raw: &str) -> Option<i64> {
         (clock(rest.as_bytes(), false)?, 0)
     };
     let us = day * 86_400_000_000 + local - offset;
-    (0..315_537_897_600_000_000).contains(&us).then_some(us)
+    (0..315_537_897_600_000_000)
+        .contains(&us)
+        .then_some((us, zone.is_some()))
 }
 
 pub const UNIX: i64 = 62_135_596_800_000_000;

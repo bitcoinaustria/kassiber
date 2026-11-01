@@ -1181,14 +1181,15 @@ classes and review warnings retain Python's behavior and readiness gates.
 The [exit-tax checkpoint](../reference/rust-shell.md#exit-tax-service-checkpoint-r5-fourteenth-reports-continuation-partial)
 records frozen projections, openpyxl workbook comparisons, other wire bytes,
 all 112 database tables, zero in-scope hybrid fallbacks and named mutation
-kills. Python registers no exit-tax snapshot and exposes no pending amendment
-impact in this report; the port preserves those omissions with a reproducible
-synthetic history case. Other reference presentation/historical-scope quirks
-also have a checked-in repro. No tax rules, Python product code, schema or
-dependencies change. This completes the exit-tax family only. Gain explanations
-and desktop gains are next, followed by cross-check, Lightning, non-PDF
-source-funds, year-handoff, platform CSV/other artifacts, then privacy reads.
-PDF-containing exports and AI projections remain Python.
+kills. The mirror now follows the corrected Python rounds 6/6b/6c/6d: configured
+method, instant-based civil departure cutoff, closest fresh local quote,
+historical wallet context, consumed-lot regimes before disposal overrides,
+nullable incomplete totals, complete workbook disclosures, offset-required timed
+departures, and version-2 journal semantics with an audited retained-outflow
+migration. Exit-tax estimates remain
+outside ordinary realized-report snapshot/capture registration pending a
+replayable valuation design. Other report families continue in their checkpoints;
+PDF publication and AI projections remain Python.
 
 ### R5 gain explanation continuation (partial)
 

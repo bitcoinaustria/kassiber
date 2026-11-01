@@ -160,7 +160,7 @@ pub fn snapshot(
     backend_kinds: &BTreeMap<String, String>,
 ) -> Result<Py, AppError> {
     let workspace = conn.query_row("SELECT id,label FROM workspaces WHERE id=(SELECT value FROM settings WHERE key='context_workspace')", [], |r| Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?))).optional().map_err(database_error)?;
-    let profile = conn.query_row("SELECT id,label,workspace_id,last_processed_at,last_processed_tx_count,journal_input_version,last_processed_input_version FROM profiles WHERE id=(SELECT value FROM settings WHERE key='context_profile')", [], |r| Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,r.get::<_,Option<String>>(3)?,r.get::<_,i64>(4)?,r.get::<_,i64>(5)?,r.get::<_,i64>(6)?))).optional().map_err(database_error)?;
+    let profile = conn.query_row("SELECT id,label,workspace_id,last_processed_at,last_processed_tx_count,journal_input_version,last_processed_input_version,required_journal_semantics_version,journal_semantics_version FROM profiles WHERE id=(SELECT value FROM settings WHERE key='context_profile')", [], |r| Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,r.get::<_,Option<String>>(3)?,r.get::<_,i64>(4)?,r.get::<_,i64>(5)?,r.get::<_,i64>(6)?,r.get::<_,i64>(7)?,r.get::<_,i64>(8)?))).optional().map_err(database_error)?;
     let Some((workspace, profile)) = workspace.zip(profile).filter(|(w, p)| w.0 == p.2) else {
         return Ok(dict([
             ("wallets", Py::List(vec![])),
@@ -186,7 +186,8 @@ pub fn snapshot(
     let stale = active_count > 0
         && (profile.3.as_deref().is_none_or(str::is_empty)
             || profile.4 != active_count
-            || profile.5 != profile.6);
+            || profile.5 != profile.6
+            || !kassiber_store::semantics::compatible(profile.7, profile.8));
     let mut stmt = conn.prepare("SELECT w.id,w.label,w.kind,w.config_json,w.created_at,a.code,a.label,COUNT(t.id),MAX(t.occurred_at) FROM wallets w LEFT JOIN accounts a ON a.id=w.account_id LEFT JOIN transactions t ON t.wallet_id=w.id AND t.excluded=0 WHERE w.profile_id=? GROUP BY w.id ORDER BY w.label ASC").map_err(database_error)?;
     let rows = stmt
         .query_map([&profile.0], |r| {

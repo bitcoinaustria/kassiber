@@ -59,8 +59,12 @@ pub fn verify(conn: &Connection) -> Result<()> {
         if id != name
             || version != 1
             || (!known
-                && !["custody-durable-evidence-v1", "device-sync-removal-v1"]
-                    .contains(&id.as_str()))
+                && ![
+                    "custody-durable-evidence-v1",
+                    "device-sync-removal-v1",
+                    "at-fee-consumed-regime-v1",
+                ]
+                .contains(&id.as_str()))
         {
             return Err(Error::migration("migration_audits"));
         }

@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 from kassiber.core import report_explanation, ui_snapshot
 from kassiber.core.journal_calculation import encode_calculation, PRICING_KEYS
-from kassiber.db import open_db
+from kassiber.db import JOURNAL_CALCULATION_SEMANTICS_VERSION, open_db
 from kassiber.errors import AppError
 from crates.reports.scripts.gen_exit_tax_vectors import FixedDateTime
 
@@ -118,7 +118,8 @@ def cases():
         explain('invalid-profile-'+key,f"UPDATE profiles SET {key}='bad' WHERE id='p';")
     explain('invalid-unprocessed-profile-count',"UPDATE profiles SET last_processed_at=NULL,last_processed_tx_count='bad' WHERE id='p';",{**REF,'processed_at':None})
     explain('invalid-stale-profile-version',"UPDATE profiles SET last_processed_tx_count=0,last_processed_input_version='bad' WHERE id='p';")
-    explain('float-profile-versions',"UPDATE profiles SET journal_input_version=7.9,last_processed_input_version=7.1,last_processed_tx_count=4.5 WHERE id='p';")
+    explain('float-profile-versions',"UPDATE profiles SET journal_input_version=7.9,last_processed_input_version=7.1,last_processed_tx_count=4.5 WHERE id='p'; UPDATE profiles SET journal_semantics_version=2 WHERE id='p';")
+    explain('old-semantics',"UPDATE profiles SET required_journal_semantics_version=2,journal_semantics_version=1 WHERE id='p';")
     for field, value in [('database_id','0'*32),('workspace_id','other'),('profile_id','other'),('input_version',8),('processed_at','old'),('entry_id','absent')]:
         explain('stale-'+field,reference={**REF,field:value})
     for name, value in [('null',None),('list',[]),('empty',{}),('bool-version',{**REF,'input_version':True}),('number-entry',{**REF,'entry_id':1}),('extra',{**REF,'extra':1})]:
@@ -189,6 +190,7 @@ def build(scratch):
         with tempfile.TemporaryDirectory(dir=scratch) as directory, patch('uuid.uuid4',side_effect=lambda counter=itertools.count(1):uuid.UUID(int=next(counter))):
             conn,profile,reference=_book(Path(directory)/'data',method,country)
             conn.execute("UPDATE profiles SET last_processed_at='2026-01-01T00:00:00Z'")
+            conn.execute("UPDATE profiles SET journal_semantics_version=?",(JOURNAL_CALCULATION_SEMANTICS_VERSION,))
             conn.execute("INSERT OR REPLACE INTO settings(key,value) VALUES('database_instance_id','0123456789abcdef0123456789abcdef'),('context_workspace','w'),('context_profile','p')")
             conn.execute("UPDATE journal_entries SET created_at='fixed'")
             conn.commit()

@@ -16,12 +16,20 @@ pub(super) fn project(
         ("Profile".into(), value(&report, "profile")),
         ("Jurisdiction".into(), value(&report, "jurisdictionCode")),
         ("Departure date".into(), value(&report, "departureDate")),
+        (
+            "Departure timezone".into(),
+            value(&report, "departureTimezone"),
+        ),
         ("Destination".into(), value(&report, "destination")),
         (
             "Collection timing".into(),
             value(totals, "collectionTiming"),
         ),
         ("Accounting method".into(), value(&report, "method")),
+        (
+            "Journal input version".into(),
+            value(&report, "journalInputVersion"),
+        ),
         (
             format!("Neubestand gain ({fiat})"),
             value(totals, "neuGain"),
@@ -83,10 +91,32 @@ pub(super) fn project(
             ]))
         })
         .collect::<Result<Vec<_>>>()?;
-    let mut notes: Vec<Value> = list(value(&report, "assumptions"))
-        .iter()
-        .map(|n| dict([("note", n.clone())]))
-        .collect();
+    let mut notes = Vec::new();
+    let status = value(&report, "status");
+    if int(status, "quarantines") != 0 {
+        notes.push(dict([(
+            "note",
+            s(format!(
+                "{} quarantined transaction(s) — estimate is incomplete until resolved.",
+                int(status, "quarantines")
+            )),
+        )]));
+    }
+    let missing = list(value(status, "missingFmvAssets"));
+    if !missing.is_empty() {
+        notes.push(dict([(
+            "note",
+            s(format!(
+                "Incomplete estimate: missing FMV for {}",
+                missing.iter().map(py_str).collect::<Vec<_>>().join(", ")
+            )),
+        )]));
+    }
+    notes.extend(
+        list(value(&report, "assumptions"))
+            .iter()
+            .map(|n| dict([("note", n.clone())])),
+    );
     notes.push(dict([("note", value(&report, "reviewGate").clone())]));
     let sections = [
         Section {
@@ -94,6 +124,23 @@ pub(super) fn project(
             title: format!("Exit-tax estimate — {}", text(&report, "profile")),
             headers: &["field", "value"],
             rows: overview,
+        },
+        Section {
+            name: "FMV quotes",
+            title: "Fair market value quotes".into(),
+            headers: &["asset", "pair", "rate", "source", "as_of"],
+            rows: list(value(&report, "fmvSource"))
+                .iter()
+                .map(|quote| {
+                    dict([
+                        ("asset", value(quote, "asset").clone()),
+                        ("pair", value(quote, "pair").clone()),
+                        ("rate", value(quote, "rate").clone()),
+                        ("source", value(quote, "source").clone()),
+                        ("as_of", value(quote, "asOf").clone()),
+                    ])
+                })
+                .collect(),
         },
         Section {
             name: "Deemed disposal",

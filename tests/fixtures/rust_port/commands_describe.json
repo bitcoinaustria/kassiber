@@ -21466,7 +21466,7 @@
             "repeatable": false,
             "choices": null,
             "secret_input": false,
-            "help": "Departure date (YYYY-MM-DD) the deemed disposal is valued at; defaults to today"
+            "help": "Departure date (YYYY-MM-DD) or date-time with an offset; timed inputs without an offset are rejected. Defaults to today in Europe/Vienna for Austrian books, UTC otherwise"
           },
           {
             "name": "destination",
@@ -23350,7 +23350,7 @@
             "repeatable": false,
             "choices": null,
             "secret_input": false,
-            "help": "Departure date (YYYY-MM-DD) the deemed disposal is valued at; defaults to today"
+            "help": "Departure date (YYYY-MM-DD) or date-time with an offset; timed inputs without an offset are rejected. Defaults to today in Europe/Vienna for Austrian books, UTC otherwise"
           },
           {
             "name": "destination",
@@ -23434,7 +23434,7 @@
             "repeatable": false,
             "choices": null,
             "secret_input": false,
-            "help": "Departure date (YYYY-MM-DD) the deemed disposal is valued at; defaults to today"
+            "help": "Departure date (YYYY-MM-DD) or date-time with an offset; timed inputs without an offset are rejected. Defaults to today in Europe/Vienna for Austrian books, UTC otherwise"
           },
           {
             "name": "destination",

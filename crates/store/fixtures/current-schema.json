@@ -1332,7 +1332,7 @@
       "table",
       "profiles",
       "profiles",
-      "CREATE TABLE profiles (\n    id TEXT PRIMARY KEY,\n    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,\n    label TEXT NOT NULL,\n    fiat_currency TEXT NOT NULL DEFAULT 'USD',\n    tax_country TEXT NOT NULL DEFAULT 'generic',\n    tax_long_term_days INTEGER NOT NULL DEFAULT 365,\n    gains_algorithm TEXT NOT NULL DEFAULT 'FIFO',\n    require_coarse_review INTEGER NOT NULL DEFAULT 0,\n    bitcoin_rail_carrying_value INTEGER NOT NULL DEFAULT 1,\n    cost_basis_pool_scope TEXT NOT NULL DEFAULT 'global',\n    journal_input_version INTEGER NOT NULL DEFAULT 0,\n    last_processed_input_version INTEGER NOT NULL DEFAULT 0,\n    last_processed_at TEXT,\n    last_processed_tx_count INTEGER NOT NULL DEFAULT 0,\n    ownership_review_counts_json TEXT,\n    created_at TEXT NOT NULL, swap_candidate_count INTEGER,\n    UNIQUE (workspace_id, label)\n)"
+      "CREATE TABLE profiles (\n    id TEXT PRIMARY KEY,\n    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,\n    label TEXT NOT NULL,\n    fiat_currency TEXT NOT NULL DEFAULT 'USD',\n    tax_country TEXT NOT NULL DEFAULT 'generic',\n    tax_long_term_days INTEGER NOT NULL DEFAULT 365,\n    gains_algorithm TEXT NOT NULL DEFAULT 'FIFO',\n    require_coarse_review INTEGER NOT NULL DEFAULT 0,\n    bitcoin_rail_carrying_value INTEGER NOT NULL DEFAULT 1,\n    cost_basis_pool_scope TEXT NOT NULL DEFAULT 'global',\n    journal_input_version INTEGER NOT NULL DEFAULT 0,\n    last_processed_input_version INTEGER NOT NULL DEFAULT 0,\n    required_journal_semantics_version INTEGER NOT NULL DEFAULT 0,\n    journal_semantics_version INTEGER NOT NULL DEFAULT 0,\n    last_processed_at TEXT,\n    last_processed_tx_count INTEGER NOT NULL DEFAULT 0,\n    ownership_review_counts_json TEXT,\n    created_at TEXT NOT NULL, swap_candidate_count INTEGER,\n    UNIQUE (workspace_id, label)\n)"
     ],
     [
       "table",
@@ -1966,6 +1966,12 @@
     ],
     [
       "trigger",
+      "trg_journal_semantics_unstamped",
+      "profiles",
+      "CREATE TRIGGER trg_journal_semantics_unstamped\n        AFTER UPDATE OF last_processed_at, last_processed_input_version ON profiles\n        BEGIN\n            UPDATE profiles SET journal_semantics_version = 0,\n                required_journal_semantics_version = MAX(required_journal_semantics_version, 1)\n            WHERE id = NEW.id;\n        END"
+    ],
+    [
+      "trigger",
       "trg_report_chain_captures_immutable",
       "filed_report_chain_captures",
       "CREATE TRIGGER trg_report_chain_captures_immutable\n BEFORE UPDATE ON filed_report_chain_captures BEGIN\n SELECT RAISE(ABORT, 'report_chain_captures_immutable'); END"
@@ -2026,6 +2032,11 @@
       1
     ],
     [
+      "at-outflow-consumed-regime-v2",
+      "at-outflow-consumed-regime-v2",
+      1
+    ],
+    [
       "custody-fail-closed-holds-v1",
       "custody-fail-closed-holds-v1",
       1
@@ -2033,6 +2044,11 @@
     [
       "custody-partial-payout-pricing-v1",
       "custody-partial-payout-pricing-v1",
+      1
+    ],
+    [
+      "journal-calculation-semantics-adoption-v1",
+      "journal-calculation-semantics-adoption-v1",
       1
     ],
     [

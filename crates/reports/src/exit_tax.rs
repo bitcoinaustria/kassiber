@@ -45,7 +45,7 @@ fn alt(row: &Value) -> Result<bool> {
     if let Some(m) = marker(row) {
         return Ok(m == "alt");
     }
-    if truthy(value(row, "at_category")) {
+    if int(row, "quantity") < 0 && truthy(value(row, "at_category")) {
         return Ok(text(row, "at_category").starts_with("alt"));
     }
     let at = text(row, "occurred_at");
@@ -87,28 +87,48 @@ fn departure(
     conn: &Connection,
     args: &Value,
     sources: &dyn kassiber_setup::Sources,
-) -> Result<String> {
+    is_at: bool,
+) -> Result<(String, i64)> {
     let raw = value(args, "departure_date");
-    if !truthy(raw) {
-        return Ok(sources.now(conn)?[..10].into());
-    }
-    let raw = py_str(raw);
-    let stripped = kassiber_pytext::strip(&raw);
-    let input = if stripped.chars().count() == 10 {
-        format!("{stripped}T00:00:00+00:00")
+    let raw = if truthy(raw) {
+        py_str(raw)
     } else {
-        stripped.into()
+        sources.now(conn)?
     };
-    kassiber_rates::time::parse(&input)
-        .and_then(kassiber_rates::time::format)
-        .map(|s| s[..10].into())
-        .ok_or_else(|| {
-            AppError::new(
-                "validation",
-                format!("Invalid occurred_at/date value '{raw}'"),
-            )
-            .with_hint("Use RFC3339 UTC like 2025-01-01T00:00:00Z")
-        })
+    let stripped = kassiber_pytext::strip(&raw);
+    let hint =
+        "Use a date (YYYY-MM-DD) or a date-time with an offset, e.g. 2025-01-01T12:00:00+01:00.";
+    let input = stripped.replace('Z', "+00:00");
+    let (instant, has_offset) =
+        kassiber_rates::time::parse_with_offset(&input).ok_or_else(|| {
+            AppError::new("validation", "Invalid exit-tax departure date").with_hint(hint)
+        })?;
+    let civil_date = stripped.chars().count() == 10;
+    if !civil_date && !has_offset {
+        return Err(
+            AppError::new("validation", "Exit-tax departure time requires an offset")
+                .with_hint(hint),
+        );
+    }
+    let zone = export_range::book_zone(is_at, &[])?;
+    let epoch = kassiber_rates::time::UNIX;
+    let offset = zone
+        .utc_offset((instant - epoch).div_euclid(1_000_000))
+        .unwrap();
+    let overflow = || AppError::new("internal_error", "date value out of range");
+    let local = kassiber_rates::time::format(if civil_date {
+        instant
+    } else {
+        instant + offset * 1_000_000
+    })
+    .ok_or_else(overflow)?;
+    let day = local[..10].to_owned();
+    let next = kassiber_rates::time::parse(&day).unwrap() + 86_400_000_000;
+    kassiber_rates::time::format(next).ok_or_else(overflow)?;
+    let offset = zone
+        .local_offset((next - epoch).div_euclid(1_000_000))
+        .unwrap();
+    Ok((day, next - offset * 1_000_000))
 }
 fn transaction_value(row: &Value, key: &str) -> Result<Option<Decimal>> {
     let precise = value(row, &format!("{key}_exact"));
@@ -123,16 +143,45 @@ fn transaction_value(row: &Value, key: &str) -> Result<Option<Decimal>> {
         decimal(stored).map(Some)
     }
 }
-fn fallback_rates(conn: &Connection, profile: &Value) -> Result<BTreeMap<String, Decimal>> {
+fn fallback_rates(
+    conn: &Connection,
+    profile: &Value,
+    cutoff: i64,
+) -> Result<BTreeMap<String, (Decimal, i64)>> {
+    let mut candidates = rows(conn,"SELECT asset,occurred_at,fiat_rate,fiat_value,fiat_rate_exact,fiat_value_exact,amount,created_at,id FROM transactions WHERE profile_id=? AND excluded=0 ORDER BY created_at DESC,id DESC",[text(profile,"id")])?;
+    candidates.retain(|row| {
+        kassiber_rates::time::parse(&text(row, "occurred_at")).is_some_and(|at| at < cutoff)
+    });
+    candidates.sort_by_key(|row| {
+        std::cmp::Reverse(kassiber_rates::time::parse(&text(row, "occurred_at")).unwrap())
+    });
     let mut result = BTreeMap::new();
-    for row in rows(conn,"SELECT asset,fiat_rate,fiat_value,fiat_rate_exact,fiat_value_exact,amount FROM transactions WHERE profile_id=? AND excluded=0 ORDER BY occurred_at DESC,created_at DESC,id DESC",[text(profile,"id")])? {
-        let asset = text(&row,"asset");
-        if result.contains_key(&asset) { continue; }
-        let rate = transaction_value(&row,"fiat_rate")?;
-        let total = transaction_value(&row,"fiat_value")?;
-        if let Some(rate) = rate { result.insert(asset,rate); }
-        else if let Some(total) = total {
-            if int(&row,"amount") != 0 { result.insert(asset,total.div(&btc(int(&row,"amount"))?,&DECIMAL).map_err(arithmetic)?); }
+    for row in candidates {
+        let asset = text(&row, "asset");
+        if result.contains_key(&asset) {
+            continue;
+        }
+        let rate = transaction_value(&row, "fiat_rate")?;
+        let total = transaction_value(&row, "fiat_value")?;
+        let rate = match rate {
+            Some(rate) => Some(rate),
+            None => total
+                .filter(|_| int(&row, "amount") != 0)
+                .map(|total| {
+                    total
+                        .div(&btc(int(&row, "amount"))?, &DECIMAL)
+                        .map_err(arithmetic)
+                })
+                .transpose()?,
+        };
+        if let Some(rate) = rate {
+            result.insert(
+                asset,
+                (
+                    rate,
+                    kassiber_rates::time::parse(&text(&row, "occurred_at")).unwrap(),
+                ),
+            );
         }
     }
     Ok(result)
@@ -141,33 +190,45 @@ fn fmv(
     conn: &Connection,
     asset: &str,
     fiat: &str,
-    cutoff: &str,
-    fallback: &BTreeMap<String, Decimal>,
+    cutoff: i64,
+    fallback: &BTreeMap<String, (Decimal, i64)>,
 ) -> Result<(Option<Decimal>, Value)> {
     let pair = kassiber_rates::transaction_rate_pair(asset, fiat);
-    let mut found = None;
-    let mut as_of = s(cutoff);
-    let mut source = "missing";
+    let mut quotes = Vec::new();
     if let Some(pair) = &pair {
-        let cutoff_at = kassiber_rates::time::parse(cutoff).unwrap();
-        let cached = sql::optional_rows(conn,"SELECT timestamp,rate,rate_exact FROM rates_cache WHERE pair=? ORDER BY timestamp DESC,CASE WHEN source='manual' THEN 0 ELSE 1 END ASC,fetched_at DESC",[pair])?
-            .into_iter().find(|row| kassiber_rates::time::parse(&text(row,"timestamp")).is_some_and(|at| at <= cutoff_at));
-        if let Some(cached) = cached {
-            if let Some(rate) = exact(&cached, "rate")? {
-                if rate > Decimal::zero() {
-                    found = Some(rate);
-                    as_of = value(&cached, "timestamp").clone();
-                    source = "cache";
-                }
+        let mut cached = sql::optional_rows(conn,"SELECT timestamp,rate,rate_exact FROM rates_cache WHERE pair=? ORDER BY CASE WHEN source='manual' THEN 0 ELSE 1 END ASC,fetched_at DESC",[pair])?;
+        cached.retain(|row| {
+            kassiber_rates::time::parse(&text(row, "timestamp")).is_some_and(|at| at < cutoff)
+        });
+        cached.sort_by_key(|row| {
+            std::cmp::Reverse(kassiber_rates::time::parse(&text(row, "timestamp")).unwrap())
+        });
+        if let Some(row) = cached.first() {
+            if let Some(rate) = exact(row, "rate")? {
+                quotes.push((
+                    rate,
+                    kassiber_rates::time::parse(&text(row, "timestamp")).unwrap(),
+                    "cache",
+                ));
             }
         }
     }
-    if found.is_none() {
-        if let Some(rate) = fallback.get(asset).filter(|r| **r > Decimal::zero()) {
-            found = Some(rate.clone());
-            source = "transaction";
-        }
+    if let Some((rate, at)) = fallback.get(asset) {
+        quotes.push((rate.clone(), *at, "transaction"));
     }
+    quotes.retain(|(rate, at, _)| {
+        *rate > Decimal::zero() && 0 < cutoff - at && cutoff - at <= 86_400_000_000
+    });
+    // Stable sorting leaves cache first at equal instants.
+    quotes.sort_by_key(|(_, at, _)| std::cmp::Reverse(*at));
+    let (found, as_of, source) = match quotes.into_iter().next() {
+        Some((rate, at, source)) => (
+            Some(rate),
+            s(kassiber_rates::time::format(at).unwrap()),
+            source,
+        ),
+        None => (None, Value::Null, "missing"),
+    };
     let row = dict([
         ("asset", s(asset)),
         (
@@ -201,7 +262,8 @@ pub(super) fn report(
     } else {
         "EUR".into()
     };
-    let entries = rows(conn,"SELECT * FROM journal_entries WHERE profile_id=? ORDER BY occurred_at ASC,created_at ASC,id ASC",[text(profile,"id")])?;
+    let (day, cutoff) = departure(conn, args, sources, is_at)?;
+    let entries = rows(conn,"SELECT e.*,w.label AS wallet_label FROM journal_entries e LEFT JOIN wallets w ON w.id=e.wallet_id WHERE e.profile_id=? ORDER BY e.occurred_at ASC,e.created_at ASC,e.id ASC",[text(profile,"id")])?;
     for row in &entries {
         for field in [
             "fiat_value",
@@ -218,9 +280,7 @@ pub(super) fn report(
         exact(&row,"cost_basis")?;
         if let Some(previous) = holdings.iter_mut().find(|r| ["wallet_id","wallet_label","account_code","asset"].iter().all(|k| value(r,k) == value(&row,k))) { *previous = row; } else { holdings.push(row); }
     }
-    let fallback = fallback_rates(conn, profile)?;
-    let day = departure(conn, args, sources)?;
-    let cutoff = format!("{day}T23:59:59Z");
+    let fallback = fallback_rates(conn, profile, cutoff)?;
     let dest = destination(value(args, "destination"))?;
     if !is_at && truthy(value(profile, "tax_long_term_days")) {
         artifact_csv::history_limit(value(profile, "tax_long_term_days")).map_err(|e| {
@@ -232,13 +292,44 @@ pub(super) fn report(
         })?;
     }
 
+    let labels: BTreeMap<_, _> = holdings
+        .iter()
+        .map(|r| (text(r, "wallet_id"), text(r, "wallet_label")))
+        .collect();
+    let mut wallet_quantities: BTreeMap<(String, String, String), Decimal> = BTreeMap::new();
     let mut assets: BTreeMap<String, [(Decimal, Decimal); 2]> = BTreeMap::new();
     let (mut income, mut untagged) = (false, false);
     for row in &entries {
-        if truthy(value(row, "occurred_at")) && text(row, "occurred_at") > cutoff {
+        let instant = kassiber_rates::time::parse(&text(row, "occurred_at")).ok_or_else(|| {
+            AppError::new(
+                "validation",
+                "Exit-tax inventory requires a valid journal timestamp.",
+            )
+        })?;
+        if instant >= cutoff {
             continue;
         }
         let kind = text(row, "entry_type");
+        let asset = text(row, "asset");
+        let quantity = btc(int(row, "quantity"))?;
+        if truthy(value(row, "asset"))
+            && truthy(value(row, "wallet_id"))
+            && !["income", "transfer_fee"].contains(&kind.as_str())
+        {
+            let wallet = text(row, "wallet_id");
+            let label = if truthy(value(row, "wallet_label")) {
+                text(row, "wallet_label")
+            } else {
+                labels
+                    .get(&wallet)
+                    .cloned()
+                    .unwrap_or_else(|| wallet.clone())
+            };
+            let previous = wallet_quantities
+                .entry((wallet, label, asset))
+                .or_insert_with(Decimal::zero);
+            *previous = previous.add(&quantity, &DECIMAL).map_err(arithmetic)?;
+        }
         if ["transfer_in", "transfer_out"].contains(&kind.as_str()) {
             continue;
         }
@@ -275,8 +366,19 @@ pub(super) fn report(
     }
     let mut sources_out = Vec::new();
     let mut rates = BTreeMap::new();
-    for asset in assets.keys() {
-        let (rate, source) = fmv(conn, asset, &fiat, &cutoff, &fallback)?;
+    let held_assets: std::collections::BTreeSet<String> = assets
+        .iter()
+        .filter(|(_, buckets)| buckets.iter().any(|(q, _)| *q > Decimal::zero()))
+        .map(|(a, _)| a.clone())
+        .chain(
+            wallet_quantities
+                .iter()
+                .filter(|(_, q)| **q > Decimal::zero())
+                .map(|((_, _, a), _)| a.clone()),
+        )
+        .collect();
+    for asset in &held_assets {
+        let (rate, source) = fmv(conn, asset, &fiat, cutoff, &fallback)?;
         rates.insert(asset.clone(), rate);
         sources_out.push(source);
     }
@@ -350,6 +452,16 @@ pub(super) fn report(
             ]));
         }
     }
+    let missing: Vec<Value> = sources_out
+        .iter()
+        .filter(|r| text(r, "source") == "missing")
+        .map(|r| value(r, "asset").clone())
+        .collect();
+    if !missing.is_empty() {
+        neu_market = None;
+        neu_gain = None;
+        alt_market = None;
+    }
     let taxable = neu_gain.as_ref().map(|g| g.clone().max(Decimal::zero()));
     let rate: Decimal = "0.275".parse().unwrap();
     let estimated = if is_at {
@@ -361,19 +473,18 @@ pub(super) fn report(
         None
     };
     let mut wallet_holdings = Vec::new();
-    for row in holdings {
-        let qty = btc(int(&row, "quantity"))?;
+    for ((_, wallet, asset), qty) in wallet_quantities {
         if qty <= Decimal::zero() {
             continue;
         }
         let market = rates
-            .get(&text(&row, "asset"))
+            .get(&asset)
             .and_then(Option::as_ref)
             .map(|r| qty.mul(r, &DECIMAL).map_err(arithmetic))
             .transpose()?;
         wallet_holdings.push(dict([
-            ("wallet", value(&row, "wallet_label").clone()),
-            ("asset", value(&row, "asset").clone()),
+            ("wallet", s(wallet)),
+            ("asset", s(asset)),
             ("quantitySats", sats(&qty)?),
             ("marketValue", eur(market.as_ref())?),
         ]));
@@ -437,10 +548,27 @@ pub(super) fn report(
         ("jurisdictionCode", s(if is_at { "AT" } else { "generic" })),
         ("fiatCurrency", s(fiat)),
         ("departureDate", s(day)),
+        (
+            "departureTimezone",
+            s(if is_at { "Europe/Vienna" } else { "UTC" }),
+        ),
         ("destination", s(dest.as_str())),
         (
             "method",
-            s(if is_at { "moving_average_at" } else { "fifo" }),
+            s(
+                kassiber_pytext::strip(&if truthy(value(profile, "gains_algorithm")) {
+                    text(profile, "gains_algorithm")
+                } else if is_at {
+                    "moving_average_at".into()
+                } else {
+                    "fifo".into()
+                })
+                .to_lowercase(),
+            ),
+        ),
+        (
+            "journalInputVersion",
+            value(profile, "journal_input_version").clone(),
         ),
         ("fmvSource", Value::List(sources_out)),
         (
@@ -477,6 +605,7 @@ pub(super) fn report(
             dict([
                 ("needsJournals", Value::Bool(entries.is_empty())),
                 ("quarantines", Value::Int(quarantines.into())),
+                ("missingFmvAssets", Value::List(missing)),
             ]),
         ),
     ]))
@@ -515,7 +644,44 @@ pub(super) fn render(report: &Value) -> Result<String> {
             text(report, "departureDate"),
             text(report, "destination")
         ),
+        format!("Departure timezone: {}", text(report, "departureTimezone")),
         format!("Accounting method: {}", text(report, "method")),
+        format!(
+            "Journal input version: {}",
+            if matches!(value(report, "journalInputVersion"), Value::Null) {
+                "unavailable".into()
+            } else {
+                py_str(value(report, "journalInputVersion"))
+            }
+        ),
+        "FMV quotes:".into(),
+    ];
+    for quote in artifact_csv::list(value(report, "fmvSource")) {
+        let rate = if matches!(value(quote, "rate"), Value::Null) {
+            "—".into()
+        } else {
+            format!("{} {ccy}", summary_text::number(value(quote, "rate"), 2))
+        };
+        lines.push(format!(
+            "  {} ({}): {rate}; source: {}; as of: {}",
+            text(quote, "asset"),
+            text(quote, "pair"),
+            text(quote, "source"),
+            if truthy(value(quote, "asOf")) {
+                text(quote, "asOf")
+            } else {
+                "unavailable".into()
+            }
+        ));
+    }
+    let missing = artifact_csv::list(value(value(report, "status"), "missingFmvAssets"));
+    if !missing.is_empty() {
+        lines.push(format!(
+            "Incomplete estimate: missing FMV for {}",
+            missing.iter().map(py_str).collect::<Vec<_>>().join(", ")
+        ));
+    }
+    lines.extend([
         String::new(),
         "Deemed disposal at fair market value:".into(),
         format!(
@@ -532,7 +698,7 @@ pub(super) fn render(report: &Value) -> Result<String> {
         ),
         String::new(),
         format!("  Taxable gain:        {}", money("taxableGain")),
-    ];
+    ]);
     if !matches!(value(totals, "estimatedTaxRate"), Value::Null) {
         lines.push("  Rate:                27.5%".into());
     }
@@ -573,6 +739,28 @@ mod tests {
         }
         fn uuid(&self, _: &Connection) -> Result<String> {
             Ok("00000000-0000-4000-8000-000000000001".into())
+        }
+    }
+    #[test]
+    fn departure_defaults_to_the_jurisdiction_day_at_vienna_midnight() {
+        struct Midnight;
+        impl kassiber_setup::Sources for Midnight {
+            fn now(&self, _: &Connection) -> Result<String> {
+                Ok("2025-01-01T23:30:00Z".into())
+            }
+            fn uuid(&self, _: &Connection) -> Result<String> {
+                unreachable!()
+            }
+        }
+        let conn = Connection::open_in_memory().unwrap();
+        for (is_at, day, cutoff) in [
+            (true, "2025-01-02", "2025-01-02T23:00:00Z"),
+            (false, "2025-01-01", "2025-01-02T00:00:00Z"),
+        ] {
+            assert_eq!(
+                departure(&conn, &dict::<&str>([]), &Midnight, is_at).unwrap(),
+                (day.into(), kassiber_rates::time::parse(cutoff).unwrap())
+            );
         }
     }
     fn operations(doc: &Document) -> Vec<(String, Vec<String>)> {

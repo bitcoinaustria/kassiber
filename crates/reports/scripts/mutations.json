@@ -6083,18 +6083,18 @@
   {
     "id": "exit-departure-offset",
     "file": "crates/reports/src/exit_tax.rs",
-    "find": ".map(|s| s[..10].into())",
-    "replace": ".map(|_| raw[..10].into())",
+    "find": "let day = local[..10].to_owned();",
+    "replace": "let day = raw[..10].to_owned();",
     "expect_failing": [
       "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
     ],
-    "rule": "Departure dates use the normalized UTC calendar day."
+    "rule": "Timed departures select the normalized jurisdiction civil day."
   },
   {
     "id": "exit-latest-fallback",
     "file": "crates/reports/src/exit_tax.rs",
-    "find": "ORDER BY occurred_at DESC,created_at DESC,id DESC",
-    "replace": "ORDER BY occurred_at ASC,created_at ASC,id ASC",
+    "find": "std::cmp::Reverse(kassiber_rates::time::parse(&text(row, \"occurred_at\")).unwrap())",
+    "replace": "kassiber_rates::time::parse(&text(row, \"occurred_at\")).unwrap()",
     "expect_failing": [
       "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
     ],
@@ -6123,8 +6123,8 @@
   {
     "id": "exit-cache-boundary",
     "file": "crates/reports/src/exit_tax.rs",
-    "find": "at <= cutoff_at",
-    "replace": "at >= cutoff_at",
+    "find": "kassiber_rates::time::parse(&text(row, \"timestamp\")).is_some_and(|at| at < cutoff)",
+    "replace": "kassiber_rates::time::parse(&text(row, \"timestamp\")).is_some_and(|at| at > cutoff)",
     "expect_failing": [
       "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
     ],
@@ -6133,8 +6133,8 @@
   {
     "id": "exit-cache-positive",
     "file": "crates/reports/src/exit_tax.rs",
-    "find": "if rate > Decimal::zero() {",
-    "replace": "if rate >= Decimal::zero() {",
+    "find": "*rate > Decimal::zero() &&",
+    "replace": "*rate >= Decimal::zero() &&",
     "expect_failing": [
       "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
     ],
@@ -6143,8 +6143,8 @@
   {
     "id": "exit-fallback-positive",
     "file": "crates/reports/src/exit_tax.rs",
-    "find": "fallback.get(asset).filter(|r| **r > Decimal::zero())",
-    "replace": "fallback.get(asset).filter(|_| true)",
+    "find": "*rate > Decimal::zero() &&",
+    "replace": "true &&",
     "expect_failing": [
       "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
     ],
@@ -6163,8 +6163,8 @@
   {
     "id": "exit-entry-cutoff",
     "file": "crates/reports/src/exit_tax.rs",
-    "find": "text(row, \"occurred_at\") > cutoff",
-    "replace": "text(row, \"occurred_at\") < cutoff",
+    "find": "if instant >= cutoff {",
+    "replace": "if instant > cutoff {",
     "expect_failing": [
       "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
     ],
@@ -6273,12 +6273,12 @@
   {
     "id": "exit-missing-neu",
     "file": "crates/reports/src/exit_tax.rs",
-    "find": "neu_market = add_optional(neu_market, market.as_ref())?;",
-    "replace": "neu_market = add_optional(neu_market, Some(market.as_ref().unwrap_or(&Decimal::zero())))?;",
+    "find": "(\"marketValue\", eur(market.as_ref())?),\n                (\n                    \"costBasis\",",
+    "replace": "(\"marketValue\", eur(Some(market.as_ref().unwrap_or(&Decimal::zero())))?),\n                (\n                    \"costBasis\",",
     "expect_failing": [
       "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
     ],
-    "rule": "Any unpriced Neu position makes the aggregate market value incomplete."
+    "rule": "An unpriced Neu position keeps its per-lot market value null, independently of aggregate nulling."
   },
   {
     "id": "exit-loss-floor",
@@ -6343,12 +6343,12 @@
   {
     "id": "exit-method-label",
     "file": "crates/reports/src/exit_tax.rs",
-    "find": "\"moving_average_at\"",
-    "replace": "\"hifo\"",
+    "find": "text(profile, \"gains_algorithm\")",
+    "replace": "\"fifo\".to_owned()",
     "expect_failing": [
       "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
     ],
-    "rule": "The reference policy-default label is preserved even for selected HIFO books."
+    "rule": "The report identifies the configured normalized accounting method."
   },
   {
     "id": "exit-xlsx-quantity",
@@ -7319,6 +7319,307 @@
       "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
     ],
     "rule": "Bare carriage-return row separators retain the Python StringIO reader refusal."
+  },
+  {
+    "id": "exit-vienna-departure",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "export_range::book_zone(is_at, &[])?",
+    "replace": "export_range::book_zone(false, &[])?",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness",
+      "departure_defaults_to_the_jurisdiction_day_at_vienna_midnight"
+    ],
+    "rule": "AT departures select the Vienna civil day including DST; generic uses UTC."
+  },
+  {
+    "id": "exit-exclusive-midnight",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "Ok((day, next - offset * 1_000_000))",
+    "replace": "Ok((day, next - offset * 1_000_000 - 1_000_000))",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "The exclusive next midnight includes every microsecond of the civil departure day."
+  },
+  {
+    "id": "exit-common-24h",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "cutoff - at <= 86_400_000_000",
+    "replace": "cutoff - at <= 86_400_000_001",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Cache and transaction quotes share an inclusive maximum age of exactly 24 elapsed hours."
+  },
+  {
+    "id": "exit-24h-inclusive",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "cutoff - at <= 86_400_000_000",
+    "replace": "cutoff - at < 86_400_000_000",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "A quote exactly 24 elapsed hours old remains usable."
+  },
+  {
+    "id": "exit-closest-source",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "quotes.sort_by_key(|(_, at, _)| std::cmp::Reverse(*at));",
+    "replace": "quotes.sort_by_key(|(_, at, _)| *at);",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "The closest usable source wins across cache and transactions."
+  },
+  {
+    "id": "exit-cache-instant-order",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "std::cmp::Reverse(kassiber_rates::time::parse(&text(row, \"timestamp\")).unwrap())",
+    "replace": "std::cmp::Reverse(text(row,\"timestamp\"))",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Cache ordering compares instants across offset spellings."
+  },
+  {
+    "id": "exit-equal-cache-wins",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "// Stable sorting leaves cache first at equal instants.",
+    "replace": "quotes.reverse(); // Prefer transaction at equal instants.",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Equal instants prefer the cached quote."
+  },
+  {
+    "id": "exit-quote-utc",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "s(kassiber_rates::time::format(at).unwrap())",
+    "replace": "s(format!(\"{}+00:00\",kassiber_rates::time::format(at).unwrap().trim_end_matches('Z')))",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Source timestamps render as canonical UTC Z without losing microseconds."
+  },
+  {
+    "id": "exit-wallet-transfer-fee-once",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "&& ![\"income\", \"transfer_fee\"].contains(&kind.as_str())",
+    "replace": "&& kind != \"income\"",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Wallet transfer_out already includes its separate fee quantity."
+  },
+  {
+    "id": "exit-wallet-transfer-context",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "let previous = wallet_quantities",
+    "replace": "if [\"transfer_in\",\"transfer_out\"].contains(&kind.as_str()) { continue; }\n            let previous = wallet_quantities",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Owned transfers move historical wallet context without changing global inventory."
+  },
+  {
+    "id": "exit-missing-wallet-totals",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "if !missing.is_empty() {\n        neu_market = None;",
+    "replace": "if false {\n        neu_market = None;",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Missing FMV on a wallet-only asset nulls all aggregate valuation/gain/tax totals."
+  },
+  {
+    "id": "exit-journal-input-stamp",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "value(profile, \"journal_input_version\").clone()",
+    "replace": "Value::Null",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Every exit-tax handoff identifies the journal input version."
+  },
+  {
+    "id": "exit-missing-status",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "(\"missingFmvAssets\", Value::List(missing))",
+    "replace": "(\"missingFmvAssets\", Value::List(vec![]))",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Missing quote assets remain explicit in report readiness."
+  },
+  {
+    "id": "exit-xlsx-quarantine",
+    "file": "crates/reports/src/exit_xlsx.rs",
+    "find": "if int(status, \"quarantines\") != 0 {",
+    "replace": "if false {",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "The workbook discloses quarantined transactions and incomplete estimates."
+  },
+  {
+    "id": "exit-xlsx-quotes",
+    "file": "crates/reports/src/exit_xlsx.rs",
+    "find": "name: \"FMV quotes\"",
+    "replace": "name: \"Quotes\"",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "The FMV quotes worksheet discloses exact source rates and actual timestamps."
+  },
+  {
+    "id": "exit-xlsx-input-stamp",
+    "file": "crates/reports/src/exit_xlsx.rs",
+    "find": "value(&report, \"journalInputVersion\")",
+    "replace": "&Value::Null",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "The XLSX Overview carries the current journal input version."
+  },
+  {
+    "id": "exit-xlsx-timezone",
+    "file": "crates/reports/src/exit_xlsx.rs",
+    "find": "value(&report, \"departureTimezone\")",
+    "replace": "&Value::Null",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "The XLSX Overview discloses the jurisdiction departure timezone."
+  },
+  {
+    "id": "exit-single-column-title",
+    "file": "crates/reports/src/artifact_xlsx.rs",
+    "find": "if headers.len() == 1 {",
+    "replace": "if false {",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "A one-column sheet writes its title as a cell instead of an invalid single-cell merge."
+  },
+  {
+    "id": "exit-semantics-version",
+    "file": "crates/store/src/semantics.rs",
+    "find": "JOURNAL_CALCULATION_SEMANTICS_VERSION: i64 = 2",
+    "replace": "JOURNAL_CALCULATION_SEMANTICS_VERSION: i64 = 1",
+    "expect_failing": [
+      "outflow_v2_preserves_evidence_and_rejects_old_writer_publication"
+    ],
+    "rule": "Only current version-2 consumed-regime calculations satisfy the journal stamp."
+  },
+  {
+    "id": "exit-semantics-required",
+    "file": "crates/store/src/semantics.rs",
+    "find": "let required = if name == OUTFLOW { 2 } else { 1 };",
+    "replace": "let required = 1;",
+    "expect_failing": [
+      "outflow_v2_preserves_evidence_and_rejects_old_writer_publication"
+    ],
+    "rule": "The audited outflow migration requires version 2 for affected Austrian journals."
+  },
+  {
+    "id": "exit-semantics-guard",
+    "file": "crates/reports/src/lib.rs",
+    "find": "!semantics_current(profile)",
+    "replace": "false",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Reports refuse old/unstamped journal calculations even when input markers match."
+  },
+  {
+    "id": "exit-historical-wallet-quantity",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "for ((_, wallet, asset), qty) in wallet_quantities {",
+    "replace": "for ((_, wallet, asset), qty) in holdings.iter().map(|row| ((text(row,\"wallet_id\"),text(row,\"wallet_label\"),text(row,\"asset\")),btc(int(row,\"quantity\")).unwrap())) {",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Historical wallet quantities come from journals at departure, rather than current holdings."
+  },
+  {
+    "id": "exit-wallet-only-quotes",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": ".filter(|(_, q)| **q > Decimal::zero())",
+    "replace": ".filter(|_| false)",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Held wallet-only assets join global inventory in the FMV quote universe."
+  },
+  {
+    "id": "exit-acquisition-category-ignored",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "if int(row, \"quantity\") < 0 && truthy(value(row, \"at_category\")) {",
+    "replace": "if truthy(value(row, \"at_category\")) {",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "An acquisition cannot inherit a disposal category override."
+  },
+  {
+    "id": "exit-transaction-boundary",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "kassiber_rates::time::parse(&text(row, \"occurred_at\")).is_some_and(|at| at < cutoff)",
+    "replace": "kassiber_rates::time::parse(&text(row, \"occurred_at\")).is_some_and(|at| at <= cutoff)",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Transaction-derived quotes exclude the exact next-midnight cutoff."
+  },
+  {
+    "id": "exit-transaction-instant-order",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "std::cmp::Reverse(kassiber_rates::time::parse(&text(row, \"occurred_at\")).unwrap())",
+    "replace": "std::cmp::Reverse(text(row,\"occurred_at\"))",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Transaction quotes order exact instants across offset spellings."
+  },
+  {
+    "id": "exit-wallet-income-once",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "&& ![\"income\", \"transfer_fee\"].contains(&kind.as_str())",
+    "replace": "&& kind != \"transfer_fee\"",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Income quantities enter wallet context through their acquisition row exactly once."
+  },
+  {
+    "id": "exit-departure-offset-required",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "if !civil_date && !has_offset {",
+    "replace": "if false && !civil_date && !has_offset {",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Timed departure inputs require an explicit UTC offset and return a typed validation error."
+  },
+  {
+    "id": "exit-semantics-global-version",
+    "file": "crates/store/src/semantics.rs",
+    "find": "required == 0 || (built == JOURNAL_CALCULATION_SEMANTICS_VERSION && built >= required)",
+    "replace": "required == 0 || built >= required",
+    "expect_failing": [
+      "global_version_refuses_older_stamps_even_with_a_lower_requirement"
+    ],
+    "rule": "The global version bump rejects a version-1 build even when the book only requires version 1."
+  },
+  {
+    "id": "exit-semantics-sql-global-version",
+    "file": "crates/store/src/semantics.rs",
+    "find": "{profile}.journal_semantics_version={JOURNAL_CALCULATION_SEMANTICS_VERSION} AND ",
+    "replace": "",
+    "expect_failing": [
+      "global_version_refuses_older_stamps_even_with_a_lower_requirement"
+    ],
+    "rule": "SQL freshness predicates require the current global calculation version, just like direct retained-journal readers."
   },
   {
     "id": "handoff-b-calendar",

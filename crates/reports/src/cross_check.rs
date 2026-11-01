@@ -959,7 +959,8 @@ pub(super) fn report(
             |r| r.get(0),
         )
         .map_err(sql_error)?;
-    let types = truthy(value(&profile, "last_processed_at"))
+    let types = semantics_current(&profile)
+        && truthy(value(&profile, "last_processed_at"))
         && int(&profile, "last_processed_tx_count") == active
         && int(&profile, "journal_input_version") == int(&profile, "last_processed_input_version");
     let in_period = |at: Option<i64>| -> Result<bool> {

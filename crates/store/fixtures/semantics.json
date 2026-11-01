@@ -1,5 +1,17 @@
 [
   {
+    "name": "journal-calculation-semantics-adoption-v1",
+    "affected": "last_processed_at IS NOT NULL OR EXISTS (\n        SELECT 1 FROM journal_entries WHERE profile_id = profiles.id\n    )",
+    "impact": {
+      "affected_profile_count": 0,
+      "explanation": "Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.",
+      "migration": "journal-calculation-semantics-adoption-v1",
+      "required_journal_semantics_version": 1,
+      "schema_version": 1
+    },
+    "source_sha256": "b8a87e46c80c613a9486d3f9e2f144a87297737c0d7dada5e2d6483a1cf7ddab"
+  },
+  {
     "name": "wages-acquisition-semantics-v1",
     "affected": null,
     "impact": {
@@ -20,7 +32,7 @@
       "migration": "wages-acquisition-semantics-v1",
       "schema_version": 1
     },
-    "source_sha256": "5bdac37539e0e1d782dea6cac2490828d7200629f4674bee55762126d67c64e4"
+    "source_sha256": "d329fd9017472cb4c33cddb1715e1c95f52d4a411f8f1ba3ef78623ab45bd296"
   },
   {
     "name": "rp2-pool-basis-semantics-v1",
@@ -36,7 +48,7 @@
       "migration": "rp2-pool-basis-semantics-v1",
       "schema_version": 1
     },
-    "source_sha256": "99d9f8fc4aa1be0abc3cfbc79779987c00ae4a12e942cba8fe45509e44f05eb9"
+    "source_sha256": "9822dc76c560ab8bb918bf16f6a066e0b8b3bb57208f3425616174184f0306e0"
   },
   {
     "name": "custody-fail-closed-holds-v1",
@@ -52,7 +64,7 @@
       "migration": "custody-fail-closed-holds-v1",
       "schema_version": 1
     },
-    "source_sha256": "1f5f713b64c08f74ac3319d86f16130e6387c27bd780ac602503256acbf0b6ce"
+    "source_sha256": "4807c999ed6ec5bc13dc85f493f9bb646c76f67d7fbf025b47ab7b3af79b5c4b"
   },
   {
     "name": "kassiber-tax-engine-v1",
@@ -71,6 +83,17 @@
     "source_sha256": "dd5e929cec66c2601b5e9f076f10c863304d2d3f96ab07421ac4b2fcb9dfe686"
   },
   {
+    "name": "at-outflow-consumed-regime-v2",
+    "affected": "lower(trim(tax_country)) = 'at' AND EXISTS (\n        SELECT 1 FROM journal_entries WHERE profile_id = profiles.id\n        AND entry_type IN ('disposal', 'fee', 'transfer_fee'))",
+    "impact": {
+      "affected_profile_count": 0,
+      "migration": "at-outflow-consumed-regime-v2",
+      "required_journal_semantics_version": 2,
+      "schema_version": 1
+    },
+    "source_sha256": "4531dc46249fd27815dfd65243b10d8dca61705a652a9205bf2e70d7ed9ef282"
+  },
+  {
     "name": "at-acquisition-valuation-support-v1",
     "affected": "\n        lower(trim(tax_country)) = 'at'\n        AND (last_processed_at IS NOT NULL OR EXISTS (\n            SELECT 1 FROM journal_entries WHERE profile_id = profiles.id))\n        AND EXISTS (SELECT 1 FROM transactions t WHERE t.profile_id = profiles.id\n            AND t.direction = 'inbound' AND coalesce(t.excluded,0) = 0\n            AND replace(replace(lower(trim(coalesce(nullif(t.kind_override,''),t.kind,''))),'-','_'),' ','_')\n                IN ('airdrop','hardfork','hard_fork'))\n    ",
     "impact": {
@@ -78,7 +101,7 @@
       "affected_profile_count": 0,
       "explanation": "Rebuild Austrian airdrop/hardfork journals with the explicit unsupported-valuation barrier."
     },
-    "source_sha256": "83e7abfbc90c27b2372b5431862d22650dae2d9bc7b2450397353e2b914d19a3"
+    "source_sha256": "d495b796c3d3041945255c718c9c70b60d9a5e16f99fb1c5b8146b76f77c4848"
   },
   {
     "name": "custody-partial-payout-pricing-v1",
@@ -88,6 +111,6 @@
       "migration": "custody-partial-payout-pricing-v1",
       "schema_version": 1
     },
-    "source_sha256": "c44878241b5abdf459f40fe9b93270151f9e9474e970c0412d7bc0d693e22cbd"
+    "source_sha256": "58cb4f62b9fb15eb5bb617d59eba8269afd25ee609ba7b5a1334c013357e7dbe"
   }
 ]

@@ -29,6 +29,20 @@ fn all_state_aggregates_match_planted_python_fixture() {
     ] {
         assert!(!bytes.contains(secret), "leaked {secret}");
     }
+    for writer in [0, 1] {
+        conn.execute("UPDATE profiles SET journal_semantics_version=?", [writer])
+            .unwrap();
+        let report = state::state(&conn, state::backends(&config)).unwrap();
+        let profiles = kassiber_envelope::get(&report, "profiles").unwrap();
+        assert_eq!(
+            kassiber_envelope::get(profiles, "processed"),
+            Some(&Value::Int(0.into()))
+        );
+        assert_eq!(
+            kassiber_envelope::get(profiles, "stale_or_unprocessed"),
+            Some(&Value::Int(2.into()))
+        );
+    }
 }
 #[test]
 fn integrity_checks_match_reference_without_database_or_with_corruption() {

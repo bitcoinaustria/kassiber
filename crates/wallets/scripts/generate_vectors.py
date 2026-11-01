@@ -312,6 +312,7 @@ def vectors():
             statements += ["INSERT INTO settings(key,value) VALUES('context_workspace','ws')", "INSERT INTO settings(key,value) VALUES('context_profile','p')"]
         if current:
             statements.append("UPDATE profiles SET last_processed_at='2025-01-03',last_processed_tx_count=2,last_processed_input_version=journal_input_version")
+            statements.append("UPDATE profiles SET journal_semantics_version=2")
         if version_changed:
             statements.append("UPDATE profiles SET journal_input_version=journal_input_version+1")
         runtime = {"default_backend": default, "backends": {"local":{"kind":"custom"}, "explicit":{"kind":"btcpay"}}}

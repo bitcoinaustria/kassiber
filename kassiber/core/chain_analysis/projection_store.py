@@ -15,7 +15,7 @@ from ..onchain import stored_tx_mapping
 from .index import _Builder, canonical_txid, digest, observer_index, thaw
 
 
-VERSION = 2
+VERSION = 3
 PHYSICAL = ("transactions", "transaction_graph_cache", "wallet_utxos", "chain_analysis_observations", "chain_analysis_reference_assertions")
 OVERLAYS = ("wallets", "profiles", "journal_custody_decisions", "journal_custody_economic_relations", "chain_analysis_labels", "chain_analysis_datasets", "chain_analysis_dataset_claims", "book_network_bindings", "chain_analysis_acquisition_grants")
 SOURCE_TABLES = PHYSICAL + OVERLAYS
@@ -154,7 +154,8 @@ def _relations(conn, builder, tables):
     profile_row = conn.execute("SELECT * FROM profiles WHERE id=?", (builder.profile_id,)).fetchone() if "profiles" in tables else None
     profile = dict(profile_row) if profile_row else {}
     count = conn.execute("SELECT count(*) FROM transactions WHERE profile_id=? AND excluded=0", (builder.profile_id,)).fetchone()[0] if "transactions" in tables else 0
-    fresh = bool(profile.get("last_processed_at")) and profile.get("journal_input_version") == profile.get("last_processed_input_version") and profile.get("last_processed_tx_count") == count
+    from ..custody_journal import evaluate_projection_freshness
+    fresh = bool(profile) and evaluate_projection_freshness(profile, count)["is_current"]
     # Record aliases are indexed; relation endpoints do not require reading
     # every transaction or rebuilding their physical facts.
     rows = []

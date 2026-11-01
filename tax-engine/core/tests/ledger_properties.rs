@@ -1219,6 +1219,18 @@ fn austrian_entries_carry_their_regime_and_moves_their_regime_flows() {
             .iter()
             .map(|row| (row["id"].as_str().unwrap(), row))
             .collect();
+        let acquired: HashMap<&str, &str> = response["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|entry| entry["entry_type"] == "acquisition")
+            .map(|entry| {
+                (
+                    entry["row"].as_str().unwrap(),
+                    marker(entry["description"].as_str().unwrap(), "at_regime").unwrap(),
+                )
+            })
+            .collect();
         for entry in response["entries"].as_array().unwrap() {
             if entry["entry_type"] == "transfer_out" || entry["entry_type"] == "transfer_in" {
                 continue;
@@ -1235,8 +1247,22 @@ fn austrian_entries_carry_their_regime_and_moves_their_regime_flows() {
                 "seed {seed}: {text}"
             );
             let row = rows[entry["row"].as_str().unwrap()];
+            let outflow = matches!(
+                entry["entry_type"].as_str(),
+                Some("disposal" | "fee" | "transfer_fee")
+            );
+            if outflow {
+                for fragment in entry["fragments"].as_array().unwrap() {
+                    let consumed = fragment["lot"]["row"]
+                        .as_str()
+                        .map_or("neu", |lot| acquired[lot]);
+                    assert_eq!(regime, Some(consumed), "seed {seed}: {entry}");
+                }
+            }
             if let Some(chosen) = row["regime_override"].as_str() {
-                assert_eq!(regime, Some(chosen), "seed {seed}: {text}");
+                if !outflow {
+                    assert_eq!(regime, Some(chosen), "seed {seed}: {text}");
+                }
                 assert!(
                     marker(text, "at_regime_basis").is_none(),
                     "seed {seed}: {text}"
