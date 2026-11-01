@@ -1726,6 +1726,13 @@ Supplemental Binance CSV import currently supports:
   execution evidence
 - BTC dividend/mining-style rows as income without exact fiat pricing
 
+ID-less autoinvest and dividend rows use their economic tuple plus the count
+of identical occurrences within the file. Prepending newer rows to a cumulative
+export therefore preserves the earlier rows' identities while keeping genuine
+identical repeats. Coinfinity, Pocket Bitcoin and Ledger Live use the same
+rule for their ID-less fallback rows; explicit provider and chain ids retain
+their identity. Mutable notes and labels do not participate in these keys.
+
 ```bash
 python3 -m kassiber wallets import-binance-supplemental \
   --workspace W --profile P \

@@ -1210,6 +1210,32 @@ def _bullbitcoin_wallet_asset(network, bull_type):
     return "BTC"
 
 
+def _csv_economic_id(provider, *values):
+    """An ID-less row's economic identity never depends on its file position."""
+    def canonical(value):
+        if isinstance(value, Decimal):
+            text = format(value, "f")
+            return text.rstrip("0").rstrip(".") if "." in text else text
+        return str(value or "")
+    payload = json.dumps([canonical(value) for value in values], ensure_ascii=False)
+    return f"{provider}:economic:{hashlib.sha256(payload.encode('utf-8')).hexdigest()}"
+
+
+def _number_synthetic_csv_occurrences(records):
+    """Keep identical rows distinct and stable across overlapping exports."""
+    counts = {}
+    for record in records:
+        identity = str(record.get("txid") or "")
+        if not record.pop("_synthetic_csv_id", False):
+            continue
+        occurrence = counts[identity] = counts.get(identity, 0) + 1
+        record["txid"] = f"{identity}:{occurrence}"
+        reference = str(record.get("pricing_external_ref") or "")
+        if ":economic:" in reference:
+            record["pricing_external_ref"] = f"{reference}:{occurrence}"
+    return records
+
+
 def _bullbitcoin_wallet_external_id(sanitized, index):
     txid = str_or_none(_get_cell(sanitized, "txid"))
     if txid:
@@ -1394,8 +1420,8 @@ def normalize_coinfinity_record(record, index=0):
 
     fiat_rate = _decimal_cell(_get_cell(sanitized, "Rate EUR"))
     occurred_at = _get_cell(sanitized, "Date")
-    order_ref = str_or_none(_get_cell(sanitized, "Order ID")) or (
-        f"coinfinity:{occurred_at}:{direction}:{asset}:{amount}:{index}"
+    order_ref = str_or_none(_get_cell(sanitized, "Order ID")) or _csv_economic_id(
+        "coinfinity", occurred_at, direction, asset, abs(amount), btc_fee, fiat_amount, fee_fiat,
     )
     transaction_ref = str_or_none(_get_cell(sanitized, "Transaction"))
     lightning_ref = str_or_none(_get_cell(sanitized, "LN Invoice"))
@@ -1406,6 +1432,7 @@ def normalize_coinfinity_record(record, index=0):
         description = f"{description} - {transaction_type}"
     payload = {
         "txid": external_id,
+        "_synthetic_csv_id": not (transaction_ref or lightning_ref or str_or_none(_get_cell(sanitized, "Order ID"))),
         "occurred_at": occurred_at,
         "direction": direction,
         "asset": asset,
@@ -1454,7 +1481,7 @@ def load_coinfinity_csv_records(file_path):
         record = normalize_coinfinity_record(row, index=index)
         if record is not None:
             normalized.append(record)
-    return normalized
+    return _number_synthetic_csv_occurrences(normalized)
 
 
 def is_coinfinity_format(input_format):
@@ -1606,13 +1633,14 @@ def normalize_pocketbitcoin_record(record, withdrawal=None, index=0):
 
     price_amount = _decimal_cell(_get_cell(sanitized, "price.amount"))
     fiat_rate = price_amount if price_amount is not None else (fiat_value / amount if amount else None)
-    reference = _pocketbitcoin_reference(
-        sanitized,
-        f"pocketbitcoin:{occurred_at}:{direction}:{asset}:{amount}:{index}",
+    provider_reference = _pocketbitcoin_reference(sanitized, None)
+    reference = provider_reference or _csv_economic_id(
+        "pocketbitcoin", occurred_at, direction, asset, amount, btc_fee, fiat_currency, fiat_value,
     )
     description = f"Pocket Bitcoin {kind}"
     return {
         "txid": f"pocketbitcoin:{reference}",
+        "_synthetic_csv_id": not provider_reference,
         "occurred_at": occurred_at,
         "direction": direction,
         "asset": asset,
@@ -1656,7 +1684,7 @@ def load_pocketbitcoin_csv_records(file_path):
         record = normalize_pocketbitcoin_record(row, withdrawals.get(id(row)), index=index)
         if record is not None:
             normalized.append(record)
-    return normalized
+    return _number_synthetic_csv_occurrences(normalized)
 
 
 def is_pocketbitcoin_format(input_format):
@@ -2134,14 +2162,16 @@ def normalize_ledgerlive_record(record, index=0):
     fee = abs(_decimal_cell(_get_cell(sanitized, "Operation Fees")) or Decimal("0"))
     occurred_at = _get_cell(sanitized, "Operation Date")
     txid = str_or_none(_get_cell(sanitized, "Operation Hash"))
+    synthetic_id = not txid
     if not txid:
-        txid = f"ledgerlive:{occurred_at}:{direction}:{asset}:{abs(amount)}:{index}"
+        txid = _csv_economic_id("ledgerlive", occurred_at, direction, asset, abs(amount), fee)
     account_name = str_or_none(_get_cell(sanitized, "Account Name"))
     description = f"Ledger Live {kind}"
     if account_name:
         description = f"{description} - {account_name}"
     return {
         "txid": txid,
+        "_synthetic_csv_id": synthetic_id,
         "occurred_at": occurred_at,
         "direction": direction,
         "asset": asset,
@@ -2176,7 +2206,7 @@ def load_ledgerlive_csv_records(file_path):
         record = normalize_ledgerlive_record(row, index=index)
         if record is not None:
             normalized.append(record)
-    return normalized
+    return _number_synthetic_csv_occurrences(normalized)
 
 
 def is_ledgerlive_format(input_format):
@@ -2265,15 +2295,16 @@ def normalize_binance_supplemental_autoinvest_record(record, index=0):
     occurred_at = _get_cell(sanitized, "timestamp utc", "Timestamp UTC")
     source = str_or_none(_get_cell(sanitized, "source of funds", "Source of Funds"))
     fiat_value = abs(quote_amount) + abs(fee_amount or Decimal("0"))
-    external_ref = (
-        f"binance-supplemental:{occurred_at}:autoinvest:"
-        f"{base_asset}:{base_amount}:{index}"
+    external_ref = _csv_economic_id(
+        "binance-supplemental:autoinvest", occurred_at, base_asset, abs(base_amount),
+        quote_asset, abs(quote_amount), fee_asset, abs(fee_amount or Decimal("0")),
     )
     description = "Binance autoinvest buy"
     if source:
         description = f"{description} - {source}"
     return {
         "txid": external_ref,
+        "_synthetic_csv_id": True,
         "occurred_at": occurred_at,
         "direction": "inbound",
         "asset": base_asset,
@@ -2321,15 +2352,18 @@ def normalize_binance_supplemental_dividend_record(record, index=0):
     amount = _decimal_cell(_get_cell(sanitized, "amount", "Amount"))
     if amount is None or amount == 0:
         return None
-    ref = str_or_none(_get_cell(sanitized, "id", "tranId", "tran id")) or str(index)
+    ref = str_or_none(_get_cell(sanitized, "id", "tranId", "tran id"))
+    synthetic_id = not ref
     occurred_at = (
         _binance_ms_epoch_to_iso(_get_cell(sanitized, "divTime", "divtime", "time"))
         or _get_cell(sanitized, "timestamp", "Timestamp")
     )
     info = str_or_none(_get_cell(sanitized, "enInfo", "info", "description"))
     kind = "mining" if info and "mining" in info.casefold() else "income"
+    ref = ref or _csv_economic_id("binance:dividend", occurred_at, asset, abs(amount), kind)
     return {
         "txid": f"binance:{ref}",
+        "_synthetic_csv_id": synthetic_id,
         "occurred_at": occurred_at,
         "direction": "inbound",
         "asset": asset,
@@ -2375,7 +2409,7 @@ def load_binance_supplemental_csv_records(file_path):
         )
         if record is not None:
             normalized.append(record)
-    return normalized
+    return _number_synthetic_csv_occurrences(normalized)
 
 
 def is_binance_supplemental_format(input_format):
