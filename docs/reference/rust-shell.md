@@ -14732,3 +14732,36 @@ The current transport registration lists still exclude Mirror and product
 served-by counts remain zero. Unsupported product entry points fail closed.
 There are no dependency, lockfile, schema or egress-permission changes. Full
 workspace, frontend and platform gates are not claimed.
+## Mirror durable triggers and contributions (R5, partial)
+
+`t3code/r5-privacy-mirror-5a` starts at `f40ca3663`.
+`analysis_index::durable` installs the existing derived schema and closed source
+trigger allowlist without `executescript`, retains both rowids on updates, and
+invalidates retained generations when a missing derived table is repaired.
+Acquisition-grant updates dirty the index only for the five verified-tip/status
+fields. Physical source replacement withdraws prior node membership, enriches
+wallet facts and calls the existing native observation builder. Contributor
+reads preserve physical-source precedence and bounded 200-node SQL lookups.
+No authored table, accounting decision, network permission or schema contract
+changes. These library functions remain behind the existing index boundary;
+Mirror product routes and AI projections are unchanged.
+
+The unchanged-Python corpus has 19 cases and 63 action snapshots. Every snapshot
+compares canonical result bytes, schema-object commitments and complete logical
+row commitments for all 112 tables. Cases cover installation/repair, rowid
+updates, withdrawal, profile isolation, invalid observations, acquired and
+inactive/reconciling assertions, wallet configuration and tip-only invalidation.
+Native guarded runs repeat the corpus with offline mode off/on, without Python
+fallback or network attempts. Caller-savepoint checks preserve pending writes
+and rollback all derived changes; arbitrary source-table names are refused.
+
+This boundary does not implement synchronization or publication. Incremental
+generation updates and SQLite/SQLCipher process-kill recovery remain required,
+alongside the parallel bounded-view/handle/report work. Local verification and
+mutation logs live under `target/r5-mirror-5a/`. The full product quality gate,
+platform builds and Mirror registration are not claimed.
+
+All ten durable-trigger/contribution mutation recipes compile and are killed
+by the named 112-table oracle test, which passes unmutated. The two native tests
+and four Python/native checks pass without skips. Verification uses Rust
+1.99.1, offline locked Cargo with eight jobs, and locked Python 3.11.17.

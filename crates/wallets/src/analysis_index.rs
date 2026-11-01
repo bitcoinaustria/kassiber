@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 pub mod analytics;
 pub mod confirmations;
 pub mod datasets;
+pub mod durable;
 pub mod entropy;
 #[cfg(any(test, feature = "test-harness"))]
 pub mod fixture;

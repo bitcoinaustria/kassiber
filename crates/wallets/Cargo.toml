@@ -64,6 +64,10 @@ required-features = ["test-harness"]
 name = "psbt_fixture"
 required-features = ["test-harness"]
 
+[[example]]
+name = "analysis_durable_fixture"
+required-features = ["test-harness"]
+
 [dependencies]
 kassiber-chain = { path = "../chain" }
 kassiber-net = { path = "../net" }

@@ -1,0 +1,102 @@
+[
+  {
+    "id": "trigger-old-rowid",
+    "file": "crates/wallets/src/analysis_index/durable.rs",
+    "find": "vec![\"OLD.rowid\".to_owned(), \"NEW.rowid\".to_owned()]",
+    "replace": "vec![\"NEW.rowid\".to_owned()]",
+    "expect_failing": [
+      "durable_triggers_and_contributions_match_python_all_112_tables"
+    ],
+    "rule": "trigger old rowid"
+  },
+  {
+    "id": "trigger-clock",
+    "file": "crates/wallets/src/analysis_index/durable.rs",
+    "find": "UPDATE chain_index_clock SET revision=revision+1 WHERE id=1; {writes}",
+    "replace": "UPDATE chain_index_clock SET revision=revision WHERE id=1; {writes}",
+    "expect_failing": [
+      "durable_triggers_and_contributions_match_python_all_112_tables"
+    ],
+    "rule": "trigger clock"
+  },
+  {
+    "id": "trigger-initial-dirty",
+    "file": "crates/wallets/src/analysis_index/durable.rs",
+    "find": "if added {",
+    "replace": "if false && added {",
+    "expect_failing": [
+      "durable_triggers_and_contributions_match_python_all_112_tables"
+    ],
+    "rule": "trigger initial dirty"
+  },
+  {
+    "id": "tip-fields",
+    "file": "crates/wallets/src/analysis_index/durable.rs",
+    "find": "\"verified_tip_at\",\n                    \"last_code\",",
+    "replace": "\"verified_tip_at\",\n                    \"requests_used\",\n                    \"last_code\",",
+    "expect_failing": [
+      "durable_triggers_and_contributions_match_python_all_112_tables"
+    ],
+    "rule": "tip fields"
+  },
+  {
+    "id": "contribution-withdrawal",
+    "file": "crates/wallets/src/analysis_index/durable.rs",
+    "find": "DELETE FROM chain_index_source_nodes WHERE profile_id=? AND source_table=? AND source_key=?",
+    "replace": "DELETE FROM chain_index_source_nodes WHERE profile_id=? AND source_table=? AND source_key=? AND 0",
+    "expect_failing": [
+      "durable_triggers_and_contributions_match_python_all_112_tables"
+    ],
+    "rule": "contribution withdrawal"
+  },
+  {
+    "id": "contribution-profile",
+    "file": "crates/wallets/src/analysis_index/durable.rs",
+    "find": "row[\"profile_id\"] == profile",
+    "replace": "row[\"profile_id\"] != profile",
+    "expect_failing": [
+      "durable_triggers_and_contributions_match_python_all_112_tables"
+    ],
+    "rule": "contribution profile"
+  },
+  {
+    "id": "contribution-active",
+    "file": "crates/wallets/src/analysis_index/durable.rs",
+    "find": "row[\"active\"] == 1",
+    "replace": "row[\"active\"] != 0",
+    "expect_failing": [
+      "durable_triggers_and_contributions_match_python_all_112_tables"
+    ],
+    "rule": "contribution active"
+  },
+  {
+    "id": "repair-invalidation",
+    "file": "crates/wallets/src/analysis_index/durable.rs",
+    "find": "UPDATE chain_index_state SET version=0",
+    "replace": "UPDATE chain_index_state SET version=version",
+    "expect_failing": [
+      "durable_triggers_and_contributions_match_python_all_112_tables"
+    ],
+    "rule": "repair invalidation"
+  },
+  {
+    "id": "contribution-wallet",
+    "file": "crates/wallets/src/analysis_index/durable.rs",
+    "find": "row[\"wallet_config_json\"] = wallet[\"config_json\"].clone();",
+    "replace": "row[\"wallet_config_json\"] = Value::Null;",
+    "expect_failing": [
+      "durable_triggers_and_contributions_match_python_all_112_tables"
+    ],
+    "rule": "contribution wallet"
+  },
+  {
+    "id": "contribution-invalid",
+    "file": "crates/wallets/src/analysis_index/durable.rs",
+    "find": "integer(&builder.coverage[\"cache_rejected\"])?",
+    "replace": "0",
+    "expect_failing": [
+      "durable_triggers_and_contributions_match_python_all_112_tables"
+    ],
+    "rule": "contribution invalid"
+  }
+]
