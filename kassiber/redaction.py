@@ -43,15 +43,16 @@ SENSITIVE_KEY_PARTS = (
     "xprv",
 )
 
-_PRIVATE_KEY_RE = re.compile(r"\b(?:xprv|tprv|yprv|zprv|uprv|vprv)[A-Za-z0-9]{16,}\b", re.IGNORECASE)
-_EXTENDED_KEY_RE = re.compile(r"\b(?:xpub|tpub|ypub|zpub|upub|vpub)[1-9A-HJ-NP-Za-km-z]{20,}\b", re.IGNORECASE)
-_DESCRIPTOR_RE = re.compile(r"\b(?:wpkh|sh|wsh|tr|pkh|combo)\([^)\n]{16,}\)", re.IGNORECASE)
-_SP_DESCRIPTOR_RE = re.compile(r"\bsp\([^)\n]{8,}\)", re.IGNORECASE)
-_SP_KEY_RE = re.compile(r"\b(?:t?spscan|t?spspend)1q[023456789acdefghjklmnpqrstuvwxyz]{8,}\b", re.IGNORECASE)
-_SP_ADDRESS_RE = re.compile(r"\b(?:t?sp)1q[023456789acdefghjklmnpqrstuvwxyz]{20,}\b", re.IGNORECASE)
-_WIF_RE = re.compile(r"\b(?:5[1-9A-HJ-NP-Za-km-z]{49,50}|[KL][1-9A-HJ-NP-Za-km-z]{50,51})\b")
-_BEARER_RE = re.compile(r"\b[Bb]earer\s+[A-Za-z0-9._~+/-]+=*")
-_SK_SECRET_RE = re.compile(r"\bsk-[A-Za-z0-9._~+/-]{6,}\b")
+_PRIVATE_KEY_RE = re.compile(r"(?<![A-Za-z0-9_])(?:xprv|tprv|yprv|zprv|uprv|vprv)[A-Za-z0-9]{16,}(?![A-Za-z0-9_])", re.IGNORECASE | re.ASCII)
+_EXTENDED_KEY_RE = re.compile(r"(?<![A-Za-z0-9_])(?:xpub|tpub|ypub|zpub|upub|vpub)[1-9A-HJ-NP-Za-km-z]{20,}(?![A-Za-z0-9_])", re.IGNORECASE | re.ASCII)
+_DESCRIPTOR_RE = re.compile(r"(?<![A-Za-z0-9_])(?:wpkh|sh|wsh|tr|pkh|combo)\([^)\n]{16,}\)", re.IGNORECASE | re.ASCII)
+_SP_DESCRIPTOR_RE = re.compile(r"(?<![A-Za-z0-9_])sp\([^)\n]{8,}\)", re.IGNORECASE | re.ASCII)
+_SP_KEY_RE = re.compile(r"(?<![A-Za-z0-9_])(?:t?spscan|t?spspend)1q[023456789acdefghjklmnpqrstuvwxyz]{8,}(?![A-Za-z0-9_])", re.IGNORECASE | re.ASCII)
+_SP_ADDRESS_RE = re.compile(r"(?<![A-Za-z0-9_])(?:t?sp)1q[023456789acdefghjklmnpqrstuvwxyz]{20,}(?![A-Za-z0-9_])", re.IGNORECASE | re.ASCII)
+_WIF_RE = re.compile(r"(?<![A-Za-z0-9_])(?:5[1-9A-HJ-NP-Za-km-z]{49,50}|[KL][1-9A-HJ-NP-Za-km-z]{50,51})(?![A-Za-z0-9_])", re.ASCII)
+_BEARER_RE = re.compile(r"(?<![A-Za-z0-9_])[Bb]earer[ \t\r\n\v\f\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+[A-Za-z0-9._~+/-]+=*", re.ASCII)
+_NOSTR_SECRET_RE = re.compile(r"(?<![A-Za-z0-9_])nsec1[023456789acdefghjklmnpqrstuvwxyz]{20,}(?![A-Za-z0-9_])", re.IGNORECASE | re.ASCII)
+_SK_SECRET_RE = re.compile(r"(?<![A-Za-z0-9_])sk-[A-Za-z0-9._~+/-]{6,}(?![A-Za-z0-9_])", re.ASCII)
 # --- Operational pseudonymization (txids + amounts) -------------------------
 # Unlike the secret floor above (credentials), txids and amounts are not
 # secrets but ARE the wallet fingerprint: a single txid/amount lets an AI
@@ -187,6 +188,7 @@ def redact_secret_text(value: str) -> str:
 
     text = redact_url_credentials(redact_keyed_secrets(value))
     text = _PRIVATE_KEY_RE.sub("[redacted-private-key]", text)
+    text = _NOSTR_SECRET_RE.sub("[redacted-private-key]", text)
     text = _WIF_RE.sub("[redacted-private-key]", text)
     text = _EXTENDED_KEY_RE.sub("[redacted-extended-key]", text)
     text = _SP_DESCRIPTOR_RE.sub("[redacted-silent-payment-descriptor]", text)
