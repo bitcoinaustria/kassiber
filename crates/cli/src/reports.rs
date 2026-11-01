@@ -45,6 +45,7 @@ pub const COMMANDS: &[&str] = &[
     "source-funds.review-context",
     "source-funds.request-input",
     "source-funds.coverage",
+    "source-funds.suggest",
 ];
 pub fn kind(command: &str) -> Option<&'static str> {
     match command {
@@ -58,6 +59,22 @@ pub fn execute(book: &mut dyn Book, command: &str, args: &Namespace) -> Result<V
         return book.reports(command, &source_funds_report_request(args));
     }
     if command.starts_with("source-funds.") {
+        if command == "source-funds.suggest" {
+            return book.reports(
+                command,
+                &dict(
+                    [
+                        "workspace",
+                        "profile",
+                        "target_transaction",
+                        "include_broad_hints",
+                        "max_suggestions",
+                        "dry_run",
+                    ]
+                    .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null))),
+                ),
+            );
+        }
         if command == "source-funds.coverage" {
             return book.reports(
                 command,
@@ -666,7 +683,6 @@ mod tests {
         for command in [
             "reports.export-source-funds-pdf",
             "reports.export-source-funds-bundle",
-            "source-funds.suggest",
             "source-funds.assemble",
         ] {
             assert!(!COMMANDS.contains(&command));
@@ -1174,6 +1190,53 @@ mod tests {
             "format",
         ] {
             assert_eq!(get(get(&actual, "args").unwrap(), key), args.get(key));
+        }
+    }
+    #[test]
+    fn source_funds_suggest_cli_forwards_preview_and_refuses_persistence() {
+        for preview in [false, true] {
+            let mut argv: Vec<String> = [
+                "source-funds",
+                "suggest",
+                "--target-transaction",
+                "target",
+                "--workspace",
+                "workspace",
+                "--profile",
+                "profile",
+                "--max-suggestions",
+                "2",
+                "--include-broad-hints",
+            ]
+            .map(String::from)
+            .into();
+            if preview {
+                argv.push("--dry-run".into());
+            }
+            let args = crate::argparse::parse_args(
+                &argv,
+                crate::argparse::Context {
+                    width: 80,
+                    version: "test",
+                },
+            )
+            .unwrap();
+            assert_eq!(
+                crate::run::implemented("source-funds.suggest", &args),
+                preview
+            );
+            let actual = execute(&mut SourceFundsCapture, "source-funds.suggest", &args).unwrap();
+            let request = get(&actual, "args").unwrap();
+            for key in [
+                "workspace",
+                "profile",
+                "target_transaction",
+                "max_suggestions",
+                "include_broad_hints",
+                "dry_run",
+            ] {
+                assert_eq!(get(request, key), args.get(key));
+            }
         }
     }
 }

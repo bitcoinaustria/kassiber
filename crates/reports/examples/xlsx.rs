@@ -13,6 +13,17 @@ impl kassiber_setup::Sources for Fixed {
         Ok("00000000-0000-4000-8000-000000000001".into())
     }
 }
+struct PreviewSources(std::cell::Cell<usize>);
+impl kassiber_setup::Sources for PreviewSources {
+    fn now(&self, conn: &Connection) -> Result<String, kassiber_envelope::AppError> {
+        Fixed.now(conn)
+    }
+    fn uuid(&self, _: &Connection) -> Result<String, kassiber_envelope::AppError> {
+        let next = self.0.get() + 1;
+        self.0.set(next);
+        Ok(format!("00000000-0000-4000-8000-{next:012}"))
+    }
+}
 fn main() {
     let mut stdout = io::stdout().lock();
     for line in io::stdin().lock().lines() {
@@ -39,7 +50,15 @@ fn main() {
             ) || command.starts_with("source-funds.")
                 || command.starts_with("ui.source_funds.")
             {
-                if command == "reports.cross-check" {
+                if command == "source-funds.suggest" {
+                    conn.execute_batch("PRAGMA foreign_keys=ON").unwrap();
+                    kassiber_reports::execute_with_sources(
+                        &conn,
+                        command,
+                        &args,
+                        &PreviewSources(std::cell::Cell::new(0)),
+                    )
+                } else if command == "reports.cross-check" {
                     kassiber_reports::export_request::execute(
                         &conn,
                         command,

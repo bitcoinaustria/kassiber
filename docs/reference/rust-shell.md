@@ -7129,6 +7129,78 @@ Suggest/assemble dry runs remain the next boundary. Case saving and persisted
 provenance operations remain with the parallel mutations worker; PDF and
 PDF-containing bundles remain Python.
 
+## Source-funds suggestion preview checkpoint (R5 partial)
+
+The continuation after `70922b0bc` ports CLI `source-funds suggest --dry-run`
+through the shared report service. The native pre-bootstrap probe admits that
+flag combination; persisted calls remain Python fallbacks and direct native
+service calls refuse persistence. No new daemon kind is admitted: Python's
+existing suggest and assemble kinds persist and expose no dry-run contract.
+The native review/coverage/preview daemon registration is unchanged.
+
+Candidate derivation retains Python's order: imported Whirlpool boundaries,
+current stored custody projections, target-only structural ancestry, provider
+keys in observation order, then explicitly enabled same-day amount hints.
+Custody decisions come from the existing shared loader, now also retaining
+projection IDs and reconciled-review metadata. The existing structural deriver
+exposes its ordered details and passthrough explanation while preserving the
+report's previous map adapter. No ownership, custody or tax decision is
+reimplemented. Source denomination equality remains distinct from normalized
+asset confidence, and integer amounts remain exact.
+
+Same-method reviewed/rejected records veto updates. Reviewed pairs veto
+parallel methods; pending confidence ties retain their earlier records, while
+stronger evidence supersedes weaker pending suggestions and attachment
+associations. Updated rows retain their IDs/creation times and reset the
+reference fields. Target scope expands after ordinary accepted candidates;
+structural parents do not widen subsequent provider scope. The requested cap
+must be positive and is clamped to 500. The outer report savepoint restores
+all rows on success, cap refusal and unexpected failure before a result escapes.
+The preview never claims committed provenance. It opens no evidence file and
+makes no backend/network request.
+
+Verification evidence is recorded in
+`target/r5-sof-reads-5/verification-suggest-summary.json`. The frozen service
+oracle uses fixed clocks/identity sequences and compares complete bytes in
+plaintext and SQLCipher, preserving all 112 tables. Whole-process comparisons
+retain account HOME, compare exit/stdout/stderr and output-file bytes, and
+require zero in-scope fallbacks. Generated process UUIDs have an explicit
+one-to-one mapping; the mapping and both raw byte hashes are retained with each
+comparison. Every other byte remains literal.
+
+The accepted oracle contains 142 cases. Its three native tests cover plaintext,
+SQLCipher and persistence refusal; five process tests cover the same service
+corpus and 80 native CLI calls across ready, stale, source-blocked and
+no-context books. Eight output-file comparisons include refused output absence.
+All 112 tables remain unchanged and every in-scope CLI call is native, with zero
+fallbacks. Eight native report/lineage/review/coverage regression tests retain
+the earlier 278 report, 32 lineage, 138 review and 111 coverage cases; seven
+CLI/daemon caller tests also pass.
+
+All 34 new named mutations are killed. A complete 32-entry campaign killed
+every entry after three unmutated named baselines passed. A later two-entry
+supplement re-killed the projection-amount rule and killed the new
+stored-amount rule after its unmutated baseline passed. Manual review then
+reproduced an unrecognized imported-section parity gap; the expanded corpus
+and a final one-entry campaign kill its new rule after another unmutated
+baseline passes. These runs record 35 executions and 34 unique kills, with no
+survivors, build errors or empty selections. All 936 catalog entries apply.
+The earlier failed runs are excluded from acceptance and recorded in the local
+summary.
+
+Production and harness all-target clippy pass with warnings denied, as does
+Rust formatting. The HOME-preserving focused Python lane passes 60 tests and
+two subtests. The required classifier update records 5,727 definitions, and
+CI preflight passes all 57 tests. This verification is Linux-only.
+
+Assemble preview remains open. Python has no CLI/daemon dry-run surface and
+`assemble_history` commits in its suggest/review passes, so wrapping it in the
+CLI savepoint would not supply a compatible preview. Defining that shared
+contract is required before native registration. Persisted source-funds
+operations stay with the parallel mutations worker; PDF and PDF-containing
+bundles remain Python. This checkpoint does not claim completion of R5 or the
+full workspace/frontend, regtest or packaging gates.
+
 ## Not yet ported
 
 The diagnostics slice now implements explicit public reports and native debug

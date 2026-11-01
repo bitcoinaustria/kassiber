@@ -191,9 +191,20 @@ rows in its claimed "classified" count; the
 [reproduction](../../crates/reports/scripts/repro_python_source_funds_coverage.py)
 records that display bug and Rust retains its text for parity. See the
 [coverage checkpoint](rust-shell.md#source-funds-coverage-checkpoint-r5-partial).
-Suggest/assemble dry runs and all source-funds mutations remain pending in
-Rust. PDF rendering and PDF-containing bundles remain in
-Python by the owner's decision; their routes are not registered natively.
+Native `source-funds suggest --dry-run` previews local privacy-boundary,
+current stored custody, structural-input and provider-hint candidates. It
+retains the reference ordering, reviewed/rejected-link vetoes, confidence
+supersession, target frontier and 500-row ceiling. The shared report savepoint
+rolls back every temporary edit before returning the preview, including on
+failure. Suggestions remain heuristic provenance requiring review; they grant
+no ownership or tax authority. Evidence files and backends are not opened.
+Persisted suggest calls and both daemon suggestion/assembly kinds remain
+Python. At this base Python has no CLI or daemon assemble dry-run contract;
+its assembly operation commits during its passes. The native assemble preview
+therefore remains pending a shared contract. See the
+[suggestion checkpoint](rust-shell.md#source-funds-suggestion-preview-checkpoint-r5-partial).
+PDF rendering and PDF-containing bundles remain in Python by the owner's
+decision; their routes are not registered natively.
 
 Uncaught failures on the native source-funds daemon reads include an empty
 native debug string; typed refusals retain null. Python-only traceback frames

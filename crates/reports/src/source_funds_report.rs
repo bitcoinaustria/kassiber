@@ -52,16 +52,29 @@ pub struct Inputs<'a> {
     profile_id: String,
     pub(super) active: Vec<Value>,
     pub(super) allocations: BTreeMap<(String, String, String), (BigInt, BigInt)>,
+    pub(super) allocation_details: BTreeMap<(String, String, String), (BTreeSet<String>, bool)>,
+}
+
+pub(super) fn active_rows(conn: &Connection, profile_id: &str) -> Result<Vec<Value>> {
+    rows(conn, "SELECT t.*,w.label AS wallet_label,w.kind AS wallet_kind,w.config_json AS wallet_config_json,observation.authority_version AS observation_authority_version,observation.graph_hash AS observation_graph_hash,observation.quantity_hash AS observation_quantity_hash FROM transactions t JOIN wallets w ON w.id=t.wallet_id LEFT JOIN chain_observation_provenance observation ON observation.transaction_id=t.id WHERE t.profile_id=? AND t.excluded=0 ORDER BY t.occurred_at ASC,t.created_at ASC,t.id ASC", [profile_id])
 }
 
 pub fn load_inputs<'a>(conn: &'a Connection, profile: &Value) -> Result<Inputs<'a>> {
+    load_inputs_with_active(conn, profile, active_rows(conn, &text(profile, "id"))?)
+}
+
+pub(super) fn load_inputs_with_active<'a>(
+    conn: &'a Connection,
+    profile: &Value,
+    active: Vec<Value>,
+) -> Result<Inputs<'a>> {
     let profile_id = text(profile, "id");
-    let active = rows(conn, "SELECT t.*,w.label AS wallet_label,w.kind AS wallet_kind,w.config_json AS wallet_config_json,observation.authority_version AS observation_authority_version,observation.graph_hash AS observation_graph_hash,observation.quantity_hash AS observation_quantity_hash FROM transactions t JOIN wallets w ON w.id=t.wallet_id LEFT JOIN chain_observation_provenance observation ON observation.transaction_id=t.id WHERE t.profile_id=? AND t.excluded=0 ORDER BY t.occurred_at ASC,t.created_at ASC,t.id ASC", [&profile_id])?;
     let current = truthy(value(profile, "last_processed_at"))
         && n(value(profile, "last_processed_tx_count"))? == BigInt::from(active.len())
         && n(value(profile, "journal_input_version"))?
             == n(value(profile, "last_processed_input_version"))?;
     let mut allocations: BTreeMap<_, (BigInt, BigInt)> = BTreeMap::new();
+    let mut allocation_details: BTreeMap<_, (BTreeSet<String>, bool)> = BTreeMap::new();
     let ids: HashSet<_> = active.iter().map(|r| text(r, "id")).collect();
     if current {
         for row in rows(conn, "SELECT * FROM journal_custody_projection_relations WHERE profile_id=? AND relation_kind IN ('move','conversion') AND in_transaction_id IS NOT NULL", [&profile_id])? {
@@ -79,6 +92,7 @@ pub fn load_inputs<'a>(conn: &'a Connection, profile: &Value) -> Result<Inputs<'
             else if target_rail=="lightning" && source_rail!="lightning" { "lightning_funding" }
             else if source_rail=="lightning" && target_rail!="lightning" { "lightning_close" }
             else if text(&row,"relation_kind")=="conversion" || asset(value(&row,"out_asset"))!=asset(value(&row,"in_asset")) { "swap" } else { "self_transfer" };
+            allocation_details.entry((from.clone(),to.clone(),kind.into())).or_default().0.insert(text(&row,"id"));
             let entry = allocations.entry((from,to,kind.into())).or_insert((0.into(),0.into()));
             entry.0 += target;
             entry.1 += source;
@@ -92,7 +106,11 @@ pub fn load_inputs<'a>(conn: &'a Connection, profile: &Value) -> Result<Inputs<'
                 let amount=integer(value(&cell,"amount_msat"))?;
                 for link in &links {
                     if text(link,"from_transaction_id")==from && text(link,"to_transaction_id")==to && n(value(link,"allocation_amount"))?==amount && n(value(link,"from_allocation_amount"))?==amount && asset(value(link,"asset"))==text(&cell,"asset") && asset(value(link,"from_asset"))==text(&cell,"asset") {
-                        allocations.entry((from.clone(),to.clone(),text(link,"link_type"))).or_insert((amount.clone(),amount.clone()));
+                        let key = (from.clone(),to.clone(),text(link,"link_type"));
+                        if !allocations.contains_key(&key) {
+                            allocation_details.insert(key.clone(), (BTreeSet::new(), true));
+                        }
+                        allocations.entry(key).or_insert((amount.clone(),amount.clone()));
                     }
                 }
             }
@@ -103,6 +121,7 @@ pub fn load_inputs<'a>(conn: &'a Connection, profile: &Value) -> Result<Inputs<'
         profile_id,
         active,
         allocations,
+        allocation_details,
     })
 }
 

@@ -1464,6 +1464,18 @@ CLI/daemon limits and Python exception families. Its
 records the 111-case oracle and 26 new mutation kills, plus the preserved Python
 truncated-summary display bug. Suggest/assemble dry runs remain separate.
 
+The following suggestion boundary admits only CLI `source-funds suggest
+--dry-run` through the native report service. Current stored custody and the
+existing structural deriver supply candidates; deterministic ordering, provider
+confidence, existing-link vetoes and target-frontier behavior retain Python's
+contract. The report savepoint rolls temporary rows and attachment cascades
+back on success and failure. The
+[suggestion checkpoint](../reference/rust-shell.md#source-funds-suggestion-preview-checkpoint-r5-partial)
+records its frozen oracle, native routing and mutation evidence. Persisted
+suggest, daemon suggest/assemble and case saving stay with the mutations
+worker. Assemble's shared preview contract is still required: Python has no
+such CLI/daemon surface and commits inside its assembly passes.
+
 ### Service slice contract (R4 onward)
 
 From R4 on, work lands as vertical slices: one command family, or one

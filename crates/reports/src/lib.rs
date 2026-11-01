@@ -49,6 +49,7 @@ mod source_funds_reads;
 pub mod source_funds_recipients;
 pub mod source_funds_report;
 pub mod source_funds_review;
+mod source_funds_suggest;
 pub mod source_funds_svg;
 mod source_funds_text;
 pub mod source_funds_traversal;
@@ -159,6 +160,9 @@ pub fn execute_with_sources(
     conn.execute_batch("SAVEPOINT report_read")
         .map_err(sql_error)?;
     let result = (|| {
+        if command == "source-funds.suggest" {
+            return source_funds_suggest::execute(conn, args, sources);
+        }
         if matches!(
             command,
             "source-funds.coverage" | "ui.source_funds.coverage"

@@ -12169,5 +12169,345 @@
       "source_funds_stored_daemon_preserves_arguments_and_registers_only_lists"
     ],
     "rule": "Coverage is registered for native daemon routing."
+  },
+  {
+    "id": "sof-suggest-rollback",
+    "file": "crates/reports/src/lib.rs",
+    "find": "ROLLBACK TO report_read; RELEASE report_read",
+    "replace": "RELEASE report_read",
+    "expect_failing": [
+      "source_funds_suggest_mutation_witnesses"
+    ],
+    "rule": "Every preview rolls back its temporary rows and cascades."
+  },
+  {
+    "id": "sof-suggest-persistence-refusal",
+    "file": "crates/reports/src/source_funds_suggest.rs",
+    "find": "if !truthy(value(args, \"dry_run\")) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "source_funds_suggest_refuses_persistence_without_changing_tables"
+    ],
+    "rule": "Only previews are admitted; persistence stays unported."
+  },
+  {
+    "id": "sof-suggest-positive-cap",
+    "file": "crates/reports/src/source_funds_suggest.rs",
+    "find": "if cap <= 0.into() {",
+    "replace": "if cap < 0.into() {",
+    "expect_failing": [
+      "source_funds_suggest_mutation_witnesses"
+    ],
+    "rule": "A zero suggestion cap is a typed refusal."
+  },
+  {
+    "id": "sof-suggest-hard-cap",
+    "file": "crates/reports/src/source_funds_suggest.rs",
+    "find": "let cap = cap.min(500.into());",
+    "replace": "let cap = cap.min(1000.into());",
+    "expect_failing": [
+      "source_funds_suggest_mutation_witnesses"
+    ],
+    "rule": "Five hundred suggestions is the absolute ceiling."
+  },
+  {
+    "id": "sof-suggest-cap-boundary",
+    "file": "crates/reports/src/source_funds_suggest.rs",
+    "find": "BigInt::from(self.inserted.len()) > self.cap",
+    "replace": "BigInt::from(self.inserted.len()) >= self.cap",
+    "expect_failing": [
+      "source_funds_suggest_mutation_witnesses"
+    ],
+    "rule": "The requested cap admits exactly that many rows."
+  },
+  {
+    "id": "sof-suggest-target-scope",
+    "file": "crates/reports/src/source_funds_suggest.rs",
+    "find": "self.target.is_none()\n            || self.scope.contains(&text(from, \"id\"))",
+    "replace": "true\n            || self.scope.contains(&text(from, \"id\"))",
+    "expect_failing": [
+      "source_funds_suggest_mutation_witnesses"
+    ],
+    "rule": "Target previews do not pull in unrelated evidence groups."
+  },
+  {
+    "id": "sof-suggest-rejected-frontier",
+    "file": "crates/reports/src/source_funds_suggest.rs",
+    "find": "SELECT from_transaction_id FROM source_funds_links WHERE profile_id=? AND to_transaction_id=? AND state!='rejected'",
+    "replace": "SELECT from_transaction_id FROM source_funds_links WHERE profile_id=? AND to_transaction_id=? AND state!='never'",
+    "expect_failing": [
+      "source_funds_suggest_mutation_witnesses"
+    ],
+    "rule": "Rejected links never widen the initial target frontier."
+  },
+  {
+    "id": "sof-suggest-scope-expansion",
+    "file": "crates/reports/src/source_funds_suggest.rs",
+    "find": "if self.target.is_some() && widen {",
+    "replace": "if self.target.is_some() && !widen {",
+    "expect_failing": [
+      "source_funds_suggest_mutation_witnesses"
+    ],
+    "rule": "Successful ordinary candidates widen subsequent suggestion scope."
+  },
+  {
+    "id": "sof-suggest-existing-veto",
+    "file": "crates/reports/src/source_funds_suggest.rs",
+    "find": "if text(&existing, \"state\") != \"suggested\" {",
+    "replace": "if false {",
+    "expect_failing": [
+      "source_funds_suggest_mutation_witnesses"
+    ],
+    "rule": "An existing reviewed or rejected method is never rewritten."
+  },
+  {
+    "id": "sof-suggest-reviewed-pair-veto",
+    "file": "crates/reports/src/source_funds_suggest.rs",
+    "find": "pairs.iter().any(|r| text(r, \"state\") != \"suggested\")",
+    "replace": "false",
+    "expect_failing": [
+      "source_funds_suggest_mutation_witnesses"
+    ],
+    "rule": "Any reviewed pair vetoes parallel evidence methods."
+  },
+  {
+    "id": "sof-suggest-confidence-tie",
+    "file": "crates/reports/src/source_funds_suggest.rs",
+    "find": ".is_some_and(|r| rank(c.confidence) <= r)",
+    "replace": ".is_some_and(|r| rank(c.confidence) < r)",
+    "expect_failing": [
+      "source_funds_suggest_mutation_witnesses"
+    ],
+    "rule": "Equal confidence does not supersede a pending pair."
+  },
+  {
+    "id": "sof-suggest-superseded-attachments",
+    "file": "crates/reports/src/source_funds_suggest.rs",
+    "find": "            for pair in pairs {\n                write(",
+    "replace": "            for pair in pairs.into_iter().take(0) {\n                write(",
+    "expect_failing": [
+      "source_funds_suggest_mutation_witnesses"
+    ],
+    "rule": "Supersession removes weaker rows and their attachment associations before projection."
+  },
+  {
+    "id": "sof-suggest-updated-chain-flags",
+    "file": "crates/reports/src/source_funds_suggest.rs",
+    "find": "explanation=?,uses_chain_observation=0,chain_data_confirmed=1,updated_at=?",
+    "replace": "explanation=?,uses_chain_observation=1,chain_data_confirmed=0,updated_at=?",
+    "expect_failing": [
+      "source_funds_suggest_mutation_witnesses"
+    ],
+    "rule": "Updated suggestions reset chain flags to locally derived values."
+  },
+  {
+    "id": "sof-suggest-samourai-boundary",
+    "file": "crates/reports/src/source_funds_suggest.rs",
+    "find": "if !boundary {",
+    "replace": "if false {",
+    "expect_failing": [
+      "source_funds_suggest_mutation_witnesses"
+    ],
+    "rule": "Only supported Whirlpool transitions produce privacy candidates."
+  },
+  {
+    "id": "sof-suggest-badbank",
+    "file": "crates/reports/src/source_funds_suggest.rs",
+    "find": "if section == \"badbank\"",
+    "replace": "if section == \"not-badbank\"",
+    "expect_failing": [
+      "source_funds_suggest_mutation_witnesses"
+    ],
+    "rule": "Badbank legs do not become coinjoin candidate destinations."
+  },
+  {
+    "id": "sof-suggest-reconciled-target",
+    "file": "crates/reports/src/source_funds_suggest.rs",
+    "find": "if reviewed_targets.contains(key.1.as_str()) && !reviewed {",
+    "replace": "if false {",
+    "expect_failing": [
+      "source_funds_suggest_mutation_witnesses"
+    ],
+    "rule": "A current reviewed compressed disclosure suppresses native alternatives for that target."
+  },
+  {
+    "id": "sof-suggest-projection-order",
+    "file": "crates/reports/src/source_funds_suggest.rs",
+    "find": "allocations.sort_by_key(|(k, _)| (&k.1, &k.0, &k.2));",
+    "replace": "allocations.sort_by_key(|(k, _)| (std::cmp::Reverse(&k.1), std::cmp::Reverse(&k.0), std::cmp::Reverse(&k.2)));",
+    "expect_failing": [
+      "source_funds_suggest_mutation_witnesses"
+    ],
+    "rule": "Stored custody suggestions use target, source and link-type order."
+  },
+  {
+    "id": "sof-suggest-projection-amount",
+    "file": "crates/reports/src/source_funds_suggest.rs",
+    "find": "allocation: amount.clone()",
+    "replace": "allocation: from_amount.clone()",
+    "expect_failing": [
+      "source_funds_suggest_mutation_witnesses"
+    ],
+    "rule": "Conversions preserve distinct target and upstream quantities."
+  },
+  {
+    "id": "sof-suggest-structural-scope-widen",
+    "file": "crates/reports/src/source_funds_suggest.rs",
+    "find": "pass.insert(c, false)?;",
+    "replace": "pass.insert(c, true)?;",
+    "expect_failing": [
+      "source_funds_suggest_mutation_witnesses"
+    ],
+    "rule": "Structural parents never widen provider scope."
+  },
+  {
+    "id": "sof-suggest-structural-passthrough",
+    "file": "crates/reports/src/source_funds_suggest.rs",
+    "find": "let explanation = if pair.passthrough {",
+    "replace": "let explanation = if !pair.passthrough {",
+    "expect_failing": [
+      "source_funds_suggest_mutation_witnesses"
+    ],
+    "rule": "Change-chain explanations disclose proportional attribution."
+  },
+  {
+    "id": "sof-suggest-broad-provider-gate",
+    "file": "crates/reports/src/source_funds_suggest.rs",
+    "find": "if !unique && !broad {",
+    "replace": "if false {",
+    "expect_failing": [
+      "source_funds_suggest_mutation_witnesses"
+    ],
+    "rule": "Provider-wide identifiers require explicit broad hints."
+  },
+  {
+    "id": "sof-suggest-provider-uniqueness",
+    "file": "crates/reports/src/source_funds_suggest.rs",
+    "find": "unique && outs.len() == 1 && ins.len() == 1 && close",
+    "replace": "unique && close",
+    "expect_failing": [
+      "source_funds_suggest_mutation_witnesses"
+    ],
+    "rule": "Only one-to-one provider groups can have strong confidence."
+  },
+  {
+    "id": "sof-suggest-provider-tolerance",
+    "file": "crates/reports/src/source_funds_suggest.rs",
+    "find": "<= (abs(a).max(abs(b)) / BigInt::from(100)).max(1000.into())",
+    "replace": "< (abs(a).max(abs(b)) / BigInt::from(100)).max(1000.into())",
+    "expect_failing": [
+      "source_funds_suggest_mutation_witnesses"
+    ],
+    "rule": "The amount tolerance includes its exact boundary."
+  },
+  {
+    "id": "sof-suggest-provider-absolute",
+    "file": "crates/reports/src/source_funds_suggest.rs",
+    "find": "abs(abs(a.clone()) - abs(b.clone()))",
+    "replace": "abs(a.clone() - b.clone())",
+    "expect_failing": [
+      "source_funds_suggest_mutation_witnesses"
+    ],
+    "rule": "Provider matching compares absolute observed quantities."
+  },
+  {
+    "id": "sof-suggest-raw-asset-kind",
+    "file": "crates/reports/src/source_funds_suggest.rs",
+    "find": "if value(from, \"asset\") == value(to, \"asset\") {",
+    "replace": "if normalized_asset(value(from, \"asset\")) == normalized_asset(value(to, \"asset\")) {",
+    "expect_failing": [
+      "source_funds_suggest_mutation_witnesses"
+    ],
+    "rule": "Link type uses raw denomination equality while confidence uses normalized assets."
+  },
+  {
+    "id": "sof-suggest-broad-hints",
+    "file": "crates/reports/src/source_funds_suggest.rs",
+    "find": "if broad {",
+    "replace": "if true {",
+    "expect_failing": [
+      "source_funds_suggest_mutation_witnesses"
+    ],
+    "rule": "Time and amount hints require explicit opt-in."
+  },
+  {
+    "id": "sof-suggest-broad-wallet",
+    "file": "crates/reports/src/source_funds_suggest.rs",
+    "find": "if value(from, \"wallet_id\") == value(to, \"wallet_id\")",
+    "replace": "if false",
+    "expect_failing": [
+      "source_funds_suggest_mutation_witnesses"
+    ],
+    "rule": "Same-wallet rows do not receive broad time-amount hints."
+  },
+  {
+    "id": "sof-suggest-broad-day",
+    "file": "crates/reports/src/source_funds_suggest.rs",
+    "find": ".take(10)\n                        .ne(py_str(value(to, \"occurred_at\")).chars().take(10))",
+    "replace": ".take(0)\n                        .ne(py_str(value(to, \"occurred_at\")).chars().take(0))",
+    "expect_failing": [
+      "source_funds_suggest_mutation_witnesses"
+    ],
+    "rule": "Broad hints require the same recorded calendar date."
+  },
+  {
+    "id": "sof-suggest-provider-surrogates",
+    "file": "crates/reports/src/source_funds_suggest.rs",
+    "find": "Value::Str(v) => Sql::Text(utf8(v)?),",
+    "replace": "Value::Str(v) => Sql::Text(py_str(&Value::Str(v.clone()))),",
+    "expect_failing": [
+      "source_funds_suggest_mutation_witnesses"
+    ],
+    "rule": "Unencodable provider text retains the reference failure instead of losing code points."
+  },
+  {
+    "id": "sof-suggest-committed-flag",
+    "file": "crates/reports/src/source_funds_suggest.rs",
+    "find": "(\"committed\",Value::Bool(false))",
+    "replace": "(\"committed\",Value::Bool(true))",
+    "expect_failing": [
+      "source_funds_suggest_mutation_witnesses"
+    ],
+    "rule": "Previews never claim committed provenance."
+  },
+  {
+    "id": "sof-suggest-dry-run-flag",
+    "file": "crates/reports/src/source_funds_suggest.rs",
+    "find": "(\"dry_run\",Value::Bool(true))",
+    "replace": "(\"dry_run\",Value::Bool(false))",
+    "expect_failing": [
+      "source_funds_suggest_mutation_witnesses"
+    ],
+    "rule": "The CLI preview retains its dry-run marker."
+  },
+  {
+    "id": "sof-suggest-cli-guard",
+    "file": "crates/cli/src/run.rs",
+    "find": "&& (command != \"source-funds.suggest\" || args.flag(\"dry_run\"))",
+    "replace": "&& (command != \"source-funds.suggest\" || true)",
+    "expect_failing": [
+      "source_funds_suggest_cli_forwards_preview_and_refuses_persistence"
+    ],
+    "rule": "Persistence is refused by the pre-bootstrap native probe."
+  },
+  {
+    "id": "sof-suggest-projection-uses-stored-amount",
+    "file": "crates/reports/src/source_funds_suggest.rs",
+    "find": "allocation: amount.clone()",
+    "replace": "allocation: { let _ = integer(value(from, \"amount\"))?; amount.clone() }",
+    "expect_failing": [
+      "source_funds_suggest_mutation_witnesses"
+    ],
+    "rule": "Custody candidates consume stored projection quantities without reinterpreting observed amounts."
+  },
+  {
+    "id": "sof-suggest-unrecognized-section",
+    "file": "crates/reports/src/source_funds_suggest.rs",
+    "find": "|| section.code_points().next().is_none()",
+    "replace": "|| section.code_points().next().is_none() || section.has_surrogates()",
+    "expect_failing": [
+      "source_funds_suggest_mutation_witnesses"
+    ],
+    "rule": "Unrecognized nonempty wallet sections remain eligible inbound privacy-boundary candidates."
   }
 ]

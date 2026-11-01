@@ -165,6 +165,7 @@ pub const PROBE_NOT_IMPLEMENTED: i32 = 3;
 // Platform transaction formats remain unported; refuse before opening a book.
 pub(crate) fn implemented(command: &str, args: &Namespace) -> bool {
     IMPLEMENTED.contains(&command)
+        && (command != "source-funds.suggest" || args.flag("dry_run"))
         && (command != "transactions.export"
             || matches!(
                 args.text("export_format"),

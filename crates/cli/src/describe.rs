@@ -212,6 +212,7 @@ pub const IMPLEMENTED: &[&str] = &[
     "source-funds.review-context",
     "source-funds.request-input",
     "source-funds.coverage",
+    "source-funds.suggest",
 ];
 
 /// `_NO_BOOTSTRAP_DATABASE_PREFIXES`.

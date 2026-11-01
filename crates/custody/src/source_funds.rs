@@ -340,12 +340,32 @@ fn txid_value(v: &Value) -> Option<String> {
     txid(v)
 }
 
+pub struct StructuralPair {
+    pub from: String,
+    pub to: String,
+    pub allocation: i128,
+    pub from_allocation: i128,
+    pub passthrough: bool,
+}
+
 pub fn structural_pairs(
     rows: &[Value],
     owned: &[Value],
 ) -> BTreeMap<(String, String), (i128, i128)> {
+    structural_pair_details(rows, owned)
+        .into_iter()
+        .map(|pair| {
+            (
+                (pair.from, pair.to),
+                (pair.allocation, pair.from_allocation),
+            )
+        })
+        .collect()
+}
+
+pub fn structural_pair_details(rows: &[Value], owned: &[Value]) -> Vec<StructuralPair> {
     let mut deriver = Deriver::new(rows, owned);
-    let mut pairs = BTreeMap::new();
+    let mut pairs = Vec::new();
     for (i, row) in rows.iter().enumerate() {
         if row["direction"] != "outbound" || !authoritative(row) {
             continue;
@@ -375,15 +395,16 @@ pub fn structural_pairs(
         let mut budget = 5000;
         let mut parents = BTreeMap::<String, (usize, i128)>::new();
         let mut complete = true;
-        for (txid, gross) in contributions {
-            let Some(upstream) = deriver.ancestors(txid, &wallet, &scope.0, &scope.1, &mut budget)
+        for (txid, gross) in &contributions {
+            let Some(upstream) =
+                deriver.ancestors(txid.clone(), &wallet, &scope.0, &scope.1, &mut budget)
             else {
                 complete = false;
                 break;
             };
             for ((parent, _), share) in upstream.iter().zip(weighted(
                 &upstream.iter().map(|p| p.1).collect::<Vec<_>>(),
-                gross,
+                *gross,
             )) {
                 if share > 0 {
                     parents
@@ -400,13 +421,22 @@ pub fn structural_pairs(
         {
             continue;
         }
+        let passthrough = parents.values().any(|&(j, _)| {
+            !contributions.contains_key(&codec::text(&rows[j]["external_id"]).py_lower())
+        });
         let shares = weighted(
             &parents.values().map(|p| p.1).collect::<Vec<_>>(),
             amount(row),
         );
         for ((parent, (_, gross)), share) in parents.into_iter().zip(shares) {
             if share > 0 {
-                pairs.insert((parent, codec::text(&row["id"])), (share, gross));
+                pairs.push(StructuralPair {
+                    from: parent,
+                    to: codec::text(&row["id"]),
+                    allocation: share,
+                    from_allocation: gross,
+                    passthrough,
+                });
             }
         }
     }
