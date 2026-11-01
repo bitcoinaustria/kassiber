@@ -491,3 +491,5 @@ REVIEWS["tests/test_rust_analysis_sources.py"] = {"*": {
 }}
 
 REVIEWS["tests/test_rust_psbt_history.py"] = {"*": {"disposition": "oracle", "group": "reports", "reason": "compares native historical/adversary PSBT baselines with the unchanged database graph and exact report bytes; preserves all 112 tables under strict no-egress with both offline-switch states, without counting fixture calls as served product reads"}}
+
+REVIEWS["tests/test_rust_psbt_transport.py"] = {"*": {"disposition": "oracle", "group": "reports", "reason": "compares the actual native CLI/file and daemon adapters with unchanged Python helpers across historical PSBT baselines, exact report/error bytes, all 112 tables and both offline states under strict no-egress; adapter fixtures do not count as served product routes"}}

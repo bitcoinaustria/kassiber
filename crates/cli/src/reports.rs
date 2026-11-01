@@ -58,6 +58,9 @@ pub fn kind(command: &str) -> Option<&'static str> {
     }
 }
 pub fn execute(book: &mut dyn Book, command: &str, args: &Namespace) -> Result<Value, AppError> {
+    if command == "reports.psbt-privacy" {
+        return book.reports(command, &psbt_request(args)?);
+    }
     if matches!(
         command,
         "reports.lightning-profitability" | "reports.export-lightning-profitability-csv"
@@ -238,6 +241,81 @@ fn cross_check_request(args: &Namespace) -> Value {
         ]
         .map(|k| (k, args.get(k).cloned().unwrap_or(Value::Null))),
     )
+}
+
+fn psbt_request(args: &Namespace) -> Result<Value, AppError> {
+    let psbt = match args.text("psbt") {
+        Some(text) => text.to_owned(),
+        None => read_psbt_file(args.text("psbt_file").unwrap_or(""))?,
+    };
+    Ok(dict([
+        (
+            "workspace",
+            args.get("workspace").cloned().unwrap_or(Value::Null),
+        ),
+        (
+            "profile",
+            args.get("profile").cloned().unwrap_or(Value::Null),
+        ),
+        ("psbt", kassiber_envelope::s(psbt)),
+        (
+            "table_rows",
+            Value::Bool(matches!(
+                args.text("format"),
+                Some("table" | "plain" | "csv")
+            )),
+        ),
+    ]))
+}
+
+fn read_psbt_file(path: &str) -> Result<String, AppError> {
+    use kassiber_envelope::s;
+    if path.is_empty() {
+        return Ok(String::new());
+    }
+    if path.contains('\0') {
+        return Err(AppError::new("internal_error", "embedded null byte"));
+    }
+    // Match the existing literal UTF-8 text-file boundary, including refusal
+    // precedence. This report's CLI file option does not expand user paths.
+    let bytes = std::fs::read(path).map_err(|_| {
+        AppError::new("validation", "Could not read PSBT file")
+            .with_hint("Choose a readable local file path.")
+            .with_details(dict([("path", s(path))]))
+    })?;
+    let text = String::from_utf8(bytes).map_err(|error| {
+        let bytes = error.as_bytes();
+        let invalid = error.utf8_error();
+        let at = invalid.valid_up_to();
+        let (end, reason) = match invalid.error_len() {
+            Some(1) if matches!(bytes[at], 0x80..=0xC1 | 0xF5..=0xFF) => (at, "invalid start byte"),
+            Some(n) => (at + n - 1, "invalid continuation byte"),
+            None => (bytes.len() - 1, "unexpected end of data"),
+        };
+        AppError::new(
+            "internal_error",
+            if end == at {
+                format!(
+                    "'utf-8' codec can't decode byte 0x{:02x} in position {at}: {reason}",
+                    bytes[at]
+                )
+            } else {
+                format!("'utf-8' codec can't decode bytes in position {at}-{end}: {reason}")
+            },
+        )
+    })?;
+    let text = kassiber_pytext::strip(&text);
+    for (refused, message) in [
+        (text.is_empty(), "PSBT file is empty"),
+        (text.contains('\0'), "PSBT file contains NUL bytes"),
+    ] {
+        if refused {
+            return Err(
+                AppError::new("validation", message).with_details(dict([("path", s(path))]))
+            );
+        }
+    }
+    Ok(text.to_owned())
 }
 
 fn export_request(args: &Namespace) -> Value {

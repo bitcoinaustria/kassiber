@@ -581,6 +581,10 @@ registers them; exit-tax preserves its reference no-registration boundary.
   exposure and bounded uncertainty inside one scope snapshot; compare unchanged
   Python bytes and all 112 tables. Product transports and registration follow;
   see the [historical checkpoint](docs/reference/rust-shell.md#native-psbt-historical-baseline-r5-privacy-psbt).
+- [x] Verify the native PSBT CLI/file and daemon adapters against unchanged
+  Python bytes, both offline-switch states and all 112 tables. Product routing
+  remains unregistered pending transport mutations and hybrid served-by proof;
+  see the [adapter checkpoint](docs/reference/rust-shell.md#psbt-clifile-and-daemon-adapter-acceptance-r5-privacy-psbt).
 - [x] Port full-report, Austrian bundle and transaction CSV artifacts, saved
   export registration and their daemon kinds. Preserve
   sealed summaries, hashes and phase-4 append-only impact history.

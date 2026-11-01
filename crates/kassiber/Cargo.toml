@@ -21,6 +21,7 @@ path = "src/main.rs"
 # kinds, and the KASSIBER_RUST_TEST_PROBE implementation probe the hybrid
 # test candidate routes on. Never in a release build.
 test-harness = [
+  "kassiber-wallets/test-harness",
   "kassiber-diagnostics/test-hooks",
   "kassiber-cli/test-probe",
   "kassiber-net/test-observer",
@@ -65,3 +66,7 @@ tempfile = "3"
 
 [lints.rust]
 unsafe_code = "forbid"
+
+[[example]]
+name = "psbt_transport_fixture"
+required-features = ["test-harness"]

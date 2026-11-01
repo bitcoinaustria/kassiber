@@ -47,6 +47,9 @@ pub const KINDS: &[&str] = &[
     "ui.reports.cross_check",
 ];
 pub fn execute(book: &mut dyn Book, kind: &str, raw: Option<&Value>) -> Result<Value, AppError> {
+    if kind == "ui.reports.psbt_privacy" {
+        return book.reports(kind, &psbt_args(raw)?);
+    }
     if kind.starts_with("ui.source_funds.") {
         return book.reports(kind, &cross_check_args(raw)?);
     }
@@ -191,6 +194,46 @@ fn gain_args(kind: &str, raw: Option<&Value>) -> Result<Value, AppError> {
             .cloned()
             .unwrap_or(Value::Null),
     )]))
+}
+
+fn psbt_args(raw: Option<&Value>) -> Result<Value, AppError> {
+    let empty = dict::<&str>([]);
+    let args = raw.filter(|v| !matches!(v, Value::Null)).unwrap_or(&empty);
+    let Value::Dict(fields) = args else {
+        return Err(AppError::new("validation", "daemon args must be an object")
+            .with_details(dict([("type", s(type_name(args)))])));
+    };
+    let mut unknown = fields
+        .iter()
+        .filter(|(key, _)| *key != "psbt".into())
+        .map(|(key, _)| match key {
+            kassiber_pyjson::Key::Str(key) => Value::Str(key.clone()),
+            _ => unreachable!(),
+        })
+        .collect::<Vec<_>>();
+    unknown.sort_by(|a, b| match (a, b) {
+        (Value::Str(a), Value::Str(b)) => a.cmp(b),
+        _ => unreachable!(),
+    });
+    if !unknown.is_empty() {
+        return Err(AppError::new(
+            "validation",
+            "ui.reports.psbt_privacy received unsupported arguments",
+        )
+        .with_details(dict([("unknown", Value::List(unknown))])));
+    }
+    let psbt = get(args, "psbt")
+        .filter(|value| match value {
+            Value::Str(text) => text
+                .as_str()
+                .is_none_or(|text| !kassiber_pytext::strip(text).is_empty()),
+            _ => false,
+        })
+        .ok_or_else(|| {
+            AppError::new("validation", "ui.reports.psbt_privacy requires psbt text")
+                .with_details(dict([("required", Value::List(vec![s("psbt")]))]))
+        })?;
+    Ok(dict([("psbt", psbt.clone())]))
 }
 
 fn privacy_args(raw: Option<&Value>) -> Result<Value, AppError> {

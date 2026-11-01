@@ -26,6 +26,8 @@ mod metadata;
 pub mod output;
 mod rates;
 mod reports;
+#[cfg(feature = "test-kinds")]
+pub use reports::execute as fixture_reports;
 mod review;
 mod secrets;
 #[cfg(feature = "test-kinds")]

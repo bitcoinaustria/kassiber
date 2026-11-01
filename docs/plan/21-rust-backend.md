@@ -4189,3 +4189,13 @@ inside its scope snapshot. Its 408-case unchanged-Python corpus compares exact
 report/error bytes and all 112 tables. Product routing remains unregistered;
 transport acceptance, mutations and served-by registration follow this boundary.
 See the [historical baseline checkpoint](../reference/rust-shell.md#native-psbt-historical-baseline-r5-privacy-psbt).
+
+### R5 privacy: PSBT transport adapter acceptance
+
+The actual native CLI/file and daemon adapters now call the full historical
+PSBT report service. Literal UTF-8 files, output projections, argument validation
+and refusal precedence match unchanged Python across 528 adapter calls, both
+offline-switch states and all 112 tables, with zero egress or fallback dispatch.
+Product registration remains unchanged; mutations and whole-process hybrid
+served-by proof precede the final registration boundary. See the
+[adapter checkpoint](../reference/rust-shell.md#psbt-clifile-and-daemon-adapter-acceptance-r5-privacy-psbt).

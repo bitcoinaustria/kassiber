@@ -215,6 +215,20 @@ pub fn execute_with_sources(
                 sources,
             );
         }
+        if matches!(command, "reports.psbt-privacy" | "ui.reports.psbt_privacy") {
+            // A lone JSON surrogate is non-ASCII PSBT text, never an instruction
+            // to discard bytes and analyze a different, potentially valid proposal.
+            let psbt = match value(args, "psbt") {
+                Value::Str(text) => text.as_str().unwrap_or("\u{fffd}"),
+                _ => "",
+            };
+            let payload = psbt_privacy::report(conn, args, psbt)?;
+            return Ok(if truthy(value(args, "table_rows")) {
+                psbt_privacy::table_rows(&payload)
+            } else {
+                payload
+            });
+        }
         let (workspace, profile) = kassiber_setup::references::scope(conn, args)?;
         if matches!(
             command,

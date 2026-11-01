@@ -49,3 +49,6 @@ mod workspaces;
 mod transfers;
 
 mod review;
+
+#[cfg(feature = "test-probe")]
+pub use reports::execute as fixture_reports;

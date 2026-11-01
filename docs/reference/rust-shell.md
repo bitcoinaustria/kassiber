@@ -13822,3 +13822,29 @@ and report all-target test-harness Clippy passes with warnings denied; workspace
 formatting and the required classifier update also pass.
 The required CI preflight passes all 57 tests without skips. Full workspace
 runtime, full Python/frontend and packaged/platform gates are not run.
+
+## PSBT CLI/file and daemon adapter acceptance (R5 privacy PSBT)
+
+The native adapters now accept direct PSBT text, literal UTF-8 file paths and
+allowlisted daemon arguments through the full historical report service. File
+read/empty/NUL/UTF-8 refusals retain Python's precedence before scope resolution.
+CLI JSON, table, plain and CSV projections include the machine-mode combinations.
+Daemon arguments admit only nonblank PSBT text; unknown fields are sorted, and
+non-object/wrong-type/missing values preserve the reference errors. Lone JSON
+surrogates are refused as invalid proposal text without silently dropping them.
+
+The guarded `psbt_transport_fixture` exercises the real adapters while product
+registration remains unchanged. Two native integration tests compare frozen
+historical outputs and file refusals. Two retained Python tests perform 528
+adapter calls (408 CLI, 120 daemon) across three historical baselines and both
+offline-switch states. Every response/error is compared as canonical bytes,
+with all 112 tables unchanged, zero fallback dispatch and zero egress.
+Test-harness Clippy for the binary, CLI, daemon and report targets passes with
+warnings denied, as does workspace formatting.
+
+This is the second verified boundary. PSBT product served-by counts remain zero;
+the inventory is still 154 CLI leaves (22 reports) and 15 report daemon kinds
+plus two transaction exports. Transport mutations, whole-process hybrid routing
+and registration are the final boundary. No Python product behavior, dependency,
+AI exposure, signing or broadcasting authority changes. Evidence remains under
+`target/r5-psbt-4/artifacts/`; full repository and platform gates are not claimed.
