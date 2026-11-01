@@ -1,0 +1,242 @@
+[
+  {
+    "id": "JRB-downstream-custody_basis_barrier",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "\"custody_basis_barrier\"",
+    "replace": "\"disabled-custody_basis_barrier\"",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "A root reason replaces this downstream reason."
+  },
+  {
+    "id": "JRB-downstream-transfer_pair_dependency_blocked",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "\"transfer_pair_dependency_blocked\"",
+    "replace": "\"disabled-transfer_pair_dependency_blocked\"",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "A root reason replaces this downstream reason."
+  },
+  {
+    "id": "JRB-downstream-basis_provenance_incomplete",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "\"basis_provenance_incomplete\"",
+    "replace": "\"disabled-basis_provenance_incomplete\"",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "A root reason replaces this downstream reason."
+  },
+  {
+    "id": "JRB-downstream-derived_transfer_group_blocked",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "\"derived_transfer_group_blocked\"",
+    "replace": "\"disabled-derived_transfer_group_blocked\"",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "A root reason replaces this downstream reason."
+  },
+  {
+    "id": "JRB-downstream-at_swap_basis_carry_unresolved",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "\"at_swap_basis_carry_unresolved\"",
+    "replace": "\"disabled-at_swap_basis_carry_unresolved\"",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "A root reason replaces this downstream reason."
+  },
+  {
+    "id": "JRB-downstream-bitcoin_rail_carry_basis_unresolved",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "\"bitcoin_rail_carry_basis_unresolved\"",
+    "replace": "\"disabled-bitcoin_rail_carry_basis_unresolved\"",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "A root reason replaces this downstream reason."
+  },
+  {
+    "id": "JRB-pairable-owned_fanout_unresolved",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "\"owned_fanout_unresolved\"\n",
+    "replace": "\"disabled-owned_fanout_unresolved\"\n",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "This root reason permits ownership review evidence."
+  },
+  {
+    "id": "JRB-pairable-ownership_transfer_destination_ambiguous",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "\"ownership_transfer_destination_ambiguous\"",
+    "replace": "\"disabled-ownership_transfer_destination_ambiguous\"",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "This root reason permits ownership review evidence."
+  },
+  {
+    "id": "JRB-pairable-ownership_transfer_source_ambiguous",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "| \"ownership_transfer_source_ambiguous\"\n    )",
+    "replace": "| \"disabled-ownership_transfer_source_ambiguous\"\n    )",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "This root reason permits ownership review evidence."
+  },
+  {
+    "id": "JRB-root-precedence",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "downstream(entry) && !downstream(&q.reason)",
+    "replace": "false",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "Root reasons supersede downstream reasons."
+  },
+  {
+    "id": "JRB-first-root",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "downstream(entry) && !downstream(&q.reason)",
+    "replace": "true",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "The first root reason remains primary."
+  },
+  {
+    "id": "JRB-source-anchor",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "fallback(&source[\"anchor_transaction_id\"], &source[\"transaction_id\"])",
+    "replace": "&source[\"transaction_id\"]",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "Source anchors take precedence over transaction ids."
+  },
+  {
+    "id": "JRB-sink-anchor",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "fallback(&sink[\"anchor_transaction_id\"], &sink[\"transaction_id\"])",
+    "replace": "&sink[\"transaction_id\"]",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "Destination anchors take precedence over transaction ids."
+  },
+  {
+    "id": "JRB-payout-exclusion",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "unavailable.insert(out);\n                continue;",
+    "replace": "let _ = out;\n                continue;",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "A component without a destination claims the source outright."
+  },
+  {
+    "id": "JRB-policy-exclusion",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "|| policy != \"carrying-value\"",
+    "replace": "|| false && policy != \"carrying-value\"",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "Conversion allocations cannot be reused by same-asset review."
+  },
+  {
+    "id": "JRB-kind-exclusion",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "|| !matches!(kind, \"manual\" | \"coinjoin\" | \"whirlpool\")",
+    "replace": "|| false && !matches!(kind, \"manual\" | \"coinjoin\" | \"whirlpool\")",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "Special component kinds exclude both row identities."
+  },
+  {
+    "id": "JRB-reusable-coinjoin",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "\"manual\" | \"coinjoin\" | \"whirlpool\"",
+    "replace": "\"manual\" | \"disabled\" | \"whirlpool\"",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "This reviewed kind permits disjoint same-asset reuse."
+  },
+  {
+    "id": "JRB-reusable-whirlpool",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "\"manual\" | \"coinjoin\" | \"whirlpool\"",
+    "replace": "\"manual\" | \"disabled\" | \"coinjoin\"",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "This reviewed kind permits disjoint same-asset reuse."
+  },
+  {
+    "id": "JRB-component-asset-exclusion",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "|| string(&o[\"asset\"]).to_uppercase() != string(&i[\"asset\"]).to_uppercase()",
+    "replace": "|| false && string(&o[\"asset\"]).to_uppercase() != string(&i[\"asset\"]).to_uppercase()",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "A cross-asset component occupies both row identities."
+  },
+  {
+    "id": "JRB-source-unavailable",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "if unavailable.contains(&id)",
+    "replace": "if false && unavailable.contains(&id)",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "Occupied source rows cannot offer review candidates."
+  },
+  {
+    "id": "JRB-source-direction",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "|| source[\"direction\"] != \"outbound\"",
+    "replace": "|| false && source[\"direction\"] != \"outbound\"",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "Only outbound source rows offer review candidates."
+  },
+  {
+    "id": "JRB-source-positive",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "|| int(&source[\"amount\"])? <= BigInt::from(0)",
+    "replace": "|| false && int(&source[\"amount\"])? <= BigInt::from(0)",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "Nonpositive source rows cannot offer review candidates."
+  },
+  {
+    "id": "JRB-inbound-unavailable",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "|| unavailable.contains(&iid)",
+    "replace": "|| false && unavailable.contains(&iid)",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "Occupied destination rows cannot offer review candidates."
+  },
+  {
+    "id": "JRB-active-pair",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "|| active.contains(&(id.clone(), iid.clone()))",
+    "replace": "|| false && active.contains(&(id.clone(), iid.clone()))",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "An active pair is never offered again."
+  }
+]
