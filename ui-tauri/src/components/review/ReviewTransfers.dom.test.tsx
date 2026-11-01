@@ -347,4 +347,19 @@ describe("what each row shows", () => {
     // Another asset is shown in its own unit, never as bitcoin.
     expect(within(swap).getByText("0.0499 USDT")).toBeTruthy();
   });
+
+  it("shows one amount and its fee, and what arrived when more came in than left", async () => {
+    daemon.candidates = [
+      candidate("a"),
+      candidate("b", { in_amount_msat: 5_010_000_000, swap_fee_msat: -10_000_000 }),
+    ];
+    mount();
+    await waitFor(() => expect(rows()).toHaveLength(2));
+    const [transfer, excess] = rows();
+    expect(within(transfer).getByText("fee 10,000 sats")).toBeTruthy();
+    expect(within(transfer).queryByText("₿ 0.04990000")).toBeNull();
+    // A negative fee is never shown as a fee: the larger arrival is in view.
+    expect(within(excess).getByText("₿ 0.05010000")).toBeTruthy();
+    expect(within(excess).queryByText(/fee/)).toBeNull();
+  });
 });

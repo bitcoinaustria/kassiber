@@ -7,7 +7,7 @@ import { ReviewTaxDeltaView } from "@/components/ai/ReviewWorkflowCard";
 import { reviewArtifact, type ReviewArtifact } from "@/components/ai/reviewWorkflow";
 import type { ProfilesSnapshot } from "@/mocks/profiles";
 import { RailIcon } from "@/components/kb/BitcoinRail";
-import { railForLeg } from "@/lib/bitcoinRail";
+import { railForLeg, type SwapRail } from "@/lib/bitcoinRail";
 import { InfoNote } from "@/components/reports/InfoNote";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,7 +46,7 @@ type Decision =
 type Undo = { decisions: Decision[]; label: string; deadline: number };
 
 const sats = (msat: number) => formatSats(Math.round(Math.abs(msat) / 1000));
-const BITCOIN_ASSETS = new Set(["BTC", "XBT", "LBTC", "L-BTC"]);
+const BITCOIN_ASSETS = new Set(["BTC", "XBT", "XXBT", "LBTC", "L-BTC"]);
 /** A leg's amount: ₿ for bitcoin on any rail, the asset's own unit otherwise. */
 function legAmount(msat: number, asset: string) {
   // Every asset is stored at msat scale: 10^11 per whole unit.
@@ -449,56 +449,22 @@ export function ReviewTransfers({
   );
 }
 
-/**
- * One side of a move on one line: the rail's logo, the wallet, and what left
- * or arrived. The logo names the rail and the amount its asset (₿ for
- * bitcoin on any rail), so no badge repeats them. A leg too narrow for the
- * line puts the amount under the wallet.
- */
-function Leg({
-  wallet,
-  walletKind,
-  asset,
-  amountMsat,
-  direction,
-  hideSensitive,
-}: {
-  wallet: string;
-  walletKind?: string;
-  asset: string;
-  amountMsat: number;
-  direction: "out" | "in";
-  hideSensitive: boolean;
-}) {
-  const rail = railForLeg(asset, walletKind);
+/** A side of the route: the rail's logo and the wallet. */
+function RouteSide({ wallet, rail, hideSensitive }: { wallet: string; rail: SwapRail; hideSensitive: boolean }) {
   return (
-    <div className="@container/leg min-w-0">
-      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 @min-[14rem]/leg:grid-cols-[auto_minmax(0,1fr)_auto]">
-        <span className="row-span-2 @min-[14rem]/leg:row-span-1">
-          <RailIcon rail={rail} size="compact" />
-        </span>
-        <p
-          className={cn("truncate text-[13px] leading-5", hideSensitive && "sensitive")}
-          title={hideSensitive ? undefined : wallet}
-        >
-          {wallet}
-        </p>
-        <p
-          className={cn(
-            "font-mono text-xs leading-5 font-semibold whitespace-nowrap tabular-nums",
-            direction === "out" ? "text-red-700 dark:text-red-300" : "text-emerald-700 dark:text-emerald-300",
-            hideSensitive && "sensitive",
-          )}
-        >
-          {legAmount(amountMsat, asset)}
-        </p>
-      </div>
-    </div>
+    <span className="flex min-w-0 items-center gap-1.5">
+      <RailIcon rail={rail} size="compact" />
+      <span
+        className={cn("truncate text-[13px]", hideSensitive && "sensitive")}
+        title={hideSensitive ? undefined : wallet}
+      >
+        {wallet}
+      </span>
+    </span>
   );
 }
 
-const TYPE_TONE = {
-  transfer: "border-border bg-muted/60 text-foreground",
+const SWAP_TONE = {
   bitcoinSwap: "border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-400/30 dark:bg-sky-950/40 dark:text-sky-100",
   swap: "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-400/30 dark:bg-amber-950/40 dark:text-amber-100",
 } as const;
@@ -506,9 +472,15 @@ const TYPE_TONE = {
 const TYPE_ICON = { transfer: ArrowLeftRight, bitcoinSwap: Repeat, swap: Shuffle } as const;
 
 /**
- * A candidate as two legs side by side, what pairing records (a transfer,
- * a Bitcoin swap, or a swap, with its tax treatment) and how sure the match
- * is; Pair, set aside, or open it in the matching tools.
+ * A candidate as one row of a table, so every row puts the same thing at the
+ * same place: the date, the route between the two wallets with their rails'
+ * logos, the amount, what pairing records (a plain transfer quietly, a swap
+ * as a chip with its tax treatment) with how sure the match is, and Pair, set
+ * aside or open it in the matching tools.
+ *
+ * Sized by the list, not the window, so a docked assistant narrowing the page
+ * gets the narrow layout: two lines, the route and amount above the date,
+ * kind and buttons, with the same edges in every row.
  */
 function CandidateRow({
   candidate,
@@ -532,117 +504,136 @@ function CandidateRow({
   const carries = policy === "carrying";
   const evidence =
     candidate.method === "ownership_graph" ? "ownership" : candidate.confidence === "exact" ? "exact" : "likely";
+  // Both sides of a move in one asset differ by its fee, so one amount and
+  // the fee say it. Another asset arriving, or no positive fee (more came in
+  // than left, which needs a look before pairing), shows what arrived too.
+  const bitcoin = (asset: string) => BITCOIN_ASSETS.has(asset.toUpperCase());
+  const sameAsset =
+    bitcoin(candidate.out_asset) === bitcoin(candidate.in_asset) &&
+    (bitcoin(candidate.out_asset) || candidate.out_asset.toUpperCase() === candidate.in_asset.toUpperCase());
+  const showReceived = !sameAsset || candidate.swap_fee_msat <= 0;
   return (
-    // Sized by the list, not the window, so a docked assistant narrowing the
-    // page gets the narrow layout: legs stacked below 36rem, the treatment
-    // and buttons on their own line below 60rem.
-    <li className="flex flex-col gap-1.5 px-3 py-2 @min-[60rem]/moves:flex-row @min-[60rem]/moves:items-center @min-[60rem]/moves:gap-4">
-      <div className="grid min-w-0 flex-1 grid-cols-1 items-center gap-0.5 @min-[36rem]/moves:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] @min-[36rem]/moves:gap-2.5">
-        <Leg
+    <li className="grid grid-cols-[auto_minmax(0,1fr)_minmax(9rem,auto)] items-center gap-x-3 gap-y-1 px-3 py-2 hover:bg-muted/30 @min-[52rem]/moves:grid-cols-[auto_minmax(0,1fr)_minmax(9rem,auto)_10rem_auto] @min-[52rem]/moves:gap-x-4">
+      <span
+        className={cn(
+          "col-start-1 row-start-2 text-2xs whitespace-nowrap text-muted-foreground tabular-nums @min-[52rem]/moves:row-start-1 @min-[52rem]/moves:text-xs",
+          hideSensitive && "sensitive",
+        )}
+      >
+        {formatShortDate(candidate.out_occurred_at)}
+      </span>
+      <span className="col-span-2 col-start-1 row-start-1 grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 @min-[52rem]/moves:col-span-1 @min-[52rem]/moves:col-start-2">
+        <RouteSide
           wallet={candidate.out_wallet_label}
-          walletKind={candidate.out_wallet_kind}
-          asset={candidate.out_asset}
-          amountMsat={candidate.out_amount_msat}
-          direction="out"
+          rail={railForLeg(candidate.out_asset, candidate.out_wallet_kind)}
           hideSensitive={hideSensitive}
         />
-        {/* Under the first rail logo while the legs stack, between them side by side. */}
-        <ArrowRight
-          className="ml-1 size-3.5 rotate-90 text-muted-foreground @min-[36rem]/moves:ml-0 @min-[36rem]/moves:rotate-0"
-          aria-label={t("inbox.transfers.to")}
-        />
-        <Leg
+        <ArrowRight className="size-3.5 text-muted-foreground" aria-label={t("inbox.transfers.to")} />
+        <RouteSide
           wallet={candidate.in_wallet_label}
-          walletKind={candidate.in_wallet_kind}
-          asset={candidate.in_asset}
-          amountMsat={candidate.in_amount_msat}
-          direction="in"
+          rail={railForLeg(candidate.in_asset, candidate.in_wallet_kind)}
           hideSensitive={hideSensitive}
         />
-      </div>
-      <div className="flex items-center justify-between gap-3 @min-[60rem]/moves:contents">
-        <div className="min-w-0 space-y-0.5 text-2xs @min-[60rem]/moves:w-52 @min-[60rem]/moves:shrink-0">
-          <p className="flex flex-wrap items-center gap-1">
-            <span className={cn("inline-flex items-center gap-1 rounded-full border px-1.5 leading-4 font-medium", TYPE_TONE[type])}>
-              <TypeIcon className="size-3" aria-hidden="true" />
-              {t(`inbox.transfers.type.${type}`)}
-            </span>
-            {type === "transfer" || !policy ? null : (
-              <span
-                className={cn(
-                  "rounded-full border px-1.5 leading-4 font-medium",
-                  carries
-                    ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-400/30 dark:bg-emerald-950/40 dark:text-emerald-100"
-                    : "border-red-200 bg-red-50 text-red-800 dark:border-red-400/30 dark:bg-red-950/40 dark:text-red-100",
-                )}
-                title={carries ? t("inbox.transfers.policy.carryingHint") : t("inbox.transfers.policy.taxableHint")}
-              >
-                {carries ? t("inbox.transfers.policy.carrying") : t("inbox.transfers.policy.taxable")}
-              </span>
+      </span>
+      <span className="col-start-3 row-start-1 text-right leading-tight">
+        <span
+          className={cn(
+            "block font-mono text-xs font-semibold whitespace-nowrap tabular-nums",
+            hideSensitive && "sensitive",
+          )}
+        >
+          {legAmount(candidate.out_amount_msat, candidate.out_asset)}
+        </span>
+        {showReceived ? (
+          <span className="block text-2xs whitespace-nowrap text-muted-foreground tabular-nums">
+            <span aria-hidden="true">→ </span>
+            <span className="sr-only">{t("inbox.transfers.to")} </span>
+            <span className={cn(hideSensitive && "sensitive")}>{legAmount(candidate.in_amount_msat, candidate.in_asset)}</span>
+          </span>
+        ) : (
+          <span className={cn("block text-2xs whitespace-nowrap text-muted-foreground tabular-nums", hideSensitive && "sensitive")}>
+            {t("inbox.transfers.fee", {
+              amount: bitcoin(candidate.out_asset)
+                ? sats(candidate.swap_fee_msat)
+                : legAmount(candidate.swap_fee_msat, candidate.out_asset),
+            })}
+          </span>
+        )}
+      </span>
+      <span className="col-start-2 row-start-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs @min-[52rem]/moves:col-start-4 @min-[52rem]/moves:row-start-1">
+        {type === "transfer" ? (
+          <span className="inline-flex items-center gap-1 text-muted-foreground">
+            <TypeIcon className="size-3" aria-hidden="true" />
+            {t("inbox.transfers.type.transfer")}
+          </span>
+        ) : (
+          <span className={cn("inline-flex items-center gap-1 rounded-full border px-1.5 leading-4 font-medium", SWAP_TONE[type])}>
+            <TypeIcon className="size-3" aria-hidden="true" />
+            {t(`inbox.transfers.type.${type}`)}
+          </span>
+        )}
+        {type === "transfer" || !policy ? null : (
+          <span
+            className={cn(
+              "rounded-full border px-1.5 leading-4 font-medium",
+              carries
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-400/30 dark:bg-emerald-950/40 dark:text-emerald-100"
+                : "border-red-200 bg-red-50 text-red-800 dark:border-red-400/30 dark:bg-red-950/40 dark:text-red-100",
             )}
-            <span className="ml-0.5 inline-flex items-center gap-1 text-muted-foreground">
-              <span
-                className={cn(
-                  "size-1.5 rounded-full",
-                  evidence === "likely" ? "bg-amber-500" : evidence === "exact" ? "bg-emerald-500" : "bg-sky-500",
-                )}
-                aria-hidden="true"
-              />
-              {t(`inbox.transfers.evidenceShort.${evidence}`)}
-            </span>
-          </p>
-          <p className="flex flex-wrap items-center gap-x-1.5 text-muted-foreground">
-            <span className={cn(hideSensitive && "sensitive")}>{formatShortDate(candidate.out_occurred_at)}</span>
-            {/* The separator wraps with the fee, never dangling at a line's end. */}
-            {candidate.swap_fee_msat ? (
-              <span className="whitespace-nowrap">
-                <span aria-hidden="true">· </span>
-                <span className={cn("tabular-nums", hideSensitive && "sensitive")}>
-                  {t("inbox.transfers.fee", { amount: sats(candidate.swap_fee_msat) })}
-                </span>
-              </span>
-            ) : null}
-          </p>
-          {candidate.conflict_size > 1 ? (
-            <p className="text-amber-700 dark:text-amber-300">
-              {t("inbox.transfers.competing", { count: candidate.conflict_size - 1 })}
-            </p>
-          ) : null}
-        </div>
-        <div className="flex shrink-0 items-center gap-1">
-          <Button
-            type="button"
-            size="sm"
-            className="h-7 gap-1 px-2.5 text-xs"
-            onClick={onPair}
-            aria-label={t("inbox.transfers.pairLabel", { route: routeLabel })}
+            title={carries ? t("inbox.transfers.policy.carryingHint") : t("inbox.transfers.policy.taxableHint")}
           >
-            <Check className="size-3.5" aria-hidden="true" />
-            {t("inbox.transfers.pair")}
-          </Button>
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            className="size-7"
-            onClick={onDismiss}
-            title={t("inbox.transfers.dismiss")}
-            aria-label={t("inbox.transfers.dismissLabel", { route: routeLabel })}
+            {carries ? t("inbox.transfers.policy.carrying") : t("inbox.transfers.policy.taxable")}
+          </span>
+        )}
+        <span className="inline-flex items-center gap-1 text-muted-foreground">
+          <span
+            className={cn(
+              "size-1.5 rounded-full",
+              evidence === "likely" ? "bg-amber-500" : evidence === "exact" ? "bg-emerald-500" : "bg-sky-500",
+            )}
+            aria-hidden="true"
+          />
+          {t(`inbox.transfers.evidenceShort.${evidence}`)}
+        </span>
+        {candidate.conflict_size > 1 ? (
+          <span className="text-amber-700 dark:text-amber-300">
+            {t("inbox.transfers.competing", { count: candidate.conflict_size - 1 })}
+          </span>
+        ) : null}
+      </span>
+      <span className="col-start-3 row-start-2 flex items-center justify-end gap-0.5 @min-[52rem]/moves:col-start-5 @min-[52rem]/moves:row-start-1">
+        <Button
+          type="button"
+          size="sm"
+          className="h-7 gap-1 px-2.5 text-xs"
+          onClick={onPair}
+          aria-label={t("inbox.transfers.pairLabel", { route: routeLabel })}
+        >
+          <Check className="size-3.5" aria-hidden="true" />
+          {t("inbox.transfers.pair")}
+        </Button>
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          className="size-7"
+          onClick={onDismiss}
+          title={t("inbox.transfers.dismiss")}
+          aria-label={t("inbox.transfers.dismissLabel", { route: routeLabel })}
+        >
+          <X className="size-3.5" aria-hidden="true" />
+        </Button>
+        <Button asChild type="button" size="icon" variant="ghost" className="size-7">
+          <Link
+            to="/swaps"
+            search={{ focus: candidate.out_id, mode: candidate.candidate_type === "swap" ? "swaps" : "transfers" }}
+            title={t("inbox.transfers.details")}
+            aria-label={t("inbox.transfers.detailsLabel", { route: routeLabel })}
           >
-            <X className="size-3.5" aria-hidden="true" />
-          </Button>
-          <Button asChild type="button" size="icon" variant="ghost" className="size-7">
-            <Link
-              to="/swaps"
-              search={{ focus: candidate.out_id, mode: candidate.candidate_type === "swap" ? "swaps" : "transfers" }}
-              title={t("inbox.transfers.details")}
-              aria-label={t("inbox.transfers.detailsLabel", { route: routeLabel })}
-            >
-              <ArrowUpRight className="size-3.5" aria-hidden="true" />
-            </Link>
-          </Button>
-        </div>
-      </div>
+            <ArrowUpRight className="size-3.5" aria-hidden="true" />
+          </Link>
+        </Button>
+      </span>
     </li>
   );
 }

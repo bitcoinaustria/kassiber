@@ -467,13 +467,17 @@ leading zero always starts a decimal, and the preview lists each price as it
 was read. Up to 50 typed prices go through one previewed step as
 `price_override` operations, each saved as exact and revertible from the
 transaction's history. **Moves between your wallets** lists the transfer
-and swap candidates from `ui.transfers.suggest`, each leg with its rail's logo
-(chain, Lightning, Liquid), and what pairing records: a transfer, a Bitcoin
-swap or a swap, and for a swap its default treatment (tax-neutral carrying
-value or taxable). The rows size themselves by the list's width, not the window's, so
-a docked assistant gets the narrow layout: a long wallet name is cut short with
-the full name on hover, a narrow leg puts its amount under the wallet, and the
-legs stack.
+and swap candidates from `ui.transfers.suggest` as table rows with the same
+edges in every row: the date, the route between the two wallets with their
+rails' logos (chain, Lightning, Liquid), one amount with the fee under it
+(instead of the fee, what arrived, for a swap into another asset or when no
+positive fee is left, as when more came in than left), and what pairing records:
+a plain transfer quietly, a Bitcoin swap or swap as a chip with its default
+treatment (tax-neutral carrying value or taxable), with how sure the match is.
+The rows size themselves by the list's width, not the window's, so a docked
+assistant gets the narrow layout: two lines, with the route and amount above
+the date, kind and buttons. A long wallet name is cut short with the full name
+on hover.
 Each has Pair, which pairs it with its default kind and policy, and two icon
 buttons: Not a transfer, which dismisses it, and Details, which opens it in
 Transfers & Custody. Exact candidates with carrying-value policy, no competing
