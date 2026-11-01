@@ -13331,3 +13331,83 @@ No dependency, lockfile, schema, Python product or AI exposure change is include
 Verification is Linux-only. The full Python/frontend gate, live-node/regtest
 acceptance and packaged-platform tests were not run; this checkpoint completes
 Lightning profitability reads/CSV, not those separately scoped products.
+
+## Public-feature primitives (R5 privacy continuation, partial)
+
+`t3code/r5-reports-privacy-2` starts at `4014edb6f`. The shared native
+`kassiber-wallets::analysis_features` ports the public feature extraction,
+persisted-cache closure and evidence-bound rules used by Chain Analysis,
+Privacy Mirror, PSBT and the separate legacy scorer. This is a prerequisite
+checkpoint. It does not complete the observation engine or any additional
+product read.
+
+Extraction retains categorical script templates, signature encodings, witness
+shapes, signed transaction versions, BIP68/BIP125 and absolute lock constraints,
+output amount/order patterns and exact observed fees. Recognized signature
+positions require their script/pubkey hash bindings; Taproot annex removal is
+limited to the final stack position. No signature is verified. Scripts, keys,
+stack bytes, payloads and derivations are discarded. Cache normalization
+accepts only bounded categorical values, rejects duplicate categories and extra
+value fields, and replaces imported source/evidence/assumption metadata with
+trusted caller context. Collaboration suppresses incompatible hypotheses;
+every rule retains its prerequisites. Nothing establishes ownership or tax facts.
+
+The crate reuses its existing Bitcoin/hash, arbitrary-precision integer and
+Python-compatible decimal dependencies. Neither a dependency nor a lockfile
+changes. The primitive accepts no connection, endpoint, consent grant or file
+path and performs no I/O. Its test-only JSON driver reads stdin and writes
+stdout; it dispatches no Python fallback and adds no `kassiber-net` route.
+AI projections and all Python product files remain unchanged.
+
+The frozen corpus contains 1,330 unchanged-Python vectors:
+
+| Boundary | Cases | Named mutation killer | Mutations |
+| --- | ---: | --- | ---: |
+| Script templates | 357 | `public_feature_script_templates_match_python_without_payloads` | 8 |
+| Signature encodings | 234 | `public_feature_signature_encodings_match_python_without_verification` | 8 |
+| Public extraction | 373 | `public_feature_extraction_matches_python_and_all_112_tables` | 16 |
+| Cache closure/rebinding | 300 | `public_feature_cache_rebinding_matches_python_and_rejects_private_fields` | 7 |
+| Evidence-bound rules | 66 | `public_feature_rules_match_python_with_collaboration_and_missing_prerequisites` | 8 |
+
+Five native tests compare canonical bytes and complete sorted rows in all 112
+seeded tables before/after the pure reads. The retained process oracle
+regenerates every case through unchanged Python and compares all 1,330 native
+results with the product offline switch both off and on, with no consent.
+Its all-table comparison surrounds the pure process run; the database is not
+passed to the driver. These are primitive proofs, not report-service or
+post-sync book acceptance. The native driver has no fallback path.
+
+Rust 1.99.1 offline/locked verification passes all five named native tests,
+workspace formatting and both production and test-harness workspace/all-target
+Clippy with `-D warnings`. Locked Python 3.11.17 passes all four retained
+feature-oracle tests without skips, vector drift and mutation applicability.
+The classifier records 5,712 Python test definitions. These are local Linux
+checks; the full Python/frontend and packaged/platform gates are not run.
+
+`crates/wallets/scripts/analysis_features_mutations.json` contains 47 recipes,
+each killed by its named test above. Use the existing shared scratch checker:
+
+```sh
+mise exec rust@1.99.1 uv@latest -- uv run --locked python \
+  crates/wallets/scripts/record_mutation_check.py \
+  --mutations crates/wallets/scripts/analysis_features_mutations.json
+```
+
+Set `CARGO_BUILD_JOBS=8`, `TMPDIR` and both Cargo build directories to owned
+directories under this checkout's `target/`, with debug symbols/incremental
+compilation disabled. Preserve account `HOME`. The final verification and
+mutation logs/summary live under `target/r5-privacy-2/`; owned build trees are
+removed after summarizing. An earlier campaign's surviving witnesses and build
+error count as no kills. Corrected fixtures preserve the script template while
+changing its hash, activate relative locks and retain short duplicate caches.
+
+The native product inventory remains 154 CLI leaves, including 22 reports,
+and 15 report daemon kinds plus two transaction exports. New Mirror, PSBT and
+legacy-scorer product served-by counts are all zero, with no newly registered
+requests or accepted fallback workload. Their acceptance remains incomplete.
+Mirror still needs the immutable observation/occurrence index, observer
+projection, traversal, clustering, patterns, attribution, conditional entropy
+and process/book-bound handles. PSBT still needs the shared v0/v2 parser,
+framing/UTXO/locktime validation, inventory/linkage overlay, redaction and
+CLI/file/daemon acceptance. The separate legacy scorer remains Python.
+Signing, broadcasting and spending keys remain outside this port.

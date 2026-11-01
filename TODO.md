@@ -544,6 +544,14 @@ registers them; exit-tax preserves its reference no-registration boundary.
   leaves and 21 native daemon kinds have zero fallbacks; PDF-containing exports
   and AI tools are explicitly Python-owned. See the
   [served-by audit](docs/reference/source-funds-rust-route-audit.md).
+- [x] Port the shared public transaction-feature extractor, closed cache
+  sanitizer and evidence-bound rule evaluator as a local native prerequisite.
+  Frozen Python vectors and named mutations cover script-bound signature
+  categories, signed versions, locks, exact amounts and collaboration exclusions.
+  This does not complete Mirror's observation index or register either report;
+  see the [feature checkpoint](docs/reference/rust-shell.md#public-feature-primitives-r5-privacy-continuation-partial).
+- [ ] Port the separate legacy `ui.privacy_hygiene.snapshot` scorer; the
+  configuration report and shared public features do not replace that contract.
 - [x] Port full-report, Austrian bundle and transaction CSV artifacts, saved
   export registration and their daemon kinds. Preserve
   sealed summaries, hashes and phase-4 append-only impact history.

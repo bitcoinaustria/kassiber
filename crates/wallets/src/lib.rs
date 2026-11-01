@@ -8,6 +8,7 @@ pub mod time;
 pub use snapshot::snapshot;
 
 pub mod acquisition;
+pub mod analysis_features;
 pub mod bdk;
 mod bdk_state;
 pub mod bitcoin_records;

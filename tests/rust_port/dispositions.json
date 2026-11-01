@@ -17251,6 +17251,11 @@
         "tests": 4
       }
     },
+    "tests/test_rust_analysis_features.py": {
+      "test_public_feature_frozen_vectors_match_unchanged_python": {"disposition": "oracle", "flags": [], "group": "chain-sync", "reason": "compares unchanged Python public-feature extraction, signature categories, cache closure and evidence-bound rules with a native JSON-only driver; retains byte comparisons and complete 112-table read invariants without product routing", "reviewed": true, "tests": 1},
+      "test_public_feature_mutation_catalog_stays_applicable": {"disposition": "oracle", "flags": ["subprocess"], "group": "chain-sync", "reason": "compares unchanged Python public-feature extraction, signature categories, cache closure and evidence-bound rules with a native JSON-only driver; retains byte comparisons and complete 112-table read invariants without product routing", "reviewed": true, "tests": 1},
+      "test_public_features_native_bytes_all_tables_without_network_consent": {"disposition": "oracle", "flags": ["sql", "subprocess"], "group": "chain-sync", "reason": "compares unchanged Python public-feature extraction, signature categories, cache closure and evidence-bound rules with a native JSON-only driver; retains byte comparisons and complete 112-table read invariants without product routing", "reviewed": true, "tests": 1}
+    },
     "tests/test_rust_austrian_xlsx.py": {
       "test_austrian_service_content_errors_and_whole_database": {
         "disposition": "oracle",

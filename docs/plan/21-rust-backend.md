@@ -4058,3 +4058,23 @@ commands), 16 report daemon kinds and two transaction export kinds.
 This completes Lightning report reads/CSV only. Full node-snapshot and backend
 probe routes, Lightning wallet sync and AI projections retain their separate
 porting work. Non-PDF source-funds and reports-b ownership remain unchanged.
+
+### R5 privacy: shared public-feature prerequisite
+
+The continuation from `4014edb6f` ports the shared public transaction-feature
+extractor, closed persisted-feature sanitizer and evidence-bound rule evaluator
+to `kassiber-wallets::analysis_features`. It reuses that crate's existing Bitcoin,
+exact integer and decimal primitives without adding dependencies. Stored
+observations and future PSBT adapters can consume the same pure implementation;
+there is no separate report-specific graph or ownership interpreter.
+
+The [feature checkpoint](../reference/rust-shell.md#public-feature-primitives-r5-privacy-continuation-partial)
+records 1,330 frozen unchanged-Python vectors, canonical byte comparisons,
+all-table read invariants and 47 named mutation recipes. This completes a
+prerequisite, not Mirror's shared analysis engine or either report's process
+acceptance. CLI/daemon registrations and served-by inventory remain unchanged.
+The immutable observation index, observer projection, traversal, clustering,
+patterns, attribution, conditional entropy and process/book-bound handles still
+precede Mirror acceptance. PSBT still needs its v0/v2 parser, validation and
+inventory/linkage overlay. The separate legacy scorer and AI projections remain
+Python. No schema, lockfile or Python product code changes.
