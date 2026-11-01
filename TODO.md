@@ -562,6 +562,12 @@ registers them; exit-tax preserves its reference no-registration boundary.
   this boundary; product inventory/linkage overlays, CLI/file/daemon acceptance
   and registration remain outstanding. See the
   [PSBT parser checkpoint](docs/reference/rust-shell.md#psbt-parser-prerequisite-r5-privacy-psbt-partial).
+- [x] Port reduced PSBT input/output inventory matching, observer-only component
+  deltas, adversary scenarios and report scope redaction over an admitted graph
+  baseline. Keep the scope and baseline callback in one SQLite read snapshot.
+  This prerequisite has no product routing; native graph construction,
+  CLI/file/daemon acceptance and registration remain outstanding. See the
+  [overlay checkpoint](docs/reference/rust-shell.md#psbt-inventorylinkage-overlay-prerequisite-r5-privacy-psbt-partial).
 - [x] Port full-report, Austrian bundle and transaction CSV artifacts, saved
   export registration and their daemon kinds. Preserve
   sealed summaries, hashes and phase-4 append-only impact history.

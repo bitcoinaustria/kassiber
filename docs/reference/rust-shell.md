@@ -13582,3 +13582,94 @@ The required classifier update records 5,716 definitions, and
 without skips. Verification is Linux-only; the full workspace test suite, full
 Python/frontend quality gate and packaged/platform gates are not run. This
 partial parser checkpoint makes no push-ready claim.
+
+## PSBT inventory/linkage overlay prerequisite (R5 privacy PSBT, partial)
+
+`t3code/r5-privacy-psbt-2` starts at `fff419a68`. The native
+`kassiber-wallets::psbt_privacy` composes the reduced proposal overlay over an
+admitted owned-output/linkage baseline. It matches exact input outpoints and
+output scripts, constructs deterministic observer-only components, and preserves
+receive reuse, branch evidence, unknown inputs, historical bounds, adversary
+deltas, transaction tells and hypothetical scenarios. Physical collaborative
+co-spends do not become observer-control edges. Fee availability uses exact
+integer msat sums and exposes no fee value. The shared PSBT decoder and public
+feature evaluator remain the parsing and structural-rule authorities.
+
+`kassiber-reports::psbt_privacy::report_with_baseline` resolves workspace/profile,
+decodes the proposal and invokes a trusted native baseline builder with the
+resolved profile and the same connection inside one SQLite read snapshot. It
+adds Python's active/bound scope flags and table projection. Private scripts
+remain transient, and the public payload has no signing, finalizing,
+broadcasting or key interface. No dependency, lockfile, schema, AI allowlist or
+egress route changes. Python product code and its existing embedded-decoder
+bug reproduction are unchanged.
+
+The baseline constructor is deliberately not implemented here. The parallel
+Mirror continuation owns immutable observation capture, inventory admission,
+public analytics and the historical graph. At its inspected `f94d5b16d`
+checkpoint, those database/analytics services remain incomplete. No empty graph
+or guessed historical links substitute for that dependency. A caller must
+supply already admitted owned outputs, observer flags, adversary views and the
+historical bound state; these are internal native inputs, never public request
+arguments. The fixture deserializer exists only in tests/test-harness builds.
+
+The corpus contains 171 unchanged-Python proposal/graph composition vectors.
+Real disposable books supply inventory cases; 80 deterministic synthetic
+admitted graphs exercise conditional linkage and evidence combinations, with
+additional synthetic historical bounds. Python's graph builder is injected
+only for this composition oracle. Mixed-domain and ambiguous inventory examples
+therefore verify overlay behavior over the admitted baseline, not a native
+inventory-admission implementation.
+
+Five native corpus tests compare canonical result/error and table-projection
+bytes and the complete sorted contents of all 112 tables before and after each
+read. A sixth test changes active profile from another connection during the
+baseline callback and proves the report retains its original SQLite snapshot.
+The retained guarded service driver accepts an explicit disposable database and
+injected baseline. Its oracle compares all 171 results in each offline-switch
+state, with no consent, no attempted egress and no fallback dispatch. Scripts,
+raw proposal text and private canaries are checked separately. These 342 driver
+calls do not constitute CLI/file/daemon acceptance or product routing proof.
+
+Product inventory and served-by counts remain unchanged: 154 CLI leaves
+(22 reports), 15 report daemon kinds plus two transaction exports; PSBT and the
+legacy scorer still have zero accepted product reads. Remaining work is native
+graph construction/projection into `Baseline`, PSBT CLI and file handling,
+daemon validation and scope/error envelopes, hybrid routing proof, transport
+mutations and registration with non-zero served-by counts. The entire separate
+legacy `ui.privacy_hygiene.snapshot` scorer, its acceptance and registration
+also remain outstanding. Proposal comparison, BIP78 verification and conditional
+entropy remain outside this reduced report checkpoint.
+
+All 26 entries in `crates/reports/scripts/psbt_privacy_mutations.json` are
+killed by six named selections in `crates/reports/tests/psbt_privacy.rs`.
+Eight cover inventory/component identifiers, reuse, fees and script redaction;
+ten cover conditional observer/adversary linkage and uncertainty; four cover
+structural/signature tells; two cover report refusals and the retained Python
+bug; one covers scope redaction; one covers the concurrent snapshot boundary.
+All six selections pass unmutated. The shared scratch checker compiles each
+mutation before accepting its actual named-test failure; there are no
+survivors, build errors or empty selections. Run it with:
+
+```sh
+mise exec rust@1.99.1 uv@latest -- uv run --locked python \
+  crates/reports/scripts/psbt_privacy_mutation_check.py
+```
+
+Preserve account `HOME`, set `CARGO_BUILD_JOBS=8`, and put `TMPDIR`,
+`CARGO_TARGET_DIR` and `CARGO_BUILD_BUILD_DIR` under the checkout's `target/`.
+The last setting overrides an inherited intermediate-build location as well as
+the final binary location. `target/r5-psbt-2/mutation-summary.json` retains every
+recipe/killer, with command logs and verification results adjacent. Owned build
+trees are removed after their results are summarized.
+
+Local Linux Rust 1.99.1 offline/locked verification passes workspace formatting,
+production and test-harness workspace/all-target Clippy with warnings denied,
+the six overlay tests, six inherited parser tests and five shared feature tests.
+Locked Python 3.11.17 passes all nine retained parser/overlay oracle cases
+without skips, including the unchanged reference-bug reproduction. The required
+classifier update records 5,719 definitions; the required CI preflight passes
+all 57 tests without skips. The optional full report-artifact sweep was stopped
+before completion and is not accepted as a passing gate. Full workspace runtime,
+Python/frontend, packaged and platform verification remain unrun. This is a
+partial local prerequisite, with no push-ready claim.

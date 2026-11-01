@@ -33,6 +33,7 @@ mod journal;
 pub mod lightning;
 mod platform_csv;
 mod privacy_hygiene;
+pub mod psbt_privacy;
 mod snapshot_write;
 mod snapshots;
 mod source_funds_assemble;

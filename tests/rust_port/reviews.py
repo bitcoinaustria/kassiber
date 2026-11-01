@@ -443,3 +443,5 @@ REVIEWS["tests/test_rust_document_cli.py"] = {"*": {
 }}
 
 REVIEWS["tests/test_rust_psbt.py"] = {"*": {"disposition": "oracle", "group": "chain-sync", "reason": "compares unchanged Python PSBT v0/v2 decoding, bounded framing, UTXO evidence, locks and redacted public analysis with a native guarded JSON driver; preserves complete 112-table reads without registering report or chain-analysis routes, and retains an uncaught embedded-decoder reference-error reproduction"}}
+
+REVIEWS["tests/test_rust_psbt_privacy.py"] = {"*": {"disposition": "oracle", "group": "reports", "reason": "compares unchanged Python reduced PSBT inventory/linkage overlays and scoped report redaction against a guarded native service driver with an injected admitted graph; retains canonical bytes, all 112 tables and mutation applicability without claiming native graph capture, transport acceptance or product routing"}}

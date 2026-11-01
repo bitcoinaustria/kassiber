@@ -4127,3 +4127,25 @@ oracle runs five cases, including both offline-switch states. The helper used
 by the required preflight preserves account `HOME` and passes an explicit
 disposable data root. The classifier now records 5,716 definitions, including
 four retained PSBT oracle definitions. No product served-by count changes.
+
+### R5 privacy: reduced PSBT inventory/linkage overlay prerequisite (partial)
+
+`t3code/r5-privacy-psbt-2` continues from `fff419a68`. It ports input/output
+inventory matching and the conditional proposal overlay over an admitted
+historical graph, plus active/bound report scope redaction and table rows. The
+report resolves scope and invokes its native baseline callback inside one
+SQLite snapshot. Observer-only components, branch evidence, unknown/bounded
+coverage, exact msat fee availability, adversary deltas and hypothetical
+scenarios retain the Python contracts. No signing or spending authority is
+added, and Python product code is unchanged.
+
+The [overlay checkpoint](../reference/rust-shell.md#psbt-inventorylinkage-overlay-prerequisite-r5-privacy-psbt-partial)
+records 171 unchanged-Python composition vectors, complete 112-table checks,
+snapshot concurrency, a guarded native service driver and named mutations.
+Its 342 offline-on/off fixture calls have no fallback dispatch or attempted
+egress. The historical graph is injected for this composition oracle; native
+inventory admission and database graph construction remain the Mirror
+workstream's prerequisite. This does not accept CLI/file/daemon transports or
+register product reads. PSBT and legacy-scorer served-by counts remain zero.
+Native graph wiring, transport acceptance, routing proof, registration and the
+entire separate legacy scorer remain outstanding.

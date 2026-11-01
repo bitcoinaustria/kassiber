@@ -8,6 +8,13 @@ license.workspace = true
 authors.workspace = true
 publish.workspace = true
 
+[features]
+test-harness = ["kassiber-wallets/test-harness"]
+
+[[example]]
+name = "psbt_privacy_fixture"
+required-features = ["test-harness"]
+
 [dependencies]
 kassiber-rates = { path = "../rates" }
 kassiber-custody = { path = "../custody" }

@@ -1,0 +1,262 @@
+[
+  {
+    "id": "psbt-overlay-observer",
+    "file": "crates/wallets/src/psbt_privacy.rs",
+    "find": "filter(|e| e.observer_linkage)",
+    "replace": "filter(|_| true)",
+    "expect_failing": [
+      "psbt_observer_components_and_conditional_deltas_match_python"
+    ],
+    "rule": "Collaborative physical co-spends must not merge observer components."
+  },
+  {
+    "id": "psbt-overlay-singletons",
+    "file": "crates/wallets/src/psbt_privacy.rs",
+    "find": "for (index, ids) in groups.values().enumerate()",
+    "replace": "for (index, ids) in groups.values().filter(|g| g.len() > 1).enumerate()",
+    "expect_failing": [
+      "psbt_inventory_matching_and_redaction_match_python_all_112_tables"
+    ],
+    "rule": "Unlinked owned outputs retain singleton components."
+  },
+  {
+    "id": "psbt-overlay-component-number",
+    "file": "crates/wallets/src/psbt_privacy.rs",
+    "find": "index + 1",
+    "replace": "index + 2",
+    "expect_failing": [
+      "psbt_inventory_matching_and_redaction_match_python_all_112_tables"
+    ],
+    "rule": "Deterministic component identifiers match the reference."
+  },
+  {
+    "id": "psbt-overlay-merge-count",
+    "file": "crates/wallets/src/psbt_privacy.rs",
+    "find": "clusters.len().saturating_sub(1)",
+    "replace": "clusters.len()",
+    "expect_failing": [
+      "psbt_inventory_matching_and_redaction_match_python_all_112_tables"
+    ],
+    "rule": "A proposal merges N components by N minus one links."
+  },
+  {
+    "id": "psbt-overlay-unknown-level",
+    "file": "crates/wallets/src/psbt_privacy.rs",
+    "find": "let level = if unknown > 0 || baseline.historical_linkage_bounded",
+    "replace": "let level = if unknown > 0",
+    "expect_failing": [
+      "psbt_observer_components_and_conditional_deltas_match_python"
+    ],
+    "rule": "Bounded historical evidence keeps the main overlay level unknown."
+  },
+  {
+    "id": "psbt-overlay-receive-priority",
+    "file": "crates/wallets/src/psbt_privacy.rs",
+    "find": "matches.iter().any(|n| n.branch_role == \"receive\")",
+    "replace": "matches.iter().all(|n| n.branch_role == \"receive\")",
+    "expect_failing": [
+      "psbt_observer_components_and_conditional_deltas_match_python"
+    ],
+    "rule": "A matched receive role takes precedence over mixed change or unknown roles."
+  },
+  {
+    "id": "psbt-overlay-change-priority",
+    "file": "crates/wallets/src/psbt_privacy.rs",
+    "find": "[\"ground_truth\", \"imported\", \"heuristic\"]",
+    "replace": "[\"heuristic\", \"imported\", \"ground_truth\"]",
+    "expect_failing": [
+      "psbt_observer_components_and_conditional_deltas_match_python"
+    ],
+    "rule": "Change evidence retains strongest applicable evidence category."
+  },
+  {
+    "id": "psbt-overlay-unknown-evidence",
+    "file": "crates/wallets/src/psbt_privacy.rs",
+    "find": "values.contains(\"unknown\")",
+    "replace": "false",
+    "expect_failing": [
+      "psbt_observer_components_and_conditional_deltas_match_python"
+    ],
+    "rule": "Unknown branch evidence must propagate across a set of output matches."
+  },
+  {
+    "id": "psbt-overlay-derived-evidence",
+    "file": "crates/wallets/src/psbt_privacy.rs",
+    "find": "values.contains(\"derived\")",
+    "replace": "false",
+    "expect_failing": [
+      "psbt_observer_components_and_conditional_deltas_match_python"
+    ],
+    "rule": "Derived branch evidence must not become exact."
+  },
+  {
+    "id": "psbt-overlay-reuse-delta",
+    "file": "crates/wallets/src/psbt_privacy.rs",
+    "find": "receive_clusters.difference(&clusters).count()",
+    "replace": "receive_clusters.len()",
+    "expect_failing": [
+      "psbt_inventory_matching_and_redaction_match_python_all_112_tables"
+    ],
+    "rule": "Receive reuse counts only components outside the proposal inputs."
+  },
+  {
+    "id": "psbt-overlay-fee-amounts",
+    "file": "crates/wallets/src/psbt_privacy.rs",
+    "find": "input_value >= output_value",
+    "replace": "input_value > output_value",
+    "expect_failing": [
+      "psbt_inventory_matching_and_redaction_match_python_all_112_tables"
+    ],
+    "rule": "Exact zero-fee proposals retain known fee coverage."
+  },
+  {
+    "id": "psbt-overlay-fee-unknown",
+    "file": "crates/wallets/src/psbt_privacy.rs",
+    "find": "&& unknown == 0\n            && known.len() == inputs.len()",
+    "replace": "",
+    "expect_failing": [
+      "psbt_inventory_matching_and_redaction_match_python_all_112_tables"
+    ],
+    "rule": "Missing local input amounts prevent an exact fee observation."
+  },
+  {
+    "id": "psbt-overlay-fee-redaction",
+    "file": "crates/wallets/src/psbt_privacy.rs",
+    "find": "\"fee_value_redacted\":true",
+    "replace": "\"fee_value_redacted\":false",
+    "expect_failing": [
+      "psbt_transaction_tells_and_exact_fees_match_python"
+    ],
+    "rule": "Fee observations retain the public categorical redaction flag."
+  },
+  {
+    "id": "psbt-overlay-script-redaction",
+    "file": "crates/wallets/src/psbt_privacy.rs",
+    "find": "json!({\"payload_schema_version\":1",
+    "replace": "json!({\"decoded_transaction\":decoded,\"payload_schema_version\":1",
+    "expect_failing": [
+      "psbt_inventory_matching_and_redaction_match_python_all_112_tables"
+    ],
+    "rule": "Transient decoded scripts must never enter the reduced report."
+  },
+  {
+    "id": "psbt-overlay-rbf",
+    "file": "crates/wallets/src/psbt_privacy.rs",
+    "find": "self.structural.contains(\"explicit_rbf_signal\")",
+    "replace": "false",
+    "expect_failing": [
+      "psbt_transaction_tells_and_exact_fees_match_python"
+    ],
+    "rule": "PSBT RBF tells consume the shared structural evaluator."
+  },
+  {
+    "id": "psbt-overlay-op-return",
+    "file": "crates/wallets/src/psbt_privacy.rs",
+    "find": "self.structural.contains(\"op_return_output\")",
+    "replace": "false",
+    "expect_failing": [
+      "psbt_transaction_tells_and_exact_fees_match_python"
+    ],
+    "rule": "OP_RETURN presence is retained without its payload."
+  },
+  {
+    "id": "psbt-overlay-signature",
+    "file": "crates/wallets/src/psbt_privacy.rs",
+    "find": "let signature = decoded[\"signature_material_present\"].as_bool().unwrap();",
+    "replace": "let signature = false;",
+    "expect_failing": [
+      "psbt_transaction_tells_and_exact_fees_match_python"
+    ],
+    "rule": "Signing and finalization material remains a presence warning only."
+  },
+  {
+    "id": "psbt-overlay-passive",
+    "file": "crates/wallets/src/psbt_privacy.rs",
+    "find": "view.tier == \"passive_chain_watcher\" || !clusters.is_disjoint(&exposed)",
+    "replace": "!clusters.is_disjoint(&exposed)",
+    "expect_failing": [
+      "psbt_observer_components_and_conditional_deltas_match_python"
+    ],
+    "rule": "The passive model includes newly exposed input components."
+  },
+  {
+    "id": "psbt-overlay-anchored",
+    "file": "crates/wallets/src/psbt_privacy.rs",
+    "find": "|| !clusters.is_disjoint(&exposed)",
+    "replace": "|| clusters.is_disjoint(&exposed)",
+    "expect_failing": [
+      "psbt_observer_components_and_conditional_deltas_match_python"
+    ],
+    "rule": "Anchored adversaries acquire a proposal delta only when an input intersects their exposure."
+  },
+  {
+    "id": "psbt-overlay-bounded-limitation",
+    "file": "crates/wallets/src/psbt_privacy.rs",
+    "find": "if baseline.historical_linkage_bounded {",
+    "replace": "if false {",
+    "expect_failing": [
+      "psbt_observer_components_and_conditional_deltas_match_python"
+    ],
+    "rule": "A bounded historical graph must be disclosed."
+  },
+  {
+    "id": "psbt-overlay-coverage",
+    "file": "crates/wallets/src/psbt_privacy.rs",
+    "find": "unknown == 0 && !baseline.historical_linkage_bounded",
+    "replace": "unknown == 0",
+    "expect_failing": [
+      "psbt_observer_components_and_conditional_deltas_match_python"
+    ],
+    "rule": "Incomplete historical linkage cannot claim complete coverage."
+  },
+  {
+    "id": "psbt-overlay-decode-bug",
+    "file": "crates/wallets/src/psbt_privacy.rs",
+    "find": "if error.code == \"internal_error\"",
+    "replace": "if false",
+    "expect_failing": [
+      "psbt_report_refusals_preserve_reference_bug_and_all_tables"
+    ],
+    "rule": "The retained Python embedded-truncation bug keeps its unhandled error contract."
+  },
+  {
+    "id": "psbt-overlay-decode-hint",
+    "file": "crates/wallets/src/psbt_privacy.rs",
+    "find": "Provide a valid base64 PSBT v0 or v2 with the required transaction fields.",
+    "replace": "Provide a valid base64 PSBT.",
+    "expect_failing": [
+      "psbt_report_refusals_preserve_reference_bug_and_all_tables"
+    ],
+    "rule": "Report validation preserves the reference hint."
+  },
+  {
+    "id": "psbt-overlay-scope",
+    "file": "crates/reports/src/psbt_privacy.rs",
+    "find": "&text(&profile, \"id\")",
+    "replace": "\"other\"",
+    "expect_failing": [
+      "psbt_inventory_matching_and_redaction_match_python_all_112_tables"
+    ],
+    "rule": "The graph builder receives the profile resolved within the report snapshot."
+  },
+  {
+    "id": "psbt-overlay-scope-redaction",
+    "file": "crates/reports/src/psbt_privacy.rs",
+    "find": "\"workspace\":\"active\"",
+    "replace": "\"workspace\":\"ws\"",
+    "expect_failing": [
+      "psbt_scope_and_table_projection_match_python"
+    ],
+    "rule": "Report scope omits private workspace identifiers."
+  },
+  {
+    "id": "psbt-overlay-read-snapshot",
+    "file": "crates/reports/src/psbt_privacy.rs",
+    "find": "\"SAVEPOINT psbt_privacy_read\"",
+    "replace": "\"SELECT 1\"",
+    "expect_failing": [
+      "psbt_scope_and_baseline_share_one_database_snapshot"
+    ],
+    "rule": "Scope resolution and graph construction must observe one pinned snapshot."
+  }
+]
