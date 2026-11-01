@@ -13206,3 +13206,10 @@ Python test definitions and assigns both new oracle modules to the serial
 daemon lane. Logs and summaries remain in `target/r5-sof-mutations-5/`; completed
 verification build trees and the initial account-directed archive tree are
 removed after summarizing.
+
+Final acceptance runs the required classifier update and
+`scripts/python_test_shards.py run preflight --ci`: all 57 preflight tests pass.
+The implementation is committed locally as `5b1cbeaa8`; the final ownership and
+backlog update records the same verified scope. This is Linux service and
+transport verification, without full workspace, frontend, live-regtest or
+platform/package acceptance. No push or pull request is part of this boundary.

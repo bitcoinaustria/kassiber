@@ -1476,6 +1476,31 @@ suggest, daemon suggest/assemble and case saving stay with the mutations
 worker. Assemble's shared preview contract is still required: Python has no
 such CLI/daemon surface and commits inside its assembly passes.
 
+### R5 source-funds persisted passes and route ownership
+
+Continuation 5 integrates the finished read line with case saving and ports
+persisted suggestion and assembly through the shared Rust service. Assembly
+freezes its inputs once and commits suggestion and review stages separately
+within each pass, retaining completed stages after later failures. Preview,
+exact allocations, scope, caps, deterministic eligibility and reviewed-save
+fingerprints retain their existing contracts. The 269-case pass corpus checks
+both bindings, complete helper envelopes, all 112 tables, attachment hashes and
+late rollback; process comparisons require zero native fallbacks.
+
+The [route audit](../reference/source-funds-rust-route-audit.md) accounts for
+19 native CLI leaves and 21 native daemon kinds. The owner assigns AI chat/tool
+execution, source admission and case saving to Python under R6. Its tool layer
+calls Python's scoped services directly and retains consent, duplicate-call
+suppression, book/input binding and redaction. Direct native CLI/daemon services
+preserve all checks enforced outside that loop. PDF rendering and
+PDF-containing bundles remain Python-owned through both transports.
+
+The [persisted-pass checkpoint](../reference/rust-shell.md#source-funds-persisted-pass-checkpoint-r5)
+records rollback, projection-bug repros, process routing, named mutation kills
+and final verification. This completes the source-funds CLI/daemon mutation
+boundary without adding a native AI loop or changing Python product behavior,
+dependencies, schemas, egress or accounting rules.
+
 ### Service slice contract (R4 onward)
 
 From R4 on, work lands as vertical slices: one command family, or one

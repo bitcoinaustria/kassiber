@@ -1439,8 +1439,14 @@ the model include the filename/format but not the managed local path.
 
 The partial Rust R5 shell now provides the shared source-funds save and daemon
 inspection services, including fingerprint revalidation under writer admission.
-Its AI execution loop, consent and once-only admission remain unported. Native
-CLI/daemon save verification does not establish native AI tool acceptance; see
+The owner has assigned the AI execution loop, consent and once-only admission
+to Python under R6. AI source admission and case saving call
+`_ui_source_funds_payload_from_conn` directly inside `_run_scoped_ai_mutation`;
+they do not call the native CLI or daemon transport. Python retains advertised
+schemas, consent, duplicate-call suppression, frozen book/input binding and
+redaction. Direct native CLI/daemon services preserve service validation and
+review fingerprints. Native CLI/daemon save verification does not establish
+native AI tool acceptance; see
 the [case-save checkpoint](rust-shell.md#source-funds-case-save-checkpoint-r5-partial).
 
 Transaction review writes (`ui_transactions_metadata_update`,

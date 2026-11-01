@@ -490,9 +490,9 @@ registers them; exit-tax preserves its reference no-registration boundary.
   This boundary added two CLI leaves and two source-funds daemon kinds;
   11 CLI mutation calls and ten daemon mutation requests are verified with zero
   fallback. See the [partial source mutation checkpoint](docs/reference/rust-shell.md#source-funds-source-mutation-checkpoint-r5-partial).
-- [ ] Complete source mutation AI consent and once-only admission. The native
-  shell has no AI execution loop; Python AI runs and service-only internal-error
-  envelopes are excluded from native transport acceptance.
+- [x] Record source mutation AI execution, consent and once-only admission as
+  Python-owned under the owner's R6 decision. AI tools call the Python service
+  directly; native CLI/daemon acceptance does not claim native AI execution.
 - [x] Port recipient create/update/soft-delete through the shared native
   service, CLI and daemon. Preserve scoped exact references, partial updates,
   frozen case history and binding-specific constraint errors. Compare full
@@ -526,20 +526,26 @@ registers them; exit-tax preserves its reference no-registration boundary.
 - [x] Port deterministic source-funds batch review through CLI and daemon.
   Revalidate scoped selections under write admission, preserve CLI dry runs,
   compare all 112 tables and attachment hashes on SQLite/SQLCipher, prove late
-  rollback and zero transport fallback, and kill named mutations. Native AI
-  admission remains separate.
+  rollback and zero transport fallback, and kill named mutations. AI admission
+  remains Python-owned under R6.
 - [x] Port complete source-funds report/SVG case saving through CLI and daemon,
   including native daemon inspection fingerprints, frozen recipient/external
   fields, same-lock revalidation, all 112 tables, attachment hashes and late
   rollback on SQLite/SQLCipher, zero fallbacks and named mutation kills.
   See the [case-save checkpoint](docs/reference/rust-shell.md#source-funds-case-save-checkpoint-r5-partial).
-- [ ] Port persisted source-funds suggest/assemble in separate verified commits.
-  Preserve exact provenance semantics, consent, once-only execution and
-  SQLite/SQLCipher rollback.
-- [ ] Complete source-funds case saving through native AI consent and once-only
-  admission. The Rust shell has no AI execution loop; Python tool runs cannot
-  establish native acceptance. Source mutation AI admission remains pending
-  under its separate task above.
+- [x] Port persisted source-funds suggest/assemble with separate suggestion and
+  review commits inside each pass, frozen inputs and SQLite/SQLCipher rollback.
+  Verify complete envelopes, all 112 tables, attachment hashes, late failure,
+  zero fallbacks and named mutation kills; see the
+  [persisted-pass checkpoint](docs/reference/rust-shell.md#source-funds-persisted-pass-checkpoint-r5).
+- [x] Keep AI case saving, consent and once-only execution Python-owned under
+  the owner's R6 scope decision. The tool executor invokes Python's scoped
+  service directly, preserving frozen book binding, redaction and reviewed
+  fingerprints without adding a native AI loop.
+- [x] Audit every source-funds CLI command and daemon kind: nineteen native CLI
+  leaves and 21 native daemon kinds have zero fallbacks; PDF-containing exports
+  and AI tools are explicitly Python-owned. See the
+  [served-by audit](docs/reference/source-funds-rust-route-audit.md).
 - [x] Port full-report, Austrian bundle and transaction CSV artifacts, saved
   export registration and their daemon kinds. Preserve
   sealed summaries, hashes and phase-4 append-only impact history.
