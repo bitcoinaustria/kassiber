@@ -12020,3 +12020,19 @@ trips with zero served-shape fallbacks. Eleven touched mutations are killed;
 formatting, production/harness clippy and all 57 required preflight checks pass.
 The inventory records 5,979 definitions. The checkpoint above records the
 refusal census, encrypted replay/cancellation proof and the unrun broader gates.
+### Document CLI review checkpoint (R5, partial)
+
+The CLI review adapter renders the visible accounting fields, source page,
+row and cell confidence, flags and defaulted fees through Python's exact
+stdout/stderr split. It delegates structural and confidence decisions to the
+reviewed document core. Nothing is selected by default; confidence-only rows
+require the explicit override, and malformed financial facts remain blocked.
+Row-number selection preserves requested order and removes duplicates. Empty
+input, EOF and an interrupted reader cancel without a write.
+
+`document_cli_review_matches_python_scripted_stdin` replays the frozen Python
+transcripts in `crates/cli/tests/data/document_review.json`, including Unicode
+selection, invalid and blocked rows, threshold refusals and cancellation.
+`test_document_cli_review_matches_frozen_python_reference` checks that corpus
+against the current Python implementation. This checkpoint does not register
+product routes or claim native operating-system interrupt acceptance.

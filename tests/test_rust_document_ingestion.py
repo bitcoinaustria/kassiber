@@ -33,6 +33,10 @@ def cases():
 
 
 class DocumentIngestionReferenceTest(unittest.TestCase):
+    def test_document_cli_review_matches_frozen_python_reference(self):
+        from crates.wallets.scripts.generate_document_cli_vectors import DEST, vectors as cli_vectors
+        self.assertEqual(DEST.read_text(), json.dumps(cli_vectors(), ensure_ascii=True, sort_keys=True, indent=2) + '\n')
+
     def test_document_rows_match_frozen_python_reference(self):
         self.assertEqual(cases(), vectors())
         self.assertEqual(json.loads(CORPUS.with_name('python_document_review.json').read_text()), review_vectors())
