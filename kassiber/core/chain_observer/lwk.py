@@ -19,6 +19,7 @@ from ...proxy import is_onion_endpoint
 from ...util import parse_bool
 from ...wallet_descriptors import liquid_asset_code
 from ..sync import emit_sync_progress, normalize_backend_kind
+from ..sync_control import check_sync_transport
 from .contract import ChainFacts, ObserverApplication, ObserverPrepareRequest
 from .host_trust import operator_ca_override
 from .identity import ObserverIdentity
@@ -366,6 +367,7 @@ class LwkObserver:
         return checkpoint
 
     def _client(self, network):
+        check_sync_transport()
         lwk = require_lwk()
         endpoint = str(self.backend.get("url") or "").strip()
         if not endpoint:
@@ -621,7 +623,9 @@ class LwkObserver:
             network = lwk_network(self.identity.network, self.policy_asset_id)
             self._store_link = lwk.ForeignStoreLink(self.store)
             self._wallet = lwk.Wollet.with_custom_store(network, lwk_descriptor_for_plan(self.plan), self._store_link)
+            check_sync_transport()
             client = self._client(network)
+            check_sync_transport()
             emit_sync_progress({"phase": "backend_fetch", "observer": "lwk", "status": "scanning"})
             if request.force_full and identity_checkpoint.get("tip_height") is not None:
                 # Rebuilding the opaque wollet must not let a lagging backend
@@ -631,10 +635,13 @@ class LwkObserver:
                     int(identity_checkpoint["tip_height"]),
                 )
             scan_to = _lwk_scan_to_index(self.plan, prior_state, identity_checkpoint)
+            check_sync_transport()
             update = client.full_scan_to_index(self._wallet, scan_to)
+            check_sync_transport()
             if update is not None:
                 self._wallet.apply_update(update)
             tip = client.tip()
+            check_sync_transport()
             facts = self._facts(
                 self._wallet,
                 tip,
