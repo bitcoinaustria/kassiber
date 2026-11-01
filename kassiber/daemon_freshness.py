@@ -772,9 +772,9 @@ def _auto_pair_before_journals(
     )
     # Cache the post-pairing candidate count so the side-nav swaps hint can be
     # served cheaply (build_review_badges_snapshot reads it without re-running the
-    # heavy matcher). This is the only writer, so the badge reflects the last
-    # journal run: after a manual pair/dismiss the count can briefly over-state
-    # until the next refresh reprocesses journals. Part of the atomic auto-pair +
+    # heavy matcher). It and `_recount_transfer_candidates` are the only
+    # writers, so the badge reflects the last journal run: after a manual
+    # pair/dismiss the count can briefly over-state until journals reprocess. Part of the atomic auto-pair +
     # journal step: committed on success, rolled back with the pairings if journal
     # processing fails.
     cache_swap_candidate_count(conn, workspace_ref, profile_ref, remaining["total"])
@@ -894,7 +894,32 @@ def refresh_journals_step(
     payload.setdefault("rebuilt", True)
     if auto_pair_summary is not None:
         payload["auto_pair"] = auto_pair_summary
+    else:
+        _recount_transfer_candidates(conn, job_scope)
     return payload
+
+
+def _recount_transfer_candidates(
+    conn: sqlite3.Connection,
+    job: Mapping[str, Any],
+) -> None:
+    """Cache the open candidate count after a rebuild that paired nothing.
+
+    The pairing pass caches it otherwise; without one, a pair or dismissal the
+    owner made would leave the review badge counting it until the next
+    automatic run. A failed recount keeps the previous count.
+    """
+
+    try:
+        workspace_ref, profile_ref = _job_scope_refs(conn, job)
+        remaining = _transfer_candidate_counts(
+            suggest_transfer_candidates(conn, workspace_ref, profile_ref)
+        )
+        cache_swap_candidate_count(conn, workspace_ref, profile_ref, remaining["total"])
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        _LOGGER.exception("Recounting transfer candidates after the journal rebuild failed")
 
 
 def _active_profile_row(conn: sqlite3.Connection) -> sqlite3.Row | None:

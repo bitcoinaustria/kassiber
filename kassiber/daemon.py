@@ -20118,21 +20118,30 @@ def handle_request(
 
     if kind == "ui.journals.process":
         args = request.get("args")
-        if args is not None and args != {}:
+        if args is None:
+            args = {}
+        # Only `auto_pair` may be turned off: the Review screen recalculates
+        # after the owner's own decisions and must not pair anything else.
+        if (
+            not isinstance(args, dict)
+            or set(args) - {"auto_pair"}
+            or not isinstance(args.get("auto_pair", True), bool)
+        ):
             if not isinstance(args, dict):
                 details: dict[str, Any] = {"type": type(args).__name__}
             else:
-                details = {"unknown": sorted(args)}
+                details = {"unknown": sorted(set(args) - {"auto_pair"})}
             return (
                 _error_envelope(
                     "validation",
-                    "ui.journals.process does not accept arguments",
+                    "ui.journals.process accepts only a boolean auto_pair",
                     request_id=request_id,
                     details=details,
                     retryable=False,
                 ),
                 False,
             )
+        auto_pair = bool(args.get("auto_pair", True))
         def _emit_journal_progress(payload: Mapping[str, Any]) -> None:
             out.write(
                 _with_request_id(
@@ -20147,6 +20156,7 @@ def handle_request(
                     "ui.journals.process",
                     _journals_refresh_payload(
                         ctx.conn,
+                        auto_pair=auto_pair,
                         progress_observer=_emit_journal_progress,
                     ),
                 ),
