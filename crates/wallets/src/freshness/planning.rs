@@ -73,9 +73,11 @@ impl<N: execution::Handler> execution::Handler for Combined<'_, N> {
     }
 }
 
-struct Execution;
+pub struct Execution {
+    _private: (),
+}
 impl Execution {
-    fn acquire() -> Result<Self> {
+    pub fn acquire() -> Result<Self> {
         EXECUTING
             .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
             .map_err(|_| {
@@ -86,7 +88,7 @@ impl Execution {
                 .with_hint("Wait for the current refresh to finish, then retry.")
                 .retryable(true)
             })?;
-        Ok(Self)
+        Ok(Self { _private: () })
     }
 }
 impl Drop for Execution {

@@ -25,12 +25,13 @@ use crate::{app_error_envelope, Daemon};
 struct Active {
     id: String,
     cancel: Cancellation,
-    consent: Arc<Consent>,
+    consent: Option<Arc<Consent>>,
     worker: JoinHandle<Finished>,
 }
 
 struct Finished {
-    response: Value,
+    response: Option<Value>,
+    after_reply_error: Option<AppError>,
     closing: Option<Box<dyn Book>>,
     graph_grants: Vec<Grant>,
 }
@@ -98,7 +99,9 @@ impl Requests {
         if stop {
             if let Some(active) = &self.active {
                 active.cancel.cancel();
-                active.consent.revoke();
+                if let Some(consent) = &active.consent {
+                    consent.revoke();
+                }
             }
         }
         if self
@@ -121,7 +124,9 @@ impl Requests {
             .retain(|_, deadline| *deadline > Instant::now());
         if let Some(active) = self.active.as_ref().filter(|v| v.id == target) {
             if revoke {
-                active.consent.revoke();
+                if let Some(consent) = &active.consent {
+                    consent.revoke();
+                }
             } else {
                 active.cancel.cancel();
             }
@@ -325,19 +330,26 @@ impl Daemon {
             return Ok(());
         };
         let finished = active.worker.join().unwrap_or_else(|_| Finished {
-            response: app_error_envelope(
+            response: Some(app_error_envelope(
                 &AppError::new("internal_error", "Freshness worker panicked"),
                 &RequestId::Value(kassiber_envelope::s(active.id.as_str())),
                 None,
-            ),
+            )),
+            after_reply_error: None,
             closing: None,
             graph_grants: vec![],
         });
         self.freshness_requests.closing = finished.closing;
-        let written = self
-            .output
-            .write_for_handoff(&finished.response)
-            .map_err(|_| AppError::new("cancelled", "Freshness output closed"))?;
+        let written = if let Some(response) = finished.response {
+            self.output
+                .write_for_handoff(&response)
+                .map_err(|_| AppError::new("cancelled", "Freshness output closed"))?
+        } else {
+            None
+        };
+        if let Some(error) = finished.after_reply_error {
+            return Err(error);
+        }
         if self.freshness_requests.closing.is_some() {
             return Err(
                 AppError::new("project_in_use", "Freshness connection could not close")
@@ -426,6 +438,11 @@ impl Daemon {
                 "Freshness request limit reached; restart the daemon",
             ));
         }
+        let journal_context = if kind == "ui.journals.process" {
+            Some(self.book_mut()?.context()?)
+        } else {
+            None
+        };
         let owner = self.owner.as_ref().ok_or_else(|| {
             AppError::new("project_in_use", "Freshness requires project ownership")
         })?;
@@ -439,17 +456,30 @@ impl Daemon {
             },
             &mut config,
         )?;
-        let plan = book.freshness_plan(request)?;
-        if kind == "ui.wallets.sync" && !plan.supports_wallets_sync() {
+        let journals = kind == "ui.journals.process";
+        let plan = if journals {
+            None
+        } else {
+            Some(book.freshness_plan(request)?)
+        };
+        if kind == "ui.wallets.sync"
+            && !plan
+                .as_ref()
+                .is_some_and(|plan| plan.supports_wallets_sync())
+        {
             return Err(AppError::new(
                 "native_fallback_required",
                 "Wallet sync requires its direct-sync reference path",
             ));
         }
-        let consent = Arc::new(Consent::explicit_trigger(&plan));
+        let consent = plan
+            .as_ref()
+            .map(|plan| Arc::new(Consent::explicit_trigger(plan)));
         let cancel = Cancellation::default();
         if get(args, "revoke") == Some(&Value::Bool(true)) {
-            consent.revoke();
+            if let Some(consent) = &consent {
+                consent.revoke();
+            }
         }
         if get(args, "cancel") == Some(&Value::Bool(true))
             || self
@@ -461,7 +491,7 @@ impl Daemon {
             cancel.cancel();
         }
         let granted = get(args, "consent") != Some(&Value::Bool(false));
-        let automatic_graph = !kind.starts_with("test.");
+        let automatic_graph = !journals && !kind.starts_with("test.");
         let kind = kind.to_owned();
         let output = self.output.clone();
         let progress_id = request_id.clone();
@@ -471,42 +501,73 @@ impl Daemon {
         let worker = std::thread::Builder::new()
             .name("kassiber-freshness-request".into())
             .spawn(move || {
+                let mut response_written = false;
                 let outcome = catch_unwind(AssertUnwindSafe(|| {
+                    let mut emit = |event: &Value| {
+                        output
+                            .write(&with_request_id(
+                                success(&format!("{kind}.progress"), event.clone()),
+                                &progress_id,
+                            ))
+                            .map_err(|_| {
+                                worker_cancel.cancel();
+                                if let Some(consent) = &worker_consent {
+                                    consent.revoke();
+                                }
+                                AppError::new("cancelled", "Freshness output closed")
+                            })
+                    };
+                    if journals {
+                        let result = book.refresh_journals(
+                            journal_context.as_ref().expect("captured journal context"),
+                            &worker_cancel,
+                            &mut emit,
+                        )?;
+                        output
+                            .write(&with_request_id(
+                                success(&kind, result.payload().clone()),
+                                &progress_id,
+                            ))
+                            .map_err(|_| AppError::new("cancelled", "Freshness output closed"))?;
+                        response_written = true;
+                        result.after_reply()?;
+                        return Ok(None);
+                    }
                     book.freshness_execute(
-                        plan,
+                        plan.expect("freshness plan"),
                         &options,
-                        granted.then_some(worker_consent.as_ref()),
+                        worker_consent.as_deref().filter(|_| granted),
                         &worker_cancel,
-                        &mut |event| {
-                            output
-                                .write(&with_request_id(
-                                    success(&format!("{kind}.progress"), event.clone()),
-                                    &progress_id,
-                                ))
-                                .map_err(|_| {
-                                    worker_cancel.cancel();
-                                    worker_consent.revoke();
-                                    AppError::new("cancelled", "Freshness output closed")
-                                })
-                        },
+                        &mut emit,
                     )
+                    .map(Some)
                 }))
                 .unwrap_or_else(|_| {
                     Err(AppError::new("internal_error", "Freshness worker panicked"))
                 });
                 let mut graph_grants = vec![];
+                let mut after_reply_error = None;
                 let response = match outcome {
-                    Ok(value) => {
-                        graph_grants = worker_consent.take_graph_grants();
-                        with_request_id(success(&kind, value), &progress_id)
+                    Ok(Some(value)) => {
+                        if let Some(consent) = &worker_consent {
+                            graph_grants = consent.take_graph_grants();
+                        }
+                        Some(with_request_id(success(&kind, value), &progress_id))
                     }
+                    Ok(None) => None,
                     Err(error) => {
                         let _ = book.rollback();
-                        app_error_envelope(&error, &progress_id, Some(&kind))
+                        if response_written {
+                            after_reply_error = Some(error);
+                            None
+                        } else {
+                            Some(app_error_envelope(&error, &progress_id, Some(&kind)))
+                        }
                     }
                 };
                 Finished {
                     response,
+                    after_reply_error,
                     graph_grants,
                     closing: if book.close().is_err() {
                         Some(book)

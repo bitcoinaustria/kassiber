@@ -149,6 +149,7 @@ pub fn supported_kinds() -> Vec<&'static str> {
             )
     }));
     kinds.extend(documents::KINDS);
+    kinds.push("ui.journals.process");
     kinds.extend(transfers::KINDS);
     kinds.extend(services::kinds().filter(|k| views::KINDS.contains(k)));
     kinds.extend(services::kinds().filter(|k| networks::KINDS.contains(k)));

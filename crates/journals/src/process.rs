@@ -219,8 +219,10 @@ fn build_in_transaction<'a>(
         mut ids,
     } = clocks;
     let cache = storage::RebuildCache::enter(conn)?;
+    writes.check()?;
     if reserve_writer {
         progress("writer_wait");
+        writes.check()?;
         conn.execute_batch("BEGIN IMMEDIATE")?;
     } else if conn.transaction_state(Some("main"))?
         != kassiber_store::rusqlite::TransactionState::Write
@@ -232,15 +234,19 @@ fn build_in_transaction<'a>(
     }
     let _transaction = Transaction(conn);
     progress("preparing");
+    writes.check()?;
     let mut profile = prebuild.resolve(conn)?;
     kassiber_custody::journal_support::require_tax_processing(&profile)
         .map_err(|(family, message)| Refusal::new(family, message))?;
     conn.execute_batch("SAVEPOINT journals_process")?;
     progress("repairing");
+    writes.check()?;
     let repairs = prebuild.repair(conn, &mut profile)?;
     progress("pricing");
+    writes.check()?;
     let auto_priced = prebuild.price(conn, &profile)?;
     progress("building");
+    writes.check()?;
     let clock = build_clock()?;
     let span = crate::timing::span("snapshot_load");
     let loaded = loader::load(conn, codec::from_json(&profile)?, &clock).map_err(load_error)?;
@@ -274,6 +280,7 @@ fn build_in_transaction<'a>(
     let state = boundary::build_operands(&profile, &operands, &wallets, &response, String::new)?;
     drop(render_span);
     progress("storing");
+    writes.check()?;
     let span = crate::timing::span("persistence_commit");
     let stored_at = now()?;
     let stored = persistence::store_ledger_state_with_clock(
@@ -323,6 +330,7 @@ fn build_in_transaction<'a>(
         payload["filed_report_impacts_resolved"] = json!(stored.filed_report_impacts_resolved);
     }
     let ordered_payload = ordered::payload(&payload)?;
+    writes.check()?;
     conn.execute_batch("RELEASE journals_process; COMMIT")?;
     drop(span);
     progress("complete");

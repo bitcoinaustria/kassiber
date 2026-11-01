@@ -169,6 +169,139 @@ impl Refresh<'_> {
     }
 }
 
+struct CheckedWrites<'a, W, C> {
+    inner: W,
+    check: C,
+    _cancel: &'a kassiber_wallets::scan::Cancellation,
+}
+impl<
+        W: kassiber_journals::storage::WriteObserver,
+        C: Fn() -> Result<(), kassiber_envelope::AppError>,
+    > kassiber_journals::storage::WriteObserver for CheckedWrites<'_, W, C>
+{
+    fn phase(&mut self, phase: &'static str) {
+        self.inner.phase(phase);
+        #[cfg(feature = "test-harness")]
+        if phase == "complete"
+            && std::env::var("KASSIBER_RUST_TEST_JOURNAL_CANCEL_BEFORE_COMMIT").as_deref()
+                == Ok("1")
+        {
+            self._cancel.cancel();
+        }
+    }
+    fn check(&mut self) -> Result<(), Refusal> {
+        (self.check)().map_err(Into::into)
+    }
+    fn wrote(&mut self, table: &'static str) -> kassiber_store::rusqlite::Result<()> {
+        if (self.check)().is_err() {
+            return Err(kassiber_store::rusqlite::Error::ExecuteReturnedResults);
+        }
+        self.inner.wrote(table)
+    }
+}
+
+pub(super) fn explicit<'a>(
+    conn: &'a Connection,
+    context: &kassiber_runtime::store::BookContext,
+    cancel: &kassiber_wallets::scan::Cancellation,
+    progress: &mut dyn FnMut(&Value) -> Result<(), kassiber_envelope::AppError>,
+) -> Result<Committed<'a>, kassiber_envelope::AppError> {
+    use kassiber_envelope::{dict, get, py_str, s};
+    let control = Refresh {
+        cancel,
+        consent: None,
+        context: dict([
+            ("workspace_id", s(context.workspace_id.as_str())),
+            ("workspace_label", s(context.workspace_label.as_str())),
+            ("profile_id", s(context.profile_id.as_str())),
+            ("profile_label", s(context.profile_label.as_str())),
+        ]),
+        // Python's direct desktop action has no time limit; only cancellation,
+        // retirement and a context change stop it.
+        deadline: std::time::Instant::now() + std::time::Duration::from_secs(u64::from(u32::MAX)),
+        #[cfg(feature = "test-harness")]
+        test_passphrase: None,
+    };
+    let output_error = std::cell::RefCell::new(None);
+    let check = || {
+        if let Some(error) = output_error.borrow().clone() {
+            return Err(error);
+        }
+        control.check(conn)
+    };
+    check()?;
+    #[cfg(feature = "test-harness")]
+    if std::env::var("KASSIBER_RUST_TEST_JOURNAL_FAIL_PAIRED_STORE").as_deref() == Ok("1") {
+        conn.execute_batch("CREATE TEMP TRIGGER IF NOT EXISTS refresh_failure BEFORE UPDATE OF last_processed_at ON profiles WHEN NEW.last_processed_at IS NOT NULL AND EXISTS(SELECT 1 FROM custody_component_economic_terms WHERE term_kind='transaction_pair') BEGIN SELECT RAISE(ABORT,'second rebuild failed'); END")
+            .map_err(|error| kassiber_journals::service::application_error(error.into()))?;
+    }
+    #[cfg(feature = "test-harness")]
+    let sources = Sources;
+    #[cfg(not(feature = "test-harness"))]
+    let sources = kassiber_transfers::SystemSources;
+    #[cfg(feature = "test-harness")]
+    let observed = std::cell::Cell::new(0);
+    #[cfg(feature = "test-harness")]
+    let inner = Writes(&observed);
+    #[cfg(not(feature = "test-harness"))]
+    let inner = ();
+    let mut writes = CheckedWrites {
+        inner,
+        check,
+        _cancel: cancel,
+    };
+    let profile = py_str(get(&control.context, "profile_id").unwrap_or(&Value::Null));
+    let mut emit = |phase| {
+        if phase == "complete" || check().is_ok() {
+            if let Err(error) = progress(&dict([("phase", s(phase))])) {
+                *output_error.borrow_mut() = Some(error);
+            }
+        }
+        #[cfg(feature = "test-harness")]
+        if std::env::var("KASSIBER_RUST_TEST_JOURNAL_WAIT_PHASE").as_deref() == Ok(phase) {
+            let until = std::time::Instant::now() + std::time::Duration::from_secs(3);
+            while std::time::Instant::now() < until && check().is_ok() {
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+        }
+    };
+    let emit = std::cell::RefCell::new(&mut emit);
+    let result = if profile.is_empty() {
+        kassiber_journals::service::process_with_sources(
+            conn,
+            None,
+            None,
+            &sources,
+            &mut |phase| (emit.borrow_mut())(phase),
+            &mut writes,
+        )
+    } else {
+        kassiber_journals::service::refresh_with_sources_checked(
+            conn,
+            &profile,
+            &sources,
+            kassiber_journals::process::RefreshOptions {
+                auto_pair: true,
+                ..Default::default()
+            },
+            &mut |phase| {
+                check()?;
+                (emit.borrow_mut())(phase);
+                check().map_err(Into::into)
+            },
+            &mut |phase| (emit.borrow_mut())(phase),
+            &mut writes,
+        )
+    };
+    match result {
+        Ok(result) => Ok(result),
+        Err(error) => {
+            check()?;
+            Err(kassiber_journals::service::application_error(error))
+        }
+    }
+}
+
 impl kassiber_wallets::freshness::execution::Handler for Refresh<'_> {
     fn supports(&self, kind: &str) -> bool {
         kind == "journal_refresh"

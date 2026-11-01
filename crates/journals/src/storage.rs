@@ -386,6 +386,9 @@ fn same_row<const N: usize, T: BindingRow<N> + ?Sized>(
 /// Called after each successful DML statement, including deletes matching zero
 /// rows. Returning an error exercises the surrounding caller's rollback path.
 pub trait WriteObserver {
+    fn check(&mut self) -> Result<(), Refusal> {
+        Ok(())
+    }
     fn phase(&mut self, _phase: &'static str) {}
     fn wrote(&mut self, table: &'static str) -> rusqlite::Result<()>;
 }

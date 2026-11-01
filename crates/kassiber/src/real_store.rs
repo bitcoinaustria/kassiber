@@ -915,13 +915,16 @@ struct RealBook {
     backends: backends::Config,
 }
 
-struct NativeJournalReply<'a>(kassiber_journals::process::Committed<'a>);
+struct NativeJournalReply<'a> {
+    result: kassiber_journals::process::Committed<'a>,
+    _slot: Option<kassiber_wallets::freshness::planning::Execution>,
+}
 impl JournalReply for NativeJournalReply<'_> {
     fn payload(&self) -> &Value {
-        &self.0.ordered_payload
+        &self.result.ordered_payload
     }
     fn after_reply(self: Box<Self>) -> Result<(), AppError> {
-        self.0
+        self.result
             .after_reply()
             .map_err(kassiber_journals::service::application_error)
     }
@@ -1090,6 +1093,19 @@ impl RealBook {
 }
 
 impl Book for RealBook {
+    fn refresh_journals(
+        &mut self,
+        context: &BookContext,
+        cancel: &kassiber_wallets::scan::Cancellation,
+        progress: &mut dyn FnMut(&Value) -> Result<(), AppError>,
+    ) -> Result<Box<dyn JournalReply + '_>, AppError> {
+        let slot = kassiber_wallets::freshness::planning::Execution::acquire()?;
+        let result = journals::explicit(self.conn()?, context, cancel, progress)?;
+        Ok(Box::new(NativeJournalReply {
+            result,
+            _slot: Some(slot),
+        }))
+    }
     fn process_journals(
         &mut self,
         workspace: Option<&Value>,
@@ -1109,7 +1125,10 @@ impl Book for RealBook {
                 .then(|| format!("{last_phase}:{}", refusal.family)),
             error: Box::new(kassiber_journals::service::application_error(refusal)),
         })?;
-        Ok(Box::new(NativeJournalReply(result)))
+        Ok(Box::new(NativeJournalReply {
+            result,
+            _slot: None,
+        }))
     }
 
     fn chain_analysis_reads(

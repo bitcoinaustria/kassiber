@@ -920,6 +920,18 @@ Automatic background and report-read syncs keep their journal policy. A queued
 journal job reused by a later request keeps automatic pairing if either
 request asked for it.
 
+The native `ui.journals.process` route shares the freshness execution slot and
+journal service. It runs directly without adding queue or source-state rows,
+and grants no wallet, rate or graph transport authority. Its worker binds the
+captured active book, checks cancellation and selection at journal phases and
+before commit, and joins before locking, switching books or shutdown. The
+terminal response is flushed before its deferred checkpoint completes. It
+accepts no processing arguments; the shared `expected_scope` guard remains
+available. Development candidate selection requires a nonempty UTF-8 string
+request ID. The internal AI mutation still uses Python's consent-bound
+dispatcher with automatic pairing disabled. See the
+[desktop checkpoint](r4-journal-process-checkpoint.md#seventh-continuation-desktop-registration).
+
 `ui.workspace.freshness.run` is the explicit book-set refresh path. It requires
 `args.workspace_id`, loops through every profile in that workspace, recovers
 interrupted jobs, enqueues wallet/rate/journal freshness work for each book,

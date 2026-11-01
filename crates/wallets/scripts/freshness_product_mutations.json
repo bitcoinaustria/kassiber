@@ -52,8 +52,8 @@
   {
     "id": "product-direct-wallet-admission",
     "file": "crates/daemon/src/freshness.rs",
-    "find": "if kind == \"ui.wallets.sync\" && !plan.supports_wallets_sync() {",
-    "replace": "if false && kind == \"ui.wallets.sync\" && !plan.supports_wallets_sync() {",
+    "find": "if kind == \"ui.wallets.sync\"\n            && !plan\n                .as_ref()\n                .is_some_and(|plan| plan.supports_wallets_sync())",
+    "replace": "if false && kind == \"ui.wallets.sync\"\n            && !plan\n                .as_ref()\n                .is_some_and(|plan| plan.supports_wallets_sync())",
     "expect_failing": [
       "tests/test_rust_freshness_product.py::test_product_wallet_selection_refuses_direct_sync_reference_path[paused]"
     ],

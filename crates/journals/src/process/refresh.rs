@@ -148,6 +148,7 @@ fn refresh<'a>(
     } else {
         None
     };
+    writes.check()?;
     let pairs_applied = summary
         .as_ref()
         .and_then(|s| kassiber_envelope::get(s, "applied"))

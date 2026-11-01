@@ -25,7 +25,7 @@ verification, including per-command Rust routing counts.
 | `crates/rates` | exact fiat cache, manual/CSV rates, pricing lookup, consent-bound market providers and desktop rate projections |
 | `crates/imports` | import-run listing, rollback plans and confirmed deletion |
 | `crates/wallets` | watch-only wallet lifecycle, local descriptors and file ingestion |
-| `crates/journals` | native plain journal processing over the admitted book; pairing, desktop/AI routing and full acceptance remain open |
+| `crates/journals` | native CLI and desktop journal processing, automatic pairing and freshness journal jobs over the admitted book; scoped AI routing and full acceptance remain open |
 | `crates/transactions` | local loan marks, managed attachment evidence, metadata edits, BIP329 labels, append-only history and CLI/desktop transaction pages shared by both transports |
 | `crates/secrets` | zeroized unlock, Python-compatible native credential lifecycle, encryption maintenance, dotenv credential migration and explicit initialization/inspection/verification |
 | `crates/workspace` | workspace health, next actions, review badges and the book/book-set overviews shared by the CLI and desktop |

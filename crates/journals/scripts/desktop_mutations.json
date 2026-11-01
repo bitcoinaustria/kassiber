@@ -1,0 +1,92 @@
+[
+  {
+    "id": "JDESKTOP-advertise",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "    kinds.push(\"ui.journals.process\");\n",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_journal_desktop.py::test_desktop_journals_match_ordered_envelopes_events_and_all_tables[exact-generic-False-False]"
+    ],
+    "rule": "Advertise the registered desktop journal route."
+  },
+  {
+    "id": "JDESKTOP-dispatch",
+    "file": "crates/daemon/src/freshness.rs",
+    "find": "let journals = kind == \"ui.journals.process\";",
+    "replace": "let journals = false;",
+    "expect_failing": [
+      "tests/test_rust_journal_desktop.py::test_desktop_journals_match_ordered_envelopes_events_and_all_tables[exact-generic-False-False]"
+    ],
+    "rule": "Dispatch desktop processing directly to the shared journal service without freshness queue mutations."
+  },
+  {
+    "id": "JDESKTOP-pairing",
+    "file": "crates/kassiber/src/real_store/journals.rs",
+    "find": "                auto_pair: true,",
+    "replace": "                auto_pair: false,",
+    "expect_failing": [
+      "tests/test_rust_journal_desktop.py::test_desktop_journals_match_ordered_envelopes_events_and_all_tables[exact-generic-False-False]"
+    ],
+    "rule": "Desktop processing carries automatic pairing authority."
+  },
+  {
+    "id": "JDESKTOP-progress",
+    "file": "crates/kassiber/src/real_store/journals.rs",
+    "find": "            &mut |phase| (emit.borrow_mut())(phase),\n            &mut writes,\n        )\n    };",
+    "replace": "            &mut |_| {},\n            &mut writes,\n        )\n    };",
+    "expect_failing": [
+      "tests/test_rust_journal_desktop.py::test_desktop_journals_match_ordered_envelopes_events_and_all_tables[exact-generic-False-False]"
+    ],
+    "rule": "Publish every journal phase in order, including both rebuilds."
+  },
+  {
+    "id": "JDESKTOP-arguments",
+    "file": "crates/daemon/src/freshness/product.rs",
+    "find": "            if !pairs.is_empty() {",
+    "replace": "            if false && !pairs.is_empty() {",
+    "expect_failing": [
+      "tests/test_rust_journal_desktop.py::test_desktop_journal_arguments_cannot_change_scope_or_pairing_authority"
+    ],
+    "rule": "Desktop arguments cannot introduce scope or pairing authority."
+  },
+  {
+    "id": "JDESKTOP-cancellation",
+    "file": "crates/kassiber/src/real_store/journals.rs",
+    "find": "        cancel,\n        consent: None,",
+    "replace": "        cancel: &Default::default(),\n        consent: None,",
+    "expect_failing": [
+      "tests/test_rust_journal_desktop.py::test_desktop_journal_cancellation_and_retirement_join_the_connection_owner[cancel-storing-False]"
+    ],
+    "rule": "Observe cancellation before journal writes and join the worker before retirement."
+  },
+  {
+    "id": "JDESKTOP-precommit",
+    "file": "crates/journals/src/process.rs",
+    "find": "    writes.check()?;\n    conn.execute_batch(\"RELEASE journals_process; COMMIT\")?;",
+    "replace": "    conn.execute_batch(\"RELEASE journals_process; COMMIT\")?;",
+    "expect_failing": [
+      "tests/test_rust_journal_desktop.py::test_desktop_journal_cancellation_before_commit_rolls_back_pairs_and_every_journal_write[False]"
+    ],
+    "rule": "Recheck cancellation immediately before committing pairing and rebuilt journals."
+  },
+  {
+    "id": "JDESKTOP-output-closed",
+    "file": "crates/daemon/src/freshness.rs",
+    "find": ".map_err(|_| AppError::new(\"cancelled\", \"Freshness output closed\"))?;",
+    "replace": ".map_err(|_| AppError::new(\"cancelled\", \"Freshness output closed\")).unwrap_or(());",
+    "expect_failing": [
+      "tests/test_rust_journal_desktop.py::test_desktop_journal_closed_terminal_output_preserves_committed_book_and_stops[False]"
+    ],
+    "rule": "Stop after the worker cannot publish its committed journal terminal response."
+  },
+  {
+    "id": "JDESKTOP-unresolved-context",
+    "file": "crates/kassiber/src/real_store/journals.rs",
+    "find": "    let result = if profile.is_empty() {",
+    "replace": "    let result = if false {",
+    "expect_failing": [
+      "tests/test_rust_journal_desktop.py::test_desktop_journals_unresolved_active_profile_matches_python_plain_resolution[no-context]"
+    ],
+    "rule": "An unresolved active profile takes Python's plain-processing resolution, not the scoped refresh."
+  }
+]

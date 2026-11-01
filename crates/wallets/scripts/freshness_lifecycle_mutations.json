@@ -18,8 +18,8 @@
   {
     "id": "freshness-lifecycle-revoke",
     "file": "crates/daemon/src/freshness.rs",
-    "find": "if revoke {\n                active.consent.revoke();",
-    "replace": "if revoke {\n                let _ = &active.consent;",
+    "find": "if revoke {\n                if let Some(consent) = &active.consent {\n                    consent.revoke();",
+    "replace": "if revoke {\n                if let Some(consent) = &active.consent {\n                    let _ = consent;",
     "expect_failing": ["tests/test_rust_freshness_lifecycle.py::test_live_freshness_controls_remain_available_during_fetch[revoke-esplora]"],
     "rule": "Revoking the active request must end its exact-action transport authority."
   },
@@ -90,8 +90,8 @@
   {
     "id": "freshness-lifecycle-output-closed",
     "file": "crates/daemon/src/freshness.rs",
-    "find": ".map_err(|_| AppError::new(\"cancelled\", \"Freshness output closed\"))?;",
-    "replace": ".map_err(|_| AppError::new(\"cancelled\", \"Freshness output closed\")).unwrap_or(None);",
+    "find": ".write_for_handoff(&response)\n                .map_err(|_| AppError::new(\"cancelled\", \"Freshness output closed\"))?",
+    "replace": ".write_for_handoff(&response)\n                .map_err(|_| AppError::new(\"cancelled\", \"Freshness output closed\")).unwrap_or(None)",
     "expect_failing": ["tests/test_rust_freshness_lifecycle.py::test_live_freshness_closed_output_stops_and_joins_the_request[esplora]"],
     "rule": "Failure to write the terminal response must stop the daemon after joining the request."
   },
@@ -108,8 +108,8 @@
   {
     "id": "freshness-graph-finished-handoff",
     "file": "crates/daemon/src/freshness.rs",
-    "find": "graph_grants = worker_consent.take_graph_grants();",
-    "replace": "graph_grants = vec![];",
+    "find": "graph_grants = consent.take_graph_grants();",
+    "replace": "graph_grants = { let _ = consent; vec![] };",
     "expect_failing": [
       "tests/test_rust_freshness_lifecycle.py::test_live_freshness_private_graph_handoff_and_discard[cancel-esplora]"
     ],

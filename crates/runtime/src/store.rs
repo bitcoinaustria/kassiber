@@ -236,6 +236,15 @@ pub trait WatchWorker: Send {
 }
 
 pub trait Book: Send {
+    fn refresh_journals(
+        &mut self,
+        _context: &BookContext,
+        _cancel: &kassiber_wallets::scan::Cancellation,
+        _progress: &mut dyn FnMut(&Value) -> Result<(), AppError>,
+    ) -> Result<Box<dyn JournalReply + '_>, AppError> {
+        Err(not_implemented("journals", "desktop processing"))
+    }
+
     fn process_journals(
         &mut self,
         _workspace: Option<&Value>,

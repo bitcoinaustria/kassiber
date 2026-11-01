@@ -8,6 +8,7 @@ use kassiber_wallets::freshness::{
 use crate::output::RequestId;
 
 pub(crate) const RUN_KINDS: &[&str] = &[
+    "ui.journals.process",
     "ui.wallets.sync",
     "ui.freshness.run",
     "ui.workspace.freshness.run",
@@ -70,6 +71,46 @@ fn boolean(args: &Value, key: &str, kind: &str, details: bool) -> Result<Option<
 }
 
 pub(crate) fn parse(kind: &str, args: &Value, id: &RequestId) -> Result<Invocation, AppError> {
+    if kind == "ui.journals.process" {
+        if let Value::Dict(pairs) = args {
+            if !pairs.is_empty() {
+                let mut unknown = pairs
+                    .iter()
+                    .filter_map(|(key, _)| match key {
+                        Key::Str(value) => Some(value.clone()),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>();
+                unknown.sort();
+                return Err(AppError::new(
+                    "validation",
+                    "ui.journals.process does not accept arguments",
+                )
+                .with_details(dict([(
+                    "unknown",
+                    Value::List(unknown.into_iter().map(Value::Str).collect()),
+                )])));
+            }
+        }
+        if !valid_id(id) {
+            return Err(fallback());
+        }
+        return Ok(Invocation {
+            request: Request {
+                scope: Scope::ActiveProfile,
+                wallet: None,
+                rates: Some(false),
+                journals: Some(true),
+                force_full: false,
+                auto_pair: true,
+                wallets_sync: false,
+            },
+            options: Options {
+                run: true,
+                limit: None,
+            },
+        });
+    }
     let wallets = kind == "ui.wallets.sync";
     let workspace = kind == "ui.workspace.freshness.run";
     if !wallets {
@@ -256,6 +297,11 @@ pub(crate) fn supported(
     if daemon.book.is_none() {
         return Ok(false);
     }
+    // Desktop processing resolves an incomplete context like Python's plain
+    // fallback and needs no source plan, so every open book is native.
+    if kind == "ui.journals.process" {
+        return Ok(true);
+    }
     if kind != "ui.workspace.freshness.run" {
         let context = daemon.book_mut()?.context()?;
         if context.workspace_id.is_empty() || context.profile_id.is_empty() {
@@ -305,7 +351,22 @@ pub(crate) fn handle(
     }
     let raw_args = selected_args.as_ref();
     let empty = dict::<&str>([]);
-    let args = args(kind, raw_args, &empty)?;
+    let args = if kind == "ui.journals.process" {
+        match raw_args {
+            None | Some(Value::Null) => &empty,
+            Some(value @ Value::Dict(_)) => value,
+            Some(value) => {
+                return Err(AppError::new(
+                    "validation",
+                    "ui.journals.process does not accept arguments",
+                )
+                .with_details(dict([("type", s(type_name(value)))]))
+                .into())
+            }
+        }
+    } else {
+        args(kind, raw_args, &empty)?
+    };
     if CONTROL_KINDS.contains(&kind) {
         let value = daemon
             .book_mut()?

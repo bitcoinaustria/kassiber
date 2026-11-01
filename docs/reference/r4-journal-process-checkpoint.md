@@ -1036,3 +1036,89 @@ including NaN stage values, actual surrogate scalars/keys, non-string stage
 keys, BLOB profile admission and malformed-scalar/refusal precedence. Earlier
 probe campaigns and timings do not certify these remaining gates. R4-13
 remains open.
+
+## Seventh continuation: desktop registration
+
+`t3code/r4-13-journals-process-7` starts at `fff1e85e0` and integrates the
+nineteen R4-15 commits in `08e99c524..dfeaf1533`. The integration preserves
+the sixth continuation's scoped CLI service and adds a separate resolved-profile
+entry for freshness. Both enter the same native refresh coordinator. No
+dependency changes are needed. The [freshness checkpoint](r4-journal-freshness-checkpoint.md)
+continues to own wallet/queue consent and its development-only journal replay.
+
+Desktop `ui.journals.process` registers with automatic pairing enabled and
+`skip_rebuild_when_current=false`. It shares that resolved-profile service and
+the foreground freshness execution slot. Like Python's direct desktop action,
+it does not enqueue a freshness job or change source-state rows. It ignores no
+processing arguments: nonempty objects and nonobjects receive the reference
+validation envelope. The common `expected_scope` guard runs before dispatch.
+Development selection requires an already open book and a nonempty UTF-8 string
+request ID; unsupported identities retain whole-invocation Python selection.
+
+The existing request worker opens and owns its SQLite/SQLCipher connection.
+Its active book is captured on the request thread and checked on the connection
+owner at journal phases, after pairing, during persistence and immediately before
+commit. Cancellation before a first commit rolls back all pending writes;
+cancellation or failure after the stale-first rebuild retains that commit and
+rolls back pairs, candidate cache and the second rebuild. Lock, profile switch
+and shutdown cancel and join the same worker before retiring its resources.
+Competing foreground work returns retryable `project_operation_in_progress`.
+The slot remains held until the terminal envelope is flushed and the deferred
+checkpoint completes. A failure after publication cannot send a second terminal
+response or authorize replay.
+
+The desktop action constructs no freshness acquisition plan, network consent or
+graph grant. Saved wallet/provider configuration does not authorize traffic.
+Product binaries return native typed refusals and contain no Python bridge.
+The desktop path does not enable the freshness job's development replay child;
+the exhaustive lossless audit must decide any additional desktop handoffs.
+Python remains the production authority until R4-16.
+
+Unexpected reference exceptions retain Python-only traceback diagnostics. The
+desktop oracle applies the established [shell comparison contract](rust-shell.md#import-run-checkpoint-r5)
+only to `error.debug` traceback strings for `internal_error`; it pins every other
+envelope field, all ordered progress and every typed table. A named comparison
+scope test rejects changes to messages, retryability, details, codes or native
+debug. The unsupported-tax-country case also reproduces and retains the Python
+daemon's stderr traceback under the disposable test root. Python is unchanged.
+
+### Desktop verification (eighth continuation)
+
+`t3code/r4-13-journals-process-8` resumes the paused seventh worker at
+`8b4266b56` and verifies its uncommitted desktop registration. Review made
+three corrections. Desktop processing no longer inherits the freshness job's
+900-second deadline, because Python's direct action has no time limit; only
+cancellation, retirement or a context change stop it. The development selector
+now admits every open book for `ui.journals.process`. Previously it rejected
+an unresolved active profile, although the route already took Python's
+plain-processing fallback for one. The desktop mutation runner now creates the
+disposable tree's `target/` before using it as the pytest base directory.
+
+A new four-shape test covers a missing profile, a profile in another
+workspace, no stored context and a label-only selector. Each shape compares
+ordered rows and every table with Python. One run passes **495 tests**: all
+**142 desktop tests** on SQLite and SQLCipher plus the complete freshness
+journal and product suites. All **nine desktop route mutations** are killed
+with passing unmutated baselines. Classification and the 57-test CI preflight
+pass. The eight inherited controls and the new
+unresolved-context control each name one failing test. Formatting and
+all-target, all-feature clippy pass with warnings denied for the touched crates.
+Default-feature production clippy also passes. Static applicability passes for
+all 44 mutation catalogs, including the re-anchored freshness lifecycle and
+product entries.
+
+### Seventh-continuation remaining work
+
+The internal scoped AI mutation still calls Python's consent-bound main-thread
+dispatcher with `auto_pair=False`. Register that internal path while retaining
+its consent handling and Python chat loop; a new public daemon kind is not a
+substitute.
+
+Then run all **25,030 generated** and **318 recorded** operands through the
+registered routes, including census/shadow and every inherited mutation catalog
+with source/binary manifests. Run the four-book benchmarks from process start
+to exit against Python and record load. Complete the refusal census for NaN,
+actual surrogate scalars and keys, non-string stage keys, resolver BLOB profiles,
+malformed-scalar precedence and every other native refusal or development
+fallback. Close supported shapes natively and retain each remaining cause.
+The desktop boundary alone does not close any of those full-campaign gates.
