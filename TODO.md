@@ -581,7 +581,12 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   remains complete. Fresh 24,000 books/1,030 permutations, 159 retained replays
   and permutations, focused census/shadow and static gates pass. Python retains
   production authority ([acceptance and provenance](docs/reference/r4-native-loader-checkpoint.md#deterministic-revision-reference-acceptance)).
-  Evidence inherited from t3code/r4-9-loader-determinism@aaf6216e3; pending fresh r9 verification.
+  Source exhaustive audits and mutation acceptance are inherited from
+  t3code/r4-9-loader-determinism@aaf6216e3. Fresh R9 verification passes all
+  274 loader/BLOB cases, the 24,000-book/1,030-permutation custody campaign,
+  159 archived requests and permutations, and focused census/shadow. The
+  [R9 audit](docs/reference/rust-backend-r9-integration.md#fresh-r9-verification)
+  tracks the remaining combined parity and mutation gates.
 - [ ] R4-10 to R4-12: pre-build repairs, rendering and joins, persistence,
   each with byte or database-dump parity.
 - [ ] Finish the [R4-10 auto-pricing checkpoint](docs/reference/r4-journal-pipeline.md#r4-10-auto-pricing-checkpoint):
