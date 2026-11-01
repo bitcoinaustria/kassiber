@@ -476,13 +476,19 @@ Rates reuse the client's pure `HttpUrl` parser; the direct `url` dependency stay
 inside `kassiber-net`. The explicit allowlist includes the service crates,
 local archive/encryption and descriptor dependencies already pinned by their
 slices, the rates inflater's `rust_backend`, and test-only provider fixtures.
-The only added reviewed child call is the setup partition export's existing
+Reviewed child calls include the setup partition export's existing
 `age`/`rage` recipient-encryption invocation, bound to its exact file, function
 and call line. Attachment URL validation's exact IPv6 literal parse is pure;
 its scanner exemption does not permit address resolution, imports of network
 modules, or socket creation. The regression keeps rejecting a socket call next
 to that parse. The combined daemon advertises all registered kinds in Python's
 order, with test-only kinds appended after the product kinds.
+
+R9 also admits the existing local journal and transfer harness features. Privacy
+hygiene imports only the three IP-literal value types for classification, without
+DNS or sockets; the scanner recognizes that exact import and still rejects a
+connector beside it. Its frozen Python differential test has one reviewed child
+call bound to `privacy_reports.rs`, `reference`, and the exact launch line.
 
 ## Chain client paths (R5 partial)
 

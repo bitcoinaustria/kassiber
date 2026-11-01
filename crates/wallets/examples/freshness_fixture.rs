@@ -66,12 +66,13 @@ impl Handler for Script<'_> {
                             message: text(step, "message"),
                             hint: get(step, "hint")
                                 .filter(|v| !matches!(v, Value::Null))
-                                .map(py_str),
+                                .map(|value| py_str(value).into_boxed_str()),
                             details: get(step, "details")
                                 .filter(|v| !matches!(v, Value::Null))
                                 .cloned(),
                             retryable: get(step, "retryable")
                                 .is_some_and(kassiber_envelope::truthy),
+                            message_codepoints: None,
                         }
                         .into())
                     }

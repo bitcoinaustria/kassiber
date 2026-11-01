@@ -75,11 +75,13 @@ elements-miniscript
 regex
 kassiber-setup
 kassiber-transactions
-kassiber-transfers
+kassiber-transfers test-harness
 kassiber-imports
 kassiber-wallets
 # Stored-journal reports: SQLite/Decimal/JSON only; no transport or process API.
 kassiber-reports
+# Journal composition and review probes reuse existing local services only.
+kassiber-journals test-harness timing
 
 # Existing secrets entropy and backup service; test hooks add no transport.
 getrandom
