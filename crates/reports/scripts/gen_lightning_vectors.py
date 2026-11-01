@@ -7,10 +7,12 @@ Every book and generated file stays under this checkout's target directory.
 from __future__ import annotations
 
 import copy
+from contextlib import closing
 import csv
 import json
 from pathlib import Path
 import random
+import sqlite3
 import sys
 import tempfile
 
@@ -188,13 +190,17 @@ def table_dump(conn):
     return {t: sorted([list(row) for row in conn.execute(f'SELECT * FROM "{t}"')], key=wire) for t in tables}
 
 
-def connections():
+def connections(baseline):
     result = []
     for name, args, sql in connection_specs():
         args = {"connection": "node", **args}
-        with tempfile.TemporaryDirectory(dir=SCRATCH, prefix="book-") as root:
-            conn = open_db(Path(root) / "data")
-            conn.executescript((ROOT / "crates/reports/tests/data/book.sql").read_text() + SEED + sql)
+        # Copy the initialized schema instead of repeating every migration for
+        # each read-only lookup. Each case still owns an isolated database.
+        with closing(sqlite3.connect(":memory:")) as conn:
+            baseline.backup(conn)
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA foreign_keys=ON")
+            conn.executescript(sql)
             before = table_dump(conn)
             try:
                 reference = args.get("connection") or args.get("wallet") or args.get("label")
@@ -204,7 +210,6 @@ def connections():
             except Exception as exc:
                 expected = dict(error=error(exc))
             assert table_dump(conn) == before
-            conn.close()
             result.append(dict(name=name, args_wire=wire(args), sql=sql, expected_wire=wire(expected), tables_wire=wire(before)))
     return result
 
@@ -227,8 +232,11 @@ def build():
         conn = open_db(Path(root) / "data")
         conn.executescript((ROOT / "crates/reports/tests/data/book.sql").read_text() + SEED)
         baseline = wire(table_dump(conn))
-        conn.close()
-    return json.dumps(dict(seed=SEED, tables_wire=baseline, reports=reports(), connections=connections(), windows=windows()), ensure_ascii=True, indent=2) + "\n"
+        try:
+            cases = connections(conn)
+        finally:
+            conn.close()
+    return json.dumps(dict(seed=SEED, tables_wire=baseline, reports=reports(), connections=cases, windows=windows()), ensure_ascii=True, indent=2) + "\n"
 
 
 if __name__ == "__main__":
