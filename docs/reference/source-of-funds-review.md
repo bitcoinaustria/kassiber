@@ -149,9 +149,16 @@ evidence association, link creation/review and managed-id attachment, plus
 recipient creation, updates and soft deletion, are
 available through the CLI and daemon. They retain the provenance boundary and
 roll back failed writes; native AI consent/once-only
-admission remains pending. The bounded traversal planner is implemented, while
-report production, review/input handoffs, coverage, suggest/assemble dry runs
-and case saving remain pending. Native batch review revalidates the target's
+admission remains pending. The native report producer also
+serves `reports source-funds` without `--save-case` and
+`ui.source_funds.preview`, including disclosure, current stored custody and
+structural-lineage checks, recipients, explorer references, findings, text and
+SVG diagrams. These reads hold a database snapshot and open no evidence file
+or network connection. Native tied-flow order is deterministic; its complete
+bytes match a measured Python hash-seed variant. The known Python fee-attribution
+bug is retained for parity; see the [producer checkpoint](rust-shell.md#source-funds-report-producer-checkpoint-r5-partial).
+Review/input handoffs, coverage, suggest/assemble dry runs and case saving
+remain pending. Native batch review revalidates the target's
 suggested links against current stored custody or authoritative, wallet-scoped
 structural lineage under the same write lock as approval. An explicit empty
 selection approves nothing; CLI dry runs return the proposed result and roll

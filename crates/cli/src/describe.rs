@@ -194,6 +194,7 @@ pub const IMPLEMENTED: &[&str] = &[
     "reports.export-year-handoff",
     "reports.privacy-hygiene",
     "source-funds.sources.list",
+    "reports.source-funds",
     "source-funds.links.list",
     "source-funds.cases.list",
     "source-funds.recipients.list",

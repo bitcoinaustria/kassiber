@@ -62,7 +62,7 @@ fn rounded(n: f64, places: usize) -> f64 {
         n
     }
 }
-fn integer(v: &Value) -> Result<BigInt> {
+pub(super) fn integer(v: &Value) -> Result<BigInt> {
     match v {
         Value::Int(n) => Ok(n.clone()),
         Value::Bool(v) => Ok(i32::from(*v).into()),
@@ -80,7 +80,7 @@ fn zero_integer(row: &Value, key: &str) -> Result<BigInt> {
         Ok(0.into())
     }
 }
-fn amount(msat: &BigInt) -> Result<Value> {
+pub(super) fn amount(msat: &BigInt) -> Result<Value> {
     let decimal: Decimal = msat
         .to_string()
         .parse()
@@ -101,7 +101,7 @@ fn plural(n: usize) -> &'static str {
         "s"
     }
 }
-fn normalized_asset(v: &Value) -> String {
+pub(super) fn normalized_asset(v: &Value) -> String {
     let raw = if truthy(v) { py_str(v) } else { String::new() };
     let raw = kassiber_pytext::strip(&raw);
     let lowered = kassiber_pytext::lower(raw);
@@ -113,7 +113,7 @@ fn normalized_asset(v: &Value) -> String {
         kassiber_pytext::upper(raw)
     }
 }
-fn ratio(numerator: &BigInt, denominator: &BigInt) -> Result<f64> {
+pub(super) fn ratio(numerator: &BigInt, denominator: &BigInt) -> Result<f64> {
     let zero = BigInt::from(0);
     if *denominator == zero {
         return Err(AppError::new("internal_error", "division by zero"));
@@ -677,6 +677,7 @@ fn simplified_flow(report: &Value) -> Result<Value> {
         }
     }
     let mut included = BTreeSet::from([target_id.clone()]);
+    let mut inclusion_order = vec![target_id.clone()];
     let mut deferred = BTreeSet::new();
     let mut hops = vec![];
     let mut depths = BTreeMap::from([(target_id.clone(), 0usize)]);
@@ -696,7 +697,9 @@ fn simplified_flow(report: &Value) -> Result<Value> {
             if depths.get(&parent).is_none_or(|&old| next < old) {
                 depths.insert(parent.clone(), next);
             }
-            included.insert(parent.clone());
+            if included.insert(parent.clone()) {
+                inclusion_order.push(parent.clone());
+            }
             if privacy(edge) {
                 deferred.insert(parent.clone());
                 hops.push(dict([
@@ -710,23 +713,10 @@ fn simplified_flow(report: &Value) -> Result<Value> {
         }
     }
     let mut levels: BTreeMap<usize, Vec<&Value>> = BTreeMap::new();
-    for id in &included {
-        levels.entry(depths[id]).or_default().push(nodes[id]);
+    for id in super::source_funds_order::zero_seed_set(inclusion_order) {
+        levels.entry(depths[&id]).or_default().push(nodes[&id]);
     }
     let max_depth = *levels.keys().max().expect("target depth");
-    for nodes in levels.values() {
-        let mut keys = BTreeSet::new();
-        for node in nodes {
-            if !keys.insert((
-                text(node, "node_type") == "source",
-                event_time(node),
-                fallback(node, "label"),
-            )) {
-                return Err(AppError::new("not_implemented", "Source-funds flow nodes with tied presentation keys have nondeterministic order in the Python reference")
-                    .with_details(dict([("component", s("source_funds_projection")), ("boundary", s("reference_flow_order"))])));
-            }
-        }
-    }
     let levels = levels
         .into_iter()
         .rev()

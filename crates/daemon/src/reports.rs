@@ -22,6 +22,7 @@ pub const KINDS: &[&str] = &[
     "ui.reports.export_exit_tax_xlsx",
     "ui.reports.export_year_handoff",
     "ui.reports.export_cross_check",
+    "ui.source_funds.preview",
     "ui.source_funds.cases.list",
     "ui.source_funds.sources.list",
     "ui.source_funds.sources.create",
@@ -508,6 +509,7 @@ mod tests {
             "ui.source_funds.cases.list",
             "ui.source_funds.recipients.list",
             "ui.source_funds.evidence.list",
+            "ui.source_funds.preview",
         ] {
             assert!(KINDS.contains(&kind));
             assert_eq!(cross_check_args(Some(&args)).unwrap(), args);
@@ -516,7 +518,6 @@ mod tests {
             assert_eq!(get(&actual, "args"), Some(&args));
         }
         for kind in [
-            "ui.source_funds.preview",
             "ui.source_funds.review_context",
             "ui.source_funds.request_input",
             "ui.source_funds.coverage",

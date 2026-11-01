@@ -30,6 +30,7 @@ fn main() {
             if matches!(
                 command,
                 "reports.cross-check"
+                    | "reports.source-funds"
                     | "ui.reports.cross_check"
                     | "reports.exit-tax"
                     | "reports.explain-capital-gain"

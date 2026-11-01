@@ -500,16 +500,17 @@ registers them; exit-tax preserves its reference no-registration boundary.
   both bindings and zero transport fallbacks. The inventory is 162 native CLI
   leaves and ten source-funds daemon kinds; Python exposes no recipient AI tools.
   See the [recipient checkpoint](docs/reference/rust-shell.md#source-funds-recipient-mutation-checkpoint-r5-partial).
-- [ ] Finish source-funds report traversal/disclosure, review-context/request-input,
-  coverage and suggest/assemble dry runs in separate verified commits on
-  `t3code/r5-sof-reads-2`; include diagrams and non-PDF output with report traversal.
-  The native dependency planner is [preparation only](docs/reference/rust-shell.md#source-funds-dependency-traversal-preparation-r5-partial),
-  with a 203-case plaintext/SQLCipher oracle and all 112 tables unchanged;
-  Pure [disclosure/report-shape preparation](docs/reference/rust-shell.md#source-funds-disclosure-projection-preparation-r5-partial)
-  is available; it does not yet register the producer or unblock case saving.
-  report producers and their new transports remain unregistered. Resolve the
-  recorded Python privacy-boundary fee-attribution discrepancy explicitly at
-  the report parity boundary, without silently changing the reference here.
+- [x] Complete the source-funds snapshot-bound report producer, disclosure,
+  custody/structural-lineage checks, recipients, explorer references, findings,
+  SVG diagrams and text output on `t3code/r5-sof-reads-4`; see the
+  [producer checkpoint](docs/reference/rust-shell.md#source-funds-report-producer-checkpoint-r5-partial).
+  CLI reports without case saving and daemon previews route natively.
+  Retain the known Python privacy-boundary fee-attribution bug for parity.
+  Native tied-flow ordering is deterministic and compared with measured Python
+  seed variants, without normalizing the output bytes.
+- [ ] Finish source-funds review-context/request-input, coverage and
+  suggest/assemble dry runs in separate verified commits. Each still requires
+  byte/all-table comparisons, zero fallbacks and named mutation kills.
 - [x] Port link creation, review and managed-id evidence association through
   the shared native service, CLI and daemon, preserving exact stored msat,
   stale-review preconditions, explicit allocation policy and scoped evidence.

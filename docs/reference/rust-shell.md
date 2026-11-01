@@ -6861,6 +6861,114 @@ Case saving and provenance mutations remain with
 `t3code/r5-sof-mutations-2`. PDF rendering and PDF-containing bundles stay
 explicitly in Python.
 
+## Source-funds report producer checkpoint (R5 partial)
+
+`t3code/r5-sof-reads-4` starts at `b4df5a9c8`. The complete native database
+producer now serves `reports.source-funds` without case saving and
+`ui.source_funds.preview`. One read snapshot covers traversal, current stored
+custody allocations and reconciliation proofs, structural-lineage revalidation,
+recipients, configured/public explorer references, attachment metadata, exact
+selected-amount propagation, findings, disclosure, text and SVG diagrams.
+Structural traversal reuses the existing authority and ownership parser,
+retains wallet/network isolation and inventory vetoes, and clears its memoized
+scope/conversion data after each operation. Weighted products use unbounded
+integers before their bounded allocations are emitted. No evidence file is
+opened, no backend is contacted, and no journal, provenance, ownership or tax
+facts are changed. CLI case-saving requests remain outside this read route;
+the service refuses a mutation request explicitly. PDF and PDF-containing
+bundle routes remain Python.
+
+Native simplified-flow ties use deterministic seed-zero CPython set ordering.
+Three frozen tied graphs (2, 8 and 24 parents) have measured complete output
+variants under Python hash seeds 0, 1 and 2. Native bytes must equal one whole
+variant; comparison never sorts or normalizes the output. The previous
+ordering refusal is removed. The unchanged Python privacy-boundary fee bug is
+retained, including its fee narrative. Both existing reference reproductions
+pass without a Python product change. Preview depth caps at 32 and core/CLI
+depth at 64, matching the respective Python boundaries. Locked ReportLab font
+metrics and finding hints have reproducible generators; native SVG rendering
+requires neither Python nor runtime font-file access.
+
+The complete-report oracle contains 278 cases measured under all three seeds,
+including current/stale custody and reconciliation proofs, structural authority
+withdrawal and contradictory inventory, recipient/explorer refusals, partial
+ratios, disclosure options, branching/cycles, deep diagram clipping, XML
+escaping and production 5,000-edge/node boundaries. A separate 32-case
+structural oracle pins iterative ancestors, weighted allocation, privacy,
+wallet isolation, duplicate inventory, fan-in and a 1,101-hop chain. Both native
+corpora replay in plaintext and SQLCipher and compare all 112 tables around
+every operation. Book-bound input reuse and explicit case-mutation refusals have
+separate all-table witnesses. The node-cap witness found and corrected a native
+finding-order error: truncation must be emitted before the incomplete-allocation
+finding when the cap interrupts a retained duplicate endpoint.
+
+The final whole-process suite passes nine tests with no skips or expected
+failures. It compares all 278 service outcomes, 272 native CLI calls across
+ready/stale/source-blocked/no-context books, eight output-file results and 64
+previews across four native daemon sessions. Seven output artifacts exist; the
+no-context plain-output refusal correctly creates none. Literal stdout, stderr,
+status, response lines, output bytes or expected absence, and all 112 tables
+remain equal. Every in-scope CLI call and daemon session routes natively with
+zero fallbacks under strict no-egress guards. Raw routing records and artifact
+hashes are retained in `target/r5-sof-reads-4/routing/` and `routing-final.json`.
+Inventories now contain 158 native CLI leaves, including five source-funds
+leaves, and six source-funds daemon reads.
+
+All 842 report mutation entries apply. The 31 new producer entries and two
+revised inherited entries pass their named unmutated baselines and are killed:
+
+| Named test | Checked mutations killed |
+| --- | ---: |
+| `source_funds_report_preserves_complete_bytes_lineage_diagrams_and_all_tables` | 22 |
+| `source_funds_structural_lineage_preserves_ancestors_authority_and_all_tables` | 6 |
+| `source_funds_report_binds_inputs_to_book_and_refuses_case_mutation` | 2 |
+| `source_funds_report_cli_forwards_recipe_and_keeps_mutation_boundary` | 1 |
+| `source_funds_stored_cli_forwards_scope_filters_and_registers_only_lists` | 1 |
+| `source_funds_stored_daemon_preserves_arguments_and_registers_only_lists` | 1 |
+
+Two initial mutations survived: the fractional-allocation refusal and selected
+amount in text. Added unchanged-Python witnesses exercise a one-msat 2:3 ratio
+and a partial text report. The strengthened baseline passes and kills both,
+the new cap-order mutation and the existing report-cap mutation. No survivor,
+build error or empty selection counts as a kill. The inherited tie mutation now
+perturbs deterministic set hashing; the listing-registration anchor accounts
+for the added producer. The other 809 entries retain prior evidence and were
+not rerun. Per-entry results are in `mutation-summary.json`; isolated mutation
+source/build trees are removed, and the real probes are rebuilt afterward.
+
+Rust 1.99.1 offline/locked checks pass workspace formatting, production
+custody/reports/CLI/daemon all-target clippy and binary harness all-target clippy
+with warnings denied, all eight stored-read/traversal/projection/producer tests,
+and four focused CLI/daemon tests. The inherited 227/203/471-case read/planner/
+projection corpora remain passing. All three changed asset/oracle generators
+verify cleanly. Locked Python 3.11.17 regressions pass 266 tests and 18 subtests,
+plus five source-funds daemon/AI tests, including disclosure and catalog checks.
+Their routing summary records 42 additional native report calls and 20 native
+listings. Case saving, PDF/bundles and other unported regression routes remain
+Python and are excluded from acceptance. The required classifier update records
+5,718 definitions, including three new retained report oracles in the serial
+daemon lane. Required CI preflight passes all 57 tests.
+
+A separate inherited six-test binary integration run is excluded from
+acceptance because its helper overrides `HOME` in disposable child processes.
+Accepted verification preserves account `HOME`, redirects preferences and owner
+roots, uses eight Cargo jobs, disables incremental/debug build output, and
+isolates both Cargo output directories and scratch under this worktree's
+`target/`. An initial regression setup failure caused by isolating XDG paths
+before mise activation is retained separately; the passing run activates the
+pinned tools first. Owned build/data trees are removed after summarizing;
+logs, raw routing records and summaries remain. `verification-summary.json`
+records accepted checks and excluded attempts. Verification is Linux-only;
+full workspace/frontend gates, Docker regtest and platform packaging are not
+claimed. No dependency, lockfile, schema or Python product change is introduced.
+
+This is the first accepted requested read family and unblocks the case-saving
+worker's producer dependency. Review-context/request-input, coverage, and
+suggest/assemble dry runs remain ordered follow-ups with separate byte,
+all-table, routing and mutation acceptance. Case saving and all provenance
+mutations remain with `t3code/r5-sof-mutations-2`. PDF and PDF-containing bundles
+stay explicitly in Python.
+
 ## Not yet ported
 
 The diagnostics slice now implements explicit public reports and native debug
@@ -12653,3 +12761,31 @@ The required classifier update inventories 5,752 Python tests, and
 `python_test_shards.py run preflight --ci` passes all 57 tests. The separately
 owned 58 loopback sandbox tests and the full workspace/frontend quality gate
 were not run in this local continuation.
+## Source-funds producer integration on the mutation line (R5 partial)
+
+`t3code/r5-sof-mutations-4` integrates the missing disclosure prerequisite
+`b4df5a9c8` and complete producer `6e63d400a` after the verified batch-review
+boundary. Conflict resolution retains the native source, recipient, link and
+batch dispatch before report read admission, their rollback and honest-native
+diagnostic contracts, and the complete report producer. The combined catalog
+contains 976 applicable mutations; their prior kill evidence remains with the
+respective checkpoints.
+
+Integration verification passes eight native report/projection/batch tests.
+The complete 278-case report corpus and 32 structural vectors replay against
+SQLite and SQLCipher with every one of the 112 tables unchanged. The fresh
+ready-book process run passes 68 native CLI calls and 16 daemon previews,
+including output artifacts, literal response bytes, all-table invariance and
+zero fallbacks. An initial run used an old executable because an examples-only
+build did not rebuild the application; its fallback records are excluded from
+acceptance. Rebuilding the binary and repeating the checks establishes the
+native routing evidence in `target/r5-sof-mutations-4/producer-native.log`.
+
+Rust 1.99.1 locked/offline workspace formatting and reports/CLI/daemon all-target
+clippy with warnings denied pass. The classifier includes the report oracle in
+the serial daemon lane. Required CI preflight passes all 57 tests. The pinned
+maturin wheel is reconstructed from its existing read-only local installation
+for offline build isolation; no dependency or lockfile changes result.
+Case saving, persisted suggest/assemble and native AI consent/once-only
+admission remain the next mutation boundaries. No AI execution loop is present
+in the native shell, so Python AI results cannot establish native acceptance.

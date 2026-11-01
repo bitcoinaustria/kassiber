@@ -8943,8 +8943,8 @@
   {
     "id": "sof-list-cli-registration",
     "file": "crates/cli/src/reports.rs",
-    "find": "    \"reports.privacy-hygiene\",\n    \"source-funds.sources.list\",",
-    "replace": "    \"reports.privacy-hygiene\",",
+    "find": "\"reports.source-funds\",\n    \"source-funds.sources.list\",",
+    "replace": "\"reports.source-funds\",",
     "expect_failing": [
       "source_funds_stored_cli_forwards_scope_filters_and_registers_only_lists"
     ],
@@ -10942,12 +10942,322 @@
   },
   {
     "id": "sof-projection-tie-boundary",
-    "file": "crates/reports/src/source_funds_projection.rs",
-    "find": "if !keys.insert((",
-    "replace": "if keys.insert((",
+    "file": "crates/reports/src/source_funds_order.rs",
+    "find": "let mut hasher = DefaultHasher::new();",
+    "replace": "let mut hasher = DefaultHasher::new(); hasher.write_u64(1);",
     "expect_failing": [
-      "source_funds_projection_refuses_reference_order_ties_without_mutation"
+      "source_funds_report_preserves_complete_bytes_lineage_diagrams_and_all_tables"
     ],
-    "rule": "Process-dependent reference ordering is an explicit unported boundary."
+    "rule": "Tied flow nodes use a deterministic measured Python seed ordering."
+  },
+  {
+    "id": "sof-producer-freshness",
+    "file": "crates/reports/src/source_funds_report.rs",
+    "find": "if current {",
+    "replace": "if true {",
+    "expect_failing": [
+      "source_funds_report_preserves_complete_bytes_lineage_diagrams_and_all_tables"
+    ],
+    "rule": "Preserve complete source-funds report bytes and authority boundaries."
+  },
+  {
+    "id": "sof-producer-proof-revision",
+    "file": "crates/reports/src/source_funds_report.rs",
+    "find": "component.revision=proof.component_revision",
+    "replace": "component.revision!=proof.component_revision",
+    "expect_failing": [
+      "source_funds_report_preserves_complete_bytes_lineage_diagrams_and_all_tables"
+    ],
+    "rule": "Preserve complete source-funds report bytes and authority boundaries."
+  },
+  {
+    "id": "sof-producer-proof-version",
+    "file": "crates/reports/src/source_funds_report.rs",
+    "find": "profile.journal_input_version=proof.input_version",
+    "replace": "profile.journal_input_version!=proof.input_version",
+    "expect_failing": [
+      "source_funds_report_preserves_complete_bytes_lineage_diagrams_and_all_tables"
+    ],
+    "rule": "Preserve complete source-funds report bytes and authority boundaries."
+  },
+  {
+    "id": "sof-producer-partial-exact",
+    "file": "crates/reports/src/source_funds_report.rs",
+    "find": "if &numerator % &denominator != 0.into() {",
+    "replace": "if false && &numerator % &denominator != 0.into() {",
+    "expect_failing": [
+      "source_funds_report_preserves_complete_bytes_lineage_diagrams_and_all_tables"
+    ],
+    "rule": "Preserve complete source-funds report bytes and authority boundaries."
+  },
+  {
+    "id": "sof-producer-source-capacity",
+    "file": "crates/reports/src/source_funds_report.rs",
+    "find": "} else if *consumption > integer(value(&endpoint, \"amount\"))? {",
+    "replace": "} else if false && *consumption > integer(value(&endpoint, \"amount\"))? {",
+    "expect_failing": [
+      "source_funds_report_preserves_complete_bytes_lineage_diagrams_and_all_tables"
+    ],
+    "rule": "Preserve complete source-funds report bytes and authority boundaries."
+  },
+  {
+    "id": "sof-producer-source-chronology",
+    "file": "crates/reports/src/source_funds_report.rs",
+    "find": "if timestamp_after(value(&endpoint, \"acquired_at\"), value(&tx, \"occurred_at\")) {",
+    "replace": "if false && timestamp_after(value(&endpoint, \"acquired_at\"), value(&tx, \"occurred_at\")) {",
+    "expect_failing": [
+      "source_funds_report_preserves_complete_bytes_lineage_diagrams_and_all_tables"
+    ],
+    "rule": "Preserve complete source-funds report bytes and authority boundaries."
+  },
+  {
+    "id": "sof-producer-unreviewed",
+    "file": "crates/reports/src/source_funds_report.rs",
+    "find": ".filter(|r| text(r, \"state\") == \"suggested\")",
+    "replace": ".filter(|_| false)",
+    "expect_failing": [
+      "source_funds_report_preserves_complete_bytes_lineage_diagrams_and_all_tables"
+    ],
+    "rule": "Preserve complete source-funds report bytes and authority boundaries."
+  },
+  {
+    "id": "sof-producer-allocation-cover",
+    "file": "crates/reports/src/source_funds_report.rs",
+    "find": "if reviewed_total != demand {",
+    "replace": "if false && reviewed_total != demand {",
+    "expect_failing": [
+      "source_funds_report_preserves_complete_bytes_lineage_diagrams_and_all_tables"
+    ],
+    "rule": "Preserve complete source-funds report bytes and authority boundaries."
+  },
+  {
+    "id": "sof-producer-export-gate",
+    "file": "crates/reports/src/source_funds_report.rs",
+    "find": "Value::Bool(blockers.is_empty())",
+    "replace": "Value::Bool(true)",
+    "expect_failing": [
+      "source_funds_report_preserves_complete_bytes_lineage_diagrams_and_all_tables"
+    ],
+    "rule": "Preserve complete source-funds report bytes and authority boundaries."
+  },
+  {
+    "id": "sof-producer-recipient",
+    "file": "crates/reports/src/source_funds_report.rs",
+    "find": "AND label=? AND active=1",
+    "replace": "AND label=? AND active=0",
+    "expect_failing": [
+      "source_funds_report_preserves_complete_bytes_lineage_diagrams_and_all_tables"
+    ],
+    "rule": "Preserve complete source-funds report bytes and authority boundaries."
+  },
+  {
+    "id": "sof-producer-depth",
+    "file": "crates/reports/src/source_funds_report.rs",
+    "find": "v.clone().min(32.into())",
+    "replace": "v.clone().min(31.into())",
+    "expect_failing": [
+      "source_funds_report_preserves_complete_bytes_lineage_diagrams_and_all_tables"
+    ],
+    "rule": "Preserve complete source-funds report bytes and authority boundaries."
+  },
+  {
+    "id": "sof-producer-authority",
+    "file": "crates/custody/src/source_funds.rs",
+    "find": ".is_some_and(|a| a[\"authoritative\"] == true)",
+    "replace": ".is_some_and(|_| true)",
+    "expect_failing": [
+      "source_funds_structural_lineage_preserves_ancestors_authority_and_all_tables"
+    ],
+    "rule": "Preserve complete source-funds report bytes and authority boundaries."
+  },
+  {
+    "id": "sof-producer-privacy",
+    "file": "crates/custody/src/source_funds.rs",
+    "find": "if privacy_hop(row).is_some() {",
+    "replace": "if false && privacy_hop(row).is_some() {",
+    "expect_failing": [
+      "source_funds_structural_lineage_preserves_ancestors_authority_and_all_tables"
+    ],
+    "rule": "Preserve complete source-funds report bytes and authority boundaries."
+  },
+  {
+    "id": "sof-producer-inventory",
+    "file": "crates/custody/src/source_funds.rs",
+    "find": "if *ambiguous || *wallet != codec::text(&row[\"wallet_id\"]) || *asset != identity {",
+    "replace": "if false && (*ambiguous || *wallet != codec::text(&row[\"wallet_id\"]) || *asset != identity) {",
+    "expect_failing": [
+      "source_funds_structural_lineage_preserves_ancestors_authority_and_all_tables"
+    ],
+    "rule": "Preserve complete source-funds report bytes and authority boundaries."
+  },
+  {
+    "id": "sof-producer-weighted-remainder",
+    "file": "crates/custody/src/source_funds.rs",
+    "find": "allocations[i] += 1;",
+    "replace": "allocations[i] += 0;",
+    "expect_failing": [
+      "source_funds_structural_lineage_preserves_ancestors_authority_and_all_tables"
+    ],
+    "rule": "Preserve complete source-funds report bytes and authority boundaries."
+  },
+  {
+    "id": "sof-producer-wallet-memo",
+    "file": "crates/custody/src/source_funds.rs",
+    "find": "wallet.to_owned(),",
+    "replace": "String::new(),",
+    "expect_failing": [
+      "source_funds_structural_lineage_preserves_ancestors_authority_and_all_tables"
+    ],
+    "rule": "Preserve complete source-funds report bytes and authority boundaries."
+  },
+  {
+    "id": "sof-producer-ancestor-capacity",
+    "file": "crates/custody/src/source_funds.rs",
+    "find": "|| parents.values().any(|&(j, n)| n > amount(&rows[j]))",
+    "replace": "|| false && parents.values().any(|&(j, n)| n > amount(&rows[j]))",
+    "expect_failing": [
+      "source_funds_structural_lineage_preserves_ancestors_authority_and_all_tables"
+    ],
+    "rule": "Preserve complete source-funds report bytes and authority boundaries."
+  },
+  {
+    "id": "sof-producer-explorer-credentials",
+    "file": "crates/reports/src/source_funds_explorers.rs",
+    "find": "authority.rsplit('@').next()",
+    "replace": "authority.split('@').next()",
+    "expect_failing": [
+      "source_funds_report_preserves_complete_bytes_lineage_diagrams_and_all_tables"
+    ],
+    "rule": "Preserve complete source-funds report bytes and authority boundaries."
+  },
+  {
+    "id": "sof-producer-explorer-api",
+    "file": "crates/reports/src/source_funds_explorers.rs",
+    "find": "&path[..path.len() - 4]",
+    "replace": "path",
+    "expect_failing": [
+      "source_funds_report_preserves_complete_bytes_lineage_diagrams_and_all_tables"
+    ],
+    "rule": "Preserve complete source-funds report bytes and authority boundaries."
+  },
+  {
+    "id": "sof-producer-svg-width",
+    "file": "crates/reports/src/source_funds_svg.rs",
+    "find": "sum * 0.001 * size",
+    "replace": "sum * size * 0.001",
+    "expect_failing": [
+      "source_funds_report_preserves_complete_bytes_lineage_diagrams_and_all_tables"
+    ],
+    "rule": "Preserve complete source-funds report bytes and authority boundaries."
+  },
+  {
+    "id": "sof-producer-svg-summary-cap",
+    "file": "crates/reports/src/source_funds_svg.rs",
+    "find": "(16, 10) } else { (6, 4)",
+    "replace": "(16, 10) } else { (6, 5)",
+    "expect_failing": [
+      "source_funds_report_preserves_complete_bytes_lineage_diagrams_and_all_tables"
+    ],
+    "rule": "Preserve complete source-funds report bytes and authority boundaries."
+  },
+  {
+    "id": "sof-producer-svg-reveal",
+    "file": "crates/reports/src/source_funds_svg.rs",
+    "find": "escaped(raw)",
+    "replace": "raw.to_owned()",
+    "expect_failing": [
+      "source_funds_report_preserves_complete_bytes_lineage_diagrams_and_all_tables"
+    ],
+    "rule": "Preserve complete source-funds report bytes and authority boundaries."
+  },
+  {
+    "id": "sof-producer-text-required",
+    "file": "crates/reports/src/source_funds_text.rs",
+    "find": "number(value(target, \"required_amount\"))",
+    "replace": "number(value(target, \"amount\"))",
+    "expect_failing": [
+      "source_funds_report_preserves_complete_bytes_lineage_diagrams_and_all_tables"
+    ],
+    "rule": "Preserve complete source-funds report bytes and authority boundaries."
+  },
+  {
+    "id": "sof-producer-cli-recipe",
+    "file": "crates/cli/src/reports.rs",
+    "find": "if command == \"reports.source-funds\" {",
+    "replace": "if false && command == \"reports.source-funds\" {",
+    "expect_failing": [
+      "source_funds_report_cli_forwards_recipe_and_keeps_mutation_boundary"
+    ],
+    "rule": "Preserve complete source-funds report bytes and authority boundaries."
+  },
+  {
+    "id": "sof-producer-daemon-registration",
+    "file": "crates/daemon/src/reports.rs",
+    "find": "    \"ui.source_funds.preview\",\n    \"ui.source_funds.links.list\",",
+    "replace": "    \"ui.source_funds.links.list\",",
+    "expect_failing": [
+      "source_funds_stored_daemon_preserves_arguments_and_registers_only_lists"
+    ],
+    "rule": "Preserve complete source-funds report bytes and authority boundaries."
+  },
+  {
+    "id": "sof-producer-save-boundary",
+    "file": "crates/reports/src/source_funds_report.rs",
+    "find": "command == \"reports.source-funds\" && truthy(value(args, \"save_case\"))",
+    "replace": "false && command == \"reports.source-funds\" && truthy(value(args, \"save_case\"))",
+    "expect_failing": [
+      "source_funds_report_binds_inputs_to_book_and_refuses_case_mutation"
+    ],
+    "rule": "The read producer cannot acknowledge a case-saving request."
+  },
+  {
+    "id": "sof-producer-custody-gate",
+    "file": "crates/reports/src/source_funds_report.rs",
+    "find": "if !valid {\n                    finding(&mut findings,\"stale_custody_component_lineage\"",
+    "replace": "if false && !valid {\n                    finding(&mut findings,\"stale_custody_component_lineage\"",
+    "expect_failing": [
+      "source_funds_report_preserves_complete_bytes_lineage_diagrams_and_all_tables"
+    ],
+    "rule": "Report authority and input binding fail closed."
+  },
+  {
+    "id": "sof-producer-structural-gate",
+    "file": "crates/reports/src/source_funds_report.rs",
+    "find": "if !valid {\n                    finding(&mut findings,\"stale_structural_lineage\"",
+    "replace": "if false && !valid {\n                    finding(&mut findings,\"stale_structural_lineage\"",
+    "expect_failing": [
+      "source_funds_report_preserves_complete_bytes_lineage_diagrams_and_all_tables"
+    ],
+    "rule": "Report authority and input binding fail closed."
+  },
+  {
+    "id": "sof-producer-report-cap",
+    "file": "crates/reports/src/source_funds_report.rs",
+    "find": "if truncated || traversal.truncated {",
+    "replace": "if false && (truncated || traversal.truncated) {",
+    "expect_failing": [
+      "source_funds_report_preserves_complete_bytes_lineage_diagrams_and_all_tables"
+    ],
+    "rule": "Report authority and input binding fail closed."
+  },
+  {
+    "id": "sof-producer-cap-finding-order",
+    "file": "crates/reports/src/source_funds_report.rs",
+    "find": "            if nodes.len() >= 5000 || edges.len() >= 5000 {\n                truncated = true;\n                size_truncation(&mut findings, &target_id)?;",
+    "replace": "            if nodes.len() >= 5000 || edges.len() >= 5000 {\n                truncated = true;",
+    "expect_failing": [
+      "source_funds_report_preserves_complete_bytes_lineage_diagrams_and_all_tables"
+    ],
+    "rule": "Emit graph-size findings at the reference boundary before allocation findings."
+  },
+  {
+    "id": "sof-producer-book-binding",
+    "file": "crates/reports/src/source_funds_report.rs",
+    "find": "if !std::ptr::eq(inputs.connection, conn) || inputs.profile_id != profile_id {",
+    "replace": "if false && (!std::ptr::eq(inputs.connection, conn) || inputs.profile_id != profile_id) {",
+    "expect_failing": [
+      "source_funds_report_binds_inputs_to_book_and_refuses_case_mutation"
+    ],
+    "rule": "Report authority and input binding fail closed."
   }
 ]

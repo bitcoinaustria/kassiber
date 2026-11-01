@@ -15,6 +15,7 @@ mod par;
 mod python_text;
 pub mod quantity;
 pub mod snapshot;
+pub mod source_funds;
 pub mod timing;
 
 pub const ENGINE_VERSION: &str = env!("CARGO_PKG_VERSION");

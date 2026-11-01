@@ -123,19 +123,12 @@ fn source_funds_projection_preserves_full_bytes_disclosure_flow_and_all_tables()
 }
 
 #[test]
-fn source_funds_projection_refuses_reference_order_ties_without_mutation() {
+fn source_funds_projection_orders_reference_ties_deterministically() {
     let mut report = kassiber_pytext::loads(r#"{"target":{"id":"target","required_amount":1,"required_amount_msat":100000000000,"asset":"BTC"},"graph":{"nodes":[{"id":"target","node_type":"transaction","label":"Target"},{"id":"a","node_type":"transaction","label":"same","occurred_at":"2024-01-01"},{"id":"b","node_type":"transaction","label":"same","occurred_at":"2024-01-01"}],"edges":[{"id":"a","from":"a","to":"target","link_type":"self_transfer"},{"id":"b","from":"b","to":"target","link_type":"self_transfer"}]},"allocations":{},"source_mix":[],"explain_gates":{"blockers":[],"warnings":[]}}"#).unwrap();
-    let before = report.clone();
-    let error = source_funds_projection::add_shape(&mut report).unwrap_err();
-    assert_eq!(error.code, "not_implemented");
-    assert_eq!(
-        error.details,
-        Some(dict([
-            ("component", s("source_funds_projection")),
-            ("boundary", s("reference_flow_order"))
-        ]))
-    );
-    assert_eq!(report, before);
+    source_funds_projection::add_shape(&mut report).unwrap();
+    let first = report.clone();
+    source_funds_projection::add_shape(&mut report).unwrap();
+    assert_eq!(report, first);
     let untied = dumps(&report, &Options::new().compact()).unwrap().replacen(
         r#""label":"same""#,
         r#""label":"distinct""#,

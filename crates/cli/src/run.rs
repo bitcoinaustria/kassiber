@@ -162,8 +162,10 @@ fn selected_leaf(namespace: &Namespace) -> (Vec<&'static str>, ParserId) {
 #[cfg(feature = "test-probe")]
 pub const PROBE_NOT_IMPLEMENTED: i32 = 3;
 
-fn implemented(command: &str, args: &Namespace) -> bool {
+// Platform transaction formats remain unported; refuse before opening a book.
+pub(crate) fn implemented(command: &str, args: &Namespace) -> bool {
     IMPLEMENTED.contains(&command)
+        && (command != "reports.source-funds" || !args.flag("save_case"))
         && (command != "transactions.export"
             || matches!(
                 args.text("export_format"),

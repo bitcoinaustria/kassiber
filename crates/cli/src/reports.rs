@@ -28,6 +28,7 @@ pub const COMMANDS: &[&str] = &[
     "reports.cross-check",
     "reports.export-year-handoff",
     "reports.privacy-hygiene",
+    "reports.source-funds",
     "source-funds.sources.list",
     "source-funds.links.list",
     "source-funds.cases.list",
@@ -50,6 +51,9 @@ pub fn kind(command: &str) -> Option<&'static str> {
     }
 }
 pub fn execute(book: &mut dyn Book, command: &str, args: &Namespace) -> Result<Value, AppError> {
+    if command == "reports.source-funds" {
+        return book.reports(command, &source_funds_report_request(args));
+    }
     if command.starts_with("source-funds.") {
         return book.reports(command, &source_funds_request(args));
     }
@@ -73,6 +77,32 @@ pub fn execute(book: &mut dyn Book, command: &str, args: &Namespace) -> Result<V
         return book.reports(command, &snapshot_request(args));
     }
     book.reports(command, &request(args))
+}
+
+fn source_funds_report_request(args: &Namespace) -> Value {
+    dict(
+        [
+            "workspace",
+            "profile",
+            "target_transaction",
+            "target_amount",
+            "purpose",
+            "planned_destination",
+            "planned_note",
+            "reveal_mode",
+            "max_depth",
+            "recipient",
+            "diagram_detail",
+            "amount_precision",
+            "mask_recipient",
+            "omit_section",
+            "reveal_override",
+            "format",
+            "save_case",
+            "case_label",
+        ]
+        .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null))),
+    )
 }
 
 fn source_funds_request(args: &Namespace) -> Value {
@@ -596,7 +626,6 @@ mod tests {
             assert_eq!(get(&actual, "args"), Some(&payload));
         }
         for command in [
-            "reports.source-funds",
             "reports.export-source-funds-pdf",
             "reports.export-source-funds-bundle",
             "source-funds.suggest",
@@ -605,6 +634,91 @@ mod tests {
             assert!(!COMMANDS.contains(&command));
             assert!(!crate::describe::IMPLEMENTED.contains(&command));
         }
+    }
+    #[test]
+    fn source_funds_report_cli_forwards_recipe_and_keeps_mutation_boundary() {
+        let argv = [
+            "--format",
+            "plain",
+            "reports",
+            "source-funds",
+            "--target-transaction",
+            "in",
+            "--target-amount",
+            "0.1",
+            "--purpose",
+            "planned_exchange_sale",
+            "--planned-destination",
+            "Exchange",
+            "--planned-note",
+            "Note",
+            "--recipient",
+            "Bank",
+            "--reveal-mode",
+            "full",
+            "--max-depth",
+            "12",
+            "--diagram-detail",
+            "detailed",
+            "--amount-precision",
+            "sats",
+            "--mask-recipient",
+            "--omit-section",
+            "flow_links",
+            "--reveal-override",
+            "in=hide",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Book",
+        ]
+        .map(String::from);
+        let args = crate::argparse::parse_args(
+            &argv,
+            crate::argparse::Context {
+                width: 78,
+                version: "test",
+            },
+        )
+        .unwrap();
+        assert!(COMMANDS.contains(&"reports.source-funds"));
+        assert!(crate::describe::IMPLEMENTED.contains(&"reports.source-funds"));
+        assert!(crate::run::implemented("reports.source-funds", &args));
+        let actual = execute(&mut SourceFundsCapture, "reports.source-funds", &args).unwrap();
+        let payload = get(&actual, "args").unwrap();
+        for key in [
+            "workspace",
+            "profile",
+            "target_transaction",
+            "target_amount",
+            "purpose",
+            "planned_destination",
+            "planned_note",
+            "reveal_mode",
+            "max_depth",
+            "recipient",
+            "diagram_detail",
+            "amount_precision",
+            "mask_recipient",
+            "omit_section",
+            "reveal_override",
+            "format",
+            "save_case",
+            "case_label",
+        ] {
+            assert_eq!(get(payload, key), args.get(key));
+        }
+        let mut saving = argv.to_vec();
+        saving.push("--save-case".into());
+        let saving = crate::argparse::parse_args(
+            &saving,
+            crate::argparse::Context {
+                width: 78,
+                version: "test",
+            },
+        )
+        .unwrap();
+        assert!(!crate::run::implemented("reports.source-funds", &saving));
     }
     #[test]
     fn cross_check_cli_forwards_filters_files_and_native_registration() {

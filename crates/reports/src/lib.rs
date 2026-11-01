@@ -39,11 +39,16 @@ mod source_funds_assembly;
 pub mod source_funds_batch;
 pub mod source_funds_cases;
 pub mod source_funds_disclosure;
+mod source_funds_explorers;
 pub mod source_funds_links;
 pub mod source_funds_mutations;
+mod source_funds_order;
 pub mod source_funds_projection;
 mod source_funds_reads;
 pub mod source_funds_recipients;
+pub mod source_funds_report;
+pub mod source_funds_svg;
+mod source_funds_text;
 pub mod source_funds_traversal;
 mod sql;
 mod standalone_csv;
@@ -149,6 +154,9 @@ pub fn execute_with_sources(
     conn.execute_batch("SAVEPOINT report_read")
         .map_err(sql_error)?;
     let result = (|| {
+        if matches!(command, "reports.source-funds" | "ui.source_funds.preview") {
+            return source_funds_report::execute(conn, command, args);
+        }
         if source_funds_reads::handles(command) {
             return source_funds_reads::execute(conn, command, args);
         }
