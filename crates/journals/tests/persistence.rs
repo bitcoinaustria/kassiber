@@ -751,3 +751,241 @@ fn component_blockers_keep_filed_impacts_pending_without_quarantines() {
     );
     c.execute_batch("ROLLBACK").unwrap();
 }
+
+fn physical_connection(path: &std::path::Path, cipher: bool) -> Connection {
+    let c = Connection::open(path).unwrap();
+    if cipher {
+        c.pragma_update(None, "key", "synthetic-test-only").unwrap();
+        c.execute_batch("PRAGMA journal_mode=DELETE;PRAGMA synchronous=FULL")
+            .unwrap();
+    } else {
+        c.execute_batch("PRAGMA journal_mode=WAL;PRAGMA synchronous=NORMAL")
+            .unwrap();
+    }
+    c.execute_batch("PRAGMA foreign_keys=ON;PRAGMA cache_size=-321;PRAGMA cache_spill=OFF;PRAGMA wal_autocheckpoint=73").unwrap();
+    c.busy_timeout(std::time::Duration::ZERO).unwrap();
+    c
+}
+
+fn connection_settings(c: &Connection) -> Vec<Value> {
+    [
+        "journal_mode",
+        "synchronous",
+        "cache_size",
+        "cache_spill",
+        "wal_autocheckpoint",
+    ]
+    .into_iter()
+    .map(|name| {
+        c.query_row(&format!("PRAGMA {name}"), [], |r| {
+            use kassiber_store::rusqlite::types::ValueRef;
+            Ok(match r.get_ref(0)? {
+                ValueRef::Text(s) => serde_json::json!(std::str::from_utf8(s).unwrap()),
+                ValueRef::Integer(n) => serde_json::json!(n),
+                _ => panic!("setting scalar"),
+            })
+        })
+        .unwrap()
+    })
+    .collect()
+}
+
+#[test]
+fn physical_callers_begin_before_repairs_and_publish_only_committed_dumps() {
+    use kassiber_journals::storage::{DeferredCheckpoint, RebuildCache};
+    use kassiber_store::rusqlite::{Error, ErrorCode, Transaction, TransactionBehavior};
+    let scratch = Scratch::new("caller-snapshot");
+    let v = &cases()[0];
+    let mut expected = v["expected"].clone();
+    // The extra repair UPDATE advances the profile's chain-index clocks once.
+    let revision = expected["chain_index_clock"]["rows"][0][2]
+        .as_i64()
+        .unwrap()
+        + 1;
+    expected["chain_index_clock"]["rows"][0][2] = serde_json::json!(revision);
+    for row in expected["chain_index_dirty"]["rows"]
+        .as_array_mut()
+        .unwrap()
+    {
+        if row[1] == "profiles" {
+            row[3] = serde_json::json!(revision);
+        }
+    }
+    for cipher in [false, true] {
+        let path = scratch.0.join(format!("{cipher}.sqlite3"));
+        let c = physical_connection(&path, cipher);
+        load(&c, &v["before"]);
+        let other = physical_connection(&path, cipher);
+        let settings = connection_settings(&c);
+        let checkpoint = DeferredCheckpoint::enter(&c).unwrap();
+        let cache = RebuildCache::enter(&c).unwrap();
+        let transaction = Transaction::new_unchecked(&c, TransactionBehavior::Immediate).unwrap();
+        assert!(matches!(other.execute_batch("BEGIN IMMEDIATE"),
+            Err(Error::SqliteFailure(error, _)) if error.code == ErrorCode::DatabaseBusy));
+        // The first accounting snapshot and a representative pre-build repair
+        // occur after the caller owns the writer lock.
+        equal(&c, &v["before"], &v["name"]);
+        c.execute(
+            "UPDATE profiles SET last_processed_tx_count=-1 WHERE id=?",
+            [v["record"]["profile"]["id"].as_str().unwrap()],
+        )
+        .unwrap();
+        store(&c, v, &mut Writes::default()).unwrap();
+        equal(&other, &v["before"], &v["name"]);
+        transaction.commit().unwrap();
+        cache.restore().unwrap();
+        equal(&other, &expected, &v["name"]);
+        checkpoint.after_reply().unwrap();
+        assert_eq!(connection_settings(&c), settings);
+        drop(other);
+        drop(c);
+        equal(&physical_connection(&path, cipher), &expected, &v["name"]);
+    }
+}
+
+#[test]
+fn physical_driver_refusals_roll_back_partial_writes_and_preserve_caller_repairs() {
+    let scratch = Scratch::new("driver-refusals");
+    let v = &cases()[0];
+    for cipher in [false, true] {
+        for mode in ["prepare", "read", "readonly", "insert", "update", "uuid"] {
+            let c =
+                physical_connection(&scratch.0.join(format!("{cipher}-{mode}.sqlite3")), cipher);
+            load(&c, &v["before"]);
+            if mode == "prepare" {
+                c.execute_batch("DROP TABLE journal_tax_summary").unwrap();
+            }
+            if mode == "read" {
+                c.execute_batch("UPDATE profiles SET last_processed_at=x'00'")
+                    .unwrap();
+            }
+            if mode == "insert" {
+                c.execute_batch("CREATE TEMP TRIGGER refuse_entry BEFORE INSERT ON journal_entries BEGIN SELECT RAISE(ABORT, 'driver insert refusal'); END").unwrap();
+            }
+            if mode == "update" {
+                c.execute_batch("CREATE TEMP TRIGGER refuse_freshness BEFORE UPDATE OF last_processed_at ON profiles BEGIN SELECT RAISE(ABORT, 'driver update refusal'); END").unwrap();
+            }
+            let before = snapshot(&c);
+            c.execute_batch("BEGIN IMMEDIATE;SAVEPOINT journals_process")
+                .unwrap();
+            c.execute_batch("UPDATE profiles SET last_processed_tx_count=-1")
+                .unwrap();
+            let repaired = snapshot(&c);
+            if mode == "readonly" {
+                c.execute_batch("PRAGMA query_only=ON").unwrap();
+            }
+            let mut input = v.clone();
+            if mode == "uuid" {
+                input["ids"] = serde_json::json!([]);
+            }
+            let mut writes = Writes::default();
+            let error = store(&c, &input, &mut writes).unwrap_err();
+            assert_eq!(
+                error.family,
+                if mode == "uuid" {
+                    "RuntimeError"
+                } else {
+                    "DatabaseError"
+                },
+                "cipher={cipher} {mode}: {error}"
+            );
+            match mode {
+                "insert" => assert!(error.message.contains("driver insert refusal")),
+                "update" => assert!(error.message.contains("driver update refusal")),
+                "prepare" => assert!(error.message.contains("no such table")),
+                "uuid" => assert_eq!(error.message, "persistence UUID tape exhausted"),
+                _ => (),
+            }
+            if matches!(mode, "insert" | "update" | "uuid") {
+                assert!(writes.count > 0);
+            }
+            c.execute_batch("PRAGMA query_only=OFF").unwrap();
+            assert!(
+                logical_equal(&snapshot(&c), &repaired),
+                "cipher={cipher} {mode}"
+            );
+            c.execute_batch("ROLLBACK TO journals_process;RELEASE journals_process;ROLLBACK")
+                .unwrap();
+            assert!(
+                logical_equal(&snapshot(&c), &before),
+                "cipher={cipher} {mode}"
+            );
+        }
+    }
+}
+
+#[test]
+fn physical_caller_drop_and_unwind_restore_repairs_journals_and_settings() {
+    use kassiber_journals::storage::{DeferredCheckpoint, RebuildCache};
+    use kassiber_store::rusqlite::{Transaction, TransactionBehavior};
+    let scratch = Scratch::new("caller-drop");
+    let v = &cases()[0];
+    for cipher in [false, true] {
+        for panic in [false, true] {
+            let path = scratch.0.join(format!("{cipher}-{panic}.sqlite3"));
+            let c = physical_connection(&path, cipher);
+            load(&c, &v["before"]);
+            let settings = connection_settings(&c);
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let _checkpoint = DeferredCheckpoint::enter(&c).unwrap();
+                let _cache = RebuildCache::enter(&c).unwrap();
+                let _transaction =
+                    Transaction::new_unchecked(&c, TransactionBehavior::Immediate).unwrap();
+                c.execute_batch(
+                    "SAVEPOINT journals_process;UPDATE profiles SET last_processed_tx_count=-1",
+                )
+                .unwrap();
+                store(&c, v, &mut Writes::default()).unwrap();
+                if panic {
+                    panic!("caller failed before COMMIT");
+                }
+                // Dropping the uncommitted caller handle must also undo repairs
+                // outside the nested persistence savepoint.
+            }));
+            assert_eq!(result.is_err(), panic);
+            assert!(c.is_autocommit());
+            equal(&c, &v["before"], &v["name"]);
+            assert_eq!(connection_settings(&c), settings);
+            drop(c);
+            equal(
+                &physical_connection(&path, cipher),
+                &v["before"],
+                &v["name"],
+            );
+        }
+    }
+}
+
+#[test]
+fn physical_commit_failure_remains_uncommitted_and_rolls_back_the_whole_caller() {
+    use kassiber_journals::storage::{DeferredCheckpoint, RebuildCache};
+    use kassiber_store::rusqlite::{Transaction, TransactionBehavior};
+    let scratch = Scratch::new("commit-refusal");
+    let v = &cases()[0];
+    for cipher in [false, true] {
+        let path = scratch.0.join(format!("{cipher}.sqlite3"));
+        let c = physical_connection(&path, cipher);
+        load(&c, &v["before"]);
+        c.execute_batch("CREATE TABLE commit_parent(id PRIMARY KEY);CREATE TABLE commit_child(parent REFERENCES commit_parent(id) DEFERRABLE INITIALLY DEFERRED)").unwrap();
+        let before = snapshot(&c);
+        let settings = connection_settings(&c);
+        {
+            let _checkpoint = DeferredCheckpoint::enter(&c).unwrap();
+            let _cache = RebuildCache::enter(&c).unwrap();
+            let transaction =
+                Transaction::new_unchecked(&c, TransactionBehavior::Immediate).unwrap();
+            c.execute_batch("SAVEPOINT journals_process;UPDATE profiles SET last_processed_tx_count=-1;INSERT INTO commit_child VALUES('missing')").unwrap();
+            store(&c, v, &mut Writes::default()).unwrap();
+            c.execute_batch("RELEASE journals_process").unwrap();
+            assert!(transaction.commit().is_err());
+        }
+        assert!(c.is_autocommit());
+        assert!(logical_equal(&snapshot(&c), &before));
+        assert_eq!(connection_settings(&c), settings);
+        drop(c);
+        assert!(logical_equal(
+            &snapshot(&physical_connection(&path, cipher)),
+            &before
+        ));
+    }
+}

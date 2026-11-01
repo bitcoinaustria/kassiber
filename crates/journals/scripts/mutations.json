@@ -2688,5 +2688,235 @@
       "malformed_storage_id_and_tie_shapes_refuse_without_writes"
     ],
     "rule": "An empty retained table still validates timestamp scalar types before preparing or writing rows."
+  },
+  {
+    "id": "JP-amount-shift",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "let shift = d.0.exponent() + 11;",
+    "replace": "let shift = d.0.exponent() + 10;",
+    "expect_failing": [
+      "amount_bindings_match_python_rounding_fallbacks_and_sqlite_overflow"
+    ],
+    "rule": "BTC quantities scale by exactly 10^11 before integer rounding."
+  },
+  {
+    "id": "JP-amount-multiply",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "n * 10u128.pow(shift as u32)",
+    "replace": "n * 10u128.pow(shift as u32) + 1",
+    "expect_failing": [
+      "amount_bindings_match_python_rounding_fallbacks_and_sqlite_overflow"
+    ],
+    "rule": "Integral fast-path amounts must not acquire an extra msat."
+  },
+  {
+    "id": "JP-amount-divisor",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "let divisor = 10u128.pow((-shift) as u32);",
+    "replace": "let divisor = 10u128.pow((-shift) as u32) + 1;",
+    "expect_failing": [
+      "amount_bindings_match_python_rounding_fallbacks_and_sqlite_overflow"
+    ],
+    "rule": "Fractional fast-path amounts divide by the exact decimal power."
+  },
+  {
+    "id": "JP-amount-half-up",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "n % divisor >= divisor / 2",
+    "replace": "n % divisor > divisor / 2",
+    "expect_failing": [
+      "amount_bindings_match_python_rounding_fallbacks_and_sqlite_overflow"
+    ],
+    "rule": "Half-msat ties round away from zero."
+  },
+  {
+    "id": "JP-amount-sign",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "Sql::Integer(if d.0.is_sign_negative() { -n } else { n })",
+    "replace": "Sql::Integer(n)",
+    "expect_failing": [
+      "amount_bindings_match_python_rounding_fallbacks_and_sqlite_overflow"
+    ],
+    "rule": "Negative BTC amounts retain their sign after half-up rounding."
+  },
+  {
+    "id": "JP-amount-wide-coefficient",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "*n <= u128::from(u64::MAX)",
+    "replace": "*n <= u128::MAX",
+    "expect_failing": [
+      "amount_bindings_match_python_rounding_fallbacks_and_sqlite_overflow"
+    ],
+    "rule": "Wide coefficients must not overflow the bounded multiplication fast path."
+  },
+  {
+    "id": "JP-amount-wide-shift",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "if (-19..=19).contains(&shift) {",
+    "replace": "if (-19..=20).contains(&shift) {",
+    "expect_failing": [
+      "amount_bindings_match_python_rounding_fallbacks_and_sqlite_overflow"
+    ],
+    "rule": "The multiplication shift bound must prevent overflowing the u128 intermediate."
+  },
+  {
+    "id": "JP-amount-sqlite-range",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "if let Ok(n) = i64::try_from(magnitude) {",
+    "replace": "if let Some(n) = Some(magnitude as i64) {",
+    "expect_failing": [
+      "amount_bindings_match_python_rounding_fallbacks_and_sqlite_overflow"
+    ],
+    "rule": "Out-of-range msat quantities refuse SQLite INTEGER binding instead of wrapping."
+  },
+  {
+    "id": "JP-amount-fallback",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "bind(&msat(&d.0)?)",
+    "replace": "Ok(Sql::Integer(0))",
+    "expect_failing": [
+      "amount_bindings_match_python_rounding_fallbacks_and_sqlite_overflow"
+    ],
+    "rule": "Fallback amounts retain Python context rounding and SQLite integer overflow refusals."
+  },
+  {
+    "id": "JP-decimal-absent",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "return Ok((Sql::Null, Sql::Null));",
+    "replace": "return Ok((Sql::Real(0.0), Sql::Null));",
+    "expect_failing": [
+      "decimal_bindings_match_python_fixed_text_and_all_float_bits"
+    ],
+    "rule": "An absent optional decimal stores two NULLs, never a numeric zero."
+  },
+  {
+    "id": "JP-decimal-short-parse",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "fixed.parse().expect(\"Decimal float spelling\")",
+    "replace": "0.0",
+    "expect_failing": [
+      "decimal_bindings_match_python_fixed_text_and_all_float_bits"
+    ],
+    "rule": "Short fixed decimals retain the exact Python float bits."
+  },
+  {
+    "id": "JP-decimal-long-parse",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "} else {\n        d.0.to_string().parse().expect(\"Decimal float spelling\")\n    };",
+    "replace": "} else {\n        0.0\n    };",
+    "expect_failing": [
+      "decimal_bindings_match_python_fixed_text_and_all_float_bits"
+    ],
+    "rule": "Long fixed decimals retain overflow, underflow and signed-zero float bits."
+  },
+  {
+    "id": "JP-bind-null",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "Value::Null => ValueRef::Null,",
+    "replace": "Value::Null => ValueRef::Integer(0),",
+    "expect_failing": [
+      "scalar_bindings_preserve_types_signs_and_refuse_wide_or_structured_values"
+    ],
+    "rule": "A JSON null remains a SQLite NULL."
+  },
+  {
+    "id": "JP-bind-integer",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "ValueRef::Integer(n)\n            } else if",
+    "replace": "ValueRef::Integer(n.saturating_sub(1))\n            } else if",
+    "expect_failing": [
+      "scalar_bindings_preserve_types_signs_and_refuse_wide_or_structured_values"
+    ],
+    "rule": "Signed 64-bit scalar bindings retain both endpoints exactly."
+  },
+  {
+    "id": "JP-bind-structured",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "\"ProgrammingError\",\n                \"unsupported SQLite binding\",",
+    "replace": "\"ValueError\",\n                \"unsupported SQLite binding\",",
+    "expect_failing": [
+      "scalar_bindings_preserve_types_signs_and_refuse_wide_or_structured_values"
+    ],
+    "rule": "Structured scalar bindings refuse with the Python ProgrammingError family."
+  },
+  {
+    "id": "JP-bind-text-reachability",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "Value::String(s) => ValueRef::Text(s.as_bytes()),",
+    "replace": "Value::String(s) => ValueRef::Blob(s.as_bytes()),",
+    "expect_failing": [
+      "scalar_bindings_preserve_types_signs_and_refuse_wide_or_structured_values"
+    ],
+    "rule": "All JSON strings enter the UTF-8 TEXT arm; the downstream BLOB arm is unreachable."
+  },
+  {
+    "id": "JP-driver-error-family",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "Self::new(\"DatabaseError\", e.to_string())",
+    "replace": "Self::new(\"RuntimeError\", e.to_string())",
+    "expect_failing": [
+      "physical_driver_refusals_roll_back_partial_writes_and_preserve_caller_repairs"
+    ],
+    "rule": "Driver prepare/read/write errors remain typed DatabaseError refusals."
+  },
+  {
+    "id": "JP-driver-error-message",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "Self::new(\"DatabaseError\", e.to_string())",
+    "replace": "Self::new(\"DatabaseError\", \"storage failed\")",
+    "expect_failing": [
+      "physical_driver_refusals_roll_back_partial_writes_and_preserve_caller_repairs"
+    ],
+    "rule": "Driver refusal messages retain their causal failure instead of a generic replacement."
+  },
+  {
+    "id": "JP-entry-prepare-idempotence",
+    "file": "crates/journals/src/persistence/entries.rs",
+    "find": "if self.bindings.get().is_some() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "typed_retained_columns_force_real_delta_writes_and_unchanged_rows_prepare_no_bindings"
+    ],
+    "rule": "Repeated entry preparation must return before the unreachable second OnceCell assignment."
+  },
+  {
+    "id": "JP-fixed-zero-integer",
+    "file": "crates/journals/src/persistence/entries.rs",
+    "find": "return Some(raw == b\"0\");",
+    "replace": "return Some(true);",
+    "expect_failing": [
+      "typed_decimal_comparison_retains_every_fixed_digit_sign_and_scale"
+    ],
+    "rule": "Zero with a nonnegative exponent accepts exactly its fixed zero spelling."
+  },
+  {
+    "id": "JP-fixed-refusal-default",
+    "file": "crates/journals/src/persistence/entries.rs",
+    "find": "compare(&decimal.0, raw).unwrap_or(false)",
+    "replace": "compare(&decimal.0, raw).unwrap_or(true)",
+    "expect_failing": [
+      "fixed_decimal_comparison_refuses_truncated_non_ascii_and_extreme_inputs"
+    ],
+    "rule": "A missing sign or a truncated or unrepresentable fixed spelling compares unequal."
+  },
+  {
+    "id": "JP-fixed-empty-point",
+    "file": "crates/journals/src/persistence/entries.rs",
+    "find": "raw.get(point) != Some(&b'.') || point == 0",
+    "replace": "raw.get(point) != Some(&b'.')",
+    "expect_failing": [
+      "fixed_decimal_comparison_refuses_truncated_non_ascii_and_extreme_inputs"
+    ],
+    "rule": "The fractional spelling requires a nonempty integer part before indexing it."
+  },
+  {
+    "id": "JP-bind-invalid-real",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "Refusal::new(\"ValueError\", \"invalid SQLite REAL\")",
+    "replace": "Refusal::new(\"OverflowError\", \"invalid SQLite REAL\")",
+    "expect_failing": [
+      "scalar_bindings_preserve_types_signs_and_refuse_wide_or_structured_values"
+    ],
+    "rule": "Unrepresentable JSON REAL bindings refuse with ValueError before any SQL write."
   }
 ]

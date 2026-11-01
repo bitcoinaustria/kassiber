@@ -1,7 +1,11 @@
 """Python reference operands for R4-12 storage primitives."""
 from copy import deepcopy
+from decimal import Decimal, localcontext
 import json
 from pathlib import Path
+import sqlite3
+import struct
+from kassiber.msat import btc_to_msat
 from kassiber.core.journal_calculation import encode_calculation
 from kassiber.core.journal_storage import journal_entry_id, journal_processed_at
 from kassiber.core.tax_events import dedupe_quarantines
@@ -11,6 +15,30 @@ PATH = Path(__file__).resolve().parents[2] / 'crates/journals/tests/data/storage
 
 
 def vectors():
+    amounts = []
+    decimals = []
+    with localcontext() as context:
+        context.prec = 32
+        for coefficient in ('0', '-0', '1', '-1', '5', '-5',
+                            '9223372036854775807', '9223372036854775808',
+                            '18446744073709551615', '18446744073709551616',
+                            '340282366920938463463374607431768211455',
+                            '340282366920938463463374607431768211456',
+                            '123456789012345678901234567890123456789012345678901234567890'):
+            for exponent in (-1000, -111, -32, -31, -30, -12, -11, -10, 0, 8, 9, 1000):
+                for sign in ('', '-') if not coefficient.startswith('-') else ('',):
+                    spelling = f'{sign}{coefficient}E{exponent}'
+                    decimal = Decimal(spelling)
+                    quantity = btc_to_msat(decimal)
+                    with sqlite3.connect(':memory:') as conn:
+                        try:
+                            stored = conn.execute('SELECT ?', (quantity,)).fetchone()[0]
+                        except OverflowError as error:
+                            amounts.append([spelling, None, type(error).__name__])
+                        else:
+                            amounts.append([spelling, stored, None])
+                    decimals.append([spelling, struct.unpack('>Q', struct.pack('>d', float(decimal)))[0],
+                                     format(decimal, 'f')])
     ids = []
     for values in [('p', 'tx', 'wallet', 'disposal', 'BTC', 0),
                    ('p', 'tx', 'wallet', 'disposal', 'BTC', 1),
@@ -103,7 +131,7 @@ def vectors():
     for detail in details+['','{"ownership_review_candidates":["old"]}']:
         for candidates in ([],[{'out_id':'tx','note':'é🔥'}]):
             enrichment.append([detail,candidates,_quarantine_detail_with_ownership_candidates(detail,candidates)])
-    return dict(ids=ids,calculations=[[c,list(encode_calculation(c))] for c in calculations],markers=markers,
+    return dict(amounts=amounts,decimals=decimals,ids=ids,calculations=[[c,list(encode_calculation(c))] for c in calculations],markers=markers,
                 quarantines=quarantines,enrichment=enrichment)
 
 

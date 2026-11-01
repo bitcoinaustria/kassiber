@@ -324,6 +324,12 @@ mod tests {
                     storage::ENTRY_COLUMNS[column]
                 );
                 assert_eq!(rebuilt.bindings.get().is_some(), column != 28);
+                if column != 28 {
+                    use storage::BindingRow;
+                    let prepared = rebuilt.bindings.get().unwrap().clone();
+                    rebuilt.prepare().unwrap();
+                    assert_eq!(rebuilt.bindings.get().unwrap(), &prepared);
+                }
                 assert_eq!(
                     conn.query_row("SELECT COUNT(*) FROM journal_entries", [], |r| r
                         .get::<_, i64>(0))
@@ -360,6 +366,37 @@ mod tests {
                     decimal.0.is_zero() || exponent <= limit
                 );
             }
+        }
+    }
+
+    #[test]
+    fn fixed_decimal_comparison_refuses_truncated_non_ascii_and_extreme_inputs() {
+        for spelling in ["0", "-0", "1", "-1", "1E1", "1E-1", "0.00", "-0.00"] {
+            let decimal = JournalDecimal(spelling.parse().unwrap());
+            let fixed = decimal.0.to_fixed_string().unwrap();
+            for raw in [
+                &b""[..],
+                &b"-"[..],
+                &b"."[..],
+                &b".1"[..],
+                &b"1."[..],
+                &b"1\xff"[..],
+                &b"\xff"[..],
+                &b"00.1"[..],
+                &b"0.01\xff"[..],
+            ] {
+                assert!(!fixed_equal(&decimal, raw), "{spelling}: {raw:?}");
+            }
+            for length in 0..fixed.len() {
+                assert!(!fixed_equal(&decimal, &fixed.as_bytes()[..length]));
+            }
+        }
+        for spelling in ["1E999999999999999999", "1E-1999999999999999997"] {
+            let decimal = JournalDecimal(spelling.parse().unwrap());
+            for raw in [b"".as_slice(), b"0", b"1", b"0.1", b"1.0"] {
+                assert!(!fixed_equal(&decimal, raw));
+            }
+            assert!(validate(&decimal).is_err());
         }
     }
 

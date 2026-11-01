@@ -511,6 +511,50 @@ fn store<O: storage::WriteObserver>(
 mod tests {
     use super::*;
     #[test]
+    fn amount_bindings_match_python_rounding_fallbacks_and_sqlite_overflow() {
+        let vectors: Value =
+            serde_json::from_str(include_str!("../tests/data/storage.json")).unwrap();
+        for case in array(&vectors["amounts"]) {
+            let decimal = JournalDecimal(case[0].as_str().unwrap().parse().unwrap());
+            let actual = amount(&decimal);
+            if let Some(family) = case[2].as_str() {
+                assert_eq!(actual.unwrap_err().family, family, "{}", case[0]);
+            } else {
+                assert_eq!(
+                    actual.unwrap(),
+                    Sql::Integer(case[1].as_i64().unwrap()),
+                    "{}",
+                    case[0]
+                );
+            }
+        }
+        assert!(array(&vectors["amounts"]).len() > 200);
+    }
+
+    #[test]
+    fn decimal_bindings_match_python_fixed_text_and_all_float_bits() {
+        let vectors: Value =
+            serde_json::from_str(include_str!("../tests/data/storage.json")).unwrap();
+        for case in array(&vectors["decimals"]) {
+            let decimal = JournalDecimal(case[0].as_str().unwrap().parse().unwrap());
+            let (actual, exact) = decimal_bindings(Some(&decimal)).unwrap();
+            let Sql::Real(actual) = actual else {
+                panic!("REAL binding")
+            };
+            assert_eq!(actual.to_bits(), case[1].as_u64().unwrap(), "{}", case[0]);
+            assert_eq!(exact, t(case[2].as_str().unwrap()), "{}", case[0]);
+        }
+        for spelling in ["1E100000001", "1E-100000002"] {
+            let decimal = JournalDecimal(spelling.parse().unwrap());
+            let expected = decimal.0.to_fixed_string().unwrap_err();
+            let actual = decimal_bindings(Some(&decimal)).unwrap_err();
+            assert_eq!(actual.family, expected.name());
+            assert_eq!(actual.message, expected.to_string());
+        }
+        assert_eq!(decimal_bindings(None).unwrap(), (Sql::Null, Sql::Null));
+    }
+
+    #[test]
     fn shared_decimal_spelling_preserves_float_bits_and_exact_text() {
         for spelling in [
             "0",
@@ -543,6 +587,7 @@ mod tests {
             (json!(true), Sql::Integer(1)),
             (json!(false), Sql::Integer(0)),
             (json!("é🔥"), t("é🔥")),
+            (json!("\0"), t("\0")),
             (json!(i64::MIN), Sql::Integer(i64::MIN)),
             (json!(i64::MAX), Sql::Integer(i64::MAX)),
             (json!(1.5), Sql::Real(1.5)),
@@ -568,6 +613,12 @@ mod tests {
                 error.message,
                 "Python int too large to convert to SQLite INTEGER"
             );
+        }
+        for text in ["1e1000", "-1e1000"] {
+            let value = serde_json::from_str(text).unwrap();
+            let error = bind(&value).unwrap_err();
+            assert_eq!(error.family, "ValueError");
+            assert_eq!(error.message, "invalid SQLite REAL");
         }
     }
 }
