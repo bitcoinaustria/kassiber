@@ -6613,6 +6613,87 @@ No new report producer commits are available from `t3code/r5-sof-reads-4` at
 this checkpoint. Complete saving still needs report, diagram, fingerprint and
 write-lock integration. PDF rendering and PDF-containing bundles remain Python.
 
+## Source-funds diagnostic wire checkpoint (R5 partial)
+
+The next `t3code/r5-sof-mutations-3` boundary applies plan 21's approved honest
+native diagnostic contract to registered source-funds daemon kinds. Mapped
+unhandled service failures carry an empty `error.debug` string. Typed refusals
+retain null. CLI debug remains null without `--debug` and empty when requested,
+for both typed and unhandled failures. Rust never invents Python tracebacks and
+writes no fabricated traceback to stderr. The daemon retains its existing
+secret floor for messages, hints and details. Other service families and
+unregistered kinds keep their previous diagnostics.
+
+The process matrix covers SQLite/SQLCipher × CLI/daemon × normal/debug. Its
+eight scenarios compare 40 native CLI mutation calls and 60 native daemon
+requests, plus session shutdowns. It pins literal non-debug bytes, the
+null/string debug distinction, native empty stderr and Python traceback
+provenance separately. Before normalization it verifies the reference's
+original encoding, and only Python's debug text may become an empty string.
+All 112 tables and managed evidence bytes/hashes remain unchanged; failures
+after source/link insertion and partial attachment association prove rollback.
+Every transport record is native, with zero fallbacks. Both former stored-read
+internal-error expected failures now pass for superscript and oversized
+integer cursors.
+
+Infinite expected-msat values now retain Python's unhandled `OverflowError`
+message rather than becoming validation. NaN remains validation, and finite
+large floats retain the reference's conversion. Four new frozen cases grow the
+link corpus to 312. The original 616 link service comparisons retain their
+evidence; the eight additional SQLite/SQLCipher comparisons cover the appended
+cases with identical helper bytes, all 112 tables and unchanged evidence hashes.
+
+The new local reference reproduction is:
+
+```sh
+mise exec rust@1.99.1 uv@latest -- uv run --locked python \
+  -m crates.reports.scripts.repro_python_source_funds_projection_commit
+```
+
+On both bindings, Python commits source/link evidence associations before
+projecting the response. A corrupt stored amount therefore produces an error
+after the association has committed, and CLI error messages retain synthetic
+credential assignments. Python remains unchanged. These corrupt-record writes
+are excluded from process parity acceptance. A separate native test proves
+that response projection failure rolls back every table on both bindings;
+native behavior is deliberately stronger on this reference-bug path. No change
+to custody, ownership, basis or tax authority follows from either behavior.
+
+All ten new mutation entries pass their five unmutated baselines and are
+killed without survivors, build errors or empty selections. The inherited 873
+entries retain their earlier evidence.
+
+| Named test | New mutations killed |
+| --- | ---: |
+| `source_funds_errors_preserve_non_debug_fields_and_empty_native_debug` | 2 |
+| `source_funds_debug_never_crosses_typed_errors_or_unregistered_kinds` | 3 |
+| `source_funds_failure_dispatch_redacts_and_rolls_back_before_reply` | 2 |
+| `source_funds_links_pin_validation_envelopes_and_all_112_tables` | 1 |
+| `source_funds_projection_failures_roll_back_all_112_tables_on_both_stores` | 2 |
+
+Verification evidence is recorded in `target/r5-sof-mutations-3/`. All data,
+preferences, owner roots, scratch and both Cargo directories remain under the
+worktree's `target/`; account `HOME` remains unchanged. Cargo uses eight jobs,
+and test/mutation jobs run serially. Owned build/data trees are removed after
+summarizing. This is Linux verification without full workspace/frontend,
+live-regtest or platform/package acceptance.
+
+All 16 source-funds Rust integration tests, 41 CLI/daemon library tests and
+11 daemon protocol tests pass. The eight appended service comparisons and
+ten diagnostic process scenarios pass. Reports/CLI/daemon all-target clippy
+with warnings denied passes. The classifier records 5,722 definitions and
+places the new diagnostic oracle in the serial daemon lane.
+Final CI preflight passes all 57 tests. Locked/offline formatting, the
+312-case generator check and validation of all 883 mutation entries pass.
+
+The inventory remains 165 native CLI leaves and 13 source-funds daemon kinds.
+Batch review, persisted suggest/assemble, source AI consent and once-only
+admission remain pending. Complete case saving still needs native report,
+diagram, fingerprint and write-lock integration through CLI, daemon and AI.
+The report worker branch has no new commits available at this checkpoint.
+PDF rendering and PDF-containing bundles remain Python. No dependencies,
+lockfiles, schema or tax rules change.
+
 ## Not yet ported
 
 The diagnostics slice now implements explicit public reports and native debug

@@ -317,11 +317,15 @@ fn review(
         if optional(raw) {
             continue;
         }
-        let expected = source_funds_reads::integer(raw).map_err(|_| {
-            AppError::new(
-                "validation",
-                format!("Expected {label} must be an exact millisatoshi integer"),
-            )
+        let expected = source_funds_reads::integer(raw).map_err(|message| {
+            if matches!(raw, Value::Float(number) if number.is_infinite()) {
+                AppError::new("internal_error", message)
+            } else {
+                AppError::new(
+                    "validation",
+                    format!("Expected {label} must be an exact millisatoshi integer"),
+                )
+            }
         })?;
         let expected = kassiber_pytext::parse_int(&expected)
             .map_err(|_| AppError::new("internal_error", "invalid integer"))?;

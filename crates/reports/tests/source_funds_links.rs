@@ -70,6 +70,57 @@ fn source_funds_links_pin_validation_envelopes_and_all_112_tables() {
 }
 
 #[test]
+fn source_funds_projection_failures_roll_back_all_112_tables_on_both_stores() {
+    let fixture = fixture();
+    let scratch = tempfile::tempdir().unwrap();
+    for encrypted in [false, true] {
+        for (family, table, column, identity, argument) in [
+            ("sources", "source_funds_sources", "amount", "s-z", "source"),
+            (
+                "links",
+                "source_funds_links",
+                "allocation_amount",
+                "l-z",
+                "link",
+            ),
+        ] {
+            let book = Book::create(
+                &scratch
+                    .path()
+                    .join(format!("projection-{encrypted}-{family}")),
+                encrypted.then_some("synthetic-source-passphrase"),
+            )
+            .unwrap();
+            let conn = book.connection();
+            seed(conn, &fixture);
+            conn.execute(
+                &format!("UPDATE {table} SET {column}=? WHERE id=?"),
+                ["synthetic malformed amount", identity],
+            )
+            .unwrap();
+            let before = dump(conn);
+            let case = kassiber_envelope::dict([
+                (
+                    "command",
+                    kassiber_envelope::s(format!("ui.source_funds.{family}.attach")),
+                ),
+                (
+                    "args",
+                    kassiber_envelope::dict([
+                        (argument, kassiber_envelope::s(identity)),
+                        ("attachment_id", kassiber_envelope::s("a-a")),
+                    ]),
+                ),
+            ]);
+            let result = outcome(conn, &case);
+            assert_eq!(text(value(&result, "error"), "code"), "internal_error");
+            assert_eq!(encode(&dump(conn)), encode(&before), "{encrypted}-{family}");
+            assert!(conn.is_autocommit());
+        }
+    }
+}
+
+#[test]
 fn source_funds_links_preserve_outer_work_and_roll_back_late_failures_on_both_stores() {
     let fixture = fixture();
     let Value::List(cases) = value(&fixture, "cases") else {

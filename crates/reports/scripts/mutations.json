@@ -10229,5 +10229,105 @@
       "source_funds_link_daemon_preserves_arguments_and_registers_mutations"
     ],
     "rule": "Managed link evidence association is served by the native daemon."
+  },
+  {
+    "id": "sof-diagnostic-omit-native-debug",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "if error.code == \"internal_error\"\n        && matches!",
+    "replace": "if false\n        && matches!",
+    "expect_failing": [
+      "source_funds_errors_preserve_non_debug_fields_and_empty_native_debug"
+    ],
+    "rule": "Unhandled source-funds failures retain an honest empty native debug string."
+  },
+  {
+    "id": "sof-diagnostic-typed-errors",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "if error.code == \"internal_error\"\n        && matches!",
+    "replace": "if true\n        && matches!",
+    "expect_failing": [
+      "source_funds_debug_never_crosses_typed_errors_or_unregistered_kinds"
+    ],
+    "rule": "Typed refusals retain null daemon debug fields."
+  },
+  {
+    "id": "sof-diagnostic-unregistered",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "kind.starts_with(\"ui.source_funds.\") && reports::KINDS.contains(&kind)",
+    "replace": "kind.starts_with(\"ui.source_funds.\")",
+    "expect_failing": [
+      "source_funds_debug_never_crosses_typed_errors_or_unregistered_kinds"
+    ],
+    "rule": "Only registered source-funds kinds enter the native diagnostic contract."
+  },
+  {
+    "id": "sof-diagnostic-family-scope",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "kind.starts_with(\"ui.source_funds.\") && reports::KINDS.contains(&kind)",
+    "replace": "reports::KINDS.contains(&kind)",
+    "expect_failing": [
+      "source_funds_debug_never_crosses_typed_errors_or_unregistered_kinds"
+    ],
+    "rule": "Source-funds diagnostics do not alter other report families."
+  },
+  {
+    "id": "sof-diagnostic-fabricated-stack",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "kassiber_envelope::set(&mut fields, \"debug\", s(\"\"));",
+    "replace": "kassiber_envelope::set(&mut fields, \"debug\", s(\"fabricated stack\"));",
+    "expect_failing": [
+      "source_funds_errors_preserve_non_debug_fields_and_empty_native_debug"
+    ],
+    "rule": "Native failures never fabricate Python or native traceback text."
+  },
+  {
+    "id": "sof-diagnostic-dispatch",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "(Some(request_error_envelope(&error, &request)), false)",
+    "replace": "(Some(app_error_envelope(&error, &RequestId::or_null(&request))), false)",
+    "expect_failing": [
+      "source_funds_failure_dispatch_redacts_and_rolls_back_before_reply"
+    ],
+    "rule": "The actual failure dispatcher must retain native debug provenance."
+  },
+  {
+    "id": "sof-diagnostic-redaction",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "let mut envelope = app_error_envelope(error, &RequestId::or_null(request));",
+    "replace": "let mut envelope = with_request_id(error.envelope(None), &RequestId::or_null(request));",
+    "expect_failing": [
+      "source_funds_failure_dispatch_redacts_and_rolls_back_before_reply"
+    ],
+    "rule": "Diagnostic admission preserves the daemon secret floor on message, hint and details."
+  },
+  {
+    "id": "sof-diagnostic-infinite-precondition",
+    "file": "crates/reports/src/source_funds_links.rs",
+    "find": "matches!(raw, Value::Float(number) if number.is_infinite())",
+    "replace": "matches!(raw, Value::Float(number) if number.is_nan())",
+    "expect_failing": [
+      "source_funds_links_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Infinite expected millisatoshis retain the unhandled reference error while NaN remains validation."
+  },
+  {
+    "id": "sof-diagnostic-source-projection-commit",
+    "file": "crates/reports/src/source_funds_mutations.rs",
+    "find": "return super::source_funds_reads::source(conn, &source);",
+    "replace": "conn.execute_batch(\"COMMIT\").map_err(sql_error)?;\n            return super::source_funds_reads::source(conn, &source);",
+    "expect_failing": [
+      "source_funds_projection_failures_roll_back_all_112_tables_on_both_stores"
+    ],
+    "rule": "Response projection failures roll back evidence associations on SQLite and SQLCipher."
+  },
+  {
+    "id": "sof-diagnostic-link-projection-commit",
+    "file": "crates/reports/src/source_funds_links.rs",
+    "find": "source_funds_reads::link(conn, &link)",
+    "replace": "conn.execute_batch(\"COMMIT\").map_err(sql_error)?;\n        source_funds_reads::link(conn, &link)",
+    "expect_failing": [
+      "source_funds_projection_failures_roll_back_all_112_tables_on_both_stores"
+    ],
+    "rule": "Response projection failures roll back evidence associations on SQLite and SQLCipher."
   }
 ]

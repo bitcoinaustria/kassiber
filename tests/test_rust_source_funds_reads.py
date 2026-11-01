@@ -213,16 +213,5 @@ def test_source_funds_stored_internal_error_wire_parity(tmp_path, monkeypatch, c
     assert state(root) == before
     served = [json.loads(line) for line in Path(env['KASSIBER_HYBRID_LOG']).read_text().splitlines()]
     assert served == [dict(command='daemon', served_by='rust')]
-    assert native.returncode == reference.returncode == 0
-    assert native.stderr == b''
-    assert reference.stderr.startswith(b'Traceback (most recent call last):\n')
-    assert b'ValueError:' in reference.stderr
-    actual = native.stdout.splitlines()[1:]
-    expected = reference.stdout.splitlines()[1:]
-    assert len(actual) == len(expected) == 2
-    assert json.loads(actual[0])['error']['debug'] == ''
-    from kassiber.log_ring import sanitize_traceback_text
-    assert json.loads(expected[0])['error']['debug'] == sanitize_traceback_text(reference.stderr.decode())
-    assert str(ROOT) not in json.loads(expected[0])['error']['debug']
-    assert native_debug_wire(actual[0]) == native_debug_wire(expected[0])
-    assert actual[1] == expected[1]
+    from tests.test_rust_source_funds_diagnostics import _compare
+    _compare(native, reference, daemon=True, debug=False)

@@ -293,6 +293,14 @@ fn app_error_envelope(error: &AppError, request_id: &RequestId, kind: Option<&st
     envelope
 }
 
+fn request_error_envelope(error: &AppError, request: &Value) -> Value {
+    let kind = get(request, "kind").and_then(|kind| match kind {
+        Value::Str(kind) => kind.as_str(),
+        _ => None,
+    });
+    app_error_envelope(error, &RequestId::or_null(request), kind)
+}
+
 /// `_locked_envelope(scope, label, request_id)`.
 fn locked_envelope(scope: &str, label: &str, request_id: &RequestId) -> Value {
     with_request_id(
@@ -475,17 +483,7 @@ impl Daemon {
                 Ok(Err(Failure::Closed)) => return 1,
                 Ok(Err(Failure::App(error))) => {
                     self.rollback();
-                    (
-                        Some(app_error_envelope(
-                            &error,
-                            &RequestId::or_null(&request),
-                            get(&request, "kind").and_then(|kind| match kind {
-                                Value::Str(kind) => kind.as_str(),
-                                _ => None,
-                            }),
-                        )),
-                        false,
-                    )
+                    (Some(request_error_envelope(&error, &request)), false)
                 }
                 Err(panic) => {
                     self.rollback();
@@ -1228,3 +1226,137 @@ mod profiles;
 mod services;
 mod views;
 mod workspaces;
+
+#[cfg(test)]
+mod source_funds_diagnostic_tests {
+    use super::*;
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Mutex,
+    };
+
+    #[derive(Clone, Default)]
+    struct Capture(Arc<Mutex<Vec<u8>>>);
+
+    impl Write for Capture {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    struct Refusal(Arc<AtomicUsize>);
+
+    impl Book for Refusal {
+        fn reports(&mut self, _: &str, _: &Value) -> Result<Value, AppError> {
+            Err(AppError::new(
+                "internal_error",
+                "synthetic refusal api_key=synthetic-diagnostic-secret",
+            )
+            .with_hint("token=synthetic-diagnostic-secret")
+            .with_details(dict([("api_key", s("synthetic-diagnostic-secret"))])))
+        }
+        fn is_initialized(&self) -> Result<bool, AppError> {
+            unreachable!()
+        }
+        fn context(&self) -> Result<kassiber_runtime::store::BookContext, AppError> {
+            unreachable!()
+        }
+        fn status_facts(&self) -> Result<kassiber_runtime::store::StatusFacts, AppError> {
+            unreachable!()
+        }
+        fn resolve_scope(
+            &self,
+            _: Option<&Value>,
+            _: Option<&Value>,
+        ) -> Result<(String, String), AppError> {
+            unreachable!()
+        }
+        fn rollback(&mut self) -> Result<(), AppError> {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+        fn close(&mut self) -> Result<(), AppError> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn source_funds_failure_dispatch_redacts_and_rolls_back_before_reply() {
+        let store = kassiber_runtime::fake::FakeStore::new(Default::default());
+        let bootstrap = store.bootstrap(&Default::default()).unwrap();
+        let capture = Capture::default();
+        let mut daemon = Daemon::new(
+            Arc::new(store),
+            DaemonConfig {
+                build: BuildInfo {
+                    version: "synthetic",
+                    channel: None,
+                    commit: None,
+                },
+                bootstrap,
+            },
+            Output::new(Box::new(capture.clone())),
+        );
+        let rollbacks = Arc::new(AtomicUsize::new(0));
+        daemon.book = Some(Box::new(Refusal(rollbacks.clone())));
+        let mut input = Input::new(spawn_reader(Box::new(std::io::Cursor::new(
+            b"{\"request_id\":\"exact-id\",\"kind\":\"ui.source_funds.links.attach\",\"args\":{\"link\":\"l-z\",\"attachment_id\":\"a-a\"}}\n".to_vec()
+        ))));
+        assert_eq!(daemon.run(&mut input), 0);
+        assert_eq!(rollbacks.load(Ordering::SeqCst), 1);
+        let bytes = capture.0.lock().unwrap().clone();
+        assert!(!String::from_utf8(bytes.clone())
+            .unwrap()
+            .contains("synthetic-diagnostic-secret"));
+        let actual = loads(std::str::from_utf8(&bytes).unwrap().trim()).unwrap();
+        let error = get(&actual, "error").unwrap();
+        assert_eq!(get(&actual, "request_id"), Some(&s("exact-id")));
+        assert_eq!(get(error, "code"), Some(&s("internal_error")));
+        assert_eq!(get(error, "debug"), Some(&s("")));
+        assert_eq!(
+            get(error, "message"),
+            Some(&s("synthetic refusal api_key=[redacted]"))
+        );
+    }
+
+    #[test]
+    fn source_funds_errors_preserve_non_debug_fields_and_empty_native_debug() {
+        let error = AppError::new("internal_error", "synthetic refusal")
+            .with_hint("retry locally")
+            .with_details(dict([("field", s("allocation_amount"))]));
+        for kind in reports::KINDS
+            .iter()
+            .filter(|kind| kind.starts_with("ui.source_funds."))
+        {
+            let request = dict([("request_id", s("exact-id")), ("kind", s(*kind))]);
+            let mut expected = error.envelope(Some(""));
+            kassiber_envelope::set(&mut expected, "request_id", s("exact-id"));
+            assert_eq!(request_error_envelope(&error, &request), expected, "{kind}");
+        }
+    }
+
+    #[test]
+    fn source_funds_debug_never_crosses_typed_errors_or_unregistered_kinds() {
+        for (kind, code) in [
+            ("ui.source_funds.sources.create", "validation"),
+            ("ui.source_funds.links.review", "source_funds_link_stale"),
+            ("ui.source_funds.links.attach", "not_found"),
+            ("ui.source_funds.recipients.create", "database_busy"),
+            ("ui.source_funds.unregistered", "internal_error"),
+            ("ui.wallets.create", "internal_error"),
+            ("ui.reports.tax_summary", "internal_error"),
+            ("ui.source_funds.preview", "not_implemented"),
+        ] {
+            let error = AppError::new(code, "synthetic refusal");
+            let request = dict([("request_id", Value::Int(7.into())), ("kind", s(kind))]);
+            assert_eq!(
+                request_error_envelope(&error, &request),
+                app_error_envelope(&error, &RequestId::or_null(&request), None)
+            );
+        }
+    }
+}

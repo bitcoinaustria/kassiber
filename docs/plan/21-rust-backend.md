@@ -1391,6 +1391,37 @@ The report producer branch has no new commits available at this checkpoint;
 traversal alone cannot authorize case saving. No dependencies, lockfiles,
 schema or tax rules change.
 
+### R5 source-funds honest-native diagnostics continuation (partial)
+
+Registered source-funds daemon failures now retain an empty native debug
+string for mapped unhandled errors; typed refusals retain null. The CLI keeps
+null without `--debug` and an empty string when requested. This applies the
+approved diagnostics contract without synthesizing Python tracebacks. All
+non-debug response bytes remain identical, including daemon secret redaction.
+The two stored-read internal-error witnesses are passing assertions instead
+of expected failures.
+
+The transport matrix covers SQLite and SQLCipher, both transports and both
+debug modes, every one of the 112 tables, unchanged managed evidence bytes and
+hashes, late attachment refusal rollback and zero fallbacks. Infinite expected
+msat inputs retain Python's unhandled overflow envelope; NaN retains validation.
+The link corpus grows from 308 to 312 cases. Named mutation tests cover debug
+presence, kind/code scope, actual dispatch, redaction, infinite preconditions
+and late response projection rollback.
+
+The unchanged Python source/link attachment APIs commit before response
+projection. Corrupt stored amounts can produce an error after committing the
+association; Rust rolls back that failure. A local reproduction records this
+reference discrepancy and the CLI's unredacted error message. This path has
+separate native rollback tests and is excluded from parity acceptance, rather
+than being normalized into a successful comparison. See the
+[diagnostics checkpoint](../reference/rust-shell.md#source-funds-diagnostic-wire-checkpoint-r5-partial).
+
+Batch review, persisted suggest/assemble, source AI consent/once-only admission
+and complete case saving remain pending. The native AI execution loop and
+report/diagram/fingerprint producer are still unavailable at this checkpoint.
+There are no new routes, dependencies, lockfiles, schemas or tax rules.
+
 ### Service slice contract (R4 onward)
 
 From R4 on, work lands as vertical slices: one command family, or one

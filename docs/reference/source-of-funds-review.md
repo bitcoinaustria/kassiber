@@ -166,3 +166,18 @@ untranslated. The Rust service preserves that envelope difference. The local
 [reproduction](../../crates/reports/scripts/repro_python_source_funds_recipient_constraints.py)
 records the discrepancy without changing Python product behavior. No recipient
 mutation tools are exposed to the in-product AI.
+
+Native CLI and daemon source-funds failures preserve non-debug response bytes.
+Under plan 21's honest-native contract, requested native debug text is empty:
+CLI debug is null without `--debug`, while daemon debug is null for typed
+refusals and an empty string for unhandled service failures. Python tracebacks
+are not synthesized. Daemon errors retain the existing secret redaction floor.
+
+The Python reference commits source/link evidence associations before response
+projection. A malformed stored amount can therefore make the request fail after
+the association has committed. Rust keeps the write and projection in one
+transaction and rolls that failure back. The synthetic
+[reproduction](../../crates/reports/scripts/repro_python_source_funds_projection_commit.py)
+records this discrepancy and the reference CLI's unredacted error message;
+Python product behavior is unchanged. This corrupt-record path is excluded
+from process parity acceptance and is tested separately for native rollback.

@@ -133,7 +133,7 @@ def cases():
         explanation=[None,'','Keep Ω',42,[],{}],
         uses_chain_observation=[None,True,False,42,'true'],
         chain_data_confirmed=[None,True,False,0,'false'],
-        expected_allocation_amount_msat=[None,'','100001',100001,100000,'100001.0',100001.9,'١٠٠٠٠١','1_00_001',[],{},False,'bad'],
+        expected_allocation_amount_msat=[None,'','100001',100001,100000,'100001.0',100001.9,'١٠٠٠٠١','1_00_001',[],{},False,'bad',float('inf'),float('-inf'),float('nan'),1e100],
         expected_from_allocation_amount_msat=[None,'100002',100001,'bad',True],
     ).items():
         for index,item in enumerate(values):

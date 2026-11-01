@@ -479,6 +479,11 @@ registers them; exit-tax preserves its reference no-registration boundary.
   non-debug response byte, all 112 tables and native routing checked. The
   [diagnostic checkpoint](docs/reference/rust-shell.md#source-funds-native-diagnostic-checkpoint-r5-partial)
   records 239 passing parity tests, zero fallbacks and five new mutation kills.
+- [x] Preserve source-funds internal-error diagnostics under the approved honest
+  native contract: identical non-debug bytes, empty native debug strings where
+  Python supplies traceback text, and null in the same remaining cases. Pin
+  CLI/daemon behavior, redaction, rollback and both database bindings; see the
+  [diagnostics checkpoint](docs/reference/rust-shell.md#source-funds-diagnostic-wire-checkpoint-r5-partial).
 - [x] Port source creation and managed-id source evidence association through
   the native service, CLI and daemon, with complete helper envelopes, all 112
   tables, file/hash invariance and late rollback on SQLite and SQLCipher.

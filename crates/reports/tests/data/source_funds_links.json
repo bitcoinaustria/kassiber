@@ -36408,6 +36408,533 @@
       }
     },
     {
+      "name": "review-expected_allocation_amount_msat-13",
+      "command": "ui.source_funds.links.review",
+      "args": {
+        "link": "l-z",
+        "expected_allocation_amount_msat": Infinity
+      },
+      "sql": "",
+      "id": "new-link",
+      "expected": {
+        "error": {
+          "code": "internal_error",
+          "message": "cannot convert float infinity to integer",
+          "hint": null,
+          "details": null,
+          "retryable": false
+        },
+        "calls": [],
+        "cli": "{\n  \"kind\": \"error\",\n  \"schema_version\": 1,\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"cannot convert float infinity to integer\",\n    \"hint\": null,\n    \"details\": null,\n    \"retryable\": false,\n    \"debug\": null\n  }\n}\n",
+        "daemon": "{\"kind\":\"error\",\"schema_version\":1,\"error\":{\"code\":\"internal_error\",\"message\":\"cannot convert float infinity to integer\",\"hint\":null,\"details\":null,\"retryable\":false,\"debug\":null}}\n"
+      },
+      "tables": {
+        "source_funds_links": [
+          {
+            "id": "l-a",
+            "workspace_id": "ws",
+            "profile_id": "p",
+            "from_source_id": "s-a",
+            "from_transaction_id": null,
+            "to_transaction_id": "in",
+            "link_type": "manual_source",
+            "state": "reviewed",
+            "confidence": "strong",
+            "method": "manual",
+            "asset": "BTC",
+            "allocation_amount": 123456789001,
+            "from_asset": "BTC",
+            "from_allocation_amount": 123456789002,
+            "allocation_policy": "explicit",
+            "explanation": "Manual evidence \u03a9",
+            "uses_chain_observation": 0,
+            "chain_data_confirmed": 0,
+            "created_at": "same",
+            "updated_at": "updated"
+          },
+          {
+            "id": "l-z",
+            "workspace_id": "ws",
+            "profile_id": "p",
+            "from_source_id": null,
+            "from_transaction_id": "in",
+            "to_transaction_id": "out",
+            "link_type": "self_transfer",
+            "state": "suggested",
+            "confidence": "exact",
+            "method": "chain_observation",
+            "asset": "BTC",
+            "allocation_amount": 100001,
+            "from_asset": "BTC",
+            "from_allocation_amount": 100002,
+            "allocation_policy": "unknown",
+            "explanation": null,
+            "uses_chain_observation": 1,
+            "chain_data_confirmed": 0,
+            "created_at": "same",
+            "updated_at": "updated"
+          },
+          {
+            "id": "l-old",
+            "workspace_id": "ws",
+            "profile_id": "p",
+            "from_source_id": "s-z",
+            "from_transaction_id": null,
+            "to_transaction_id": "out",
+            "link_type": "manual_source",
+            "state": "rejected",
+            "confidence": "weak",
+            "method": "manual",
+            "asset": "LBTC",
+            "allocation_amount": null,
+            "from_asset": null,
+            "from_allocation_amount": null,
+            "allocation_policy": "heuristic",
+            "explanation": "",
+            "uses_chain_observation": 0,
+            "chain_data_confirmed": 1,
+            "created_at": "before",
+            "updated_at": "updated"
+          },
+          {
+            "id": "l-other",
+            "workspace_id": "ws",
+            "profile_id": "other",
+            "from_source_id": "s-other",
+            "from_transaction_id": null,
+            "to_transaction_id": "excluded",
+            "link_type": "manual_source",
+            "state": "reviewed",
+            "confidence": "strong",
+            "method": "manual",
+            "asset": "BTC",
+            "allocation_amount": 999,
+            "from_asset": "BTC",
+            "from_allocation_amount": 999,
+            "allocation_policy": "explicit",
+            "explanation": null,
+            "uses_chain_observation": 0,
+            "chain_data_confirmed": 0,
+            "created_at": "z",
+            "updated_at": "z"
+          }
+        ],
+        "source_funds_link_attachments": [
+          {
+            "link_id": "l-a",
+            "attachment_id": "a-z",
+            "created_at": "first"
+          },
+          {
+            "link_id": "l-a",
+            "attachment_id": "a-old",
+            "created_at": "same"
+          },
+          {
+            "link_id": "l-a",
+            "attachment_id": "a-a",
+            "created_at": "same"
+          }
+        ]
+      }
+    },
+    {
+      "name": "review-expected_allocation_amount_msat-14",
+      "command": "ui.source_funds.links.review",
+      "args": {
+        "link": "l-z",
+        "expected_allocation_amount_msat": -Infinity
+      },
+      "sql": "",
+      "id": "new-link",
+      "expected": {
+        "error": {
+          "code": "internal_error",
+          "message": "cannot convert float infinity to integer",
+          "hint": null,
+          "details": null,
+          "retryable": false
+        },
+        "calls": [],
+        "cli": "{\n  \"kind\": \"error\",\n  \"schema_version\": 1,\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"cannot convert float infinity to integer\",\n    \"hint\": null,\n    \"details\": null,\n    \"retryable\": false,\n    \"debug\": null\n  }\n}\n",
+        "daemon": "{\"kind\":\"error\",\"schema_version\":1,\"error\":{\"code\":\"internal_error\",\"message\":\"cannot convert float infinity to integer\",\"hint\":null,\"details\":null,\"retryable\":false,\"debug\":null}}\n"
+      },
+      "tables": {
+        "source_funds_links": [
+          {
+            "id": "l-a",
+            "workspace_id": "ws",
+            "profile_id": "p",
+            "from_source_id": "s-a",
+            "from_transaction_id": null,
+            "to_transaction_id": "in",
+            "link_type": "manual_source",
+            "state": "reviewed",
+            "confidence": "strong",
+            "method": "manual",
+            "asset": "BTC",
+            "allocation_amount": 123456789001,
+            "from_asset": "BTC",
+            "from_allocation_amount": 123456789002,
+            "allocation_policy": "explicit",
+            "explanation": "Manual evidence \u03a9",
+            "uses_chain_observation": 0,
+            "chain_data_confirmed": 0,
+            "created_at": "same",
+            "updated_at": "updated"
+          },
+          {
+            "id": "l-z",
+            "workspace_id": "ws",
+            "profile_id": "p",
+            "from_source_id": null,
+            "from_transaction_id": "in",
+            "to_transaction_id": "out",
+            "link_type": "self_transfer",
+            "state": "suggested",
+            "confidence": "exact",
+            "method": "chain_observation",
+            "asset": "BTC",
+            "allocation_amount": 100001,
+            "from_asset": "BTC",
+            "from_allocation_amount": 100002,
+            "allocation_policy": "unknown",
+            "explanation": null,
+            "uses_chain_observation": 1,
+            "chain_data_confirmed": 0,
+            "created_at": "same",
+            "updated_at": "updated"
+          },
+          {
+            "id": "l-old",
+            "workspace_id": "ws",
+            "profile_id": "p",
+            "from_source_id": "s-z",
+            "from_transaction_id": null,
+            "to_transaction_id": "out",
+            "link_type": "manual_source",
+            "state": "rejected",
+            "confidence": "weak",
+            "method": "manual",
+            "asset": "LBTC",
+            "allocation_amount": null,
+            "from_asset": null,
+            "from_allocation_amount": null,
+            "allocation_policy": "heuristic",
+            "explanation": "",
+            "uses_chain_observation": 0,
+            "chain_data_confirmed": 1,
+            "created_at": "before",
+            "updated_at": "updated"
+          },
+          {
+            "id": "l-other",
+            "workspace_id": "ws",
+            "profile_id": "other",
+            "from_source_id": "s-other",
+            "from_transaction_id": null,
+            "to_transaction_id": "excluded",
+            "link_type": "manual_source",
+            "state": "reviewed",
+            "confidence": "strong",
+            "method": "manual",
+            "asset": "BTC",
+            "allocation_amount": 999,
+            "from_asset": "BTC",
+            "from_allocation_amount": 999,
+            "allocation_policy": "explicit",
+            "explanation": null,
+            "uses_chain_observation": 0,
+            "chain_data_confirmed": 0,
+            "created_at": "z",
+            "updated_at": "z"
+          }
+        ],
+        "source_funds_link_attachments": [
+          {
+            "link_id": "l-a",
+            "attachment_id": "a-z",
+            "created_at": "first"
+          },
+          {
+            "link_id": "l-a",
+            "attachment_id": "a-old",
+            "created_at": "same"
+          },
+          {
+            "link_id": "l-a",
+            "attachment_id": "a-a",
+            "created_at": "same"
+          }
+        ]
+      }
+    },
+    {
+      "name": "review-expected_allocation_amount_msat-15",
+      "command": "ui.source_funds.links.review",
+      "args": {
+        "link": "l-z",
+        "expected_allocation_amount_msat": NaN
+      },
+      "sql": "",
+      "id": "new-link",
+      "expected": {
+        "error": {
+          "code": "validation",
+          "message": "Expected allocation amount must be an exact millisatoshi integer",
+          "hint": null,
+          "details": null,
+          "retryable": false
+        },
+        "calls": [],
+        "cli": "{\n  \"kind\": \"error\",\n  \"schema_version\": 1,\n  \"error\": {\n    \"code\": \"validation\",\n    \"message\": \"Expected allocation amount must be an exact millisatoshi integer\",\n    \"hint\": null,\n    \"details\": null,\n    \"retryable\": false,\n    \"debug\": null\n  }\n}\n",
+        "daemon": "{\"kind\":\"error\",\"schema_version\":1,\"error\":{\"code\":\"validation\",\"message\":\"Expected allocation amount must be an exact millisatoshi integer\",\"hint\":null,\"details\":null,\"retryable\":false,\"debug\":null}}\n"
+      },
+      "tables": {
+        "source_funds_links": [
+          {
+            "id": "l-a",
+            "workspace_id": "ws",
+            "profile_id": "p",
+            "from_source_id": "s-a",
+            "from_transaction_id": null,
+            "to_transaction_id": "in",
+            "link_type": "manual_source",
+            "state": "reviewed",
+            "confidence": "strong",
+            "method": "manual",
+            "asset": "BTC",
+            "allocation_amount": 123456789001,
+            "from_asset": "BTC",
+            "from_allocation_amount": 123456789002,
+            "allocation_policy": "explicit",
+            "explanation": "Manual evidence \u03a9",
+            "uses_chain_observation": 0,
+            "chain_data_confirmed": 0,
+            "created_at": "same",
+            "updated_at": "updated"
+          },
+          {
+            "id": "l-z",
+            "workspace_id": "ws",
+            "profile_id": "p",
+            "from_source_id": null,
+            "from_transaction_id": "in",
+            "to_transaction_id": "out",
+            "link_type": "self_transfer",
+            "state": "suggested",
+            "confidence": "exact",
+            "method": "chain_observation",
+            "asset": "BTC",
+            "allocation_amount": 100001,
+            "from_asset": "BTC",
+            "from_allocation_amount": 100002,
+            "allocation_policy": "unknown",
+            "explanation": null,
+            "uses_chain_observation": 1,
+            "chain_data_confirmed": 0,
+            "created_at": "same",
+            "updated_at": "updated"
+          },
+          {
+            "id": "l-old",
+            "workspace_id": "ws",
+            "profile_id": "p",
+            "from_source_id": "s-z",
+            "from_transaction_id": null,
+            "to_transaction_id": "out",
+            "link_type": "manual_source",
+            "state": "rejected",
+            "confidence": "weak",
+            "method": "manual",
+            "asset": "LBTC",
+            "allocation_amount": null,
+            "from_asset": null,
+            "from_allocation_amount": null,
+            "allocation_policy": "heuristic",
+            "explanation": "",
+            "uses_chain_observation": 0,
+            "chain_data_confirmed": 1,
+            "created_at": "before",
+            "updated_at": "updated"
+          },
+          {
+            "id": "l-other",
+            "workspace_id": "ws",
+            "profile_id": "other",
+            "from_source_id": "s-other",
+            "from_transaction_id": null,
+            "to_transaction_id": "excluded",
+            "link_type": "manual_source",
+            "state": "reviewed",
+            "confidence": "strong",
+            "method": "manual",
+            "asset": "BTC",
+            "allocation_amount": 999,
+            "from_asset": "BTC",
+            "from_allocation_amount": 999,
+            "allocation_policy": "explicit",
+            "explanation": null,
+            "uses_chain_observation": 0,
+            "chain_data_confirmed": 0,
+            "created_at": "z",
+            "updated_at": "z"
+          }
+        ],
+        "source_funds_link_attachments": [
+          {
+            "link_id": "l-a",
+            "attachment_id": "a-z",
+            "created_at": "first"
+          },
+          {
+            "link_id": "l-a",
+            "attachment_id": "a-old",
+            "created_at": "same"
+          },
+          {
+            "link_id": "l-a",
+            "attachment_id": "a-a",
+            "created_at": "same"
+          }
+        ]
+      }
+    },
+    {
+      "name": "review-expected_allocation_amount_msat-16",
+      "command": "ui.source_funds.links.review",
+      "args": {
+        "link": "l-z",
+        "expected_allocation_amount_msat": 1e+100
+      },
+      "sql": "",
+      "id": "new-link",
+      "expected": {
+        "error": {
+          "code": "source_funds_link_stale",
+          "message": "This source-funds link changed since it was inspected",
+          "hint": "Reload the investigation, check the updated amounts, and review it again.",
+          "details": {
+            "link": "l-z",
+            "field": "allocation_amount"
+          },
+          "retryable": false
+        },
+        "calls": [],
+        "cli": "{\n  \"kind\": \"error\",\n  \"schema_version\": 1,\n  \"error\": {\n    \"code\": \"source_funds_link_stale\",\n    \"message\": \"This source-funds link changed since it was inspected\",\n    \"hint\": \"Reload the investigation, check the updated amounts, and review it again.\",\n    \"details\": {\n      \"link\": \"l-z\",\n      \"field\": \"allocation_amount\"\n    },\n    \"retryable\": false,\n    \"debug\": null\n  }\n}\n",
+        "daemon": "{\"kind\":\"error\",\"schema_version\":1,\"error\":{\"code\":\"source_funds_link_stale\",\"message\":\"This source-funds link changed since it was inspected\",\"hint\":\"Reload the investigation, check the updated amounts, and review it again.\",\"details\":{\"link\":\"l-z\",\"field\":\"allocation_amount\"},\"retryable\":false,\"debug\":null}}\n"
+      },
+      "tables": {
+        "source_funds_links": [
+          {
+            "id": "l-a",
+            "workspace_id": "ws",
+            "profile_id": "p",
+            "from_source_id": "s-a",
+            "from_transaction_id": null,
+            "to_transaction_id": "in",
+            "link_type": "manual_source",
+            "state": "reviewed",
+            "confidence": "strong",
+            "method": "manual",
+            "asset": "BTC",
+            "allocation_amount": 123456789001,
+            "from_asset": "BTC",
+            "from_allocation_amount": 123456789002,
+            "allocation_policy": "explicit",
+            "explanation": "Manual evidence \u03a9",
+            "uses_chain_observation": 0,
+            "chain_data_confirmed": 0,
+            "created_at": "same",
+            "updated_at": "updated"
+          },
+          {
+            "id": "l-z",
+            "workspace_id": "ws",
+            "profile_id": "p",
+            "from_source_id": null,
+            "from_transaction_id": "in",
+            "to_transaction_id": "out",
+            "link_type": "self_transfer",
+            "state": "suggested",
+            "confidence": "exact",
+            "method": "chain_observation",
+            "asset": "BTC",
+            "allocation_amount": 100001,
+            "from_asset": "BTC",
+            "from_allocation_amount": 100002,
+            "allocation_policy": "unknown",
+            "explanation": null,
+            "uses_chain_observation": 1,
+            "chain_data_confirmed": 0,
+            "created_at": "same",
+            "updated_at": "updated"
+          },
+          {
+            "id": "l-old",
+            "workspace_id": "ws",
+            "profile_id": "p",
+            "from_source_id": "s-z",
+            "from_transaction_id": null,
+            "to_transaction_id": "out",
+            "link_type": "manual_source",
+            "state": "rejected",
+            "confidence": "weak",
+            "method": "manual",
+            "asset": "LBTC",
+            "allocation_amount": null,
+            "from_asset": null,
+            "from_allocation_amount": null,
+            "allocation_policy": "heuristic",
+            "explanation": "",
+            "uses_chain_observation": 0,
+            "chain_data_confirmed": 1,
+            "created_at": "before",
+            "updated_at": "updated"
+          },
+          {
+            "id": "l-other",
+            "workspace_id": "ws",
+            "profile_id": "other",
+            "from_source_id": "s-other",
+            "from_transaction_id": null,
+            "to_transaction_id": "excluded",
+            "link_type": "manual_source",
+            "state": "reviewed",
+            "confidence": "strong",
+            "method": "manual",
+            "asset": "BTC",
+            "allocation_amount": 999,
+            "from_asset": "BTC",
+            "from_allocation_amount": 999,
+            "allocation_policy": "explicit",
+            "explanation": null,
+            "uses_chain_observation": 0,
+            "chain_data_confirmed": 0,
+            "created_at": "z",
+            "updated_at": "z"
+          }
+        ],
+        "source_funds_link_attachments": [
+          {
+            "link_id": "l-a",
+            "attachment_id": "a-z",
+            "created_at": "first"
+          },
+          {
+            "link_id": "l-a",
+            "attachment_id": "a-old",
+            "created_at": "same"
+          },
+          {
+            "link_id": "l-a",
+            "attachment_id": "a-a",
+            "created_at": "same"
+          }
+        ]
+      }
+    },
+    {
       "name": "review-expected_from_allocation_amount_msat-0",
       "command": "ui.source_funds.links.review",
       "args": {
