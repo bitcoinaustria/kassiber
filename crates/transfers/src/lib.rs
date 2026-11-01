@@ -23,6 +23,7 @@ pub mod review_artifact;
 pub mod review_cases;
 #[cfg(feature = "test-harness")]
 pub mod review_operations;
+pub mod review_reading;
 mod rules;
 #[cfg(not(feature = "test-harness"))]
 mod sql;

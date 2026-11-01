@@ -1230,6 +1230,17 @@ impl Book for RealBook {
             },
             projection,
             args,
+            &|out_id, in_id| {
+                kassiber_transfers::review_reading::reading(
+                    self.conn()?,
+                    &kassiber_transfers::Scope {
+                        workspace_id: &context.workspace_id,
+                        profile_id: &context.profile_id,
+                    },
+                    out_id,
+                    in_id,
+                )
+            },
         )
     }
 

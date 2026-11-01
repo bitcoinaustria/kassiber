@@ -4487,3 +4487,21 @@ daemons' workers produce identical events, loopback request sequences and
 tables; see the [source runner record](../reference/rust-port-egress.md#chain-analysis-source-runner-r5).
 The operations assignment is complete apart from integration with the reads
 branch.
+
+### R5 unassigned desktop projections: resolver checkpoint (partial)
+
+`t3code/r5-desktop-projections` starts at `b10e90e54` (`t3code/rust-backend-r9`).
+Only `ui.transactions.resolve` is newly registered: **1/15 requested desktop
+kinds**, with no additional CLI or AI registration. The transaction group is
+incomplete; transfers/custody, reports/export preview, review/audit and rates
+have not been started. The [checkpoint](../reference/rust-shell.md#desktop-transaction-resolution-r5-partial)
+records per-kind served-by evidence, exact envelope/all-table comparisons,
+named mutation tests and the remaining kinds.
+
+Resolution reuses the native desktop row renderer and current-journal gate.
+IDs precede external aliases, duplicate aliases retain Python's SQL ordering,
+and a focused leg keeps its observed principal and fee while pair status comes
+from the book's review queue. A shared transfer helper binds a uniquely matched
+review to its observations and allocations; ambiguous or missing reviews get
+no confirmation fingerprint. Reads grant no custody or tax authority and make
+no network request. Python product code remains unchanged.

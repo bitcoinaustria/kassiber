@@ -327,70 +327,7 @@ pub fn current_pairs(conn: &Connection, scope: &Scope<'_>) -> Result<Vec<Value>>
     Ok(result)
 }
 
-/// Bind the review, observed legs and allocations by economic content.
-pub fn pair_fingerprint(conn: &Connection, pair: &Value) -> Result<String> {
-    let mut reading = project(
-        pair,
-        &[
-            "kind",
-            "policy",
-            "out_amount",
-            "swap_fee_msat",
-            "swap_fee_kind",
-        ],
-    );
-    set(&mut reading, "pair_id", s(text(pair, "id")));
-    for side in ["out", "in"] {
-        for field in [
-            "transaction_id",
-            "asset",
-            "full_amount_msat",
-            "amount_msat",
-            "external_id",
-            "occurred_at",
-        ] {
-            let key = format!("{side}_{field}");
-            set(&mut reading, &key, value(pair, &key));
-        }
-    }
-    let mut allocations = Vec::new();
-    if truthy(&value(pair, "component_id")) {
-        for row in rows(
-            conn,
-            "SELECT source.role AS source_role,
-                    COALESCE(source.anchor_transaction_id,source.transaction_id) AS source_tx,
-                    sink.role AS sink_role,
-                    COALESCE(sink.anchor_transaction_id,sink.transaction_id) AS sink_tx,
-                    allocation.source_amount_msat,allocation.sink_amount_msat
-             FROM custody_component_allocations allocation
-             JOIN custody_component_legs source ON source.id=allocation.source_leg_id
-             JOIN custody_component_legs sink ON sink.id=allocation.sink_leg_id
-             WHERE allocation.component_id=?",
-            [text(pair, "component_id")],
-        )? {
-            allocations.push(Value::List(vec![
-                value(&row, "source_role"),
-                value(&row, "source_tx"),
-                value(&row, "sink_role"),
-                value(&row, "sink_tx"),
-                Value::Int(int_or_zero(&value(&row, "source_amount_msat"))?),
-                Value::Int(int_or_zero(&value(&row, "sink_amount_msat"))?),
-            ]));
-        }
-    }
-    // Python sorts by json.dumps(item), which uses spaces, not compact JSON.
-    let mut keyed = allocations
-        .into_iter()
-        .map(|row| Ok((json(&row, false)?, row)))
-        .collect::<Result<Vec<_>>>()?;
-    keyed.sort_by(|a, b| a.0.cmp(&b.0));
-    set(
-        &mut reading,
-        "allocations",
-        Value::List(keyed.into_iter().map(|(_, row)| row).collect()),
-    );
-    component_store::hash(&reading, true)
-}
+pub use crate::review_reading::pair_fingerprint;
 
 pub fn pair_evidence(conn: &Connection, transaction_id: &str, pair: &Value) -> Result<Value> {
     let mut legs = dict::<&str>([]);

@@ -2268,5 +2268,125 @@
       "document_prices_are_bounded_finite_and_canonicalize_zero"
     ],
     "rule": "Commercial document prices use the same finite bounded decimal boundary as Python."
+  },
+  {
+    "id": "resolve-id-precedence",
+    "file": "crates/transactions/src/desktop/resolve.rs",
+    "find": "for (column, candidates) in [(\"t.id\", ids), (\"t.external_id\", external_ids)] {",
+    "replace": "for (column, candidates) in [(\"t.external_id\", external_ids), (\"t.id\", ids)] {",
+    "expect_failing": [
+      "desktop_resolve_preserves_alias_precedence_focused_principal_and_queue_status"
+    ],
+    "rule": "Desktop IDs are selected before external aliases."
+  },
+  {
+    "id": "resolve-id-lowercase",
+    "file": "crates/transactions/src/desktop/resolve.rs",
+    "find": "ids.push(lower(query));",
+    "replace": "ids.push(query.to_owned());",
+    "expect_failing": [
+      "desktop_resolve_preserves_alias_precedence_focused_principal_and_queue_status"
+    ],
+    "rule": "Desktop ID lookup includes the lowercased query."
+  },
+  {
+    "id": "resolve-external-uppercase",
+    "file": "crates/transactions/src/desktop/resolve.rs",
+    "find": "external_ids.push(upper(query));",
+    "replace": "external_ids.push(query.to_owned());",
+    "expect_failing": [
+      "desktop_resolve_preserves_alias_precedence_focused_principal_and_queue_status"
+    ],
+    "rule": "External aliases also try the uppercase query."
+  },
+  {
+    "id": "resolve-order",
+    "file": "crates/transactions/src/desktop/resolve.rs",
+    "find": "ORDER BY t.occurred_at DESC,t.created_at DESC,t.id DESC LIMIT 1",
+    "replace": "ORDER BY t.occurred_at ASC,t.created_at ASC,t.id ASC LIMIT 1",
+    "expect_failing": [
+      "desktop_resolve_preserves_alias_precedence_focused_principal_and_queue_status"
+    ],
+    "rule": "Duplicate aliases retain descending SQL text order."
+  },
+  {
+    "id": "resolve-id-order",
+    "file": "crates/transactions/src/desktop/resolve.rs",
+    "find": "let order_limit = if column == \"t.id\" {",
+    "replace": "let order_limit = if false {",
+    "expect_failing": [
+      "desktop_resolve_preserves_alias_precedence_focused_principal_and_queue_status"
+    ],
+    "rule": "Direct ID candidates retain the reference's unsorted lookup."
+  },
+  {
+    "id": "resolve-profile",
+    "file": "crates/transactions/src/desktop/resolve.rs",
+    "find": "WHERE t.profile_id=? AND {column}",
+    "replace": "WHERE (t.profile_id=? OR 1) AND {column}",
+    "expect_failing": [
+      "desktop_resolve_preserves_alias_precedence_focused_principal_and_queue_status"
+    ],
+    "rule": "Resolution remains bound to the active profile."
+  },
+  {
+    "id": "resolve-focused-principal",
+    "file": "crates/transactions/src/desktop/resolve.rs",
+    "find": "let focused = lower(text(&row, \"id\")) == lower(query);",
+    "replace": "let focused = false;",
+    "expect_failing": [
+      "desktop_resolve_preserves_alias_precedence_focused_principal_and_queue_status"
+    ],
+    "rule": "An ID resolution displays the focused observed principal."
+  },
+  {
+    "id": "resolve-focused-pair-fee",
+    "file": "crates/transactions/src/desktop/resolve.rs",
+    "find": "set(&mut displayed, \"feeSat\", render::sat(num(&row, \"fee\")));",
+    "replace": "set(&mut displayed, \"feeSat\", Value::Null);",
+    "expect_failing": [
+      "desktop_resolve_preserves_alias_precedence_focused_principal_and_queue_status"
+    ],
+    "rule": "A focused pair displays its observed leg fee."
+  },
+  {
+    "id": "resolve-queue-status",
+    "file": "crates/transactions/src/desktop/resolve.rs",
+    "find": "if text(pair, \"kind\") != \"journal-derived\" {",
+    "replace": "if false {",
+    "expect_failing": [
+      "desktop_resolve_preserves_alias_precedence_focused_principal_and_queue_status"
+    ],
+    "rule": "Detail pair status follows the whole-book review queue."
+  },
+  {
+    "id": "resolve-current",
+    "file": "crates/transactions/src/desktop/resolve.rs",
+    "find": "let current = current(conn, scope)?;",
+    "replace": "let current = true;",
+    "expect_failing": [
+      "desktop_resolve_preserves_alias_precedence_focused_principal_and_queue_status"
+    ],
+    "rule": "Stale stored journals cannot annotate resolution with current custody."
+  },
+  {
+    "id": "resolve-no-context",
+    "file": "crates/transactions/src/desktop/resolve.rs",
+    "find": "if scope.workspace_id.is_empty() || scope.profile_id.is_empty() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "desktop_missing_context_short_circuits_list_search_but_extremes_validates"
+    ],
+    "rule": "Absent book context precedes argument validation."
+  },
+  {
+    "id": "resolve-query-trim",
+    "file": "crates/transactions/src/desktop/resolve.rs",
+    "find": ".map(strip)",
+    "replace": ".map(|query| query)",
+    "expect_failing": [
+      "desktop_resolve_preserves_alias_precedence_focused_principal_and_queue_status"
+    ],
+    "rule": "Resolver queries strip Python whitespace."
   }
 ]

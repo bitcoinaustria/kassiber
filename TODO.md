@@ -87,6 +87,25 @@ ordered compatibility, hidden-home cutover and legacy project migration through
 - [ ] Complete storage crash/backup and Windows/macOS acceptance, then wire
   maintenance commands with Python-safe journals and credential stale guards.
 
+## Rust backend R5 desktop projections
+
+The [resolver checkpoint](docs/reference/rust-shell.md#desktop-transaction-resolution-r5-partial)
+ports **1/15** requested unassigned desktop kinds. The first transaction group
+is incomplete; no subsequent group has been started.
+
+- [ ] Finish `ui.transactions.dashboard`, `ui.transactions.graph` and
+  `ui.transactions.review_context`, with exact envelopes, all-table comparisons,
+  named mutation kills and a group commit.
+- [ ] Port `ui.transfers.review_context`, `ui.custody.coverage.snapshot` and
+  `ui.custody.lineage.snapshot`.
+- [ ] Port `ui.reports.capital_gains` and `ui.exports.preview` while retaining
+  report-readiness and maintenance barriers.
+- [ ] Port `ui.report.blockers`, `ui.audit.changes_since_last_answer`,
+  `ui.audit.evidence.summary`, `ui.review.worklist` and `ui.review.request_input`.
+  Keep their AI projections in Python and retain the direct worklist refusal.
+- [ ] Port `ui.rates.rebuild` through the native rates service, with exact-action
+  consent and offline checks on every `kassiber-net` fetch.
+
 ## Rust backend R5 rates
 
 The partial [rates checkpoint](docs/reference/rust-shell.md#rates-service-checkpoint-r5-partial)
@@ -291,8 +310,10 @@ reverts and the grouped desktop metadata-update kind are implemented, including
 exact pricing, review/tax validation and atomic audited edits. `transactions list`
 now preserves observed CLI pages, scoped filters, sort/cursor bytes and unpaged
 counts. Desktop list/search/extremes now preserve grouped custody rows, queue
-status, signed display sorts, exact bounds and cursor pages; the five other
-transaction desktop projections and exports remain unported. Documents now cover
+status, signed display sorts, exact bounds and cursor pages. Desktop resolution
+now preserves ID/alias selection, focused-leg principal and reviewed pair
+fingerprints. Dashboard, graph, review context and ledger template remain
+unported; transaction exports use the separate report service. Documents now cover
 registration, transactionless evidence and prior-report archives, with stored
 commercial matching/context reads. AI
 projections stay Python. Progress and remaining work for this slice:
@@ -305,7 +326,9 @@ projections stay Python. Progress and remaining work for this slice:
   state, with raw JSONL parity and killed filter/order/count/page mutations.
 - [x] Port commercial documents through the CLI and daemon, with stored
   matching, context reads, parity and mutation evidence in the acceptance record.
-- [ ] Port desktop dashboard/resolve/graph/review-context/template projections.
+- [x] Port desktop transaction resolution with raw JSONL parity, unchanged
+  112-table snapshots and named mutation kills.
+- [ ] Port desktop dashboard/graph/review-context/template projections.
   Preserve the exact
   dependencies and remaining editor-smoke boundary in the acceptance record.
 - [ ] Complete descriptor/input-graph BIP329 matching and standard-field

@@ -2801,5 +2801,55 @@
       "desktop_component_reads_bound_pages_and_keep_local_evidence_private"
     ],
     "rule": "JSON component identifiers must not lose surrogate code points."
+  },
+  {
+    "id": "desktop-reading-missing",
+    "file": "crates/transfers/src/review_reading.rs",
+    "find": "first.is_none() || matches.next().is_some()",
+    "replace": "first.is_some() || matches.next().is_some()",
+    "expect_failing": [
+      "desktop_pair_readings_match_frozen_python_fingerprints_without_writes"
+    ],
+    "rule": "Missing pair reviews never acquire a reading."
+  },
+  {
+    "id": "desktop-reading-observation",
+    "file": "crates/transfers/src/review_reading.rs",
+    "find": "value(pair, &key)",
+    "replace": "Value::Null",
+    "expect_failing": [
+      "desktop_pair_readings_match_frozen_python_fingerprints_without_writes"
+    ],
+    "rule": "Fingerprints bind both observed legs."
+  },
+  {
+    "id": "desktop-reading-allocations",
+    "file": "crates/transfers/src/review_reading.rs",
+    "find": "\"allocations\",\n        Value::List(keyed.into_iter().map(|(_, row)| row).collect()),",
+    "replace": "\"allocations\",\n        Value::List(vec![]),",
+    "expect_failing": [
+      "desktop_pair_readings_match_frozen_python_fingerprints_without_writes"
+    ],
+    "rule": "Fingerprints bind all authored allocations."
+  },
+  {
+    "id": "desktop-reading-source",
+    "file": "crates/transfers/src/review_reading.rs",
+    "find": "allocation.source_amount_msat,allocation.sink_amount_msat",
+    "replace": "allocation.sink_amount_msat AS source_amount_msat,allocation.sink_amount_msat",
+    "expect_failing": [
+      "desktop_pair_readings_match_frozen_python_fingerprints_without_writes"
+    ],
+    "rule": "Fingerprints preserve asymmetric allocation quantities."
+  },
+  {
+    "id": "desktop-reading-ambiguous",
+    "file": "crates/transfers/src/review_reading.rs",
+    "find": "first.is_none() || matches.next().is_some()",
+    "replace": "first.is_none()",
+    "expect_failing": [
+      "desktop_pair_readings_refuse_ambiguous_reviews_and_foreign_profiles"
+    ],
+    "rule": "Ambiguous current reviews do not grant an unpair fingerprint."
   }
 ]

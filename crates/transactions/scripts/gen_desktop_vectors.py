@@ -33,6 +33,27 @@ def generate():
             output.append(dict(group=group, kind="ui.transactions." + kind, args=args, setup=setup, expected=expected, error=error))
             return expected
 
+        for args in ({}, None, [], {"query": ""}, {"query": 3}, {"query": " "},
+                     {"query": "a", "z": 1, "extra": 2}, {"query": " a "},
+                     {"query": "A"}, {"query": "external-E"}, {"query": "PAYMENT-HASH"},
+                     {"query": "absent"}, {"query": "foreign"}, {"query": "d"}):
+            add("resolve", args, kind="resolve")
+        uppercase = "UPDATE transactions SET external_id='PAYMENT-HASH' WHERE id='b';"
+        conn.executescript(uppercase)
+        add("resolve", {"query": "payment-hash"}, kind="resolve", setup=uppercase)
+        conn.execute("UPDATE transactions SET external_id='payment-hash' WHERE id='b'")
+        aliases = "UPDATE transactions SET external_id='a' WHERE id='e';"
+        conn.executescript(aliases)
+        add("resolve", {"query": "a"}, kind="resolve", setup=aliases)
+        conn.execute("UPDATE transactions SET external_id='external-e' WHERE id='e'")
+        duplicate = "UPDATE transactions SET external_id='duplicate' WHERE id IN ('b','e','g');"
+        conn.executescript(duplicate)
+        add("resolve", {"query": "duplicate"}, kind="resolve", setup=duplicate)
+        conn.execute("UPDATE transactions SET external_id=CASE id WHEN 'b' THEN 'payment-hash' WHEN 'e' THEN 'external-e' WHEN 'g' THEN 'external-g' ELSE external_id END")
+        case_ids = "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,asset,direction,amount,fee,occurred_at,created_at) VALUES('A','w','p','cold','case-id','BTC','inbound',2001,0,'2020','2020');"
+        conn.executescript(case_ids)
+        add("resolve", {"query": "A"}, kind="resolve", setup=case_ids)
+        conn.execute("DELETE FROM transactions WHERE id='A'")
         for key, values in (
             ("wallet", ["Cold", "cold", "ln", "absent"]),
             ("direction", ["inbound", "outbound"]), ("asset", ["btc", "LBTC", "ß"]),
@@ -80,6 +101,8 @@ def generate():
             add("refusals", args)
         setup = """INSERT INTO journal_custody_economic_relations(relation_id,workspace_id,profile_id,relation_kind,source_transaction_id,target_transaction_id,source_asset,target_asset,source_amount_msat,target_amount_msat,basis_state,occurred_at,created_at) VALUES('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','w','p','conversion','g','b','BTC','LBTC',100001,100001,'eligible','2025','2025'); UPDATE profiles SET last_processed_at='2025',last_processed_tx_count=7,journal_input_version=2,last_processed_input_version=2 WHERE id='p'; UPDATE profiles SET journal_semantics_version=2 WHERE id='p';"""
         conn.executescript(setup)
+        for query in ("b", "B", "g", "payment-hash", "external-g"):
+            add("resolve", {"query": query}, kind="resolve", setup=setup)
         for args in ({}, {"status": "review"}, {"status": "completed", "wallet": "ln"}, {"quick": "review_queue"}, {"quick": "failed_import"}, {"flow": "swap"}, {"flow": "incoming"}, {"since": "2025-02-01", "status": "completed"}):
             add("pairs", args, setup=setup)
         args = {"limit": 1}
@@ -89,17 +112,22 @@ def generate():
         for marker in ("last_processed_tx_count=0", "last_processed_input_version=1", "last_processed_at=NULL"):
             change = f"UPDATE profiles SET {marker} WHERE id='p';"
             conn.executescript(change)
+            add("resolve", {"query": "b"}, kind="resolve", setup=setup + change)
             for flow in ("swap", "incoming", "transfer"):
                 add("freshness", {"flow": flow}, setup=setup + change)
             conn.executescript("DELETE FROM journal_custody_economic_relations;" + setup)
         conn.execute("DELETE FROM journal_custody_economic_relations")
         move = """INSERT INTO journal_custody_decisions(decision_id,workspace_id,profile_id,source_transaction_id,target_transaction_id,source_observation_hash,source_start_msat,source_end_msat,target_observation_hash,target_start_msat,target_end_msat,source_network,target_network,source_rail,target_rail,source_asset,target_asset,state,basis_state,reason,occurred_at,created_at) VALUES('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb','w','p','g','b','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',0,100001,'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',0,100001,'main','main','onchain','onchain','BTC','BTC','internal_reviewed','eligible','test','2025','2025'); UPDATE profiles SET last_processed_at='2025',last_processed_tx_count=7,journal_input_version=2,last_processed_input_version=2 WHERE id='p'; UPDATE profiles SET journal_semantics_version=2 WHERE id='p';"""
         conn.executescript(move)
+        for query in ("b", "g", "payment-hash", "external-g"):
+            add("resolve", {"query": query}, kind="resolve", setup=move)
         for args in ({}, {"flow": "transfer"}, {"flow": "incoming"}, {"wallet": "ln", "status": "completed"}, {"status": "review"}):
             add("moves", args, setup=move)
         conn.execute("DELETE FROM journal_custody_decisions")
         journal = """INSERT INTO journal_entries(id,workspace_id,profile_id,transaction_id,wallet_id,occurred_at,entry_type,asset,quantity,description,created_at) VALUES('jin','w','p','b','ln','2025','transfer_in','BTC',100001,'transfer','2025'),('jout','w','p','g','cold','2025','transfer_out','BTC',-100001,'transfer','2025'); UPDATE profiles SET last_processed_at='2025',last_processed_tx_count=7,journal_input_version=2,last_processed_input_version=2 WHERE id='p'; UPDATE profiles SET journal_semantics_version=2 WHERE id='p';"""
         conn.executescript(journal)
+        for query in ("b", "payment-hash"):
+            add("resolve", {"query": query}, kind="resolve", setup=journal)
         add("moves", {}, setup=journal)
         conn.close()
     return json.dumps(output, ensure_ascii=True, separators=(",", ":")) + "\n"

@@ -179,7 +179,7 @@ class RustTransactionListingTest(unittest.TestCase):
 
     def test_unported_desktop_surfaces_remain_explicit_refusals(self):
         kinds = ["ui.transactions." + suffix for suffix in (
-            "dashboard", "resolve", "graph", "review_context", "ledger_template")]
+            "dashboard", "graph", "review_context", "ledger_template")]
         kinds += ["ui.btcpay.provenance.sync", "ui.btcpay.provenance.review"]
         wire = "".join(json.dumps({"request_id": str(i), "kind": kind}) + "\n" for i, kind in enumerate([*kinds, "daemon.shutdown"]))
         result = subprocess.run([RUST_BIN, "--machine", "--data-root", str(self.root), "daemon"], env=self.env, input=wire, text=True, capture_output=True, timeout=120)

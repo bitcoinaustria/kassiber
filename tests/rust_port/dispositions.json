@@ -3026,6 +3026,9 @@
     "tests/test_rust_transaction_listing.py": {
       "RustTransactionListingTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "compares observed Rust CLI pages, all filters, sort and cursor bytes, exact msat values and fail-closed export/desktop barriers with Python on disposable books", "reviewed": true, "tests": 5}
     },
+    "tests/test_rust_transaction_resolve.py": {
+      "RustTransactionResolveTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "compares native desktop resolution raw JSONL and all 112 tables with Python, including aliases, focused pair amounts, stale journals and reviewed fingerprints", "reviewed": true, "tests": 4}
+    },
     "tests/test_rust_transaction_services.py": {
       "RustTransactionServicesTest": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.db", "reviewed": false, "tests": 4}
     },

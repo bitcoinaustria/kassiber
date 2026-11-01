@@ -1,6 +1,7 @@
 //! Desktop transaction reads over persisted observations and journal projections.
 //! These reads never process journals, infer ownership or contact a provider.
 mod render;
+mod resolve;
 mod sql;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -17,6 +18,7 @@ pub const KINDS: &[&str] = &[
     "ui.transactions.list",
     "ui.transactions.extremes",
     "ui.transactions.search",
+    "ui.transactions.resolve",
 ];
 
 /// The complete desktop projection allowlist; there is no generic kind dispatch.
@@ -25,6 +27,7 @@ pub enum Projection {
     List,
     Search,
     Extremes,
+    Resolve,
 }
 impl Projection {
     pub fn from_kind(kind: &str) -> Option<Self> {
@@ -32,6 +35,7 @@ impl Projection {
             "ui.transactions.list" => Some(Self::List),
             "ui.transactions.search" => Some(Self::Search),
             "ui.transactions.extremes" => Some(Self::Extremes),
+            "ui.transactions.resolve" => Some(Self::Resolve),
             _ => None,
         }
     }
@@ -40,6 +44,7 @@ impl Projection {
             Self::List => "ui.transactions.list",
             Self::Search => "ui.transactions.search",
             Self::Extremes => "ui.transactions.extremes",
+            Self::Resolve => "ui.transactions.resolve",
         }
     }
 }
@@ -331,7 +336,11 @@ pub fn execute(
     scope: &Scope<'_>,
     projection: Projection,
     args: Option<&Value>,
+    pair_reading: &dyn Fn(&str, &str) -> Result<Value>,
 ) -> Result<Value> {
+    if matches!(projection, Projection::Resolve) {
+        return resolve::execute(conn, scope, args, pair_reading);
+    }
     let kind = projection.kind();
     let empty = dict::<&str>([]);
     let args = args.filter(|v| !matches!(v, Value::Null)).unwrap_or(&empty);
@@ -366,9 +375,9 @@ pub fn execute(
         set(&mut base, "limit", Value::Int(limit.into()));
         set(&mut base, "sort", s("amount"));
         set(&mut base, "order", s("desc"));
-        let largest = execute(conn, scope, Projection::List, Some(&base))?;
+        let largest = execute(conn, scope, Projection::List, Some(&base), pair_reading)?;
         set(&mut base, "order", s("asc"));
-        let smallest = execute(conn, scope, Projection::List, Some(&base))?;
+        let smallest = execute(conn, scope, Projection::List, Some(&base), pair_reading)?;
         let filters = val(&largest, "filters");
         return Ok(dict([
             ("largest", val(&largest, "txs")),

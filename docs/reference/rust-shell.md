@@ -96,7 +96,7 @@ Python's identifier signals, uniqueness refusals, principal-based confidence,
 document enrichment, rejected-link retention and response ordering. Suggestions
 never apply pricing or kind changes. Prior reports remain evidence without
 ledger, lot, ownership, custody or tax authority.
-`ui.transactions.dashboard/resolve/graph/review_context/ledger_template`,
+`ui.transactions.dashboard/graph/review_context/ledger_template`,
 journal/report processing, BTCPay
 provenance sync and commercial review remain `not_implemented`. Transaction
 CSV, XLSX, CoinTracking and Blockpit exports now use the native report transport
@@ -15339,3 +15339,101 @@ Rust test), checks cancellation leaves no active pack, and compares eight daemon
 refusals per offline setting byte for byte. Four named mutations are killed.
 At integration, drop the duplicated `runtime.rs`, `preview.rs` and daemon
 hunks in favour of the read branch's copies and keep `stream_claims`.
+
+## Desktop transaction resolution (R5, partial)
+
+`t3code/r5-desktop-projections` starts at `b10e90e54`
+(`t3code/rust-backend-r9`). This checkpoint ports only
+`ui.transactions.resolve`: **1/15 requested desktop kinds**. The first
+transaction group is incomplete; the other four groups have not been started.
+There are no new CLI or AI registrations, dependencies, schema changes or
+Python product changes.
+
+The resolver reuses native transaction presentation and the current-journal
+barrier. Direct IDs precede external aliases, case candidates retain Python's
+unsorted ID lookup, and duplicate external aliases retain descending SQL text
+order. An ID-focused pair displays its observed leg's principal, rate, fiat
+value and fee, including the nested fee; its review status comes from the
+whole-book queue. Missing book context still precedes argument validation.
+Only a uniquely matched current authored review supplies a review identity and
+fingerprint. The shared transfer helper binds observed legs and all authored
+allocations, preserves nullable external IDs, and leaves confirmation fields
+null for missing or ambiguous reviews. This read establishes no ownership or
+tax fact and initiates no network traffic.
+
+The frozen desktop corpus adds **32 resolver cases**. The pair-reading tests
+check **18 frozen Python fingerprints**, missing and ambiguous reviews,
+foreign-profile isolation and unchanged data. Product acceptance uses native
+daemon processes and the unchanged Python oracle, compares response JSONL
+bytes, and checks every row in all **112 logical tables** before and after
+each implementation, on plaintext and SQLCipher books. The daemon handshake
+must advertise the new kind. Native execution contains no Python fallback.
+
+All **17 new mutations build and are killed** after their four named baseline
+selections pass. The catalogs contain **239 transaction entries** and **285
+transfer entries**; inherited kills are not rerun at this checkpoint.
+
+| Named test | New mutations killed |
+| --- | ---: |
+| `desktop_resolve_preserves_alias_precedence_focused_principal_and_queue_status` | 11 |
+| `desktop_missing_context_short_circuits_list_search_but_extremes_validates` | 1 |
+| `desktop_pair_readings_match_frozen_python_fingerprints_without_writes` | 4 |
+| `desktop_pair_readings_refuse_ambiguous_reviews_and_foreign_profiles` | 1 |
+
+The four resolver acceptance tests record **45 native responses across 14
+daemon sessions: 36 successes and nine typed validation refusals**, with
+**zero Python fallbacks**. The 14 deferred kinds have no new successful native
+acceptance calls at this checkpoint.
+
+The eight-test Python run also repeats the three existing desktop page
+scenarios and the explicit unported-kind refusal regression. Its inherited
+page calls are **158 list, 70 search and 13 extremes responses**, all native;
+the combined served-by witness contains **286 Rust responses**.
+
+| Requested desktop kind | Successful Rust-served calls | Python fallbacks |
+| --- | ---: | ---: |
+| `ui.transactions.resolve` | 36 | 0 |
+| `ui.transactions.dashboard` | 0 | 0 |
+| `ui.transactions.graph` | 0 | 0 |
+| `ui.transactions.review_context` | 0 | 0 |
+| `ui.transfers.review_context` | 0 | 0 |
+| `ui.custody.coverage.snapshot` | 0 | 0 |
+| `ui.custody.lineage.snapshot` | 0 | 0 |
+| `ui.reports.capital_gains` | 0 | 0 |
+| `ui.exports.preview` | 0 | 0 |
+| `ui.report.blockers` | 0 | 0 |
+| `ui.audit.changes_since_last_answer` | 0 | 0 |
+| `ui.audit.evidence.summary` | 0 | 0 |
+| `ui.review.worklist` | 0 | 0 |
+| `ui.review.request_input` | 0 | 0 |
+| `ui.rates.rebuild` | 0 | 0 |
+
+Clean-tree native verification passes **22 tests**: 12 desktop tests, eight
+inherited review-case tests and two pair-reading tests. All-target clippy for
+transactions, transfers and the harness binary passes with warnings denied.
+Workspace formatting and the frozen oracle check pass; all **201 inherited
+vectors remain unchanged**. The required classifier update records **6,026
+test definitions**, and the required CI preflight passes all **57 checks**.
+An earlier verification reused stale mutation artifacts; the accepted native
+results use a separate, freshly built verification tree.
+
+Scratch, mutation and verification builds stay under
+this worktree's `target/`; Cargo uses the pinned toolchain, offline/locked
+dependencies and six build jobs. Account `HOME` is preserved and uv uses the
+shared cache. Mutation scratch and verification build trees are removed after
+their results are summarized. The small accepted summaries remain in
+`target/r5-desktop-scratch/verification-summary.json` and `mutation-final.log`.
+
+Remaining kinds, in the requested order:
+
+1. Transactions: `ui.transactions.dashboard`, `ui.transactions.graph`,
+   `ui.transactions.review_context`.
+2. Transfers/custody: `ui.transfers.review_context`,
+   `ui.custody.coverage.snapshot`, `ui.custody.lineage.snapshot`.
+3. Reports/export preview: `ui.reports.capital_gains`, `ui.exports.preview`.
+   Report-readiness barriers still apply.
+4. Review/audit: `ui.report.blockers`, `ui.audit.changes_since_last_answer`,
+   `ui.audit.evidence.summary`, `ui.review.worklist`, `ui.review.request_input`.
+   Their AI projections stay in Python; the direct worklist refusal remains.
+5. Rates: `ui.rates.rebuild`. Reuse the native rates crate; every fetch must
+   pass exact-action consent and offline checks through `kassiber-net`.

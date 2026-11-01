@@ -102,6 +102,11 @@ fn desktop_moves_use_stored_decisions_and_journal_fallback_without_inventing_fee
 }
 
 #[test]
+fn desktop_resolve_preserves_alias_precedence_focused_principal_and_queue_status() {
+    vectors("resolve");
+}
+
+#[test]
 fn desktop_relative_periods_use_midnight_and_alias_precedence() {
     let tmp = tempfile::tempdir().unwrap();
     let book = Book::create(tmp.path(), None).unwrap();
@@ -177,6 +182,15 @@ fn desktop_missing_context_short_circuits_list_search_but_extremes_validates() {
             Some(&Value::Int(0.into()))
         );
     }
+    let resolved = execute(
+        book.connection(),
+        &scope,
+        "ui.transactions.resolve",
+        Some(&Value::List(vec![])),
+    )
+    .unwrap();
+    assert_eq!(get(&resolved, "transaction"), Some(&Value::Null));
+    assert_eq!(get(&resolved, "query"), Some(&s("")));
     assert_eq!(
         execute(
             book.connection(),
@@ -201,5 +215,11 @@ fn execute(
         scope,
         desktop::Projection::from_kind(kind).unwrap(),
         args,
+        &|_, _| {
+            Ok(kassiber_envelope::dict([
+                ("reviewPairId", Value::Null),
+                ("pairFingerprint", Value::Null),
+            ]))
+        },
     )
 }

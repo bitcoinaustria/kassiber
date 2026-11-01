@@ -73,7 +73,7 @@ pub(super) fn pairs(
     }
     Ok(output)
 }
-fn positive(raw: &Value) -> Value {
+pub(super) fn positive(raw: &Value) -> Value {
     if *raw == Value::Null {
         return Value::Null;
     }
@@ -82,7 +82,7 @@ fn positive(raw: &Value) -> Value {
         _ => Value::Null,
     }
 }
-fn sat(msat: i64) -> Value {
+pub(super) fn sat(msat: i64) -> Value {
     if msat % 1000 == 0 {
         Value::Int((msat / 1000).into())
     } else {

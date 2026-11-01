@@ -1461,7 +1461,7 @@ new entries; a single 226-entry run is not claimed. The 50 new mappings follow.
 | `document-url-surrogate` | `document_evidence_is_literal_transactionless_hashed_and_atomic` |
 <!-- document-mutations:end -->
 
-Remaining work: the five deferred transaction desktop projections and full
+Remaining work: the four deferred transaction desktop projections and full
 editor smoke session, transaction exports in every format, journal processing
 and reports, BTCPay provenance sync and commercial review, descriptor/input-graph
 BIP329 matching, standard-field surrogate support and native-platform evidence.
@@ -1469,3 +1469,27 @@ The stored commercial section is now available to a future review-context port;
 the whole review-context kind remains `not_implemented`. OCR/import-draft AI
 workflows and AI projections are outside this document-family port. Native
 platform checks and full Python shards remain with the orchestrator.
+
+## Desktop resolution continuation (partial)
+
+The [R5 resolver checkpoint](rust-shell.md#desktop-transaction-resolution-r5-partial)
+registers `ui.transactions.resolve` on `t3code/r5-desktop-projections` from
+`b10e90e54`. This supersedes the preceding deferred-resolver statements;
+dashboard, graph, review context and ledger template remain unported. The
+resolver uses the existing desktop renderer, exact integer msat amounts and
+current-journal gate. A uniquely matched authored pair supplies its reviewed
+identity and economic fingerprint through the shared transfer service. Missing
+or ambiguous review matches carry null confirmation fields. The 32 frozen
+resolver vectors and plaintext/SQLCipher daemon comparisons pin alias ordering,
+focused principal and fee, grouped review status, profile scope and no-context
+validation order. All 112 logical tables stay unchanged by these reads.
+
+The new transaction mutation entries are `resolve-id-precedence`,
+`resolve-id-lowercase`, `resolve-external-uppercase`, `resolve-order`,
+`resolve-id-order`, `resolve-profile`, `resolve-focused-principal`, `resolve-focused-pair-fee`,
+`resolve-queue-status`, `resolve-current`, `resolve-no-context` and
+`resolve-query-trim`. The transfer catalog adds `desktop-reading-missing`,
+`desktop-reading-observation`, `desktop-reading-allocations`,
+`desktop-reading-source` and `desktop-reading-ambiguous`. Each entry names its
+killer test in its owning catalog. The shell checkpoint records the run results;
+previous mutation kills are inherited, not claimed as rerun here.
