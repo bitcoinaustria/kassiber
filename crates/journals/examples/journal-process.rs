@@ -21,6 +21,8 @@ struct Tapes<'a> {
     clock_reads: Cell<usize>,
     build_clock_reads: Cell<usize>,
     uuid_reads: Cell<usize>,
+    pause_precise: Option<u64>,
+    fail_precise: Option<u64>,
 }
 impl Sources for Tapes<'_> {
     fn uuid(&self, _: &Connection) -> Result<String, kassiber_envelope::AppError> {
@@ -52,7 +54,26 @@ impl Sources for Tapes<'_> {
     }
     fn now_precise(&self, _: &Connection) -> Result<String, kassiber_envelope::AppError> {
         self.build_clock_reads.set(self.build_clock_reads.get() + 1);
+        if self.pause_precise == Some(self.build_clock_reads.get() as u64) {
+            pause(json!({"paused_precise": self.build_clock_reads.get()}));
+        }
+        if self.fail_precise == Some(self.build_clock_reads.get() as u64) {
+            let mut error = kassiber_envelope::AppError::new(
+                "auto_pair_failed",
+                "injected pairing clock failure",
+            );
+            error.retryable = true;
+            return Err(error);
+        }
         Ok(self.clock.to_owned())
+    }
+}
+
+fn pause(record: Value) -> ! {
+    println!("{record}");
+    io::stdout().flush().expect("kill-point stdout");
+    loop {
+        std::thread::park();
     }
 }
 
@@ -165,6 +186,8 @@ fn run(v: &Value) -> Result<(), Box<dyn std::error::Error>> {
         clock_reads: Cell::new(0),
         build_clock_reads: Cell::new(0),
         uuid_reads: Cell::new(0),
+        pause_precise: v["pause_precise"].as_u64(),
+        fail_precise: v["fail_precise"].as_u64(),
     };
     let mut identity = || sources.uuid(&c).map_err(|e| Refusal::from(e.message));
     let mut phases = Vec::new();
@@ -191,10 +214,20 @@ fn run(v: &Value) -> Result<(), Box<dyn std::error::Error>> {
         // Both observers write to one ordered event sequence; their contracts
         // differ because only the outer freshness observer may commit.
         let phases = RefCell::new(&mut phases);
-        let mut observer = |phase| {
+        let phase_counts = RefCell::new(std::collections::BTreeMap::new());
+        let observe = |phase: &'static str| {
+            let mut counts = phase_counts.borrow_mut();
+            let occurrence = counts.entry(phase).or_insert(0_u64);
+            *occurrence += 1;
+            if v["pause_phase"] == phase && v["pause_phase_occurrence"] == *occurrence {
+                pause(json!({"paused_phase":phase,"occurrence":occurrence}));
+            }
             phases.borrow_mut().push(
                 json!({"phase":phase,"wall":start.elapsed().as_secs_f64(),"cpu":cpu()-started_cpu}),
-            )
+            );
+        };
+        let mut observer = |phase| {
+            observe(phase);
         };
         process::refresh_native(
             &c,
@@ -207,11 +240,7 @@ fn run(v: &Value) -> Result<(), Box<dyn std::error::Error>> {
                 ..Default::default()
             },
             &mut observer,
-            &mut |phase| {
-                phases.borrow_mut().push(
-                json!({"phase":phase,"wall":start.elapsed().as_secs_f64(),"cpu":cpu()-started_cpu}),
-            )
-            },
+            &mut |phase| observe(phase),
             &mut writes,
         )
     } else if v["native_prebuild"] == true {
@@ -241,7 +270,8 @@ fn run(v: &Value) -> Result<(), Box<dyn std::error::Error>> {
         Err(error) => {
             let mut reply = json!({"ok":false,"error":error.to_string(),
                 "refusal":error,"phases":phases,"clock_reads":sources.clock_reads.get(),
-                "build_clock_reads":sources.build_clock_reads.get(),"uuid_reads":sources.uuid_reads.get()});
+                "build_clock_reads":sources.build_clock_reads.get(),"uuid_reads":sources.uuid_reads.get(),
+                "write_count":writes.observed});
             if v["dump"] == true {
                 reply["dump"] = support::snapshot(&c);
             }
@@ -253,6 +283,7 @@ fn run(v: &Value) -> Result<(), Box<dyn std::error::Error>> {
     let payload_json = kassiber_pyjson::dumps(&result.ordered_payload, &Default::default())?;
     let mut reply = json!({"ok":true,"payload":result.payload,"payload_json":payload_json,"phases":phases,
         "clock_reads":sources.clock_reads.get(),"build_clock_reads":sources.build_clock_reads.get(),"uuid_reads":sources.uuid_reads.get(),
+        "write_count":writes.observed,
         "wall_seconds":start.elapsed().as_secs_f64(),"cpu_seconds":cpu()-started_cpu});
     if v["dump"] == true {
         reply["dump"] = support::snapshot(&c);

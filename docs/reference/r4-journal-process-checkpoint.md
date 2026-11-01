@@ -940,3 +940,38 @@ census/shadow and inherited mutation catalogs through the registered routes,
 with source/binary manifests and zero fallbacks on valid books. Benchmark all
 four registered commands/books from process start to exit against Python with
 load recorded; the inherited probe measurements do not close that gate.
+
+## Sixth continuation: invocation recovery contract
+
+`t3code/r4-13-journals-process-6` starts at `08e99c524`. The full-invocation
+rollback requirement allows Python's exact staged-commit semantics. The
+reference `refresh_journals_step` commits the first stale rebuild in
+`_journals_process_payload` before invoking pairing. A failed second rebuild
+rolls back pending pairs and their candidate cache, while retaining the first
+rebuild. A current starting book has no earlier commit to retain. Pairing
+failures are caught, rolled back and reported as skipped; they do not abort
+the refresh. This is existing Python behavior, also pinned by the inherited
+`second-rebuild-failure-current0/1` fixtures. Python is unchanged.
+
+The native coordinator already implements those commit boundaries. Its first
+commit is therefore retained. The continuation adds a direct replay-guard
+regression on both codecs: a failure after that commit cannot request a whole
+invocation replay. It also adds live Python repros of both current/stale failure
+cases on both drivers. The disposable native probe can pause at each progress
+phase and each precise clock read, in addition to its existing per-write pause
+and fault controls. Recovery checks cover every observed journal write, both
+rebuilds, all four pairing clock calls and the boundaries before/after commits.
+They reopen the book, check integrity and compare every typed application row
+against the initial or exact Python first-commit snapshot as appropriate.
+These controls belong only to the unpackaged example; route registration is a
+separate boundary.
+
+All **21 Python cases** pass across the full run and focused reruns, including
+the exhaustive write/phase/clock kill sweeps, per-write faults and failures at
+each pairing pass on both codecs. The four live reference failure cases retain
+Python's exact first-commit tables. The oracle helper now preserves a supplied
+driver's row factory, allowing those SQLCipher reference replays. All **five
+Rust refresh tests** pass, including the new durable replay guard regression.
+All-target, all-feature journal clippy passes with warnings denied, and
+workspace formatting passes. The classifier update and required CI preflight
+pass (**57 tests**). Registration and the remaining campaign gates remain open.

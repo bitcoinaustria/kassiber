@@ -50,7 +50,8 @@ def book(scenario):
     return conn
 
 
-def run(conn, name, *, auto_pair=True, skip=False, schema_sql=(), current_before_rebuild=False):
+def run(conn, name, *, auto_pair=True, skip=False, schema_sql=(), current_before_rebuild=False,
+        fail_pairing_clock=None):
     profile = dict(conn.execute("SELECT * FROM profiles WHERE id='p'").fetchone())
     precise_reads = []
 
@@ -58,6 +59,8 @@ def run(conn, name, *, auto_pair=True, skip=False, schema_sql=(), current_before
         @classmethod
         def now(cls, tz=None):
             precise_reads.append(CLOCK)
+            if fail_pairing_clock == len(precise_reads):
+                raise RuntimeError('injected pairing clock failure')
             return cls(2026, 10, 31, 12, tzinfo=timezone.utc)
 
     def refresh(conn, _workspace, profile_id, *, progress_observer):

@@ -894,7 +894,10 @@ automatic transfer pairing followed by a rebuild, recorded as the book's
 journal freshness job. Stored MOVE decisions and ownership review cards block
 conflicting automatic pairs only against a current projection, so a stale book
 is rebuilt before pairing and rebuilt once more only when pairs were applied;
-a current book that gained no pairs is left as is. The step performs no network
+a current book that gained no pairs is left as is. The first stale rebuild
+commits separately. If the second rebuild fails or is cancelled, that first
+rebuild remains; pending pairs, their candidate cache and the second rebuild
+roll back together. The step performs no network
 I/O and honors the policy's `journals` source class. Its outcome is returned as
 `journals: {status, rebuilt, quarantines, auto_pair_applied, error}` with
 `status` one of `processed`, `current`, `deferred`, `disabled`, `failed`,

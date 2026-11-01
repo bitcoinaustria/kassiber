@@ -75,7 +75,8 @@ def inputs():
 
 def capture(case, *, connection=None, operation=None, additional_clocks=(), rollback_expected=True):
     conn = connection if connection is not None else sqlite3.connect(':memory:')
-    conn.row_factory = sqlite3.Row
+    if connection is None:
+        conn.row_factory = sqlite3.Row
     try:
         if connection is None:
             restore(conn, case['before'])

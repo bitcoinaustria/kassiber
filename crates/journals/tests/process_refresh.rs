@@ -232,6 +232,64 @@ fn refresh_cancellation_rolls_back_pairs_and_keeps_only_the_first_commit() {
 }
 
 #[test]
+fn refresh_replay_requires_rollback_of_the_whole_invocation() {
+    let vectors = vectors();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/r4-13/tests");
+    std::fs::create_dir_all(&root).unwrap();
+    for cipher in [false, true] {
+        for current in [false, true] {
+            let name = format!("second-rebuild-failure-current{}", usize::from(current));
+            let case = vectors["cases"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|case| case["name"] == name)
+                .unwrap();
+            let path = root.join(format!(
+                "refresh-replay-{}-{cipher}-{current}.sqlite3",
+                std::process::id()
+            ));
+            let conn = Connection::open(&path).unwrap();
+            if cipher {
+                conn.pragma_update(None, "key", "synthetic-refresh-replay-only")
+                    .unwrap();
+            }
+            conn.pragma_update(None, "journal_mode", "DELETE").unwrap();
+            support::load(&conn, &expand(&vectors, case, "before"));
+            for sql in case["schema_sql"].as_array().unwrap() {
+                conn.execute_batch(sql.as_str().unwrap()).unwrap();
+            }
+            let guard = kassiber_journals::service::ReplayGuard::capture(&conn);
+            let scope = scope(case);
+            let sources = Tapes::new(case);
+            let result = process::refresh_native(
+                &conn,
+                &scope,
+                |conn| support::profile(conn, scope.profile_id),
+                &sources,
+                RefreshOptions {
+                    auto_pair: true,
+                    ..Default::default()
+                },
+                &mut |_| {},
+                &mut |_| {},
+                &mut (),
+            );
+            assert!(result.is_err(), "{name}");
+            drop(result);
+            assert!(conn.is_autocommit());
+            assert_eq!(guard.unchanged(&conn), current, "{name}, cipher={cipher}");
+            assert!(support::logical_equal(
+                &support::snapshot(&conn),
+                &expand(&vectors, case, "expected"),
+            ));
+            conn.close().unwrap();
+            std::fs::remove_file(path).unwrap();
+        }
+    }
+}
+
+#[test]
 fn refresh_pairing_panics_restore_the_entire_current_book() {
     let vectors = vectors();
     let case = vectors["cases"]

@@ -38,8 +38,11 @@ The journal caller owns `BEGIN IMMEDIATE`, its journal savepoint, commit and
 rollback. Rebuild a stale journal projection before pairing, as
 `refresh_journals_step` does. Pairing captures current MOVE and ownership guards
 before the rules pass and reuses them for bulk exact pairing even after a rule
-invalidates journals. Then rebuild journals when required and commit both
-changes together. Preserve the existing refresh counts, progress phases and
+invalidates journals. Then rebuild journals when required and commit pairing
+and that rebuild together. The reference commits an earlier stale-projection
+rebuild separately; a later failure retains it and rolls back pending pairing,
+its candidate cache and the second rebuild. Preserve the existing refresh
+counts, progress phases and
 `skip_rebuild_when_current` behavior. Do not commit progress while pairs are
 pending. R4-15 uses the same boundary for the freshness job.
 
