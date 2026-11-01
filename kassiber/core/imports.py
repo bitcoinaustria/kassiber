@@ -3131,6 +3131,12 @@ def import_file_into_wallet(
             commit=False,
         )
         outcome["file"] = os.path.abspath(file_path)
+        batch_id = import_batches.record_batch(
+            conn, profile, wallet_id=str(wallet["id"]), source_format=input_format,
+            source_filename=os.path.basename(file_path), column_map=None, outcome=outcome,
+        )
+        if batch_id:
+            outcome["import_batch_id"] = batch_id
         if commit:
             conn.commit()
         return outcome
