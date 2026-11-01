@@ -28,5 +28,25 @@
       "privacy_mirror_daemon_accepts_only_an_empty_object"
     ],
     "rule": "Unknown daemon arguments cannot silently change the audience or wallet scope."
+  },
+  {
+    "id": "mirror-retain-generation",
+    "file": "crates/reports/src/privacy_mirror.rs",
+    "find": "\"RELEASE mirror_report\"",
+    "replace": "\"ROLLBACK TO mirror_report; RELEASE mirror_report\"",
+    "expect_failing": [
+      "synchronized_mirror_matches_python_cold_warm_incremental_and_caller_rollback"
+    ],
+    "rule": "Successful standalone reads retain the durable generation."
+  },
+  {
+    "id": "mirror-synchronize-before-read",
+    "file": "crates/reports/src/privacy_mirror.rs",
+    "find": "kassiber_wallets::analysis_index::durable::synchronize_with_sources(\n            conn,\n            &text(&profile, \"id\"),\n            false,\n            &mut index_sources,\n        )?;",
+    "replace": "let _ = &mut index_sources;",
+    "expect_failing": [
+      "synchronized_mirror_matches_python_cold_warm_incremental_and_caller_rollback"
+    ],
+    "rule": "The report synchronizes cold and changed source state before its SQL read."
   }
 ]

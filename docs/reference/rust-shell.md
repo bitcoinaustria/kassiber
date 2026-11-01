@@ -14716,11 +14716,9 @@ arguments. Local summaries/logs remain in `target/r5-mirror-5b/`. This is adapte
 acceptance, not whole-process Mirror registration or packaged acceptance.
 
 Registration remains the final step. After merging the complete 5a durable
-layer and its SQLite/SQLCipher kill-recovery evidence, add a Mirror-specific
-savepoint around scope resolution, synchronization and report construction.
-Successful release must retain a synchronized generation and failure must roll
-back only that savepoint; the general report read path always rolls back and
-cannot own this publication. Keep caller transactions and writes intact. Then
+layer and its SQLite/SQLCipher kill-recovery evidence, use the Mirror-specific
+savepoint verified in the [durable integration checkpoint](#mirror-durable-read-integration-awaiting-recovery-and-registration-r5).
+It retains synchronized generations on success and preserves caller transactions. Then
 add `reports.privacy-mirror` to CLI `reports::COMMANDS` and
 `describe::IMPLEMENTED`, and `ui.reports.privacy_mirror` to daemon
 `reports::KINDS`. Run whole-process CLI/daemon byte and all-table comparisons,
@@ -14808,3 +14806,60 @@ views, handles, report projections and product registration remain outside this
 worker's scope. No dependency, lockfile, product schema or network permission
 changes are included. Local verification/mutation logs, including corrected
 fixture failures, remain under `target/r5-mirror-5a/`.
+
+## Mirror durable read integration awaiting recovery and registration (R5)
+
+This branch cherry-picks 5a's `eb38c977c` and `10d6bb836` as local commits
+`1791d3409` and `52ea9aa48`. Documentation conflicts retain both workers'
+checkpoints and completed backlog items. The durable layer and the read side
+share the existing index schema and observation/analytics interfaces. The 5a
+SQLite/SQLCipher process-kill recovery boundary has not been published or
+accepted here; this integration does not claim it.
+
+The report dispatcher now gives Mirror its own savepoint around scope
+resolution, durable synchronization and report construction. Success releases
+that savepoint, retaining the generation; failure rolls it back. Nested caller
+writes remain pending and caller rollback removes the derived publication too.
+The ordinary report-read rollback path remains appropriate for the other report
+kinds. Existing report clock/identity sources feed the durable seam; production
+retains random identities and the current local clock. No AI tool projection
+or dispatch moves out of Python.
+
+Eight standalone/caller-transaction flow scenarios compare 22 report states
+against unchanged Python, plus the corresponding CLI table payload and all
+112 logical table commitments after every state. Cases cover cold publication,
+warm reads, new ownership evidence, changed exact inventory amounts and revoked
+public attribution. Invalid scope preserves every table and transaction state.
+Two additional compiled mutations kill skipped synchronization and accidental
+rollback of successful generation publication. Together with views, handles,
+report composition and the first adapter boundary, 29 new read-side recipes
+are killed, with passing unmodified baselines. The initial integration fixture
+compared independent random index identities; the retained correction uses the
+existing identity seam rather than normalizing away any table or report bytes.
+
+The combined 37-test native analysis-index selection passes. Fifteen retained
+Python/native view, handle and durable checks pass without skips, including
+guarded process runs with offline mode off/on, zero Python fallback and no
+network attempts. The report's four retained oracle/driver tests also pass,
+with 142 canonical cases, 284 guarded evaluations and all-table read invariants.
+Both report adapter/integration tests pass under both no-egress states. The
+required classifier update records 5,756 test definitions; CI preflight passes
+all 57 tests without skips. Wrapper/integration fixture regeneration is stable.
+Workspace
+formatting and wallet/reports/CLI/daemon production all-target Clippy pass with
+warnings denied; wallet test-harness all-target Clippy also passes.
+
+Product Mirror registration remains the last commit. Still required: merge and
+verify 5a's SQLite/SQLCipher kill-recovery acceptance, add the CLI/describe and
+daemon registration entries listed above, and retain whole-process CLI/daemon
+byte/all-table/no-egress comparisons with non-zero Rust served-by counts and
+zero fallback. Then update execution evidence and rerun the required classifier
+and CI preflight before that registration commit. Current product served-by
+counts remain zero and unsupported routes fail closed. This branch has no push,
+PR, dependency, lockfile, authored schema or egress-permission change.
+
+Evidence and mutation summaries stay under `target/r5-mirror-5b/`; owned build
+and mutation scratch trees are removed after summarizing. Scratch stays inside
+this worktree and account `HOME` is unchanged. Test jobs run serially. Full
+workspace, Python/frontend quality-gate and packaged/platform acceptance are
+not claimed.

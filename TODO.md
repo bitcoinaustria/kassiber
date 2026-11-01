@@ -651,6 +651,9 @@ registers them; exit-tax preserves its reference no-registration boundary.
 - [x] Port Mirror's incremental synchronization and generation publication,
   retaining affected-region context, tip-only generations and attribution expiry;
   see the [synchronization checkpoint](docs/reference/rust-shell.md#mirror-incremental-synchronization-r5-partial).
+- [x] Integrate durable Mirror report reads with retained generations, exact
+  all-table parity and caller rollback; see the
+  [integration checkpoint](docs/reference/rust-shell.md#mirror-durable-read-integration-awaiting-recovery-and-registration-r5).
 - [ ] Finish Mirror's SQLite/SQLCipher kill recovery and CLI/daemon acceptance with
   non-zero served-by counts. Preserve deterministic native
   ambiguity ordering; retain the recorded Python reference repro.

@@ -164,6 +164,12 @@ pub fn execute_with_sources(
     if source_funds_mutations::handles(command) {
         return source_funds_mutations::execute(conn, command, args, sources);
     }
+    if matches!(
+        command,
+        "reports.privacy-mirror" | "ui.reports.privacy_mirror"
+    ) {
+        return privacy_mirror::execute(conn, command, args, sources);
+    }
     if command == "reports.filed-snapshots.create" {
         let (workspace, profile) = kassiber_setup::references::scope(conn, args)?;
         return snapshot_write::create_cli(conn, &workspace, &profile, args, sources);
@@ -244,24 +250,6 @@ pub fn execute_with_sources(
             return Ok(
                 if truthy(value(args, "text")) || truthy(value(args, "csv")) {
                     privacy_hygiene::table(&report)
-                } else {
-                    report
-                },
-            );
-        }
-        if matches!(
-            command,
-            "reports.privacy-mirror" | "ui.reports.privacy_mirror"
-        ) {
-            let report = privacy_mirror::report(
-                conn,
-                &workspace,
-                &profile,
-                command == "reports.privacy-mirror",
-            )?;
-            return Ok(
-                if truthy(value(args, "text")) || truthy(value(args, "csv")) {
-                    privacy_mirror::table(&report)
                 } else {
                     report
                 },

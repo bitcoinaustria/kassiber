@@ -1,5 +1,66 @@
 use super::*;
 
+struct IndexSources {
+    identity: String,
+    timestamp: String,
+}
+impl kassiber_wallets::publication::wallet::Sources for IndexSources {
+    fn id(&mut self) -> String {
+        self.identity.clone()
+    }
+    fn now(&mut self) -> String {
+        self.timestamp.clone()
+    }
+}
+
+pub(super) fn execute(
+    conn: &Connection,
+    command: &str,
+    args: &Value,
+    sources: &dyn kassiber_setup::Sources,
+) -> Result<Value> {
+    conn.execute_batch("SAVEPOINT mirror_report")
+        .map_err(sql_error)?;
+    let result = (|| {
+        let (workspace, profile) = kassiber_setup::references::scope(conn, args)?;
+        let mut index_sources = IndexSources {
+            identity: sources.uuid(conn)?,
+            timestamp: sources.now(conn)?,
+        };
+        kassiber_wallets::analysis_index::durable::synchronize_with_sources(
+            conn,
+            &text(&profile, "id"),
+            false,
+            &mut index_sources,
+        )?;
+        let report = report(
+            conn,
+            &workspace,
+            &profile,
+            command == "reports.privacy-mirror",
+        )?;
+        Ok(
+            if truthy(value(args, "text")) || truthy(value(args, "csv")) {
+                table(&report)
+            } else {
+                report
+            },
+        )
+    })();
+    match result {
+        Ok(payload) => {
+            conn.execute_batch("RELEASE mirror_report")
+                .map_err(sql_error)?;
+            Ok(payload)
+        }
+        Err(error) => {
+            conn.execute_batch("ROLLBACK TO mirror_report; RELEASE mirror_report")
+                .map_err(sql_error)?;
+            Err(error)
+        }
+    }
+}
+
 pub fn report(
     conn: &Connection,
     workspace: &Value,

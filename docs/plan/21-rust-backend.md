@@ -4368,3 +4368,12 @@ validation. Six wrapper cases retain byte and all-112-table parity; three
 adapter mutations are killed. Product registration remains deliberately last,
 after durable integration and SQLite/SQLCipher recovery acceptance, with
 whole-process served-by evidence still required.
+
+### R5 privacy: durable read integration awaiting final registration
+
+The [integration checkpoint](../reference/rust-shell.md#mirror-durable-read-integration-awaiting-recovery-and-registration-r5)
+combines 5a triggers/contributions and incremental synchronization with the read
+side. A dedicated report savepoint retains successful generation publication
+and preserves caller rollback. All 37 native index tests pass; eight report
+flow scenarios compare 22 canonical report states and all 112 table commitments.
+Recovery acceptance and whole-process registration remain open.
