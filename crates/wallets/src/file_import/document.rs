@@ -1,11 +1,12 @@
 //! Reviewed OCR observations, gated local providers and managed evidence.
-//! PDF preparation and product registration are pending boundaries.
+//! Product registration remains a separate acceptance boundary.
 use super::*;
 use kassiber_envelope::{get, py_str, set, truthy};
 use kassiber_pyjson::{Key, Options, PyStr};
 
 mod coordinator;
 mod files;
+mod pdf;
 mod provider;
 mod rows;
 pub use coordinator::{import_draft, reviewed_records, ImportDraft};

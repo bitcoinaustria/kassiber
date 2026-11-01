@@ -3209,14 +3209,18 @@ The retained Python quirks have an offline reproduction in
 - A managed-digest mismatch rolls back database writes but leaves an untracked
   evidence copy. The native failure path removes that copy instead.
 
-Generic database exceptions are an explicit wire gap: Rust retains the shared
+Generic database exceptions are an explicit privacy deviation: Rust retains the shared
 store's `internal_error: database operation failed`, while Python returns the
 raw exception message. The failure test pins each reply separately and compares
 the complete rolled-back books/files. It does not normalize the difference away
 or count it as byte parity. The managed-digest cleanup difference is also
-intentional and pinned by a native trigger test plus the Python reproduction;
-the complete importer still needs a separate reference correction or explicit
-resolution of these differences before acceptance.
+intentional and pinned by a native trigger test plus the Python reproduction.
+These two differences are resolved by retaining the native privacy behavior:
+raw SQLite errors can disclose document paths, SQL and source values, and an
+untracked failed-import copy unnecessarily retains sensitive evidence. Cleanup
+is confined to canonical paths under the managed evidence root. Neither
+deviation changes successful accounting or weakens rollback; neither is counted
+as exact error/file parity with Python.
 
 The wallet mutation catalog adds 27 entries to the inherited 740 (767 total).
 Each entry names its native killer in `crates/wallets/scripts/mutations.json`.
@@ -3255,10 +3259,10 @@ workspace quality gate. Verification logs are retained under
 `target/r5-document-artifacts/`; the mutation source copy and both build trees
 are removed after the audit.
 
-Provider discovery and OCR transport remain to be implemented through
-`kassiber-net` with exact-action consent and offline/no-egress fencing. Test
-them only against disposable loopback fake providers. Bounded Poppler input
-inspection/rendering and interactive CLI review also remain. The CLI catalog
+The provider and PDF continuations below add consent-gated `kassiber-net`
+transport and bounded Poppler OCR input preparation, verified against Python
+using disposable books and owned loopback fake providers. Interactive CLI
+review and product acceptance remain. The CLI catalog
 stays at 158 entries. No complete document importer or zero-fallback product
 acceptance is claimed.
 
@@ -8384,6 +8388,50 @@ source/options, provider, profile or database identity changes. Seven named
 `W-document-provider-*` mutation entries pin those boundaries, model selection,
 request retention and the local-AI offline classification.
 All seven mutations are killed after their four named baselines pass.
+
+### Document PDF preparation checkpoint (R5, partial)
+
+The native provider preview now accepts PDF input. It resolves the same
+`pdftoppm` and `pdfinfo` executables as Python, refuses missing tools with the
+same typed errors, and directly invokes `pdfinfo SOURCE` followed by
+`pdftoppm -png -r 180 -scale-to 2400 -f START -l END SOURCE PREFIX`.
+Both calls retain the 30-second timeout. No shell or new crate is involved.
+Report/export rendering is unchanged.
+
+Page selection preserves the explicit contiguous range requirement above eight
+pages and the configured maximum (at most eight). Rendered PNGs are sorted by
+numeric page suffix, checked for exact page count, signature, IHDR, nonzero
+geometry, 2400-pixel dimensions, 24 MiB per page and 96 MiB total, then labeled
+with their original page numbers. Source regions are restricted to that page
+set. The same source hash and PDF metadata flow into the draft.
+
+Private source/page directories use the temporary root; the differential test
+sets both runtimes' root under its disposable data directory. Images are
+removed after OCR and on every failure. Timeout handling kills and reaps the
+child and joins both output-capture threads. Preparing pages itself performs
+no HTTP; only the existing exact-action OCR grant permits provider disclosure.
+
+Five native PDF tests cover exact argument/time budgets, numeric ordering,
+page labels, private storage, failure cleanup, PNG byte/geometry budgets and
+real child timeout/capture behavior. Frozen vectors include 112 Python page
+selection cases. Ten real-Poppler differential cases across SQLite and
+SQLCipher compare raw replies, complete books, outgoing image payloads and
+cleanup, including missing tools and explicit long-document selection.
+`W-document-pdf-*` mutations name the native killers for selection, DPI,
+timeouts, expected page count and image budgets. The reviewed process-call
+allowlist admits only this existing Poppler boundary.
+
+All nine PDF mutations are killed after four named baselines pass; the final
+page-byte-budget recipe is rechecked after its lint-only expression rewrite.
+All 22 integrated native document tests, 30 Python document/frozen-reference
+tests and nine process/dependency guard tests pass. Strict wallets all-target
+Clippy and formatting pass offline. The required locked classification update
+and all 57 CI preflight tests pass (5,741 classified Python tests). This is a
+core checkpoint, with no full-workspace quality-gate or CLI acceptance claim.
+
+The database-error wire and managed-digest cleanup differences are resolved as
+the explicit privacy deviations above; their exact per-runtime results remain
+pinned. Native CLI registration and full product acceptance remain pending.
 
 ### Bitcoin atomic publication verification (R5)
 

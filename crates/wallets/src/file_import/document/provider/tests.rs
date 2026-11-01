@@ -36,10 +36,18 @@ fn python_document_provider_vectors() {
     };
     for (index, case) in cases.iter().enumerate() {
         let operation = rendered(field(case, "operation"));
-        if operation == "pages" {
-            continue;
-        }
         let actual = match operation.as_str() {
+            "pages" => super::super::pdf::selected(
+                field(case, "pages"),
+                rendered(field(case, "total")).parse().unwrap(),
+                rendered(field(case, "maximum")).parse().unwrap(),
+            )
+            .map(|(pages, explicit)| {
+                Py::List(vec![
+                    Py::List(pages.into_iter().map(Py::from).collect()),
+                    Py::Bool(explicit),
+                ])
+            }),
             "choose" => {
                 let Py::List(models) = field(case, "models") else {
                     panic!()

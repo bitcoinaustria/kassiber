@@ -2464,17 +2464,22 @@ The disposable-book driver compares core response bytes, all typed book tables
 and schema objects, and managed evidence on SQLite and SQLCipher. It explicitly
 asserts successful imports. Generic
 database failures retain the shared Rust store's redaction instead of Python's
-raw exception message; that difference is pinned and remains an acceptance gap.
+raw exception message; this is a pinned privacy deviation because raw database
+diagnostics can expose source values or local paths.
 Native managed-digest failures also remove the copy that Python leaves orphaned;
-this storage difference has a native regression and an offline reference repro.
+this pinned privacy deviation avoids retaining untracked sensitive evidence.
+Cleanup validates canonical managed paths; native regressions and an offline
+reference reproduction preserve the distinction from exact Python parity.
 Reference quirks, named mutation killers and verification are recorded in the
 [partial document checkpoint](../reference/rust-shell.md#reviewed-document-core-r5-partial).
 
 The [provider continuation](../reference/rust-shell.md#document-provider-transport-checkpoint-r5-partial)
 adds configuration bootstrap, model discovery and OCR through `kassiber-net`,
 with exact-action consent and the Python local-AI offline/no-egress exception.
-Completion still requires bounded Poppler PDF inspection/rendering,
-interactive CLI review and CLI wire/full-book
+The PDF continuation uses the same Poppler tools, arguments, page/DPI/image
+limits and 30-second timeouts as Python for OCR preparation, including private
+temporary images and cleanup. PDF report/export rendering stays in Python.
+Completion still requires interactive CLI review and CLI wire/full-book
 acceptance. Product served-by counts for document preview/import and the
 shared daemon importer are zero; the native catalog remains at 158 entries.
 `ui.wallets.import_file` stays unregistered until native `journals process`

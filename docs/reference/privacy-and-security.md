@@ -334,6 +334,22 @@ opt-out omits it. A refusal never weakens retention. No document bytes,
 credentials or request contents enter the bounded RAM network ledger. Product
 CLI and daemon routes remain unregistered at this provider checkpoint.
 
+Rust OCR PDF preparation launches only local Poppler `pdfinfo` and `pdftoppm`,
+with Python's exact arguments and limits: at most eight contiguous pages,
+180 DPI, 2400 pixels per side, 24 MiB per PNG, 96 MiB in total and 30 seconds per
+process. Private temporary source/page directories honor the selected temporary
+root; verification sets it inside each disposable data root. Child processes
+are killed and reaped on timeout, and pages are removed on success or failure.
+No shell or provider contact is involved in preparation; image disclosure still
+requires the exact OCR action grant. PDF report/export rendering is separate.
+
+Two Rust document-import privacy deviations are deliberate and regression
+tested. Generic database errors use the shared redacted diagnostic rather than
+raw SQLite exceptions that may contain local paths or source values. A managed
+copy that fails source-digest verification is removed after rollback, rather
+than left as untracked evidence as in Python; cleanup is restricted to canonical
+paths under the managed evidence root. Successful accounting is unchanged.
+
 `KASSIBER_NO_EGRESS=1` blocks the shared backend HTTP/SOCKS and Python Electrum
 connect boundaries, native BDK/LWK observer construction, and chain-analysis
 acquisition, including loopback nodes. Acquisition rechecks it for every

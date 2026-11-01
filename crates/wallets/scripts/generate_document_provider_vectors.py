@@ -59,7 +59,7 @@ def vectors():
             out.append(case)
     for total in [1, 8, 9, 20]:
         for maximum in [1, 8]:
-            for pages in [None, "", "1", "2-6", "9-16", "0", "2-1", "1,2", "١-٢", " 2 - 3 "]:
+            for pages in [None, "", "1", "2-6", "9-16", "0", "2-1", "1,2", "١-٢", " 2 - 3 ", " ", "1\u001c-\u001d2", False, 2]:
                 case = dict(operation="pages", total=total, maximum=maximum, pages=pages)
                 try:
                     selected, explicit = ref._selected_pdf_pages(pages, total_pages=total, max_pages=maximum)

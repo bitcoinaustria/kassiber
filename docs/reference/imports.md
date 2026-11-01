@@ -654,6 +654,14 @@ split the statement. The preview reports the total and rendered page set, and
 source regions outside that set are quarantined. Rendered page dimensions and
 encoded byte totals are capped before raster data reaches the local model.
 
+The unregistered Rust core uses Python's `pdfinfo` and `pdftoppm` OCR preparation
+with the same arguments, limits, timeouts, missing-tool refusals and temporary
+page cleanup. PDF report/export rendering remains outside that port. The native
+core also deliberately redacts generic database failures and removes a managed
+copy after a source-digest mismatch; these
+[privacy deviations](privacy-and-security.md) avoid disclosing source values or
+retaining untracked sensitive evidence. CLI registration is still pending.
+
 The preview returns draft rows with `ready` / `quarantined` status, per-row and
 per-populated-field confidence, every financial field, evidence text, source
 regions when the model provides them, and a normalized `import_record`.

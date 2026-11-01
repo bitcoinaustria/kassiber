@@ -4771,6 +4771,62 @@
   {
     "operation": "pages",
     "total": 1,
+    "maximum": 1,
+    "pages": " ",
+    "result": [
+      [
+        1
+      ],
+      false
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 1,
+    "maximum": 1,
+    "pages": "1\u001c-\u001d2",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range is outside the document",
+      "hint": null,
+      "details": {
+        "pages": "1\u001c-\u001d2",
+        "total_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 1,
+    "maximum": 1,
+    "pages": false,
+    "result": [
+      [
+        1
+      ],
+      false
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 1,
+    "maximum": 1,
+    "pages": 2,
+    "error": {
+      "code": "validation",
+      "message": "PDF page range is outside the document",
+      "hint": null,
+      "details": {
+        "pages": "2",
+        "total_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 1,
     "maximum": 8,
     "pages": null,
     "result": [
@@ -4911,6 +4967,62 @@
       "hint": null,
       "details": {
         "pages": "2 - 3",
+        "total_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 1,
+    "maximum": 8,
+    "pages": " ",
+    "result": [
+      [
+        1
+      ],
+      false
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 1,
+    "maximum": 8,
+    "pages": "1\u001c-\u001d2",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range is outside the document",
+      "hint": null,
+      "details": {
+        "pages": "1\u001c-\u001d2",
+        "total_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 1,
+    "maximum": 8,
+    "pages": false,
+    "result": [
+      [
+        1
+      ],
+      false
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 1,
+    "maximum": 8,
+    "pages": 2,
+    "error": {
+      "code": "validation",
+      "message": "PDF page range is outside the document",
+      "hint": null,
+      "details": {
+        "pages": "2",
         "total_pages": 1
       },
       "retryable": false
@@ -5078,6 +5190,67 @@
   {
     "operation": "pages",
     "total": 8,
+    "maximum": 1,
+    "pages": " ",
+    "error": {
+      "code": "document_import_pdf_page_selection_required",
+      "message": "This PDF needs an explicit page range before OCR",
+      "hint": "Choose a contiguous range of at most 1 pages, for example 1-1, or split the statement into smaller PDFs.",
+      "details": {
+        "total_pages": 8,
+        "max_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 8,
+    "maximum": 1,
+    "pages": "1\u001c-\u001d2",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range may contain at most 1 pages",
+      "hint": null,
+      "details": {
+        "pages": "1\u001c-\u001d2",
+        "selected_pages": 2,
+        "max_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 8,
+    "maximum": 1,
+    "pages": false,
+    "error": {
+      "code": "document_import_pdf_page_selection_required",
+      "message": "This PDF needs an explicit page range before OCR",
+      "hint": "Choose a contiguous range of at most 1 pages, for example 1-1, or split the statement into smaller PDFs.",
+      "details": {
+        "total_pages": 8,
+        "max_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 8,
+    "maximum": 1,
+    "pages": 2,
+    "result": [
+      [
+        2
+      ],
+      true
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 8,
     "maximum": 8,
     "pages": null,
     "result": [
@@ -5227,6 +5400,69 @@
       [
         2,
         3
+      ],
+      true
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 8,
+    "maximum": 8,
+    "pages": " ",
+    "result": [
+      [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      false
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 8,
+    "maximum": 8,
+    "pages": "1\u001c-\u001d2",
+    "result": [
+      [
+        1,
+        2
+      ],
+      true
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 8,
+    "maximum": 8,
+    "pages": false,
+    "result": [
+      [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      false
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 8,
+    "maximum": 8,
+    "pages": 2,
+    "result": [
+      [
+        2
       ],
       true
     ]
@@ -5393,6 +5629,67 @@
   {
     "operation": "pages",
     "total": 9,
+    "maximum": 1,
+    "pages": " ",
+    "error": {
+      "code": "document_import_pdf_page_selection_required",
+      "message": "This PDF needs an explicit page range before OCR",
+      "hint": "Choose a contiguous range of at most 1 pages, for example 1-1, or split the statement into smaller PDFs.",
+      "details": {
+        "total_pages": 9,
+        "max_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 9,
+    "maximum": 1,
+    "pages": "1\u001c-\u001d2",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range may contain at most 1 pages",
+      "hint": null,
+      "details": {
+        "pages": "1\u001c-\u001d2",
+        "selected_pages": 2,
+        "max_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 9,
+    "maximum": 1,
+    "pages": false,
+    "error": {
+      "code": "document_import_pdf_page_selection_required",
+      "message": "This PDF needs an explicit page range before OCR",
+      "hint": "Choose a contiguous range of at most 1 pages, for example 1-1, or split the statement into smaller PDFs.",
+      "details": {
+        "total_pages": 9,
+        "max_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 9,
+    "maximum": 1,
+    "pages": 2,
+    "result": [
+      [
+        2
+      ],
+      true
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 9,
     "maximum": 8,
     "pages": null,
     "error": {
@@ -5536,6 +5833,63 @@
       [
         2,
         3
+      ],
+      true
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 9,
+    "maximum": 8,
+    "pages": " ",
+    "error": {
+      "code": "document_import_pdf_page_selection_required",
+      "message": "This PDF needs an explicit page range before OCR",
+      "hint": "Choose a contiguous range of at most 8 pages, for example 1-8, or split the statement into smaller PDFs.",
+      "details": {
+        "total_pages": 9,
+        "max_pages": 8
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 9,
+    "maximum": 8,
+    "pages": "1\u001c-\u001d2",
+    "result": [
+      [
+        1,
+        2
+      ],
+      true
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 9,
+    "maximum": 8,
+    "pages": false,
+    "error": {
+      "code": "document_import_pdf_page_selection_required",
+      "message": "This PDF needs an explicit page range before OCR",
+      "hint": "Choose a contiguous range of at most 8 pages, for example 1-8, or split the statement into smaller PDFs.",
+      "details": {
+        "total_pages": 9,
+        "max_pages": 8
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 9,
+    "maximum": 8,
+    "pages": 2,
+    "result": [
+      [
+        2
       ],
       true
     ]
@@ -5703,6 +6057,67 @@
   {
     "operation": "pages",
     "total": 20,
+    "maximum": 1,
+    "pages": " ",
+    "error": {
+      "code": "document_import_pdf_page_selection_required",
+      "message": "This PDF needs an explicit page range before OCR",
+      "hint": "Choose a contiguous range of at most 1 pages, for example 1-1, or split the statement into smaller PDFs.",
+      "details": {
+        "total_pages": 20,
+        "max_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 20,
+    "maximum": 1,
+    "pages": "1\u001c-\u001d2",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range may contain at most 1 pages",
+      "hint": null,
+      "details": {
+        "pages": "1\u001c-\u001d2",
+        "selected_pages": 2,
+        "max_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 20,
+    "maximum": 1,
+    "pages": false,
+    "error": {
+      "code": "document_import_pdf_page_selection_required",
+      "message": "This PDF needs an explicit page range before OCR",
+      "hint": "Choose a contiguous range of at most 1 pages, for example 1-1, or split the statement into smaller PDFs.",
+      "details": {
+        "total_pages": 20,
+        "max_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 20,
+    "maximum": 1,
+    "pages": 2,
+    "result": [
+      [
+        2
+      ],
+      true
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 20,
     "maximum": 8,
     "pages": null,
     "error": {
@@ -5849,6 +6264,63 @@
       [
         2,
         3
+      ],
+      true
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 20,
+    "maximum": 8,
+    "pages": " ",
+    "error": {
+      "code": "document_import_pdf_page_selection_required",
+      "message": "This PDF needs an explicit page range before OCR",
+      "hint": "Choose a contiguous range of at most 8 pages, for example 1-8, or split the statement into smaller PDFs.",
+      "details": {
+        "total_pages": 20,
+        "max_pages": 8
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 20,
+    "maximum": 8,
+    "pages": "1\u001c-\u001d2",
+    "result": [
+      [
+        1,
+        2
+      ],
+      true
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 20,
+    "maximum": 8,
+    "pages": false,
+    "error": {
+      "code": "document_import_pdf_page_selection_required",
+      "message": "This PDF needs an explicit page range before OCR",
+      "hint": "Choose a contiguous range of at most 8 pages, for example 1-8, or split the statement into smaller PDFs.",
+      "details": {
+        "total_pages": 20,
+        "max_pages": 8
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 20,
+    "maximum": 8,
+    "pages": 2,
+    "result": [
+      [
+        2
       ],
       true
     ]

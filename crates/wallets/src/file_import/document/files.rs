@@ -215,3 +215,43 @@ impl Snapshot {
         })
     }
 }
+
+fn base64(bytes: &[u8]) -> String {
+    const ABC: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let a = chunk[0];
+        let b = chunk.get(1).copied().unwrap_or(0);
+        let c = chunk.get(2).copied().unwrap_or(0);
+        out.push(ABC[(a >> 2) as usize] as char);
+        out.push(ABC[(((a & 3) << 4) | (b >> 4)) as usize] as char);
+        out.push(if chunk.len() > 1 {
+            ABC[(((b & 15) << 2) | (c >> 6)) as usize] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            ABC[(c & 63) as usize] as char
+        } else {
+            '='
+        });
+    }
+    out
+}
+pub(super) fn image_part(path: &Path) -> Result<Py, AppError> {
+    let bytes = std::fs::read(path).map_err(files::io)?;
+    Ok(dict([
+        ("type", s("image_url")),
+        (
+            "image_url",
+            dict([(
+                "url",
+                s(format!(
+                    "data:{};base64,{}",
+                    files::mime(path),
+                    base64(&bytes)
+                )),
+            )]),
+        ),
+    ]))
+}

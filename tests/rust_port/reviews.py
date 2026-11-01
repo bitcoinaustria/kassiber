@@ -417,5 +417,5 @@ REVIEWS["tests/test_rust_samourai_import.py"] = {"*": {
 
 REVIEWS["tests/test_rust_document_ingestion.py"] = {"*": {
     "disposition": "oracle", "group": "imports",
-    "reason": "compares frozen Python OCR draft, reviewed-row and provider vectors, native core and local-provider replies, outgoing OCR payloads, every typed schema/table row and managed evidence bytes on SQLite/SQLCipher; retains Python as reference for the unregistered document core",
+    "reason": "compares frozen Python OCR draft, reviewed-row, provider and PDF page-selection vectors, native core and local-provider replies, exact Poppler OCR input preparation and outgoing payloads, every typed schema/table row and managed evidence bytes on SQLite/SQLCipher; retains Python as reference for the unregistered document core",
 }}

@@ -244,6 +244,95 @@ class RustDocumentIngestionTest(unittest.TestCase):
                         server.server_close()
                         thread.join()
 
+    @unittest.skipUnless(shutil.which('pdfinfo') and shutil.which('pdftoppm'), 'Poppler OCR tools required')
+    def test_pdf_preview_poppler_wire_complete_books_and_cleanup(self):
+        from crates.wallets.scripts.generate_document_vectors import base
+        def pdf_bytes(pages):
+            objects = [b'<< /Type /Catalog /Pages 2 0 R >>',
+                ('<< /Type /Pages /Count %d /Kids [%s] >>' % (pages,
+                    ' '.join(f'{i + 3} 0 R' for i in range(pages)))).encode()]
+            objects += [b'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 72 72] >>'] * pages
+            data = bytearray(b'%PDF-1.4\n')
+            offsets = [0]
+            for index, obj in enumerate(objects, 1):
+                offsets.append(len(data))
+                data.extend(f'{index} 0 obj\n'.encode() + obj + b'\nendobj\n')
+            offset = len(data)
+            data.extend(f'xref\n0 {len(offsets)}\n0000000000 65535 f \n'.encode())
+            for position in offsets[1:]:
+                data.extend(f'{position:010d} 00000 n \n'.encode())
+            data.extend(f'trailer\n<< /Size {len(offsets)} /Root 1 0 R >>\nstartxref\n{offset}\n%%EOF\n'.encode())
+            return bytes(data)
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, *args):
+                pass
+            def do_GET(self):
+                self.reply('{"data":[{"id":"glm-ocr"}]}')
+            def do_POST(self):
+                self.reply(self.server.ocr)
+            def reply(self, payload):
+                body = self.rfile.read(int(self.headers.get('Content-Length', 0)))
+                self.server.hits.append((self.command, self.path, body))
+                payload = payload.encode()
+                self.send_response(200)
+                self.send_header('Content-Length', str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+        scratch = self.data / 'ocr-scratch'
+        scratch.mkdir(mode=0o700)
+        tools = self.root / 'missing-tools'
+        tools.mkdir()
+        for encrypted in [False, True]:
+            for name, total, pages in [('complete', 2, None), ('range', 12, '9-12'),
+                    ('selection-required', 9, None), ('missing-ppm', 1, None), ('missing-info', 1, None)]:
+                with self.subTest(encrypted=encrypted, case=name):
+                    baseline = self.baseline(encrypted)
+                    self.source = self.root / 'statement with spaces.pdf'
+                    self.source.write_bytes(pdf_bytes(total))
+                    row = base()
+                    row['source_region'] = {'page': 9 if name == 'range' else 1}
+                    ocr = json.dumps({'rows': [row]})
+                    server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+                    server.daemon_threads = True
+                    server.ocr = json.dumps({'output': [{'type': 'message', 'content': [{'type': 'output_text', 'text': ocr}]}]})
+                    server.hits = []
+                    thread = threading.Thread(target=server.serve_forever)
+                    thread.start()
+                    try:
+                        def setup(conn):
+                            conn.execute("INSERT INTO settings(key,value) VALUES('database_instance_id','disposable-book')")
+                            conn.execute("INSERT INTO ai_providers(name,base_url,kind,created_at,updated_at) VALUES('local',?,'local','2026-01-01','2026-01-01')", (f'http://127.0.0.1:{server.server_port}/v1',))
+                        environment = {'TMPDIR': str(scratch), 'KASSIBER_NO_EGRESS': '1'}
+                        if name.startswith('missing-'):
+                            (tools / 'pdftoppm').unlink(missing_ok=True)
+                            if name == 'missing-info':
+                                (tools / 'pdftoppm').symlink_to(shutil.which('pdftoppm'))
+                            environment['PATH'] = str(tools)
+                        with mock.patch.dict(os.environ, environment), mock.patch.object(tempfile, 'tempdir', str(scratch)):
+                            outputs, _ = self.compare(baseline, encrypted,
+                                [self.request([], encrypted, action='preview', provider='local', pages=pages)], setup=setup)
+                        hits = server.hits
+                        half = len(hits) // 2
+                        self.assertEqual(half, 2 if name in {'complete', 'range'} else 1)
+                        for before, after in zip(hits[:half], hits[half:]):
+                            self.assertEqual(before[:2], after[:2])
+                            self.assertEqual(json.loads(before[2]) if before[2] else None,
+                                json.loads(after[2]) if after[2] else None)
+                        self.assertEqual(list(scratch.iterdir()), [])
+                        if name in {'complete', 'range'}:
+                            result = outputs[0]['result']
+                            self.assertEqual(result['source']['kind'], 'pdf')
+                            self.assertEqual(result['source']['pdf']['complete'], name == 'complete')
+                            self.assertEqual(result['source']['pdf']['rendered_pages'], [1, 2] if name == 'complete' else [9, 10, 11, 12])
+                            self.assertEqual(result['summary']['ready'], 1)
+                        else:
+                            self.assertEqual(outputs[0]['error']['code'],
+                                'document_import_pdf_page_selection_required' if name == 'selection-required' else 'document_import_pdf_renderer_missing')
+                    finally:
+                        server.shutdown()
+                        server.server_close()
+                        thread.join()
+
     def test_provider_policy_refusals_match_reference_without_contact(self):
         for encrypted in [False, True]:
             for name in ['disabled', 'remote-unacknowledged', 'remote', 'tee', 'local-remote-host',

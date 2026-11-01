@@ -387,11 +387,11 @@ projections stay Python. Progress and remaining work for this slice:
 - [x] Add unregistered document provider discovery/OCR through `kassiber-net`,
   with exact-action consent, local-only policy and Python offline/no-egress
   fencing. See the [provider checkpoint](docs/reference/rust-shell.md#document-provider-transport-checkpoint-r5-partial).
-- [ ] Finish document ingestion at core/CLI level: bounded Poppler PDF
-  verification/rendering, interactive CLI review, native
-  registration and CLI wire/full-book/zero-fallback acceptance. Resolve the
-  documented database-error wire and managed-digest cleanup differences before
-  complete acceptance.
+- [x] Add Python-compatible Poppler PDF preparation for OCR, including page
+  selection, bounded images, timeouts and cleanup. Retain and justify the native
+  database-error redaction and managed-digest cleanup privacy deviations.
+- [ ] Finish document ingestion at core/CLI level: interactive CLI review, native
+  registration and CLI wire/full-book/zero-fallback acceptance.
   R6 AI tool projections stay Python. An attachment grants neither ownership
   nor tax facts.
 - [ ] Complete the [shared file-import daemon parity follow-up](docs/reference/rust-shell.md#shared-file-import-daemon-parity-pending)

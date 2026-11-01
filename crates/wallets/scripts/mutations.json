@@ -8581,5 +8581,95 @@
       "document_http_fallback_is_origin_bound_and_never_weakens_retention"
     ],
     "rule": "A refusal of store false is reported without weakening retention or resending the document."
+  },
+  {
+    "id": "W-document-pdf-explicit-selection",
+    "file": "crates/wallets/src/file_import/document/pdf.rs",
+    "find": "if total > max {",
+    "replace": "if false && total > max {",
+    "expect_failing": [
+      "python_document_provider_vectors"
+    ],
+    "rule": "A large PDF requires explicit selection, never silent truncation."
+  },
+  {
+    "id": "W-document-pdf-page-range-limit",
+    "file": "crates/wallets/src/file_import/document/pdf.rs",
+    "find": "if count > max as i64 {",
+    "replace": "if false && count > max as i64 {",
+    "expect_failing": [
+      "python_document_provider_vectors"
+    ],
+    "rule": "Selected contiguous ranges cannot exceed the reviewed page limit."
+  },
+  {
+    "id": "W-document-pdf-dpi",
+    "file": "crates/wallets/src/file_import/document/pdf.rs",
+    "find": "OsString::from(\"180\"),",
+    "replace": "OsString::from(\"181\"),",
+    "expect_failing": [
+      "document_pdf_preparation_pins_arguments_order_page_labels_and_cleanup"
+    ],
+    "rule": "OCR preparation uses exactly the Python Poppler DPI and argument sequence."
+  },
+  {
+    "id": "W-document-pdf-timeout",
+    "file": "crates/wallets/src/file_import/document/pdf.rs",
+    "find": "const TIMEOUT: Duration = Duration::from_secs(30);",
+    "replace": "const TIMEOUT: Duration = Duration::from_secs(31);",
+    "expect_failing": [
+      "document_pdf_preparation_pins_arguments_order_page_labels_and_cleanup"
+    ],
+    "rule": "Both Poppler calls retain the exact 30-second timeout."
+  },
+  {
+    "id": "W-document-pdf-page-count",
+    "file": "crates/wallets/src/file_import/document/pdf.rs",
+    "find": "if rendered.len() != pages.len() {",
+    "replace": "if false && rendered.len() != pages.len() {",
+    "expect_failing": [
+      "document_pdf_render_failures_remove_all_temporary_images"
+    ],
+    "rule": "A partial render never becomes a complete OCR input."
+  },
+  {
+    "id": "W-document-pdf-geometry",
+    "file": "crates/wallets/src/file_import/document/pdf.rs",
+    "find": "|| width > MAX_DIMENSION",
+    "replace": "|| false",
+    "expect_failing": [
+      "document_pdf_png_budgets_reject_geometry_page_and_total_size"
+    ],
+    "rule": "Rendered PNG width is capped before encoding or disclosure."
+  },
+  {
+    "id": "W-document-pdf-page-bytes",
+    "file": "crates/wallets/src/file_import/document/pdf.rs",
+    "find": "if !(1..=MAX_PAGE_BYTES).contains(&size)",
+    "replace": "if false",
+    "expect_failing": [
+      "document_pdf_png_budgets_reject_geometry_page_and_total_size"
+    ],
+    "rule": "Each rendered page stays within the Python 24 MiB budget."
+  },
+  {
+    "id": "W-document-pdf-total-bytes",
+    "file": "crates/wallets/src/file_import/document/pdf.rs",
+    "find": "|| total > MAX_TOTAL_BYTES",
+    "replace": "|| false",
+    "expect_failing": [
+      "document_pdf_png_budgets_reject_geometry_page_and_total_size"
+    ],
+    "rule": "The complete rendered input stays within the Python 96 MiB budget."
+  },
+  {
+    "id": "W-document-pdf-png-header",
+    "file": "crates/wallets/src/file_import/document/pdf.rs",
+    "find": "&header[..8] != b\"\\x89PNG\\r\\n\\x1a\\n\"",
+    "replace": "false",
+    "expect_failing": [
+      "document_pdf_render_failures_remove_all_temporary_images"
+    ],
+    "rule": "Renderer output must have the PNG signature before image encoding."
   }
 ]
