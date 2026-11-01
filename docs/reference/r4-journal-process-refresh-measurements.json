@@ -1,0 +1,2911 @@
+{
+  "schema": "kassiber.journal-process-prepared-bench.v1",
+  "native_prebuild": true,
+  "registered_command": false,
+  "acceptance": "open",
+  "date": "2026-11-01",
+  "oracle_clock": "2026-10-31T12:00:00Z",
+  "python_version": "3.11.17 (main, Oct 21 2026, 17:46:53) [Clang 23.1.3 ]",
+  "trials_per_book": 5,
+  "native_binary_sha256": "0d881d04ab281c655ad62a01bff5bfac6328ce804ebcec0eed2aa6bc62ecedda",
+  "records": [
+    {
+      "book": {
+        "schema": "kassiber.journals-bench-book.v1",
+        "kind": "generic",
+        "transactions": 2000,
+        "seed": 1,
+        "csv_sha256": {
+          "book.csv": "11b9ae7166f9ca46e8eea1fe82465380d70d6f194cd215649a2ab31647aa1352"
+        },
+        "pegs": 0,
+        "pegs_paired": 0,
+        "journals": {
+          "entries_created": 2000,
+          "quarantined": 0,
+          "cross_asset_pairs": 0,
+          "processed_transactions": 2000
+        },
+        "built_by": "b5eb38ea8cb764675322e61e9b957a57deb947c6",
+        "build_seconds": 14.8
+      },
+      "pairs": [
+        {
+          "load": [
+            6.2919921875,
+            10.46435546875,
+            19.390625
+          ],
+          "complete_dump_equal": true,
+          "python": {
+            "ok": true,
+            "payload": {
+              "profile": "Default",
+              "entries_created": 2000,
+              "quarantined": 0,
+              "transfers_detected": 0,
+              "cross_asset_pairs": 0,
+              "auto_priced": 0,
+              "processed_transactions": 2000,
+              "processed_at": "2026-10-31T19:18:22.000001Z",
+              "custody_quantity": {
+                "postings": 4000,
+                "issues": 0,
+                "balances": 3,
+                "decisions": 0,
+                "economic_relations": 0,
+                "differences": 0,
+                "blocked": false,
+                "blocked_from": null
+              }
+            },
+            "phases": [
+              {
+                "phase": "writer_wait",
+                "wall": 0.03186872799415141,
+                "cpu": 0.021185698000000003
+              },
+              {
+                "phase": "preparing",
+                "wall": 0.031881198985502124,
+                "cpu": 0.021194608000000004
+              },
+              {
+                "phase": "repairing",
+                "wall": 0.03193634998751804,
+                "cpu": 0.021250008000000015
+              },
+              {
+                "phase": "pricing",
+                "wall": 0.0341078540077433,
+                "cpu": 0.023382725999999993
+              },
+              {
+                "phase": "building",
+                "wall": 0.03467980900313705,
+                "cpu": 0.023948004999999994
+              },
+              {
+                "phase": "storing",
+                "wall": 1.3005584490019828,
+                "cpu": 1.298413987
+              },
+              {
+                "phase": "complete",
+                "wall": 1.3925981420034077,
+                "cpu": 1.38995822
+              }
+            ],
+            "wall_seconds": 1.403223658009665,
+            "cpu_seconds": 1.400494669,
+            "subprocess_wall": 1.6925837990129367,
+            "subprocess_cpu": 1.6655170000000004
+          },
+          "rust": {
+            "build_clock_reads": 1,
+            "clock_reads": 2,
+            "cpu_seconds": 1.151534,
+            "ok": true,
+            "payload": {
+              "auto_priced": 0,
+              "cross_asset_pairs": 0,
+              "custody_quantity": {
+                "balances": 3,
+                "blocked": false,
+                "blocked_from": null,
+                "decisions": 0,
+                "differences": 0,
+                "economic_relations": 0,
+                "issues": 0,
+                "postings": 4000
+              },
+              "entries_created": 2000,
+              "processed_at": "2026-10-31T19:18:22.000001Z",
+              "processed_transactions": 2000,
+              "profile": "Default",
+              "quarantined": 0,
+              "transfers_detected": 0
+            },
+            "payload_json": "{\"profile\": \"Default\", \"entries_created\": 2000, \"quarantined\": 0, \"transfers_detected\": 0, \"cross_asset_pairs\": 0, \"auto_priced\": 0, \"processed_transactions\": 2000, \"processed_at\": \"2026-10-31T19:18:22.000001Z\", \"custody_quantity\": {\"postings\": 4000, \"issues\": 0, \"balances\": 3, \"decisions\": 0, \"economic_relations\": 0, \"differences\": 0, \"blocked\": false, \"blocked_from\": null}}",
+            "phases": [
+              {
+                "cpu": 0.004156999999999999,
+                "phase": "writer_wait",
+                "wall": 0.004186675
+              },
+              {
+                "cpu": 0.004163,
+                "phase": "preparing",
+                "wall": 0.004194825
+              },
+              {
+                "cpu": 0.004201,
+                "phase": "repairing",
+                "wall": 0.004232976
+              },
+              {
+                "cpu": 0.007342999999999999,
+                "phase": "pricing",
+                "wall": 0.007401795
+              },
+              {
+                "cpu": 0.007734999999999999,
+                "phase": "building",
+                "wall": 0.007795965
+              },
+              {
+                "cpu": 1.0269700000000002,
+                "phase": "storing",
+                "wall": 0.706908961
+              },
+              {
+                "cpu": 1.0632730000000001,
+                "phase": "complete",
+                "wall": 0.764254786
+              }
+            ],
+            "uuid_reads": 3,
+            "wall_seconds": 0.853203442,
+            "subprocess_wall": 0.9061011760204565,
+            "subprocess_cpu": 1.1907670000000004
+          }
+        },
+        {
+          "load": [
+            6.2919921875,
+            10.46435546875,
+            19.390625
+          ],
+          "complete_dump_equal": true,
+          "rust": {
+            "build_clock_reads": 1,
+            "clock_reads": 2,
+            "cpu_seconds": 1.146631,
+            "ok": true,
+            "payload": {
+              "auto_priced": 0,
+              "cross_asset_pairs": 0,
+              "custody_quantity": {
+                "balances": 3,
+                "blocked": false,
+                "blocked_from": null,
+                "decisions": 0,
+                "differences": 0,
+                "economic_relations": 0,
+                "issues": 0,
+                "postings": 4000
+              },
+              "entries_created": 2000,
+              "processed_at": "2026-10-31T19:18:22.000001Z",
+              "processed_transactions": 2000,
+              "profile": "Default",
+              "quarantined": 0,
+              "transfers_detected": 0
+            },
+            "payload_json": "{\"profile\": \"Default\", \"entries_created\": 2000, \"quarantined\": 0, \"transfers_detected\": 0, \"cross_asset_pairs\": 0, \"auto_priced\": 0, \"processed_transactions\": 2000, \"processed_at\": \"2026-10-31T19:18:22.000001Z\", \"custody_quantity\": {\"postings\": 4000, \"issues\": 0, \"balances\": 3, \"decisions\": 0, \"economic_relations\": 0, \"differences\": 0, \"blocked\": false, \"blocked_from\": null}}",
+            "phases": [
+              {
+                "cpu": 0.004402,
+                "phase": "writer_wait",
+                "wall": 0.004435292
+              },
+              {
+                "cpu": 0.004409,
+                "phase": "preparing",
+                "wall": 0.004445802
+              },
+              {
+                "cpu": 0.004452,
+                "phase": "repairing",
+                "wall": 0.004488633
+              },
+              {
+                "cpu": 0.007792,
+                "phase": "pricing",
+                "wall": 0.008933334
+              },
+              {
+                "cpu": 0.008244,
+                "phase": "building",
+                "wall": 0.009388025
+              },
+              {
+                "cpu": 1.01824,
+                "phase": "storing",
+                "wall": 0.693510726
+              },
+              {
+                "cpu": 1.051849,
+                "phase": "complete",
+                "wall": 0.74799651
+              }
+            ],
+            "uuid_reads": 3,
+            "wall_seconds": 0.843456529,
+            "subprocess_wall": 0.8986196199839469,
+            "subprocess_cpu": 1.1813460000000007
+          },
+          "python": {
+            "ok": true,
+            "payload": {
+              "profile": "Default",
+              "entries_created": 2000,
+              "quarantined": 0,
+              "transfers_detected": 0,
+              "cross_asset_pairs": 0,
+              "auto_priced": 0,
+              "processed_transactions": 2000,
+              "processed_at": "2026-10-31T19:18:22.000001Z",
+              "custody_quantity": {
+                "postings": 4000,
+                "issues": 0,
+                "balances": 3,
+                "decisions": 0,
+                "economic_relations": 0,
+                "differences": 0,
+                "blocked": false,
+                "blocked_from": null
+              }
+            },
+            "phases": [
+              {
+                "phase": "writer_wait",
+                "wall": 0.04102925700135529,
+                "cpu": 0.020182739000000005
+              },
+              {
+                "phase": "preparing",
+                "wall": 0.04103902698261663,
+                "cpu": 0.020190848999999983
+              },
+              {
+                "phase": "repairing",
+                "wall": 0.04108587797963992,
+                "cpu": 0.02023788900000001
+              },
+              {
+                "phase": "pricing",
+                "wall": 0.042696317977970466,
+                "cpu": 0.02184201699999999
+              },
+              {
+                "phase": "building",
+                "wall": 0.043100237991893664,
+                "cpu": 0.022239396999999994
+              },
+              {
+                "phase": "storing",
+                "wall": 1.3225549789785873,
+                "cpu": 1.31222839
+              },
+              {
+                "phase": "complete",
+                "wall": 1.3993588209850714,
+                "cpu": 1.388525059
+              }
+            ],
+            "wall_seconds": 1.4074822939874139,
+            "cpu_seconds": 1.3965953009999998,
+            "subprocess_wall": 1.685996914980933,
+            "subprocess_cpu": 1.6512610000000003
+          }
+        },
+        {
+          "load": [
+            6.50927734375,
+            10.43994140625,
+            19.33447265625
+          ],
+          "complete_dump_equal": true,
+          "python": {
+            "ok": true,
+            "payload": {
+              "profile": "Default",
+              "entries_created": 2000,
+              "quarantined": 0,
+              "transfers_detected": 0,
+              "cross_asset_pairs": 0,
+              "auto_priced": 0,
+              "processed_transactions": 2000,
+              "processed_at": "2026-10-31T19:18:22.000001Z",
+              "custody_quantity": {
+                "postings": 4000,
+                "issues": 0,
+                "balances": 3,
+                "decisions": 0,
+                "economic_relations": 0,
+                "differences": 0,
+                "blocked": false,
+                "blocked_from": null
+              }
+            },
+            "phases": [
+              {
+                "phase": "writer_wait",
+                "wall": 0.0419121089798864,
+                "cpu": 0.025099813
+              },
+              {
+                "phase": "preparing",
+                "wall": 0.041923918994143605,
+                "cpu": 0.025109093
+              },
+              {
+                "phase": "repairing",
+                "wall": 0.041989841003669426,
+                "cpu": 0.025167503000000008
+              },
+              {
+                "phase": "pricing",
+                "wall": 0.043788805982330814,
+                "cpu": 0.026958940999999986
+              },
+              {
+                "phase": "building",
+                "wall": 0.04424254799960181,
+                "cpu": 0.027404560999999994
+              },
+              {
+                "phase": "storing",
+                "wall": 1.3392620270024054,
+                "cpu": 1.3275760300000001
+              },
+              {
+                "phase": "complete",
+                "wall": 1.421463844977552,
+                "cpu": 1.408992587
+              }
+            ],
+            "wall_seconds": 1.4290778650029097,
+            "cpu_seconds": 1.416528239,
+            "subprocess_wall": 1.687073821987724,
+            "subprocess_cpu": 1.659265
+          },
+          "rust": {
+            "build_clock_reads": 1,
+            "clock_reads": 2,
+            "cpu_seconds": 1.133363,
+            "ok": true,
+            "payload": {
+              "auto_priced": 0,
+              "cross_asset_pairs": 0,
+              "custody_quantity": {
+                "balances": 3,
+                "blocked": false,
+                "blocked_from": null,
+                "decisions": 0,
+                "differences": 0,
+                "economic_relations": 0,
+                "issues": 0,
+                "postings": 4000
+              },
+              "entries_created": 2000,
+              "processed_at": "2026-10-31T19:18:22.000001Z",
+              "processed_transactions": 2000,
+              "profile": "Default",
+              "quarantined": 0,
+              "transfers_detected": 0
+            },
+            "payload_json": "{\"profile\": \"Default\", \"entries_created\": 2000, \"quarantined\": 0, \"transfers_detected\": 0, \"cross_asset_pairs\": 0, \"auto_priced\": 0, \"processed_transactions\": 2000, \"processed_at\": \"2026-10-31T19:18:22.000001Z\", \"custody_quantity\": {\"postings\": 4000, \"issues\": 0, \"balances\": 3, \"decisions\": 0, \"economic_relations\": 0, \"differences\": 0, \"blocked\": false, \"blocked_from\": null}}",
+            "phases": [
+              {
+                "cpu": 0.00459,
+                "phase": "writer_wait",
+                "wall": 0.004839261
+              },
+              {
+                "cpu": 0.004601000000000001,
+                "phase": "preparing",
+                "wall": 0.004852651
+              },
+              {
+                "cpu": 0.004649,
+                "phase": "repairing",
+                "wall": 0.004900952
+              },
+              {
+                "cpu": 0.007575,
+                "phase": "pricing",
+                "wall": 0.007867007
+              },
+              {
+                "cpu": 0.007929,
+                "phase": "building",
+                "wall": 0.008228195
+              },
+              {
+                "cpu": 1.01009,
+                "phase": "storing",
+                "wall": 0.668235263
+              },
+              {
+                "cpu": 1.04179,
+                "phase": "complete",
+                "wall": 0.720924182
+              }
+            ],
+            "uuid_reads": 3,
+            "wall_seconds": 0.813642402,
+            "subprocess_wall": 0.865515740995761,
+            "subprocess_cpu": 1.1726650000000003
+          }
+        },
+        {
+          "load": [
+            6.50927734375,
+            10.43994140625,
+            19.33447265625
+          ],
+          "complete_dump_equal": true,
+          "rust": {
+            "build_clock_reads": 1,
+            "clock_reads": 2,
+            "cpu_seconds": 1.1282189999999999,
+            "ok": true,
+            "payload": {
+              "auto_priced": 0,
+              "cross_asset_pairs": 0,
+              "custody_quantity": {
+                "balances": 3,
+                "blocked": false,
+                "blocked_from": null,
+                "decisions": 0,
+                "differences": 0,
+                "economic_relations": 0,
+                "issues": 0,
+                "postings": 4000
+              },
+              "entries_created": 2000,
+              "processed_at": "2026-10-31T19:18:22.000001Z",
+              "processed_transactions": 2000,
+              "profile": "Default",
+              "quarantined": 0,
+              "transfers_detected": 0
+            },
+            "payload_json": "{\"profile\": \"Default\", \"entries_created\": 2000, \"quarantined\": 0, \"transfers_detected\": 0, \"cross_asset_pairs\": 0, \"auto_priced\": 0, \"processed_transactions\": 2000, \"processed_at\": \"2026-10-31T19:18:22.000001Z\", \"custody_quantity\": {\"postings\": 4000, \"issues\": 0, \"balances\": 3, \"decisions\": 0, \"economic_relations\": 0, \"differences\": 0, \"blocked\": false, \"blocked_from\": null}}",
+            "phases": [
+              {
+                "cpu": 0.004512,
+                "phase": "writer_wait",
+                "wall": 0.005464767
+              },
+              {
+                "cpu": 0.00452,
+                "phase": "preparing",
+                "wall": 0.005473547
+              },
+              {
+                "cpu": 0.004562,
+                "phase": "repairing",
+                "wall": 0.005515738
+              },
+              {
+                "cpu": 0.007396999999999999,
+                "phase": "pricing",
+                "wall": 0.008371969
+              },
+              {
+                "cpu": 0.007771,
+                "phase": "building",
+                "wall": 0.008752289
+              },
+              {
+                "cpu": 1.013136,
+                "phase": "storing",
+                "wall": 0.701422154
+              },
+              {
+                "cpu": 1.047148,
+                "phase": "complete",
+                "wall": 0.756235536
+              }
+            ],
+            "uuid_reads": 3,
+            "wall_seconds": 0.83792192,
+            "subprocess_wall": 0.8944717360136565,
+            "subprocess_cpu": 1.1641199999999987
+          },
+          "python": {
+            "ok": true,
+            "payload": {
+              "profile": "Default",
+              "entries_created": 2000,
+              "quarantined": 0,
+              "transfers_detected": 0,
+              "cross_asset_pairs": 0,
+              "auto_priced": 0,
+              "processed_transactions": 2000,
+              "processed_at": "2026-10-31T19:18:22.000001Z",
+              "custody_quantity": {
+                "postings": 4000,
+                "issues": 0,
+                "balances": 3,
+                "decisions": 0,
+                "economic_relations": 0,
+                "differences": 0,
+                "blocked": false,
+                "blocked_from": null
+              }
+            },
+            "phases": [
+              {
+                "phase": "writer_wait",
+                "wall": 0.04140798599109985,
+                "cpu": 0.020484158000000002
+              },
+              {
+                "phase": "preparing",
+                "wall": 0.04141904599964619,
+                "cpu": 0.020492717999999993
+              },
+              {
+                "phase": "repairing",
+                "wall": 0.04147218700381927,
+                "cpu": 0.02054624799999999
+              },
+              {
+                "phase": "pricing",
+                "wall": 0.043196921003982425,
+                "cpu": 0.022261295999999986
+              },
+              {
+                "phase": "building",
+                "wall": 0.04361792097915895,
+                "cpu": 0.022681615999999988
+              },
+              {
+                "phase": "storing",
+                "wall": 1.3218027699913364,
+                "cpu": 1.3072583089999998
+              },
+              {
+                "phase": "complete",
+                "wall": 1.3999837369774468,
+                "cpu": 1.38457762
+              }
+            ],
+            "wall_seconds": 1.407685810001567,
+            "cpu_seconds": 1.392193812,
+            "subprocess_wall": 1.6672065750171896,
+            "subprocess_cpu": 1.627425
+          }
+        },
+        {
+          "load": [
+            6.46826171875,
+            10.3662109375,
+            19.2626953125
+          ],
+          "complete_dump_equal": true,
+          "python": {
+            "ok": true,
+            "payload": {
+              "profile": "Default",
+              "entries_created": 2000,
+              "quarantined": 0,
+              "transfers_detected": 0,
+              "cross_asset_pairs": 0,
+              "auto_priced": 0,
+              "processed_transactions": 2000,
+              "processed_at": "2026-10-31T19:18:22.000001Z",
+              "custody_quantity": {
+                "postings": 4000,
+                "issues": 0,
+                "balances": 3,
+                "decisions": 0,
+                "economic_relations": 0,
+                "differences": 0,
+                "blocked": false,
+                "blocked_from": null
+              }
+            },
+            "phases": [
+              {
+                "phase": "writer_wait",
+                "wall": 0.04491279399371706,
+                "cpu": 0.023663535999999985
+              },
+              {
+                "phase": "preparing",
+                "wall": 0.04492361401207745,
+                "cpu": 0.023672306000000004
+              },
+              {
+                "phase": "repairing",
+                "wall": 0.04498950601555407,
+                "cpu": 0.023732686000000003
+              },
+              {
+                "phase": "pricing",
+                "wall": 0.047185970994178206,
+                "cpu": 0.025791183999999995
+              },
+              {
+                "phase": "building",
+                "wall": 0.04776975599816069,
+                "cpu": 0.026339103000000003
+              },
+              {
+                "phase": "storing",
+                "wall": 1.3397223590000067,
+                "cpu": 1.323720598
+              },
+              {
+                "phase": "complete",
+                "wall": 1.4159614070085809,
+                "cpu": 1.399556238
+              }
+            ],
+            "wall_seconds": 1.423897845990723,
+            "cpu_seconds": 1.4074563500000001,
+            "subprocess_wall": 1.7016903379990254,
+            "subprocess_cpu": 1.657930999999999
+          },
+          "rust": {
+            "build_clock_reads": 1,
+            "clock_reads": 2,
+            "cpu_seconds": 1.143837,
+            "ok": true,
+            "payload": {
+              "auto_priced": 0,
+              "cross_asset_pairs": 0,
+              "custody_quantity": {
+                "balances": 3,
+                "blocked": false,
+                "blocked_from": null,
+                "decisions": 0,
+                "differences": 0,
+                "economic_relations": 0,
+                "issues": 0,
+                "postings": 4000
+              },
+              "entries_created": 2000,
+              "processed_at": "2026-10-31T19:18:22.000001Z",
+              "processed_transactions": 2000,
+              "profile": "Default",
+              "quarantined": 0,
+              "transfers_detected": 0
+            },
+            "payload_json": "{\"profile\": \"Default\", \"entries_created\": 2000, \"quarantined\": 0, \"transfers_detected\": 0, \"cross_asset_pairs\": 0, \"auto_priced\": 0, \"processed_transactions\": 2000, \"processed_at\": \"2026-10-31T19:18:22.000001Z\", \"custody_quantity\": {\"postings\": 4000, \"issues\": 0, \"balances\": 3, \"decisions\": 0, \"economic_relations\": 0, \"differences\": 0, \"blocked\": false, \"blocked_from\": null}}",
+            "phases": [
+              {
+                "cpu": 0.004267,
+                "phase": "writer_wait",
+                "wall": 0.004295907
+              },
+              {
+                "cpu": 0.004275,
+                "phase": "preparing",
+                "wall": 0.004304908
+              },
+              {
+                "cpu": 0.0043159999999999995,
+                "phase": "repairing",
+                "wall": 0.004346429
+              },
+              {
+                "cpu": 0.0070160000000000005,
+                "phase": "pricing",
+                "wall": 0.007061737
+              },
+              {
+                "cpu": 0.007378999999999999,
+                "phase": "building",
+                "wall": 0.007425526
+              },
+              {
+                "cpu": 1.031059,
+                "phase": "storing",
+                "wall": 0.703005064
+              },
+              {
+                "cpu": 1.061826,
+                "phase": "complete",
+                "wall": 0.754884743
+              }
+            ],
+            "uuid_reads": 3,
+            "wall_seconds": 0.837778637,
+            "subprocess_wall": 0.8852229749900289,
+            "subprocess_cpu": 1.1779930000000007
+          }
+        }
+      ]
+    },
+    {
+      "book": {
+        "schema": "kassiber.journals-bench-book.v1",
+        "kind": "multi-wallet",
+        "transactions": 2000,
+        "seed": 7,
+        "csv_sha256": {
+          "Hot.csv": "e106b0aa2628699a1bff2b7fa4705a94ff8aa3c52761582e69baee21090e0d6c",
+          "Cold.csv": "e65f77cd25ab4e5de41f831eccc073c12b9cd2c5b9909fdca5ae4bea88eabdca",
+          "LHot.csv": "77da8aad0da7f1401e6ed0d8663299c669a05b5a194e2c6fd6c2d3ac9299ab98",
+          "LCold.csv": "94adb338d7efdf3b52025c2ef85e0fb586a7f501ff446d6aef3572295f8fc748"
+        },
+        "pegs": 342,
+        "pegs_paired": 171,
+        "journals": {
+          "entries_created": 2000,
+          "quarantined": 0,
+          "cross_asset_pairs": 171,
+          "processed_transactions": 2000
+        },
+        "built_by": "b5eb38ea8cb764675322e61e9b957a57deb947c6",
+        "build_seconds": 217.6
+      },
+      "pairs": [
+        {
+          "load": [
+            6.67138671875,
+            10.34326171875,
+            19.20751953125
+          ],
+          "complete_dump_equal": true,
+          "python": {
+            "ok": true,
+            "payload": {
+              "profile": "Default",
+              "entries_created": 2000,
+              "quarantined": 0,
+              "transfers_detected": 0,
+              "cross_asset_pairs": 171,
+              "auto_priced": 0,
+              "processed_transactions": 2000,
+              "processed_at": "2026-10-31T19:22:00.000001Z",
+              "custody_quantity": {
+                "postings": 4529,
+                "issues": 0,
+                "balances": 179,
+                "decisions": 0,
+                "economic_relations": 171,
+                "differences": 0,
+                "blocked": false,
+                "blocked_from": null
+              }
+            },
+            "phases": [
+              {
+                "phase": "writer_wait",
+                "wall": 0.05156165000516921,
+                "cpu": 0.02821821000000002
+              },
+              {
+                "phase": "preparing",
+                "wall": 0.0515725199948065,
+                "cpu": 0.02822686000000002
+              },
+              {
+                "phase": "repairing",
+                "wall": 0.05162615200970322,
+                "cpu": 0.02828072000000001
+              },
+              {
+                "phase": "pricing",
+                "wall": 0.05389537799055688,
+                "cpu": 0.030531417000000005
+              },
+              {
+                "phase": "building",
+                "wall": 0.05450256401672959,
+                "cpu": 0.031129307000000023
+              },
+              {
+                "phase": "storing",
+                "wall": 1.7132591980043799,
+                "cpu": 1.713867857
+              },
+              {
+                "phase": "complete",
+                "wall": 1.8023761479998939,
+                "cpu": 1.8021264830000001
+              }
+            ],
+            "wall_seconds": 1.8119537479942665,
+            "cpu_seconds": 1.8115666230000003,
+            "subprocess_wall": 2.086168362002354,
+            "subprocess_cpu": 2.061435999999997
+          },
+          "rust": {
+            "build_clock_reads": 1,
+            "clock_reads": 2,
+            "cpu_seconds": 1.687423,
+            "ok": true,
+            "payload": {
+              "auto_priced": 0,
+              "cross_asset_pairs": 171,
+              "custody_quantity": {
+                "balances": 179,
+                "blocked": false,
+                "blocked_from": null,
+                "decisions": 0,
+                "differences": 0,
+                "economic_relations": 171,
+                "issues": 0,
+                "postings": 4529
+              },
+              "entries_created": 2000,
+              "processed_at": "2026-10-31T19:22:00.000001Z",
+              "processed_transactions": 2000,
+              "profile": "Default",
+              "quarantined": 0,
+              "transfers_detected": 0
+            },
+            "payload_json": "{\"profile\": \"Default\", \"entries_created\": 2000, \"quarantined\": 0, \"transfers_detected\": 0, \"cross_asset_pairs\": 171, \"auto_priced\": 0, \"processed_transactions\": 2000, \"processed_at\": \"2026-10-31T19:22:00.000001Z\", \"custody_quantity\": {\"postings\": 4529, \"issues\": 0, \"balances\": 179, \"decisions\": 0, \"economic_relations\": 171, \"differences\": 0, \"blocked\": false, \"blocked_from\": null}}",
+            "phases": [
+              {
+                "cpu": 0.00434,
+                "phase": "writer_wait",
+                "wall": 0.004406611
+              },
+              {
+                "cpu": 0.004346,
+                "phase": "preparing",
+                "wall": 0.004414771
+              },
+              {
+                "cpu": 0.0043890000000000005,
+                "phase": "repairing",
+                "wall": 0.004457782
+              },
+              {
+                "cpu": 0.007711,
+                "phase": "pricing",
+                "wall": 0.007811566
+              },
+              {
+                "cpu": 0.008222,
+                "phase": "building",
+                "wall": 0.008336289
+              },
+              {
+                "cpu": 1.545682,
+                "phase": "storing",
+                "wall": 1.058385999
+              },
+              {
+                "cpu": 1.5919029999999998,
+                "phase": "complete",
+                "wall": 1.124651448
+              }
+            ],
+            "uuid_reads": 7,
+            "wall_seconds": 1.221619475,
+            "subprocess_wall": 1.2876931569771841,
+            "subprocess_cpu": 1.7335490000000022
+          }
+        },
+        {
+          "load": [
+            6.77783203125,
+            10.30419921875,
+            19.14697265625
+          ],
+          "complete_dump_equal": true,
+          "rust": {
+            "build_clock_reads": 1,
+            "clock_reads": 2,
+            "cpu_seconds": 1.715444,
+            "ok": true,
+            "payload": {
+              "auto_priced": 0,
+              "cross_asset_pairs": 171,
+              "custody_quantity": {
+                "balances": 179,
+                "blocked": false,
+                "blocked_from": null,
+                "decisions": 0,
+                "differences": 0,
+                "economic_relations": 171,
+                "issues": 0,
+                "postings": 4529
+              },
+              "entries_created": 2000,
+              "processed_at": "2026-10-31T19:22:00.000001Z",
+              "processed_transactions": 2000,
+              "profile": "Default",
+              "quarantined": 0,
+              "transfers_detected": 0
+            },
+            "payload_json": "{\"profile\": \"Default\", \"entries_created\": 2000, \"quarantined\": 0, \"transfers_detected\": 0, \"cross_asset_pairs\": 171, \"auto_priced\": 0, \"processed_transactions\": 2000, \"processed_at\": \"2026-10-31T19:22:00.000001Z\", \"custody_quantity\": {\"postings\": 4529, \"issues\": 0, \"balances\": 179, \"decisions\": 0, \"economic_relations\": 171, \"differences\": 0, \"blocked\": false, \"blocked_from\": null}}",
+            "phases": [
+              {
+                "cpu": 0.004236,
+                "phase": "writer_wait",
+                "wall": 0.004308017
+              },
+              {
+                "cpu": 0.004241999999999999,
+                "phase": "preparing",
+                "wall": 0.004316498
+              },
+              {
+                "cpu": 0.004286,
+                "phase": "repairing",
+                "wall": 0.004360479
+              },
+              {
+                "cpu": 0.007673000000000001,
+                "phase": "pricing",
+                "wall": 0.007786425
+              },
+              {
+                "cpu": 0.008192,
+                "phase": "building",
+                "wall": 0.008318738
+              },
+              {
+                "cpu": 1.566943,
+                "phase": "storing",
+                "wall": 1.052973893
+              },
+              {
+                "cpu": 1.617526,
+                "phase": "complete",
+                "wall": 1.122195806
+              }
+            ],
+            "uuid_reads": 7,
+            "wall_seconds": 1.221382958,
+            "subprocess_wall": 1.2877175089961383,
+            "subprocess_cpu": 1.7615570000000003
+          },
+          "python": {
+            "ok": true,
+            "payload": {
+              "profile": "Default",
+              "entries_created": 2000,
+              "quarantined": 0,
+              "transfers_detected": 0,
+              "cross_asset_pairs": 171,
+              "auto_priced": 0,
+              "processed_transactions": 2000,
+              "processed_at": "2026-10-31T19:22:00.000001Z",
+              "custody_quantity": {
+                "postings": 4529,
+                "issues": 0,
+                "balances": 179,
+                "decisions": 0,
+                "economic_relations": 171,
+                "differences": 0,
+                "blocked": false,
+                "blocked_from": null
+              }
+            },
+            "phases": [
+              {
+                "phase": "writer_wait",
+                "wall": 0.04858622598112561,
+                "cpu": 0.02850296999999999
+              },
+              {
+                "phase": "preparing",
+                "wall": 0.04859765598666854,
+                "cpu": 0.028511530000000007
+              },
+              {
+                "phase": "repairing",
+                "wall": 0.04865298798540607,
+                "cpu": 0.028567079999999995
+              },
+              {
+                "phase": "pricing",
+                "wall": 0.05095436499686912,
+                "cpu": 0.03085421699999999
+              },
+              {
+                "phase": "building",
+                "wall": 0.05157772099482827,
+                "cpu": 0.03146976700000001
+              },
+              {
+                "phase": "storing",
+                "wall": 1.7579977689892985,
+                "cpu": 1.762700196
+              },
+              {
+                "phase": "complete",
+                "wall": 1.8597717459779233,
+                "cpu": 1.8638515089999999
+              }
+            ],
+            "wall_seconds": 1.868685038993135,
+            "cpu_seconds": 1.8727133889999998,
+            "subprocess_wall": 2.1480404409812763,
+            "subprocess_cpu": 2.1253940000000004
+          }
+        },
+        {
+          "load": [
+            6.77783203125,
+            10.30419921875,
+            19.14697265625
+          ],
+          "complete_dump_equal": true,
+          "python": {
+            "ok": true,
+            "payload": {
+              "profile": "Default",
+              "entries_created": 2000,
+              "quarantined": 0,
+              "transfers_detected": 0,
+              "cross_asset_pairs": 171,
+              "auto_priced": 0,
+              "processed_transactions": 2000,
+              "processed_at": "2026-10-31T19:22:00.000001Z",
+              "custody_quantity": {
+                "postings": 4529,
+                "issues": 0,
+                "balances": 179,
+                "decisions": 0,
+                "economic_relations": 171,
+                "differences": 0,
+                "blocked": false,
+                "blocked_from": null
+              }
+            },
+            "phases": [
+              {
+                "phase": "writer_wait",
+                "wall": 0.04904891797923483,
+                "cpu": 0.027918501000000012
+              },
+              {
+                "phase": "preparing",
+                "wall": 0.049059917975682765,
+                "cpu": 0.027927581000000007
+              },
+              {
+                "phase": "repairing",
+                "wall": 0.04910993899102323,
+                "cpu": 0.02797776099999999
+              },
+              {
+                "phase": "pricing",
+                "wall": 0.05131451497436501,
+                "cpu": 0.030169569000000007
+              },
+              {
+                "phase": "building",
+                "wall": 0.051902469975175336,
+                "cpu": 0.030750998
+              },
+              {
+                "phase": "storing",
+                "wall": 1.6845985029940493,
+                "cpu": 1.686999074
+              },
+              {
+                "phase": "complete",
+                "wall": 1.7705554239801131,
+                "cpu": 1.7720951139999999
+              }
+            ],
+            "wall_seconds": 1.7790664669882972,
+            "cpu_seconds": 1.7805461249999999,
+            "subprocess_wall": 2.085432684980333,
+            "subprocess_cpu": 2.0631279999999954
+          },
+          "rust": {
+            "build_clock_reads": 1,
+            "clock_reads": 2,
+            "cpu_seconds": 1.6613580000000001,
+            "ok": true,
+            "payload": {
+              "auto_priced": 0,
+              "cross_asset_pairs": 171,
+              "custody_quantity": {
+                "balances": 179,
+                "blocked": false,
+                "blocked_from": null,
+                "decisions": 0,
+                "differences": 0,
+                "economic_relations": 171,
+                "issues": 0,
+                "postings": 4529
+              },
+              "entries_created": 2000,
+              "processed_at": "2026-10-31T19:22:00.000001Z",
+              "processed_transactions": 2000,
+              "profile": "Default",
+              "quarantined": 0,
+              "transfers_detected": 0
+            },
+            "payload_json": "{\"profile\": \"Default\", \"entries_created\": 2000, \"quarantined\": 0, \"transfers_detected\": 0, \"cross_asset_pairs\": 171, \"auto_priced\": 0, \"processed_transactions\": 2000, \"processed_at\": \"2026-10-31T19:22:00.000001Z\", \"custody_quantity\": {\"postings\": 4529, \"issues\": 0, \"balances\": 179, \"decisions\": 0, \"economic_relations\": 171, \"differences\": 0, \"blocked\": false, \"blocked_from\": null}}",
+            "phases": [
+              {
+                "cpu": 0.004439,
+                "phase": "writer_wait",
+                "wall": 0.004550894
+              },
+              {
+                "cpu": 0.004447,
+                "phase": "preparing",
+                "wall": 0.004559844
+              },
+              {
+                "cpu": 0.004485,
+                "phase": "repairing",
+                "wall": 0.004597975
+              },
+              {
+                "cpu": 0.007926,
+                "phase": "pricing",
+                "wall": 0.008074882
+              },
+              {
+                "cpu": 0.008453,
+                "phase": "building",
+                "wall": 0.008616846
+              },
+              {
+                "cpu": 1.523045,
+                "phase": "storing",
+                "wall": 1.034358868
+              },
+              {
+                "cpu": 1.5706980000000001,
+                "phase": "complete",
+                "wall": 1.104962385
+              }
+            ],
+            "uuid_reads": 7,
+            "wall_seconds": 1.19623716,
+            "subprocess_wall": 1.256743853999069,
+            "subprocess_cpu": 1.6991689999999995
+          }
+        },
+        {
+          "load": [
+            6.7958984375,
+            10.2490234375,
+            19.08154296875
+          ],
+          "complete_dump_equal": true,
+          "rust": {
+            "build_clock_reads": 1,
+            "clock_reads": 2,
+            "cpu_seconds": 1.618797,
+            "ok": true,
+            "payload": {
+              "auto_priced": 0,
+              "cross_asset_pairs": 171,
+              "custody_quantity": {
+                "balances": 179,
+                "blocked": false,
+                "blocked_from": null,
+                "decisions": 0,
+                "differences": 0,
+                "economic_relations": 171,
+                "issues": 0,
+                "postings": 4529
+              },
+              "entries_created": 2000,
+              "processed_at": "2026-10-31T19:22:00.000001Z",
+              "processed_transactions": 2000,
+              "profile": "Default",
+              "quarantined": 0,
+              "transfers_detected": 0
+            },
+            "payload_json": "{\"profile\": \"Default\", \"entries_created\": 2000, \"quarantined\": 0, \"transfers_detected\": 0, \"cross_asset_pairs\": 171, \"auto_priced\": 0, \"processed_transactions\": 2000, \"processed_at\": \"2026-10-31T19:22:00.000001Z\", \"custody_quantity\": {\"postings\": 4529, \"issues\": 0, \"balances\": 179, \"decisions\": 0, \"economic_relations\": 171, \"differences\": 0, \"blocked\": false, \"blocked_from\": null}}",
+            "phases": [
+              {
+                "cpu": 0.0043479999999999994,
+                "phase": "writer_wait",
+                "wall": 0.00439164
+              },
+              {
+                "cpu": 0.004354,
+                "phase": "preparing",
+                "wall": 0.00439983
+              },
+              {
+                "cpu": 0.004393,
+                "phase": "repairing",
+                "wall": 0.004438641
+              },
+              {
+                "cpu": 0.0076820000000000005,
+                "phase": "pricing",
+                "wall": 0.007749525
+              },
+              {
+                "cpu": 0.008794,
+                "phase": "building",
+                "wall": 0.009096188
+              },
+              {
+                "cpu": 1.487991,
+                "phase": "storing",
+                "wall": 0.994260465
+              },
+              {
+                "cpu": 1.5321200000000001,
+                "phase": "complete",
+                "wall": 1.058071292
+              }
+            ],
+            "uuid_reads": 7,
+            "wall_seconds": 1.145220393,
+            "subprocess_wall": 1.2034493300016038,
+            "subprocess_cpu": 1.6579509999999997
+          },
+          "python": {
+            "ok": true,
+            "payload": {
+              "profile": "Default",
+              "entries_created": 2000,
+              "quarantined": 0,
+              "transfers_detected": 0,
+              "cross_asset_pairs": 171,
+              "auto_priced": 0,
+              "processed_transactions": 2000,
+              "processed_at": "2026-10-31T19:22:00.000001Z",
+              "custody_quantity": {
+                "postings": 4529,
+                "issues": 0,
+                "balances": 179,
+                "decisions": 0,
+                "economic_relations": 171,
+                "differences": 0,
+                "blocked": false,
+                "blocked_from": null
+              }
+            },
+            "phases": [
+              {
+                "phase": "writer_wait",
+                "wall": 0.048120904015377164,
+                "cpu": 0.028139180000000014
+              },
+              {
+                "phase": "preparing",
+                "wall": 0.04813311400357634,
+                "cpu": 0.028148190000000017
+              },
+              {
+                "phase": "repairing",
+                "wall": 0.04818446599529125,
+                "cpu": 0.028199750000000023
+              },
+              {
+                "phase": "pricing",
+                "wall": 0.050560664996737614,
+                "cpu": 0.03056088800000001
+              },
+              {
+                "phase": "building",
+                "wall": 0.05121396100730635,
+                "cpu": 0.031206727000000017
+              },
+              {
+                "phase": "storing",
+                "wall": 1.7731075870105997,
+                "cpu": 1.773051728
+              },
+              {
+                "phase": "complete",
+                "wall": 1.871578162012156,
+                "cpu": 1.8701944140000002
+              }
+            ],
+            "wall_seconds": 1.8807464920100756,
+            "cpu_seconds": 1.879222935,
+            "subprocess_wall": 2.1492828630143777,
+            "subprocess_cpu": 2.124735999999999
+          }
+        },
+        {
+          "load": [
+            6.892578125,
+            10.21142578125,
+            19.02197265625
+          ],
+          "complete_dump_equal": true,
+          "python": {
+            "ok": true,
+            "payload": {
+              "profile": "Default",
+              "entries_created": 2000,
+              "quarantined": 0,
+              "transfers_detected": 0,
+              "cross_asset_pairs": 171,
+              "auto_priced": 0,
+              "processed_transactions": 2000,
+              "processed_at": "2026-10-31T19:22:00.000001Z",
+              "custody_quantity": {
+                "postings": 4529,
+                "issues": 0,
+                "balances": 179,
+                "decisions": 0,
+                "economic_relations": 171,
+                "differences": 0,
+                "blocked": false,
+                "blocked_from": null
+              }
+            },
+            "phases": [
+              {
+                "phase": "writer_wait",
+                "wall": 0.05954355001449585,
+                "cpu": 0.030238578000000016
+              },
+              {
+                "phase": "preparing",
+                "wall": 0.059555400017416105,
+                "cpu": 0.030247338000000012
+              },
+              {
+                "phase": "repairing",
+                "wall": 0.05960969100124203,
+                "cpu": 0.030301968000000012
+              },
+              {
+                "phase": "pricing",
+                "wall": 0.06231164900236763,
+                "cpu": 0.032983605
+              },
+              {
+                "phase": "building",
+                "wall": 0.06304639799054712,
+                "cpu": 0.033703974
+              },
+              {
+                "phase": "storing",
+                "wall": 1.7547131380124483,
+                "cpu": 1.7438196389999998
+              },
+              {
+                "phase": "complete",
+                "wall": 1.8511678719951306,
+                "cpu": 1.838930248
+              }
+            ],
+            "wall_seconds": 1.85959770300542,
+            "cpu_seconds": 1.8472439390000002,
+            "subprocess_wall": 2.157167091005249,
+            "subprocess_cpu": 2.10652
+          },
+          "rust": {
+            "build_clock_reads": 1,
+            "clock_reads": 2,
+            "cpu_seconds": 1.6949450000000001,
+            "ok": true,
+            "payload": {
+              "auto_priced": 0,
+              "cross_asset_pairs": 171,
+              "custody_quantity": {
+                "balances": 179,
+                "blocked": false,
+                "blocked_from": null,
+                "decisions": 0,
+                "differences": 0,
+                "economic_relations": 171,
+                "issues": 0,
+                "postings": 4529
+              },
+              "entries_created": 2000,
+              "processed_at": "2026-10-31T19:22:00.000001Z",
+              "processed_transactions": 2000,
+              "profile": "Default",
+              "quarantined": 0,
+              "transfers_detected": 0
+            },
+            "payload_json": "{\"profile\": \"Default\", \"entries_created\": 2000, \"quarantined\": 0, \"transfers_detected\": 0, \"cross_asset_pairs\": 171, \"auto_priced\": 0, \"processed_transactions\": 2000, \"processed_at\": \"2026-10-31T19:22:00.000001Z\", \"custody_quantity\": {\"postings\": 4529, \"issues\": 0, \"balances\": 179, \"decisions\": 0, \"economic_relations\": 171, \"differences\": 0, \"blocked\": false, \"blocked_from\": null}}",
+            "phases": [
+              {
+                "cpu": 0.004231,
+                "phase": "writer_wait",
+                "wall": 0.004301758
+              },
+              {
+                "cpu": 0.0042380000000000004,
+                "phase": "preparing",
+                "wall": 0.004310248
+              },
+              {
+                "cpu": 0.004281999999999999,
+                "phase": "repairing",
+                "wall": 0.004354289
+              },
+              {
+                "cpu": 0.007667,
+                "phase": "pricing",
+                "wall": 0.007847797
+              },
+              {
+                "cpu": 0.008191,
+                "phase": "building",
+                "wall": 0.00837297
+              },
+              {
+                "cpu": 1.556176,
+                "phase": "storing",
+                "wall": 1.063094078
+              },
+              {
+                "cpu": 1.6025040000000002,
+                "phase": "complete",
+                "wall": 1.120751671
+              }
+            ],
+            "uuid_reads": 7,
+            "wall_seconds": 1.21458507,
+            "subprocess_wall": 1.2820923289982602,
+            "subprocess_cpu": 1.7382799999999978
+          }
+        }
+      ]
+    },
+    {
+      "book": {
+        "schema": "kassiber.journals-bench-book.v1",
+        "kind": "generic",
+        "transactions": 20000,
+        "seed": 1,
+        "csv_sha256": {
+          "book.csv": "7b09f4fd1d6fc465734d1c30db1e8ca2445577932c2fd924ab593106172cf6b1"
+        },
+        "pegs": 0,
+        "pegs_paired": 0,
+        "journals": {
+          "entries_created": 20000,
+          "quarantined": 0,
+          "cross_asset_pairs": 0,
+          "processed_transactions": 20000
+        },
+        "built_by": "b5eb38ea8cb764675322e61e9b957a57deb947c6",
+        "build_seconds": 22.0
+      },
+      "pairs": [
+        {
+          "load": [
+            6.841796875,
+            10.037109375,
+            18.8232421875
+          ],
+          "complete_dump_equal": true,
+          "python": {
+            "ok": true,
+            "payload": {
+              "profile": "Default",
+              "entries_created": 20000,
+              "quarantined": 0,
+              "transfers_detected": 0,
+              "cross_asset_pairs": 0,
+              "auto_priced": 0,
+              "processed_transactions": 20000,
+              "processed_at": "2026-10-31T19:22:21.000001Z",
+              "custody_quantity": {
+                "postings": 40000,
+                "issues": 0,
+                "balances": 3,
+                "decisions": 0,
+                "economic_relations": 0,
+                "differences": 0,
+                "blocked": false,
+                "blocked_from": null
+              }
+            },
+            "phases": [
+              {
+                "phase": "writer_wait",
+                "wall": 0.08982153801480308,
+                "cpu": 0.059858195
+              },
+              {
+                "phase": "preparing",
+                "wall": 0.0898334990197327,
+                "cpu": 0.05986730499999998
+              },
+              {
+                "phase": "repairing",
+                "wall": 0.08988821000093594,
+                "cpu": 0.059922315000000004
+              },
+              {
+                "phase": "pricing",
+                "wall": 0.11158385299495421,
+                "cpu": 0.08137698199999999
+              },
+              {
+                "phase": "building",
+                "wall": 0.11866932100383565,
+                "cpu": 0.08838277500000002
+              },
+              {
+                "phase": "storing",
+                "wall": 10.692585478012916,
+                "cpu": 10.71131003
+              },
+              {
+                "phase": "complete",
+                "wall": 12.050940418004757,
+                "cpu": 12.053791097
+              }
+            ],
+            "wall_seconds": 12.165259510016767,
+            "cpu_seconds": 12.167213529,
+            "subprocess_wall": 12.500338407000527,
+            "subprocess_cpu": 12.463837999999997
+          },
+          "rust": {
+            "build_clock_reads": 1,
+            "clock_reads": 2,
+            "cpu_seconds": 11.068909,
+            "ok": true,
+            "payload": {
+              "auto_priced": 0,
+              "cross_asset_pairs": 0,
+              "custody_quantity": {
+                "balances": 3,
+                "blocked": false,
+                "blocked_from": null,
+                "decisions": 0,
+                "differences": 0,
+                "economic_relations": 0,
+                "issues": 0,
+                "postings": 40000
+              },
+              "entries_created": 20000,
+              "processed_at": "2026-10-31T19:22:21.000001Z",
+              "processed_transactions": 20000,
+              "profile": "Default",
+              "quarantined": 0,
+              "transfers_detected": 0
+            },
+            "payload_json": "{\"profile\": \"Default\", \"entries_created\": 20000, \"quarantined\": 0, \"transfers_detected\": 0, \"cross_asset_pairs\": 0, \"auto_priced\": 0, \"processed_transactions\": 20000, \"processed_at\": \"2026-10-31T19:22:21.000001Z\", \"custody_quantity\": {\"postings\": 40000, \"issues\": 0, \"balances\": 3, \"decisions\": 0, \"economic_relations\": 0, \"differences\": 0, \"blocked\": false, \"blocked_from\": null}}",
+            "phases": [
+              {
+                "cpu": 0.0042510000000000004,
+                "phase": "writer_wait",
+                "wall": 0.004278447
+              },
+              {
+                "cpu": 0.0042580000000000005,
+                "phase": "preparing",
+                "wall": 0.004287018
+              },
+              {
+                "cpu": 0.004295,
+                "phase": "repairing",
+                "wall": 0.004324828
+              },
+              {
+                "cpu": 0.03215,
+                "phase": "pricing",
+                "wall": 0.032425272
+              },
+              {
+                "cpu": 0.036709,
+                "phase": "building",
+                "wall": 0.037017226
+              },
+              {
+                "cpu": 9.896793,
+                "phase": "storing",
+                "wall": 6.641679777
+              },
+              {
+                "cpu": 10.291249,
+                "phase": "complete",
+                "wall": 7.065980948
+              }
+            ],
+            "uuid_reads": 9,
+            "wall_seconds": 7.848939477,
+            "subprocess_wall": 8.127188342972659,
+            "subprocess_cpu": 11.316968
+          }
+        },
+        {
+          "load": [
+            6.8408203125,
+            9.77685546875,
+            18.50244140625
+          ],
+          "complete_dump_equal": true,
+          "rust": {
+            "build_clock_reads": 1,
+            "clock_reads": 2,
+            "cpu_seconds": 11.175065,
+            "ok": true,
+            "payload": {
+              "auto_priced": 0,
+              "cross_asset_pairs": 0,
+              "custody_quantity": {
+                "balances": 3,
+                "blocked": false,
+                "blocked_from": null,
+                "decisions": 0,
+                "differences": 0,
+                "economic_relations": 0,
+                "issues": 0,
+                "postings": 40000
+              },
+              "entries_created": 20000,
+              "processed_at": "2026-10-31T19:22:21.000001Z",
+              "processed_transactions": 20000,
+              "profile": "Default",
+              "quarantined": 0,
+              "transfers_detected": 0
+            },
+            "payload_json": "{\"profile\": \"Default\", \"entries_created\": 20000, \"quarantined\": 0, \"transfers_detected\": 0, \"cross_asset_pairs\": 0, \"auto_priced\": 0, \"processed_transactions\": 20000, \"processed_at\": \"2026-10-31T19:22:21.000001Z\", \"custody_quantity\": {\"postings\": 40000, \"issues\": 0, \"balances\": 3, \"decisions\": 0, \"economic_relations\": 0, \"differences\": 0, \"blocked\": false, \"blocked_from\": null}}",
+            "phases": [
+              {
+                "cpu": 0.004637,
+                "phase": "writer_wait",
+                "wall": 0.004884111
+              },
+              {
+                "cpu": 0.004645,
+                "phase": "preparing",
+                "wall": 0.004894311
+              },
+              {
+                "cpu": 0.004694,
+                "phase": "repairing",
+                "wall": 0.004944483
+              },
+              {
+                "cpu": 0.039201,
+                "phase": "pricing",
+                "wall": 0.040212767
+              },
+              {
+                "cpu": 0.047508999999999996,
+                "phase": "building",
+                "wall": 0.048636529
+              },
+              {
+                "cpu": 9.956682,
+                "phase": "storing",
+                "wall": 6.748892744
+              },
+              {
+                "cpu": 10.380136,
+                "phase": "complete",
+                "wall": 7.189622412
+              }
+            ],
+            "uuid_reads": 9,
+            "wall_seconds": 7.990728057,
+            "subprocess_wall": 8.258032142010052,
+            "subprocess_cpu": 11.411080000000002
+          },
+          "python": {
+            "ok": true,
+            "payload": {
+              "profile": "Default",
+              "entries_created": 20000,
+              "quarantined": 0,
+              "transfers_detected": 0,
+              "cross_asset_pairs": 0,
+              "auto_priced": 0,
+              "processed_transactions": 20000,
+              "processed_at": "2026-10-31T19:22:21.000001Z",
+              "custody_quantity": {
+                "postings": 40000,
+                "issues": 0,
+                "balances": 3,
+                "decisions": 0,
+                "economic_relations": 0,
+                "differences": 0,
+                "blocked": false,
+                "blocked_from": null
+              }
+            },
+            "phases": [
+              {
+                "phase": "writer_wait",
+                "wall": 0.08565511900815181,
+                "cpu": 0.05431092100000001
+              },
+              {
+                "phase": "preparing",
+                "wall": 0.08566620000055991,
+                "cpu": 0.054319281
+              },
+              {
+                "phase": "repairing",
+                "wall": 0.08571752099669538,
+                "cpu": 0.054371011
+              },
+              {
+                "phase": "pricing",
+                "wall": 0.1066189710109029,
+                "cpu": 0.07499147900000003
+              },
+              {
+                "phase": "building",
+                "wall": 0.11287444099434651,
+                "cpu": 0.081181593
+              },
+              {
+                "phase": "storing",
+                "wall": 10.471466040995438,
+                "cpu": 10.489392185000002
+              },
+              {
+                "phase": "complete",
+                "wall": 11.805359735997627,
+                "cpu": 11.811570647
+              }
+            ],
+            "wall_seconds": 11.925081105000572,
+            "cpu_seconds": 11.930393062,
+            "subprocess_wall": 12.20316617199569,
+            "subprocess_cpu": 12.188450999999999
+          }
+        },
+        {
+          "load": [
+            6.70654296875,
+            9.548828125,
+            18.24072265625
+          ],
+          "complete_dump_equal": true,
+          "python": {
+            "ok": true,
+            "payload": {
+              "profile": "Default",
+              "entries_created": 20000,
+              "quarantined": 0,
+              "transfers_detected": 0,
+              "cross_asset_pairs": 0,
+              "auto_priced": 0,
+              "processed_transactions": 20000,
+              "processed_at": "2026-10-31T19:22:21.000001Z",
+              "custody_quantity": {
+                "postings": 40000,
+                "issues": 0,
+                "balances": 3,
+                "decisions": 0,
+                "economic_relations": 0,
+                "differences": 0,
+                "blocked": false,
+                "blocked_from": null
+              }
+            },
+            "phases": [
+              {
+                "phase": "writer_wait",
+                "wall": 0.07789740897715092,
+                "cpu": 0.059524078000000036
+              },
+              {
+                "phase": "preparing",
+                "wall": 0.07790915897930972,
+                "cpu": 0.05953280799999999
+              },
+              {
+                "phase": "repairing",
+                "wall": 0.07796180099830963,
+                "cpu": 0.05958575799999999
+              },
+              {
+                "phase": "pricing",
+                "wall": 0.09983532698242925,
+                "cpu": 0.08130675500000001
+              },
+              {
+                "phase": "building",
+                "wall": 0.10755650798091665,
+                "cpu": 0.08896696700000001
+              },
+              {
+                "phase": "storing",
+                "wall": 10.612420360994292,
+                "cpu": 10.686523973
+              },
+              {
+                "phase": "complete",
+                "wall": 11.855048606987111,
+                "cpu": 11.91224499
+              }
+            ],
+            "wall_seconds": 11.973639761999948,
+            "cpu_seconds": 12.029335387,
+            "subprocess_wall": 12.256453659007093,
+            "subprocess_cpu": 12.293263999999992
+          },
+          "rust": {
+            "build_clock_reads": 1,
+            "clock_reads": 2,
+            "cpu_seconds": 12.409524,
+            "ok": true,
+            "payload": {
+              "auto_priced": 0,
+              "cross_asset_pairs": 0,
+              "custody_quantity": {
+                "balances": 3,
+                "blocked": false,
+                "blocked_from": null,
+                "decisions": 0,
+                "differences": 0,
+                "economic_relations": 0,
+                "issues": 0,
+                "postings": 40000
+              },
+              "entries_created": 20000,
+              "processed_at": "2026-10-31T19:22:21.000001Z",
+              "processed_transactions": 20000,
+              "profile": "Default",
+              "quarantined": 0,
+              "transfers_detected": 0
+            },
+            "payload_json": "{\"profile\": \"Default\", \"entries_created\": 20000, \"quarantined\": 0, \"transfers_detected\": 0, \"cross_asset_pairs\": 0, \"auto_priced\": 0, \"processed_transactions\": 20000, \"processed_at\": \"2026-10-31T19:22:21.000001Z\", \"custody_quantity\": {\"postings\": 40000, \"issues\": 0, \"balances\": 3, \"decisions\": 0, \"economic_relations\": 0, \"differences\": 0, \"blocked\": false, \"blocked_from\": null}}",
+            "phases": [
+              {
+                "cpu": 0.004267,
+                "phase": "writer_wait",
+                "wall": 0.004332153
+              },
+              {
+                "cpu": 0.004273,
+                "phase": "preparing",
+                "wall": 0.004340394
+              },
+              {
+                "cpu": 0.004312,
+                "phase": "repairing",
+                "wall": 0.004379765
+              },
+              {
+                "cpu": 0.032611,
+                "phase": "pricing",
+                "wall": 0.033117065
+              },
+              {
+                "cpu": 0.037094999999999996,
+                "phase": "building",
+                "wall": 0.037660975
+              },
+              {
+                "cpu": 11.167325,
+                "phase": "storing",
+                "wall": 7.765325883
+              },
+              {
+                "cpu": 11.591052,
+                "phase": "complete",
+                "wall": 8.198385662
+              }
+            ],
+            "uuid_reads": 9,
+            "wall_seconds": 9.031441999,
+            "subprocess_wall": 9.369040877005318,
+            "subprocess_cpu": 12.724528000000003
+          }
+        },
+        {
+          "load": [
+            8.32177734375,
+            9.65966796875,
+            18.04345703125
+          ],
+          "complete_dump_equal": true,
+          "rust": {
+            "build_clock_reads": 1,
+            "clock_reads": 2,
+            "cpu_seconds": 11.441068,
+            "ok": true,
+            "payload": {
+              "auto_priced": 0,
+              "cross_asset_pairs": 0,
+              "custody_quantity": {
+                "balances": 3,
+                "blocked": false,
+                "blocked_from": null,
+                "decisions": 0,
+                "differences": 0,
+                "economic_relations": 0,
+                "issues": 0,
+                "postings": 40000
+              },
+              "entries_created": 20000,
+              "processed_at": "2026-10-31T19:22:21.000001Z",
+              "processed_transactions": 20000,
+              "profile": "Default",
+              "quarantined": 0,
+              "transfers_detected": 0
+            },
+            "payload_json": "{\"profile\": \"Default\", \"entries_created\": 20000, \"quarantined\": 0, \"transfers_detected\": 0, \"cross_asset_pairs\": 0, \"auto_priced\": 0, \"processed_transactions\": 20000, \"processed_at\": \"2026-10-31T19:22:21.000001Z\", \"custody_quantity\": {\"postings\": 40000, \"issues\": 0, \"balances\": 3, \"decisions\": 0, \"economic_relations\": 0, \"differences\": 0, \"blocked\": false, \"blocked_from\": null}}",
+            "phases": [
+              {
+                "cpu": 0.004711,
+                "phase": "writer_wait",
+                "wall": 0.004803967
+              },
+              {
+                "cpu": 0.00472,
+                "phase": "preparing",
+                "wall": 0.004816397
+              },
+              {
+                "cpu": 0.004777,
+                "phase": "repairing",
+                "wall": 0.004873619
+              },
+              {
+                "cpu": 0.040708,
+                "phase": "pricing",
+                "wall": 0.041278865
+              },
+              {
+                "cpu": 0.050597,
+                "phase": "building",
+                "wall": 0.051331671
+              },
+              {
+                "cpu": 10.215156,
+                "phase": "storing",
+                "wall": 6.976138083
+              },
+              {
+                "cpu": 10.625885,
+                "phase": "complete",
+                "wall": 7.396311199
+              }
+            ],
+            "uuid_reads": 9,
+            "wall_seconds": 8.226809667,
+            "subprocess_wall": 8.484591743996134,
+            "subprocess_cpu": 11.688013000000007
+          },
+          "python": {
+            "ok": true,
+            "payload": {
+              "profile": "Default",
+              "entries_created": 20000,
+              "quarantined": 0,
+              "transfers_detected": 0,
+              "cross_asset_pairs": 0,
+              "auto_priced": 0,
+              "processed_transactions": 20000,
+              "processed_at": "2026-10-31T19:22:21.000001Z",
+              "custody_quantity": {
+                "postings": 40000,
+                "issues": 0,
+                "balances": 3,
+                "decisions": 0,
+                "economic_relations": 0,
+                "differences": 0,
+                "blocked": false,
+                "blocked_from": null
+              }
+            },
+            "phases": [
+              {
+                "phase": "writer_wait",
+                "wall": 0.06748005800182,
+                "cpu": 0.05242902500000002
+              },
+              {
+                "phase": "preparing",
+                "wall": 0.06749275801121257,
+                "cpu": 0.052438454999999995
+              },
+              {
+                "phase": "repairing",
+                "wall": 0.06754352999269031,
+                "cpu": 0.05248950499999999
+              },
+              {
+                "phase": "pricing",
+                "wall": 0.09072823799215257,
+                "cpu": 0.075075732
+              },
+              {
+                "phase": "building",
+                "wall": 0.09823828199296258,
+                "cpu": 0.08252764400000001
+              },
+              {
+                "phase": "storing",
+                "wall": 10.911617984995246,
+                "cpu": 10.965856676
+              },
+              {
+                "phase": "complete",
+                "wall": 12.141543259989703,
+                "cpu": 12.181532795999999
+              }
+            ],
+            "wall_seconds": 12.257093135995092,
+            "cpu_seconds": 12.296348854,
+            "subprocess_wall": 12.56037729998934,
+            "subprocess_cpu": 12.570615999999987
+          }
+        },
+        {
+          "load": [
+            8.501953125,
+            9.6044921875,
+            17.8017578125
+          ],
+          "complete_dump_equal": true,
+          "python": {
+            "ok": true,
+            "payload": {
+              "profile": "Default",
+              "entries_created": 20000,
+              "quarantined": 0,
+              "transfers_detected": 0,
+              "cross_asset_pairs": 0,
+              "auto_priced": 0,
+              "processed_transactions": 20000,
+              "processed_at": "2026-10-31T19:22:21.000001Z",
+              "custody_quantity": {
+                "postings": 40000,
+                "issues": 0,
+                "balances": 3,
+                "decisions": 0,
+                "economic_relations": 0,
+                "differences": 0,
+                "blocked": false,
+                "blocked_from": null
+              }
+            },
+            "phases": [
+              {
+                "phase": "writer_wait",
+                "wall": 0.16772699300781824,
+                "cpu": 0.06927456900000001
+              },
+              {
+                "phase": "preparing",
+                "wall": 0.16773971301154234,
+                "cpu": 0.06928443899999998
+              },
+              {
+                "phase": "repairing",
+                "wall": 0.16780293500050902,
+                "cpu": 0.06934806900000001
+              },
+              {
+                "phase": "pricing",
+                "wall": 0.19215538501157425,
+                "cpu": 0.09345832300000001
+              },
+              {
+                "phase": "building",
+                "wall": 0.20091911300551146,
+                "cpu": 0.10215442399999997
+              },
+              {
+                "phase": "storing",
+                "wall": 10.619166823016712,
+                "cpu": 10.556792771
+              },
+              {
+                "phase": "complete",
+                "wall": 11.833806714013917,
+                "cpu": 11.756369599000001
+              }
+            ],
+            "wall_seconds": 11.950585284997942,
+            "cpu_seconds": 11.871729648,
+            "subprocess_wall": 12.251756112003932,
+            "subprocess_cpu": 12.15412400000001
+          },
+          "rust": {
+            "build_clock_reads": 1,
+            "clock_reads": 2,
+            "cpu_seconds": 11.126012,
+            "ok": true,
+            "payload": {
+              "auto_priced": 0,
+              "cross_asset_pairs": 0,
+              "custody_quantity": {
+                "balances": 3,
+                "blocked": false,
+                "blocked_from": null,
+                "decisions": 0,
+                "differences": 0,
+                "economic_relations": 0,
+                "issues": 0,
+                "postings": 40000
+              },
+              "entries_created": 20000,
+              "processed_at": "2026-10-31T19:22:21.000001Z",
+              "processed_transactions": 20000,
+              "profile": "Default",
+              "quarantined": 0,
+              "transfers_detected": 0
+            },
+            "payload_json": "{\"profile\": \"Default\", \"entries_created\": 20000, \"quarantined\": 0, \"transfers_detected\": 0, \"cross_asset_pairs\": 0, \"auto_priced\": 0, \"processed_transactions\": 20000, \"processed_at\": \"2026-10-31T19:22:21.000001Z\", \"custody_quantity\": {\"postings\": 40000, \"issues\": 0, \"balances\": 3, \"decisions\": 0, \"economic_relations\": 0, \"differences\": 0, \"blocked\": false, \"blocked_from\": null}}",
+            "phases": [
+              {
+                "cpu": 0.00443,
+                "phase": "writer_wait",
+                "wall": 0.004477886
+              },
+              {
+                "cpu": 0.004439,
+                "phase": "preparing",
+                "wall": 0.004488607
+              },
+              {
+                "cpu": 0.004487,
+                "phase": "repairing",
+                "wall": 0.004536738
+              },
+              {
+                "cpu": 0.032327,
+                "phase": "pricing",
+                "wall": 0.03254472
+              },
+              {
+                "cpu": 0.036819,
+                "phase": "building",
+                "wall": 0.037072078
+              },
+              {
+                "cpu": 9.925283,
+                "phase": "storing",
+                "wall": 6.703015783
+              },
+              {
+                "cpu": 10.375248,
+                "phase": "complete",
+                "wall": 7.164941153
+              }
+            ],
+            "uuid_reads": 9,
+            "wall_seconds": 7.925982615,
+            "subprocess_wall": 8.21086133600329,
+            "subprocess_cpu": 11.386609000000007
+          }
+        }
+      ]
+    },
+    {
+      "book": {
+        "schema": "kassiber.journals-bench-book.v1",
+        "kind": "multi-wallet",
+        "transactions": 20000,
+        "seed": 7,
+        "csv_sha256": {
+          "Hot.csv": "8d3852c3bcdb36bdd425b76fb3a8e5f64bf462e57c6b61294ed774681ac81146",
+          "Cold.csv": "ed3a0928e98404316be9b9fa7e3b603f4d4e0d7577633bec06e441d8d0e8ff5f",
+          "LHot.csv": "0cdeee02cfd30c7a1bc950bb013c3bbe793b4f1c7f19bc7ab4a4569100117b7a",
+          "LCold.csv": "94adb338d7efdf3b52025c2ef85e0fb586a7f501ff446d6aef3572295f8fc748"
+        },
+        "pegs": 3306,
+        "pegs_paired": 300,
+        "journals": {
+          "entries_created": 19983,
+          "quarantined": 17,
+          "cross_asset_pairs": 300,
+          "processed_transactions": 20000
+        },
+        "built_by": "b5eb38ea8cb764675322e61e9b957a57deb947c6",
+        "build_seconds": 1222.3
+      },
+      "pairs": [
+        {
+          "load": [
+            6.52685546875,
+            8.927734375,
+            17.18310546875
+          ],
+          "complete_dump_equal": true,
+          "python": {
+            "ok": true,
+            "payload": {
+              "profile": "Default",
+              "entries_created": 19983,
+              "quarantined": 17,
+              "transfers_detected": 0,
+              "cross_asset_pairs": 300,
+              "auto_priced": 0,
+              "processed_transactions": 20000,
+              "processed_at": "2026-10-31T19:42:43.000001Z",
+              "custody_quantity": {
+                "postings": 45216,
+                "issues": 0,
+                "balances": 308,
+                "decisions": 0,
+                "economic_relations": 300,
+                "differences": 1,
+                "blocked": false,
+                "blocked_from": null
+              }
+            },
+            "phases": [
+              {
+                "phase": "writer_wait",
+                "wall": 0.14884117199108005,
+                "cpu": 0.13597821500000004
+              },
+              {
+                "phase": "preparing",
+                "wall": 0.14885345197399147,
+                "cpu": 0.13598740500000003
+              },
+              {
+                "phase": "repairing",
+                "wall": 0.14890968397958204,
+                "cpu": 0.136043865
+              },
+              {
+                "phase": "pricing",
+                "wall": 0.17937335898750462,
+                "cpu": 0.166089613
+              },
+              {
+                "phase": "building",
+                "wall": 0.19063027598895133,
+                "cpu": 0.17719302100000003
+              },
+              {
+                "phase": "storing",
+                "wall": 20.18515000399202,
+                "cpu": 20.271649239000002
+              },
+              {
+                "phase": "complete",
+                "wall": 21.64112772399676,
+                "cpu": 21.712693772
+              }
+            ],
+            "wall_seconds": 21.77681282098638,
+            "cpu_seconds": 21.845858792,
+            "subprocess_wall": 22.144047198991757,
+            "subprocess_cpu": 22.139252000000003
+          },
+          "rust": {
+            "build_clock_reads": 1,
+            "clock_reads": 1,
+            "cpu_seconds": 16.438438,
+            "ok": true,
+            "payload": {
+              "auto_priced": 0,
+              "cross_asset_pairs": 300,
+              "custody_quantity": {
+                "balances": 308,
+                "blocked": false,
+                "blocked_from": null,
+                "decisions": 0,
+                "differences": 1,
+                "economic_relations": 300,
+                "issues": 0,
+                "postings": 45216
+              },
+              "entries_created": 19983,
+              "processed_at": "2026-10-31T19:42:43.000001Z",
+              "processed_transactions": 20000,
+              "profile": "Default",
+              "quarantined": 17,
+              "transfers_detected": 0
+            },
+            "payload_json": "{\"profile\": \"Default\", \"entries_created\": 19983, \"quarantined\": 17, \"transfers_detected\": 0, \"cross_asset_pairs\": 300, \"auto_priced\": 0, \"processed_transactions\": 20000, \"processed_at\": \"2026-10-31T19:42:43.000001Z\", \"custody_quantity\": {\"postings\": 45216, \"issues\": 0, \"balances\": 308, \"decisions\": 0, \"economic_relations\": 300, \"differences\": 1, \"blocked\": false, \"blocked_from\": null}}",
+            "phases": [
+              {
+                "cpu": 0.004763,
+                "phase": "writer_wait",
+                "wall": 0.040409081
+              },
+              {
+                "cpu": 0.004771,
+                "phase": "preparing",
+                "wall": 0.040419652
+              },
+              {
+                "cpu": 0.0048189999999999995,
+                "phase": "repairing",
+                "wall": 0.040467523
+              },
+              {
+                "cpu": 0.048250999999999995,
+                "phase": "pricing",
+                "wall": 0.08501736
+              },
+              {
+                "cpu": 0.061278,
+                "phase": "building",
+                "wall": 0.098157767
+              },
+              {
+                "cpu": 14.944383,
+                "phase": "storing",
+                "wall": 9.762787453
+              },
+              {
+                "cpu": 15.495072,
+                "phase": "complete",
+                "wall": 10.323686412
+              }
+            ],
+            "uuid_reads": 15,
+            "wall_seconds": 11.274938781,
+            "subprocess_wall": 11.631565751013113,
+            "subprocess_cpu": 16.774135000000005
+          }
+        },
+        {
+          "load": [
+            9.3173828125,
+            9.20556640625,
+            16.9189453125
+          ],
+          "complete_dump_equal": true,
+          "rust": {
+            "build_clock_reads": 1,
+            "clock_reads": 1,
+            "cpu_seconds": 15.625099,
+            "ok": true,
+            "payload": {
+              "auto_priced": 0,
+              "cross_asset_pairs": 300,
+              "custody_quantity": {
+                "balances": 308,
+                "blocked": false,
+                "blocked_from": null,
+                "decisions": 0,
+                "differences": 1,
+                "economic_relations": 300,
+                "issues": 0,
+                "postings": 45216
+              },
+              "entries_created": 19983,
+              "processed_at": "2026-10-31T19:42:43.000001Z",
+              "processed_transactions": 20000,
+              "profile": "Default",
+              "quarantined": 17,
+              "transfers_detected": 0
+            },
+            "payload_json": "{\"profile\": \"Default\", \"entries_created\": 19983, \"quarantined\": 17, \"transfers_detected\": 0, \"cross_asset_pairs\": 300, \"auto_priced\": 0, \"processed_transactions\": 20000, \"processed_at\": \"2026-10-31T19:42:43.000001Z\", \"custody_quantity\": {\"postings\": 45216, \"issues\": 0, \"balances\": 308, \"decisions\": 0, \"economic_relations\": 300, \"differences\": 1, \"blocked\": false, \"blocked_from\": null}}",
+            "phases": [
+              {
+                "cpu": 0.0061340000000000006,
+                "phase": "writer_wait",
+                "wall": 0.008285171
+              },
+              {
+                "cpu": 0.006143000000000001,
+                "phase": "preparing",
+                "wall": 0.008296842
+              },
+              {
+                "cpu": 0.006188000000000001,
+                "phase": "repairing",
+                "wall": 0.008341103
+              },
+              {
+                "cpu": 0.047798,
+                "phase": "pricing",
+                "wall": 0.050418987
+              },
+              {
+                "cpu": 0.061512000000000004,
+                "phase": "building",
+                "wall": 0.064230763
+              },
+              {
+                "cpu": 14.208501,
+                "phase": "storing",
+                "wall": 9.264135454
+              },
+              {
+                "cpu": 14.772121,
+                "phase": "complete",
+                "wall": 9.840963258
+              }
+            ],
+            "uuid_reads": 15,
+            "wall_seconds": 10.704373466,
+            "subprocess_wall": 11.048614486993756,
+            "subprocess_cpu": 15.926884000000012
+          },
+          "python": {
+            "ok": true,
+            "payload": {
+              "profile": "Default",
+              "entries_created": 19983,
+              "quarantined": 17,
+              "transfers_detected": 0,
+              "cross_asset_pairs": 300,
+              "auto_priced": 0,
+              "processed_transactions": 20000,
+              "processed_at": "2026-10-31T19:42:43.000001Z",
+              "custody_quantity": {
+                "postings": 45216,
+                "issues": 0,
+                "balances": 308,
+                "decisions": 0,
+                "economic_relations": 300,
+                "differences": 1,
+                "blocked": false,
+                "blocked_from": null
+              }
+            },
+            "phases": [
+              {
+                "phase": "writer_wait",
+                "wall": 0.5854114679968916,
+                "cpu": 0.13134114000000002
+              },
+              {
+                "phase": "preparing",
+                "wall": 0.5854235780134331,
+                "cpu": 0.13135049
+              },
+              {
+                "phase": "repairing",
+                "wall": 0.5854799099906813,
+                "cpu": 0.13140707000000001
+              },
+              {
+                "phase": "pricing",
+                "wall": 0.6160840519878548,
+                "cpu": 0.161806308
+              },
+              {
+                "phase": "building",
+                "wall": 0.6270895980123896,
+                "cpu": 0.17265799600000004
+              },
+              {
+                "phase": "storing",
+                "wall": 20.810436280007707,
+                "cpu": 20.494312306
+              },
+              {
+                "phase": "complete",
+                "wall": 22.311770417989464,
+                "cpu": 21.970481904
+              }
+            ],
+            "wall_seconds": 22.453631754993694,
+            "cpu_seconds": 22.110900207,
+            "subprocess_wall": 22.78475683799479,
+            "subprocess_cpu": 22.413043000000005
+          }
+        },
+        {
+          "load": [
+            10.7626953125,
+            9.62939453125,
+            16.7763671875
+          ],
+          "complete_dump_equal": true,
+          "python": {
+            "ok": true,
+            "payload": {
+              "profile": "Default",
+              "entries_created": 19983,
+              "quarantined": 17,
+              "transfers_detected": 0,
+              "cross_asset_pairs": 300,
+              "auto_priced": 0,
+              "processed_transactions": 20000,
+              "processed_at": "2026-10-31T19:42:43.000001Z",
+              "custody_quantity": {
+                "postings": 45216,
+                "issues": 0,
+                "balances": 308,
+                "decisions": 0,
+                "economic_relations": 300,
+                "differences": 1,
+                "blocked": false,
+                "blocked_from": null
+              }
+            },
+            "phases": [
+              {
+                "phase": "writer_wait",
+                "wall": 0.15851429698523134,
+                "cpu": 0.14423933799999997
+              },
+              {
+                "phase": "preparing",
+                "wall": 0.1585465879761614,
+                "cpu": 0.14426685799999997
+              },
+              {
+                "phase": "repairing",
+                "wall": 0.15868408198002726,
+                "cpu": 0.144404418
+              },
+              {
+                "phase": "pricing",
+                "wall": 0.19157464397721924,
+                "cpu": 0.175538826
+              },
+              {
+                "phase": "building",
+                "wall": 0.20269823298440315,
+                "cpu": 0.18658326499999997
+              },
+              {
+                "phase": "storing",
+                "wall": 19.61389987397706,
+                "cpu": 19.767058136000003
+              },
+              {
+                "phase": "complete",
+                "wall": 21.041795570985414,
+                "cpu": 21.183667793
+              }
+            ],
+            "wall_seconds": 21.18369612499373,
+            "cpu_seconds": 21.322345637,
+            "subprocess_wall": 21.5086043770134,
+            "subprocess_cpu": 21.628389999999968
+          },
+          "rust": {
+            "build_clock_reads": 1,
+            "clock_reads": 1,
+            "cpu_seconds": 15.188748,
+            "ok": true,
+            "payload": {
+              "auto_priced": 0,
+              "cross_asset_pairs": 300,
+              "custody_quantity": {
+                "balances": 308,
+                "blocked": false,
+                "blocked_from": null,
+                "decisions": 0,
+                "differences": 1,
+                "economic_relations": 300,
+                "issues": 0,
+                "postings": 45216
+              },
+              "entries_created": 19983,
+              "processed_at": "2026-10-31T19:42:43.000001Z",
+              "processed_transactions": 20000,
+              "profile": "Default",
+              "quarantined": 17,
+              "transfers_detected": 0
+            },
+            "payload_json": "{\"profile\": \"Default\", \"entries_created\": 19983, \"quarantined\": 17, \"transfers_detected\": 0, \"cross_asset_pairs\": 300, \"auto_priced\": 0, \"processed_transactions\": 20000, \"processed_at\": \"2026-10-31T19:42:43.000001Z\", \"custody_quantity\": {\"postings\": 45216, \"issues\": 0, \"balances\": 308, \"decisions\": 0, \"economic_relations\": 300, \"differences\": 1, \"blocked\": false, \"blocked_from\": null}}",
+            "phases": [
+              {
+                "cpu": 0.00448,
+                "phase": "writer_wait",
+                "wall": 0.004518595
+              },
+              {
+                "cpu": 0.004491,
+                "phase": "preparing",
+                "wall": 0.004547746
+              },
+              {
+                "cpu": 0.004533,
+                "phase": "repairing",
+                "wall": 0.004590037
+              },
+              {
+                "cpu": 0.044966000000000006,
+                "phase": "pricing",
+                "wall": 0.045492097
+              },
+              {
+                "cpu": 0.056067000000000006,
+                "phase": "building",
+                "wall": 0.056813401
+              },
+              {
+                "cpu": 13.866766,
+                "phase": "storing",
+                "wall": 8.995144514
+              },
+              {
+                "cpu": 14.357068,
+                "phase": "complete",
+                "wall": 9.503182102
+              }
+            ],
+            "uuid_reads": 15,
+            "wall_seconds": 10.341034554,
+            "subprocess_wall": 10.662861278979108,
+            "subprocess_cpu": 15.491852999999981
+          }
+        },
+        {
+          "load": [
+            9.71826171875,
+            9.54541015625,
+            16.486328125
+          ],
+          "complete_dump_equal": true,
+          "rust": {
+            "build_clock_reads": 1,
+            "clock_reads": 1,
+            "cpu_seconds": 15.327337,
+            "ok": true,
+            "payload": {
+              "auto_priced": 0,
+              "cross_asset_pairs": 300,
+              "custody_quantity": {
+                "balances": 308,
+                "blocked": false,
+                "blocked_from": null,
+                "decisions": 0,
+                "differences": 1,
+                "economic_relations": 300,
+                "issues": 0,
+                "postings": 45216
+              },
+              "entries_created": 19983,
+              "processed_at": "2026-10-31T19:42:43.000001Z",
+              "processed_transactions": 20000,
+              "profile": "Default",
+              "quarantined": 17,
+              "transfers_detected": 0
+            },
+            "payload_json": "{\"profile\": \"Default\", \"entries_created\": 19983, \"quarantined\": 17, \"transfers_detected\": 0, \"cross_asset_pairs\": 300, \"auto_priced\": 0, \"processed_transactions\": 20000, \"processed_at\": \"2026-10-31T19:42:43.000001Z\", \"custody_quantity\": {\"postings\": 45216, \"issues\": 0, \"balances\": 308, \"decisions\": 0, \"economic_relations\": 300, \"differences\": 1, \"blocked\": false, \"blocked_from\": null}}",
+            "phases": [
+              {
+                "cpu": 0.004641000000000001,
+                "phase": "writer_wait",
+                "wall": 0.004996817
+              },
+              {
+                "cpu": 0.004647999999999999,
+                "phase": "preparing",
+                "wall": 0.005005678
+              },
+              {
+                "cpu": 0.004692,
+                "phase": "repairing",
+                "wall": 0.005054299
+              },
+              {
+                "cpu": 0.048635000000000005,
+                "phase": "pricing",
+                "wall": 0.050413591
+              },
+              {
+                "cpu": 0.059871,
+                "phase": "building",
+                "wall": 0.061727263
+              },
+              {
+                "cpu": 13.920653999999999,
+                "phase": "storing",
+                "wall": 9.088514924
+              },
+              {
+                "cpu": 14.441668,
+                "phase": "complete",
+                "wall": 9.626229761
+              }
+            ],
+            "uuid_reads": 15,
+            "wall_seconds": 10.522586706,
+            "subprocess_wall": 11.017245283001103,
+            "subprocess_cpu": 15.63309700000002
+          },
+          "python": {
+            "ok": true,
+            "payload": {
+              "profile": "Default",
+              "entries_created": 19983,
+              "quarantined": 17,
+              "transfers_detected": 0,
+              "cross_asset_pairs": 300,
+              "auto_priced": 0,
+              "processed_transactions": 20000,
+              "processed_at": "2026-10-31T19:42:43.000001Z",
+              "custody_quantity": {
+                "postings": 45216,
+                "issues": 0,
+                "balances": 308,
+                "decisions": 0,
+                "economic_relations": 300,
+                "differences": 1,
+                "blocked": false,
+                "blocked_from": null
+              }
+            },
+            "phases": [
+              {
+                "phase": "writer_wait",
+                "wall": 0.1736321430071257,
+                "cpu": 0.15247067
+              },
+              {
+                "phase": "preparing",
+                "wall": 0.1736439030210022,
+                "cpu": 0.15247953
+              },
+              {
+                "phase": "repairing",
+                "wall": 0.17369998499634676,
+                "cpu": 0.15253583
+              },
+              {
+                "phase": "pricing",
+                "wall": 0.2036696610157378,
+                "cpu": 0.182294078
+              },
+              {
+                "phase": "building",
+                "wall": 0.21370060701156035,
+                "cpu": 0.192231858
+              },
+              {
+                "phase": "storing",
+                "wall": 20.166258720011683,
+                "cpu": 20.311425006999997
+              },
+              {
+                "phase": "complete",
+                "wall": 21.513169142010156,
+                "cpu": 21.648907437
+              }
+            ],
+            "wall_seconds": 21.634710710000945,
+            "cpu_seconds": 21.76938728,
+            "subprocess_wall": 21.931912127998658,
+            "subprocess_cpu": 22.04744700000002
+          }
+        },
+        {
+          "load": [
+            9.39892578125,
+            9.47265625,
+            16.203125
+          ],
+          "complete_dump_equal": true,
+          "python": {
+            "ok": true,
+            "payload": {
+              "profile": "Default",
+              "entries_created": 19983,
+              "quarantined": 17,
+              "transfers_detected": 0,
+              "cross_asset_pairs": 300,
+              "auto_priced": 0,
+              "processed_transactions": 20000,
+              "processed_at": "2026-10-31T19:42:43.000001Z",
+              "custody_quantity": {
+                "postings": 45216,
+                "issues": 0,
+                "balances": 308,
+                "decisions": 0,
+                "economic_relations": 300,
+                "differences": 1,
+                "blocked": false,
+                "blocked_from": null
+              }
+            },
+            "phases": [
+              {
+                "phase": "writer_wait",
+                "wall": 0.14940585099975578,
+                "cpu": 0.136330299
+              },
+              {
+                "phase": "preparing",
+                "wall": 0.14941886099404655,
+                "cpu": 0.13633979899999998
+              },
+              {
+                "phase": "repairing",
+                "wall": 0.14947381301317364,
+                "cpu": 0.136395039
+              },
+              {
+                "phase": "pricing",
+                "wall": 0.17988863700884394,
+                "cpu": 0.166401217
+              },
+              {
+                "phase": "building",
+                "wall": 0.19047399799455889,
+                "cpu": 0.17682422600000003
+              },
+              {
+                "phase": "storing",
+                "wall": 19.83043318000273,
+                "cpu": 19.910670834
+              },
+              {
+                "phase": "complete",
+                "wall": 21.248597186990082,
+                "cpu": 21.314141127
+              }
+            ],
+            "wall_seconds": 21.37717933600652,
+            "cpu_seconds": 21.441777432000002,
+            "subprocess_wall": 21.677007258986123,
+            "subprocess_cpu": 21.722578999999946
+          },
+          "rust": {
+            "build_clock_reads": 1,
+            "clock_reads": 1,
+            "cpu_seconds": 15.503603,
+            "ok": true,
+            "payload": {
+              "auto_priced": 0,
+              "cross_asset_pairs": 300,
+              "custody_quantity": {
+                "balances": 308,
+                "blocked": false,
+                "blocked_from": null,
+                "decisions": 0,
+                "differences": 1,
+                "economic_relations": 300,
+                "issues": 0,
+                "postings": 45216
+              },
+              "entries_created": 19983,
+              "processed_at": "2026-10-31T19:42:43.000001Z",
+              "processed_transactions": 20000,
+              "profile": "Default",
+              "quarantined": 17,
+              "transfers_detected": 0
+            },
+            "payload_json": "{\"profile\": \"Default\", \"entries_created\": 19983, \"quarantined\": 17, \"transfers_detected\": 0, \"cross_asset_pairs\": 300, \"auto_priced\": 0, \"processed_transactions\": 20000, \"processed_at\": \"2026-10-31T19:42:43.000001Z\", \"custody_quantity\": {\"postings\": 45216, \"issues\": 0, \"balances\": 308, \"decisions\": 0, \"economic_relations\": 300, \"differences\": 1, \"blocked\": false, \"blocked_from\": null}}",
+            "phases": [
+              {
+                "cpu": 0.004671,
+                "phase": "writer_wait",
+                "wall": 0.00511395
+              },
+              {
+                "cpu": 0.004679000000000001,
+                "phase": "preparing",
+                "wall": 0.00512533
+              },
+              {
+                "cpu": 0.00473,
+                "phase": "repairing",
+                "wall": 0.005175822
+              },
+              {
+                "cpu": 0.042762999999999995,
+                "phase": "pricing",
+                "wall": 0.043447689
+              },
+              {
+                "cpu": 0.054289,
+                "phase": "building",
+                "wall": 0.055120689
+              },
+              {
+                "cpu": 14.073573,
+                "phase": "storing",
+                "wall": 9.016892003
+              },
+              {
+                "cpu": 14.611486999999999,
+                "phase": "complete",
+                "wall": 9.573545038
+              }
+            ],
+            "uuid_reads": 15,
+            "wall_seconds": 10.472148447,
+            "subprocess_wall": 10.809116846998222,
+            "subprocess_cpu": 15.822225000000053
+          }
+        }
+      ]
+    }
+  ]
+}

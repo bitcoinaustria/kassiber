@@ -772,7 +772,9 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   Its 57 complete reference books cover both commits, skip-current and failure
   recovery. Bind it to production while preserving desktop pairing and scoped
   AI no-pairing behavior. Track speed acceptance separately;
-  prepared-book probe results do not authorize production routing.
+  unregistered probe results do not authorize production routing. The fresh
+  four-book CPU record includes real native pre-build and 20 exact paired
+  dumps; the 4× target remains open on the separate performance track.
 
 <!-- inherited from render@f1712c625; pending r10 verification -->
   ownership graph consumption is completed by the

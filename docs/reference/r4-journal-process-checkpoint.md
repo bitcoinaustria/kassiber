@@ -694,30 +694,74 @@ These campaigns certify the stored-book adapter and fixed source/binary above.
 They do not certify arbitrary malformed/lossless stage values, production scope,
 registered envelopes/events, or the full inherited census/shadow/mutation gates.
 
+## Four-book process CPU after merged refresh work
+
+The [fresh raw record](r4-journal-process-refresh-measurements.json) contains five
+alternating Python/native pairs on each of the four seeded benchmark books.
+All **20/20** pairs match ordered payload JSON bytes, phase order and complete
+scalar-exact database dumps. CSV and source-copy hashes were checked before the
+run; source books were copied without changing the pairing worker's originals.
+The binary hash is identical to the full campaigns above.
+
+These runs use `--native-prebuild`, so real native repairs and cached pricing
+execute. The benchmark books qualify for the no-op repair/pricing case; scope
+is still injected through the private probe. CPU covers each complete child
+from startup through response, deferred checkpoint, deallocation and exit,
+including every native worker thread. Database copying and dump comparisons
+are outside timing. This remains an unregistered process measurement; it does
+not include the future registered CLI/daemon adapter or close its acceptance.
+
+Each CPU cell is **best / median of five**, seconds. The ratio uses medians.
+
+| Book | Python process CPU | Native process CPU | CPU speedup |
+| --- | ---: | ---: | ---: |
+| generic 2k | 1.627 / 1.658 | 1.164 / 1.178 | 1.41× |
+| multi-wallet 2k | 2.061 / 2.107 | 1.658 / 1.734 | 1.22× |
+| generic 20k | 12.154 / 12.293 | 11.317 / 11.411 | 1.08× |
+| multi-wallet 20k | 21.628 / 22.047 | 15.492 / 15.822 | 1.39× |
+
+The one-minute load ranges are 6.29–6.51, 6.67–6.89, 6.71–8.50 and 6.53–10.76,
+respectively. Native wall medians are 0.894 / 1.282 / 8.258 / 11.017 seconds;
+they remain above the four design budgets. The owner's 4× CPU target remains
+unmet on all four books. The separate performance worker track remains open;
+performance is not used as the reason to defer route registration here.
+
+Final closeout regenerates the test classification inventory and passes the
+required **57-test CI preflight**, formatting and all 239 journal mutation
+anchor checks. The mutation trees and the main 2.5 GiB verification build tree
+are removed after summarizing; the bound probe binaries, campaign shards and
+logs remain under `target/`, about 2.1 GiB in total. All launched verification
+jobs have finished.
+
 ## Remaining integration work
 
 1. Bind the real `process_native` adapter to production scope resolution and
    `SystemSources` through the shared book service. Source repair/warning,
    legacy refresh/profile reload, cached pricing and lifecycle clocks are now
-   composed; preserve the ordered source fields when emitting envelopes.
+   composed; preserve the ordered source fields when emitting envelopes. Reuse
+   setup's shared scope/selector resolver while preserving lossless stored
+   profile values, rather than substituting the probe's injected profile.
 2. Finish process/rendering acceptance gaps, including lossless stage values,
-   exact refusals and the intended native boundaries. R4-9 is fully accepted
-   with no pending exceptions; the process and R4-11 acceptance work remains.
+   exact refusals and the intended native boundaries. In particular,
+   `process::stage_value` still refuses NaN, actual surrogate scalars and
+   non-string keys, and transitional rendering/response decoding remains.
+   R4-9 is fully accepted with no pending exceptions; these are process and
+   R4-11 gaps, not loader exceptions.
 3. The complete generated and retained-recording process campaigns pass above.
    Finish integrated frozen, census/shadow, codec/rollback and inherited mutation
    gates. The selected 41 mutation kills do not close the full inherited
    catalogs; future production route wiring needs its own named mutations.
-4. Register CLI `journals process` with and without `--auto-pair`, verify exact
-   envelopes, routing and zero fallback, and commit that boundary. The native
-   R4-14 stage and atomic refresh coordinator are composed through the test-only
-   entry; their production scope and route integration remain.
-5. Register daemon processing only after reconciling the pairing contract and
-   proving exact payload/event-stream parity, cancellation/scope and fallback
-   behavior; commit separately. The current desktop kind accepts no arguments
-   and calls `_journals_refresh_payload` with its default `auto_pair=True`.
-   The scoped AI path explicitly passes `False`. A non-pairing replacement
-   cannot silently stand in for both. R4-14 and the existing consent boundary
-   must be preserved.
-6. Keep performance acceptance on the separate worker track: measure the
+4. Register plain CLI `journals process`, with exact ordered envelopes, native
+   routing, zero fallbacks and route mutation tests; commit separately.
+5. Register CLI `journals process --auto-pair` through the native R4-14 stage
+   and atomic refresh coordinator, with the same envelope/routing/mutation
+   requirements; commit separately.
+6. Register desktop `ui.journals.process`, which accepts no arguments and uses
+   `auto_pair=True`. Prove exact payload/event streams, cancellation, scope,
+   zero fallbacks and route mutations; commit separately.
+7. Register the scoped AI path with `auto_pair=False`. Preserve consent,
+   book/input-version binding, cancellation and execution-thread boundaries,
+   exact envelopes/events, zero fallbacks and route mutations; commit separately.
+8. Keep performance acceptance on the separate worker track: measure the
    registered command from process start to exit against the owner's 4× target
    and four design budgets, then address R4-15/R4-16 authority work.
