@@ -374,7 +374,8 @@ PDF and XLSX drafts stamp `departureTimezone` as well as the departure date.
 Managed desktop and AI export filenames use that resolved civil date
 (`YYYY-MM-DD`), so timed inputs cannot put offset punctuation in filenames.
 The desktop takes its default departure date from the core and displays that
-timezone; clearing the date asks the core for today's civil day again.
+timezone. The calendar's today outline uses the core's default civil day,
+including after a different departure date is selected.
 This replaces the earlier open timezone question with the owner's decision.
 
 For departure 2024-12-31, a receipt at 2025-01-01 00:30 Europe/Vienna

@@ -93,6 +93,12 @@ export function ExitTax() {
   const [activeExport, setActiveExport] = useState<ExportFormat | null>(null);
   const [exportStatus, setExportStatus] = useState<ExitTaxExportStatus | null>(null);
 
+  // Keep the core's current civil day available after selecting another day.
+  // The query cache shares this with preview while the default is selected.
+  const todayPreview = useDaemon<ExitTaxReport>("ui.reports.exit_tax_preview", {
+    departure_date: undefined,
+    destination,
+  });
   const preview = useDaemon<ExitTaxReport>("ui.reports.exit_tax_preview", {
     departure_date: departureDate || undefined,
     destination,
@@ -176,6 +182,7 @@ export function ExitTax() {
             Departure date
             <DatePicker
               value={resolvedDepartureDate}
+              today={todayPreview.data?.data?.departureDate}
               onChange={setDepartureDate}
               className={cn(pageHeaderActionClassName, "w-[180px]")}
             />
