@@ -1,0 +1,3400 @@
+{
+  "probe_sha256": "09ba8bc079466223fdd3c1bc6b78856dd330ddc9cd8f82633ea890c68d386d88",
+  "sources": {
+    "/home/tg/.t3/worktrees/kassiber/t3-bb653b36/scripts/benchmark-journal-read-floor.py": "e21f18f7038ed52e0ce2ec6f8e43c12e6be226a13ba293731ad1a5081e4f1231",
+    "crates/journals/examples/journal-read-floor.rs": "baa58d6380a351ed68bd7bd160713b76eddf7705c9f413455c08bc319b77f63e"
+  },
+  "method": "Five scans on independent newly opened connections, matching native benchmark cache state; independent CPU minimum. Prepared SELECTs, borrowed ValueRef for every retained column, one black_box touch per scalar, no hashing, conversion, allocation or byte comparison. SELECT iteration and COMMIT timed. Complete dumps verified outside timing.",
+  "cells": [
+    {
+      "database": "/home/tg/.t3/worktrees/kassiber/t3-bb653b36/target/read-floor/generic-20000-sqlite/kassiber.sqlite3",
+      "fresh_connection_per_trial": true,
+      "trials": [
+        {
+          "cpu_seconds": 0.102764,
+          "entries": {
+            "bytes": 17490451,
+            "cells": 580000,
+            "rows": 20000,
+            "types": [
+              155728,
+              20000,
+              64102,
+              340170,
+              0
+            ]
+          },
+          "loadavg": "33.58 33.00 32.33 20/2194 47",
+          "postings": {
+            "bytes": 13796732,
+            "cells": 480000,
+            "rows": 40000,
+            "types": [
+              0,
+              40000,
+              0,
+              440000,
+              0
+            ]
+          },
+          "run": 0,
+          "seconds": 0.10441534
+        },
+        {
+          "cpu_seconds": 0.10763899999999998,
+          "entries": {
+            "bytes": 17490451,
+            "cells": 580000,
+            "rows": 20000,
+            "types": [
+              155728,
+              20000,
+              64102,
+              340170,
+              0
+            ]
+          },
+          "loadavg": "33.58 33.00 32.33 25/2205 47",
+          "postings": {
+            "bytes": 13796732,
+            "cells": 480000,
+            "rows": 40000,
+            "types": [
+              0,
+              40000,
+              0,
+              440000,
+              0
+            ]
+          },
+          "run": 1,
+          "seconds": 0.108612935
+        },
+        {
+          "cpu_seconds": 0.104463,
+          "entries": {
+            "bytes": 17490451,
+            "cells": 580000,
+            "rows": 20000,
+            "types": [
+              155728,
+              20000,
+              64102,
+              340170,
+              0
+            ]
+          },
+          "loadavg": "33.58 33.00 32.33 19/2199 47",
+          "postings": {
+            "bytes": 13796732,
+            "cells": 480000,
+            "rows": 40000,
+            "types": [
+              0,
+              40000,
+              0,
+              440000,
+              0
+            ]
+          },
+          "run": 2,
+          "seconds": 0.107238734
+        },
+        {
+          "cpu_seconds": 0.08810399999999996,
+          "entries": {
+            "bytes": 17490451,
+            "cells": 580000,
+            "rows": 20000,
+            "types": [
+              155728,
+              20000,
+              64102,
+              340170,
+              0
+            ]
+          },
+          "loadavg": "33.58 33.00 32.33 17/2173 47",
+          "postings": {
+            "bytes": 13796732,
+            "cells": 480000,
+            "rows": 40000,
+            "types": [
+              0,
+              40000,
+              0,
+              440000,
+              0
+            ]
+          },
+          "run": 3,
+          "seconds": 0.088863376
+        },
+        {
+          "cpu_seconds": 0.08371200000000001,
+          "entries": {
+            "bytes": 17490451,
+            "cells": 580000,
+            "rows": 20000,
+            "types": [
+              155728,
+              20000,
+              64102,
+              340170,
+              0
+            ]
+          },
+          "loadavg": "33.58 33.00 32.33 19/2173 47",
+          "postings": {
+            "bytes": 13796732,
+            "cells": 480000,
+            "rows": 40000,
+            "types": [
+              0,
+              40000,
+              0,
+              440000,
+              0
+            ]
+          },
+          "run": 4,
+          "seconds": 0.084394213
+        }
+      ],
+      "book": {
+        "schema": "kassiber.journals-bench-book.v1",
+        "kind": "generic",
+        "transactions": 20000,
+        "seed": 1,
+        "csv_sha256": {
+          "book.csv": "7b09f4fd1d6fc465734d1c30db1e8ca2445577932c2fd924ab593106172cf6b1"
+        },
+        "pegs": 0,
+        "pegs_paired": 0,
+        "journals": {
+          "entries_created": 20000,
+          "quarantined": 0,
+          "cross_asset_pairs": 0,
+          "processed_transactions": 20000
+        },
+        "built_by": "32767d331e7be68c1efba00f9811f501d8a5f76f",
+        "build_seconds": 37.0,
+        "source": "copied historical synthetic book; CSV digests checked against the continuation record",
+        "normalized_by": "51bd20498 Python capture with fixed persistence clock"
+      },
+      "policy": {
+        "journal_mode": "wal",
+        "synchronous": 1
+      },
+      "logical_dump_sha256": "e84cbbb69099b92264a01781662330470de13d8f335c95034a61979070335e47",
+      "best_cpu": 0.08371200000000001
+    },
+    {
+      "database": "/home/tg/.t3/worktrees/kassiber/t3-bb653b36/target/read-floor/generic-20000-cipher/kassiber.sqlite3",
+      "fresh_connection_per_trial": true,
+      "trials": [
+        {
+          "cpu_seconds": 0.238122,
+          "entries": {
+            "bytes": 17490451,
+            "cells": 580000,
+            "rows": 20000,
+            "types": [
+              155728,
+              20000,
+              64102,
+              340170,
+              0
+            ]
+          },
+          "loadavg": "32.94 32.83 32.29 34/2215 48",
+          "postings": {
+            "bytes": 13796732,
+            "cells": 480000,
+            "rows": 40000,
+            "types": [
+              0,
+              40000,
+              0,
+              440000,
+              0
+            ]
+          },
+          "run": 0,
+          "seconds": 0.241637972
+        },
+        {
+          "cpu_seconds": 0.22969300000000004,
+          "entries": {
+            "bytes": 17490451,
+            "cells": 580000,
+            "rows": 20000,
+            "types": [
+              155728,
+              20000,
+              64102,
+              340170,
+              0
+            ]
+          },
+          "loadavg": "32.94 32.83 32.29 24/2188 48",
+          "postings": {
+            "bytes": 13796732,
+            "cells": 480000,
+            "rows": 40000,
+            "types": [
+              0,
+              40000,
+              0,
+              440000,
+              0
+            ]
+          },
+          "run": 1,
+          "seconds": 0.231778903
+        },
+        {
+          "cpu_seconds": 0.22335699999999992,
+          "entries": {
+            "bytes": 17490451,
+            "cells": 580000,
+            "rows": 20000,
+            "types": [
+              155728,
+              20000,
+              64102,
+              340170,
+              0
+            ]
+          },
+          "loadavg": "32.55 32.75 32.26 25/2197 48",
+          "postings": {
+            "bytes": 13796732,
+            "cells": 480000,
+            "rows": 40000,
+            "types": [
+              0,
+              40000,
+              0,
+              440000,
+              0
+            ]
+          },
+          "run": 2,
+          "seconds": 0.225159155
+        },
+        {
+          "cpu_seconds": 0.21672400000000014,
+          "entries": {
+            "bytes": 17490451,
+            "cells": 580000,
+            "rows": 20000,
+            "types": [
+              155728,
+              20000,
+              64102,
+              340170,
+              0
+            ]
+          },
+          "loadavg": "32.55 32.75 32.26 20/2206 48",
+          "postings": {
+            "bytes": 13796732,
+            "cells": 480000,
+            "rows": 40000,
+            "types": [
+              0,
+              40000,
+              0,
+              440000,
+              0
+            ]
+          },
+          "run": 3,
+          "seconds": 0.218694175
+        },
+        {
+          "cpu_seconds": 0.22648500000000005,
+          "entries": {
+            "bytes": 17490451,
+            "cells": 580000,
+            "rows": 20000,
+            "types": [
+              155728,
+              20000,
+              64102,
+              340170,
+              0
+            ]
+          },
+          "loadavg": "32.55 32.75 32.26 22/2200 48",
+          "postings": {
+            "bytes": 13796732,
+            "cells": 480000,
+            "rows": 40000,
+            "types": [
+              0,
+              40000,
+              0,
+              440000,
+              0
+            ]
+          },
+          "run": 4,
+          "seconds": 0.228688859
+        }
+      ],
+      "book": {
+        "schema": "kassiber.journals-bench-book.v1",
+        "kind": "generic",
+        "transactions": 20000,
+        "seed": 1,
+        "csv_sha256": {
+          "book.csv": "7b09f4fd1d6fc465734d1c30db1e8ca2445577932c2fd924ab593106172cf6b1"
+        },
+        "pegs": 0,
+        "pegs_paired": 0,
+        "journals": {
+          "entries_created": 20000,
+          "quarantined": 0,
+          "cross_asset_pairs": 0,
+          "processed_transactions": 20000
+        },
+        "built_by": "32767d331e7be68c1efba00f9811f501d8a5f76f",
+        "build_seconds": 37.0,
+        "source": "copied historical synthetic book; CSV digests checked against the continuation record",
+        "normalized_by": "51bd20498 Python capture with fixed persistence clock"
+      },
+      "policy": {
+        "journal_mode": "delete",
+        "synchronous": 2
+      },
+      "logical_dump_sha256": "e84cbbb69099b92264a01781662330470de13d8f335c95034a61979070335e47",
+      "best_cpu": 0.21672400000000014
+    },
+    {
+      "database": "/home/tg/.t3/worktrees/kassiber/t3-bb653b36/target/read-floor/multi-wallet-20000-sqlite/kassiber.sqlite3",
+      "fresh_connection_per_trial": true,
+      "trials": [
+        {
+          "cpu_seconds": 0.104963,
+          "entries": {
+            "bytes": 18327488,
+            "cells": 579507,
+            "rows": 19983,
+            "types": [
+              147517,
+              19983,
+              67077,
+              344930,
+              0
+            ]
+          },
+          "loadavg": "33.63 32.97 32.34 33/2214 49",
+          "postings": {
+            "bytes": 15470911,
+            "cells": 542592,
+            "rows": 45216,
+            "types": [
+              0,
+              45216,
+              0,
+              497376,
+              0
+            ]
+          },
+          "run": 0,
+          "seconds": 0.105968491
+        },
+        {
+          "cpu_seconds": 0.099774,
+          "entries": {
+            "bytes": 18327488,
+            "cells": 579507,
+            "rows": 19983,
+            "types": [
+              147517,
+              19983,
+              67077,
+              344930,
+              0
+            ]
+          },
+          "loadavg": "33.63 32.97 32.34 29/2191 49",
+          "postings": {
+            "bytes": 15470911,
+            "cells": 542592,
+            "rows": 45216,
+            "types": [
+              0,
+              45216,
+              0,
+              497376,
+              0
+            ]
+          },
+          "run": 1,
+          "seconds": 0.100703727
+        },
+        {
+          "cpu_seconds": 0.09740400000000002,
+          "entries": {
+            "bytes": 18327488,
+            "cells": 579507,
+            "rows": 19983,
+            "types": [
+              147517,
+              19983,
+              67077,
+              344930,
+              0
+            ]
+          },
+          "loadavg": "33.63 32.97 32.34 20/2189 49",
+          "postings": {
+            "bytes": 15470911,
+            "cells": 542592,
+            "rows": 45216,
+            "types": [
+              0,
+              45216,
+              0,
+              497376,
+              0
+            ]
+          },
+          "run": 2,
+          "seconds": 0.098319647
+        },
+        {
+          "cpu_seconds": 0.105022,
+          "entries": {
+            "bytes": 18327488,
+            "cells": 579507,
+            "rows": 19983,
+            "types": [
+              147517,
+              19983,
+              67077,
+              344930,
+              0
+            ]
+          },
+          "loadavg": "33.63 32.97 32.34 20/2192 49",
+          "postings": {
+            "bytes": 15470911,
+            "cells": 542592,
+            "rows": 45216,
+            "types": [
+              0,
+              45216,
+              0,
+              497376,
+              0
+            ]
+          },
+          "run": 3,
+          "seconds": 0.106064724
+        },
+        {
+          "cpu_seconds": 0.10592400000000007,
+          "entries": {
+            "bytes": 18327488,
+            "cells": 579507,
+            "rows": 19983,
+            "types": [
+              147517,
+              19983,
+              67077,
+              344930,
+              0
+            ]
+          },
+          "loadavg": "33.63 32.97 32.34 23/2193 49",
+          "postings": {
+            "bytes": 15470911,
+            "cells": 542592,
+            "rows": 45216,
+            "types": [
+              0,
+              45216,
+              0,
+              497376,
+              0
+            ]
+          },
+          "run": 4,
+          "seconds": 0.107395732
+        }
+      ],
+      "book": {
+        "schema": "kassiber.journals-bench-book.v1",
+        "kind": "multi-wallet",
+        "transactions": 20000,
+        "seed": 7,
+        "csv_sha256": {
+          "Hot.csv": "8d3852c3bcdb36bdd425b76fb3a8e5f64bf462e57c6b61294ed774681ac81146",
+          "Cold.csv": "ed3a0928e98404316be9b9fa7e3b603f4d4e0d7577633bec06e441d8d0e8ff5f",
+          "LHot.csv": "0cdeee02cfd30c7a1bc950bb013c3bbe793b4f1c7f19bc7ab4a4569100117b7a",
+          "LCold.csv": "94adb338d7efdf3b52025c2ef85e0fb586a7f501ff446d6aef3572295f8fc748"
+        },
+        "pegs": 3306,
+        "pegs_paired": 300,
+        "journals": {
+          "entries_created": 19983,
+          "quarantined": 17,
+          "cross_asset_pairs": 300,
+          "processed_transactions": 20000
+        },
+        "built_by": "b5eb38ea8cb764675322e61e9b957a57deb947c6",
+        "build_seconds": 1239.1,
+        "source": "copied historical synthetic book; CSV digests checked against the continuation record",
+        "normalized_by": "51bd20498 Python capture with fixed persistence clock"
+      },
+      "policy": {
+        "journal_mode": "wal",
+        "synchronous": 1
+      },
+      "logical_dump_sha256": "bbb6ef650d07e302354e377486f79289385e659cc19854c4f4023d29541dd218",
+      "best_cpu": 0.09740400000000002
+    },
+    {
+      "database": "/home/tg/.t3/worktrees/kassiber/t3-bb653b36/target/read-floor/multi-wallet-20000-cipher/kassiber.sqlite3",
+      "fresh_connection_per_trial": true,
+      "trials": [
+        {
+          "cpu_seconds": 0.23767199999999997,
+          "entries": {
+            "bytes": 18327488,
+            "cells": 579507,
+            "rows": 19983,
+            "types": [
+              147517,
+              19983,
+              67077,
+              344930,
+              0
+            ]
+          },
+          "loadavg": "31.08 32.44 32.18 20/2268 50",
+          "postings": {
+            "bytes": 15470911,
+            "cells": 542592,
+            "rows": 45216,
+            "types": [
+              0,
+              45216,
+              0,
+              497376,
+              0
+            ]
+          },
+          "run": 0,
+          "seconds": 0.239505708
+        },
+        {
+          "cpu_seconds": 0.237027,
+          "entries": {
+            "bytes": 18327488,
+            "cells": 579507,
+            "rows": 19983,
+            "types": [
+              147517,
+              19983,
+              67077,
+              344930,
+              0
+            ]
+          },
+          "loadavg": "31.08 32.44 32.18 14/2265 50",
+          "postings": {
+            "bytes": 15470911,
+            "cells": 542592,
+            "rows": 45216,
+            "types": [
+              0,
+              45216,
+              0,
+              497376,
+              0
+            ]
+          },
+          "run": 1,
+          "seconds": 0.238913001
+        },
+        {
+          "cpu_seconds": 0.25417,
+          "entries": {
+            "bytes": 18327488,
+            "cells": 579507,
+            "rows": 19983,
+            "types": [
+              147517,
+              19983,
+              67077,
+              344930,
+              0
+            ]
+          },
+          "loadavg": "31.08 32.44 32.18 21/2274 50",
+          "postings": {
+            "bytes": 15470911,
+            "cells": 542592,
+            "rows": 45216,
+            "types": [
+              0,
+              45216,
+              0,
+              497376,
+              0
+            ]
+          },
+          "run": 2,
+          "seconds": 0.256307904
+        },
+        {
+          "cpu_seconds": 0.25268199999999985,
+          "entries": {
+            "bytes": 18327488,
+            "cells": 579507,
+            "rows": 19983,
+            "types": [
+              147517,
+              19983,
+              67077,
+              344930,
+              0
+            ]
+          },
+          "loadavg": "31.08 32.44 32.18 20/2277 50",
+          "postings": {
+            "bytes": 15470911,
+            "cells": 542592,
+            "rows": 45216,
+            "types": [
+              0,
+              45216,
+              0,
+              497376,
+              0
+            ]
+          },
+          "run": 3,
+          "seconds": 0.255890531
+        },
+        {
+          "cpu_seconds": 0.24373000000000022,
+          "entries": {
+            "bytes": 18327488,
+            "cells": 579507,
+            "rows": 19983,
+            "types": [
+              147517,
+              19983,
+              67077,
+              344930,
+              0
+            ]
+          },
+          "loadavg": "31.08 32.44 32.18 15/2277 50",
+          "postings": {
+            "bytes": 15470911,
+            "cells": 542592,
+            "rows": 45216,
+            "types": [
+              0,
+              45216,
+              0,
+              497376,
+              0
+            ]
+          },
+          "run": 4,
+          "seconds": 0.246646242
+        }
+      ],
+      "book": {
+        "schema": "kassiber.journals-bench-book.v1",
+        "kind": "multi-wallet",
+        "transactions": 20000,
+        "seed": 7,
+        "csv_sha256": {
+          "Hot.csv": "8d3852c3bcdb36bdd425b76fb3a8e5f64bf462e57c6b61294ed774681ac81146",
+          "Cold.csv": "ed3a0928e98404316be9b9fa7e3b603f4d4e0d7577633bec06e441d8d0e8ff5f",
+          "LHot.csv": "0cdeee02cfd30c7a1bc950bb013c3bbe793b4f1c7f19bc7ab4a4569100117b7a",
+          "LCold.csv": "94adb338d7efdf3b52025c2ef85e0fb586a7f501ff446d6aef3572295f8fc748"
+        },
+        "pegs": 3306,
+        "pegs_paired": 300,
+        "journals": {
+          "entries_created": 19983,
+          "quarantined": 17,
+          "cross_asset_pairs": 300,
+          "processed_transactions": 20000
+        },
+        "built_by": "b5eb38ea8cb764675322e61e9b957a57deb947c6",
+        "build_seconds": 1239.1,
+        "source": "copied historical synthetic book; CSV digests checked against the continuation record",
+        "normalized_by": "51bd20498 Python capture with fixed persistence clock"
+      },
+      "policy": {
+        "journal_mode": "delete",
+        "synchronous": 2
+      },
+      "logical_dump_sha256": "bbb6ef650d07e302354e377486f79289385e659cc19854c4f4023d29541dd218",
+      "best_cpu": 0.237027
+    }
+  ],
+  "base_commit": "d6e46912b45f0b0bf32acfc0036b5bef2794f67b",
+  "production_commit": "51bd20498563f5cbd7b4863f6eda7ca4741968d8",
+  "accepted": false,
+  "host_quiet": false,
+  "toolchain": {
+    "rust": "1.99.1",
+    "cargo_offline": true,
+    "python": "3.11.17",
+    "cargo_build_jobs": 8,
+    "tmpdir": "target/tmp",
+    "maturin_no_install_rust": true,
+    "uv_sync": "uv sync --locked --python 3.11 --offline"
+  },
+  "interpretation": "Independent fresh connections match the native benchmark cache state. Both measured SQLCipher read floors already exceed their unchanged write-floor + 0.15 allowances. Propose read-floor + 0.15 for all unchanged cells; keep write-floor + 0.15 for fresh cells. SQLite read floors alone do not rule the old budget out. No production optimization or acceptance is claimed. All samples ran on a busy shared host; a quiet-host repeat remains outstanding.",
+  "warm_connection_exploration": {
+    "probe_sha256": "31be19e3056b4af08a8999e0ae7a6c94de3c44b94a5b5d56d8a1e934b10dcb28",
+    "sources": {
+      "/home/tg/.t3/worktrees/kassiber/t3-bb653b36/scripts/benchmark-journal-read-floor.py": "8aea6b54d84c052715cdbf32f032b35f55cfbdcd6bf6d394154c8e9866f4ef81",
+      "crates/journals/examples/journal-read-floor.rs": "f36fd19a0834b14db3512cd0b01eb8c56aadff015e5e23f7b073dc89298fb9a0"
+    },
+    "method": "Five scans on one connection; independent CPU minimum. Prepared SELECTs, borrowed ValueRef for every retained column, one black_box touch per scalar, no hashing, conversion, allocation or byte comparison. SELECT iteration and COMMIT timed. Complete dumps verified outside timing.",
+    "cells": [
+      {
+        "database": "/home/tg/.t3/worktrees/kassiber/t3-bb653b36/target/read-floor/generic-20000-sqlite/kassiber.sqlite3",
+        "trials": [
+          {
+            "cpu_seconds": 0.093129,
+            "entries": {
+              "bytes": 17490451,
+              "cells": 580000,
+              "rows": 20000,
+              "types": [
+                155728,
+                20000,
+                64102,
+                340170,
+                0
+              ]
+            },
+            "loadavg": "32.25 35.78 32.81 22/2185 46",
+            "postings": {
+              "bytes": 13796732,
+              "cells": 480000,
+              "rows": 40000,
+              "types": [
+                0,
+                40000,
+                0,
+                440000,
+                0
+              ]
+            },
+            "run": 0,
+            "seconds": 0.094317337
+          },
+          {
+            "cpu_seconds": 0.09209899999999999,
+            "entries": {
+              "bytes": 17490451,
+              "cells": 580000,
+              "rows": 20000,
+              "types": [
+                155728,
+                20000,
+                64102,
+                340170,
+                0
+              ]
+            },
+            "loadavg": "32.25 35.78 32.81 25/2204 46",
+            "postings": {
+              "bytes": 13796732,
+              "cells": 480000,
+              "rows": 40000,
+              "types": [
+                0,
+                40000,
+                0,
+                440000,
+                0
+              ]
+            },
+            "run": 1,
+            "seconds": 0.093326115
+          },
+          {
+            "cpu_seconds": 0.11138599999999999,
+            "entries": {
+              "bytes": 17490451,
+              "cells": 580000,
+              "rows": 20000,
+              "types": [
+                155728,
+                20000,
+                64102,
+                340170,
+                0
+              ]
+            },
+            "loadavg": "32.25 35.78 32.81 35/2199 46",
+            "postings": {
+              "bytes": 13796732,
+              "cells": 480000,
+              "rows": 40000,
+              "types": [
+                0,
+                40000,
+                0,
+                440000,
+                0
+              ]
+            },
+            "run": 2,
+            "seconds": 0.112468828
+          },
+          {
+            "cpu_seconds": 0.10464299999999999,
+            "entries": {
+              "bytes": 17490451,
+              "cells": 580000,
+              "rows": 20000,
+              "types": [
+                155728,
+                20000,
+                64102,
+                340170,
+                0
+              ]
+            },
+            "loadavg": "32.25 35.78 32.81 34/2231 46",
+            "postings": {
+              "bytes": 13796732,
+              "cells": 480000,
+              "rows": 40000,
+              "types": [
+                0,
+                40000,
+                0,
+                440000,
+                0
+              ]
+            },
+            "run": 3,
+            "seconds": 0.107512393
+          },
+          {
+            "cpu_seconds": 0.10429300000000002,
+            "entries": {
+              "bytes": 17490451,
+              "cells": 580000,
+              "rows": 20000,
+              "types": [
+                155728,
+                20000,
+                64102,
+                340170,
+                0
+              ]
+            },
+            "loadavg": "32.25 35.78 32.81 30/2226 46",
+            "postings": {
+              "bytes": 13796732,
+              "cells": 480000,
+              "rows": 40000,
+              "types": [
+                0,
+                40000,
+                0,
+                440000,
+                0
+              ]
+            },
+            "run": 4,
+            "seconds": 0.105089838
+          }
+        ],
+        "book": {
+          "schema": "kassiber.journals-bench-book.v1",
+          "kind": "generic",
+          "transactions": 20000,
+          "seed": 1,
+          "csv_sha256": {
+            "book.csv": "7b09f4fd1d6fc465734d1c30db1e8ca2445577932c2fd924ab593106172cf6b1"
+          },
+          "pegs": 0,
+          "pegs_paired": 0,
+          "journals": {
+            "entries_created": 20000,
+            "quarantined": 0,
+            "cross_asset_pairs": 0,
+            "processed_transactions": 20000
+          },
+          "built_by": "32767d331e7be68c1efba00f9811f501d8a5f76f",
+          "build_seconds": 37.0,
+          "source": "copied historical synthetic book; CSV digests checked against the continuation record",
+          "normalized_by": "51bd20498 Python capture with fixed persistence clock"
+        },
+        "policy": {
+          "journal_mode": "wal",
+          "synchronous": 1
+        },
+        "logical_dump_sha256": "e84cbbb69099b92264a01781662330470de13d8f335c95034a61979070335e47",
+        "best_cpu": 0.09209899999999999
+      },
+      {
+        "database": "/home/tg/.t3/worktrees/kassiber/t3-bb653b36/target/read-floor/generic-20000-cipher/kassiber.sqlite3",
+        "trials": [
+          {
+            "cpu_seconds": 0.20895899999999998,
+            "entries": {
+              "bytes": 17490451,
+              "cells": 580000,
+              "rows": 20000,
+              "types": [
+                155728,
+                20000,
+                64102,
+                340170,
+                0
+              ]
+            },
+            "loadavg": "31.49 35.22 32.75 10/2195 47",
+            "postings": {
+              "bytes": 13796732,
+              "cells": 480000,
+              "rows": 40000,
+              "types": [
+                0,
+                40000,
+                0,
+                440000,
+                0
+              ]
+            },
+            "run": 0,
+            "seconds": 0.211704688
+          },
+          {
+            "cpu_seconds": 0.09555799999999998,
+            "entries": {
+              "bytes": 17490451,
+              "cells": 580000,
+              "rows": 20000,
+              "types": [
+                155728,
+                20000,
+                64102,
+                340170,
+                0
+              ]
+            },
+            "loadavg": "31.49 35.22 32.75 14/2198 47",
+            "postings": {
+              "bytes": 13796732,
+              "cells": 480000,
+              "rows": 40000,
+              "types": [
+                0,
+                40000,
+                0,
+                440000,
+                0
+              ]
+            },
+            "run": 1,
+            "seconds": 0.096452376
+          },
+          {
+            "cpu_seconds": 0.10058699999999998,
+            "entries": {
+              "bytes": 17490451,
+              "cells": 580000,
+              "rows": 20000,
+              "types": [
+                155728,
+                20000,
+                64102,
+                340170,
+                0
+              ]
+            },
+            "loadavg": "31.49 35.22 32.75 21/2221 47",
+            "postings": {
+              "bytes": 13796732,
+              "cells": 480000,
+              "rows": 40000,
+              "types": [
+                0,
+                40000,
+                0,
+                440000,
+                0
+              ]
+            },
+            "run": 2,
+            "seconds": 0.101952914
+          },
+          {
+            "cpu_seconds": 0.08613800000000005,
+            "entries": {
+              "bytes": 17490451,
+              "cells": 580000,
+              "rows": 20000,
+              "types": [
+                155728,
+                20000,
+                64102,
+                340170,
+                0
+              ]
+            },
+            "loadavg": "31.49 35.22 32.75 17/2211 47",
+            "postings": {
+              "bytes": 13796732,
+              "cells": 480000,
+              "rows": 40000,
+              "types": [
+                0,
+                40000,
+                0,
+                440000,
+                0
+              ]
+            },
+            "run": 3,
+            "seconds": 0.086861404
+          },
+          {
+            "cpu_seconds": 0.09329100000000001,
+            "entries": {
+              "bytes": 17490451,
+              "cells": 580000,
+              "rows": 20000,
+              "types": [
+                155728,
+                20000,
+                64102,
+                340170,
+                0
+              ]
+            },
+            "loadavg": "31.49 35.22 32.75 14/2204 47",
+            "postings": {
+              "bytes": 13796732,
+              "cells": 480000,
+              "rows": 40000,
+              "types": [
+                0,
+                40000,
+                0,
+                440000,
+                0
+              ]
+            },
+            "run": 4,
+            "seconds": 0.094354277
+          }
+        ],
+        "book": {
+          "schema": "kassiber.journals-bench-book.v1",
+          "kind": "generic",
+          "transactions": 20000,
+          "seed": 1,
+          "csv_sha256": {
+            "book.csv": "7b09f4fd1d6fc465734d1c30db1e8ca2445577932c2fd924ab593106172cf6b1"
+          },
+          "pegs": 0,
+          "pegs_paired": 0,
+          "journals": {
+            "entries_created": 20000,
+            "quarantined": 0,
+            "cross_asset_pairs": 0,
+            "processed_transactions": 20000
+          },
+          "built_by": "32767d331e7be68c1efba00f9811f501d8a5f76f",
+          "build_seconds": 37.0,
+          "source": "copied historical synthetic book; CSV digests checked against the continuation record",
+          "normalized_by": "51bd20498 Python capture with fixed persistence clock"
+        },
+        "policy": {
+          "journal_mode": "delete",
+          "synchronous": 2
+        },
+        "logical_dump_sha256": "e84cbbb69099b92264a01781662330470de13d8f335c95034a61979070335e47",
+        "best_cpu": 0.08613800000000005
+      },
+      {
+        "database": "/home/tg/.t3/worktrees/kassiber/t3-bb653b36/target/read-floor/multi-wallet-20000-sqlite/kassiber.sqlite3",
+        "trials": [
+          {
+            "cpu_seconds": 0.089989,
+            "entries": {
+              "bytes": 18327488,
+              "cells": 579507,
+              "rows": 19983,
+              "types": [
+                147517,
+                19983,
+                67077,
+                344930,
+                0
+              ]
+            },
+            "loadavg": "31.37 35.14 32.73 11/2188 48",
+            "postings": {
+              "bytes": 15470911,
+              "cells": 542592,
+              "rows": 45216,
+              "types": [
+                0,
+                45216,
+                0,
+                497376,
+                0
+              ]
+            },
+            "run": 0,
+            "seconds": 0.090682622
+          },
+          {
+            "cpu_seconds": 0.085079,
+            "entries": {
+              "bytes": 18327488,
+              "cells": 579507,
+              "rows": 19983,
+              "types": [
+                147517,
+                19983,
+                67077,
+                344930,
+                0
+              ]
+            },
+            "loadavg": "31.37 35.14 32.73 8/2183 48",
+            "postings": {
+              "bytes": 15470911,
+              "cells": 542592,
+              "rows": 45216,
+              "types": [
+                0,
+                45216,
+                0,
+                497376,
+                0
+              ]
+            },
+            "run": 1,
+            "seconds": 0.085602564
+          },
+          {
+            "cpu_seconds": 0.10389799999999999,
+            "entries": {
+              "bytes": 18327488,
+              "cells": 579507,
+              "rows": 19983,
+              "types": [
+                147517,
+                19983,
+                67077,
+                344930,
+                0
+              ]
+            },
+            "loadavg": "31.37 35.14 32.73 13/2185 48",
+            "postings": {
+              "bytes": 15470911,
+              "cells": 542592,
+              "rows": 45216,
+              "types": [
+                0,
+                45216,
+                0,
+                497376,
+                0
+              ]
+            },
+            "run": 2,
+            "seconds": 0.105171288
+          },
+          {
+            "cpu_seconds": 0.09329499999999996,
+            "entries": {
+              "bytes": 18327488,
+              "cells": 579507,
+              "rows": 19983,
+              "types": [
+                147517,
+                19983,
+                67077,
+                344930,
+                0
+              ]
+            },
+            "loadavg": "31.37 35.14 32.73 11/2181 48",
+            "postings": {
+              "bytes": 15470911,
+              "cells": 542592,
+              "rows": 45216,
+              "types": [
+                0,
+                45216,
+                0,
+                497376,
+                0
+              ]
+            },
+            "run": 3,
+            "seconds": 0.094282955
+          },
+          {
+            "cpu_seconds": 0.09019100000000002,
+            "entries": {
+              "bytes": 18327488,
+              "cells": 579507,
+              "rows": 19983,
+              "types": [
+                147517,
+                19983,
+                67077,
+                344930,
+                0
+              ]
+            },
+            "loadavg": "31.37 35.14 32.73 13/2174 48",
+            "postings": {
+              "bytes": 15470911,
+              "cells": 542592,
+              "rows": 45216,
+              "types": [
+                0,
+                45216,
+                0,
+                497376,
+                0
+              ]
+            },
+            "run": 4,
+            "seconds": 0.091009959
+          }
+        ],
+        "book": {
+          "schema": "kassiber.journals-bench-book.v1",
+          "kind": "multi-wallet",
+          "transactions": 20000,
+          "seed": 7,
+          "csv_sha256": {
+            "Hot.csv": "8d3852c3bcdb36bdd425b76fb3a8e5f64bf462e57c6b61294ed774681ac81146",
+            "Cold.csv": "ed3a0928e98404316be9b9fa7e3b603f4d4e0d7577633bec06e441d8d0e8ff5f",
+            "LHot.csv": "0cdeee02cfd30c7a1bc950bb013c3bbe793b4f1c7f19bc7ab4a4569100117b7a",
+            "LCold.csv": "94adb338d7efdf3b52025c2ef85e0fb586a7f501ff446d6aef3572295f8fc748"
+          },
+          "pegs": 3306,
+          "pegs_paired": 300,
+          "journals": {
+            "entries_created": 19983,
+            "quarantined": 17,
+            "cross_asset_pairs": 300,
+            "processed_transactions": 20000
+          },
+          "built_by": "b5eb38ea8cb764675322e61e9b957a57deb947c6",
+          "build_seconds": 1239.1,
+          "source": "copied historical synthetic book; CSV digests checked against the continuation record",
+          "normalized_by": "51bd20498 Python capture with fixed persistence clock"
+        },
+        "policy": {
+          "journal_mode": "wal",
+          "synchronous": 1
+        },
+        "logical_dump_sha256": "bbb6ef650d07e302354e377486f79289385e659cc19854c4f4023d29541dd218",
+        "best_cpu": 0.085079
+      },
+      {
+        "database": "/home/tg/.t3/worktrees/kassiber/t3-bb653b36/target/read-floor/multi-wallet-20000-cipher/kassiber.sqlite3",
+        "trials": [
+          {
+            "cpu_seconds": 0.29201299999999997,
+            "entries": {
+              "bytes": 18327488,
+              "cells": 579507,
+              "rows": 19983,
+              "types": [
+                147517,
+                19983,
+                67077,
+                344930,
+                0
+              ]
+            },
+            "loadavg": "29.79 34.29 32.54 29/2239 49",
+            "postings": {
+              "bytes": 15470911,
+              "cells": 542592,
+              "rows": 45216,
+              "types": [
+                0,
+                45216,
+                0,
+                497376,
+                0
+              ]
+            },
+            "run": 0,
+            "seconds": 0.294328999
+          },
+          {
+            "cpu_seconds": 0.127214,
+            "entries": {
+              "bytes": 18327488,
+              "cells": 579507,
+              "rows": 19983,
+              "types": [
+                147517,
+                19983,
+                67077,
+                344930,
+                0
+              ]
+            },
+            "loadavg": "29.79 34.29 32.54 27/2263 49",
+            "postings": {
+              "bytes": 15470911,
+              "cells": 542592,
+              "rows": 45216,
+              "types": [
+                0,
+                45216,
+                0,
+                497376,
+                0
+              ]
+            },
+            "run": 1,
+            "seconds": 0.128431545
+          },
+          {
+            "cpu_seconds": 0.14476600000000006,
+            "entries": {
+              "bytes": 18327488,
+              "cells": 579507,
+              "rows": 19983,
+              "types": [
+                147517,
+                19983,
+                67077,
+                344930,
+                0
+              ]
+            },
+            "loadavg": "29.79 34.29 32.54 27/2260 49",
+            "postings": {
+              "bytes": 15470911,
+              "cells": 542592,
+              "rows": 45216,
+              "types": [
+                0,
+                45216,
+                0,
+                497376,
+                0
+              ]
+            },
+            "run": 2,
+            "seconds": 0.146268099
+          },
+          {
+            "cpu_seconds": 0.12027300000000007,
+            "entries": {
+              "bytes": 18327488,
+              "cells": 579507,
+              "rows": 19983,
+              "types": [
+                147517,
+                19983,
+                67077,
+                344930,
+                0
+              ]
+            },
+            "loadavg": "29.79 34.29 32.54 40/2261 49",
+            "postings": {
+              "bytes": 15470911,
+              "cells": 542592,
+              "rows": 45216,
+              "types": [
+                0,
+                45216,
+                0,
+                497376,
+                0
+              ]
+            },
+            "run": 3,
+            "seconds": 0.121275259
+          },
+          {
+            "cpu_seconds": 0.11911799999999995,
+            "entries": {
+              "bytes": 18327488,
+              "cells": 579507,
+              "rows": 19983,
+              "types": [
+                147517,
+                19983,
+                67077,
+                344930,
+                0
+              ]
+            },
+            "loadavg": "29.79 34.29 32.54 28/2239 49",
+            "postings": {
+              "bytes": 15470911,
+              "cells": 542592,
+              "rows": 45216,
+              "types": [
+                0,
+                45216,
+                0,
+                497376,
+                0
+              ]
+            },
+            "run": 4,
+            "seconds": 0.120074722
+          }
+        ],
+        "book": {
+          "schema": "kassiber.journals-bench-book.v1",
+          "kind": "multi-wallet",
+          "transactions": 20000,
+          "seed": 7,
+          "csv_sha256": {
+            "Hot.csv": "8d3852c3bcdb36bdd425b76fb3a8e5f64bf462e57c6b61294ed774681ac81146",
+            "Cold.csv": "ed3a0928e98404316be9b9fa7e3b603f4d4e0d7577633bec06e441d8d0e8ff5f",
+            "LHot.csv": "0cdeee02cfd30c7a1bc950bb013c3bbe793b4f1c7f19bc7ab4a4569100117b7a",
+            "LCold.csv": "94adb338d7efdf3b52025c2ef85e0fb586a7f501ff446d6aef3572295f8fc748"
+          },
+          "pegs": 3306,
+          "pegs_paired": 300,
+          "journals": {
+            "entries_created": 19983,
+            "quarantined": 17,
+            "cross_asset_pairs": 300,
+            "processed_transactions": 20000
+          },
+          "built_by": "b5eb38ea8cb764675322e61e9b957a57deb947c6",
+          "build_seconds": 1239.1,
+          "source": "copied historical synthetic book; CSV digests checked against the continuation record",
+          "normalized_by": "51bd20498 Python capture with fixed persistence clock"
+        },
+        "policy": {
+          "journal_mode": "delete",
+          "synchronous": 2
+        },
+        "logical_dump_sha256": "bbb6ef650d07e302354e377486f79289385e659cc19854c4f4023d29541dd218",
+        "best_cpu": 0.11911799999999995
+      }
+    ],
+    "disposition": "Excluded from floor decision because repeated scans reused warmed decrypted pages."
+  },
+  "baseline": [
+    {
+      "name": "generic-20000-cipher",
+      "environment": {
+        "book": {
+          "schema": "kassiber.journals-bench-book.v1",
+          "kind": "generic",
+          "transactions": 20000,
+          "seed": 1,
+          "csv_sha256": {
+            "book.csv": "7b09f4fd1d6fc465734d1c30db1e8ca2445577932c2fd924ab593106172cf6b1"
+          },
+          "pegs": 0,
+          "pegs_paired": 0,
+          "journals": {
+            "entries_created": 20000,
+            "quarantined": 0,
+            "cross_asset_pairs": 0,
+            "processed_transactions": 20000
+          },
+          "built_by": "32767d331e7be68c1efba00f9811f501d8a5f76f",
+          "build_seconds": 37.0,
+          "source": "copied historical synthetic book; CSV digests checked against the continuation record",
+          "normalized_by": "51bd20498 Python capture with fixed persistence clock"
+        },
+        "runs": 5,
+        "python": "3.11.17 (main, Oct 21 2026, 17:46:53) [Clang 23.1.3 ]",
+        "cpus": 48,
+        "probe_sha256": "f43dd2d6a001e0a7d3e3b792cea6ef583803776b673fa55b2e004ed426b63448",
+        "harness_sha256": "b9cb682b6e652362756528a4cedf38713774d70833ce1c1c5300a14a3c3a6bbc",
+        "sources": {
+          "crates/journals/src/boundary/joins.rs": "58b06db41921c470886b1cd1e190f506d6fd9175645c58321340fc6dd464c68e",
+          "crates/journals/src/boundary.rs": "2ddc678761e48f07a4277b2c20622a94a631f2c7c3725eefa32370a71abd878d",
+          "crates/journals/src/compute.rs": "b50c57224fc536c3df0fdff7d4d465d396aed6f717c158fb668f0fee0d507102",
+          "crates/journals/src/lib.rs": "f3d8fc2ab7257405c56545dda5d0bf7b3c24d90be78b8ccdc219feda380a576d",
+          "crates/journals/src/loader/direct.rs": "6f4ff944e2dd1a053ae54807ad510094ffa7c6c72c7c97b25cb5b2a4b876b999",
+          "crates/journals/src/loader/ownership.rs": "e9fd153c3ddbc0b7ad836c280e2219d8c0285e46e80f457fb5039003d250c2c8",
+          "crates/journals/src/loader/receipts.rs": "08b0978e2fed949d12af142596d9c91f1e39436d6dd2665e62e374af69bb4453",
+          "crates/journals/src/loader/tests.rs": "c32901ad80222bb09c20979247c37cebc1801dfd26dfc5cddc430c7bc034b804",
+          "crates/journals/src/loader/worklist.rs": "64670923212f75666cf0496da7e4ff7a9073e85e382d715bdebf05776a5d3516",
+          "crates/journals/src/loader.rs": "42698dcb84c9f0aba04eef10a14ecdb2e8b0497960f8bdd4d48dd7a17c762465",
+          "crates/journals/src/model.rs": "68f10bb6e44e1283ccf887606562fd908ad764848e7a4f3fdbe5e2f196239f8b",
+          "crates/journals/src/persistence/filed.rs": "24206d69912e8b067199a1f42a3ba1ba257ed40ff99e1569d0dc9d4d3ff94432",
+          "crates/journals/src/persistence/quantity.rs": "947e1c3927fc943f0eb187604e82e06a37ded17ccbf617d51358abbdd0a4a094",
+          "crates/journals/src/persistence/quarantine.rs": "c9cb06f5e0b8ab54fc47c20d9b4f7dc63a54379444e864fb450d0ef2f8235c0d",
+          "crates/journals/src/persistence.rs": "8d97d978da4911d18f662b9ef780a802b601cd5c7faa9bd28f62bc31d388c5e0",
+          "crates/journals/src/render.rs": "afac4610917b0ed8ef320385b7f80ca5cb28bd69187e9c00b5dac5b998550d45",
+          "crates/journals/src/storage/calculation.rs": "a637aca0d07926d54671a0b2bffdf988574adae711cc2a8db5a413dd9d55f2ba",
+          "crates/journals/src/storage/tests.rs": "199c5229846b89ef177d8941dd2a223975511b97cbac4576e551803b02989104",
+          "crates/journals/src/storage.rs": "d659568b07eb32327c08615b1d94e9f80e1594f6c5c16597f81c28262d49f243"
+        }
+      },
+      "measurements": [
+        {
+          "mode": "unchanged",
+          "transactions": 20000,
+          "appended_transactions": 0,
+          "activity": {
+            "journal_entries": {
+              "insert": 0,
+              "delete": 0
+            },
+            "journal_quantity_postings": {
+              "insert": 0,
+              "delete": 0
+            }
+          },
+          "entries": 20000,
+          "postings": 40000,
+          "best": {
+            "python": 1.325196003000002,
+            "rust": 0.48312499999999936,
+            "floor": 0.003913999999998197
+          },
+          "best_wall": {
+            "python": 1.4075031660031527,
+            "rust": 0.559674753,
+            "floor": 0.068802691
+          },
+          "trials": [
+            {
+              "python": {
+                "seconds": 1.5026291239773855,
+                "cpu_seconds": 1.403470562999999,
+                "load1": 28.15673828125
+              },
+              "rust": {
+                "seconds": 0.746450643,
+                "cpu_seconds": 0.6638929999999998,
+                "phases": {
+                  "begin": {
+                    "cpu": 2.300000000010627e-05,
+                    "wall": 2.313e-05
+                  },
+                  "commit": {
+                    "cpu": 0.006155000000000133,
+                    "wall": 0.079870067
+                  },
+                  "complete": {
+                    "cpu": 0.01507399999999981,
+                    "wall": 0.015236363
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.14951399999999992,
+                    "wall": 0.152426825
+                  },
+                  "entries_write": {
+                    "cpu": 0.15135999999999994,
+                    "wall": 0.152925017
+                  },
+                  "filed": {
+                    "cpu": 0.00023200000000045407,
+                    "wall": 0.000225385
+                  },
+                  "pricing": {
+                    "cpu": 0.06561100000000009,
+                    "wall": 0.066495818
+                  },
+                  "quantity": {
+                    "cpu": 0.003359000000000112,
+                    "wall": 0.003382778
+                  },
+                  "quantity_other": {
+                    "cpu": 0.017350999999999672,
+                    "wall": 0.017516105
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.03615400000000002,
+                    "wall": 0.036467843
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.016181,
+                    "wall": 0.016322958
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.18963200000000024,
+                    "wall": 0.192114002
+                  },
+                  "setup": {
+                    "cpu": 0.0008749999999997371,
+                    "wall": 0.000878841
+                  },
+                  "small_tables": {
+                    "cpu": 0.012357999999999869,
+                    "wall": 0.012462298
+                  }
+                },
+                "load1": 28.15673828125
+              },
+              "floor": {
+                "seconds": 0.081197358,
+                "cpu_seconds": 0.004865999999999815,
+                "phases": null,
+                "load1": 27.42333984375
+              }
+            },
+            {
+              "rust": {
+                "seconds": 0.559674753,
+                "cpu_seconds": 0.48312499999999936,
+                "phases": {
+                  "begin": {
+                    "cpu": 2.1000000000270802e-05,
+                    "wall": 2.3561e-05
+                  },
+                  "commit": {
+                    "cpu": 0.0038530000000003284,
+                    "wall": 0.076845107
+                  },
+                  "complete": {
+                    "cpu": 0.011263000000000467,
+                    "wall": 0.011344552
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.08449000000000062,
+                    "wall": 0.085116048
+                  },
+                  "entries_write": {
+                    "cpu": 0.1138779999999997,
+                    "wall": 0.114668992
+                  },
+                  "filed": {
+                    "cpu": 0.0001499999999996504,
+                    "wall": 0.000144454
+                  },
+                  "pricing": {
+                    "cpu": 0.05208899999999961,
+                    "wall": 0.052496595
+                  },
+                  "quantity": {
+                    "cpu": 0.0031169999999995923,
+                    "wall": 0.003139502
+                  },
+                  "quantity_other": {
+                    "cpu": 0.013865000000000016,
+                    "wall": 0.013971703
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.033967000000000525,
+                    "wall": 0.034229382
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.015706999999999915,
+                    "wall": 0.015852146
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.13912000000000013,
+                    "wall": 0.14010447
+                  },
+                  "setup": {
+                    "cpu": 0.0008299999999996643,
+                    "wall": 0.000831879
+                  },
+                  "small_tables": {
+                    "cpu": 0.010761999999999716,
+                    "wall": 0.01083687
+                  }
+                },
+                "load1": 26.98876953125
+              },
+              "python": {
+                "seconds": 1.4495132099837065,
+                "cpu_seconds": 1.3625540250000014,
+                "load1": 26.98876953125
+              },
+              "floor": {
+                "seconds": 0.119053453,
+                "cpu_seconds": 0.004675000000000651,
+                "phases": null,
+                "load1": 26.5888671875
+              }
+            },
+            {
+              "python": {
+                "seconds": 1.4075031660031527,
+                "cpu_seconds": 1.325196003000002,
+                "load1": 26.5888671875
+              },
+              "rust": {
+                "seconds": 0.62708181,
+                "cpu_seconds": 0.5451519999999999,
+                "phases": {
+                  "begin": {
+                    "cpu": 1.8000000000739647e-05,
+                    "wall": 1.839e-05
+                  },
+                  "commit": {
+                    "cpu": 0.004766000000000048,
+                    "wall": 0.081813432
+                  },
+                  "complete": {
+                    "cpu": 0.01285400000000081,
+                    "wall": 0.01297213
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.09175499999999914,
+                    "wall": 0.092592871
+                  },
+                  "entries_write": {
+                    "cpu": 0.1199659999999998,
+                    "wall": 0.120889205
+                  },
+                  "filed": {
+                    "cpu": 0.00024900000000016576,
+                    "wall": 0.000242546
+                  },
+                  "pricing": {
+                    "cpu": 0.05233500000000113,
+                    "wall": 0.052799562
+                  },
+                  "quantity": {
+                    "cpu": 0.002855000000000274,
+                    "wall": 0.002877827
+                  },
+                  "quantity_other": {
+                    "cpu": 0.01576700000000031,
+                    "wall": 0.015892367
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.04294299999999929,
+                    "wall": 0.043315551
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.013973000000000013,
+                    "wall": 0.014084296
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.17561599999999977,
+                    "wall": 0.177377661
+                  },
+                  "setup": {
+                    "cpu": 0.000802999999999443,
+                    "wall": 0.000805778
+                  },
+                  "small_tables": {
+                    "cpu": 0.011236999999999497,
+                    "wall": 0.011322742
+                  }
+                },
+                "load1": 27.2626953125
+              },
+              "floor": {
+                "seconds": 0.082010997,
+                "cpu_seconds": 0.005793999999999855,
+                "phases": null,
+                "load1": 26.6005859375
+              }
+            },
+            {
+              "rust": {
+                "seconds": 0.657223856,
+                "cpu_seconds": 0.5796000000000028,
+                "phases": {
+                  "begin": {
+                    "cpu": 2.000000000279556e-05,
+                    "wall": 2e-05
+                  },
+                  "commit": {
+                    "cpu": 0.004252000000001033,
+                    "wall": 0.073559601
+                  },
+                  "complete": {
+                    "cpu": 0.010958999999999719,
+                    "wall": 0.011028825
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.1050910000000016,
+                    "wall": 0.105902579
+                  },
+                  "entries_write": {
+                    "cpu": 0.12770199999999932,
+                    "wall": 0.128760157
+                  },
+                  "filed": {
+                    "cpu": 0.00014399999999881175,
+                    "wall": 0.000139763
+                  },
+                  "pricing": {
+                    "cpu": 0.06555900000000037,
+                    "wall": 0.068118985
+                  },
+                  "quantity": {
+                    "cpu": 0.0031269999999992137,
+                    "wall": 0.003162713
+                  },
+                  "quantity_other": {
+                    "cpu": 0.022522999999999627,
+                    "wall": 0.022739426
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.03913299999999964,
+                    "wall": 0.039590866
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.016221000000001595,
+                    "wall": 0.016369869
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.17084200000000038,
+                    "wall": 0.172694053
+                  },
+                  "setup": {
+                    "cpu": 0.0008689999999980103,
+                    "wall": 0.001804382
+                  },
+                  "small_tables": {
+                    "cpu": 0.013144000000000489,
+                    "wall": 0.013251616
+                  }
+                },
+                "load1": 26.6005859375
+              },
+              "python": {
+                "seconds": 1.662174891011091,
+                "cpu_seconds": 1.5749388229999965,
+                "load1": 27.59375
+              },
+              "floor": {
+                "seconds": 0.079133769,
+                "cpu_seconds": 0.005026999999998338,
+                "phases": null,
+                "load1": 29.38818359375
+              }
+            },
+            {
+              "python": {
+                "seconds": 1.6723428539989982,
+                "cpu_seconds": 1.5964478539999973,
+                "load1": 29.38818359375
+              },
+              "rust": {
+                "seconds": 0.742247159,
+                "cpu_seconds": 0.5594570000000019,
+                "phases": {
+                  "begin": {
+                    "cpu": 1.9999999999242846e-05,
+                    "wall": 2.042e-05
+                  },
+                  "commit": {
+                    "cpu": 0.0022650000000012938,
+                    "wall": 0.179573251
+                  },
+                  "complete": {
+                    "cpu": 0.015481000000001188,
+                    "wall": 0.015644012
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.0985309999999977,
+                    "wall": 0.099467779
+                  },
+                  "entries_write": {
+                    "cpu": 0.13945200000000213,
+                    "wall": 0.140894148
+                  },
+                  "filed": {
+                    "cpu": 0.00019299999999944362,
+                    "wall": 0.000185924
+                  },
+                  "pricing": {
+                    "cpu": 0.05713200000000285,
+                    "wall": 0.057737705
+                  },
+                  "quantity": {
+                    "cpu": 0.0032320000000005678,
+                    "wall": 0.003255175
+                  },
+                  "quantity_other": {
+                    "cpu": 0.016477999999999327,
+                    "wall": 0.016630424
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.03526700000000105,
+                    "wall": 0.035536192
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.0162009999999988,
+                    "wall": 0.016339238
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.16188499999999806,
+                    "wall": 0.16347431
+                  },
+                  "setup": {
+                    "cpu": 0.0008490000000023201,
+                    "wall": 0.00085202
+                  },
+                  "small_tables": {
+                    "cpu": 0.012425999999997828,
+                    "wall": 0.01254504
+                  }
+                },
+                "load1": 29.837890625
+              },
+              "floor": {
+                "seconds": 0.068802691,
+                "cpu_seconds": 0.003913999999998197,
+                "phases": null,
+                "load1": 29.6103515625
+              }
+            }
+          ],
+          "over_floor": 0.47921100000000116
+        }
+      ]
+    },
+    {
+      "name": "generic-20000-sqlite",
+      "environment": {
+        "book": {
+          "schema": "kassiber.journals-bench-book.v1",
+          "kind": "generic",
+          "transactions": 20000,
+          "seed": 1,
+          "csv_sha256": {
+            "book.csv": "7b09f4fd1d6fc465734d1c30db1e8ca2445577932c2fd924ab593106172cf6b1"
+          },
+          "pegs": 0,
+          "pegs_paired": 0,
+          "journals": {
+            "entries_created": 20000,
+            "quarantined": 0,
+            "cross_asset_pairs": 0,
+            "processed_transactions": 20000
+          },
+          "built_by": "32767d331e7be68c1efba00f9811f501d8a5f76f",
+          "build_seconds": 37.0,
+          "source": "copied historical synthetic book; CSV digests checked against the continuation record",
+          "normalized_by": "51bd20498 Python capture with fixed persistence clock"
+        },
+        "runs": 5,
+        "python": "3.11.17 (main, Oct 21 2026, 17:46:53) [Clang 23.1.3 ]",
+        "cpus": 48,
+        "probe_sha256": "f43dd2d6a001e0a7d3e3b792cea6ef583803776b673fa55b2e004ed426b63448",
+        "harness_sha256": "b9cb682b6e652362756528a4cedf38713774d70833ce1c1c5300a14a3c3a6bbc",
+        "sources": {
+          "crates/journals/src/boundary/joins.rs": "58b06db41921c470886b1cd1e190f506d6fd9175645c58321340fc6dd464c68e",
+          "crates/journals/src/boundary.rs": "2ddc678761e48f07a4277b2c20622a94a631f2c7c3725eefa32370a71abd878d",
+          "crates/journals/src/compute.rs": "b50c57224fc536c3df0fdff7d4d465d396aed6f717c158fb668f0fee0d507102",
+          "crates/journals/src/lib.rs": "f3d8fc2ab7257405c56545dda5d0bf7b3c24d90be78b8ccdc219feda380a576d",
+          "crates/journals/src/loader/direct.rs": "6f4ff944e2dd1a053ae54807ad510094ffa7c6c72c7c97b25cb5b2a4b876b999",
+          "crates/journals/src/loader/ownership.rs": "e9fd153c3ddbc0b7ad836c280e2219d8c0285e46e80f457fb5039003d250c2c8",
+          "crates/journals/src/loader/receipts.rs": "08b0978e2fed949d12af142596d9c91f1e39436d6dd2665e62e374af69bb4453",
+          "crates/journals/src/loader/tests.rs": "c32901ad80222bb09c20979247c37cebc1801dfd26dfc5cddc430c7bc034b804",
+          "crates/journals/src/loader/worklist.rs": "64670923212f75666cf0496da7e4ff7a9073e85e382d715bdebf05776a5d3516",
+          "crates/journals/src/loader.rs": "42698dcb84c9f0aba04eef10a14ecdb2e8b0497960f8bdd4d48dd7a17c762465",
+          "crates/journals/src/model.rs": "68f10bb6e44e1283ccf887606562fd908ad764848e7a4f3fdbe5e2f196239f8b",
+          "crates/journals/src/persistence/filed.rs": "24206d69912e8b067199a1f42a3ba1ba257ed40ff99e1569d0dc9d4d3ff94432",
+          "crates/journals/src/persistence/quantity.rs": "947e1c3927fc943f0eb187604e82e06a37ded17ccbf617d51358abbdd0a4a094",
+          "crates/journals/src/persistence/quarantine.rs": "c9cb06f5e0b8ab54fc47c20d9b4f7dc63a54379444e864fb450d0ef2f8235c0d",
+          "crates/journals/src/persistence.rs": "8d97d978da4911d18f662b9ef780a802b601cd5c7faa9bd28f62bc31d388c5e0",
+          "crates/journals/src/render.rs": "afac4610917b0ed8ef320385b7f80ca5cb28bd69187e9c00b5dac5b998550d45",
+          "crates/journals/src/storage/calculation.rs": "a637aca0d07926d54671a0b2bffdf988574adae711cc2a8db5a413dd9d55f2ba",
+          "crates/journals/src/storage/tests.rs": "199c5229846b89ef177d8941dd2a223975511b97cbac4576e551803b02989104",
+          "crates/journals/src/storage.rs": "d659568b07eb32327c08615b1d94e9f80e1594f6c5c16597f81c28262d49f243"
+        }
+      },
+      "measurements": [
+        {
+          "mode": "unchanged",
+          "transactions": 20000,
+          "appended_transactions": 0,
+          "activity": {
+            "journal_entries": {
+              "insert": 0,
+              "delete": 0
+            },
+            "journal_quantity_postings": {
+              "insert": 0,
+              "delete": 0
+            }
+          },
+          "entries": 20000,
+          "postings": 40000,
+          "best": {
+            "python": 1.0902882920000003,
+            "rust": 0.3373879999999998,
+            "floor": 0.0008150000000002322
+          },
+          "best_wall": {
+            "python": 1.1032648899999913,
+            "rust": 0.37363614,
+            "floor": 0.038255625
+          },
+          "trials": [
+            {
+              "python": {
+                "seconds": 1.2338120070053264,
+                "cpu_seconds": 1.218976473999998,
+                "load1": 27.05859375
+              },
+              "rust": {
+                "seconds": 0.421503528,
+                "cpu_seconds": 0.3763540000000001,
+                "phases": {
+                  "begin": {
+                    "cpu": 1.8000000000073513e-05,
+                    "wall": 2.005e-05
+                  },
+                  "commit": {
+                    "cpu": 0.0014799999999999258,
+                    "wall": 0.043652161
+                  },
+                  "complete": {
+                    "cpu": 0.012709000000000081,
+                    "wall": 0.012798527
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.10214100000000004,
+                    "wall": 0.102860591
+                  },
+                  "entries_write": {
+                    "cpu": 0.06295600000000023,
+                    "wall": 0.063371197
+                  },
+                  "filed": {
+                    "cpu": 0.0001230000000003173,
+                    "wall": 0.000116982
+                  },
+                  "pricing": {
+                    "cpu": 0.01761400000000002,
+                    "wall": 0.01773414
+                  },
+                  "quantity": {
+                    "cpu": 0.002919000000000116,
+                    "wall": 0.002933888
+                  },
+                  "quantity_other": {
+                    "cpu": 0.01594899999999999,
+                    "wall": 0.016050532
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.035633999999999943,
+                    "wall": 0.035940742
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.01607000000000003,
+                    "wall": 0.016198635
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.10308300000000004,
+                    "wall": 0.10406384
+                  },
+                  "setup": {
+                    "cpu": 0.0003069999999998352,
+                    "wall": 0.000303217
+                  },
+                  "small_tables": {
+                    "cpu": 0.005333999999999506,
+                    "wall": 0.005375705
+                  }
+                },
+                "load1": 27.53466796875
+              },
+              "floor": {
+                "seconds": 0.08467158,
+                "cpu_seconds": 0.0017320000000000668,
+                "phases": null,
+                "load1": 27.53466796875
+              }
+            },
+            {
+              "rust": {
+                "seconds": 0.37363614,
+                "cpu_seconds": 0.3373879999999998,
+                "phases": {
+                  "begin": {
+                    "cpu": 2.0000000000131024e-05,
+                    "wall": 2.173e-05
+                  },
+                  "commit": {
+                    "cpu": 0.0013100000000001444,
+                    "wall": 0.034919219
+                  },
+                  "complete": {
+                    "cpu": 0.011144999999999072,
+                    "wall": 0.01122982
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.08573499999999967,
+                    "wall": 0.0863942
+                  },
+                  "entries_write": {
+                    "cpu": 0.0601799999999999,
+                    "wall": 0.060704316
+                  },
+                  "filed": {
+                    "cpu": 0.00011100000000041632,
+                    "wall": 0.000108793
+                  },
+                  "pricing": {
+                    "cpu": 0.01576299999999975,
+                    "wall": 0.015868087
+                  },
+                  "quantity": {
+                    "cpu": 0.0028180000000004313,
+                    "wall": 0.002842156
+                  },
+                  "quantity_other": {
+                    "cpu": 0.013949000000000211,
+                    "wall": 0.014038625
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.031025999999999776,
+                    "wall": 0.031253073
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.014490000000000336,
+                    "wall": 0.014597978
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.09542699999999993,
+                    "wall": 0.096168987
+                  },
+                  "setup": {
+                    "cpu": 0.0002749999999993591,
+                    "wall": 0.000278667
+                  },
+                  "small_tables": {
+                    "cpu": 0.005130000000000301,
+                    "wall": 0.005158569
+                  }
+                },
+                "load1": 26.93115234375
+              },
+              "python": {
+                "seconds": 1.1712380039971322,
+                "cpu_seconds": 1.1598821820000005,
+                "load1": 26.93115234375
+              },
+              "floor": {
+                "seconds": 0.211854985,
+                "cpu_seconds": 0.0008150000000002322,
+                "phases": null,
+                "load1": 26.3759765625
+              }
+            },
+            {
+              "python": {
+                "seconds": 1.1032648899999913,
+                "cpu_seconds": 1.0902882920000003,
+                "load1": 26.3759765625
+              },
+              "rust": {
+                "seconds": 0.496776469,
+                "cpu_seconds": 0.40966399999999936,
+                "phases": {
+                  "begin": {
+                    "cpu": 1.9999999999242846e-05,
+                    "wall": 2.151e-05
+                  },
+                  "commit": {
+                    "cpu": 0.0017449999999996635,
+                    "wall": 0.084181719
+                  },
+                  "complete": {
+                    "cpu": 0.01133200000000123,
+                    "wall": 0.011415134
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.09345200000000098,
+                    "wall": 0.094333074
+                  },
+                  "entries_write": {
+                    "cpu": 0.06832399999999872,
+                    "wall": 0.068875584
+                  },
+                  "filed": {
+                    "cpu": 0.00011999999999900979,
+                    "wall": 0.000122003
+                  },
+                  "pricing": {
+                    "cpu": 0.016465999999999426,
+                    "wall": 0.016611334
+                  },
+                  "quantity": {
+                    "cpu": 0.0027970000000010486,
+                    "wall": 0.002826696
+                  },
+                  "quantity_other": {
+                    "cpu": 0.016063000000000827,
+                    "wall": 0.016212375
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.04829999999999934,
+                    "wall": 0.049313792
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.015017999999999532,
+                    "wall": 0.01515079
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.1305449999999997,
+                    "wall": 0.132147689
+                  },
+                  "setup": {
+                    "cpu": 0.000280000000000058,
+                    "wall": 0.000284847
+                  },
+                  "small_tables": {
+                    "cpu": 0.005192000000000974,
+                    "wall": 0.005220831
+                  }
+                },
+                "load1": 26.265625
+              },
+              "floor": {
+                "seconds": 0.043114998,
+                "cpu_seconds": 0.0012780000000010006,
+                "phases": null,
+                "load1": 26.265625
+              }
+            },
+            {
+              "rust": {
+                "seconds": 0.406076109,
+                "cpu_seconds": 0.3691689999999994,
+                "phases": {
+                  "begin": {
+                    "cpu": 1.9999999999242846e-05,
+                    "wall": 2.179e-05
+                  },
+                  "commit": {
+                    "cpu": 0.0015710000000002111,
+                    "wall": 0.035217505
+                  },
+                  "complete": {
+                    "cpu": 0.011328999999999922,
+                    "wall": 0.011422144
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.09372499999999917,
+                    "wall": 0.094487677
+                  },
+                  "entries_write": {
+                    "cpu": 0.0652070000000009,
+                    "wall": 0.065774172
+                  },
+                  "filed": {
+                    "cpu": 0.00011300000000069588,
+                    "wall": 0.000109313
+                  },
+                  "pricing": {
+                    "cpu": 0.017652,
+                    "wall": 0.017803642
+                  },
+                  "quantity": {
+                    "cpu": 0.002741999999999578,
+                    "wall": 0.002757664
+                  },
+                  "quantity_other": {
+                    "cpu": 0.01698299999999975,
+                    "wall": 0.017120146
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.03421600000000069,
+                    "wall": 0.034493829
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.014554999999999652,
+                    "wall": 0.014674519
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.10538400000000081,
+                    "wall": 0.106422113
+                  },
+                  "setup": {
+                    "cpu": 0.00027000000000043656,
+                    "wall": 0.000272987
+                  },
+                  "small_tables": {
+                    "cpu": 0.00538199999999911,
+                    "wall": 0.005428065
+                  }
+                },
+                "load1": 27.04541015625
+              },
+              "python": {
+                "seconds": 1.1340265570033807,
+                "cpu_seconds": 1.122044686999999,
+                "load1": 27.04541015625
+              },
+              "floor": {
+                "seconds": 0.038255625,
+                "cpu_seconds": 0.002120000000001454,
+                "phases": null,
+                "load1": 26.56103515625
+              }
+            },
+            {
+              "python": {
+                "seconds": 1.6358602810068987,
+                "cpu_seconds": 1.622506702999999,
+                "load1": 26.56103515625
+              },
+              "rust": {
+                "seconds": 0.567512454,
+                "cpu_seconds": 0.5207669999999993,
+                "phases": {
+                  "begin": {
+                    "cpu": 1.899999999821489e-05,
+                    "wall": 2.172e-05
+                  },
+                  "commit": {
+                    "cpu": 0.001577999999998525,
+                    "wall": 0.03889286
+                  },
+                  "complete": {
+                    "cpu": 0.017593000000001524,
+                    "wall": 0.017787382
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.14087599999999867,
+                    "wall": 0.145595179
+                  },
+                  "entries_write": {
+                    "cpu": 0.11474499999999921,
+                    "wall": 0.115988645
+                  },
+                  "filed": {
+                    "cpu": 0.00021999999999877673,
+                    "wall": 0.000211315
+                  },
+                  "pricing": {
+                    "cpu": 0.02088799999999935,
+                    "wall": 0.021058407
+                  },
+                  "quantity": {
+                    "cpu": 0.0034290000000005705,
+                    "wall": 0.003467099
+                  },
+                  "quantity_other": {
+                    "cpu": 0.02139900000000239,
+                    "wall": 0.021624951
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.04923199999999994,
+                    "wall": 0.04972004
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.019978999999999303,
+                    "wall": 0.020211338
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.12182899999999819,
+                    "wall": 0.122989806
+                  },
+                  "setup": {
+                    "cpu": 0.0002820000000021139,
+                    "wall": 0.000277137
+                  },
+                  "small_tables": {
+                    "cpu": 0.008676000000001238,
+                    "wall": 0.009574351
+                  }
+                },
+                "load1": 26.275390625
+              },
+              "floor": {
+                "seconds": 0.041606613,
+                "cpu_seconds": 0.0014859999999998763,
+                "phases": null,
+                "load1": 26.275390625
+              }
+            }
+          ],
+          "over_floor": 0.33657299999999957
+        }
+      ]
+    },
+    {
+      "name": "multi-wallet-20000-cipher",
+      "environment": {
+        "book": {
+          "schema": "kassiber.journals-bench-book.v1",
+          "kind": "multi-wallet",
+          "transactions": 20000,
+          "seed": 7,
+          "csv_sha256": {
+            "Hot.csv": "8d3852c3bcdb36bdd425b76fb3a8e5f64bf462e57c6b61294ed774681ac81146",
+            "Cold.csv": "ed3a0928e98404316be9b9fa7e3b603f4d4e0d7577633bec06e441d8d0e8ff5f",
+            "LHot.csv": "0cdeee02cfd30c7a1bc950bb013c3bbe793b4f1c7f19bc7ab4a4569100117b7a",
+            "LCold.csv": "94adb338d7efdf3b52025c2ef85e0fb586a7f501ff446d6aef3572295f8fc748"
+          },
+          "pegs": 3306,
+          "pegs_paired": 300,
+          "journals": {
+            "entries_created": 19983,
+            "quarantined": 17,
+            "cross_asset_pairs": 300,
+            "processed_transactions": 20000
+          },
+          "built_by": "b5eb38ea8cb764675322e61e9b957a57deb947c6",
+          "build_seconds": 1239.1,
+          "source": "copied historical synthetic book; CSV digests checked against the continuation record",
+          "normalized_by": "51bd20498 Python capture with fixed persistence clock"
+        },
+        "runs": 5,
+        "python": "3.11.17 (main, Oct 21 2026, 17:46:53) [Clang 23.1.3 ]",
+        "cpus": 48,
+        "probe_sha256": "f43dd2d6a001e0a7d3e3b792cea6ef583803776b673fa55b2e004ed426b63448",
+        "harness_sha256": "b9cb682b6e652362756528a4cedf38713774d70833ce1c1c5300a14a3c3a6bbc",
+        "sources": {
+          "crates/journals/src/boundary/joins.rs": "58b06db41921c470886b1cd1e190f506d6fd9175645c58321340fc6dd464c68e",
+          "crates/journals/src/boundary.rs": "2ddc678761e48f07a4277b2c20622a94a631f2c7c3725eefa32370a71abd878d",
+          "crates/journals/src/compute.rs": "b50c57224fc536c3df0fdff7d4d465d396aed6f717c158fb668f0fee0d507102",
+          "crates/journals/src/lib.rs": "f3d8fc2ab7257405c56545dda5d0bf7b3c24d90be78b8ccdc219feda380a576d",
+          "crates/journals/src/loader/direct.rs": "6f4ff944e2dd1a053ae54807ad510094ffa7c6c72c7c97b25cb5b2a4b876b999",
+          "crates/journals/src/loader/ownership.rs": "e9fd153c3ddbc0b7ad836c280e2219d8c0285e46e80f457fb5039003d250c2c8",
+          "crates/journals/src/loader/receipts.rs": "08b0978e2fed949d12af142596d9c91f1e39436d6dd2665e62e374af69bb4453",
+          "crates/journals/src/loader/tests.rs": "c32901ad80222bb09c20979247c37cebc1801dfd26dfc5cddc430c7bc034b804",
+          "crates/journals/src/loader/worklist.rs": "64670923212f75666cf0496da7e4ff7a9073e85e382d715bdebf05776a5d3516",
+          "crates/journals/src/loader.rs": "42698dcb84c9f0aba04eef10a14ecdb2e8b0497960f8bdd4d48dd7a17c762465",
+          "crates/journals/src/model.rs": "68f10bb6e44e1283ccf887606562fd908ad764848e7a4f3fdbe5e2f196239f8b",
+          "crates/journals/src/persistence/filed.rs": "24206d69912e8b067199a1f42a3ba1ba257ed40ff99e1569d0dc9d4d3ff94432",
+          "crates/journals/src/persistence/quantity.rs": "947e1c3927fc943f0eb187604e82e06a37ded17ccbf617d51358abbdd0a4a094",
+          "crates/journals/src/persistence/quarantine.rs": "c9cb06f5e0b8ab54fc47c20d9b4f7dc63a54379444e864fb450d0ef2f8235c0d",
+          "crates/journals/src/persistence.rs": "8d97d978da4911d18f662b9ef780a802b601cd5c7faa9bd28f62bc31d388c5e0",
+          "crates/journals/src/render.rs": "afac4610917b0ed8ef320385b7f80ca5cb28bd69187e9c00b5dac5b998550d45",
+          "crates/journals/src/storage/calculation.rs": "a637aca0d07926d54671a0b2bffdf988574adae711cc2a8db5a413dd9d55f2ba",
+          "crates/journals/src/storage/tests.rs": "199c5229846b89ef177d8941dd2a223975511b97cbac4576e551803b02989104",
+          "crates/journals/src/storage.rs": "d659568b07eb32327c08615b1d94e9f80e1594f6c5c16597f81c28262d49f243"
+        }
+      },
+      "measurements": [
+        {
+          "mode": "unchanged",
+          "transactions": 20000,
+          "appended_transactions": 0,
+          "activity": {
+            "journal_entries": {
+              "insert": 0,
+              "delete": 0
+            },
+            "journal_quantity_postings": {
+              "insert": 0,
+              "delete": 0
+            }
+          },
+          "entries": 19983,
+          "postings": 45216,
+          "best": {
+            "python": 1.470125490000001,
+            "rust": 0.695089000000003,
+            "floor": 0.019524999999999793
+          },
+          "best_wall": {
+            "python": 1.5603811070031952,
+            "rust": 0.783153739,
+            "floor": 0.091533748
+          },
+          "trials": [
+            {
+              "python": {
+                "seconds": 1.7983674689894542,
+                "cpu_seconds": 1.568716643000002,
+                "load1": 35.71826171875
+              },
+              "rust": {
+                "seconds": 0.874829235,
+                "cpu_seconds": 0.7835380000000001,
+                "phases": {
+                  "begin": {
+                    "cpu": 1.8999999999991246e-05,
+                    "wall": 1.982e-05
+                  },
+                  "commit": {
+                    "cpu": 0.008389999999999898,
+                    "wall": 0.084372731
+                  },
+                  "complete": {
+                    "cpu": 0.017813999999999997,
+                    "wall": 0.018009083
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.1289769999999999,
+                    "wall": 0.130191208
+                  },
+                  "entries_write": {
+                    "cpu": 0.17366599999999988,
+                    "wall": 0.178033757
+                  },
+                  "filed": {
+                    "cpu": 9.000000000369823e-06,
+                    "wall": 1.86e-06
+                  },
+                  "pricing": {
+                    "cpu": 0.07300500000000021,
+                    "wall": 0.074095985
+                  },
+                  "quantity": {
+                    "cpu": 0.01268699999999967,
+                    "wall": 0.012951957
+                  },
+                  "quantity_other": {
+                    "cpu": 0.06262599999999985,
+                    "wall": 0.064914023
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.058488000000000095,
+                    "wall": 0.059518879
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.02075199999999988,
+                    "wall": 0.021699247
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.21239500000000033,
+                    "wall": 0.216039593
+                  },
+                  "setup": {
+                    "cpu": 0.0013460000000002914,
+                    "wall": 0.001367063
+                  },
+                  "small_tables": {
+                    "cpu": 0.013347999999999693,
+                    "wall": 0.013486704
+                  }
+                },
+                "load1": 35.71826171875
+              },
+              "floor": {
+                "seconds": 0.091533748,
+                "cpu_seconds": 0.019524999999999793,
+                "phases": null,
+                "load1": 34.69970703125
+              }
+            },
+            {
+              "rust": {
+                "seconds": 0.783153739,
+                "cpu_seconds": 0.7028439999999998,
+                "phases": {
+                  "begin": {
+                    "cpu": 2.1000000000270802e-05,
+                    "wall": 2.1611e-05
+                  },
+                  "commit": {
+                    "cpu": 0.009521999999998698,
+                    "wall": 0.080934169
+                  },
+                  "complete": {
+                    "cpu": 0.01967600000000047,
+                    "wall": 0.020354473
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.11118500000000076,
+                    "wall": 0.112449174
+                  },
+                  "entries_write": {
+                    "cpu": 0.15266699999999922,
+                    "wall": 0.154346298
+                  },
+                  "filed": {
+                    "cpu": 9.999999999621423e-06,
+                    "wall": 2.16e-06
+                  },
+                  "pricing": {
+                    "cpu": 0.06273200000000045,
+                    "wall": 0.063379131
+                  },
+                  "quantity": {
+                    "cpu": 0.010008000000000905,
+                    "wall": 0.010959585
+                  },
+                  "quantity_other": {
+                    "cpu": 0.06094399999999922,
+                    "wall": 0.061652109
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.0543079999999998,
+                    "wall": 0.054882511
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.017414999999999736,
+                    "wall": 0.017675862
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.1885690000000002,
+                    "wall": 0.190433874
+                  },
+                  "setup": {
+                    "cpu": 0.0012649999999991834,
+                    "wall": 0.001271059
+                  },
+                  "small_tables": {
+                    "cpu": 0.014506000000000796,
+                    "wall": 0.014677389
+                  }
+                },
+                "load1": 33.7626953125
+              },
+              "python": {
+                "seconds": 1.662003794015618,
+                "cpu_seconds": 1.581851694000001,
+                "load1": 33.220703125
+              },
+              "floor": {
+                "seconds": 0.098957644,
+                "cpu_seconds": 0.02474600000000038,
+                "phases": null,
+                "load1": 33.220703125
+              }
+            },
+            {
+              "python": {
+                "seconds": 1.5800566129910294,
+                "cpu_seconds": 1.470125490000001,
+                "load1": 33.12255859375
+              },
+              "rust": {
+                "seconds": 0.845417671,
+                "cpu_seconds": 0.7542209999999994,
+                "phases": {
+                  "begin": {
+                    "cpu": 2.1000000000270802e-05,
+                    "wall": 2.2751e-05
+                  },
+                  "commit": {
+                    "cpu": 0.008842999999998824,
+                    "wall": 0.091261198
+                  },
+                  "complete": {
+                    "cpu": 0.015363000000000682,
+                    "wall": 0.015677078
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.11079499999999953,
+                    "wall": 0.111897967
+                  },
+                  "entries_write": {
+                    "cpu": 0.14222299999999954,
+                    "wall": 0.143642133
+                  },
+                  "filed": {
+                    "cpu": 9.999999999621423e-06,
+                    "wall": 1.43e-06
+                  },
+                  "pricing": {
+                    "cpu": 0.0620270000000005,
+                    "wall": 0.062674088
+                  },
+                  "quantity": {
+                    "cpu": 0.010182999999999609,
+                    "wall": 0.010319784
+                  },
+                  "quantity_other": {
+                    "cpu": 0.07060700000000075,
+                    "wall": 0.071331542
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.05256499999999953,
+                    "wall": 0.053042005
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.017919000000000906,
+                    "wall": 0.018076471
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.25098799999999954,
+                    "wall": 0.254585042
+                  },
+                  "setup": {
+                    "cpu": 0.00137499999999946,
+                    "wall": 0.001378302
+                  },
+                  "small_tables": {
+                    "cpu": 0.011285000000000878,
+                    "wall": 0.011382957
+                  }
+                },
+                "load1": 32.7919921875
+              },
+              "floor": {
+                "seconds": 0.107984914,
+                "cpu_seconds": 0.02159899999999837,
+                "phases": null,
+                "load1": 32.7919921875
+              }
+            },
+            {
+              "rust": {
+                "seconds": 0.789489477,
+                "cpu_seconds": 0.695089000000003,
+                "phases": {
+                  "begin": {
+                    "cpu": 2.3000000002326715e-05,
+                    "wall": 2.4371e-05
+                  },
+                  "commit": {
+                    "cpu": 0.005742000000001468,
+                    "wall": 0.087784135
+                  },
+                  "complete": {
+                    "cpu": 0.015363999999998157,
+                    "wall": 0.01548276
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.09825599999999923,
+                    "wall": 0.098936825
+                  },
+                  "entries_write": {
+                    "cpu": 0.12451199999999929,
+                    "wall": 0.125411689
+                  },
+                  "filed": {
+                    "cpu": 7.000000000090267e-06,
+                    "wall": 1.43e-06
+                  },
+                  "pricing": {
+                    "cpu": 0.07326199999999972,
+                    "wall": 0.073959026
+                  },
+                  "quantity": {
+                    "cpu": 0.010829000000001088,
+                    "wall": 0.014104508
+                  },
+                  "quantity_other": {
+                    "cpu": 0.06201700000000088,
+                    "wall": 0.062565241
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.06707400000000163,
+                    "wall": 0.069052507
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.021107999999998128,
+                    "wall": 0.021538764
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.2047939999999997,
+                    "wall": 0.208367529
+                  },
+                  "setup": {
+                    "cpu": 0.001424999999997567,
+                    "wall": 0.001438014
+                  },
+                  "small_tables": {
+                    "cpu": 0.010661000000002474,
+                    "wall": 0.010730346
+                  }
+                },
+                "load1": 32.408203125
+              },
+              "python": {
+                "seconds": 1.5603811070031952,
+                "cpu_seconds": 1.4854101540000002,
+                "load1": 32.29541015625
+              },
+              "floor": {
+                "seconds": 0.092426259,
+                "cpu_seconds": 0.023776000000001574,
+                "phases": null,
+                "load1": 32.29541015625
+              }
+            },
+            {
+              "python": {
+                "seconds": 1.9195975890033878,
+                "cpu_seconds": 1.7695841060000035,
+                "load1": 32.59228515625
+              },
+              "rust": {
+                "seconds": 0.839727905,
+                "cpu_seconds": 0.739967,
+                "phases": {
+                  "begin": {
+                    "cpu": 2.1000000000270802e-05,
+                    "wall": 2.3051e-05
+                  },
+                  "commit": {
+                    "cpu": 0.009862000000001814,
+                    "wall": 0.100648096
+                  },
+                  "complete": {
+                    "cpu": 0.017989000000000033,
+                    "wall": 0.018178428
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.11702700000000021,
+                    "wall": 0.118173896
+                  },
+                  "entries_write": {
+                    "cpu": 0.15053699999999992,
+                    "wall": 0.152118718
+                  },
+                  "filed": {
+                    "cpu": 9.999999999621423e-06,
+                    "wall": 1.6e-06
+                  },
+                  "pricing": {
+                    "cpu": 0.06840599999999952,
+                    "wall": 0.069092425
+                  },
+                  "quantity": {
+                    "cpu": 0.015288000000001745,
+                    "wall": 0.015515408
+                  },
+                  "quantity_other": {
+                    "cpu": 0.06077200000000005,
+                    "wall": 0.062411543
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.057786000000000115,
+                    "wall": 0.058454794
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.02766799999999847,
+                    "wall": 0.027960174
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.20087200000000038,
+                    "wall": 0.203092639
+                  },
+                  "setup": {
+                    "cpu": 0.0015229999999988308,
+                    "wall": 0.001643539
+                  },
+                  "small_tables": {
+                    "cpu": 0.01218899999999934,
+                    "wall": 0.01229778
+                  }
+                },
+                "load1": 32.865234375
+              },
+              "floor": {
+                "seconds": 0.091859348,
+                "cpu_seconds": 0.023400999999999783,
+                "phases": null,
+                "load1": 32.6357421875
+              }
+            }
+          ],
+          "over_floor": 0.6755640000000032
+        }
+      ]
+    },
+    {
+      "name": "multi-wallet-20000-sqlite",
+      "environment": {
+        "book": {
+          "schema": "kassiber.journals-bench-book.v1",
+          "kind": "multi-wallet",
+          "transactions": 20000,
+          "seed": 7,
+          "csv_sha256": {
+            "Hot.csv": "8d3852c3bcdb36bdd425b76fb3a8e5f64bf462e57c6b61294ed774681ac81146",
+            "Cold.csv": "ed3a0928e98404316be9b9fa7e3b603f4d4e0d7577633bec06e441d8d0e8ff5f",
+            "LHot.csv": "0cdeee02cfd30c7a1bc950bb013c3bbe793b4f1c7f19bc7ab4a4569100117b7a",
+            "LCold.csv": "94adb338d7efdf3b52025c2ef85e0fb586a7f501ff446d6aef3572295f8fc748"
+          },
+          "pegs": 3306,
+          "pegs_paired": 300,
+          "journals": {
+            "entries_created": 19983,
+            "quarantined": 17,
+            "cross_asset_pairs": 300,
+            "processed_transactions": 20000
+          },
+          "built_by": "b5eb38ea8cb764675322e61e9b957a57deb947c6",
+          "build_seconds": 1239.1,
+          "source": "copied historical synthetic book; CSV digests checked against the continuation record",
+          "normalized_by": "51bd20498 Python capture with fixed persistence clock"
+        },
+        "runs": 5,
+        "python": "3.11.17 (main, Oct 21 2026, 17:46:53) [Clang 23.1.3 ]",
+        "cpus": 48,
+        "probe_sha256": "f43dd2d6a001e0a7d3e3b792cea6ef583803776b673fa55b2e004ed426b63448",
+        "harness_sha256": "b9cb682b6e652362756528a4cedf38713774d70833ce1c1c5300a14a3c3a6bbc",
+        "sources": {
+          "crates/journals/src/boundary/joins.rs": "58b06db41921c470886b1cd1e190f506d6fd9175645c58321340fc6dd464c68e",
+          "crates/journals/src/boundary.rs": "2ddc678761e48f07a4277b2c20622a94a631f2c7c3725eefa32370a71abd878d",
+          "crates/journals/src/compute.rs": "b50c57224fc536c3df0fdff7d4d465d396aed6f717c158fb668f0fee0d507102",
+          "crates/journals/src/lib.rs": "f3d8fc2ab7257405c56545dda5d0bf7b3c24d90be78b8ccdc219feda380a576d",
+          "crates/journals/src/loader/direct.rs": "6f4ff944e2dd1a053ae54807ad510094ffa7c6c72c7c97b25cb5b2a4b876b999",
+          "crates/journals/src/loader/ownership.rs": "e9fd153c3ddbc0b7ad836c280e2219d8c0285e46e80f457fb5039003d250c2c8",
+          "crates/journals/src/loader/receipts.rs": "08b0978e2fed949d12af142596d9c91f1e39436d6dd2665e62e374af69bb4453",
+          "crates/journals/src/loader/tests.rs": "c32901ad80222bb09c20979247c37cebc1801dfd26dfc5cddc430c7bc034b804",
+          "crates/journals/src/loader/worklist.rs": "64670923212f75666cf0496da7e4ff7a9073e85e382d715bdebf05776a5d3516",
+          "crates/journals/src/loader.rs": "42698dcb84c9f0aba04eef10a14ecdb2e8b0497960f8bdd4d48dd7a17c762465",
+          "crates/journals/src/model.rs": "68f10bb6e44e1283ccf887606562fd908ad764848e7a4f3fdbe5e2f196239f8b",
+          "crates/journals/src/persistence/filed.rs": "24206d69912e8b067199a1f42a3ba1ba257ed40ff99e1569d0dc9d4d3ff94432",
+          "crates/journals/src/persistence/quantity.rs": "947e1c3927fc943f0eb187604e82e06a37ded17ccbf617d51358abbdd0a4a094",
+          "crates/journals/src/persistence/quarantine.rs": "c9cb06f5e0b8ab54fc47c20d9b4f7dc63a54379444e864fb450d0ef2f8235c0d",
+          "crates/journals/src/persistence.rs": "8d97d978da4911d18f662b9ef780a802b601cd5c7faa9bd28f62bc31d388c5e0",
+          "crates/journals/src/render.rs": "afac4610917b0ed8ef320385b7f80ca5cb28bd69187e9c00b5dac5b998550d45",
+          "crates/journals/src/storage/calculation.rs": "a637aca0d07926d54671a0b2bffdf988574adae711cc2a8db5a413dd9d55f2ba",
+          "crates/journals/src/storage/tests.rs": "199c5229846b89ef177d8941dd2a223975511b97cbac4576e551803b02989104",
+          "crates/journals/src/storage.rs": "d659568b07eb32327c08615b1d94e9f80e1594f6c5c16597f81c28262d49f243"
+        }
+      },
+      "measurements": [
+        {
+          "mode": "unchanged",
+          "transactions": 20000,
+          "appended_transactions": 0,
+          "activity": {
+            "journal_entries": {
+              "insert": 0,
+              "delete": 0
+            },
+            "journal_quantity_postings": {
+              "insert": 0,
+              "delete": 0
+            }
+          },
+          "entries": 19983,
+          "postings": 45216,
+          "best": {
+            "python": 1.179651579999998,
+            "rust": 0.4465330000000005,
+            "floor": 0.011076000000000086
+          },
+          "best_wall": {
+            "python": 1.1915443610050716,
+            "rust": 0.474303409,
+            "floor": 0.045555932
+          },
+          "trials": [
+            {
+              "python": {
+                "seconds": 1.242709576006746,
+                "cpu_seconds": 1.2292925240000017,
+                "load1": 36.876953125
+              },
+              "rust": {
+                "seconds": 0.501282073,
+                "cpu_seconds": 0.477735,
+                "phases": {
+                  "begin": {
+                    "cpu": 2.1000000000048757e-05,
+                    "wall": 2.2221e-05
+                  },
+                  "commit": {
+                    "cpu": 0.002441999999999833,
+                    "wall": 0.020886993
+                  },
+                  "complete": {
+                    "cpu": 0.013287000000000049,
+                    "wall": 0.013392329
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.11320700000000006,
+                    "wall": 0.114476835
+                  },
+                  "entries_write": {
+                    "cpu": 0.07104799999999978,
+                    "wall": 0.071789918
+                  },
+                  "filed": {
+                    "cpu": 7.000000000090267e-06,
+                    "wall": 1.36e-06
+                  },
+                  "pricing": {
+                    "cpu": 0.02352500000000024,
+                    "wall": 0.02380776
+                  },
+                  "quantity": {
+                    "cpu": 0.00544699999999998,
+                    "wall": 0.005506678
+                  },
+                  "quantity_other": {
+                    "cpu": 0.05372000000000021,
+                    "wall": 0.054272654
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.04461499999999985,
+                    "wall": 0.045053581
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.016931999999999947,
+                    "wall": 0.017096975
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.12647399999999998,
+                    "wall": 0.127836054
+                  },
+                  "setup": {
+                    "cpu": 0.0004750000000000032,
+                    "wall": 0.00047181
+                  },
+                  "small_tables": {
+                    "cpu": 0.006524999999999892,
+                    "wall": 0.006591873
+                  }
+                },
+                "load1": 36.876953125
+              },
+              "floor": {
+                "seconds": 0.193261116,
+                "cpu_seconds": 0.011076000000000086,
+                "phases": null,
+                "load1": 36.40625
+              }
+            },
+            {
+              "rust": {
+                "seconds": 0.480105033,
+                "cpu_seconds": 0.4465330000000005,
+                "phases": {
+                  "begin": {
+                    "cpu": 2.0999999999382624e-05,
+                    "wall": 2.2911e-05
+                  },
+                  "commit": {
+                    "cpu": 0.0030189999999992168,
+                    "wall": 0.032741686
+                  },
+                  "complete": {
+                    "cpu": 0.014185000000000336,
+                    "wall": 0.01430394
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.08909199999999995,
+                    "wall": 0.089895598
+                  },
+                  "entries_write": {
+                    "cpu": 0.06982400000000055,
+                    "wall": 0.070436157
+                  },
+                  "filed": {
+                    "cpu": 8.000000000230045e-06,
+                    "wall": 1.45e-06
+                  },
+                  "pricing": {
+                    "cpu": 0.020181000000000004,
+                    "wall": 0.02034286
+                  },
+                  "quantity": {
+                    "cpu": 0.006859999999999644,
+                    "wall": 0.00692937
+                  },
+                  "quantity_other": {
+                    "cpu": 0.05038399999999932,
+                    "wall": 0.050798153
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.04842999999999975,
+                    "wall": 0.048851559
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.017407000000000394,
+                    "wall": 0.017563136
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.1194140000000008,
+                    "wall": 0.120427903
+                  },
+                  "setup": {
+                    "cpu": 0.0007260000000002265,
+                    "wall": 0.000724216
+                  },
+                  "small_tables": {
+                    "cpu": 0.006908999999999388,
+                    "wall": 0.006960441
+                  }
+                },
+                "load1": 36.40625
+              },
+              "python": {
+                "seconds": 1.1915443610050716,
+                "cpu_seconds": 1.179651579999998,
+                "load1": 35.57275390625
+              },
+              "floor": {
+                "seconds": 0.154341246,
+                "cpu_seconds": 0.011696999999999846,
+                "phases": null,
+                "load1": 34.64599609375
+              }
+            },
+            {
+              "python": {
+                "seconds": 1.9803789950092323,
+                "cpu_seconds": 1.9544537510000026,
+                "load1": 34.64599609375
+              },
+              "rust": {
+                "seconds": 0.474303409,
+                "cpu_seconds": 0.45309300000000086,
+                "phases": {
+                  "begin": {
+                    "cpu": 2.0000000001019203e-05,
+                    "wall": 2.0721e-05
+                  },
+                  "commit": {
+                    "cpu": 0.0028240000000003818,
+                    "wall": 0.020416021
+                  },
+                  "complete": {
+                    "cpu": 0.014148000000000494,
+                    "wall": 0.014242359
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.09025500000000086,
+                    "wall": 0.090851178
+                  },
+                  "entries_write": {
+                    "cpu": 0.08021299999999876,
+                    "wall": 0.081056532
+                  },
+                  "filed": {
+                    "cpu": 5.999999999062311e-06,
+                    "wall": 1.22e-06
+                  },
+                  "pricing": {
+                    "cpu": 0.018976999999999578,
+                    "wall": 0.019084911
+                  },
+                  "quantity": {
+                    "cpu": 0.005042000000001323,
+                    "wall": 0.005089988
+                  },
+                  "quantity_other": {
+                    "cpu": 0.05444299999999913,
+                    "wall": 0.054843067
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.04489099999999979,
+                    "wall": 0.045243325
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.015684000000000253,
+                    "wall": 0.015821206
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.11801900000000032,
+                    "wall": 0.118956278
+                  },
+                  "setup": {
+                    "cpu": 0.0005619999999986192,
+                    "wall": 0.000567833
+                  },
+                  "small_tables": {
+                    "cpu": 0.007995000000001085,
+                    "wall": 0.008067587
+                  }
+                },
+                "load1": 33.39306640625
+              },
+              "floor": {
+                "seconds": 0.05108928,
+                "cpu_seconds": 0.012038999999999689,
+                "phases": null,
+                "load1": 33.39306640625
+              }
+            },
+            {
+              "rust": {
+                "seconds": 0.585567918,
+                "cpu_seconds": 0.5409369999999996,
+                "phases": {
+                  "begin": {
+                    "cpu": 2.3000000000550358e-05,
+                    "wall": 2.4221e-05
+                  },
+                  "commit": {
+                    "cpu": 0.003643000000000285,
+                    "wall": 0.04025254
+                  },
+                  "complete": {
+                    "cpu": 0.024617999999998474,
+                    "wall": 0.024891545
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.11571200000000026,
+                    "wall": 0.11687135
+                  },
+                  "entries_write": {
+                    "cpu": 0.10932099999999956,
+                    "wall": 0.110360799
+                  },
+                  "filed": {
+                    "cpu": 1.100000000064938e-05,
+                    "wall": 2.51e-06
+                  },
+                  "pricing": {
+                    "cpu": 0.023906000000000205,
+                    "wall": 0.024121217
+                  },
+                  "quantity": {
+                    "cpu": 0.00528700000000093,
+                    "wall": 0.005331973
+                  },
+                  "quantity_other": {
+                    "cpu": 0.05513000000000012,
+                    "wall": 0.055616074
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.045969999999998734,
+                    "wall": 0.046417322
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.01580700000000057,
+                    "wall": 0.015945099
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.13070100000000018,
+                    "wall": 0.134724753
+                  },
+                  "setup": {
+                    "cpu": 0.0006559999999993238,
+                    "wall": 0.000664025
+                  },
+                  "small_tables": {
+                    "cpu": 0.010137000000000285,
+                    "wall": 0.010290368
+                  }
+                },
+                "load1": 32.3203125
+              },
+              "python": {
+                "seconds": 1.7223292480048258,
+                "cpu_seconds": 1.709012461999997,
+                "load1": 32.3203125
+              },
+              "floor": {
+                "seconds": 0.213561513,
+                "cpu_seconds": 0.011393999999999238,
+                "phases": null,
+                "load1": 31.41357421875
+              }
+            },
+            {
+              "python": {
+                "seconds": 1.216492861014558,
+                "cpu_seconds": 1.2062327209999992,
+                "load1": 31.41357421875
+              },
+              "rust": {
+                "seconds": 0.615054557,
+                "cpu_seconds": 0.5556389999999993,
+                "phases": {
+                  "begin": {
+                    "cpu": 2.1000000000270802e-05,
+                    "wall": 2.232e-05
+                  },
+                  "commit": {
+                    "cpu": 0.0038130000000009545,
+                    "wall": 0.057782015
+                  },
+                  "complete": {
+                    "cpu": 0.013061000000000433,
+                    "wall": 0.013184075
+                  },
+                  "entries_prepare": {
+                    "cpu": 0.12554799999999844,
+                    "wall": 0.127055794
+                  },
+                  "entries_write": {
+                    "cpu": 0.0871069999999996,
+                    "wall": 0.087926011
+                  },
+                  "filed": {
+                    "cpu": 7.000000000090267e-06,
+                    "wall": 1.06e-06
+                  },
+                  "pricing": {
+                    "cpu": 0.031023000000001133,
+                    "wall": 0.031441836
+                  },
+                  "quantity": {
+                    "cpu": 0.005493999999998778,
+                    "wall": 0.005542258
+                  },
+                  "quantity_other": {
+                    "cpu": 0.075685,
+                    "wall": 0.076312113
+                  },
+                  "quantity_postings_bind": {
+                    "cpu": 0.051379999999998205,
+                    "wall": 0.051877389
+                  },
+                  "quantity_postings_prepare": {
+                    "cpu": 0.01832600000000184,
+                    "wall": 0.018483036
+                  },
+                  "quantity_postings_write": {
+                    "cpu": 0.13629600000000153,
+                    "wall": 0.137443545
+                  },
+                  "setup": {
+                    "cpu": 0.0005689999999987094,
+                    "wall": 0.000575664
+                  },
+                  "small_tables": {
+                    "cpu": 0.007291999999999632,
+                    "wall": 0.00734427
+                  }
+                },
+                "load1": 30.89990234375
+              },
+              "floor": {
+                "seconds": 0.045555932,
+                "cpu_seconds": 0.013055000000001371,
+                "phases": null,
+                "load1": 30.42724609375
+              }
+            }
+          ],
+          "over_floor": 0.4354570000000004
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "build": {
+      "log": "target/evidence/read-floor-build.log",
+      "sha256": "6cccf6ee05b08b101570e3cfe45770ca5fe208bbc6fc45ef816652321be951f6"
+    },
+    "test": {
+      "log": "target/evidence/read-floor-test.log",
+      "sha256": "3a895a6254121494bd0d89766c69d029f9bb821b3bba297451d4bf9d32fcdd53"
+    },
+    "clippy": {
+      "log": "target/evidence/read-floor-clippy.log",
+      "sha256": "a28f55847510d5145575cf073faf770c346096733c44a9b961ea120b9cb94a3c"
+    },
+    "classifier": {
+      "log": "target/evidence/floor-classifier.log",
+      "sha256": "6d5aec411b822716320386bd5a09a02e20eb087879bc27512f783043fa4d4896"
+    },
+    "preflight": {
+      "log": "target/evidence/floor-preflight.log",
+      "sha256": "76b24c243e7c7ccadb134a05edd58da83efee8132cc2e372840913a6db17ab8c",
+      "passed": 57
+    },
+    "format": {
+      "log": "target/evidence/read-floor-format.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "manual_second_review": true
+  },
+  "exact_timed_baseline_stores": 60
+}

@@ -6,6 +6,64 @@ persistence-branch mutation coverage and inherited full R4 campaigns must close
 before this becomes production authority. Python remains the reference. No CLI
 or daemon registration changes are included.
 
+## Borrowed retained-row read floor from `d6e46912b`
+
+R4-12 remains **unaccepted**. The unregistered `journal-read-floor` example
+prepares the same profile-scoped SELECTs as persistence, then visits every
+column of every retained entry and quantity posting through borrowed
+`rusqlite::types::ValueRef`. Each scalar is touched once through `black_box`;
+text and BLOB payloads remain borrowed. It records row, column, type and payload
+byte counts. It does no canonical hashing, JSON decoding, string conversion,
+row copying or value comparison. This is a lower bound on reading, rather than
+a full comparison or a substitute for the DML floor.
+
+Each cell is the minimum process CPU time over five independent, newly opened
+connections, matching the native benchmark's decrypted-page cache state.
+Query iteration and COMMIT are timed. Opening, statement preparation, complete
+dumps and checkpointing stay outside the timer. Every retained column,
+including `created_at`, is visited. Plaintext uses WAL/NORMAL with mmap;
+SQLCipher uses DELETE/FULL without mmap. Both use the scoped 128 MiB cache.
+
+| 20k book / driver | Entries | Postings | Read floor CPU | Current write floor CPU | Current unchanged allowance |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| generic / SQLite | 20,000 | 40,000 | 0.083712 | 0.000815 | 0.150815 |
+| generic / SQLCipher | 20,000 | 40,000 | 0.216724 | 0.003914 | 0.153914 |
+| multi-wallet / SQLite | 19,983 | 45,216 | 0.097404 | 0.011076 | 0.161076 |
+| multi-wallet / SQLCipher | 19,983 | 45,216 | 0.237027 | 0.019525 | 0.169525 |
+
+Both SQLCipher read floors exceed their current allowances before preparation
+or comparison: by 0.062810 and 0.067502 CPU seconds. Under the benchmark's
+fresh-connection conditions, the measured borrowed scan alone cannot meet the
+old allowance. **Propose read floor + 0.15 CPU seconds for all unchanged cells;
+retain write floor + 0.15 for fresh cells.** The proposed unchanged allowances
+are 0.233712 / 0.366724 seconds generic and 0.247404 / 0.387027 multi-wallet,
+on SQLite / SQLCipher respectively. These measurements do not establish that
+the complete writer meets either budget. No acceptance is claimed.
+
+A first exploratory probe reused one connection for all five repetitions.
+Its warm-cache minima (0.085079–0.119118 seconds) did not match the native
+benchmark's connection lifecycle. They are retained separately in the record
+and excluded from the budget decision. No schema or persisted digest is added.
+
+The host was busy: every sample records `/proc/loadavg`, with one-minute load
+31.08–33.63. These are best-of-five process-CPU measurements under contention,
+not quiet-host acceptance; the requested quiet-host repeat remains open.
+The copied synthetic books retain their previously normalized journals and
+matching CSV SHA-256 values. Unmasked complete dumps match before and after
+all four cells; integrity and foreign-key checks pass. A focused unit test pins
+all five SQLite scalar classes and profile filtering. Offline release build,
+that test and example clippy with warnings denied pass.
+
+The [measurement record](r4-journal-persistence-read-floor-measurements.json)
+retains all trials, load averages, scalar counts, logical-dump hashes, book
+manifests, source and binary hashes, and the separately remeasured unchanged
+baseline. Reproduce on disposable normalized books with:
+
+```sh
+cargo build --offline --release -p kassiber-journals --example journal-read-floor
+uv run --locked python scripts/benchmark-journal-read-floor.py --books target/books/generic-20000 target/books/multi-wallet-20000 --out target/read-floor
+```
+
 ## Digest probe from `51bd20498` (withdrawn)
 
 This attempt leaves **R4-12 unaccepted**. The schema-preserving digest and lazy
