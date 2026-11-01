@@ -1,6 +1,6 @@
 # Rust backend R9 integration audit
 
-**Status: ordered replay complete; combined verification in progress.**
+**Status: ordered replay complete; clean checkpoint with verification incomplete.**
 The local `t3code/rust-backend-r9` stack starts at `9f7471bf7`, retaining
 R8 (`3d88f24fa`) and the first-attempt checkpoint. All requested source lines
 are now integrated through transfers `61e6b66e7`. No push, PR, remote comment,
@@ -125,7 +125,7 @@ found missing storage/secrets probe prerequisites and CI's missing chain client
 fixture; those builds are explicit too. Other asserted wallet fixtures already
 have builds, and store interoperability/migration suites build their own probes.
 All 1,370 backup-install cases have passing fresh R9 receipts. The extended
-existing CI contract and preflight still need their post-addendum run.
+existing CI contract passes in the fresh post-addendum preflight: **57 / 57**.
 
 ## Fresh R9 verification
 
@@ -147,8 +147,8 @@ at a time. Task-owned build trees must be summarized and removed at completion.
 | Test classification and preflight | Updated 6,022 definitions; classifier check passes, and preflight passes all 57 checks |
 | Custody generated/replay/focused lanes | Refreshed after the owned-converter fix: 24,000 books + 1,030 permutations yield 24,852 complete stage matches and 178 matching refusals; 159 archived requests + 159 permutations match. Focused census and shadow each pass 300 tests and 32 subtests, with 75 native-loader byte matches and one explained panic-hook skip |
 | Complete renderer campaign | Refreshed after the owned-converter fix: 24,705 / 24,705 generated admitted cases and 318 / 318 archived cases match |
-| Slice/hybrid parity and no-fallback assertions | In progress: 3,842 exact collected nodes have passing receipts, through journal process, rendering, Lightning, report, review and setup modules. The hybrid module passes all 35 tests and 4,741 subtests, including importer complete-dump and no-fallback assertions. The 29 disposable-keyring skips await a private-bus retry; the shell/importer matrix and later modules continue serially |
-| Full mutation kills in resumable shards | Pending fresh run |
+| Slice/hybrid parity and no-fallback assertions | **4,334 passed, two platform skips, 1,310 uncovered**, from 5,646 collected nodes. SOF writes/reads pass 74/239 cases; store interoperability passes 114 with the two platform skips. The hybrid module passes all 35 tests and 4,741 subtests, including importer complete-dump and no-fallback assertions. All 29 disposable-keyring retries pass on the private bus. Remaining coverage is listed below |
+| Full mutation kills in resumable shards | **1 / 6,544 killed; 6,543 outstanding.** The new `projection-owned-byte-identity` recipe passes its baseline and is killed; its build and scratch trees are deleted. Full catalog applicability passes for all 42 catalogs; applicability is not a kill result |
 | Combined journals process / custody CPU | All four books complete five alternating pairs, with exact payload, phase and persisted scalar comparisons. Process CPU improves 1.65–2.26×; integrated finalized custody compute CPU improves 1.36–2.19×. The diagnostic binding round trip uses more CPU on three books; scope and load are detailed below |
 
 The fresh post-fix workspace run uses the combined harness and observer features and passes all 1,890 tests in one uninterrupted run. The earlier 1,889-test result remains a historical receipt. The earlier run and its 73
@@ -161,6 +161,22 @@ are refreshed from the rebuilt, byte-preserving stack. The 274-case loader/BLOB
 suite separately exercises SQLite revision loading, which the generated
 snapshots do not cover. The owner will run full census and shadow shards
 afterwards; those full shards are outside this integration's focused lanes.
+
+The shell matrix was deliberately interrupted for scheduling after 22 complete
+parent tests and 1,184 subtests, including the full Binance reference matrix in
+both codecs. Its unfinished Blockpit case is excluded, including JUnit's
+zero-time placeholder. The migration continuation retains four completed cases,
+including one encrypted historical upgrade; its interrupted case is not a pass.
+Neither interruption reports a behavior mismatch. The private-bus retry closes
+all 29 earlier keyring skips. The only remaining skips are
+`test_native_case_aliases_keep_python_project_identity` and
+`test_windows_broker_secret_uses_inherited_os_handle`, on Linux without their
+required native case-alias and Windows-handle environments.
+
+The post-addendum classifier update/check passes with 6,022 unchanged definitions.
+Preflight passes all 57 tests in 89.28 seconds, including the fixture-build contract.
+The inventory/contracts modules additionally have a complete ten-node JUnit
+receipt, included in the 4,334 passing parity nodes.
 
 ## Combined performance
 
@@ -195,14 +211,53 @@ output boundaries; both measurements are retained.
 
 ## Remaining verification
 
-Finish every slice's hybrid parity with no fallback for registered shapes and
-all mutation recipes in resumable serial shards, then summarize cleanup and the
-final manual review. The saved partial parity reconciliation contains 87 shell
-nodes still running and 23 later modules awaiting collection. Retry the 29
-disposable-keyring skips using the documented private bus without service
-activation, and rerun preflight after the fixture-build addendum. The active
-resumer continues from exact node receipts. Update this audit at each verified
-boundary rather than treating an interrupted run as a full pass.
+This run stops at a clean commit boundary before combined acceptance. No test
+job remains active. Finish **1,310 parity nodes in 19 modules**, then **6,543
+mutation recipes**. The verification JSON contains every missing parity node,
+per-catalog pending counts and the one completed mutation ID; the remaining
+mutation set is exactly every current catalog entry except that ID.
+
+| Parity module under `tests/` | Remaining nodes |
+| --- | ---: |
+| `test_rust_shell_parity.py` | 65 |
+| `test_rust_store_migrations.py` | 277 |
+| `test_rust_store_partition_reference.py` | 264 |
+| `test_rust_sync_hybrid_routing.py` | 8 |
+| `test_rust_transaction_desktop.py` | 3 |
+| `test_rust_transaction_listing.py` | 5 |
+| `test_rust_transaction_services.py` | 4 |
+| `test_rust_transfer_reads.py` | 4 |
+| `test_rust_transfer_services.py` | 11 |
+| `test_rust_wallet_acquisition.py` | 23 |
+| `test_rust_wallet_discovery.py` | 14 |
+| `test_rust_wallet_fetch.py` | 46 |
+| `test_rust_wallet_publication.py` | 50 |
+| `test_rust_wallet_sync_cli.py` | 84 |
+| `test_rust_wallet_sync_service.py` | 76 |
+| `test_rust_xlsx.py` | 217 |
+| `test_rust_xlsx_exports.py` | 86 |
+| `test_rust_year_handoff.py` | 71 |
+| `test_journal_prebuild_campaign.py` | 2 |
+
+The local drivers and exact receipts remain under `target/r9-integration`.
+Source `verification-env.sh` and use `run.sh` with `TMPDIR=$PWD/target/t9`.
+`parity-resume.py --resume` selects uncovered nodes from completed receipts;
+leave `R9_DEFER_SHELL` and `R9_START_MODULE` unset for the complete continuation.
+`all-mutations.py --size 250` runs resumable serial shards, summarizing and
+deleting each build tree. Its single-recipe byte-identity receipt remains valid
+for the current source hash; the full driver may recheck it in its containing
+shard. Full census/shadow shards remain the owner's
+separate follow-up. The two platform acceptance cases require their platforms.
+
+After summarizing the interrupted runs, the 7.6 GiB verification build tree,
+the mutation build/scratch trees, disposable benchmark books, keyring data and
+completed test data roots are removed. Forty-six standalone executables
+(1,331,112,648 bytes) are retained with hashes for resumption; these are copies,
+not Cargo build trees. Empty short socket/temp roots and small receipts remain.
+The process audit finds no task-owned verification process; the pre-existing
+Codex tool service is excluded and left running. Manual second review found no
+unresolved correctness or consistency finding; the incomplete gates above remain
+an explicit acceptance limit.
 
 ## Original-to-integrated replay map
 
