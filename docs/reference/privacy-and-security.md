@@ -133,6 +133,8 @@ An already transmitted request cannot be recalled.
 Saved freshness cancellation is rechecked before each subsequent compatibility
 HTTP request or Electrum batch, including active-book prefetch. Network workers
 wait for that check on the thread owning the book's SQLite connection.
+HTTP retry backoff with an active cancellation check sleeps in at most 100 ms
+slices and rechecks between slices; it keeps the same retry and total-wait caps.
 Native BDK/LWK Electrum observers check before opening connections, between
 SDK calls (including tip/header reads and repeated scans), and between observer
 identities. A BDK `full_scan` or `sync`, or LWK `full_scan_to_index`, already in
