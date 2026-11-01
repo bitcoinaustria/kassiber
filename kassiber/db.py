@@ -976,6 +976,9 @@ CREATE TABLE IF NOT EXISTS transactions (
     pricing_method TEXT,
     pricing_external_ref TEXT,
     pricing_quality TEXT,
+    -- The coarse price the owner accepted, as `pricing.reviewed_price` states
+    -- it. Holds only while the price is unchanged; a new price is reviewed again.
+    pricing_review_accepted_price TEXT,
     commercial_applied_link_id TEXT,
     review_status TEXT,
     taxability_override INTEGER,
@@ -5247,6 +5250,7 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "transactions", "pricing_method", "TEXT")
     ensure_column(conn, "transactions", "pricing_external_ref", "TEXT")
     ensure_column(conn, "transactions", "pricing_quality", "TEXT")
+    ensure_column(conn, "transactions", "pricing_review_accepted_price", "TEXT")
     conn.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_transactions_wallet_pricing_ref

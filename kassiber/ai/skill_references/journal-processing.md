@@ -119,6 +119,13 @@ covers everything the user agreed to:
   `classify_residual` with `classification`), `gap_id`, and a reason.
 - `kind_override`: an inbound kind (or null) for a non-quarantined inbound
   transaction outside an active custody review.
+- `accept_coarse_prices`: a reason and optional `transaction_ids`. It accepts
+  the daily or coarser price of `pricing_review_required` cases as it stands,
+  bound to that exact price; a changed price is held again. Without ids the
+  plan names every such case; a chat plan holds about 1000, so name batches
+  of ids in a larger book. Propose it only after the user said the
+  approximate prices are acceptable, and offer `price_override` for any price
+  they want corrected instead.
 
 Each operation runs against the book as the previous ones left it. Plan is the
 what-if path: `before`/`after` carry per-year `tax` figures (realized gain/loss,

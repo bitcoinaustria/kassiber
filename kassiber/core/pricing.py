@@ -61,6 +61,26 @@ def decimal_from_exact(*values: Any) -> Decimal | None:
     return None
 
 
+def reviewed_price(row: Mapping[str, Any]) -> str | None:
+    """The price a coarse-price review accepts, the way journals read it.
+
+    Journals take the rate first and fall back to the value, so the review is
+    bound to whichever of them prices the row: ``rate:<exact>`` or
+    ``value:<exact>``. None when the row has no positive price.
+    """
+
+    def field(key: str) -> Any:
+        return row[key] if key in row.keys() else None
+
+    rate = decimal_from_exact(field("fiat_rate_exact"), field("fiat_rate"))
+    if rate is not None and rate > 0:
+        return f"rate:{format(rate, 'f')}"
+    value = decimal_from_exact(field("fiat_value_exact"), field("fiat_value"))
+    if value is not None and value > 0:
+        return f"value:{format(value, 'f')}"
+    return None
+
+
 def legacy_source_for(source_kind: str | None) -> str | None:
     if source_kind in {SOURCE_FMV_PROVIDER, SOURCE_MANUAL_RATE_CACHE}:
         return LEGACY_SOURCE_RATES_CACHE

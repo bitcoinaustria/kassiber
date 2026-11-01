@@ -7974,8 +7974,9 @@ def _run_scoped_ai_mutation(
 
 
 # Review operations any provider may batch. Every other type (component
-# revisions and state changes, pairs, dismissals, custody-gap actions and
-# acquisition kind overrides) needs full agent access; see docs/reference/ai.md.
+# revisions and state changes, pairs, dismissals, custody-gap actions,
+# acquisition kind overrides and coarse-price acceptance) needs full agent
+# access; see docs/reference/ai.md.
 _AI_RESTRICTED_REVIEW_OPERATION_TYPES = frozenset(
     {"price_override", "exclude", "unpair", "custody_component"}
 )
@@ -8130,7 +8131,11 @@ def _review_workflow_payload(
         )) > 65_536:
             raise AppError(
                 "Review artifact exceeds the AI tool argument limit",
-                code="validation", hint="Plan fewer operations in each review batch.",
+                code="validation",
+                hint=(
+                    "Plan fewer operations in each review batch, or name fewer "
+                    "transaction_ids in accept_coarse_prices."
+                ),
             )
         if authored_source == "ai_tool" and redact_ai_tool_result(payload) != payload:
             raise AppError(

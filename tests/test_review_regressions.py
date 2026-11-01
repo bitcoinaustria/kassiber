@@ -13829,6 +13829,20 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(partner["reason"], "pricing_review_required")
         self.assertTrue(json.loads(partner["detail_json"])["paired_leg"])
 
+        # Accepting the used leg's coarse price releases both legs.
+        accepted_in_row = {
+            **used_coarse_in_row,
+            "pricing_review_accepted_price": pricing.reviewed_price(used_coarse_in_row),
+        }
+        normalized = normalize_tax_asset_inputs(
+            profile,
+            "BTC",
+            [unpriced_out_row, accepted_in_row],
+            inputs.wallet_refs_by_id,
+            [{"out": unpriced_out_row, "in": accepted_in_row}],
+        )
+        self.assertEqual(normalized.quarantines, [])
+
     def test_missing_spot_price_snapshot_matches_fixture(self):
         self._bootstrap_wallet(label="MissingPrice")
         self._insert_transaction(
