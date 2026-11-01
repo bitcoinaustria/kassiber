@@ -25,7 +25,7 @@ verification, including per-command Rust routing counts.
 | `crates/rates` | exact fiat cache, manual/CSV rates, pricing lookup, consent-bound market providers and desktop rate projections |
 | `crates/imports` | import-run listing, rollback plans and confirmed deletion |
 | `crates/wallets` | watch-only wallet lifecycle, local descriptors and file ingestion |
-| `crates/journals` | unregistered custody/fusion, R4-9 loader, R4-11 rendering and R4-12 persistence checkpoints; production acceptance remains open |
+| `crates/journals` | native plain journal processing over the admitted book; pairing, desktop/AI routing and full acceptance remain open |
 | `crates/transactions` | local loan marks, managed attachment evidence, metadata edits, BIP329 labels, append-only history and CLI/desktop transaction pages shared by both transports |
 | `crates/secrets` | zeroized unlock, Python-compatible native credential lifecycle, encryption maintenance, dotenv credential migration and explicit initialization/inspection/verification |
 | `crates/backup` | encrypted archive export, staging/install import and Python-compatible tar/manifest validation |
@@ -116,6 +116,14 @@ project is read or created. Nothing falls back to Python in the product.
 The development-only hybrid candidate selects Python before bootstrap except
 for sync capability selection, which uses the inert admitted-book preflight
 described in the [CLI registration checkpoint](#bitcoin-wallet-sync-cli-registration-r5-partial).
+
+<!-- inherited from process@08e99c524; pending r10 verification -->
+The development-only hybrid candidate may select Python before bootstrap.
+Plain `journals process` also supports guarded refusal replay after native
+execution: only a test build's byte-identical rollback signal can hand the
+whole invocation to Python. The launcher records the phase/exception-family
+shape of each fallback. Product binaries keep typed native errors and never
+launch Python. `--auto-pair` remains outside this registration boundary.
 Wallet lifecycle remains a partial service checkpoint with the explicit limitations below.
 
 `commands describe` builds the catalog from the generated tree with the

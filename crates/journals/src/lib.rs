@@ -1,7 +1,7 @@
-//! Journal rendering, joins and caller-owned persistence (R4-11/R4-12).
-//! No clock, entropy or network I/O. Raw custody operands retain the transitional
-//! JSON boundary; the engine result and rendered entries have native types.
-//! No production command is registered; checkpoint references own acceptance.
+//! Native journal composition, rendering and persistence (R4-11/R4-12/R4-13).
+//! The scoped service binds local transactions and lifecycle sources; no stage
+//! performs network I/O. Raw custody operands retain the transitional JSON
+//! boundary; the engine result and rendered entries have native types.
 pub mod boundary;
 pub mod engine;
 mod integer;

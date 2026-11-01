@@ -916,6 +916,14 @@ Do not file security-impacting issues in the public tracker. See
 
 ## Custody port verification data
 
+Native journal refusal replay compares hashes of the admitted database and its
+durable sidecars in RAM after rollback, and verifies the selected book from
+before bootstrap through connection close. It retains no book copy or hash log.
+The development hybrid launcher buffers the bounded passphrase bytes in RAM
+and supplies a fresh pipe to a possible reference replay. Only the test build
+emits a replay signal, and only after the durable files compare byte-identical.
+Neither path authorizes provider access or adds an AI tool.
+
 The test-only R2 recorder is enabled explicitly with
 `KASSIBER_TEST_CUSTODY_SNAPSHOT_DIR`; ordinary product builds never install it.
 Its [raw request](custody-engine.md) contains local accounting evidence, including

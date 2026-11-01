@@ -1,0 +1,42 @@
+[
+  {
+    "id": "JROUTE-auto-pair-admission",
+    "file": "crates/cli/src/run.rs",
+    "find": "        && (command != \"journals.process\" || !args.flag(\"auto_pair\"))",
+    "replace": "",
+    "expect_failing": ["journal_auto_pair_remains_unregistered_before_bootstrap", "the_probe_reports_implementation_without_running_the_command"],
+    "rule": "Keep automatic pairing outside the plain registration boundary."
+  },
+  {
+    "id": "JROUTE-plain-registration",
+    "file": "crates/cli/src/describe.rs",
+    "find": "    \"journals.process\",",
+    "replace": "",
+    "expect_failing": ["journal_plain_registration_forwards_selectors_and_finishes_checkpoint"],
+    "rule": "Register the plain journal leaf before bootstrap."
+  },
+  {
+    "id": "JROUTE-plain-dispatch",
+    "file": "crates/cli/src/run.rs",
+    "find": "if operation == \"journals.process\" {",
+    "replace": "if operation == \"__disabled_journals.process\" {",
+    "expect_failing": ["journal_plain_registration_forwards_selectors_and_finishes_checkpoint"],
+    "rule": "Dispatch the registered leaf to the shared journal service."
+  },
+  {
+    "id": "JROUTE-plain-scope",
+    "file": "crates/cli/src/run.rs",
+    "find": "                    namespace.get(\"workspace\"),\n                    namespace.get(\"profile\"),",
+    "replace": "                    None,\n                    None,",
+    "expect_failing": ["journal_plain_registration_forwards_selectors_and_finishes_checkpoint"],
+    "rule": "Forward both explicit journal scope selectors."
+  },
+  {
+    "id": "JROUTE-plain-checkpoint",
+    "file": "crates/cli/src/run.rs",
+    "find": "return result.after_reply();",
+    "replace": "return Ok(());",
+    "expect_failing": ["journal_plain_registration_forwards_selectors_and_finishes_checkpoint"],
+    "rule": "Complete the journal checkpoint after publishing the terminal envelope."
+  }
+]

@@ -741,10 +741,10 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   transfer suggestions, rules and bulk exact pairing. Pin repeated-pass and
   caller-transaction database parity on SQLite and SQLCipher, hash-seed sweeps,
   generator/recorded books and named mutations. The [CPU acceptance](docs/reference/rust-pairing.md#cpu-acceptance-2026-10-31)
-  reaches 13.02× / 11.75× Python at 20k. Journal routes remain Python.
+  reaches 13.02× / 11.75× Python at 20k. Pairing journal routes remain Python.
 - [ ] R4-13, R4-15 and R4-16: CLI and daemon journal commands, integration of
   automatic pairing, the freshness journal job and the authority switch.
-  R4-13's [test-only composition](docs/reference/r4-journal-process-checkpoint.md)
+  R4-13's [composition checkpoint](docs/reference/r4-journal-process-checkpoint.md)
   wires native load through persistence, ordered progress and outer rollback.
   The continuation imports cached pricing, R4-14 pairing and renderer boundary
   hardening; it adds real-pricing and abrupt-death recovery probes. Production
@@ -757,9 +757,11 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   The continuation imports complete R4-10 pre-build, R4-14 pairing, renderer
   boundary hardening and persistence recovery. Its real pre-build adapter retains
   profile reload and distinct repair/build/store/filed-report clocks; complete
-  process vectors include active repairs and late rollback. Bind production
-  scope resolution, finish lossless-stage and full-pipeline parity/mutation gates,
-  then register CLI and daemon in separate verified commits.
+  process vectors include active repairs and late rollback. Production
+  scope resolution is now bound and plain CLI processing is registered with a
+  byte-identical rollback guard for refusal replay through the hybrid launcher.
+  Register pairing, desktop and scoped AI in separate verified commits; finish
+  registered-route campaigns, census/shadow, inherited mutations and benchmarks.
   The third continuation integrates the requested loader/BLOB, pre-build,
   render and persistence tips, adds resumable complete-process shards, and
   repairs network-refusal metadata and merged BLOB conversion defects. Its

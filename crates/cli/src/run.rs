@@ -164,6 +164,7 @@ pub const PROBE_NOT_IMPLEMENTED: i32 = 3;
 
 fn implemented(command: &str, args: &Namespace) -> bool {
     IMPLEMENTED.contains(&command)
+        && (command != "journals.process" || !args.flag("auto_pair"))
         && (command != "transactions.export"
             || matches!(
                 args.text("export_format"),
@@ -332,6 +333,11 @@ pub fn run(
     if let Err(error) = prepared {
         return fail(&mut stdout, &mut stderr, error);
     }
+    #[cfg(feature = "test-probe")]
+    let journal_invocation_guard = (dotted == "journals.process"
+        && std::env::var("KASSIBER_RUST_TEST_JOURNAL_FALLBACK").as_deref() == Ok("1"))
+    .then(|| store.journal_replay_guard(&globals.selection))
+    .flatten();
     // _maybe_migrate_default_state_root, before broker routing and
     // bootstrap. `commands describe` never migrates (nor bootstraps).
     let migrate = globals.selection.data_root.is_none()
@@ -374,6 +380,7 @@ pub fn run(
         args: crate::diagnostics::arguments(&namespace, None),
         report: None,
         unhandled_type: None,
+        journal_replay_shape: None,
     };
     #[cfg(feature = "test-probe")]
     let mut sync_handoff = false;
@@ -510,6 +517,17 @@ pub fn run(
             0
         }
         Err(mut error) => {
+            #[cfg(feature = "test-probe")]
+            if journal_invocation_guard
+                .as_ref()
+                .is_some_and(|check| check())
+            {
+                if let Some(shape) = &diagnostics.journal_replay_shape {
+                    let _ = writeln!(sink.stdout, "{shape}");
+                    let _ = sink.stdout.flush();
+                    return PROBE_NOT_IMPLEMENTED;
+                }
+            }
             // Python wraps layout I/O exceptions before these local services
             // as internal_error, just as it does their evidence-file failures.
             if error.code == "storage_io_error"
@@ -629,6 +647,20 @@ fn book_command(
         }
         if operation == "transactions.list" {
             return emit(crate::transactions::execute(book.as_mut(), namespace)?);
+        }
+        if operation == "journals.process" {
+            let result = book
+                .process_journals(
+                    namespace.get("workspace"),
+                    namespace.get("profile"),
+                    &mut |_| {},
+                )
+                .map_err(|failure| {
+                    diagnostics.journal_replay_shape = failure.replay_shape;
+                    *failure.error
+                })?;
+            emit(result.payload().clone())?;
+            return result.after_reply();
         }
         if operation.starts_with("metadata.") {
             return emit(crate::metadata::execute(

@@ -7,6 +7,63 @@ use kassiber_setup::references::{resolve, Entity};
 use kassiber_store::rusqlite::Connection;
 use kassiber_transfers::{Sources, SystemSources};
 
+type DurableFile = (std::path::PathBuf, Option<bitcoin_hashes::sha256::Hash>);
+/// A refusal may be replayed only after rollback and an exact comparison of
+/// the durable database files. Lock-index SHM is not persisted book state.
+pub struct ReplayGuard(Option<Vec<DurableFile>>);
+impl ReplayGuard {
+    pub fn capture(conn: &Connection) -> Self {
+        let Some(path) = conn.path().filter(|p| !p.is_empty()) else {
+            return Self(None);
+        };
+        Self::capture_path(std::path::Path::new(path))
+    }
+    pub fn capture_path(path: &std::path::Path) -> Self {
+        Self(
+            ["", "-wal", "-journal"]
+                .into_iter()
+                .map(|suffix| {
+                    let mut file = path.as_os_str().to_owned();
+                    file.push(suffix);
+                    let file = std::path::PathBuf::from(file);
+                    digest(&file).map(|hash| (file, hash))
+                })
+                .collect::<std::io::Result<_>>()
+                .ok(),
+        )
+    }
+    pub fn unchanged(&self, conn: &Connection) -> bool {
+        conn.is_autocommit() && self.files_unchanged()
+    }
+    pub fn files_unchanged(&self) -> bool {
+        self.0.as_ref().is_some_and(|files| {
+            files
+                .iter()
+                .all(|(file, before)| digest(file).is_ok_and(|after| &after == before))
+        })
+    }
+}
+
+fn digest(path: &std::path::Path) -> std::io::Result<Option<bitcoin_hashes::sha256::Hash>> {
+    use bitcoin_hashes::{sha256, Hash, HashEngine};
+    use std::io::Read;
+    let mut file = match std::fs::File::open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error),
+    };
+    let mut hash = sha256::Hash::engine();
+    let mut buffer = [0; 65536];
+    loop {
+        let read = file.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        hash.input(&buffer[..read]);
+    }
+    Ok(Some(sha256::Hash::from_engine(hash)))
+}
+
 /// Resolve selectors using the same ID/label/context rules as other services,
 /// retaining every stored profile value through the loader's checked adapter.
 fn profile(
@@ -130,6 +187,36 @@ mod tests {
             assert_eq!(error.code.as_deref(), Some(code));
             assert_eq!(conn.total_changes(), before);
             assert!(conn.is_autocommit());
+        }
+    }
+
+    #[test]
+    fn replay_guard_requires_complete_rollback_and_identical_durable_files() {
+        for cipher in [false, true] {
+            let root = std::env::temp_dir()
+                .join(format!("journal-replay-{}-{cipher}", std::process::id()));
+            std::fs::create_dir_all(&root).unwrap();
+            let path = root.join("book.sqlite3");
+            let conn = Connection::open(&path).unwrap();
+            if cipher {
+                conn.pragma_update(None, "key", "synthetic-replay-only")
+                    .unwrap();
+            }
+            conn.execute_batch(
+                "PRAGMA journal_mode=DELETE;CREATE TABLE state(v);INSERT INTO state VALUES(1)",
+            )
+            .unwrap();
+            let guard = ReplayGuard::capture(&conn);
+            assert!(guard.unchanged(&conn));
+            conn.execute_batch("BEGIN IMMEDIATE;UPDATE state SET v=2")
+                .unwrap();
+            assert!(!guard.unchanged(&conn));
+            conn.execute_batch("ROLLBACK").unwrap();
+            assert!(guard.unchanged(&conn));
+            conn.execute_batch("UPDATE state SET v=2").unwrap();
+            assert!(!guard.unchanged(&conn));
+            drop(conn);
+            std::fs::remove_dir_all(root).unwrap();
         }
     }
 }

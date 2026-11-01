@@ -10,8 +10,9 @@ use kassiber_envelope::{dict, get, s, AppError};
 use kassiber_pyjson::Value;
 
 use crate::store::{
-    Book, BookContext, BookStore, Bootstrap, OwnerKind, ProjectOwner, ProjectRef, RuntimeConfig,
-    RuntimePaths, Secret, Selection, StatusCounts, StatusFacts, Unlock, UnlockMode,
+    Book, BookContext, BookStore, Bootstrap, JournalFailure, JournalReply, OwnerKind, ProjectOwner,
+    ProjectRef, RuntimeConfig, RuntimePaths, Secret, Selection, StatusCounts, StatusFacts, Unlock,
+    UnlockMode,
 };
 
 /// What the fake book looks like.
@@ -192,7 +193,38 @@ struct FakeBook {
     closed: bool,
 }
 
+struct FakeJournalReply {
+    store: FakeStore,
+    payload: Value,
+}
+impl JournalReply for FakeJournalReply {
+    fn payload(&self) -> &Value {
+        &self.payload
+    }
+    fn after_reply(self: Box<Self>) -> Result<(), AppError> {
+        self.store.record("journals checkpoint".into());
+        Ok(())
+    }
+}
+
 impl Book for FakeBook {
+    fn process_journals(
+        &mut self,
+        workspace: Option<&Value>,
+        profile: Option<&Value>,
+        progress: &mut dyn FnMut(&'static str),
+    ) -> Result<Box<dyn JournalReply + '_>, JournalFailure> {
+        self.store.record("journals process".into());
+        progress("complete");
+        Ok(Box::new(FakeJournalReply {
+            store: self.store.clone(),
+            payload: dict([
+                ("workspace", workspace.cloned().unwrap_or(Value::Null)),
+                ("profile", profile.cloned().unwrap_or(Value::Null)),
+            ]),
+        }))
+    }
+
     fn is_initialized(&self) -> Result<bool, AppError> {
         Ok(self.store.config.initialized)
     }

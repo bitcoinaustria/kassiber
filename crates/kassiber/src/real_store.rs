@@ -2,6 +2,7 @@
 //! the storage crates; this module projects their results onto R1's transport
 //! contract without opening a network client.
 mod backends;
+mod journals;
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -190,6 +191,28 @@ impl ProjectOwner for RealOwner {
 }
 
 impl BookStore for RealStore {
+    #[cfg(feature = "test-harness")]
+    fn journal_replay_guard(&self, selection: &Selection) -> Option<Box<dyn Fn() -> bool + Send>> {
+        // Resolve without bootstrap: layout creation, restore recovery and
+        // compatibility migrations must all remain inside this comparison.
+        let database = context()
+            .ok()?
+            .resolve_for_bootstrap(&options(selection))
+            .ok()?
+            .database;
+        if !database.is_file() {
+            return None;
+        }
+        let guard = kassiber_journals::service::ReplayGuard::capture_path(&database);
+        let selection = selection.clone();
+        Some(Box::new(move || {
+            context()
+                .ok()
+                .and_then(|context| context.resolve_for_bootstrap(&options(&selection)).ok())
+                .is_some_and(|paths| paths.database == database)
+                && guard.files_unchanged()
+        }))
+    }
     fn restore_maintenance(&self, data_root: &str) -> Result<Box<dyn Send>, AppError> {
         Ok(Box::new(
             kassiber_store::restore::maintenance(
@@ -790,12 +813,19 @@ impl Book for RealBook {
         workspace: Option<&Value>,
         profile: Option<&Value>,
         progress: &mut dyn FnMut(&'static str),
-    ) -> Result<Box<dyn JournalReply + '_>, AppError> {
-        let result =
-            kassiber_journals::service::process(self.conn()?, workspace, profile, &mut |phase| {
-                progress(phase)
-            })
-            .map_err(kassiber_journals::service::application_error)?;
+    ) -> Result<Box<dyn JournalReply + '_>, JournalFailure> {
+        let conn = self.conn()?;
+        let guard = kassiber_journals::service::ReplayGuard::capture(conn);
+        let mut last_phase = "admission";
+        let result = journals::process(conn, workspace, profile, &mut |phase| {
+            last_phase = phase;
+            progress(phase);
+        })
+        .map_err(|refusal| JournalFailure {
+            replay_shape: (last_phase != "complete" && guard.unchanged(conn))
+                .then(|| format!("{last_phase}:{}", refusal.family)),
+            error: Box::new(kassiber_journals::service::application_error(refusal)),
+        })?;
         Ok(Box::new(NativeJournalReply(result)))
     }
 

@@ -1,4 +1,4 @@
-//! Unregistered R4-13 orchestration. R4-10 supplies the pre-build implementation.
+//! R4-13 orchestration. R4-10 supplies the ordered pre-build implementation.
 use crate::{boundary, loader, persistence, prebuild, storage, Refusal};
 use kassiber_custody::{codec, ledger_request, snapshot::Snapshot, Stages};
 use kassiber_store::rusqlite::Connection;

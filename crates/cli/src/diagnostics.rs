@@ -104,6 +104,7 @@ pub struct FailureContext {
     pub args: Value,
     pub report: Option<Result<Value, AppError>>,
     pub unhandled_type: Option<&'static str>,
+    pub journal_replay_shape: Option<String>,
 }
 impl FailureContext {
     pub fn annotate(&self, report: &mut Value) {

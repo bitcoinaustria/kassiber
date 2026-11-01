@@ -168,6 +168,19 @@ pub trait JournalReply {
     fn after_reply(self: Box<Self>) -> Result<(), AppError>;
 }
 
+pub struct JournalFailure {
+    pub error: Box<AppError>,
+    pub replay_shape: Option<String>,
+}
+impl From<AppError> for JournalFailure {
+    fn from(error: AppError) -> Self {
+        Self {
+            error: Box::new(error),
+            replay_shape: None,
+        }
+    }
+}
+
 /// An open, unlocked book.
 pub trait Book: Send {
     fn process_journals(
@@ -175,8 +188,8 @@ pub trait Book: Send {
         _workspace: Option<&Value>,
         _profile: Option<&Value>,
         _progress: &mut dyn FnMut(&'static str),
-    ) -> Result<Box<dyn JournalReply + '_>, AppError> {
-        Err(not_implemented("journals", "process"))
+    ) -> Result<Box<dyn JournalReply + '_>, JournalFailure> {
+        Err(not_implemented("journals", "process").into())
     }
 
     /// Redacted report over this admitted connection; never exposes raw rows/configuration.
@@ -420,6 +433,12 @@ pub enum OwnerKind {
 
 /// The storage operations the shell calls.
 pub trait BookStore: Send + Sync {
+    /// Test-only hybrid replay must also prove that bootstrap, migrations and
+    /// closing the connection preserved the originally selected book files.
+    /// A missing guard never permits replay.
+    fn journal_replay_guard(&self, _selection: &Selection) -> Option<Box<dyn Fn() -> bool + Send>> {
+        None
+    }
     fn restore_maintenance(&self, _data_root: &str) -> Result<Box<dyn Send>, AppError> {
         Err(not_implemented("backup", "restore maintenance"))
     }

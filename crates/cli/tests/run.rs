@@ -60,6 +60,47 @@ fn fake(config: FakeConfig) -> Arc<dyn BookStore> {
 }
 
 #[test]
+fn journal_plain_registration_forwards_selectors_and_finishes_checkpoint() {
+    let store = FakeStore::new(FakeConfig::default());
+    let (code, out, err) = invoke(
+        Arc::new(store.clone()),
+        &Environment::default(),
+        &[
+            "--machine",
+            "--data-root",
+            "/disposable",
+            "journals",
+            "process",
+            "--workspace",
+            "chosen-workspace",
+            "--profile",
+            "chosen-profile",
+        ],
+    );
+    assert_eq!((code, err.as_str()), (0, ""), "{out}");
+    assert!(out.contains("\"kind\": \"journals.process\""), "{out}");
+    assert!(out.contains("\"workspace\": \"chosen-workspace\""), "{out}");
+    assert!(out.contains("\"profile\": \"chosen-profile\""), "{out}");
+    let events = store.events();
+    let index = |event| events.iter().position(|e| e == event).unwrap();
+    assert!(index("journals process") < index("journals checkpoint"));
+    assert!(index("journals checkpoint") < index("close"));
+}
+
+#[test]
+fn journal_auto_pair_remains_unregistered_before_bootstrap() {
+    let store = FakeStore::new(FakeConfig::default());
+    let (code, out, err) = invoke(
+        Arc::new(store.clone()),
+        &Environment::default(),
+        &["--machine", "journals", "process", "--auto-pair"],
+    );
+    assert_eq!((code, err.as_str()), (1, ""), "{out}");
+    assert!(out.contains("\"code\": \"not_implemented\""), "{out}");
+    assert!(store.events().is_empty());
+}
+
+#[test]
 fn hidden_forms_and_unported_leaves_fail_closed() {
     let env = Environment::default();
     let (code, out, err) = invoke(Arc::new(StubStore), &env, &["--operator-broker-server"]);
@@ -308,6 +349,16 @@ fn the_probe_reports_implementation_without_running_the_command() {
         (&["--machine", "status"][..], 0, "status"),
         (&["--machine", "init"][..], 0, "init"),
         (&["--machine", "wallets", "list"][..], 0, "wallets.list"),
+        (
+            &["--machine", "journals", "process"][..],
+            0,
+            "journals.process",
+        ),
+        (
+            &["--machine", "journals", "process", "--auto-pair"][..],
+            PROBE_NOT_IMPLEMENTED,
+            "journals.process",
+        ),
         (
             &["--machine", "--diagnostics-out", "auto", "status"][..],
             0,

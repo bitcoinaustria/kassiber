@@ -9,6 +9,8 @@ parses the command line and touches nothing. Implemented commands and usage
 errors then run in Rust, everything else in this checkout's Python. Both
 share books safely (plan 21, R3 coexistence), so a test that sets up its book
 through commands Rust lacks still exercises the commands it has.
+Plain journal refusals may also replay in Python after the native service
+proves byte-identical rollback; those calls include a `fallback_shape` in the log.
 
 `daemon` runs in Python unless `KASSIBER_HYBRID_RUST_DAEMON=1`: one daemon
 session mixes kinds, and most are not ported yet.
@@ -30,6 +32,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 
 RUST_ENV = "KASSIBER_HYBRID_RUST_BIN"
 LOG_ENV = "KASSIBER_HYBRID_LOG"
@@ -81,6 +84,82 @@ def configure(argv: list[str]) -> list[str]:
     return args
 
 
+def python_command(args: list[str]) -> list[str]:
+    owner_root = os.environ.get("KASSIBER_RUST_TEST_OWNER_ROOT")
+    if owner_root:
+        script = (
+            "import sys; from pathlib import Path; from kassiber.operator import project; "
+            "root=Path(sys.argv.pop(1)); project._owner_lock_root=lambda:root; "
+            "from kassiber.cli.main import main; raise SystemExit(main(sys.argv[1:]))"
+        )
+        return [sys.executable, "-c", script, owner_root, *args]
+    return [sys.executable, "-m", "kassiber", *args]
+
+
+def journal_run(rust: str, args: list[str]):
+    """Buffer native output until a proven whole-invocation replay decision.
+
+    A passphrase pipe is one-shot. Retain its bounded bytes only in RAM and
+    supply a fresh pipe to each child, including a possible Python replay.
+    """
+    fd_index = None
+    inline = False
+    secret = None
+    for index, arg in enumerate(args):
+        option, separator, value = arg.partition("=")
+        if option.startswith("--") and "--db-passphrase-fd".startswith(option):
+            inline = bool(separator)
+            fd_index = index if inline else index + 1
+    if fd_index is not None:
+        try:
+            raw = args[fd_index].partition('=')[2] if inline else args[fd_index]
+            descriptor = int(raw)
+            chunks = []
+            remaining = 8193
+            while remaining:
+                chunk = os.read(descriptor, remaining)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                remaining -= len(chunk)
+            secret = b"".join(chunks)
+        except (ValueError, OverflowError, OSError, IndexError):
+            fd_index = None
+
+    def run(prefix, env):
+        if fd_index is None:
+            return subprocess.run([*prefix, *args], env=env, capture_output=True, check=False)
+        read_fd, write_fd = os.pipe()
+        child_args = list(args)
+        child_args[fd_index] = ("--db-passphrase-fd=" if inline else "") + str(read_fd)
+        def write():
+            try:
+                view = memoryview(secret)
+                while view:
+                    view = view[os.write(write_fd, view):]
+            except BrokenPipeError:
+                pass
+            finally:
+                os.close(write_fd)
+        writer = threading.Thread(target=write)
+        writer.start()
+        try:
+            return subprocess.run([*prefix, *child_args], env=env, pass_fds=(read_fd,), capture_output=True, check=False)
+        finally:
+            os.close(read_fd)
+            writer.join()
+
+    native = run([rust], {**os.environ, "KASSIBER_RUST_TEST_JOURNAL_FALLBACK": "1"})
+    if native.returncode != PROBE_NOT_IMPLEMENTED:
+        return native, "rust", None
+    shape = native.stdout.decode("ascii").strip()
+    # The reserved signal is emitted only by the guarded journal adapter.
+    if native.stderr or not shape or any(c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_:" for c in shape):
+        raise SystemExit("hybrid candidate: invalid journal replay signal")
+    reference = python_command([])
+    return run(reference, os.environ.copy()), "python", shape
+
+
 def main() -> None:
     args = configure(sys.argv[1:])
     rust = os.environ.get(RUST_ENV)
@@ -98,14 +177,25 @@ def main() -> None:
                 raise SystemExit("hybrid candidate: sync handoff must have empty output")
             served_by = "python"
             sync_result = None
+    completed = None
+    fallback_shape = None
+    if served_by == "rust" and command == "journals.process":
+        completed, served_by, fallback_shape = journal_run(rust, args)
     log = os.environ.get(LOG_ENV)
     if log:
-        line = json.dumps({"command": command, "served_by": served_by}) + "\n"
+        record = {"command": command, "served_by": served_by}
+        if fallback_shape:
+            record["fallback_shape"] = fallback_shape
+        line = json.dumps(record) + "\n"
         fd = os.open(log, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
         try:
             os.write(fd, line.encode("utf-8"))
         finally:
             os.close(fd)
+    if completed is not None:
+        sys.stdout.buffer.write(completed.stdout)
+        sys.stderr.buffer.write(completed.stderr)
+        raise SystemExit(completed.returncode)
     # exec keeps stdin, inherited descriptors (--db-passphrase-fd) and the
     # working directory exactly as the test passed them.
     if served_by == "rust":
@@ -125,15 +215,7 @@ def main() -> None:
     # Match the native test build's disposable ownership namespace. Python's
     # production namespace deliberately uses the UID account home, not HOME.
     # Keep this injection in the test launcher rather than product code.
-    owner_root = os.environ.get("KASSIBER_RUST_TEST_OWNER_ROOT")
-    if owner_root:
-        script = (
-            "import sys; from pathlib import Path; from kassiber.operator import project; "
-            "root=Path(sys.argv.pop(1)); project._owner_lock_root=lambda:root; "
-            "from kassiber.cli.main import main; raise SystemExit(main(sys.argv[1:]))"
-        )
-        os.execv(sys.executable, [sys.executable, "-c", script, owner_root, *args])
-    os.execv(sys.executable, [sys.executable, "-m", "kassiber", *args])
+    os.execv(sys.executable, python_command(args))
 
 
 if __name__ == "__main__":

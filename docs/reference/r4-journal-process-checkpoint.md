@@ -1,6 +1,8 @@
 # R4-13 journal process checkpoint
 
-This is a **test-only, unregistered checkpoint**. The original
+The earlier sections record a **test-only, unregistered checkpoint**. The
+[fifth continuation](#fifth-continuation-production-binding) records production
+binding and plain CLI registration separately. The original
 `t3code/r4-13-journals-process` starts at `b5eb38ea8` with loader rounds 3–8
 (`0b78605a0..c5966c1ff`) integrated; the continuation
 `t3code/r4-13-journals-process-2` starts at `925800ebe`. It does not complete R4-13 or switch
@@ -842,3 +844,99 @@ allows whole-invocation Python fallback for native refusals before writes, or
 after a proven byte-identical rollback. Successful admitted books must remain
 native. Route activation and source-bound acceptance are recorded separately
 below; the earlier campaigns and benchmarks remain historical evidence.
+
+### Plain CLI registration boundary
+
+Plain `journals process` now dispatches through the production book service.
+`--auto-pair` remains explicitly unregistered in both ordinary dispatch and
+the hybrid implementation probe. Successful results retain the ordered native
+payload and publish/flush the terminal envelope before the deferred checkpoint.
+No daemon kind, freshness job or AI tool is enabled by this boundary.
+
+The hybrid launcher buffers native output until the invocation finishes. A
+refusal may request whole-invocation Python replay only when the connection is
+idle after rollback and hashes of the database, WAL and rollback journal equal
+their values at service entry, including each file's absence. A second guard
+resolves the selected book without bootstrap and compares those durable files
+again after close, so bootstrap/migration commits and close-time changes cannot
+escape the comparison. Missing/unresolvable initial books, changed selection,
+unreadable or changed files and in-memory connections refuse replay. This
+includes an opening migration that recreated a missing index and an opening or
+closing checkpoint that changed the original durable files. SHM contains
+lock-index state and is excluded. The product build emits its normal typed
+error; the reserved replay signal exists only in the test build. Checkpoint/output errors
+after a successful commit cannot request replay. The launcher retains bounded
+passphrase bytes only in RAM and supplies fresh anonymous pipes to both children.
+
+The new route tests bind clocks and durable UUIDs and compare complete typed
+books, raw stdout/stderr and exit codes for generic/Austrian books on both
+SQLite and SQLCipher. They include unchanged, changed, quarantined and empty
+books, foreign/missing selectors, native served-by counts, reference replay,
+faults after writes 1/8/15 and abrupt kills at those same writes. Reopened books
+must pass integrity checking and match every starting table after a refusal or
+kill. The route mutation catalog removes registration, dispatch, selector
+forwarding and checkpoint completion; another removes the automatic-pairing
+admission fence from ordinary dispatch and the hybrid probe. Each control names
+its CLI boundary test.
+
+### Refusal handoff for the lossless follow-up
+
+The hybrid log counts `fallback_shape` as `<last phase>:<exception family>`;
+it records no refusal message or book operand. The focused hybrid matrix and
+descriptor cases have two successful native calls (one per codec) and nine
+reference replays:
+
+| Operand shape | Phase/family | Replays |
+| --- | --- | ---: |
+| Unsupported stored tax country | `preparing:ValueError` | 2 |
+| Invalid stored gains algorithm, including three descriptor forms | `building:AppError` | 5 |
+| Injected storage failure after write 8 | `storing:DatabaseError` | 2 |
+
+The first two outcomes are the reference's exact refusals; the injected native
+fault replays Python successfully. Valid generated/recorded books have not yet
+been rerun through registration, so this bounded count does not certify their
+zero-fallback gate. The known lossless follow-up includes NaN stage values,
+actual surrogate scalars/keys, non-string stage keys, BLOB profile values the
+setup resolver does not admit, and other malformed stored scalars/refusal
+precedence. Those shapes must be measured separately; this table is not an
+exhaustive census. Existing native cases that already preserve a BLOB consumer
+are still admitted and must not be forced into fallback.
+
+### Registration verification
+
+The registered plain-route suite passes **44 cases**. Together with the shared
+CLI-runner checks it passes **52 tests and six subtests**. Three inherited
+hybrid checks also pass: usage routing, inherited descriptors to both runtimes,
+and the default Python daemon. Their existing test fixture's `HOME` assignment
+is filtered in a disposable runner; the account home is retained and XDG paths
+and owner namespaces remain disposable. Faults and kills cover writes 1/8/15
+on both codecs; the bootstrap-write cases refuse replay after index recreation.
+All **10 native CLI tests** and **three production-service/guard tests** pass.
+The five route mutations are all killed, with three passing unmutated baselines
+and no build failures. Production compilation and scoped all-target,
+all-feature clippy pass with warnings denied; workspace formatting passes.
+The required classifier update completes and CI preflight passes **57 tests**.
+Source/binary/log hashes and fallback counts are retained in
+`target/r4-13/registration-5/verification-summary.json`; logs and the verified
+harness binary remain there after disposable mutation/verification builds are
+removed. No background verification job remains running at handoff.
+The integrated generated/recorded campaigns have not been rerun through these
+registered routes. These focused counts do not close R4-13 acceptance.
+
+### Remaining continuation work
+
+Register CLI automatic pairing, desktop processing (`auto_pair=True`) and the
+internal scoped AI mutation (`auto_pair=False`) in separate verified commits.
+The refresh coordinator's first rebuild currently commits before pairing, so
+a late second-stage failure can retain that first rebuild; a byte-identical
+guard must never replay such an invocation. Reconcile that boundary with the
+owner's full-rollback requirement before enabling the flag. Desktop needs exact
+progress/envelopes, argument/scope authority and cancellation tests. AI still
+executes inside Python's consent-bound main-thread mutation dispatcher; adding
+a public no-pairing daemon kind would not register that internal path.
+
+Then rerun the 25,030 generated and 318 recorded comparisons, integrated
+census/shadow and inherited mutation catalogs through the registered routes,
+with source/binary manifests and zero fallbacks on valid books. Benchmark all
+four registered commands/books from process start to exit against Python with
+load recorded; the inherited probe measurements do not close that gate.
