@@ -83,6 +83,10 @@ fn check_cases(text: &str, group: Option<&str>) {
     assert!(count > 0);
 }
 #[test]
+fn scalar_coercions_match_python_rendering() {
+    check_cases(include_str!("data/render-scalar-coercions.json"), None);
+}
+#[test]
 fn legacy_audit_and_carry_floats_match_python() {
     check_cases(include_str!("data/render-legacy-floats.json"), None);
 }

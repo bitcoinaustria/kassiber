@@ -19,6 +19,7 @@ mod render;
 pub mod review_effects;
 #[cfg(feature = "test-harness")]
 pub mod review_workflow;
+pub mod scalar;
 pub mod storage;
 pub mod timing;
 pub use model::*;
@@ -96,7 +97,12 @@ pub(crate) fn field<'a>(value: &'a Value, key: &str) -> &'a Value {
     }
 }
 pub(crate) fn string(value: &Value) -> String {
-    kassiber_custody::codec::pystr(value)
+    match value {
+        Value::Array(_) | Value::Object(_) => scalar::repr(
+            &kassiber_custody::codec::from_json(value).expect("JSON scalar conversion"),
+        ),
+        _ => kassiber_custody::codec::pystr(value),
+    }
 }
 pub(crate) fn truth(value: &Value) -> bool {
     kassiber_custody::codec::truth(value)
