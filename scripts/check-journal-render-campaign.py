@@ -24,7 +24,7 @@ from tests.custody_snapshot import load, SCHEMA
 from tests.rust_port.journal_render_oracle import capture_projection, canonical
 
 
-def books(recordings):
+def books(recordings, selected_suites=None):
     if recordings:
         for path in sorted(recordings.rglob('*.json')):
             document = load(path)
@@ -37,6 +37,8 @@ def books(recordings):
             yield 'recorded', path.stem, True, permuted_snapshot(book)
     else:
         for suite, scenarios, generate in suites():
+            if selected_suites and suite not in selected_suites:
+                continue
             for seed in range(2000):
                 scenario = scenarios[seed % len(scenarios)]
                 book = generate(seed)
@@ -50,7 +52,11 @@ def main():
     parser.add_argument('--probe', type=Path, default=Path('target/release/examples/journal-render'))
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--recordings', type=Path)
+    parser.add_argument('--suite', action='append', choices=[name for name, _, _ in suites()],
+                        help='run only this generated suite; use separate output directories to resume shards')
     args = parser.parse_args()
+    if args.recordings and args.suite:
+        parser.error('--suite applies only to generated books')
     args.output.mkdir(mode=0o700, parents=True, exist_ok=True)
     args.output.chmod(0o700)
     path = args.output / 'current.json'
@@ -60,7 +66,7 @@ def main():
     active_inputs = {}
     with subprocess.Popen([str(args.probe)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                           text=True, bufsize=1) as child:
-        for index, (suite, scenario, permuted, book) in enumerate(books(args.recordings)):
+        for index, (suite, scenario, permuted, book) in enumerate(books(args.recordings, args.suite)):
             totals = summary.setdefault(suite, dict(totals=Counter(), scenarios={}))
             counts = totals['scenarios'].setdefault(scenario, Counter())
             activity = Counter(permutations=1) if permuted else Counter(books=1)
@@ -126,8 +132,12 @@ def main():
     if failures:
         print('\n'.join(failures), file=sys.stderr)
     if not args.recordings:
-        assert sum(data['totals']['books'] for data in summary.values()) == 24000
-        assert sum(data['totals']['permutations'] for data in summary.values()) == 1030
+        selected = [(name, scenarios) for name, scenarios, _ in suites()
+                    if not args.suite or name in args.suite]
+        assert set(summary) == {name for name, _ in selected}
+        assert sum(data['totals']['books'] for data in summary.values()) == 2000 * len(selected)
+        assert sum(data['totals']['permutations'] for data in summary.values()) == sum(
+            len(scenarios) * 2 for _, scenarios in selected)
     vacuous = any(not data['totals']['compared'] or not data['totals']['active_requests']
                    for data in summary.values())
     return int(bool(failures) or not summary or vacuous)
