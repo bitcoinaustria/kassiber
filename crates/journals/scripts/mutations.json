@@ -2918,5 +2918,75 @@
       "scalar_bindings_preserve_types_signs_and_refuse_wide_or_structured_values"
     ],
     "rule": "Unrepresentable JSON REAL bindings refuse with ValueError before any SQL write."
+  },
+  {
+    "id": "JP-probe-flush-order",
+    "file": "crates/journals/examples/journal-persist.rs",
+    "find": "output.flush()?;\n    let _ = checkpoint();",
+    "replace": "let _ = checkpoint();\n    output.flush()?;",
+    "expect_failing": [
+      "physical_success_is_visible_and_flushed_before_failing_post_commit_maintenance"
+    ],
+    "rule": "The success record must be flushed before attempting the deferred checkpoint."
+  },
+  {
+    "id": "JP-probe-checkpoint-error",
+    "file": "crates/journals/examples/journal-persist.rs",
+    "find": "let _ = checkpoint();",
+    "replace": "checkpoint().map_err(|e| io::Error::other(e.to_string()))?;",
+    "expect_failing": [
+      "physical_success_is_visible_and_flushed_before_failing_post_commit_maintenance"
+    ],
+    "rule": "Checkpoint maintenance cannot convert an already committed success into a failure."
+  },
+  {
+    "id": "JP-probe-restore-error",
+    "file": "crates/journals/examples/journal-persist.rs",
+    "find": "let _ = restore();",
+    "replace": "restore().map_err(|e| io::Error::other(e.to_string()))?;",
+    "expect_failing": [
+      "physical_success_is_visible_and_flushed_before_failing_post_commit_maintenance"
+    ],
+    "rule": "Post-COMMIT setting restoration failure cannot emit an uncommitted refusal."
+  },
+  {
+    "id": "JP-probe-second-failure",
+    "file": "crates/journals/examples/journal-persist.rs",
+    "find": "if committed {\n        return Err(error);",
+    "replace": "if false {\n        return Err(error);",
+    "expect_failing": [
+      "physical_flush_failure_drops_checkpoint_without_publishing_a_second_response"
+    ],
+    "rule": "A failed success flush after COMMIT must not append a second failure record."
+  },
+  {
+    "id": "JP-probe-require-flush",
+    "file": "crates/journals/examples/journal-persist.rs",
+    "find": "output.flush()?;\n    let _ = checkpoint();",
+    "replace": "let _ = output.flush();\n    let _ = checkpoint();",
+    "expect_failing": [
+      "physical_flush_failure_drops_checkpoint_without_publishing_a_second_response"
+    ],
+    "rule": "A failed success flush drops the deferred checkpoint without invoking it."
+  },
+  {
+    "id": "JP-probe-floor-committed",
+    "file": "crates/journals/examples/journal-persist.rs",
+    "find": "let (seconds, cpu_seconds) = replay_floor(&c, v)?;\n        *committed = true;",
+    "replace": "let (seconds, cpu_seconds) = replay_floor(&c, v)?;\n        *committed = false;",
+    "expect_failing": [
+      "physical_probe_marks_both_commit_paths_before_a_failed_success_flush"
+    ],
+    "rule": "The prepared floor path records durable COMMIT before publishing success."
+  },
+  {
+    "id": "JP-probe-store-committed",
+    "file": "crates/journals/examples/journal-persist.rs",
+    "find": "c.execute_batch(\"RELEASE journals_process;COMMIT\")?;\n    *committed = true;",
+    "replace": "c.execute_batch(\"RELEASE journals_process;COMMIT\")?;\n    *committed = false;",
+    "expect_failing": [
+      "physical_probe_marks_both_commit_paths_before_a_failed_success_flush"
+    ],
+    "rule": "The native store path records durable COMMIT before publishing success."
   }
 ]

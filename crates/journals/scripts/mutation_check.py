@@ -26,6 +26,8 @@ def _test_target(test):
     pattern = re.compile(r'\bfn\s+' + re.escape(name) + r'\s*\(')
     owners = [path.stem for path in (ROOT / 'crates/journals/tests').glob('*.rs')
               if pattern.search(path.read_text())]
+    if pattern.search((ROOT / 'crates/journals/examples/journal-persist.rs').read_text()):
+        owners.append('probe')
     if len(owners) > 1:
         raise ValueError(f'ambiguous integration test filter: {test}')
     return ['--test', owners[0]] if owners else ['--lib']
