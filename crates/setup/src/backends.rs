@@ -785,6 +785,19 @@ fn clear_default(conn: &Connection, config: &mut Config) -> Result<Value> {
     Ok(result)
 }
 impl Config {
+    pub fn resolve_lightning(&self, conn: &Connection, name: &str) -> Result<Value> {
+        let mut current = self.clone();
+        merge(conn, &mut current)?;
+        if let Some(backend) = current.view.get(&name.trim().to_lowercase()) {
+            return Ok(backend.clone());
+        }
+        db_backend(
+            conn,
+            &name.to_lowercase(),
+            "Use `kassiber backends list` to see configured backends, or `kassiber backends create` to add one.",
+        )
+    }
+
     /// Copy-on-success keeps runtime default selection consistent with rollback.
     pub fn execute(
         &mut self,

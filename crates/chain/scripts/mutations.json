@@ -342,8 +342,8 @@
   {
     "id": "chain-lnd-report-switch-route",
     "file": "crates/chain/src/lightning.rs",
-    "find": "self.read(\"/v1/switch\",",
-    "replace": "self.read(\"/v1/payments\",",
+    "find": "\"/v1/switch\",",
+    "replace": "\"/v1/payments\",",
     "expect_failing": [
       "lnd_report_acquisition_pins_requests_window_rounding_and_discard_boundary"
     ],

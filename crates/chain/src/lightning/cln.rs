@@ -131,10 +131,23 @@ impl ClnReportClient {
         consent: Option<&Consent>,
         deadline: Instant,
     ) -> Result<ProfitabilitySnapshot> {
+        self.fetch_checked(consent, deadline, || Ok(()))
+    }
+
+    pub fn fetch_checked(
+        &self,
+        consent: Option<&Consent>,
+        deadline: Instant,
+        mut check: impl FnMut() -> Result<()>,
+    ) -> Result<ProfitabilitySnapshot> {
         let result = acquire(
-            |method| self.read(method, consent, deadline),
+            |method| {
+                check()?;
+                self.read(method, consent, deadline)
+            },
             self.window_days,
         )?;
+        check()?;
         self.gate
             .authorize(self.request.clone(), consent.cloned())
             .map_err(|e| e.app_error())?;

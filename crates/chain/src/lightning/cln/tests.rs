@@ -81,9 +81,17 @@ fn cln_report_consent_binds_action_and_every_process_option_before_launch() {
             "{key}"
         );
     }
-    for key in ["book", "profile", "connection", "window", "export"] {
+    for key in [
+        "operation",
+        "book",
+        "profile",
+        "connection",
+        "window",
+        "export",
+    ] {
         let mut action = action();
         match key {
+            "operation" => action.operation = "ui.reports.lightning_profitability".into(),
             "book" => action.book_id = "other".into(),
             "profile" => action.profile_id = "other".into(),
             "connection" => action.connection_id = "other".into(),

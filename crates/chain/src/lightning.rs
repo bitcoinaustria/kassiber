@@ -13,6 +13,7 @@ pub use cln::ClnReportClient;
 
 #[derive(Clone)]
 pub struct ReportAction {
+    pub operation: String,
     pub book_id: String,
     pub profile_id: String,
     pub connection_id: String,
@@ -22,7 +23,8 @@ pub struct ReportAction {
 
 impl ReportAction {
     fn binding(&self, backend: &Json) -> Result<[u8; 32]> {
-        if self.book_id.is_empty()
+        if self.operation.is_empty()
+            || self.book_id.is_empty()
             || self.profile_id.is_empty()
             || self.connection_id.is_empty()
             || !(1..=365).contains(&self.window_days)
@@ -34,6 +36,7 @@ impl ReportAction {
         }
         let input = serde_json::json!([
             "lightning-profitability-v1",
+            self.operation,
             self.book_id,
             self.profile_id,
             self.connection_id,
@@ -245,19 +248,32 @@ impl LndReportClient {
         consent: Option<&Consent>,
         deadline: Instant,
     ) -> Result<ProfitabilitySnapshot> {
-        let info = self.read("/v1/getinfo", None, consent, deadline)?;
-        let onchain = self.read("/v1/balance/blockchain", None, consent, deadline)?;
-        let balance = self.read("/v1/balance/channels", None, consent, deadline)?;
-        let fees = self.read("/v1/fees", None, consent, deadline)?;
+        self.fetch_checked(consent, deadline, || Ok(()))
+    }
+
+    pub fn fetch_checked(
+        &self,
+        consent: Option<&Consent>,
+        deadline: Instant,
+        mut check: impl FnMut() -> Result<()>,
+    ) -> Result<ProfitabilitySnapshot> {
+        let mut read = |path: &str, body: Option<Json>| {
+            check()?;
+            self.read(path, body, consent, deadline)
+        };
+        let info = read("/v1/getinfo", None)?;
+        let onchain = read("/v1/balance/blockchain", None)?;
+        let balance = read("/v1/balance/channels", None)?;
+        let fees = read("/v1/fees", None)?;
         for row in lnd_rows(&fees, "channel_fees")? {
             if truthy(field(row, "chan_id")) || truthy(field(row, "channel_id")) {
                 integer(field(row, "base_fee_msat"))?;
                 integer(field(row, "fee_per_mil"))?;
             }
         }
-        let open_payload = self.read("/v1/channels", None, consent, deadline)?;
+        let open_payload = read("/v1/channels", None)?;
         let open_rows = lnd_rows(&open_payload, "channels")?;
-        let closed_payload = self.read("/v1/channels/closed", None, consent, deadline)?;
+        let closed_payload = read("/v1/channels/closed", None)?;
         let closed_rows = lnd_rows(&closed_payload, "channels")?;
         let now = integer(field(&info, "best_header_timestamp"))?;
         let start = if now == BigInt::from(0) {
@@ -265,9 +281,12 @@ impl LndReportClient {
         } else {
             (&now - BigInt::from(self.window_days) * 86400u32).max(0.into())
         };
-        let forwarding = self.read("/v1/switch", Some(serde_json::json!({
-            "start_time": start.to_string(), "end_time": if now == BigInt::from(0) { String::new() } else { now.to_string() }, "num_max_events": 1000
-        })), consent, deadline)?;
+        let forwarding = read(
+            "/v1/switch",
+            Some(serde_json::json!({
+                "start_time": start.to_string(), "end_time": if now == BigInt::from(0) { String::new() } else { now.to_string() }, "num_max_events": 1000
+            })),
+        )?;
         let forwards = lnd_rows(&forwarding, "forwarding_events")?
             .into_iter()
             .filter_map(|row| match integer(field(row, "timestamp")) {
@@ -282,11 +301,9 @@ impl LndReportClient {
                 Err(error) => Some(Err(error)),
             })
             .collect::<Result<Vec<_>>>()?;
-        let payments = self.read(
+        let payments = read(
             "/v1/payments?include_incomplete=true&max_payments=1000",
             None,
-            consent,
-            deadline,
         )?;
         let mut scoped_payments = Vec::new();
         for row in lnd_rows(&payments, "payments")? {
@@ -298,12 +315,7 @@ impl LndReportClient {
             }
             scoped_payments.push(row);
         }
-        let invoices = self.read(
-            "/v1/invoices?num_max_invoices=1000",
-            None,
-            consent,
-            deadline,
-        )?;
+        let invoices = read("/v1/invoices?num_max_invoices=1000", None)?;
         lnd_rows(&invoices, "invoices")?;
         let mut earned: BTreeMap<PyStr, BigInt> = BTreeMap::new();
         for row in &forwards {
@@ -331,7 +343,7 @@ impl LndReportClient {
                     path.push_str(&format!("%{b:02X}"));
                 }
             }
-            match self.read(&path, None, consent, deadline) {
+            match read(&path, None) {
                 Err(error)
                     if ["interaction_required", "network_egress_disabled"]
                         .contains(&error.code.as_str())
@@ -417,6 +429,7 @@ impl LndReportClient {
                 }
             })
             .collect();
+        check()?;
         self.http
             .gate
             .authorize(self.request().clone(), consent.cloned())

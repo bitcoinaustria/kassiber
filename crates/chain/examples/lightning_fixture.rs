@@ -70,6 +70,7 @@ fn main() {
         gate = gate.with_cln_fixture(program.into());
     }
     let action = ReportAction {
+        operation: "reports.lightning-profitability".into(),
         book_id: "disposable-book".into(),
         profile_id: "profile".into(),
         connection_id: "wallet".into(),

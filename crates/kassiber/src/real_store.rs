@@ -3,6 +3,8 @@
 //! contract without opening a network client.
 mod backends;
 mod journals;
+#[cfg(test)]
+mod lightning;
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;

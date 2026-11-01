@@ -135,6 +135,7 @@ fn lnd_report_python_vectors_pin_projection_and_exact_requests() {
 
 pub(super) fn action() -> ReportAction {
     ReportAction {
+        operation: "reports.lightning-profitability".into(),
         book_id: "disposable-book".into(),
         profile_id: "profile".into(),
         connection_id: "lnd-wallet".into(),
@@ -190,6 +191,9 @@ fn lnd_report_consent_binds_book_profile_connection_window_export_and_credential
     .unwrap();
     let consent = Consent::explicit_trigger(original.request());
     let mut changes = Vec::new();
+    let mut a = action();
+    a.operation = "ui.reports.lightning_profitability".into();
+    changes.push((a, config("http://must-not-resolve.invalid")));
     let mut a = action();
     a.book_id = "other".into();
     changes.push((a, config("http://must-not-resolve.invalid")));
@@ -251,6 +255,26 @@ fn lnd_report_offline_and_unavailable_refuse_before_loopback() {
     assert!(node.requests().is_empty());
     assert!(gate.attempts().records.is_empty());
     assert!(gate.ledger().snapshot(0, 2000).records.is_empty());
+}
+
+#[test]
+fn lnd_checked_report_refuses_between_reads_and_before_return() {
+    for stop in [1, 2, 9, 10] {
+        let node = FakeProvider::new("{}").unwrap();
+        let client = LndReportClient::new(&config(node.base()), gate(), "test", action()).unwrap();
+        let consent = Consent::explicit_trigger(client.request());
+        let mut checks = 0;
+        let result = client.fetch_checked(Some(&consent), deadline(), || {
+            checks += 1;
+            if checks == stop {
+                Err(AppError::new("interaction_required", "scope changed"))
+            } else {
+                Ok(())
+            }
+        });
+        assert_eq!(result.unwrap_err().code, "interaction_required");
+        assert_eq!(node.requests().len(), stop - 1);
+    }
 }
 
 #[test]

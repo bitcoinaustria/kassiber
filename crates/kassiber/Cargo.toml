@@ -24,6 +24,7 @@ test-harness = [
   "kassiber-diagnostics/test-hooks",
   "kassiber-cli/test-probe",
   "kassiber-net/test-observer",
+  "kassiber-net/test-support",
   "kassiber-runtime/fake",
   "kassiber-daemon/test-kinds",
   "kassiber-store/test-hooks",

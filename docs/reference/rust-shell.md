@@ -13213,3 +13213,30 @@ The implementation is committed locally as `5b1cbeaa8`; the final ownership and
 backlog update records the same verified scope. This is Linux service and
 transport verification, without full workspace, frontend, live-regtest or
 platform/package acceptance. No push or pull request is part of this boundary.
+## Lightning shared service foundation (R5 continuation)
+
+`t3code/r5-reports-lightning-5` starts at `d1178136a`. Its first boundary
+connects the curated CLN/LND clients to the shared report service in the native
+book adapter, compiled under tests until public wiring is verified. Raw backend
+resolution uses the same local runtime/DB precedence as setup, including the
+canonical DB fallback and malformed-config recovery. Only the registered CLN
+and LND adapters advertise the eight reference capabilities; NWC refuses before
+backend access or traffic.
+
+The request grant additionally binds the exact CLI/daemon operation. The service
+captures book identity, active context, resolved connection, wallet configuration
+and effective backend configuration. It checks them before every resource and
+before publishing a payload or CSV; changes require a fresh trigger. Request
+completion or failure revokes the shared grant. The synchronous book-owned
+request has no independent background worker or cancellation registration.
+Missing, revoked, cross-operation, cross-window and cross-export grants refuse
+without a connection attempt. Offline and the product no-egress switch still
+apply to local nodes and CLN subprocesses.
+
+The two native service tests pass against disposable loopback nodes, including
+unchanged database change counts and grant revocation after completion. The
+chain/net suite passes with the new between-resource/final-return authority
+regression and inherited 535 LND / 348 CLN oracle cases. No product route is
+registered in this first commit; successful product served-by counts remain zero.
+Verification logs are under `target/r5-lightning-5/`. All Cargo builds are
+locked/offline with eight jobs and both build locations inside that directory.
