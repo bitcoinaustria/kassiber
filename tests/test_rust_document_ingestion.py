@@ -33,6 +33,10 @@ def cases():
 
 
 class DocumentIngestionReferenceTest(unittest.TestCase):
+    def test_document_cli_mutations_apply_once_and_name_existing_tests(self):
+        from crates.wallets.scripts.document_cli_mutation_check import problems
+        self.assertEqual(problems(), [])
+
     def test_document_cli_review_matches_frozen_python_reference(self):
         from crates.wallets.scripts.generate_document_cli_vectors import DEST, vectors as cli_vectors
         self.assertEqual(DEST.read_text(), json.dumps(cli_vectors(), ensure_ascii=True, sort_keys=True, indent=2) + '\n')

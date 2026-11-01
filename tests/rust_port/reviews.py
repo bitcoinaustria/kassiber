@@ -417,5 +417,10 @@ REVIEWS["tests/test_rust_samourai_import.py"] = {"*": {
 
 REVIEWS["tests/test_rust_document_ingestion.py"] = {"*": {
     "disposition": "oracle", "group": "imports",
-    "reason": "compares frozen Python OCR draft, reviewed-row, provider and PDF page-selection vectors, native core and local-provider replies, exact Poppler OCR input preparation and outgoing payloads, every typed schema/table row and managed evidence bytes on SQLite/SQLCipher; retains Python as reference for the unregistered document core",
+    "reason": "compares frozen Python OCR draft, reviewed-row, interactive CLI, provider and PDF page-selection vectors, native core and local-provider replies, exact Poppler OCR input preparation and outgoing payloads, every typed schema/table row and managed evidence bytes on SQLite/SQLCipher; retains Python as the document reference",
+}}
+
+REVIEWS["tests/test_rust_document_cli.py"] = {"*": {
+    "disposition": "oracle", "group": "imports",
+    "reason": "Runs Python, raw native and hybrid document CLI processes with terminal stdin, compares exact exit/stdout/stderr, complete typed books, outgoing provider requests and managed source files on SQLite/SQLCipher, and asserts every hybrid document call is served in Rust.",
 }}

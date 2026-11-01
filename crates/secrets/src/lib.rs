@@ -12,6 +12,7 @@ pub mod service;
 #[cfg(test)]
 #[path = "tests.rs"]
 mod service_tests;
+pub mod terminal;
 use kassiber_ownership::OwnerNamespace;
 use kassiber_paths::{load_settings, Platform};
 pub use kassiber_paths::{Error, ErrorKind, Result};

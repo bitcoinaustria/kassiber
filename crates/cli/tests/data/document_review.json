@@ -5232,6 +5232,210 @@
   {
     "draft": {
       "confidence_threshold": 0.78,
+      "rows": [
+        {
+          "cell_confidences": {
+            "amount_btc": 0.99,
+            "asset": 0.99,
+            "counterparty": 0.99,
+            "description": 0.99,
+            "direction": 0.99,
+            "fee_btc": 0.99,
+            "fiat_currency": 0.99,
+            "fiat_rate": 0.99,
+            "fiat_value": 0.99,
+            "occurred_at": 0.99
+          },
+          "confidence": 0.94,
+          "confidence_threshold": 0.78,
+          "evidence_text": "02.01.2026 BTC 0.01000000 EUR 500 OTC Desk",
+          "flags": [],
+          "id": "docrow-f85736148c94b4c6-6ffefd6afaa75714-001",
+          "import_record": {
+            "amount": "0.01",
+            "asset": "BTC",
+            "counterparty": "Desk\ud800",
+            "description": "caf\u00e9\ud83d\ude00\udfff",
+            "direction": "inbound",
+            "fee": "0",
+            "fiat_currency": "EUR",
+            "fiat_rate": null,
+            "fiat_value": "500",
+            "id": "docrow-f85736148c94b4c6-6ffefd6afaa75714-001",
+            "occurred_at": "2026-01-02T00:00:00Z",
+            "raw_json": {
+              "cell_confidences": {
+                "amount_btc": 0.99,
+                "asset": 0.99,
+                "counterparty": 0.99,
+                "description": 0.99,
+                "direction": 0.99,
+                "fee_btc": 0.99,
+                "fiat_currency": 0.99,
+                "fiat_rate": 0.99,
+                "fiat_value": 0.99,
+                "occurred_at": 0.99
+              },
+              "evidence_text": "02.01.2026 BTC 0.01000000 EUR 500 OTC Desk",
+              "fee_defaulted": false,
+              "model_confidence": 0.94,
+              "model_row_id": null,
+              "row_id": "docrow-f85736148c94b4c6-6ffefd6afaa75714-001",
+              "source": "document_import",
+              "source_region": {
+                "height": 0.1,
+                "page": 1,
+                "unit": "relative",
+                "width": 0.7,
+                "x": 0.1,
+                "y": 0.2
+              }
+            }
+          },
+          "record": {
+            "amount_btc": "0.01",
+            "asset": "BTC",
+            "counterparty": "Desk\ud800",
+            "description": "caf\u00e9\ud83d\ude00\udfff",
+            "direction": "inbound",
+            "fee_btc": "0",
+            "fee_defaulted": false,
+            "fiat_currency": "EUR",
+            "fiat_rate": null,
+            "fiat_value": "500",
+            "occurred_at": "2026-01-02T00:00:00Z"
+          },
+          "source_region": {
+            "height": 0.1,
+            "page": 1,
+            "unit": "relative",
+            "width": 0.7,
+            "x": 0.1,
+            "y": 0.2
+          },
+          "status": "ready"
+        }
+      ],
+      "source": {
+        "sha256": "f85736148c94b4c6ae60695c6614f5c33945b8a80d1b50d255243b21ab57b7f5"
+      }
+    },
+    "include": false,
+    "interactive": true,
+    "interrupt": false,
+    "name": "{'counterparty': 'Desk\\ud800', 'description': 'caf\u00e9\ud83d\ude00\\udfff'}",
+    "selected": [
+      "docrow-f85736148c94b4c6-6ffefd6afaa75714-001"
+    ],
+    "stderr": "OCR accounting draft (nothing is selected by default):\n[1] selectable | ready | confidence 94% | page 1\n    date=2026-01-02T00:00:00Z | side=inbound | asset=BTC | amount=0.01 | fee=0 | fiat=500 EUR | rate=\u2014\n    counterparty=Desk\\ud800 | description=caf\u00e9\ud83d\ude00\\udfff\n    cell_confidences={\"amount_btc\": 0.99, \"asset\": 0.99, \"counterparty\": 0.99, \"description\": 0.99, \"direction\": 0.99, \"fee_btc\": 0.99, \"fiat_currency\": 0.99, \"fiat_rate\": 0.99, \"fiat_value\": 0.99, \"occurred_at\": 0.99} | flags=none\n",
+    "stdin": "1\n",
+    "stdout": "Enter comma-separated row numbers to import, or press Enter to cancel: "
+  },
+  {
+    "draft": {
+      "confidence_threshold": 0.78,
+      "rows": [
+        {
+          "cell_confidences": {
+            "amount_btc": 0.99,
+            "asset": 0.99,
+            "counterparty": 0.99,
+            "description": 0.99,
+            "direction": 0.99,
+            "fee_btc": 0.99,
+            "fiat_currency": 0.99,
+            "fiat_rate": 0.99,
+            "fiat_value": 0.99,
+            "occurred_at": 0.99
+          },
+          "confidence": 0.94,
+          "confidence_threshold": 0.78,
+          "evidence_text": "02.01.2026 BTC 0.01000000 EUR 500 OTC Desk",
+          "flags": [],
+          "id": "docrow-f85736148c94b4c6-6ffefd6afaa75714-001",
+          "import_record": {
+            "amount": "0.01",
+            "asset": "BTC",
+            "counterparty": "Desk\ud800",
+            "description": "caf\u00e9\ud83d\ude00\udfff",
+            "direction": "inbound",
+            "fee": "0",
+            "fiat_currency": "EUR",
+            "fiat_rate": null,
+            "fiat_value": "500",
+            "id": "docrow-f85736148c94b4c6-6ffefd6afaa75714-001",
+            "occurred_at": "2026-01-02T00:00:00Z",
+            "raw_json": {
+              "cell_confidences": {
+                "amount_btc": 0.99,
+                "asset": 0.99,
+                "counterparty": 0.99,
+                "description": 0.99,
+                "direction": 0.99,
+                "fee_btc": 0.99,
+                "fiat_currency": 0.99,
+                "fiat_rate": 0.99,
+                "fiat_value": 0.99,
+                "occurred_at": 0.99
+              },
+              "evidence_text": "02.01.2026 BTC 0.01000000 EUR 500 OTC Desk",
+              "fee_defaulted": false,
+              "model_confidence": 0.94,
+              "model_row_id": null,
+              "row_id": "docrow-f85736148c94b4c6-6ffefd6afaa75714-001",
+              "source": "document_import",
+              "source_region": {
+                "height": 0.1,
+                "page": 1,
+                "unit": "relative",
+                "width": 0.7,
+                "x": 0.1,
+                "y": 0.2
+              }
+            }
+          },
+          "record": {
+            "amount_btc": "0.01",
+            "asset": "BTC",
+            "counterparty": "Desk\ud800",
+            "description": "caf\u00e9\ud83d\ude00\udfff",
+            "direction": "inbound",
+            "fee_btc": "0",
+            "fee_defaulted": false,
+            "fiat_currency": "EUR",
+            "fiat_rate": null,
+            "fiat_value": "500",
+            "occurred_at": "2026-01-02T00:00:00Z"
+          },
+          "source_region": {
+            "height": 0.1,
+            "page": 1,
+            "unit": "relative",
+            "width": 0.7,
+            "x": 0.1,
+            "y": 0.2
+          },
+          "status": "ready"
+        }
+      ],
+      "source": {
+        "sha256": "f85736148c94b4c6ae60695c6614f5c33945b8a80d1b50d255243b21ab57b7f5"
+      }
+    },
+    "include": true,
+    "interactive": true,
+    "interrupt": false,
+    "name": "{'counterparty': 'Desk\\ud800', 'description': 'caf\u00e9\ud83d\ude00\\udfff'}",
+    "selected": [
+      "docrow-f85736148c94b4c6-6ffefd6afaa75714-001"
+    ],
+    "stderr": "OCR accounting draft (nothing is selected by default):\n[1] selectable | ready | confidence 94% | page 1\n    date=2026-01-02T00:00:00Z | side=inbound | asset=BTC | amount=0.01 | fee=0 | fiat=500 EUR | rate=\u2014\n    counterparty=Desk\\ud800 | description=caf\u00e9\ud83d\ude00\\udfff\n    cell_confidences={\"amount_btc\": 0.99, \"asset\": 0.99, \"counterparty\": 0.99, \"description\": 0.99, \"direction\": 0.99, \"fee_btc\": 0.99, \"fiat_currency\": 0.99, \"fiat_rate\": 0.99, \"fiat_value\": 0.99, \"occurred_at\": 0.99} | flags=none\n",
+    "stdin": "1\n",
+    "stdout": "Enter comma-separated row numbers to import, or press Enter to cancel: "
+  },
+  {
+    "draft": {
+      "confidence_threshold": 0.78,
       "rows": [],
       "source": {
         "sha256": "f85736148c94b4c6ae60695c6614f5c33945b8a80d1b50d255243b21ab57b7f5"

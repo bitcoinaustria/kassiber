@@ -321,7 +321,7 @@ provider base URL for an explicit gateway. Native CLI providers and the
 permission-gated GitHub update checker retain their separately documented
 transport configuration.
 
-The unregistered Rust document-provider service uses `kassiber-net` for model
+The Rust document-provider service uses `kassiber-net` for model
 discovery and OCR. Constructing the service and seeding provider configuration
 contact nothing. Each invocation requires a grant bound to the document,
 options, database instance and selected provider configuration. Disabled,
@@ -332,7 +332,10 @@ Requests ignore ambient proxies and permit only same-origin redirects. Both
 wire formats carry `store: false`; only the saved explicit Chat Completions
 opt-out omits it. A refusal never weakens retention. No document bytes,
 credentials or request contents enter the bounded RAM network ledger. Product
-CLI and daemon routes remain unregistered at this provider checkpoint.
+CLI `wallets preview-document` and interactive `wallets import-document`
+grant this exact action after resolving the selected book. Imports resolve the
+wallet and refuse machine, noninteractive or nonterminal input before provider
+discovery or OCR. Daemon registration remains deferred; R6 AI paths stay Python.
 
 Rust OCR PDF preparation launches only local Poppler `pdfinfo` and `pdftoppm`,
 with Python's exact arguments and limits: at most eight contiguous pages,

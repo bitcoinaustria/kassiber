@@ -447,7 +447,7 @@ pub fn run(
                     }
                 }
                 let payload =
-                    crate::wallets::execute(&namespace, book, stdin.as_mut(), sink.stderr)?;
+                    crate::wallets::execute(&namespace, book, stdin.as_mut(), sink.stdout, sink.stderr, stdin_is_tty)?;
                 emit(&mut sink, format, &kind, payload)
             },
         ),

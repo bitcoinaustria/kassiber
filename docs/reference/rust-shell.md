@@ -107,7 +107,8 @@ The [R5 local evidence boundary](rust-transactions-r5-status.md) records storage
 invariants, parity evidence and remaining work.
 
 The native catalog includes `wallets import-btcpay`, `wallets import-ledger`,
-`wallets import-wasabi` and `wallets import-samourai`. `commands describe` lists the supported leaves
+`wallets import-wasabi`, `wallets import-samourai`, `wallets preview-document`
+and `wallets import-document`. `commands describe` lists the supported leaves
 from `crates/cli/src/describe.rs`; each family registers through its own CLI
 module. Every other leaf parses exactly as in Python and then fails
 `not_implemented`
@@ -12036,3 +12037,34 @@ selection, invalid and blocked rows, threshold refusals and cancellation.
 `test_document_cli_review_matches_frozen_python_reference` checks that corpus
 against the current Python implementation. This checkpoint does not register
 product routes or claim native operating-system interrupt acceptance.
+
+### Document CLI registration (R5)
+
+`wallets preview-document` and `wallets import-document` now use the reviewed
+native document core through narrow runtime methods. Both resolve the selected
+book; import also resolves its wallet before refusing machine, noninteractive
+or nonterminal input. That refusal precedes provider discovery and OCR. An
+explicit invocation grants only its bound provider action. Review shows the
+exact draft and requires an active row selection before the source-bound,
+atomic transaction/attachment coordinator runs. The catalog contains 160
+native commands. Daemon registration remains deferred until native
+`journals process`; R6 AI projections and desktop document sessions stay Python.
+
+`tests/test_rust_document_cli.py` drives real Python, native and hybrid
+processes, with a PTY for review and separate stdout/stderr capture. Eight
+acceptance methods compare raw exit/output bytes, complete typed SQLite and
+SQLCipher books, managed evidence and outgoing local-provider requests. They
+cover preview, selected imports, reimport, Unicode, structural/confidence
+barriers, the explicit override, table/plain/CSV output, cancellation, EOF,
+native SIGINT, unattended refusals before contact, changed sources, late
+attachment failure and real Poppler page selection. The two documented
+database-error/digest-cleanup privacy deviations remain in force; the injected
+late database failure compares the fixed redacted diagnostic explicitly.
+
+The accepted run records 192 document calls: 64 Python reference calls, 64 raw
+native calls and 64 hybrid calls. Every hybrid document call is Rust-served,
+with zero fallback. The hybrid calls include 54 imports and 10 previews across
+both codecs. Fifty frozen Python review transcripts additionally pin scripted
+stdin and sorted cell-confidence output. Native SIGINT handling is scoped to
+review and restores the previous handler and terminal flags. This acceptance
+was run on Linux; the Windows console handler is not platform-verified here.

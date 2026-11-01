@@ -21,7 +21,7 @@ def vectors():
         scenarios.append((repr(response[:32]), draft, response, False, True, False))
     scenarios.append(('interrupt', draft, '', False, True, True))
     scenarios.append(('noninteractive', draft, '1\n', False, False, False))
-    for changes in [{}, {'fee_btc': None}, {'confidence': 0.5}, {'amount_btc': '0.000000000015'}, {'fiat_currency': 'USD'}, {'cell_confidences': {}}]:
+    for changes in [{}, {'fee_btc': None}, {'confidence': 0.5}, {'amount_btc': '0.000000000015'}, {'fiat_currency': 'USD'}, {'cell_confidences': {}}, {'counterparty': 'Desk\ud800', 'description': 'café😀\udfff'}]:
         rows = reference._draft_rows({'rows': [{**base(), **changes}]}, source_hash=SOURCE_HASH,
             threshold=reference.DEFAULT_CONFIDENCE_THRESHOLD, expected_fiat_currency='EUR', allowed_pages=[1])
         for include in [False, True]:
@@ -50,7 +50,7 @@ def vectors():
                     interactive=interactive, input_fn=input_fn, output=stderr)
             except Exception as exc:
                 case['error'] = error(exc)
-        case.update(stdout=stdout.getvalue(), stderr=stderr.getvalue())
+        case.update(stdout=stdout.getvalue(), stderr=stderr.getvalue().encode('utf-8', errors='backslashreplace').decode())
         result.append(case)
     return result
 

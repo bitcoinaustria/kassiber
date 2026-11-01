@@ -2446,7 +2446,8 @@ for served-by counts, mutation killers and verification.
 
 The CLI catalog contains 158 native entries. `ui.wallets.import_file` remains
 unregistered until native journal processing and shared daemon acceptance land.
-The document continuation below remains partial; the bare-CR correction stays deferred.
+The document CLI continuation below completes that registration; the bare-CR
+correction stays deferred.
 
 ### R5 document ingestion: reviewed core checkpoint (partial)
 
@@ -2479,9 +2480,13 @@ with exact-action consent and the Python local-AI offline/no-egress exception.
 The PDF continuation uses the same Poppler tools, arguments, page/DPI/image
 limits and 30-second timeouts as Python for OCR preparation, including private
 temporary images and cleanup. PDF report/export rendering stays in Python.
-Completion still requires interactive CLI review and CLI wire/full-book
-acceptance. Product served-by counts for document preview/import and the
-shared daemon importer are zero; the native catalog remains at 158 entries.
+The [CLI continuation](../reference/rust-shell.md#document-cli-registration-r5)
+adds interactive review, runtime wiring and both native CLI registrations.
+Its SQLite/SQLCipher acceptance compares exact process output, complete typed
+books, managed evidence and outgoing provider requests across Python, raw Rust
+and the hybrid. All 64 hybrid document calls run in Rust with zero fallback;
+the native catalog now contains 160 entries. The shared daemon importer has
+no new native calls.
 `ui.wallets.import_file` stays unregistered until native `journals process`
 and shared daemon acceptance land. R6 document AI projections and session/token
 flows remain on Python. PDF report generation also remains Python.

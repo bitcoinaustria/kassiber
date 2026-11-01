@@ -390,7 +390,7 @@ projections stay Python. Progress and remaining work for this slice:
 - [x] Add Python-compatible Poppler PDF preparation for OCR, including page
   selection, bounded images, timeouts and cleanup. Retain and justify the native
   database-error redaction and managed-digest cleanup privacy deviations.
-- [ ] Finish document ingestion at core/CLI level: interactive CLI review, native
+- [x] Finish document ingestion at core/CLI level: interactive CLI review, native
   registration and CLI wire/full-book/zero-fallback acceptance.
   R6 AI tool projections stay Python. An attachment grants neither ownership
   nor tax facts.

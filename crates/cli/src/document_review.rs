@@ -22,9 +22,21 @@ fn field<'a>(value: &'a Value, key: &str) -> &'a Value {
 
 fn display(value: &Value, fallback: &str) -> String {
     if truthy(value) {
-        py_str(value)
+        review_str(value)
     } else {
         fallback.into()
+    }
+}
+
+fn review_str(value: &Value) -> String {
+    match value {
+        Value::Str(text) => text
+            .code_points()
+            .map(|point| {
+                char::from_u32(point).map_or_else(|| format!("\\u{point:04x}"), |c| c.to_string())
+            })
+            .collect(),
+        _ => py_str(value),
     }
 }
 
@@ -127,6 +139,8 @@ pub(crate) fn select(
             "Document draft has no structurally valid rows to review",
         ));
     }
+    let mut terminal = kassiber_secrets::terminal::ReviewInput::install()
+        .map_err(|_| AppError::new("internal_error", "Could not prepare document review input"))?;
     write!(
         stdout,
         "Enter comma-separated row numbers to import, or press Enter to cancel: "
@@ -136,7 +150,11 @@ pub(crate) fn select(
     let mut response = Vec::new();
     loop {
         let mut byte = [0];
-        match stdin.read(&mut byte) {
+        let read = match terminal.as_mut() {
+            Some(terminal) => terminal.read(stdin, &mut byte),
+            None => stdin.read(&mut byte),
+        };
+        match read {
             Ok(0) => break,
             Ok(_) if byte[0] == b'\n' => break,
             Ok(_) => response.push(byte[0]),

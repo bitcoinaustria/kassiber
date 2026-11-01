@@ -89,6 +89,7 @@ _DAEMON_SERIAL_MODULES = frozenset(
         "test_rust_transaction_desktop",
         "test_rust_document_services",
         "test_rust_document_ingestion",
+        "test_rust_document_cli",
         "test_rust_reports",
         "test_rust_report_exports",
         "test_rust_xlsx_exports",

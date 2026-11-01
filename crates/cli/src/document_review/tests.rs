@@ -24,8 +24,18 @@ fn document_cli_review_matches_python_scripted_stdin() {
             &mut input
         };
         let (mut stdout, mut stderr) = (Vec::new(), Vec::new());
+        let mut draft = field(&case, "draft").clone();
+        if let Value::List(mut rows) = field(&draft, "rows").clone() {
+            for row in &mut rows {
+                if let Value::Dict(mut cells) = field(row, "cell_confidences").clone() {
+                    cells.reverse();
+                    kassiber_envelope::set(row, "cell_confidences", Value::Dict(cells));
+                }
+            }
+            kassiber_envelope::set(&mut draft, "rows", Value::List(rows));
+        }
         let result = select(
-            field(&case, "draft"),
+            &draft,
             "EUR",
             truthy(field(&case, "include")),
             truthy(field(&case, "interactive")),

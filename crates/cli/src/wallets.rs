@@ -12,7 +12,9 @@ pub fn execute(
     namespace: &Namespace,
     book: &mut dyn Book,
     stdin: &mut dyn Read,
+    stdout: &mut dyn Write,
     stderr: &mut dyn Write,
+    stdin_is_tty: bool,
 ) -> Result<Value, AppError> {
     if namespace.text("wallets_command") == Some("import-samourai") {
         return book.import_samourai(kassiber_wallets::file_import::samourai::Request {
@@ -38,6 +40,20 @@ pub fn execute(
     let (workspace_id, profile_id) =
         book.resolve_scope(namespace.get("workspace"), namespace.get("profile"))?;
     let wallet = namespace.text("wallet").unwrap_or_default().to_owned();
+    if matches!(
+        namespace.text("wallets_command"),
+        Some("preview-document" | "import-document")
+    ) {
+        return document(
+            namespace,
+            book,
+            (&profile_id, &wallet),
+            stdin,
+            stdout,
+            stderr,
+            stdin_is_tty,
+        );
+    }
     let operation = match namespace.text("wallets_command").unwrap_or_default() {
         "sync" => {
             return book.wallet_sync(
@@ -199,6 +215,69 @@ pub fn preview_ledger(namespace: &Namespace) -> Result<Value, AppError> {
         mapping.as_ref(),
         limit,
     )
+}
+
+fn document(
+    namespace: &Namespace,
+    book: &mut dyn Book,
+    scope: (&str, &str),
+    stdin: &mut dyn Read,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+    stdin_is_tty: bool,
+) -> Result<Value, AppError> {
+    use kassiber_envelope::get;
+    use kassiber_wallets::file_import::document::DocumentPreview;
+    let (profile_id, wallet) = scope;
+    let importing = namespace.text("wallets_command") == Some("import-document");
+    let target = book.document_target(profile_id, importing.then_some(wallet))?;
+    let interactive =
+        stdin_is_tty && !namespace.flag("non_interactive") && !namespace.flag("machine");
+    if importing && !interactive {
+        return Err(crate::document_review::required());
+    }
+    let value = |key| namespace.get(key).cloned().unwrap_or(Value::Null);
+    let file = namespace.text("file").unwrap_or_default();
+    let draft = book.preview_document(DocumentPreview {
+        source_file: file.into(),
+        provider_name: namespace.text("provider").map(str::to_owned),
+        model: namespace.text("model").map(str::to_owned),
+        confidence_threshold: value("confidence_threshold"),
+        max_pages: value("max_pages"),
+        pages: value("pages"),
+        expected_fiat_currency: Some(target.fiat_currency.clone()),
+    })?;
+    if !importing {
+        return Ok(draft);
+    }
+    let include = namespace.flag("include_quarantined");
+    let selected = crate::document_review::select(
+        &draft,
+        &target.fiat_currency,
+        include,
+        interactive,
+        stdin,
+        stdout,
+        stderr,
+    )?;
+    let rows = match get(&draft, "rows") {
+        Some(Value::List(rows)) => rows.as_slice(),
+        _ => return Err(AppError::new("validation", "Document OCR draft is invalid")),
+    };
+    let source_sha256 = get(&draft, "source")
+        .and_then(|v| get(v, "sha256"))
+        .map(kassiber_envelope::py_str)
+        .unwrap_or_default();
+    book.import_document(kassiber_runtime::store::ReviewedDocument {
+        source_file: file,
+        profile_id,
+        wallet: target.wallet_id.as_deref().unwrap_or(wallet),
+        rows,
+        selected_row_ids: &selected,
+        source_sha256: &source_sha256,
+        include_quarantined: include,
+        confidence_threshold: &value("confidence_threshold"),
+    })
 }
 
 fn json_value(value: &Value) -> Result<Json, AppError> {

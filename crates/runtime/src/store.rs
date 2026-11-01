@@ -181,6 +181,22 @@ impl From<AppError> for JournalFailure {
     }
 }
 
+pub struct DocumentTarget {
+    pub fiat_currency: String,
+    pub wallet_id: Option<String>,
+}
+
+pub struct ReviewedDocument<'a> {
+    pub source_file: &'a str,
+    pub profile_id: &'a str,
+    pub wallet: &'a str,
+    pub rows: &'a [Value],
+    pub selected_row_ids: &'a [String],
+    pub source_sha256: &'a str,
+    pub include_quarantined: bool,
+    pub confidence_threshold: &'a Value,
+}
+
 /// An open, unlocked book.
 pub trait Book: Send {
     fn process_journals(
@@ -378,6 +394,22 @@ pub trait Book: Send {
         _column_map: Option<kassiber_wallets::file_import::ledger::ColumnMap>,
     ) -> Result<Value, AppError> {
         Err(not_implemented("wallets", "generic ledger import"))
+    }
+    fn document_target(
+        &self,
+        _profile_id: &str,
+        _wallet: Option<&str>,
+    ) -> Result<DocumentTarget, AppError> {
+        Err(not_implemented("wallets", "document target"))
+    }
+    fn preview_document(
+        &mut self,
+        _request: kassiber_wallets::file_import::document::DocumentPreview,
+    ) -> Result<Value, AppError> {
+        Err(not_implemented("wallets", "document preview"))
+    }
+    fn import_document(&mut self, _request: ReviewedDocument<'_>) -> Result<Value, AppError> {
+        Err(not_implemented("wallets", "reviewed document import"))
     }
     fn import_samourai(
         &mut self,

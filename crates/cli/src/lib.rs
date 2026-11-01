@@ -12,7 +12,6 @@ mod attachments;
 mod commercial;
 pub mod describe;
 mod diagnostics;
-#[cfg(test)]
 mod document_review;
 mod documents;
 pub mod help;

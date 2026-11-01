@@ -1312,6 +1312,108 @@ impl Book for RealBook {
     fn derive_wallet(&mut self, request: kassiber_wallets::Derive) -> Result<Value, AppError> {
         kassiber_wallets::derive_wallet(self.conn()?, request)
     }
+    fn document_target(
+        &self,
+        profile_id: &str,
+        wallet: Option<&str>,
+    ) -> Result<DocumentTarget, AppError> {
+        #[cfg(feature = "test-harness")]
+        if let Ok(time) = std::env::var("KASSIBER_RUST_TEST_DOCUMENT_TIME") {
+            self.conn()?
+                .create_scalar_function(
+                    "strftime",
+                    -1,
+                    kassiber_store::rusqlite::functions::FunctionFlags::SQLITE_UTF8,
+                    move |_| Ok(time.clone()),
+                )
+                .map_err(map_sqlite_error)
+                .map_err(error)?;
+        }
+        #[cfg(feature = "test-harness")]
+        if let Ok(ids) = std::env::var("KASSIBER_RUST_TEST_DOCUMENT_ATTACHMENT_IDS") {
+            let ids = Mutex::new(
+                ids.split(',')
+                    .map(str::to_owned)
+                    .collect::<Vec<_>>()
+                    .into_iter(),
+            );
+            self.conn()?
+                .create_scalar_function(
+                    "randomblob",
+                    1,
+                    kassiber_store::rusqlite::functions::FunctionFlags::SQLITE_UTF8,
+                    move |_| {
+                        let id = ids
+                            .lock()
+                            .unwrap()
+                            .next()
+                            .expect("document attachment entropy")
+                            .replace('-', "");
+                        Ok((0..32)
+                            .step_by(2)
+                            .map(|i| u8::from_str_radix(&id[i..i + 2], 16).unwrap())
+                            .collect::<Vec<_>>())
+                    },
+                )
+                .map_err(map_sqlite_error)
+                .map_err(error)?;
+        }
+        let fiat_currency = self
+            .conn()?
+            .query_row(
+                "SELECT fiat_currency FROM profiles WHERE id=?",
+                [profile_id],
+                |r| r.get(0),
+            )
+            .map_err(map_sqlite_error)
+            .map_err(error)?;
+        let wallet_id = wallet
+            .map(|wallet| kassiber_wallets::resolve(self.conn()?, profile_id, wallet).map(|w| w.id))
+            .transpose()?;
+        Ok(DocumentTarget {
+            fiat_currency,
+            wallet_id,
+        })
+    }
+    fn preview_document(
+        &mut self,
+        request: kassiber_wallets::file_import::document::DocumentPreview,
+    ) -> Result<Value, AppError> {
+        use kassiber_wallets::file_import::document::{DocumentConsent, Providers};
+        let conn = self.conn()?;
+        let consent = DocumentConsent::explicit(conn, &request)?;
+        Providers::system().preview(conn, &request, Some(consent))
+    }
+    fn import_document(&mut self, request: ReviewedDocument<'_>) -> Result<Value, AppError> {
+        use kassiber_wallets::file_import::document::{import_draft, ImportDraft};
+        #[cfg(feature = "test-harness")]
+        let identity = std::env::var("KASSIBER_RUST_TEST_IMPORT_IDS")
+            .ok()
+            .and_then(|ids| {
+                Some(kassiber_wallets::file_import::Identity {
+                    ids: ids.split(',').map(str::to_owned).collect(),
+                    timestamp: std::env::var("KASSIBER_RUST_TEST_IMPORT_TIME").ok()?,
+                })
+            });
+        #[cfg(not(feature = "test-harness"))]
+        let identity = None;
+        import_draft(
+            self.conn()?,
+            ImportDraft {
+                source_file: request.source_file,
+                data_root: Path::new(&self.data_root),
+                profile_id: request.profile_id,
+                wallet: request.wallet,
+                rows: request.rows,
+                include_quarantined: request.include_quarantined,
+                selected_row_ids: Some(request.selected_row_ids),
+                expected_source_sha256: Some(request.source_sha256),
+                confidence_threshold: request.confidence_threshold,
+                attach_evidence: true,
+            },
+            identity.as_ref(),
+        )
+    }
     fn import_wallet_file(
         &mut self,
         request: kassiber_wallets::file_import::Request,
