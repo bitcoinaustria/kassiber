@@ -328,7 +328,7 @@ class _Period:
 
 
 def _period_for_profile(profile: Mapping[str, Any], year: int) -> _Period:
-    tax_country = str(_row_get(profile, "tax_country") or "").lower()
+    tax_country = str(_row_get(profile, "tax_country") or "").strip().lower()
     return _Period(year, AT_TAX_TZ if tax_country == "at" else _UTC)
 
 
