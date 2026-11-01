@@ -130,22 +130,24 @@ at a time. Task-owned build trees must be summarized and removed at completion.
 | Locked environment | Passed, offline, CPython 3.11.17 |
 | Workspace formatting | Passed after compatibility fixes |
 | All-target workspace clippy `-D warnings` | Passed with journal harness/timing, binary, chain/wallet harnesses and network observer features |
-| Workspace tests | 1,873 nodes verified: 1,800 passed in the full run plus all 73 failed nodes passed on exact elevated reruns; zero ignored |
+| Workspace tests | Final source-order stack: 1,889 passed across 143 harness results; zero failed or ignored, with all specified harness/observer features |
 | Binary / network-observer harness tests | 86 passed across nine harness results; zero failed or ignored |
-| Mutation catalog anchors | 6,541 / 6,541 apply exactly once across 42 catalogs; kills pending |
-| Test classification | Regenerated 6,020 definitions; final contract check/preflight pending |
+| Mutation catalog anchors | 6,543 recipes across 42 catalogs after determinism; the pre-addendum 6,541-anchor check passed, final catalog check and kills remain pending |
+| Test classification | Regenerated 6,022 definitions; final contract check/preflight pending |
 | Custody generated/replay/focused lanes | 24,000 books + 1,030 permutations: 24,852 complete stage matches and 178 matching refusals; 159 archived requests + 159 permutations match. Focused census and shadow each pass 300 tests and 32 subtests, with 75 native-loader byte matches and one explained panic-hook skip |
 | Complete renderer campaign | 24,705 / 24,705 generated admitted cases and 318 / 318 archived cases match |
 | Slice/hybrid parity and no-fallback assertions | Pending fresh run |
 | Full mutation kills in resumable shards | Pending fresh run |
 | Combined journals process / custody CPU | Pending fresh run |
 
-The full workspace run has 143 harness results. Its initial 73 failures across
-six targets are retained separately: loopback restrictions, the combined daemon
-registration expectation and dependency/source review entries. Exact reruns
-select and pass every failed node after the narrow fixes. Restricted results
-are not counted as successful coverage. The all-target feature check also exposed
-a freshness fixture with obsolete `AppError` fields; it is adapted and clippy passes.
+The final workspace run uses the combined harness and observer features and
+passes all 1,889 tests in one uninterrupted run. The earlier run and its 73
+initial failures/rechecks remain historical receipts, rather than the final
+coverage claim. The all-target feature check had also exposed a freshness
+fixture with obsolete `AppError` fields; the fixture is adapted and clippy passes.
+After saving the exact log hash and counts, 221 completed test executables were
+removed (4.988 GB unlinked), bringing the verification build tree to 7.3 GiB.
+Rebuilt debug fixtures, the hybrid candidate and optimized journal probes pass.
 The custody/render receipts above precede the late mixed-revision guard; the
 generated snapshots do not exercise SQLite revision loading. The final loader
 suite reruns the affected boundary. The owner will run full census and shadow shards afterwards; focused lanes
