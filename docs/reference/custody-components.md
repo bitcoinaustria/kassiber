@@ -114,6 +114,12 @@ For an outbound anchor whose backend stores the miner fee separately, the
 source leg is the complete debit (`transaction amount + transaction fee`). The
 fee leg allocates part of that source; it is not added a second time for anchor
 coverage. For fee-inclusive imports, the source equals the stored net debit.
+Pair authoring uses that same debit when allocating a reviewed residual: a
+1,000 msat principal, separate 10 msat fee, and 998 msat receipt produce a
+1,010 msat source, 998 msat destination, 2 msat suspense, and 10 msat fee.
+For a reviewed swap refund, the remaining principal shortfall can instead be
+an additional reviewed fee. It consumes principal separately from the observed
+miner fee; both fee allocations must retain their distinct meanings.
 
 Anchored legs always inherit the imported transaction's canonical occurrence
 time; an authored override is rejected. Transaction-less legs require a valid

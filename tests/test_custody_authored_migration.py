@@ -182,13 +182,13 @@ def test_reopen_migrates_legacy_reviews_to_active_exact_components(tmp_path):
         ) == [
             ("destination", 900),
             ("fee", 10),
-            ("source", 1000),
-            ("suspense", 90),
+            ("source", 1010),
+            ("suspense", 100),
         ]
         assert sum(
             allocation["source_amount_msat"]
             for allocation in pair["allocations"]
-        ) == 1000
+        ) == 1010
         assert len(pair["economic_terms"]) == 1
         terms = pair["economic_terms"][0]
         assert terms["term_kind"] == "transaction_pair"
@@ -970,7 +970,7 @@ def test_connected_fanout_pairs_activate_as_one_atomic_component(tmp_path):
         assert sum(
             allocation["source_amount_msat"]
             for allocation in component["allocations"]
-        ) == 1000
+        ) == 1010
         assert {
             leg["anchor_transaction_id"]
             for leg in component["legs"]

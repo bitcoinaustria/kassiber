@@ -3340,6 +3340,13 @@ def _db_anchor_validation(
                     }
                 )
 
+    legs_by_id = {str(leg["id"]): leg for leg in legs}
+    fee_by_transaction: dict[str, int] = defaultdict(int)
+    for allocation in allocations:
+        source = legs_by_id.get(str(allocation.get("source_leg_id")))
+        sink = legs_by_id.get(str(allocation.get("sink_leg_id")))
+        if source is not None and sink is not None and sink.get("role") == "fee":
+            fee_by_transaction[str(source.get("transaction_id"))] += int(allocation.get("source_amount_msat") or 0)
     coverage: list[dict[str, Any]] = []
     for transaction_id in sorted(by_transaction):
         row = transaction_rows.get(transaction_id)
@@ -3362,7 +3369,7 @@ def _db_anchor_validation(
             for leg in by_transaction[transaction_id]
         )
         expected = (
-            boundary.principal_msat
+            boundary.principal_msat + min(boundary.fee_msat, fee_by_transaction[transaction_id])
             if partial_review
             else boundary.wallet_movement_msat
         )
@@ -3388,7 +3395,6 @@ def _db_anchor_validation(
     # A reviewed suspense residual must never absorb an already-observed miner
     # fee. Components containing suspense require explicit allocations, so the
     # exact fee split can be checked per anchored source leg without inference.
-    legs_by_id = {str(leg["id"]): leg for leg in legs}
     allocations_by_source: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
     for allocation in allocations:
         allocations_by_source[str(allocation.get("source_leg_id"))].append(allocation)
