@@ -577,6 +577,10 @@ def _effects(state, conn, profile, operations=()) -> dict[str, Any]:
     if any(op["type"] == "kind_override" for op in operations):
         from .acquisition_review import acquisition_effects
         acquisition = acquisition_effects(state, conn, profile)
+    pair_ids = sorted({op["pair_id"] for op in operations if op["type"] == "repair_legacy_pair"})
+    if pair_ids:
+        # A legacy repair revises authored amounts: show them, not just a digest.
+        acquisition["legacy_pairs"] = [_pair_terms(conn, profile, pair_id) for pair_id in pair_ids]
     return {
         **acquisition,
         "entries_count": len(entries), "quarantine_count": len(quarantines),
@@ -688,6 +692,22 @@ def _tax_delta(before, after) -> dict[str, Any]:
         if changed:
             years.append(item)
     return {"years": years}
+def _pair_terms(conn, profile, pair_id) -> dict[str, Any]:
+    """The pair's current reviewed legs and allocations, in msat."""
+    pair = quarantine_review.pairs_by_id(conn, str(profile["id"])).get(pair_id)
+    if pair is None:
+        return {"pair_id": pair_id, "legs": [], "allocations": []}
+    component = custody_components.get_component(conn, pair["component_id"], include_local_evidence=False)
+    roles = {leg["id"]: leg["role"] for leg in component["legs"]}
+    return {
+        "pair_id": pair_id,
+        "legs": [{"role": leg["role"], "transaction_id": leg["transaction_id"], "asset": leg["asset"],
+                  "amount_msat": int(leg["amount_msat"])} for leg in component["legs"]],
+        "allocations": [{"source": roles.get(row["source_leg_id"]), "sink": roles.get(row["sink_leg_id"]),
+                         "source_amount_msat": int(row["source_amount_msat"]),
+                         "sink_amount_msat": int(row["sink_amount_msat"])}
+                        for row in component["allocations"]],
+    }
 
 
 def _cases(state) -> dict[str, dict[str, Any]]:

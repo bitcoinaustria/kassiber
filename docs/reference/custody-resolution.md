@@ -419,7 +419,10 @@ so the recalculated journals are stored in the same transaction.
 For a simple legacy pair blocked by
 `legacy_pair_fee_allocation_review_required`, cases offer `repair_legacy_pair`
 with the same `pair_id`, `expected_fingerprint`, and `reason` fields. Preview
-rebuilds the pair through the current authoring service in memory; explicit
+rebuilds the pair through the current authoring service in memory. Its
+`before` and `after` effects list the pair's legs and allocations in msat under
+`legacy_pairs`, so the changed source debit and residual are visible before
+consent; explicit
 apply appends the corrected component revision and the reason to its note.
 The fingerprint and input version must still match and the legacy hold must
 still exist. This revision operation is local CLI only; the AI boundary refuses

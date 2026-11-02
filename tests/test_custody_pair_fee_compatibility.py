@@ -168,6 +168,16 @@ def test_legacy_pair_repair_is_read_only_in_preview_then_explicit_and_version_bo
         assert _authored(conn) == before
         assert all(item["reason"] != "custody_component_authored_active_invalid"
                    for item in plan["after"]["quarantines"])
+        # The preview names the revised amounts, not only a journal digest.
+        def amounts(side):
+            terms, = plan[side]["legacy_pairs"]
+            assert terms["pair_id"] == operation["pair_id"]
+            return ({leg["role"]: leg["amount_msat"] for leg in terms["legs"]},
+                    {(row["source"], row["sink"]): row["source_amount_msat"] for row in terms["allocations"]})
+        assert amounts("before") == ({"source": 1000, "destination": 900, "fee": 10, "suspense": 90},
+                                     {("source", "destination"): 900, ("source", "fee"): 10, ("source", "suspense"): 90})
+        assert amounts("after") == ({"source": 1010, "destination": 900, "fee": 10, "suspense": 100},
+                                    {("source", "destination"): 900, ("source", "fee"): 10, ("source", "suspense"): 100})
         stale = {**operation, "expected_fingerprint": "stale"}
         with pytest.raises(AppError) as raised:
             review.plan_review(conn, profile, operations=[stale],
