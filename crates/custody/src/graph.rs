@@ -154,25 +154,45 @@ impl RawText {
             .iter()
             .rev()
             .find_map(|(k, v)| match k {
-                kassiber_pyjson::Key::Str(k) if k.as_str() == Some(key) => Some(v),
+                // Equal bytes are valid UTF-8, as `key` is.
+                kassiber_pyjson::Key::Str(k) if k.is(key) => Some(v),
                 _ => None,
             })
             .map_or(Cow::Borrowed(&NULL), |v| Cow::Owned(decoded(v)))
     }
 }
 
+type RawEntry = (std::sync::Arc<str>, std::sync::Arc<RawText>);
 thread_local! {
-    static RAW_TEXTS: std::cell::RefCell<crate::fxhash::HashMap<String, std::sync::Arc<RawText>>> =
+    static RAW_TEXTS: std::cell::RefCell<crate::fxhash::HashMap<std::sync::Arc<str>, std::sync::Arc<RawText>>> =
+        std::cell::RefCell::new(Default::default());
+    /// The entry last found at a text's address. A hit still compares the
+    /// text, so a reused address cannot return another text's entry.
+    static RAW_ADDRESSES: std::cell::RefCell<crate::fxhash::HashMap<usize, RawEntry>> =
         std::cell::RefCell::new(Default::default());
 }
 
 /// The operation's loaded raw text `text`, shared by every reader.
 pub(crate) fn raw_text(text: &str) -> std::sync::Arc<RawText> {
-    if let Some(hit) = RAW_TEXTS.with(|m| m.borrow().get(text).cloned()) {
+    let address = text.as_ptr() as usize;
+    if let Some(hit) = RAW_ADDRESSES.with(|m| {
+        m.borrow()
+            .get(&address)
+            .filter(|(known, _)| **known == *text)
+            .map(|(_, entry)| entry.clone())
+    }) {
         return hit;
     }
-    let entry = std::sync::Arc::new(RawText::new(text));
-    RAW_TEXTS.with(|m| m.borrow_mut().insert(text.to_owned(), entry.clone()));
+    let (key, entry) = RAW_TEXTS.with(|m| {
+        if let Some((key, entry)) = m.borrow().get_key_value(text) {
+            return (key.clone(), entry.clone());
+        }
+        let key: std::sync::Arc<str> = text.into();
+        let entry = std::sync::Arc::new(RawText::new(text));
+        m.borrow_mut().insert(key.clone(), entry.clone());
+        (key, entry)
+    });
+    RAW_ADDRESSES.with(|m| m.borrow_mut().insert(address, (key, entry.clone())));
     entry
 }
 
@@ -335,6 +355,7 @@ pub(crate) fn record_scope(row: &crate::snapshot::Record) -> Scope {
 
 /// Releases memoized scopes at the end of an operation.
 pub(crate) fn clear_scopes() {
+    RAW_ADDRESSES.with(|m| m.borrow_mut().clear());
     RAW_TEXTS.with(|m| m.borrow_mut().clear());
     SCOPES.with(|m| m.borrow_mut().clear());
     SCOPE_ROWS.with(|m| m.borrow_mut().clear());

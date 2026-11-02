@@ -26,6 +26,17 @@ fn amount(value: &Value) -> Result<BigInt, Error> {
 }
 
 fn quoted(value: &str, out: &mut String) {
+    // Printable ASCII other than quote and backslash is written as is.
+    if value
+        .bytes()
+        .all(|b| matches!(b, 0x20..=0x7e) && b != b'"' && b != b'\\')
+    {
+        out.reserve(value.len() + 2);
+        out.push('"');
+        out.push_str(value);
+        out.push('"');
+        return;
+    }
     kassiber_pyjson::dumps_str_into(value, &Options::new().ensure_ascii(false), out);
 }
 
@@ -396,5 +407,35 @@ mod tests {
         let actual = Commitment::build(&row, &key, Some(Py::Null)).err().unwrap();
         assert_eq!(actual.code, expected.code);
         assert_eq!(actual.message, expected.message);
+    }
+}
+
+#[cfg(test)]
+mod quoting_tests {
+    use super::*;
+
+    #[test]
+    fn quoted_strings_match_the_encoder() {
+        for text in [
+            "",
+            "plain text",
+            "a\"b",
+            "a\\b",
+            "tab\tx",
+            "\u{7f}",
+            "é",
+            "\u{1f600}",
+            "~ !",
+        ] {
+            let mut fast = String::new();
+            quoted(text, &mut fast);
+            let mut slow = String::new();
+            kassiber_pyjson::dumps_str_into(text, &Options::new().ensure_ascii(false), &mut slow);
+            assert_eq!(fast, slow, "{text:?}");
+        }
+        assert_eq!(
+            codec::sha256("abc"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
     }
 }

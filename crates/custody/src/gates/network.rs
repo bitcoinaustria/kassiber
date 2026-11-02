@@ -26,6 +26,16 @@ impl Payload {
             // Serde structs accept positional arrays, while the historical
             // object reader treats every non-object payload as an empty map.
             SqlValue::Text(s) if !s.trim_start().starts_with('{') => Self::default(),
+            // Every field name contains "chain", "network" or "source"; a text
+            // without them or escapes names none of the fields.
+            SqlValue::Text(s)
+                if !s.contains('\\')
+                    && !["chain", "network", "source"]
+                        .iter()
+                        .any(|name| s.contains(name)) =>
+            {
+                Self::default()
+            }
             SqlValue::Text(s) => serde_json::from_str(s).unwrap_or_else(|_| {
                 serde_json::from_value(crate::codec::object(&value.json())).unwrap_or_default()
             }),

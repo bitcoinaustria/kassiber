@@ -24115,6 +24115,36 @@
     "rule": "Only text without uppercase letters lowercases to itself."
   },
   {
+    "id": "quoted-fast-quote",
+    "file": "crates/custody/src/evidence/observation.rs",
+    "find": "        .all(|b| matches!(b, 0x20..=0x7e) && b != b'\"' && b != b'\\\\')",
+    "replace": "        .all(|b| matches!(b, 0x20..=0x7e) && b != b'\\\\')",
+    "expect_failing": [
+      "quoted_strings_match_the_encoder"
+    ],
+    "rule": "Quotes are escaped even on the plain-text path."
+  },
+  {
+    "id": "sha256-hex-nibble",
+    "file": "crates/custody/src/codec.rs",
+    "find": "        hex.push(char::from(HEX[usize::from(byte >> 4)]));",
+    "replace": "        hex.push(char::from(HEX[usize::from(byte & 0xf)]));",
+    "expect_failing": [
+      "quoted_strings_match_the_encoder"
+    ],
+    "rule": "Digests are written high nibble first."
+  },
+  {
+    "id": "raw-field-key-match",
+    "file": "crates/custody/src/graph.rs",
+    "find": "                kassiber_pyjson::Key::Str(k) if k.is(key) => Some(v),",
+    "replace": "                kassiber_pyjson::Key::Str(k) if !k.is(key) => Some(v),",
+    "expect_failing": [
+      "raw_fields_match_decoded_objects"
+    ],
+    "rule": "A raw field reads the entry with its key."
+  },
+  {
     "id": "R4-evidence-alias-slot-index",
     "file": "crates/custody/src/evidence.rs",
     "find": "selected[*index] = keeper;",

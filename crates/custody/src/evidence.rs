@@ -30,7 +30,19 @@ pub struct EventKey {
 }
 impl EventKey {
     pub fn value(&self) -> Value {
-        json!({"$type":"CanonicalEventKey", "chain":self.chain, "network":self.network, "native_namespace":self.native_namespace, "native_event_id":self.native_event_id})
+        let mut value = serde_json::Map::new();
+        value.insert("$type".into(), Value::String("CanonicalEventKey".into()));
+        value.insert("chain".into(), Value::String(self.chain.clone()));
+        value.insert("network".into(), Value::String(self.network.clone()));
+        value.insert(
+            "native_namespace".into(),
+            Value::String(self.native_namespace.clone()),
+        );
+        value.insert(
+            "native_event_id".into(),
+            Value::String(self.native_event_id.clone()),
+        );
+        Value::Object(value)
     }
     pub fn payload(&self) -> Value {
         let mut v = self.value();
@@ -990,7 +1002,6 @@ fn canonical_event<F: Fields>(
         legs.push(observations[keeper].leg(&key_value));
     }
     let mut aliases = Vec::with_capacity(observations.len());
-    let mut snapshots = BTreeMap::new();
     let mut ids = BTreeSet::new();
     for (index, item) in observations.iter().enumerate() {
         aliases.push((
@@ -1001,26 +1012,32 @@ fn canonical_event<F: Fields>(
                 .as_str(),
         ));
         ids.insert(item.transaction_id.as_ref());
-        snapshots.insert(item.commitment.detail_hash.as_str(), &item.commitment);
     }
     aliases.sort();
     let string = |value: &str| Value::String(value.to_owned());
-    let snapshots = snapshots
-        .into_values()
-        .map(|item| {
-            let mut snapshot = serde_json::Map::new();
-            snapshot.insert("$type".into(), string("EvidenceSnapshot"));
-            snapshot.insert("detail_hash".into(), string(&item.detail_hash));
-            snapshot.insert("payload_json".into(), string(&item.payload_json));
-            snapshot.insert("quantity_hash".into(), string(&item.quantity_hash));
-            Value::Object(snapshot)
-        })
-        .collect();
     let aliases = aliases
         .into_iter()
         .map(|(id, hash)| Value::Array(vec![string(id), string(hash)]))
         .collect();
     let ids = ids.into_iter().map(string).collect();
+    // The commitments move into the snapshots; a later one with the same
+    // detail hash replaces an earlier one.
+    let mut snapshots = BTreeMap::new();
+    for item in observations {
+        let commitment = item.commitment;
+        snapshots.insert(commitment.detail_hash.clone(), commitment);
+    }
+    let snapshots = snapshots
+        .into_values()
+        .map(|item| {
+            let mut snapshot = serde_json::Map::new();
+            snapshot.insert("$type".into(), string("EvidenceSnapshot"));
+            snapshot.insert("detail_hash".into(), Value::String(item.detail_hash));
+            snapshot.insert("payload_json".into(), Value::String(item.payload_json));
+            snapshot.insert("quantity_hash".into(), Value::String(item.quantity_hash));
+            Value::Object(snapshot)
+        })
+        .collect();
     Ok(Ok(canonical::Event::new(
         key, key_value, legs, snapshots, ids, aliases,
     )))

@@ -264,6 +264,17 @@ pub fn dumps_str_into(text: &str, options: &Options, out: &mut String) {
     *out = encoder.out;
 }
 
+/// Bytes written as themselves: printable ASCII other than '"' and '\\'.
+static PLAIN: [bool; 256] = {
+    let mut plain = [false; 256];
+    let mut byte = 0x20;
+    while byte <= 0x7E {
+        plain[byte] = byte != b'"' as usize && byte != b'\\' as usize;
+        byte += 1;
+    }
+    plain
+};
+
 struct Encoder<'a> {
     options: &'a Options,
     indent: Option<&'a str>,
@@ -486,16 +497,14 @@ impl Encoder<'_> {
 
     /// [`Self::string`] over generalized UTF-8 bytes.
     fn string_bytes(&mut self, bytes: &[u8]) {
+        self.out.reserve(bytes.len() + 2);
         self.out.push('"');
         // Printable ASCII other than '"' and '\\' is written as is under both
         // options; copy such runs whole and encode everything else per point.
         let mut at = 0;
         while at < bytes.len() {
             let start = at;
-            while at < bytes.len()
-                && matches!(bytes[at], 0x20..=0x7E)
-                && !matches!(bytes[at], b'"' | b'\\')
-            {
+            while at < bytes.len() && PLAIN[usize::from(bytes[at])] {
                 at += 1;
             }
             if at > start {
@@ -503,10 +512,23 @@ impl Encoder<'_> {
                     .push_str(core::str::from_utf8(&bytes[start..at]).expect("ASCII run"));
             }
             if at < bytes.len() {
-                let mut points = PyStr::code_points_of(&bytes[at..]);
-                let point = points.next().expect("whole code point");
-                at = bytes.len() - points.rest_len();
-                self.point(point);
+                // The two escaped ASCII characters need no code point decoding.
+                match bytes[at] {
+                    b'"' => {
+                        self.out.push_str("\\\"");
+                        at += 1;
+                    }
+                    b'\\' => {
+                        self.out.push_str("\\\\");
+                        at += 1;
+                    }
+                    _ => {
+                        let mut points = PyStr::code_points_of(&bytes[at..]);
+                        let point = points.next().expect("whole code point");
+                        at = bytes.len() - points.rest_len();
+                        self.point(point);
+                    }
+                }
             }
         }
         self.out.push('"');

@@ -383,7 +383,15 @@ pub fn hash(v: &Value, ascii: bool) -> Result<(String, String), String> {
     }
 }
 pub fn sha256(text: &str) -> String {
-    format!("{:x}", Sha256::digest(text.as_bytes()))
+    // Lowercase hex, as `{:x}` writes the digest.
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let digest = Sha256::digest(text.as_bytes());
+    let mut hex = String::with_capacity(2 * digest.len());
+    for byte in digest {
+        hex.push(char::from(HEX[usize::from(byte >> 4)]));
+        hex.push(char::from(HEX[usize::from(byte & 0xf)]));
+    }
+    hex
 }
 
 /// Python accepts nonfinite constants, unbounded ints and lone surrogates.
