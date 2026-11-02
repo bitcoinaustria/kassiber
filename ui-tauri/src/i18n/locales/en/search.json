@@ -112,5 +112,17 @@
     "connectionNetworkPhrases": [
       "{{network}} wallet"
     ]
+  },
+  "review": {
+    "journals": {
+      "title": "Journals need processing",
+      "subtitle": "Reports are stale until the journals are processed",
+      "action": "Process journals"
+    },
+    "queue": {
+      "title": "Review",
+      "subtitle_one": "{{count}} left to review",
+      "subtitle_other": "{{count}} left to review"
+    }
   }
 }

@@ -730,11 +730,9 @@
       "transfers_other": "{{count}} Transfers zuzuordnen",
       "journals": "Journale müssen verarbeitet werden",
       "process": "Verarbeiten",
-      "summary_one": "{{count}} Ursache braucht Sie",
-      "summary_other": "{{count}} Ursachen brauchen Sie",
       "waiting_one": "{{count}} wartet",
       "waiting_other": "{{count}} warten",
-      "openPage": "Quarantäne öffnen"
+      "openPage": "Review öffnen"
     },
     "changes": {
       "loading": "Letzte Änderungen werden geladen",

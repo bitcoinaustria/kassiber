@@ -319,9 +319,50 @@ describe("review transfers", () => {
   it("renders nothing when there is nothing to decide", async () => {
     daemon.candidates = [];
     mount();
+    // The heading holds the place while the list loads, then goes.
     await waitFor(() =>
       expect(daemon.calls.some((call) => call.kind === "ui.transfers.suggest")).toBe(true),
     );
-    expect(screen.queryByRole("heading", { name: /Moves between your wallets/ })).toBeNull();
+    await waitFor(() =>
+      expect(screen.queryByRole("heading", { name: /Moves between your wallets/ })).toBeNull(),
+    );
+  });
+});
+
+describe("what each row shows", () => {
+  it("names a transfer, a Bitcoin swap and a taxable swap, each leg on its rail", async () => {
+    daemon.candidates = [
+      candidate("a"),
+      candidate("b", { in_asset: "LBTC", in_wallet_kind: "liquid", default_kind: "peg-in" }),
+      candidate("c", { in_asset: "USDT", candidate_type: "swap", default_kind: "manual", default_policy: "taxable" }),
+    ];
+    mount();
+    await waitFor(() => expect(rows()).toHaveLength(3));
+    const [transfer, peg, swap] = rows();
+    expect(within(transfer).getByText("Transfer")).toBeTruthy();
+    expect(within(transfer).queryByText("Tax-neutral")).toBeNull();
+    expect(within(peg).getByText("Bitcoin swap")).toBeTruthy();
+    expect(within(peg).getByText("Tax-neutral")).toBeTruthy();
+    expect(within(peg).getByTitle("Liquid")).toBeTruthy();
+    expect(within(swap).getByText("Swap")).toBeTruthy();
+    expect(within(swap).getByText("Taxable")).toBeTruthy();
+    expect(within(transfer).getByText("₿ 0.05000000")).toBeTruthy();
+    // Another asset is shown in its own unit, never as bitcoin.
+    expect(within(swap).getByText("0.0499 USDT")).toBeTruthy();
+  });
+
+  it("shows one amount and its fee, and what arrived when more came in than left", async () => {
+    daemon.candidates = [
+      candidate("a"),
+      candidate("b", { in_amount_msat: 5_010_000_000, swap_fee_msat: -10_000_000 }),
+    ];
+    mount();
+    await waitFor(() => expect(rows()).toHaveLength(2));
+    const [transfer, excess] = rows();
+    expect(within(transfer).getByText("fee 10,000 sats")).toBeTruthy();
+    expect(within(transfer).queryByText("₿ 0.04990000")).toBeNull();
+    // A negative fee is never shown as a fee: the larger arrival is in view.
+    expect(within(excess).getByText("₿ 0.05010000")).toBeTruthy();
+    expect(within(excess).queryByText(/fee/)).toBeNull();
   });
 });

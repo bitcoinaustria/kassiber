@@ -516,7 +516,8 @@
       "shownOf": "{{shown}} of {{total}} shown",
       "showMoreRows": "Show more",
       "showMoreRowsOf": "Show more of “{{cause}}”",
-      "showFewerRowsOf": "Show fewer of “{{cause}}”"
+      "showFewerRowsOf": "Show fewer of “{{cause}}”",
+      "aboutLabel": "About “{{cause}}”"
     },
     "queue": {
       "waitsOn": "Waits on {{root}}",
@@ -602,12 +603,12 @@
     "price": {
       "enter": "Enter prices",
       "enterExact": "Enter exact prices",
-      "hint": "Type what each receipt says, in {{currency}}. Rows left empty stay as they are.",
-      "hintNoCurrency": "Type what each receipt says, in the book's currency. Rows left empty stay as they are.",
+      "hint": "In {{currency}}. Empty rows stay as they are.",
+      "hintNoCurrency": "In the book's currency. Empty rows stay as they are.",
       "unitLabel": "What you enter",
       "unitValue": "Total value",
       "unitRate": "Price per {{asset}}",
-      "inputLabel": "Price for {{row}}, in {{currency}}",
+      "inputLabel": "{{unit}} for {{row}}, in {{currency}}",
       "preview_one": "Check {{count}} price",
       "preview_other": "Check {{count}} prices",
       "invalid_one": "{{count}} price is not a number above zero. Fix or clear it.",
@@ -622,7 +623,7 @@
       "applying": "Saving…",
       "doneTitle_one": "{{count}} price saved",
       "doneTitle_other": "{{count}} prices saved",
-      "inputLabelNoCurrency": "Price for {{row}}, in the book currency",
+      "inputLabelNoCurrency": "{{unit}} for {{row}}, in the book currency",
       "listLabel": "Prices to save",
       "lineValue": "{{value}} {{currency}} total",
       "lineRate": "{{value}} {{currency}} per {{asset}}"

@@ -1,11 +1,14 @@
 import * as React from "react";
 import { Link } from "@tanstack/react-router";
-import { ArrowRight, ArrowUpRight, Loader2 } from "lucide-react";
+import { ArrowLeftRight, ArrowRight, ArrowUpRight, Check, Loader2, Repeat, Shuffle, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { ReviewTaxDeltaView } from "@/components/ai/ReviewWorkflowCard";
 import { reviewArtifact, type ReviewArtifact } from "@/components/ai/reviewWorkflow";
 import type { ProfilesSnapshot } from "@/mocks/profiles";
+import { RailIcon } from "@/components/kb/BitcoinRail";
+import { railForLeg, type SwapRail } from "@/lib/bitcoinRail";
+import { InfoNote } from "@/components/reports/InfoNote";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -17,14 +20,16 @@ import {
 } from "@/components/ui/dialog";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { formatShortDate } from "@/lib/date";
-import { formatSats } from "@/lib/localeFormat";
+import { formatBtc } from "@/lib/currency";
+import { formatSats, formatUiNumber } from "@/lib/localeFormat";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
 
 import {
   bulkPairable,
   candidateKey,
-  isSameAsset,
+  DISMISS_REASON,
+  moveType,
   type TransferCandidate,
   type TransferSuggestions,
 } from "./transferModel";
@@ -42,6 +47,14 @@ type Decision =
 type Undo = { decisions: Decision[]; label: string; deadline: number };
 
 const sats = (msat: number) => formatSats(Math.round(Math.abs(msat) / 1000));
+const BITCOIN_ASSETS = new Set(["BTC", "XBT", "XXBT", "LBTC", "L-BTC"]);
+/** A leg's amount: ₿ for bitcoin on any rail, the asset's own unit otherwise. */
+function legAmount(msat: number, asset: string) {
+  // Every asset is stored at msat scale: 10^11 per whole unit.
+  const quantity = Math.abs(msat) / 100_000_000_000;
+  if (BITCOIN_ASSETS.has(asset.toUpperCase())) return formatBtc(quantity);
+  return `${formatUiNumber(quantity, { maximumFractionDigits: 8 })} ${asset}`;
+}
 
 /**
  * Moves the matcher thinks went between the owner's own wallets. Each is
@@ -214,7 +227,7 @@ export function ReviewTransfers({
         const envelope = await dismiss.mutateAsync({
           tx_out: candidate.out_id,
           tx_in: candidate.in_id,
-          reason: t("swap.dismissReason"),
+          reason: DISMISS_REASON,
         });
         const id = envelope.data?.id;
         setUndo(
@@ -311,7 +324,17 @@ export function ReviewTransfers({
     }
   };
 
-  if (suggest.isLoading) return null;
+  if (suggest.isLoading) {
+    // Holds the place, so the causes below do not jump down when it loads.
+    return (
+      <section className="space-y-3" aria-busy="true" aria-labelledby="review-transfers-title">
+        <h2 id="review-transfers-title" className="text-sm font-semibold">
+          {t("inbox.transfers.title")}
+        </h2>
+        <div className="kb-surface h-20 animate-pulse motion-reduce:animate-none" />
+      </section>
+    );
+  }
   if (suggest.isError || suggest.data?.error) {
     return (
       <section className="kb-surface p-(--kb-card-padding)" role="alert">
@@ -324,8 +347,8 @@ export function ReviewTransfers({
 
   return (
     <section className="space-y-3" aria-labelledby="review-transfers-title">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 space-y-0.5">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-2">
           <h2
             id="review-transfers-title"
             ref={headingRef}
@@ -339,7 +362,11 @@ export function ReviewTransfers({
               </span>
             ) : null}
           </h2>
-          <p className="text-xs text-muted-foreground">{t("inbox.transfers.why")}</p>
+          {/* Beside the heading, not in it, so the heading's name stays its title. */}
+          <InfoNote
+            label={t("inbox.transfers.aboutLabel")}
+            notes={[t("inbox.transfers.why"), t("inbox.transfers.policyNote")]}
+          />
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           {/* While the journals recalculate the daemon could pair more than
@@ -380,72 +407,17 @@ export function ReviewTransfers({
       </p>
 
       {candidates.length ? (
-        <ul ref={listRef} id="review-transfers-list" className="kb-surface divide-y overflow-hidden">
-          {shown.map((candidate) => {
-            const key = candidateKey(candidate);
-            const sameAsset = isSameAsset(candidate);
-            return (
-              <li key={key} className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:gap-4">
-                <div className="min-w-0 flex-1 space-y-0.5">
-                  <p className={cn("flex min-w-0 items-center gap-1.5 text-sm", hideSensitive && "sensitive")}>
-                    <span className="truncate">{candidate.out_wallet_label}</span>
-                    <ArrowRight className="size-3.5 shrink-0 text-muted-foreground" aria-label={t("inbox.transfers.to")} />
-                    <span className="truncate">{candidate.in_wallet_label}</span>
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    <span className={cn(hideSensitive && "sensitive")}>
-                      {formatShortDate(candidate.out_occurred_at)} ·{" "}
-                      {sameAsset
-                        ? sats(candidate.out_amount_msat)
-                        : `${sats(candidate.out_amount_msat)} ${candidate.out_asset} → ${sats(candidate.in_amount_msat)} ${candidate.in_asset}`}
-                      {candidate.swap_fee_msat
-                        ? ` · ${t("inbox.transfers.fee", { amount: sats(candidate.swap_fee_msat) })}`
-                        : ""}
-                    </span>
-                    {" · "}
-                    {candidate.method === "ownership_graph"
-                      ? t("inbox.transfers.evidence.ownership")
-                      : candidate.confidence === "exact"
-                        ? t("inbox.transfers.evidence.exact")
-                        : t("inbox.transfers.evidence.likely")}
-                    {candidate.conflict_size > 1
-                      ? ` · ${t("inbox.transfers.competing", { count: candidate.conflict_size - 1 })}`
-                      : ""}
-                  </p>
-                </div>
-                <div className="flex shrink-0 items-center gap-1.5">
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => void decide(candidate, "pair")}
-                    aria-label={t("inbox.transfers.pairLabel", { route: route(candidate) })}
-                  >
-                    {t("inbox.transfers.pair")}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => void decide(candidate, "dismiss")}
-                    aria-label={t("inbox.transfers.dismissLabel", { route: route(candidate) })}
-                  >
-                    {t("inbox.transfers.dismiss")}
-                  </Button>
-                  <Button asChild type="button" size="sm" variant="ghost">
-                    <Link
-                      to="/swaps"
-                      search={{
-                        focus: candidate.out_id,
-                        mode: candidate.candidate_type === "swap" ? "swaps" : "transfers",
-                      }}
-                      aria-label={t("inbox.transfers.detailsLabel", { route: route(candidate) })}>
-                      {t("inbox.transfers.details")}
-                    </Link>
-                  </Button>
-                </div>
-              </li>
-            );
-          })}
+        <ul ref={listRef} id="review-transfers-list" className="kb-surface @container/moves divide-y overflow-hidden">
+          {shown.map((candidate) => (
+            <CandidateRow
+              key={candidateKey(candidate)}
+              candidate={candidate}
+              hideSensitive={hideSensitive}
+              routeLabel={route(candidate)}
+              onPair={() => void decide(candidate, "pair")}
+              onDismiss={() => void decide(candidate, "dismiss")}
+            />
+          ))}
         </ul>
       ) : null}
       {candidates.length > SHOWN ? (
@@ -457,9 +429,10 @@ export function ReviewTransfers({
           aria-controls="review-transfers-list"
           onClick={() => setExpanded((value) => !value)}
         >
+          {/* Worded like the causes' fold below, so one screen folds one way. */}
           {expanded
             ? t("inbox.transfers.showFewer")
-            : t("inbox.transfers.showAll", { count: candidates.length })}
+            : t("inbox.transfers.showMore", { count: candidates.length - SHOWN })}
         </Button>
       ) : null}
 
@@ -485,5 +458,195 @@ export function ReviewTransfers({
         </DialogContent>
       </Dialog>
     </section>
+  );
+}
+
+/** A side of the route: the rail's logo and the wallet. */
+function RouteSide({ wallet, rail, hideSensitive }: { wallet: string; rail: SwapRail; hideSensitive: boolean }) {
+  return (
+    <span className="flex min-w-0 items-center gap-1.5">
+      <RailIcon rail={rail} size="compact" />
+      <span
+        className={cn("truncate text-sm", hideSensitive && "sensitive")}
+        title={hideSensitive ? undefined : wallet}
+      >
+        {wallet}
+      </span>
+    </span>
+  );
+}
+
+const SWAP_TONE = {
+  bitcoinSwap: "border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-400/30 dark:bg-sky-950/40 dark:text-sky-100",
+  swap: "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-400/30 dark:bg-amber-950/40 dark:text-amber-100",
+} as const;
+
+const TYPE_ICON = { transfer: ArrowLeftRight, bitcoinSwap: Repeat, swap: Shuffle } as const;
+
+/**
+ * A candidate as one row of a table, so every row puts the same thing at the
+ * same place: the date, the route between the two wallets with their rails'
+ * logos, the amount, what pairing records (a plain transfer quietly, a swap
+ * as a chip with its tax treatment) with how sure the match is, and Pair, set
+ * aside or open it in the matching tools.
+ *
+ * Sized by the list, not the window, so a docked assistant narrowing the page
+ * gets the narrow layout: two lines, the route and amount above the date,
+ * kind and buttons, with the same edges in every row.
+ */
+function CandidateRow({
+  candidate,
+  hideSensitive,
+  routeLabel,
+  onPair,
+  onDismiss,
+}: {
+  candidate: TransferCandidate;
+  hideSensitive: boolean;
+  routeLabel: string;
+  onPair: () => void;
+  onDismiss: () => void;
+}) {
+  const { t } = useTranslation("review");
+  const type = moveType(candidate);
+  const TypeIcon = TYPE_ICON[type];
+  // Only a known treatment gets a chip; an unknown one is never shown as tax-neutral.
+  const policy =
+    candidate.default_policy === "carrying-value" ? "carrying" : candidate.default_policy === "taxable" ? "taxable" : null;
+  const carries = policy === "carrying";
+  const evidence =
+    candidate.method === "ownership_graph" ? "ownership" : candidate.confidence === "exact" ? "exact" : "likely";
+  // Both sides of a move in one asset differ by its fee, so one amount and
+  // the fee say it. Another asset arriving, or no positive fee (more came in
+  // than left, which needs a look before pairing), shows what arrived too.
+  const bitcoin = (asset: string) => BITCOIN_ASSETS.has(asset.toUpperCase());
+  const sameAsset =
+    bitcoin(candidate.out_asset) === bitcoin(candidate.in_asset) &&
+    (bitcoin(candidate.out_asset) || candidate.out_asset.toUpperCase() === candidate.in_asset.toUpperCase());
+  const showReceived = !sameAsset || candidate.swap_fee_msat <= 0;
+  return (
+    <li className="grid grid-cols-[auto_minmax(0,1fr)_minmax(9rem,auto)] items-center gap-x-3 gap-y-1 px-3 py-2 @min-[60rem]/moves:grid-cols-[auto_minmax(0,1fr)_minmax(9rem,auto)_10rem_auto] @min-[60rem]/moves:gap-x-4">
+      <span
+        className={cn(
+          "col-start-1 row-start-2 text-2xs whitespace-nowrap text-muted-foreground tabular-nums @min-[60rem]/moves:row-start-1 @min-[60rem]/moves:text-xs",
+          hideSensitive && "sensitive",
+        )}
+      >
+        {formatShortDate(candidate.out_occurred_at)}
+      </span>
+      <span className="col-span-2 col-start-1 row-start-1 grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 @min-[60rem]/moves:col-span-1 @min-[60rem]/moves:col-start-2">
+        <RouteSide
+          wallet={candidate.out_wallet_label}
+          rail={railForLeg(candidate.out_asset, candidate.out_wallet_kind)}
+          hideSensitive={hideSensitive}
+        />
+        <ArrowRight className="size-3.5 text-muted-foreground" aria-label={t("inbox.transfers.to")} />
+        <RouteSide
+          wallet={candidate.in_wallet_label}
+          rail={railForLeg(candidate.in_asset, candidate.in_wallet_kind)}
+          hideSensitive={hideSensitive}
+        />
+      </span>
+      <span className="col-start-3 row-start-1 text-right leading-tight">
+        <span
+          className={cn(
+            // Set like the amounts in the cause cards below.
+            "block text-sm whitespace-nowrap tabular-nums",
+            hideSensitive && "sensitive",
+          )}
+        >
+          {legAmount(candidate.out_amount_msat, candidate.out_asset)}
+        </span>
+        {showReceived ? (
+          <span className="block text-2xs whitespace-nowrap text-muted-foreground tabular-nums">
+            <span aria-hidden="true">→ </span>
+            <span className="sr-only">{t("inbox.transfers.to")} </span>
+            <span className={cn(hideSensitive && "sensitive")}>{legAmount(candidate.in_amount_msat, candidate.in_asset)}</span>
+          </span>
+        ) : (
+          <span className={cn("block text-2xs whitespace-nowrap text-muted-foreground tabular-nums", hideSensitive && "sensitive")}>
+            {t("inbox.transfers.fee", {
+              amount: bitcoin(candidate.out_asset)
+                ? sats(candidate.swap_fee_msat)
+                : legAmount(candidate.swap_fee_msat, candidate.out_asset),
+            })}
+          </span>
+        )}
+      </span>
+      <span className="col-start-2 row-start-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs @min-[60rem]/moves:col-start-4 @min-[60rem]/moves:row-start-1">
+        {type === "transfer" ? (
+          <span className="inline-flex items-center gap-1 text-muted-foreground">
+            <TypeIcon className="size-3" aria-hidden="true" />
+            {t("inbox.transfers.type.transfer")}
+          </span>
+        ) : (
+          <span className={cn("inline-flex items-center gap-1 rounded-full border px-1.5 leading-4 font-medium", SWAP_TONE[type])}>
+            <TypeIcon className="size-3" aria-hidden="true" />
+            {t(`inbox.transfers.type.${type}`)}
+          </span>
+        )}
+        {type === "transfer" || !policy ? null : (
+          <span
+            className={cn(
+              "rounded-full border px-1.5 leading-4 font-medium",
+              carries
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-400/30 dark:bg-emerald-950/40 dark:text-emerald-100"
+                : "border-red-200 bg-red-50 text-red-800 dark:border-red-400/30 dark:bg-red-950/40 dark:text-red-100",
+            )}
+            title={carries ? t("inbox.transfers.policy.carryingHint") : t("inbox.transfers.policy.taxableHint")}
+          >
+            {carries ? t("inbox.transfers.policy.carrying") : t("inbox.transfers.policy.taxable")}
+          </span>
+        )}
+        <span className="inline-flex items-center gap-1 text-muted-foreground">
+          <span
+            className={cn(
+              "size-1.5 rounded-full",
+              evidence === "likely" ? "bg-amber-500" : evidence === "exact" ? "bg-emerald-500" : "bg-sky-500",
+            )}
+            aria-hidden="true"
+          />
+          {t(`inbox.transfers.evidenceShort.${evidence}`)}
+        </span>
+        {candidate.conflict_size > 1 ? (
+          <span className="text-amber-700 dark:text-amber-300">
+            {t("inbox.transfers.competing", { count: candidate.conflict_size - 1 })}
+          </span>
+        ) : null}
+      </span>
+      <span className="col-start-3 row-start-2 flex items-center justify-end gap-0.5 @min-[60rem]/moves:col-start-5 @min-[60rem]/moves:row-start-1">
+        <Button
+          type="button"
+          size="sm"
+          className="h-7 gap-1 px-2.5 text-xs"
+          onClick={onPair}
+          aria-label={t("inbox.transfers.pairLabel", { route: routeLabel })}
+        >
+          <Check className="size-3.5" aria-hidden="true" />
+          {t("inbox.transfers.pair")}
+        </Button>
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          className="size-7"
+          onClick={onDismiss}
+          title={t("inbox.transfers.dismiss")}
+          aria-label={t("inbox.transfers.dismissLabel", { route: routeLabel })}
+        >
+          <X className="size-3.5" aria-hidden="true" />
+        </Button>
+        <Button asChild type="button" size="icon" variant="ghost" className="size-7">
+          <Link
+            to="/swaps"
+            search={{ focus: candidate.out_id, mode: candidate.candidate_type === "swap" ? "swaps" : "transfers" }}
+            title={t("inbox.transfers.details")}
+            aria-label={t("inbox.transfers.detailsLabel", { route: routeLabel })}
+          >
+            <ArrowUpRight className="size-3.5" aria-hidden="true" />
+          </Link>
+        </Button>
+      </span>
+    </li>
   );
 }

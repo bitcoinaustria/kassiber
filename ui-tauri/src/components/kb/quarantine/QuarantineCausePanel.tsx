@@ -1,9 +1,10 @@
 import * as React from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { AlertTriangle, ArrowRight, Loader2, RefreshCw, Sparkles } from "lucide-react";
+import { AlertTriangle, ArrowDownLeft, ArrowRight, ArrowUpRight, Loader2, RefreshCw, Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { useAskAssistantAbout } from "@/components/ai/useAskAssistantAbout";
+import { InfoNote } from "@/components/reports/InfoNote";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -52,6 +53,8 @@ import type {
   QuarantineSnapshot,
 } from "./types";
 
+/** Actions whose button already says what to do, so the card need not spell it out. */
+const SELF_DESCRIBING_ACTIONS = new Set(["sync_wallet", "connect_wallet", "import_history", "set_price", "pair_transfer"]);
 /** Pairs or transactions a cause shows before the rest fold away. */
 const SHOWN_ROWS = 3;
 /** Cause cards shown before the rest fold away. */
@@ -532,6 +535,13 @@ function QuarantineCauseCard({
   const actions = (pairs.length ? group.actions.filter((action) => action.kind !== "review_pair") : group.actions)
     .filter((action) => !(priceRows.length && action.kind === "set_price"));
   const primaryTaken = Boolean(onAcceptPrices) || (priceRows.length > 0 && !entering);
+  // Spelled out where no button carries it, and where a pair decision needs
+  // its caution in view.
+  const provideInline =
+    pairs.length > 0 ||
+    (!onAcceptPrices &&
+      !priceRows.length &&
+      !(actions.length > 0 && actions.every((action) => SELF_DESCRIBING_ACTIONS.has(action.kind))));
   return (
     <li
       className={cn(
@@ -557,26 +567,35 @@ function QuarantineCauseCard({
             · {t("quarantine.causes.waitingShort", { count: group.downstream_count })}
           </span>
         ) : null}
+        {/* The buttons say what to do; the full instruction is one click away. */}
+        {provideInline ? null : (
+          <InfoNote
+            label={t("quarantine.causes.aboutLabel", { cause: copy.title })}
+            notes={[`${t("quarantine.causes.whatToDo")}: ${copy.provide}`]}
+          />
+        )}
       </div>
       <p
         className={cn(
-          "mt-1 max-w-3xl text-sm text-muted-foreground",
+          "mt-0.5 max-w-3xl text-sm text-muted-foreground",
           copy.whyQuotesAmounts && sensitiveClass(hideSensitive),
         )}
       >
         {copy.why}
       </p>
       {facts.length && !pairs.length ? (
-        <ul className="mt-2 list-disc space-y-0.5 pl-5 text-sm text-muted-foreground">
+        <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm text-muted-foreground">
           {facts.map((fact) => (
             <li key={fact}>{fact}</li>
           ))}
         </ul>
       ) : null}
-      <p className="mt-1 max-w-3xl text-sm">
-        <span className="font-medium">{t("quarantine.causes.whatToDo")}: </span>
-        {copy.provide}
-      </p>
+      {provideInline ? (
+        <p className="mt-1 max-w-3xl text-sm">
+          <span className="font-medium">{t("quarantine.causes.whatToDo")}: </span>
+          {copy.provide}
+        </p>
+      ) : null}
       {deprecated.map((wallet) => (
         <p key={wallet.id} className="mt-1 text-xs text-amber-700 dark:text-amber-300">
           {t("quarantine.panel.deprecatedWallet", { wallet: wallet.label })}
@@ -695,6 +714,12 @@ function QuarantineCauseCard({
       />
     </li>
   );
+}
+
+/** In red or green by direction; neutral while values are hidden, since the colour shows through the blur. */
+function directionTone(direction: string | undefined, hideSensitive: boolean) {
+  if (hideSensitive) return "text-muted-foreground";
+  return direction === "outbound" ? "text-red-700 dark:text-red-300" : "text-emerald-700 dark:text-emerald-300";
 }
 
 function PairLegLine({
@@ -885,6 +910,10 @@ function CauseTransactionList({
         (item, index) => index < SHOWN_ROWS || Boolean(priceEntry?.entries[item.transaction_id]?.trim()),
       );
   const currency = priceEntry?.currency ?? "";
+  const priceUnitLabel =
+    priceEntry?.unit === "rate"
+      ? t("quarantine.price.unitRate", { asset: priceEntry.asset })
+      : t("quarantine.price.unitValue");
   return (
     <div className="mt-3 border-t pt-2" data-testid="quarantine-cause-transactions">
       {priceEntry ? (
@@ -911,10 +940,27 @@ function CauseTransactionList({
               className="flex min-w-0 flex-1 items-center gap-3 rounded-sm py-2 text-left text-sm hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
               onClick={() => onOpen(item.transaction_id)}
             >
+              {item.direction === "outbound" ? (
+                <ArrowUpRight
+                  className={cn("size-3.5 shrink-0", directionTone(item.direction, hideSensitive), sensitiveClass(hideSensitive))}
+                  aria-hidden="true"
+                />
+              ) : (
+                <ArrowDownLeft
+                  className={cn("size-3.5 shrink-0", directionTone(item.direction, hideSensitive), sensitiveClass(hideSensitive))}
+                  aria-hidden="true"
+                />
+              )}
               <span className={cn("min-w-0 flex-1 truncate text-muted-foreground", sensitiveClass(hideSensitive))}>
                 {quarantineRowMeta(item)}
               </span>
-              <span className={cn("shrink-0 tabular-nums", sensitiveClass(hideSensitive))}>
+              <span
+                className={cn(
+                  "shrink-0 tabular-nums",
+                  directionTone(item.direction, hideSensitive),
+                  sensitiveClass(hideSensitive),
+                )}
+              >
                 {quarantineRowAmount(item)}
               </span>
               <ArrowRight className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -926,9 +972,17 @@ function CauseTransactionList({
                 className={cn("h-8 w-36 shrink-0 text-right tabular-nums", sensitiveClass(hideSensitive))}
                 placeholder={currency}
                 aria-label={
+                  // Names what is typed: a total or a price per unit.
                   currency
-                    ? t("quarantine.price.inputLabel", { row: quarantineRowMeta(item), currency })
-                    : t("quarantine.price.inputLabelNoCurrency", { row: quarantineRowMeta(item) })
+                    ? t("quarantine.price.inputLabel", {
+                        unit: priceUnitLabel,
+                        row: quarantineRowMeta(item),
+                        currency,
+                      })
+                    : t("quarantine.price.inputLabelNoCurrency", {
+                        unit: priceUnitLabel,
+                        row: quarantineRowMeta(item),
+                      })
                 }
                 aria-invalid={priceEntry.invalid.has(item.transaction_id) || undefined}
                 value={priceEntry.entries[item.transaction_id] ?? ""}

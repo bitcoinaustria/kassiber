@@ -730,11 +730,9 @@
       "transfers_other": "{{count}} transfers to match",
       "journals": "Journals need processing",
       "process": "Process",
-      "summary_one": "{{count}} cause needs you",
-      "summary_other": "{{count}} causes need you",
       "waiting_one": "{{count}} waiting",
       "waiting_other": "{{count}} waiting",
-      "openPage": "Open Quarantine"
+      "openPage": "Open Review"
     },
     "changes": {
       "loading": "Loading recent changes",

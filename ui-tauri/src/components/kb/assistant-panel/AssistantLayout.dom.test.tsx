@@ -703,10 +703,12 @@ describe("AssistantLayout", () => {
     expect(panel()!.dataset.activeTab).toBe("review");
     const queue = screen.getByRole("region", { name: "Review queue" });
     expect(queue.textContent).toContain("Reports are blocked until these are resolved.");
-    expect(queue.textContent).toContain("1 cause needs you · 2 waiting");
+    // Counted as the Review screen counts it, and its moves are pairs there.
+    expect(queue.textContent).toContain("1 transaction needs you · 2 waiting");
+    expect(queue.textContent).toContain("Open Review");
     expect(queue.textContent).toContain("2 transfers to match");
     fireEvent.click(screen.getByRole("button", { name: "2 transfers to match" }));
-    expect(navigate).toHaveBeenCalledWith({ to: "/swaps" });
+    expect(navigate).toHaveBeenCalledWith({ to: "/review" });
 
     // The cause opens its root in a kept tab, at the evidence's tab, and
     // closing that tab returns to the queue.

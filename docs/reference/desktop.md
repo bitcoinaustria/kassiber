@@ -453,7 +453,9 @@ its pages is open, however you got there.
 **Moves between your wallets** comes first, because pairing a move often
 clears a quarantine cause with it. **Can't be booked yet** holds the
 quarantine causes, as [custody resolution](custody-resolution.md#why-a-transaction-is-quarantined)
-describes, with the journal freshness warning above them. Each card lists its
+describes, with the journal freshness warning above them. Each cause card
+keeps the full instruction behind its info button where its buttons already
+say what to do. Each card lists its
 transactions folded to three, with one Show more that shows the rest of the
 loaded page and then loads the next. A cause of approximate prices held for
 review offers **Accept these prices**, which accepts all of them in one
@@ -465,14 +467,25 @@ leading zero always starts a decimal, and the preview lists each price as it
 was read. Up to 50 typed prices go through one previewed step as
 `price_override` operations, each saved as exact and revertible from the
 transaction's history. **Moves between your wallets** lists the transfer
-and swap candidates from `ui.transfers.suggest`.
-Each has Pair, which pairs it with its default kind and policy, and Not a
-transfer, which dismisses it; Details opens it in Transfers & Custody. Exact
-candidates with carrying-value policy, no competing match and no ownership
-proof can be paired in groups of up to 50. `ui.review.plan` binds their exact
-transaction IDs, policies, input version and book to the confirmation;
-`ui.review.apply` refuses stale confirmations and applies the preview atomically.
-Taxable and ownership-graph candidates stay one at a time. A decision can be undone for 20 seconds
+and swap candidates from `ui.transfers.suggest` as table rows with the same
+edges in every row: the date, the route between the two wallets with their
+rails' logos (chain, Lightning, Liquid), one amount with the fee under it
+(instead of the fee, what arrived, for a swap into another asset or when no
+positive fee is left, as when more came in than left), and what pairing records:
+a plain transfer quietly, a Bitcoin swap or swap as a chip with its default
+treatment (tax-neutral carrying value or taxable), with how sure the match is.
+The rows size themselves by the list's width, not the window's, so a docked
+assistant gets the narrow layout: two lines, with the route and amount above
+the date, kind and buttons. A long wallet name is cut short with the full name
+on hover.
+Each has Pair, which pairs it with its default kind and policy, and two icon
+buttons: Not a transfer, which dismisses it, and Details, which opens it in
+Transfers & Custody. Exact candidates with carrying-value policy, no competing
+match and no ownership proof can be paired in groups of up to 50.
+`ui.review.plan` binds their exact transaction IDs, policies, input version and
+book to the confirmation; `ui.review.apply` refuses stale confirmations and
+applies the preview atomically. Taxable and ownership-graph candidates stay
+one at a time. A decision can be undone for 20 seconds
 (`ui.transfers.unpair`, or `ui.transfers.dismissals.delete` for a dismissal).
 Once the owner stops deciding, the journals recalculate. That is local and
 makes no network request. The queued refresh survives navigation, including a
@@ -483,9 +496,12 @@ reading less what was decided, because a read of stale journals lists more
 candidates than are open. One number counts what is left: `ui.review.badges`
 `review`, which is `quarantine_attention` plus the cached transfer candidates
 (an ownership-graph move counts once, under its held transaction).
-The sidebar's Review badge, the bell, and Overview's Review row all show it,
-in red while a quarantine holds rows back from the reports. Stale journals
-with nothing else open show a dot. `/quarantine` and `kassiber://quarantine`
+The sidebar's Review badge, the bell, search, and Overview's Review row all
+show it, in red while a quarantine holds rows back from the reports. Stale
+journals with nothing else open show a dot. The side panel's Review queue
+counts causes and transactions as the screen does and opens Review; a
+dismissal is stored with an English reason whatever the app's language, like
+accepted and entered prices. `/quarantine` and `kassiber://quarantine`
 open Review, and the native menu's Review item keeps Quarantine's shortcut.
 
 Reports shows one tax year from `ui.reports.capital_gains`: whether it can be
