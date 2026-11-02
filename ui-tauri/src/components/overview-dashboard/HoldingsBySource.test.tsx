@@ -63,7 +63,7 @@ describe("holdings by source", () => {
     expect(html).toContain("Other sources");
   });
 
-  it("tells sources apart in whole euros, marks a sliver as under 1% and hides the bars with the figures", () => {
+  it("tells sources apart in whole euros and marks a sliver as under 1%", () => {
     const rate = 50_000;
     const connections = [40.2, 40.0, 0.001].map((balance, index) => ({
       ...MOCK_OVERVIEW.connections[0],
@@ -71,23 +71,19 @@ describe("holdings by source", () => {
       label: `Wallet ${index}`,
       balance,
     }));
-    const render = (hideSensitive: boolean) =>
-      renderToStaticMarkup(
-        createElement(HoldingsBySourceChart, {
-          snapshot: {
-            ...MOCK_OVERVIEW,
-            connections,
-            marketRate: { ...MOCK_OVERVIEW.marketRate!, rate, fiatCurrency: "EUR" },
-          },
-          hideSensitive,
-          currency: "eur",
-        }),
-      );
-    const html = render(false).replace(/\u00a0|\u202f/g, " ");
+    const html = renderToStaticMarkup(
+      createElement(HoldingsBySourceChart, {
+        snapshot: {
+          ...MOCK_OVERVIEW,
+          connections,
+          marketRate: { ...MOCK_OVERVIEW.marketRate!, rate, fiatCurrency: "EUR" },
+        },
+        hideSensitive: false,
+        currency: "eur",
+      }),
+    ).replace(/\u00a0|\u202f/g, " ");
     expect(html).toContain("€ 2.010.000");
     expect(html).toContain("€ 2.000.000");
     expect(html).toContain("&lt;1%");
-    expect(render(false)).toContain("width:100%");
-    expect(render(true)).not.toContain("width:");
   });
 });

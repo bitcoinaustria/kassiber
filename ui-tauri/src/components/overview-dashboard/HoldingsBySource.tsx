@@ -23,7 +23,7 @@ const SHOWN_SOURCES = 8;
 
 /**
  * Where the bitcoin sits, across the page under the chart: the sources
- * largest first, each with its rail's logo, a bar, its value and share.
+ * largest first, each with its rail's logo, value and share.
  */
 export const HoldingsBySourceChart = ({
   snapshot,
@@ -44,7 +44,6 @@ export const HoldingsBySourceChart = ({
     ? (snapshot.fiat.eurUnrealized / snapshot.fiat.eurCostBasis) * 100
     : 0;
   const total = holdings.reduce((sum, item) => sum + item.value, 0);
-  const largest = Math.max(0, ...holdings.map((item) => item.value));
   // Without a market rate a fiat figure would be a stale or zero placeholder.
   const fiatValueUnavailable =
     !isBitcoinMode && fiatCompleteness(snapshot.fiat).marketRateMissing;
@@ -103,9 +102,8 @@ export const HoldingsBySourceChart = ({
       </div>
 
       {holdings.length ? (
-        // A ranked bar list, read down the first column and then the next:
-        // each bar is the source's size against the largest one. The value
-        // column has a fixed width so every bar's track is the same length.
+        // Largest first, read down the first column and then the next; the
+        // fixed value column keeps the figures of both columns in line.
         <ul
           className={cn(
             "grid gap-x-8 gap-y-1",
@@ -117,33 +115,22 @@ export const HoldingsBySourceChart = ({
           {holdings.map((item) => (
             <li
               key={item.nameKey ?? item.name}
-              className="grid min-w-0 grid-cols-[1.5rem_minmax(0,1fr)_6.5rem_2.5rem] items-center gap-2 text-xs"
+              className="grid min-w-0 grid-cols-[1.5rem_minmax(0,1fr)_6.5rem_2.5rem] items-center gap-2 py-0.5 text-xs"
             >
               <span className="flex justify-center">
                 {item.rail ? <RailIcon rail={item.rail} size="compact" /> : null}
               </span>
-              <span className="min-w-0 space-y-1 py-1">
-                <span
-                  className={cn("block truncate", item.nameKey && "text-muted-foreground")}
-                  title={item.nameKey ? undefined : item.name}
-                >
-                  {/* dynamic key */}
-                  {item.nameKey ? t(item.nameKey as never) : item.name}
-                </span>
-                {/* The bar is a share, so it hides with the figures. */}
-                <span className="block h-[3px] overflow-hidden rounded-full bg-muted" aria-hidden="true">
-                  {hideSensitive ? null : (
-                    <span
-                      className="block h-full rounded-full bg-primary/70"
-                      style={{ width: `${largest ? Math.max((item.value / largest) * 100, 1) : 0}%` }}
-                    />
-                  )}
-                </span>
+              <span
+                className={cn("truncate", item.nameKey && "text-muted-foreground")}
+                title={item.nameKey ? undefined : item.name}
+              >
+                {/* dynamic key */}
+                {item.nameKey ? t(item.nameKey as never) : item.name}
               </span>
-              <span className={cn("self-start truncate pt-1 text-right font-medium tabular-nums", blurClass(hideSensitive))}>
+              <span className={cn("truncate text-right font-medium tabular-nums", blurClass(hideSensitive))}>
                 {valueLabel(item.value)}
               </span>
-              <span className={cn("self-start pt-1 text-right text-muted-foreground tabular-nums", blurClass(hideSensitive))}>
+              <span className={cn("text-right text-muted-foreground tabular-nums", blurClass(hideSensitive))}>
                 {item.percent === 0 && item.value > 0 ? "<1%" : `${item.percent}%`}
               </span>
             </li>
