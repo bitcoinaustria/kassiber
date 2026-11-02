@@ -976,7 +976,7 @@ def _migrate_stored_error_credentials(conn) -> int:
 
 
 PARTIAL_PAYOUT_SEMANTICS_MIGRATION = "custody-partial-payout-pricing-v1"
-JOURNAL_CALCULATION_SEMANTICS_VERSION = 4
+JOURNAL_CALCULATION_SEMANTICS_VERSION = 5
 JOURNAL_SEMANTICS_ADOPTION_MIGRATION = "journal-calculation-semantics-adoption-v1"
 
 

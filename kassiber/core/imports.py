@@ -1843,10 +1843,11 @@ def insert_wallet_records(
     normalized_records = [normalize_import_record(record, source_label=source_label) for record in records]
     guard_observations(conn, profile["id"], ({**normalized, "wallet_kind": scoped_wallet["kind"], "wallet_config_json": scoped_wallet["config_json"]} for normalized in normalized_records))
     from ..importers import synthetic_csv_identity
-    from .import_identity import stored_synthetic_occurrences
+    from .import_identity import occurrence_slots, stored_synthetic_occurrences
     synthetic_identities = [synthetic_csv_identity(row["external_id"], row["raw_json"])
                             for row in normalized_records]
-    stored_occurrences = (stored_synthetic_occurrences(conn, profile_id=profile["id"], wallet_id=wallet["id"])
+    stored_occurrences = ({key: occurrence_slots(members) for key, members in
+                           stored_synthetic_occurrences(conn, profile_id=profile["id"], wallet_id=wallet["id"]).items()}
                           if any(synthetic_identities) else {})
     incoming_occurrences = {}
     if authoritative_chain_observer:
@@ -1881,9 +1882,8 @@ def insert_wallet_records(
         if identity is not None:
             key = (wallet["id"], identity[0])
             occurrence = incoming_occurrences[key] = incoming_occurrences.get(key, 0) + 1
-            members = stored_occurrences.get(key, ())
-            if (occurrence <= len(members)
-                    and members[occurrence - 1]["external_id"] != normalized["external_id"]):
+            stored = stored_occurrences.get(key, {}).get(occurrence)
+            if stored is not None and stored["external_id"] != normalized["external_id"]:
                 # Compatibility is an in-memory match, never an ID migration or
                 # enrichment that could overwrite the owner's reviewed row.
                 skipped += 1

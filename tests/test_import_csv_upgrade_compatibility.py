@@ -210,3 +210,149 @@ def test_old_rows_are_recognized_when_an_earlier_parser_spelled_the_amount_diffe
         assert _import(conn, profile, wallet, tmp_path / "export.csv", fmt, [january, january])["imported"] == 0
     finally:
         conn.close()
+
+
+def _fresh(tmp_path):
+    conn = open_db(tmp_path / "book")
+    _scope(conn)
+    conn.commit()
+    profile = conn.execute("SELECT * FROM profiles").fetchone()
+    wallet = conn.execute("SELECT * FROM wallets WHERE id='btc'").fetchone()
+    return conn, profile, wallet
+
+
+def _batch_ids(conn):
+    return [row[0] for row in conn.execute("SELECT id FROM import_batches ORDER BY imported_at, rowid")]
+
+
+@pytest.mark.parametrize("case_index", range(len(CASES)))
+def test_rolled_back_first_import_does_not_swallow_a_genuine_repeat(tmp_path, case_index):
+    conn, profile, wallet = _fresh(tmp_path)
+    fmt, january, _ = CASES[case_index]
+    path = tmp_path / "export.csv"
+    try:
+        assert _import(conn, profile, wallet, path, fmt, [january])["imported"] == 1
+        assert _import(conn, profile, wallet, path, fmt, [january, january])["imported"] == 1
+        import_batches.rollback_batch(conn, profile, _batch_ids(conn)[0],
+                                      invalidate_journals=lambda *args, **kwargs: None)
+        assert conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0] == 1
+        # The surviving row is occurrence 2; occurrence 1 is genuinely missing.
+        assert _import(conn, profile, wallet, path, fmt, [january, january])["imported"] == 1
+        assert conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0] == 2
+        assert _import(conn, profile, wallet, path, fmt, [january, january])["imported"] == 0
+        assert not any(q["reason"] == ISSUE for q in review_workflow._build(conn, profile)["quarantines"])
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("case_index", range(len(CASES)))
+def test_old_rows_fill_only_occurrences_without_a_current_row(tmp_path, case_index):
+    from kassiber.core.import_identity import occurrence_slots, stored_synthetic_occurrences
+    conn, profile, wallet = _restore(tmp_path, case_index)
+    fmt, january, _ = CASES[case_index]
+    path = tmp_path / "export.csv"
+    try:
+        # One old row plus a current occurrence 1 from a later import.
+        first, second = conn.execute("SELECT * FROM transactions ORDER BY external_id").fetchall()
+        _write(path, [january])
+        current, = importers.load_import_records(path, fmt)
+        conn.execute("UPDATE transactions SET external_id=?, created_at='2025-04-01T00:00:00Z' WHERE id=?",
+                     (current["txid"], second["id"]))
+        conn.commit()
+        members, = stored_synthetic_occurrences(conn, profile_id=profile["id"]).values()
+        slots = occurrence_slots(members)
+        assert {number: row["id"] for number, row in slots.items()} == {1: second["id"], 2: first["id"]}
+        assert _import(conn, profile, wallet, path, fmt, [january] * 3)["imported"] == 1
+        assert _import(conn, profile, wallet, path, fmt, [january] * 3)["imported"] == 0
+    finally:
+        conn.close()
+
+
+def _shift_month(row, month):
+    copied = dict(row)
+    for field in ("external_id", "raw_json", "occurred_at", "fingerprint"):
+        copied[field] = copied[field].replace("2025-01-01", f"2025-{month}-01")
+    copied["id"] = copied["fingerprint"] = f"{row['id']}-{month}"
+    return copied
+
+
+@pytest.mark.parametrize("case_index", range(len(CASES)))
+def test_duplicate_whose_first_copy_predates_import_batches_is_held(tmp_path, case_index):
+    conn, profile, wallet = _restore(tmp_path, case_index)
+    fmt, january, date_column = CASES[case_index]
+    try:
+        # Old code imported [jan] before batches existed, then the cumulative
+        # [feb, jan] as one batch: the shifted position stored jan again.
+        first, second = conn.execute("SELECT * FROM transactions ORDER BY external_id").fetchall()
+        batch, = _batch_ids(conn)
+        conn.execute("DELETE FROM import_batch_transactions WHERE transaction_id=?", (first["id"],))
+        conn.execute("UPDATE transactions SET created_at='2025-01-15T00:00:00Z' WHERE id=?", (first["id"],))
+        february = _shift_month(first, "02")
+        _insert(conn, "transactions", february)
+        _insert(conn, "import_batch_transactions", {"batch_id": batch, "transaction_id": february["id"]})
+        conn.execute("UPDATE transactions SET excluded=0, fiat_rate=50000, fiat_rate_exact='50000'")
+        conn.commit()
+        path = tmp_path / "export.csv"
+        march = {**january, date_column: january[date_column].replace("01-01", "03-01")}
+        february_row = {**january, date_column: january[date_column].replace("01-01", "02-01")}
+        assert _import(conn, profile, wallet, path, fmt, [march, february_row, january])["imported"] == 1
+        conn.execute("UPDATE transactions SET fiat_rate=50000, fiat_rate_exact='50000'")
+        conn.commit()
+        before = [tuple(row) for row in conn.execute("SELECT * FROM transactions ORDER BY id")]
+        state = review_workflow._build(conn, profile)
+        held = sorted(q["transaction_id"] for q in state["quarantines"] if q["reason"] == ISSUE)
+        assert held == sorted([first["id"], second["id"]])
+        assert state["custody_quantity"].report_blocked
+        assert [tuple(row) for row in conn.execute("SELECT * FROM transactions ORDER BY id")] == before
+        metadata.update_transaction_metadata(conn, "ws", "profile", first["id"], handlers._metadata_hooks(),
+            excluded=True, reason="Reviewed duplicated import occurrence")
+        assert not any(q["reason"] == ISSUE for q in review_workflow._build(conn, profile)["quarantines"])
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("case_index", range(len(CASES)))
+def test_unbatched_rows_alone_are_one_export(tmp_path, case_index):
+    conn, profile, _ = _restore(tmp_path, case_index)
+    try:
+        conn.execute("DELETE FROM import_batch_transactions")
+        conn.execute("UPDATE transactions SET excluded=0, fiat_rate=50000, fiat_rate_exact='50000'")
+        conn.commit()
+        assert not any(q["reason"] == ISSUE for q in review_workflow._build(conn, profile)["quarantines"])
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("case_index", [0, 2, 3, 4])
+def test_old_id_with_another_date_is_not_a_positional_occurrence(tmp_path, case_index):
+    conn, profile, wallet = _restore(tmp_path, case_index)
+    fmt, january, _ = CASES[case_index]
+    try:
+        first, second = conn.execute("SELECT * FROM transactions ORDER BY external_id").fetchall()
+        conn.execute("UPDATE transactions SET external_id=replace(external_id, '2025-01-01', '2024-12-31') WHERE id=?",
+                     (first["id"],))
+        conn.commit()
+        changed = conn.execute("SELECT external_id, raw_json FROM transactions WHERE id=?", (first["id"],)).fetchone()
+        assert importers.synthetic_csv_identity(changed["external_id"], changed["raw_json"]) is None
+        assert importers.synthetic_csv_identity(second["external_id"], second["raw_json"]) is not None
+        assert _import(conn, profile, wallet, tmp_path / "export.csv", fmt, [january, january])["imported"] == 1
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("case_index", range(len(CASES)))
+def test_current_occurrence_reimport_still_reconciles_its_stored_row(tmp_path, case_index):
+    conn, profile, wallet = _fresh(tmp_path)
+    fmt, january, _ = CASES[case_index]
+    path = tmp_path / "export.csv"
+    try:
+        assert _import(conn, profile, wallet, path, fmt, [january])["imported"] == 1
+        fingerprint = conn.execute("SELECT fingerprint FROM transactions").fetchone()[0]
+        conn.execute("UPDATE transactions SET fingerprint='stale'")
+        conn.commit()
+        # An exact current ID goes through the normal merge, not the old-row skip.
+        result = _import(conn, profile, wallet, path, fmt, [january])
+        assert (result["imported"], len(result["updated_records"])) == (0, 1)
+        assert conn.execute("SELECT fingerprint FROM transactions").fetchone()[0] == fingerprint
+    finally:
+        conn.close()

@@ -10,10 +10,12 @@ DUPLICATE_REVIEW = "synthetic_import_duplicate_review_required"
 
 
 def stored_synthetic_occurrences(conn, *, profile_id, wallet_id=None):
-    """Number stored occurrences by import time, then the old numeric row index.
+    """Group stored occurrences by import time, then the old numeric row index.
 
-    Excluded rows still consume an occurrence: re-import cannot reopen a review.
-    No ID, raw row, fingerprint, review, or batch membership is rewritten.
+    Rows without a batch predate batch recording, so they sort before every
+    batched row. Excluded rows still consume an occurrence: re-import cannot
+    reopen a review. No ID, raw row, fingerprint, review, or batch membership
+    is rewritten.
     """
     rows = conn.execute("""
         SELECT t.id, t.wallet_id, t.external_id, t.raw_json, t.excluded,
@@ -29,7 +31,7 @@ def stored_synthetic_occurrences(conn, *, profile_id, wallet_id=None):
             OR t.external_id LIKE 'pocketbitcoin:pocketbitcoin:%'
             OR t.external_id LIKE 'binance-supplemental:%'
             OR t.external_id LIKE 'binance:%')
-        ORDER BY COALESCE(b.imported_at, t.created_at), b.id, t.id
+        ORDER BY b.id IS NOT NULL, COALESCE(b.imported_at, t.created_at), b.id, t.id
     """, (profile_id, wallet_id, wallet_id)).fetchall()
     groups = defaultdict(list)
     seen = set()
@@ -45,9 +47,31 @@ def stored_synthetic_occurrences(conn, *, profile_id, wallet_id=None):
             **dict(row), "ordinal": ordinal, "legacy": legacy,
         })
     for members in groups.values():
-        members.sort(key=lambda row: (row["imported_at"] or row["created_at"],
+        members.sort(key=lambda row: (row["batch_id"] is not None,
+                                      row["imported_at"] or row["created_at"],
                                       row["ordinal"], row["id"]))
     return dict(groups)
+
+
+def occurrence_slots(members):
+    """Map each occurrence number to the stored row that already holds it.
+
+    A current ID names its own occurrence exactly. Old positional rows carry a
+    file position instead, so they fill only the lowest numbers no current row
+    holds, in stored order.
+    """
+    slots = {}
+    for row in members:
+        if not row["legacy"]:
+            slots.setdefault(row["ordinal"], row)
+    free = 0
+    for row in members:
+        if row["legacy"]:
+            free += 1
+            while free in slots:
+                free += 1
+            slots[free] = row
+    return slots
 
 
 def duplicate_review_quarantines(conn, profile_id):
@@ -55,7 +79,9 @@ def duplicate_review_quarantines(conn, profile_id):
     quarantines = []
     for (_, economic), members in stored_synthetic_occurrences(conn, profile_id=profile_id).items():
         active = [row for row in members if not row["excluded"]]
-        batches = {row["batch_id"] for row in active if row["batch_id"] is not None}
+        # Unbatched rows came from imports before batch recording began; they
+        # count together as one more import beside any batched copy.
+        batches = {row["batch_id"] for row in active}
         if len(batches) < 2:
             continue
         counts = Counter(row["batch_id"] for row in members)
