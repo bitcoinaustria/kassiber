@@ -1,4 +1,4 @@
-import { redactKeyedSecrets, redactUrlCredentials } from "./secretScanner";
+import { redactCredentials } from "./secretScanner";
 export type AppLogLevel = "trace" | "debug" | "info" | "warning" | "error";
 
 export type AppLogFieldType =
@@ -660,7 +660,7 @@ function redactTextForMode(value: string, options: AppLogRenderOptions): string 
 }
 
 function redactSecretFloorText(value: string): string {
-  return applyTextBackstop(redactUrlCredentials(redactKeyedSecrets(value)), SECRET_FLOOR_TEXT_PATTERNS);
+  return applyTextBackstop(redactCredentials(value), SECRET_FLOOR_TEXT_PATTERNS);
 }
 
 // high_signal keeps operational data (addresses, paths, URLs, labels) readable

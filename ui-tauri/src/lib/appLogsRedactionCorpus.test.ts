@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import corpus from "../../../tests/fixtures/operational_redaction_cases.json";
 import stress from "../../../tests/fixtures/secret_redaction_stress_cases.json";
 import fixes5f from "../../../tests/fixtures/secret_redaction_5f_cases.json";
+import fixes5g from "../../../tests/fixtures/secret_redaction_5g_cases.json";
 import failClosed from "../../../tests/fixtures/secret_redaction_5e_cases.json";
 import secrets from "../../../tests/fixtures/secret_redaction_cases.json";
 
@@ -53,7 +54,20 @@ it.each(stress)("keeps adversarial secret shape $name within the deadline", (tes
   expect(performance.now() - start).toBeLessThan(500);
 });
 
-it.each([...failClosed, ...fixes5f])("fails closed for review regression $id", (testCase) => {
+it("scales adversarial secret shapes linearly to 400k characters", () => {
+  // Aggregate time: quadratic growth would cost ~100x for ten times the input.
+  const total = (size: number) => stress.reduce((sum, testCase) => {
+    const text = testCase.prefix + testCase.repeat.repeat(Math.floor(size / testCase.repeat.length) + 1) + testCase.suffix;
+    const start = performance.now();
+    logs.emitAppLog({ level: "info", module: "test", file: "test", line: 1, msg: text, fields: {} });
+    logs.clearAppLogRecords();
+    return sum + performance.now() - start;
+  }, 0);
+  const small = total(40_000);
+  expect(total(400_000)).toBeLessThan(25 * small + 1_000);
+}, 120_000);
+
+it.each([...failClosed, ...fixes5f, ...fixes5g])("fails closed for review regression $id", (testCase) => {
   const output = logs.emitAppLog({ level: "info", module: "test", file: "test", line: 1, msg: testCase.input, fields: {} })!.msg;
   if ("expected" in testCase) expect(output).toBe(testCase.expected);
   if (testCase.sentinel) {

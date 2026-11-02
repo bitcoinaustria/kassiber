@@ -6,7 +6,7 @@ import re
 import secrets
 from typing import Any
 
-from kassiber.redaction_scanner import redact_keyed_secrets, redact_url_credentials
+from kassiber.redaction_scanner import redact_credentials
 
 
 SENSITIVE_KEY_PARTS = (
@@ -186,7 +186,7 @@ def is_sensitive_key(key: str) -> bool:
 def redact_secret_text(value: str) -> str:
     """Redact secret-shaped material from text that may cross a trust boundary."""
 
-    text = redact_url_credentials(redact_keyed_secrets(value))
+    text = redact_credentials(value)
     text = _PRIVATE_KEY_RE.sub("[redacted-private-key]", text)
     text = _NOSTR_SECRET_RE.sub("[redacted-private-key]", text)
     text = _WIF_RE.sub("[redacted-private-key]", text)
