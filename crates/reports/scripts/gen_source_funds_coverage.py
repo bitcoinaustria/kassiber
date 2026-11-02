@@ -49,7 +49,7 @@ def cases():
     add('desktop-unknown-fields',dict(unknown=True,profile='missing',workspace='missing'))
     for profile in ['Other','missing']:
         add('cli-profile-'+profile,dict(profile=profile),command='source-funds.coverage')
-    malformed="UPDATE profiles SET last_processed_at='fixed',last_processed_tx_count=(SELECT COUNT(*) FROM transactions WHERE profile_id='p' AND excluded=0),last_processed_input_version=journal_input_version WHERE id='p';ALTER TABLE journal_custody_reconciliations RENAME COLUMN proof_json TO hidden_proof;"
+    malformed="UPDATE profiles SET last_processed_at='fixed',last_processed_tx_count=(SELECT COUNT(*) FROM transactions WHERE profile_id='p' AND excluded=0),last_processed_input_version=journal_input_version WHERE id='p';UPDATE profiles SET journal_semantics_version=2 WHERE id='p';ALTER TABLE journal_custody_reconciliations RENAME COLUMN proof_json TO hidden_proof;"
     add('sqlite-error',sql=clean+malformed)
     add('unlinked-malformed-schema',sql=malformed+'DELETE FROM source_funds_links;')
     add('capped-malformed-schema',dict(max_transactions=0),sql=malformed,command='source-funds.coverage')

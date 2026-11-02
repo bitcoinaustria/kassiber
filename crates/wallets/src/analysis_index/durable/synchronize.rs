@@ -66,6 +66,7 @@ fn relations(
         0
     };
     let fresh = kassiber_envelope::truthy(&profile_row["last_processed_at"].py())
+        && super::super::value::journal_semantics_current(&profile_row)
         && profile_row["journal_input_version"] == profile_row["last_processed_input_version"]
         && profile_row["last_processed_tx_count"] == json!(count);
     let mut groups = Vec::new();

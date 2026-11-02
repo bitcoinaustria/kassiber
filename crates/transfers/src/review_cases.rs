@@ -496,6 +496,21 @@ fn freshness(conn: &Connection, profile: &Value) -> Result<Value> {
     let input = int_or_zero(&value(profile, "journal_input_version"))?;
     let processed = int_or_zero(&value(profile, "last_processed_input_version"))?;
     let at = value(profile, "last_processed_at");
+    // A profile without the semantics columns can never be current.
+    let semantics = match (
+        get(profile, "required_journal_semantics_version"),
+        get(profile, "journal_semantics_version"),
+    ) {
+        (Some(required), Some(built)) => {
+            let required = int_or_zero(required)?;
+            let built = int_or_zero(built)?;
+            let version = kassiber_pyjson::BigInt::from(
+                kassiber_store::semantics::JOURNAL_CALCULATION_SEMANTICS_VERSION,
+            );
+            required == 0.into() || (built == version && built >= required)
+        }
+        _ => false,
+    };
     let (status, reason) = if active == 0 {
         ("no_transactions", "no active transactions")
     } else if !truthy(&at) {
@@ -507,17 +522,22 @@ fn freshness(conn: &Connection, profile: &Value) -> Result<Value> {
         )
     } else if input != processed {
         ("stale", "journal inputs changed since last processing")
+    } else if !semantics {
+        (
+            "stale",
+            "journal calculation semantics changed; rebuild with current Kassiber",
+        )
     } else {
         (
             "current",
-            "journals match the active transaction count and input version",
+            "journals match the active transaction count, input version and calculation semantics",
         )
     };
     Ok(dict([
         ("status", s(status)),
         (
             "is_current",
-            Value::Bool(truthy(&at) && count == active.into() && input == processed),
+            Value::Bool(truthy(&at) && count == active.into() && input == processed && semantics),
         ),
         (
             "needs_processing",

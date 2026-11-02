@@ -72,7 +72,8 @@ pub(super) fn load_inputs_with_active<'a>(
     let current = truthy(value(profile, "last_processed_at"))
         && n(value(profile, "last_processed_tx_count"))? == BigInt::from(active.len())
         && n(value(profile, "journal_input_version"))?
-            == n(value(profile, "last_processed_input_version"))?;
+            == n(value(profile, "last_processed_input_version"))?
+        && crate::semantics_current(profile);
     let mut allocations: BTreeMap<_, (BigInt, BigInt)> = BTreeMap::new();
     let mut allocation_details: BTreeMap<_, (BTreeSet<String>, bool)> = BTreeMap::new();
     let ids: HashSet<_> = active.iter().map(|r| text(r, "id")).collect();

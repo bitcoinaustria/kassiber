@@ -336,3 +336,22 @@ macro_rules! json {
     ($item:expr) => { $crate::analysis_index::value::Capture::capture(&$item) };
 }
 pub(super) use json;
+
+/// `evaluate_projection_freshness`'s calculation-semantics term: a profile
+/// row without both markers is never current.
+pub(super) fn journal_semantics_current(profile: &Value) -> bool {
+    let marker = |key| match profile.get(key)? {
+        Value::Null => Some(BigInt::from(0)),
+        Value::Bool(value) => Some(BigInt::from(u8::from(*value))),
+        Value::Int(value) => Some(value.clone()),
+        _ => None,
+    };
+    let (Some(required), Some(built)) = (
+        marker("required_journal_semantics_version"),
+        marker("journal_semantics_version"),
+    ) else {
+        return false;
+    };
+    let version = BigInt::from(kassiber_store::semantics::JOURNAL_CALCULATION_SEMANTICS_VERSION);
+    required == BigInt::from(0) || (built == version && built >= required)
+}

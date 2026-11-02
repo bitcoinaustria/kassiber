@@ -23,7 +23,7 @@ UPDATE source_funds_links SET state='suggested', method='custody_component',conf
 allocation_amount=100001,from_allocation_amount=100001,uses_chain_observation=0 WHERE id='l-z';
 INSERT INTO journal_custody_decisions(decision_id,workspace_id,profile_id,source_transaction_id,target_transaction_id,source_observation_hash,source_start_msat,source_end_msat,target_observation_hash,target_start_msat,target_end_msat,source_wallet_id,target_wallet_id,source_network,target_network,source_rail,target_rail,source_asset,target_asset,state,basis_state,reason,occurred_at,target_occurred_at,created_at) VALUES
 (printf('%064d',1),'ws','p','in','out',printf('%064d',2),0,100001,printf('%064d',3),0,100001,'cold','cold','main','main','bitcoin','bitcoin','BTC','BTC','internal_reviewed','eligible','reviewed','2024-01-01T00:00:00Z','2024-12-31T23:30:00Z','fixed');
-UPDATE profiles SET last_processed_at='current',last_processed_tx_count=(SELECT COUNT(*) FROM transactions WHERE profile_id='p' AND excluded=0),last_processed_input_version=journal_input_version WHERE id='p';
+UPDATE profiles SET last_processed_at='current',last_processed_tx_count=(SELECT COUNT(*) FROM transactions WHERE profile_id='p' AND excluded=0),last_processed_input_version=journal_input_version WHERE id='p';UPDATE profiles SET journal_semantics_version=2 WHERE id='p';
 """
 
 

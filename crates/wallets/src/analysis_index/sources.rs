@@ -192,6 +192,7 @@ fn capture(
     };
     let profile_row = profiles.first().unwrap_or(&Value::Null);
     let fresh = truth(&profile_row["last_processed_at"])
+        && super::value::journal_semantics_current(profile_row)
         && profile_row["journal_input_version"] == profile_row["last_processed_input_version"]
         && profile_row["last_processed_tx_count"]
             == json!(transactions

@@ -81,14 +81,14 @@ def main():
                 variants=[('base',[])]
                 if scenario['name']=='lifecycle' and i==1:
                     variants.append(('review-conflict',["INSERT INTO custody_gap_reviews SELECT 'concurrent-conflict',workspace_id,profile_id,gap_id,revision,candidate_fingerprint,'dismissed',event_kind,component_id,authored_source,reason,snapshot_json,created_at FROM custody_gap_reviews"]))
-                    current=["UPDATE profiles SET last_processed_at='2025-01-01',last_processed_tx_count=3,last_processed_input_version=journal_input_version WHERE id='p'", "INSERT INTO journal_custody_gap_inputs(workspace_id,profile_id,input_version,ignored_ids_json,accounting_ignored_ids_json,created_at) SELECT 'w','p',journal_input_version,'[]','[]','2025-01-01' FROM profiles WHERE id='p'"]
+                    current=["UPDATE profiles SET last_processed_at='2025-01-01',last_processed_tx_count=3,last_processed_input_version=journal_input_version WHERE id='p'", "UPDATE profiles SET journal_semantics_version=2 WHERE id='p'", "INSERT INTO journal_custody_gap_inputs(workspace_id,profile_id,input_version,ignored_ids_json,accounting_ignored_ids_json,created_at) SELECT 'w','p',journal_input_version,'[]','[]','2025-01-01' FROM profiles WHERE id='p'"]
                     variants += [('resolved-current',current),('resolved-drift',current+["UPDATE transactions SET amount=1001 WHERE id='out'"])]
                 if scenario['name']=='dismiss' and i==1:
                     variants.append(('dismiss-drift',["UPDATE transactions SET amount=1001 WHERE id='out'"]))
                 if scenario['name']=='lifecycle' and i==-1:
                     issue=lambda id,asset,amount:f"INSERT INTO journal_quantity_issues(issue_id,workspace_id,profile_id,issue_type,state,asset,amount_msat,reason,created_at) VALUES('{id}','w','p','missing','custody_suspense',{asset},{amount},'unknown custody','2025-01-01T00:00:00Z')"
                     variants += [
-                        ('current',["UPDATE profiles SET last_processed_at='2025-01-01',last_processed_tx_count=3,last_processed_input_version=journal_input_version WHERE id='p'"]),
+                        ('current',["UPDATE profiles SET last_processed_at='2025-01-01',last_processed_tx_count=3,last_processed_input_version=journal_input_version WHERE id='p'", "UPDATE profiles SET journal_semantics_version=2 WHERE id='p'"]),
                         ('issues',[issue('btc',"'BTC'",123),issue('eth',"'ETH'",456),issue('unknown','NULL','NULL')]),
                         ('unprocessed',["UPDATE profiles SET last_processed_at=NULL WHERE id='p'"]),
                         ('empty',["DELETE FROM transactions"]),

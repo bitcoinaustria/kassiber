@@ -92,6 +92,7 @@ fn custody(
         || amount(&profile_row, "last_processed_tx_count")? != amount(&profile_row, "active_count")?
         || amount(&profile_row, "journal_input_version")?
             != amount(&profile_row, "last_processed_input_version")?
+        || !crate::semantics_current(&profile_row)
     {
         return Ok(result);
     }

@@ -550,7 +550,10 @@ pub fn report(conn: &Connection, workspace: &Value, profile: &Value) -> Result<V
         "no_transactions"
     } else if !truthy(value(profile, "last_processed_at")) {
         "not_processed"
-    } else if processed_count != number(active) || version != processed_version {
+    } else if processed_count != number(active)
+        || version != processed_version
+        || !crate::semantics_current(profile)
+    {
         "stale"
     } else {
         "current"
