@@ -2,6 +2,7 @@
 //! comparison-only artifacts never write or grant accounting authority.
 pub mod allocation;
 mod arbitration;
+pub(crate) use arbitration::DecisionRef;
 pub mod balances;
 pub mod hashes;
 pub mod holds;

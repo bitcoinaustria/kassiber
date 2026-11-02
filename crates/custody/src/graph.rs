@@ -8,7 +8,6 @@ use kassiber_pyjson::BigInt;
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Deref;
-use std::rc::Rc;
 use std::str::FromStr;
 
 pub(crate) mod ownership;
@@ -81,9 +80,106 @@ pub(crate) fn parse(raw: &Value) -> Result<Option<Value>, String> {
 }
 // Transfer identity predicates stringify nonfinite Python scalars. Preserve
 // their presence instead of turning them into null during outer JSON conversion.
+fn decoded(value: &kassiber_pyjson::Value) -> Value {
+    use kassiber_pyjson::Value as Py;
+    match value {
+        Py::Float(n) if !n.is_finite() => json!(kassiber_pyjson::float_repr(*n)),
+        Py::List(values) => json!(values.iter().map(decoded).collect::<Vec<_>>()),
+        Py::Dict(values) => Value::Object(
+            values
+                .iter()
+                .filter_map(|(k, v)| {
+                    if let kassiber_pyjson::Key::Str(k) = k {
+                        Some((k.as_str()?.to_owned(), decoded(v)))
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+        ),
+        _ => codec::to_json(value),
+    }
+}
+
+/// A raw JSON text of the operation, loaded once: its `codec::loads` and,
+/// built on first request, its transfer decoding.
+#[derive(Debug)]
+pub(crate) struct RawText {
+    loaded: Result<kassiber_pyjson::Value, ()>,
+    /// The text, kept only when it does not load; it decodes as itself.
+    unparsed: Option<Box<str>>,
+    decoded: std::sync::OnceLock<Value>,
+}
+
+static EMPTY_OBJECT: std::sync::LazyLock<Value> =
+    std::sync::LazyLock::new(|| Value::Object(serde_json::Map::new()));
+static NULL: Value = Value::Null;
+
+impl RawText {
+    fn new(text: &str) -> Self {
+        let loaded = codec::loads(text).map_err(|_| ());
+        Self {
+            unparsed: loaded.is_err().then(|| text.into()),
+            loaded,
+            decoded: std::sync::OnceLock::new(),
+        }
+    }
+
+    pub(crate) fn loaded(&self) -> &Result<kassiber_pyjson::Value, ()> {
+        &self.loaded
+    }
+
+    fn decoded(&self) -> &Value {
+        self.decoded.get_or_init(|| match &self.loaded {
+            Ok(value) => decoded(value),
+            Err(()) => Value::String(self.unparsed.as_deref().unwrap_or_default().into()),
+        })
+    }
+
+    fn is_object(&self) -> bool {
+        matches!(self.loaded, Ok(kassiber_pyjson::Value::Dict(_)))
+    }
+
+    /// The decoded field `key`, decoding only that field: the last entry
+    /// with that key, as the decoded mapping keeps it.
+    fn field(&self, key: &str) -> std::borrow::Cow<'_, Value> {
+        use std::borrow::Cow;
+        if let Some(decoded) = self.decoded.get() {
+            return Cow::Borrowed(&decoded[key]);
+        }
+        let Ok(kassiber_pyjson::Value::Dict(items)) = &self.loaded else {
+            return Cow::Borrowed(&NULL);
+        };
+        items
+            .iter()
+            .rev()
+            .find_map(|(k, v)| match k {
+                kassiber_pyjson::Key::Str(k) if k.as_str() == Some(key) => Some(v),
+                _ => None,
+            })
+            .map_or(Cow::Borrowed(&NULL), |v| Cow::Owned(decoded(v)))
+    }
+}
+
+thread_local! {
+    static RAW_TEXTS: std::cell::RefCell<crate::fxhash::HashMap<String, std::sync::Arc<RawText>>> =
+        std::cell::RefCell::new(Default::default());
+}
+
+/// The operation's loaded raw text `text`, shared by every reader.
+pub(crate) fn raw_text(text: &str) -> std::sync::Arc<RawText> {
+    if let Some(hit) = RAW_TEXTS.with(|m| m.borrow().get(text).cloned()) {
+        return hit;
+    }
+    let entry = std::sync::Arc::new(RawText::new(text));
+    RAW_TEXTS.with(|m| m.borrow_mut().insert(text.to_owned(), entry.clone()));
+    entry
+}
+
 pub(crate) enum TransferValue<'a> {
     Borrowed(&'a Value),
-    Shared(Rc<Value>),
+    Raw(std::sync::Arc<RawText>),
+    Empty,
 }
 
 impl Deref for TransferValue<'_> {
@@ -92,52 +188,27 @@ impl Deref for TransferValue<'_> {
     fn deref(&self) -> &Value {
         match self {
             Self::Borrowed(value) => value,
-            Self::Shared(value) => value,
+            Self::Raw(raw) => raw.decoded(),
+            Self::Empty => &EMPTY_OBJECT,
+        }
+    }
+}
+
+impl TransferValue<'_> {
+    /// `self[key]`, without decoding the rest of a raw text.
+    pub(crate) fn field(&self, key: &str) -> std::borrow::Cow<'_, Value> {
+        use std::borrow::Cow;
+        match self {
+            Self::Borrowed(value) => Cow::Borrowed(&value[key]),
+            Self::Raw(raw) => raw.field(key),
+            Self::Empty => Cow::Borrowed(&NULL),
         }
     }
 }
 
 fn transfer_value(value: &Value) -> TransferValue<'_> {
-    transfer_value_loaded(value, None)
-}
-
-/// `transfer_value`, reusing the caller's `codec::loads` of a string value.
-fn transfer_value_loaded<'v>(
-    value: &'v Value,
-    loaded: Option<&Result<kassiber_pyjson::Value, ()>>,
-) -> TransferValue<'v> {
-    fn decoded(value: &kassiber_pyjson::Value) -> Value {
-        use kassiber_pyjson::Value as Py;
-        match value {
-            Py::Float(n) if !n.is_finite() => json!(kassiber_pyjson::float_repr(*n)),
-            Py::List(values) => json!(values.iter().map(decoded).collect::<Vec<_>>()),
-            Py::Dict(values) => Value::Object(
-                values
-                    .iter()
-                    .filter_map(|(k, v)| {
-                        if let kassiber_pyjson::Key::Str(k) = k {
-                            Some((k.as_str()?.to_owned(), decoded(v)))
-                        } else {
-                            None
-                        }
-                    })
-                    .collect(),
-            ),
-            _ => codec::to_json(value),
-        }
-    }
     match value.as_str() {
-        Some(s) => TransferValue::Shared(codec::memo_shared(codec::Memo::Transfer, s, || {
-            let parsed;
-            let loaded = match loaded {
-                Some(loaded) => loaded.as_ref().ok(),
-                None => {
-                    parsed = codec::loads(s).ok();
-                    parsed.as_ref()
-                }
-            };
-            loaded.map(decoded).unwrap_or_else(|| value.clone())
-        })),
+        Some(text) => TransferValue::Raw(raw_text(text)),
         None => TransferValue::Borrowed(value),
     }
 }
@@ -146,19 +217,15 @@ pub fn transfer_object(value: &Value) -> Value {
 }
 
 pub(crate) fn transfer_object_ref(value: &Value) -> TransferValue<'_> {
-    transfer_object_ref_loaded(value, None)
-}
-
-/// `transfer_object_ref`, reusing the caller's `codec::loads` of a string value.
-pub(crate) fn transfer_object_ref_loaded<'v>(
-    value: &'v Value,
-    loaded: Option<&Result<kassiber_pyjson::Value, ()>>,
-) -> TransferValue<'v> {
-    let value = transfer_value_loaded(value, loaded);
-    if value.is_object() {
+    let value = transfer_value(value);
+    let object = match &value {
+        TransferValue::Raw(raw) => raw.is_object(),
+        value => value.is_object(),
+    };
+    if object {
         value
     } else {
-        TransferValue::Shared(Rc::new(json!({})))
+        TransferValue::Empty
     }
 }
 
@@ -268,6 +335,7 @@ pub(crate) fn record_scope(row: &crate::snapshot::Record) -> Scope {
 
 /// Releases memoized scopes at the end of an operation.
 pub(crate) fn clear_scopes() {
+    RAW_TEXTS.with(|m| m.borrow_mut().clear());
     SCOPES.with(|m| m.borrow_mut().clear());
     SCOPE_ROWS.with(|m| m.borrow_mut().clear());
 }
@@ -331,6 +399,23 @@ fn physical_scope<R: crate::fields::Fields + ?Sized>(row: &R) -> Scope {
     .any(|p| text(row.at("id")).starts_with(p))
     {
         return None;
+    }
+    // A raw object without nested graphs is its only payload. With an
+    // invalid txid, or none and no txid external id, it has no scope; this
+    // reads those fields without decoding the rest of the text.
+    if let Some(raw_json) = row.at("raw_json").as_str() {
+        let raw = raw_text(raw_json);
+        if raw.is_object()
+            && !raw.field("tx").is_object()
+            && !raw.field("ownership_graph").is_object()
+        {
+            let txid = raw.field("txid");
+            if !text(&txid).py_strip().is_empty() {
+                strict_txid(&txid)?;
+            } else if strict_txid(row.at("external_id")).is_none() {
+                return None;
+            }
+        }
     }
     let raw = transfer_object_ref(row.at("raw_json"));
     let config = transfer_object_ref(if truth(row.at("config_json")) {
@@ -1101,6 +1186,42 @@ mod semantic_tests {
         let mut owned = transfer_object(&original);
         owned["tx"]["txid"] = json!("changed");
         assert_eq!(original["tx"]["txid"], "sample");
+        codec::clear_memos();
+    }
+
+    #[test]
+    fn raw_fields_match_decoded_objects() {
+        let texts = [
+            r#"{"chain":"liquid","chain":"bitcoin","txid":"a","n":NaN}"#,
+            r#"{"tx":{"txid":"b"},"network":Infinity,"x":[1,2.5]}"#,
+            r#"[{"chain":"bitcoin"}]"#,
+            r#""chain""#,
+            r#"{"chain":"\ud800","network":"main"}"#,
+            "not json",
+            "",
+        ];
+        for text in texts {
+            for decoded_first in [false, true] {
+                codec::clear_memos();
+                let value = json!(text);
+                let object = transfer_object_ref(&value);
+                if decoded_first {
+                    let _ = &*object;
+                }
+                let keys = ["chain", "network", "txid", "tx", "n", "x", "missing"];
+                let fields: Vec<Value> = keys
+                    .iter()
+                    .map(|key| object.field(key).into_owned())
+                    .collect();
+                for (key, field) in keys.iter().zip(fields) {
+                    assert_eq!(
+                        field,
+                        transfer_object(&value)[*key],
+                        "{text} {key} {decoded_first}"
+                    );
+                }
+            }
+        }
         codec::clear_memos();
     }
 

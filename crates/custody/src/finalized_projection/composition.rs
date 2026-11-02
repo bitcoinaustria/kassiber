@@ -3,6 +3,7 @@
 use super::*;
 use crate::evidence::canonical::{EventRef, LegRef};
 use crate::python_text::PythonText;
+use crate::quantity::DecisionRef;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 /// Observations by quantity hash.
@@ -17,7 +18,7 @@ pub(super) struct Input<'a> {
     pub op: &'a str,
     pub profile: Cow<'a, Value>,
     pub observations: Vec<LegRef<'a>>,
-    pub decisions: Vec<&'a Value>,
+    pub decisions: Vec<DecisionRef<'a>>,
     pub eligible: Vec<Cow<'a, Value>>,
     pub events: Vec<EventRef<'a>>,
     pub pool_barriers: Cow<'a, Value>,
@@ -35,7 +36,10 @@ impl<'a> Input<'a> {
             op: v["op"].as_str().unwrap_or(""),
             profile: Cow::Borrowed(&v["profile"]),
             observations: array(&v["observations"]).iter().map(LegRef::Json).collect(),
-            decisions: array(&v["decisions"]).iter().collect(),
+            decisions: array(&v["decisions"])
+                .iter()
+                .map(DecisionRef::Json)
+                .collect(),
             eligible: array(&v["eligible"]).iter().map(Cow::Borrowed).collect(),
             events: array(&v["events"]).iter().map(EventRef::Json).collect(),
             pool_barriers: Cow::Borrowed(&v["pool_barriers"]),
@@ -49,10 +53,10 @@ impl<'a> Input<'a> {
         }
     }
 }
-fn internal(d: &Value) -> bool {
-    !d["target"].is_null()
+fn internal(d: DecisionRef<'_>) -> bool {
+    !d.at("target").is_null()
         && matches!(
-            d["state"].as_str(),
+            d.at("state").as_str(),
             Some("internal_verified" | "internal_reviewed")
         )
 }
@@ -72,14 +76,14 @@ fn observation<'a>(observations: &Observations<'a>, slice: &Value) -> Result<Leg
 }
 /// Close selected internal paths and propagate their complete root origins.
 pub(super) fn connected(
-    decisions: &[&Value],
+    decisions: &[DecisionRef<'_>],
     observations: &Observations<'_>,
     explicit: &BTreeSet<String>,
 ) -> Result<Value, String> {
     let mut neighbors: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-    for d in decisions.iter().filter(|d| internal(d)) {
-        let a = string(&observation(observations, &d["source"])?["anchor_transaction_id"]);
-        let b = string(&observation(observations, &d["target"])?["anchor_transaction_id"]);
+    for d in decisions.iter().filter(|d| internal(**d)) {
+        let a = string(&observation(observations, d.at("source"))?["anchor_transaction_id"]);
+        let b = string(&observation(observations, d.at("target"))?["anchor_transaction_id"]);
         neighbors.entry(a.clone()).or_default().insert(b.clone());
         neighbors.entry(b).or_default().insert(a);
     }
@@ -263,15 +267,15 @@ pub(super) fn evaluate_parts<'r>(
         .iter()
         .map(|o| (string_ref(o.at("quantity_hash")), *o))
         .collect();
-    let mut decisions: Vec<&Value> = v.decisions.clone();
+    let mut decisions: Vec<DecisionRef> = v.decisions.clone();
     // Resolve every source before sorting, matching Python's key admission.
     let mut keyed = Vec::new();
     for d in decisions.drain(..) {
-        let source = observation(&observations, &d["source"])?;
+        let source = observation(&observations, d.at("source"))?;
         keyed.push((
             (
                 string_ref(source.at("occurred_at")),
-                slice_key(&d["source"])?,
+                slice_key(d.at("source"))?,
             ),
             d,
         ));
@@ -326,41 +330,41 @@ pub(super) fn evaluate_parts<'r>(
         super::quarantines::Quarantines::with_interpreter(v, &closure, diagnostics, rows)?;
     let mut fees = FeeAllocation::from_decisions(decisions.iter().copied())?;
     for d in &decisions {
-        let source = observation(&observations, &d["source"])?;
-        let target = if d["target"].is_null() {
+        let source = observation(&observations, d.at("source"))?;
+        let target = if d.at("target").is_null() {
             None
         } else {
-            Some(observation(&observations, &d["target"])?)
+            Some(observation(&observations, d.at("target"))?)
         };
         if blocked.contains(&*string_ref(&source["anchor_transaction_id"]))
             || target.is_some_and(|t| blocked.contains(&*string_ref(&t["anchor_transaction_id"])))
         {
             continue;
         }
-        if !eligible.contains(&slice_key(&d["source"])?) {
+        if !eligible.contains(&slice_key(d.at("source"))?) {
             if finalize {
                 quarantines.basis(source)?;
             }
             continue;
         }
-        if internal(d) {
+        if internal(*d) {
             let target = target.expect("internal has target");
             let out = slice_row(
                 source,
-                &d["source"],
+                d.at("source"),
                 rows,
                 "move-out",
-                &fees.move_fee(d, source)?,
+                &fees.move_fee(*d, source)?,
             )?;
-            let input = slice_row(target, &d["target"], rows, "move-in", &BigInt::from(0))?;
-            let id = if codec::truth(&d["selected_claim_id"]) {
-                d["selected_claim_id"].clone()
+            let input = slice_row(target, d.at("target"), rows, "move-in", &BigInt::from(0))?;
+            let id = if codec::truth(d.at("selected_claim_id")) {
+                d.at("selected_claim_id").clone()
             } else {
                 out["id"].clone()
             };
             moves.push(id.clone());
             if source["asset"] == target["asset"] {
-                let mut pair = json!({"out":out,"in":input,"pair_id":id,"source":d["reason"],"policy":"carrying-value","group_id":d["atomic_bundle_id"]});
+                let mut pair = json!({"out":out,"in":input,"pair_id":id,"source":d.at("reason"),"policy":"carrying-value","group_id":d.at("atomic_bundle_id")});
                 if privacy(&out) || privacy(&input) {
                     pair["kind"] = json!("custody-reviewed-coinjoin");
                 }
@@ -374,7 +378,7 @@ pub(super) fn evaluate_parts<'r>(
                     .strip_prefix("pair:")
                     .map(|s| s.split(':').next().unwrap())
                     .unwrap_or(&id_text);
-                cross.push(json!({"pair_id":durable,"component_id":if codec::truth(&d["component_id"]) {d["component_id"].clone()} else {json!(component)},"out_id":out["id"],"in_id":input["id"],"out_transaction_id":source["anchor_transaction_id"],"in_transaction_id":target["anchor_transaction_id"],"out_asset":source["asset"],"in_asset":target["asset"],"policy":if codec::truth(&d["transfer_policy"]) {d["transfer_policy"].clone()} else {json!("carrying-value")},"kind":if codec::truth(&d["transfer_kind"]) {d["transfer_kind"].clone()} else {json!("custody_cross_rail")}}));
+                cross.push(json!({"pair_id":durable,"component_id":if codec::truth(d.at("component_id")) {d.at("component_id").clone()} else {json!(component)},"out_id":out["id"],"in_id":input["id"],"out_transaction_id":source["anchor_transaction_id"],"in_transaction_id":target["anchor_transaction_id"],"out_asset":source["asset"],"in_asset":target["asset"],"policy":if codec::truth(d.at("transfer_policy")) {d.at("transfer_policy").clone()} else {json!("carrying-value")},"kind":if codec::truth(d.at("transfer_kind")) {d.at("transfer_kind").clone()} else {json!("custody_cross_rail")}}));
             }
             projected.extend([out, input]);
             continue;
@@ -387,20 +391,20 @@ pub(super) fn evaluate_parts<'r>(
             continue;
         }
         if !matches!(
-            d["state"].as_str(),
+            d.at("state").as_str(),
             Some("external_confirmed" | "external_presumed")
         ) {
             continue;
         }
-        if d["destination_kind"] == "fee" {
-            if let Some(amount) = fees.reviewed_fee(d)? {
+        if d.at("destination_kind") == "fee" {
+            if let Some(amount) = fees.reviewed_fee(*d)? {
                 projected.push(fee_row(source, &amount, rows, "reviewed-fee")?);
             }
             continue;
         }
         let candidate = &payouts[string(&source["anchor_transaction_id"])];
-        let payout = if d["reason"] == "reviewed_direct_payout_source"
-            && d["component_id"] == candidate["component_id"]
+        let payout = if d.at("reason") == "reviewed_direct_payout_source"
+            && *d.at("component_id") == candidate["component_id"]
         {
             candidate
         } else {
@@ -412,8 +416,8 @@ pub(super) fn evaluate_parts<'r>(
             } else {
                 &source["amount_msat"]
             };
-            let selected =
-                integer_big(&d["source"]["end_msat"])? - integer_big(&d["source"]["start_msat"])?;
+            let selected = integer_big(&d.at("source")["end_msat"])?
+                - integer_big(&d.at("source")["start_msat"])?;
             if selected != integer_big(reviewed)? {
                 return Err("AppError".into());
             }
@@ -438,7 +442,7 @@ pub(super) fn evaluate_parts<'r>(
             }
             let out = slice_row(
                 source,
-                &d["source"],
+                d.at("source"),
                 rows,
                 "direct-payout-source",
                 &fees.raw(source)?,
@@ -452,22 +456,22 @@ pub(super) fn evaluate_parts<'r>(
             ]);
             continue;
         }
-        let mut row = slice_row(source, &d["source"], rows, "external", &fees.raw(source)?)?;
-        if !d["external_economic_subtype"].is_null() {
-            row["kind"] = d["external_economic_subtype"].clone();
-            row["custody_external_economic_subtype"] = d["external_economic_subtype"].clone();
+        let mut row = slice_row(source, d.at("source"), rows, "external", &fees.raw(source)?)?;
+        if !d.at("external_economic_subtype").is_null() {
+            row["kind"] = d.at("external_economic_subtype").clone();
+            row["custody_external_economic_subtype"] = d.at("external_economic_subtype").clone();
             row["privacy_boundary"] = Value::Null;
         }
         let amount =
-            integer_big(&d["source"]["end_msat"])? - integer_big(&d["source"]["start_msat"])?;
+            integer_big(&d.at("source")["end_msat"])? - integer_big(&d.at("source")["start_msat"])?;
         projected.push(payouts::price_row(row, payout, &amount)?);
     }
     // Index the complete decision population once, including unselected targets.
     // Re-scanning it for every receipt makes finalization quadratic.
     let mut targets_by_observation: BTreeMap<Cow<str>, Vec<(Msat, Msat)>> = BTreeMap::new();
     for decision in &decisions {
-        if !decision["target"].is_null() {
-            let (hash, start, end) = slice_key(&decision["target"])?;
+        if !decision.at("target").is_null() {
+            let (hash, start, end) = slice_key(decision.at("target"))?;
             targets_by_observation
                 .entry(hash)
                 .or_default()

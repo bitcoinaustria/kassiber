@@ -1264,8 +1264,8 @@ impl QuantityState {
             .map(|at| self.located(*at))
     }
     /// Arbitrated decisions as their complete JSON objects.
-    pub(crate) fn decisions(&self) -> impl Iterator<Item = &Value> {
-        self.projection.decisions.iter().map(|d| d.value())
+    pub(crate) fn decisions(&self) -> impl Iterator<Item = super::arbitration::DecisionRef<'_>> {
+        self.projection.decisions.iter().map(|d| d.as_ref())
     }
     pub(crate) fn issues(&self) -> &[kassiber_pyjson::Value] {
         &self.issues

@@ -166,10 +166,56 @@ impl Claim {
     }
 }
 #[derive(Clone)]
-pub(super) struct Decision {
+pub(crate) struct Decision {
     value: std::cell::OnceCell<Value>,
+    /// The default decision's source slice object, built on first read.
+    source_value: std::cell::OnceCell<Value>,
     source: Slice,
     target: Option<Slice>,
+}
+
+static NULL: Value = Value::Null;
+static DEFAULT_TYPE: std::sync::LazyLock<Value> =
+    std::sync::LazyLock::new(|| Value::String("ArbitratedSlice".into()));
+static DEFAULT_STATE: std::sync::LazyLock<Value> =
+    std::sync::LazyLock::new(|| Value::String("external_presumed".into()));
+static DEFAULT_REASON: std::sync::LazyLock<Value> =
+    std::sync::LazyLock::new(|| Value::String("unmatched_outbound_default".into()));
+static EMPTY: std::sync::LazyLock<Value> = std::sync::LazyLock::new(|| Value::Array(Vec::new()));
+
+/// An arbitrated decision read by field: the default decision, whose fields
+/// are fixed but its source, or a decision's JSON object.
+#[derive(Clone, Copy)]
+pub(crate) enum DecisionRef<'a> {
+    Default(&'a Decision),
+    Json(&'a Value),
+}
+
+impl<'a> DecisionRef<'a> {
+    /// The field `key`, borrowed for the decision's lifetime.
+    pub(crate) fn at(self, key: &str) -> &'a Value {
+        match self {
+            Self::Json(value) => &value[key],
+            Self::Default(decision) => match key {
+                "$type" => &DEFAULT_TYPE,
+                "state" => &DEFAULT_STATE,
+                "reason" => &DEFAULT_REASON,
+                "contender_claim_ids" => &EMPTY,
+                "source" => decision
+                    .source_value
+                    .get_or_init(|| decision.source.value()),
+                _ => &NULL,
+            },
+        }
+    }
+}
+
+impl std::ops::Index<&str> for DecisionRef<'_> {
+    type Output = Value;
+
+    fn index(&self, key: &str) -> &Value {
+        self.at(key)
+    }
 }
 impl Decision {
     fn new(source: Slice, state: &str, reason: &str) -> Self {
@@ -179,8 +225,16 @@ impl Decision {
         }
         Self {
             value,
+            source_value: std::cell::OnceCell::new(),
             source,
             target: None,
+        }
+    }
+    /// The decision read by field, without building a default decision.
+    pub(crate) fn as_ref(&self) -> DecisionRef<'_> {
+        match self.value.get() {
+            Some(value) => DecisionRef::Json(value),
+            None => DecisionRef::Default(self),
         }
     }
     pub(super) fn value(&self) -> &Value {
@@ -983,11 +1037,19 @@ pub(super) fn arbitrate<'a>(
     destination_overlaps(&mut decisions);
     atomic_bundles(&mut decisions, &claims);
     let postings = postings(&by_hash, observations, &decisions)?;
-    let mut totals: BTreeMap<_, BigInt> = BTreeMap::new();
+    // Sum each observation's postings, then each domain's: a posting's
+    // domain is its observation's, and integer sums regroup exactly.
+    let mut by_observation: crate::fxhash::HashMap<usize, (LegRef<'a>, BigInt)> =
+        Default::default();
     for p in &postings {
-        *totals
-            .entry(super::Domain::key(&p.observation))
-            .or_default() += &p.amount;
+        by_observation
+            .entry(p.observation.address())
+            .or_insert_with(|| (p.observation, BigInt::from(0)))
+            .1 += &p.amount;
+    }
+    let mut totals: BTreeMap<_, BigInt> = BTreeMap::new();
+    for (observation, sum) in by_observation.values() {
+        *totals.entry(super::Domain::key(observation)).or_default() += sum;
     }
     if totals.values().any(|n| *n != BigInt::from(0)) {
         return Err("AssertionError".into());

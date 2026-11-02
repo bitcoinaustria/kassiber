@@ -643,12 +643,11 @@ pub(crate) fn loads_bytes(text: &[u8]) -> Result<Py, String> {
 #[derive(Clone, Copy)]
 pub(crate) enum Memo {
     Object,
-    Transfer,
 }
 
 thread_local! {
-    static MEMOS: std::cell::RefCell<[crate::fxhash::HashMap<String, Rc<Value>>; 2]> =
-        std::cell::RefCell::new([Default::default(), Default::default()]);
+    static MEMOS: std::cell::RefCell<[crate::fxhash::HashMap<String, Rc<Value>>; 1]> =
+        std::cell::RefCell::new([Default::default()]);
 }
 
 pub(crate) fn memo(kind: Memo, text: &str, convert: impl FnOnce() -> Value) -> Value {

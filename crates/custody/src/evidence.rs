@@ -97,9 +97,9 @@ pub(crate) fn scope_fields<'a>(row: impl Fn(&str) -> &'a Value) -> Result<(Strin
     });
     let kind = strip(&text(row("wallet_kind"))).py_lower();
     let asset = strip(&text(row("asset"))).py_upper();
-    let raw_chain = text(&raw["chain"]);
-    let selected = if !raw["chain"].is_null() && raw["chain"] != "" {
-        raw_chain
+    let raw_chain = raw.field("chain");
+    let selected = if !raw_chain.is_null() && *raw_chain != "" {
+        text(&raw_chain)
     } else if lightning(&kind) {
         "lightning".into()
     } else if !row("chain").is_null() && *row("chain") != "" {
@@ -117,8 +117,9 @@ pub(crate) fn scope_fields<'a>(row: impl Fn(&str) -> &'a Value) -> Result<(Strin
     } else {
         &selected
     })?;
-    let n = if truth(&raw["network"]) {
-        &raw["network"]
+    let raw_network = raw.field("network");
+    let n = if truth(&raw_network) {
+        &*raw_network
     } else if truth(row("network")) {
         row("network")
     } else {
@@ -225,7 +226,7 @@ pub(crate) fn event_key_of<F: Fields + ?Sized>(row: &F) -> Result<EventKey, Erro
     let kind = if truth(row.at("external_id_kind")) {
         text(row.at("external_id_kind"))
     } else {
-        text(&raw()["external_id_kind"])
+        text(&raw().field("external_id_kind"))
     };
     if kind.py_strip().py_lower() == "txid" {
         candidates.extend([
@@ -243,7 +244,7 @@ pub(crate) fn event_key_of<F: Fields + ?Sized>(row: &F) -> Result<EventKey, Erro
             row.at("native_namespace"),
             row.at("source_ref"),
             row.at("backend_name"),
-            &raw()["_kassiber_provenance"]["import_source"],
+            &raw().field("_kassiber_provenance")["import_source"],
             row.at("wallet_id"),
         ]
         .into_iter()
@@ -252,13 +253,10 @@ pub(crate) fn event_key_of<F: Fields + ?Sized>(row: &F) -> Result<EventKey, Erro
         .unwrap_or_default()
         .py_strip()
         .py_lower();
-        let declared = [
-            row.at("native_event_id"),
-            &raw()["txid"],
-            row.at("external_id"),
-        ]
-        .into_iter()
-        .find(|v| !v.is_null() && **v != Value::String(String::new()));
+        let raw_txid = raw().field("txid");
+        let declared = [row.at("native_event_id"), &*raw_txid, row.at("external_id")]
+            .into_iter()
+            .find(|v| !v.is_null() && **v != Value::String(String::new()));
         let native = declared
             .filter(|v| truth(v))
             .or_else(|| {
@@ -561,7 +559,7 @@ pub struct Enriched {
     native_normalized: Option<Value>,
     duplicate_normalized: Option<Value>,
     /// `codec::loads` of a string `raw_json`, parsed once for every reader.
-    raw: Option<Result<Py, ()>>,
+    raw: Option<std::sync::Arc<crate::graph::RawText>>,
 }
 impl Enriched {
     pub fn row(&self) -> usize {
@@ -641,7 +639,7 @@ impl<R: RowRecord> Fields for EnrichedRow<'_, R> {
     }
 
     fn loaded_raw(&self) -> Option<&Result<Py, ()>> {
-        self.facts.raw.as_ref()
+        self.facts.raw.as_deref().map(crate::graph::RawText::loaded)
     }
 }
 
@@ -659,12 +657,12 @@ fn enrich_with_keys<R: RowRecord>(
         let original = |key: &str| row.field(key).unwrap_or(&Value::Null);
         let auth = authority_facts(&Retained(row))?;
         let config = crate::graph::transfer_object_ref(original("config_json"));
-        let loaded = original("raw_json")
-            .as_str()
-            .map(|s| codec::loads(s).map_err(|_| ()));
-        let raw = crate::graph::transfer_object_ref_loaded(original("raw_json"), loaded.as_ref());
-        let mut chain = if truth(&raw["chain"]) {
-            raw["chain"].clone()
+        // The loaded text is shared with every later reader of it.
+        let loaded = original("raw_json").as_str().map(crate::graph::raw_text);
+        let raw = crate::graph::transfer_object_ref(original("raw_json"));
+        let raw_chain = raw.field("chain");
+        let mut chain = if truth(&raw_chain) {
+            raw_chain.into_owned()
         } else {
             config["chain"].clone()
         };
@@ -672,8 +670,9 @@ fn enrich_with_keys<R: RowRecord>(
         {
             chain = json!("lightning");
         }
-        let network = if truth(&raw["network"]) {
-            raw["network"].clone()
+        let raw_network = raw.field("network");
+        let network = if truth(&raw_network) {
+            raw_network.into_owned()
         } else {
             config["network"].clone()
         };

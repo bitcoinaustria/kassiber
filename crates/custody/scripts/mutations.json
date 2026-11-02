@@ -2627,7 +2627,7 @@
     "id": "J-fanout-true-source-count",
     "file": "crates/custody/src/interpretation/fanout.rs",
     "find": "outs.push(*row);",
-    "replace": "if !handled.contains(&codec::pystr(&row[\"id\"])) { outs.push(*row); }",
+    "replace": "if !handled.contains(&codec::pystr(row.at(\"id\"))) { outs.push(*row); }",
     "expect_failing": [
       "fanout_boundary_handled_other_source"
     ],
@@ -2797,7 +2797,7 @@
     "id": "J-fanout-synthetic-row",
     "file": "crates/custody/src/interpretation/fanout.rs",
     "find": "leg_rows.push(leg);",
-    "replace": "leg_rows.push(incoming.clone());",
+    "replace": "leg_rows.push(incoming.json().into_owned());",
     "expect_failing": [
       "interpretation_fanout_bitcoin"
     ],
@@ -3027,7 +3027,7 @@
     "id": "J-fanout-row-id",
     "file": "crates/custody/src/interpretation/fanout.rs",
     "find": "base[\"id\"] = json!(id);",
-    "replace": "base[\"id\"] = row[\"id\"].clone();",
+    "replace": "base[\"id\"] = row.at(\"id\").clone();",
     "expect_failing": [
       "interpretation_fanout_bitcoin"
     ],
@@ -3037,7 +3037,7 @@
     "id": "J-fanout-external-id",
     "file": "crates/custody/src/interpretation/fanout.rs",
     "find": "base[\"external_id\"] = json!(id);",
-    "replace": "base[\"external_id\"] = row[\"external_id\"].clone();",
+    "replace": "base[\"external_id\"] = row.at(\"external_id\").clone();",
     "expect_failing": [
       "interpretation_fanout_provider_ids"
     ],
@@ -5027,7 +5027,7 @@
     "id": "R2c-ownership-duplicate-group-handled",
     "file": "crates/custody/src/interpretation/ownership.rs",
     "find": "for row in group {\n            economic",
-    "replace": "for row in group.iter().filter(|row| !handled.contains(&codec::pystr(&row[\"id\"]))) {\n            economic",
+    "replace": "for row in group.iter().filter(|row| !handled.contains(&codec::pystr(row.at(\"id\")))) {\n            economic",
     "expect_failing": [
       "ownership_production_vectors"
     ],
@@ -6096,8 +6096,8 @@
   {
     "id": "R2c-consolidation-group-rows",
     "file": "crates/custody/src/interpretation/consolidation.rs",
-    "find": "\"group_block_rows\":block_rows",
-    "replace": "\"group_block_rows\":[]",
+    "find": "\"group_block_rows\":block_rows.iter().map(|row| row.json()).collect::<Vec<_>>()",
+    "replace": "\"group_block_rows\":Vec::<Value>::new()",
     "expect_failing": [
       "consolidation_production_vectors"
     ],
@@ -20956,7 +20956,7 @@
   {
     "id": "projection2-bundle-atomic",
     "file": "crates/custody/src/finalized_projection/fees.rs",
-    "find": "if codec::truth(&decision[\"atomic_bundle_id\"])",
+    "find": "if codec::truth(decision.at(\"atomic_bundle_id\"))",
     "replace": "if false",
     "expect_failing": [
       "projection_fee_allocation_vectors"
@@ -20976,8 +20976,8 @@
   {
     "id": "projection2-fee-only-scan",
     "file": "crates/custody/src/finalized_projection/fees.rs",
-    "find": "decision[\"destination_kind\"] != \"fee\"",
-    "replace": "decision[\"destination_kind\"] == \"fee\"",
+    "find": "decision.at(\"destination_kind\") != \"fee\"",
+    "replace": "decision.at(\"destination_kind\") == \"fee\"",
     "expect_failing": [
       "projection_fee_allocation_vectors"
     ],
@@ -21016,8 +21016,8 @@
   {
     "id": "projection2-component-replacement",
     "file": "crates/custody/src/finalized_projection/fees.rs",
-    "find": "!decision[\"component_id\"].is_null()",
-    "replace": "decision[\"component_id\"].is_null()",
+    "find": "!decision.at(\"component_id\").is_null()",
+    "replace": "decision.at(\"component_id\").is_null()",
     "expect_failing": [
       "projection_fee_allocation_vectors"
     ],
@@ -21026,7 +21026,7 @@
   {
     "id": "projection2-refund-additive",
     "file": "crates/custody/src/finalized_projection/fees.rs",
-    "find": "decision[\"transfer_kind\"] != \"swap-refund\"",
+    "find": "decision.at(\"transfer_kind\") != \"swap-refund\"",
     "replace": "true",
     "expect_failing": [
       "projection_fee_allocation_vectors"
@@ -21246,7 +21246,7 @@
   {
     "id": "projection2-bundle-reason",
     "file": "crates/custody/src/finalized_projection/fees.rs",
-    "find": "decision[\"reason\"] == \"reviewed_custody_component\"",
+    "find": "decision.at(\"reason\") == \"reviewed_custody_component\"",
     "replace": "true",
     "expect_failing": [
       "projection_fee_allocation_vectors"
@@ -21256,8 +21256,8 @@
   {
     "id": "projection2-reviewed-amount",
     "file": "crates/custody/src/finalized_projection/fees.rs",
-    "find": "integer_big(&decision[\"source\"][\"end_msat\"])?\n                - integer_big(&decision[\"source\"][\"start_msat\"])?",
-    "replace": "integer_big(&decision[\"source\"][\"end_msat\"])?",
+    "find": "integer_big(&decision.at(\"source\")[\"end_msat\"])?\n                - integer_big(&decision.at(\"source\")[\"start_msat\"])?",
+    "replace": "integer_big(&decision.at(\"source\")[\"end_msat\"])?",
     "expect_failing": [
       "projection_fee_allocation_vectors"
     ],
@@ -21286,8 +21286,8 @@
   {
     "id": "projection3-neighbor-anchor",
     "file": "crates/custody/src/finalized_projection/composition.rs",
-    "find": "&d[\"target\"])?[\"anchor_transaction_id\"]",
-    "replace": "&d[\"source\"])?[\"anchor_transaction_id\"]",
+    "find": "d.at(\"target\"))?[\"anchor_transaction_id\"]",
+    "replace": "d.at(\"source\"))?[\"anchor_transaction_id\"]",
     "expect_failing": [
       "projection_connected_path_vectors"
     ],
@@ -21376,8 +21376,8 @@
   {
     "id": "projection3-eligibility",
     "file": "crates/custody/src/finalized_projection/composition.rs",
-    "find": "if !eligible.contains(&slice_key(&d[\"source\"])?)",
-    "replace": "if eligible.contains(&slice_key(&d[\"source\"])?)",
+    "find": "if !eligible.contains(&slice_key(d.at(\"source\"))?)",
+    "replace": "if eligible.contains(&slice_key(d.at(\"source\"))?)",
     "expect_failing": [
       "projection_selected_composition_vectors"
     ],
@@ -21386,7 +21386,7 @@
   {
     "id": "projection3-move-fee",
     "file": "crates/custody/src/finalized_projection/composition.rs",
-    "find": "&fees.move_fee(d, source)?",
+    "find": "&fees.move_fee(*d, source)?",
     "replace": "&BigInt::from(0)",
     "expect_failing": [
       "projection_selected_composition_vectors"
@@ -21406,7 +21406,7 @@
   {
     "id": "projection3-move-id",
     "file": "crates/custody/src/finalized_projection/composition.rs",
-    "find": "d[\"selected_claim_id\"].clone()",
+    "find": "d.at(\"selected_claim_id\").clone()",
     "replace": "out[\"id\"].clone()",
     "expect_failing": [
       "projection_selected_composition_vectors"
@@ -21486,7 +21486,7 @@
   {
     "id": "projection3-external-subtype",
     "file": "crates/custody/src/finalized_projection/composition.rs",
-    "find": "row[\"kind\"] = d[\"external_economic_subtype\"].clone();",
+    "find": "row[\"kind\"] = d.at(\"external_economic_subtype\").clone();",
     "replace": "row[\"kind\"] = json!(\"sell\");",
     "expect_failing": [
       "projection_selected_composition_vectors"
@@ -22406,8 +22406,8 @@
   {
     "id": "projection-review-M21",
     "file": "crates/custody/src/finalized_projection/composition.rs",
-    "find": "let amount =\n            integer_big(&d[\"source\"][\"end_msat\"])? - integer_big(&d[\"source\"][\"start_msat\"])?;",
-    "replace": "let amount =\n            integer_big(&d[\"source\"][\"end_msat\"])?;",
+    "find": "let amount =\n            integer_big(&d.at(\"source\")[\"end_msat\"])? - integer_big(&d.at(\"source\")[\"start_msat\"])?;",
+    "replace": "let amount =\n            integer_big(&d.at(\"source\")[\"end_msat\"])?;",
     "expect_failing": [
       "projection_nonzero_slice_pricing"
     ],
@@ -22616,8 +22616,8 @@
   {
     "id": "projection-review-sweep-M24",
     "file": "crates/custody/src/finalized_projection/composition.rs",
-    "find": "if internal(d) {\n            let target",
-    "replace": "if internal(d) && false {\n            let target",
+    "find": "if internal(*d) {\n            let target",
+    "replace": "if internal(*d) && false {\n            let target",
     "expect_failing": [
       "projection_review_operator_sweep"
     ],
@@ -22676,7 +22676,7 @@
   {
     "id": "projection-review-sweep-M31",
     "file": "crates/custody/src/finalized_projection/composition.rs",
-    "find": "if !matches!(\n            d[\"state\"].as_str(),\n            Some(\"external_confirmed\" | \"external_presumed\")\n        ) {\n            continue;\n        }",
+    "find": "if !matches!(\n            d.at(\"state\").as_str(),\n            Some(\"external_confirmed\" | \"external_presumed\")\n        ) {\n            continue;\n        }",
     "replace": "",
     "expect_failing": [
       "projection_review_operator_sweep"
@@ -22706,8 +22706,8 @@
   {
     "id": "projection-review-sweep-M41",
     "file": "crates/custody/src/finalized_projection/composition.rs",
-    "find": "for d in decisions.iter().filter(|d| internal(d)) {",
-    "replace": "for d in decisions.iter().filter(|d| !d[\"target\"].is_null()) {",
+    "find": "for d in decisions.iter().filter(|d| internal(**d)) {",
+    "replace": "for d in decisions.iter().filter(|d| !d.at(\"target\").is_null()) {",
     "expect_failing": [
       "projection_review_operator_sweep"
     ],
@@ -22846,7 +22846,7 @@
   {
     "id": "R6-payout-slice",
     "file": "crates/custody/src/finalized_projection/composition.rs",
-    "find": "d[\"reason\"] == \"reviewed_direct_payout_source\"",
+    "find": "d.at(\"reason\") == \"reviewed_direct_payout_source\"",
     "replace": "true",
     "expect_failing": [
       "projection_unreviewed_payout_slice"
@@ -22856,7 +22856,7 @@
   {
     "id": "R6-payout-component",
     "file": "crates/custody/src/finalized_projection/composition.rs",
-    "find": "&& d[\"component_id\"] == candidate[\"component_id\"]",
+    "find": "&& *d.at(\"component_id\") == candidate[\"component_id\"]",
     "replace": "",
     "expect_failing": [
       "projection_payout_component_binding"
@@ -23355,16 +23355,6 @@
     "rule": "Owned finalization restores native bytes and escaped literal mappings without converting one into the other."
   },
   {
-    "id": "transfer-memo-kind-isolation",
-    "file": "crates/custody/src/graph.rs",
-    "find": "codec::memo_shared(codec::Memo::Transfer, s, || {",
-    "replace": "codec::memo_shared(codec::Memo::Object, s, || {",
-    "expect_failing": [
-      "embedded_json_readers_keep_conversion_and_mutation_isolation"
-    ],
-    "rule": "Shared transfer parses retain nonfinite identity separately from generic object conversions."
-  },
-  {
     "id": "native-support-raw-escapes",
     "file": "crates/custody/src/components/commitments.rs",
     "find": "!s.contains('\\\\')",
@@ -23807,8 +23797,8 @@
   {
     "id": "canonical-leg-index",
     "file": "crates/custody/src/evidence/canonical.rs",
-    "find": "                Ok(at) => &self.fields[at],",
-    "replace": "                Ok(at) => &self.fields[(at + 1) % 16],",
+    "find": "                Some(at) => &self.fields[at],",
+    "replace": "                Some(at) => &self.fields[(at + 1) % 16],",
     "expect_failing": [
       "quantity_runtime_wrapper_vectors"
     ],
@@ -24053,6 +24043,46 @@
       "gap_beam_unique_and_duplicate_id_python_hashes"
     ],
     "rule": "The moved search result keeps its accounting candidates."
+  },
+  {
+    "id": "raw-field-decoded-first",
+    "file": "crates/custody/src/graph.rs",
+    "find": "            return Cow::Borrowed(&decoded[key]);",
+    "replace": "            return Cow::Borrowed(&decoded[\"chain\"]);",
+    "expect_failing": [
+      "raw_fields_match_decoded_objects"
+    ],
+    "rule": "A decoded raw text answers fields from its object."
+  },
+  {
+    "id": "physical-scope-fast-external",
+    "file": "crates/custody/src/graph.rs",
+    "find": "            } else if strict_txid(row.at(\"external_id\")).is_none() {\n                return None;\n            }",
+    "replace": "            } else {\n                return None;\n            }",
+    "expect_failing": [
+      "cpython_onchain_scopes"
+    ],
+    "rule": "An external txid still scopes a raw object without one."
+  },
+  {
+    "id": "decision-default-state",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "                \"state\" => &DEFAULT_STATE,",
+    "replace": "                \"state\" => &DEFAULT_REASON,",
+    "expect_failing": [
+      "typed_finalized_matches_python_value_adapter"
+    ],
+    "rule": "A default decision reads as its built object."
+  },
+  {
+    "id": "posting-totals-sum",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "            .1 += &p.amount;",
+    "replace": "            .1 = p.amount.clone();",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Domain totals sum every posting."
   },
   {
     "id": "R4-evidence-alias-slot-index",

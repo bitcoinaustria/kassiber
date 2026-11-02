@@ -31,6 +31,30 @@ const FIELDS: [&str; 16] = [
     "wallet_id",
 ];
 
+/// The position of `key` in `FIELDS`. Field names differ in length or first
+/// letters, so a match finds them without searching.
+fn slot(key: &str) -> Option<usize> {
+    Some(match key {
+        "amount_includes_fee" => 0,
+        "amount_msat" => 1,
+        "anchor_transaction_id" => 2,
+        "asset" => 3,
+        "authoritative_chain_observation" => 4,
+        "direction" => 5,
+        "evidence_detail_hash" => 6,
+        "evidence_payload_json" => 7,
+        "fee_attribution" => 8,
+        "fee_msat" => 9,
+        "observation_authority_reason" => 10,
+        "occurred_at" => 11,
+        "profile_id" => 12,
+        "quantity_hash" => 13,
+        "transaction_id" => 14,
+        "wallet_id" => 15,
+        _ => return None,
+    })
+}
+
 /// One `QuantityObservation`.
 #[derive(Clone, Debug)]
 pub struct Leg {
@@ -62,9 +86,9 @@ impl Index<&str> for Leg {
         match key {
             "$type" => &OBSERVATION,
             "event_key" => &self.event_key,
-            _ => match FIELDS.binary_search(&key) {
-                Ok(at) => &self.fields[at],
-                Err(_) => &NULL,
+            _ => match slot(key) {
+                Some(at) => &self.fields[at],
+                None => &NULL,
             },
         }
     }
@@ -224,6 +248,14 @@ impl<'a> LegRef<'a> {
         }
     }
 
+    /// The observation's address, which identifies it while it is borrowed.
+    pub fn address(self) -> usize {
+        match self {
+            Self::Typed(leg) => leg as *const Leg as usize,
+            Self::Json(value) => value as *const Value as usize,
+        }
+    }
+
     /// Whether both name the same observation.
     pub fn same(self, other: Self) -> bool {
         match (self, other) {
@@ -319,3 +351,18 @@ pub fn json_events(canonical: &Value) -> Vec<EventRef<'_>> {
 /// reference to either.
 pub trait Obs: for<'k> Index<&'k str, Output = Value> {}
 impl<T: for<'k> Index<&'k str, Output = Value> + ?Sized> Obs for T {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn leg_slots_name_their_fields() {
+        for (at, name) in FIELDS.iter().enumerate() {
+            assert_eq!(slot(name), Some(at), "{name}");
+        }
+        for name in ["", "$type", "event_key", "amount", "wallet_idx", "Asset"] {
+            assert_eq!(slot(name), None, "{name}");
+        }
+    }
+}

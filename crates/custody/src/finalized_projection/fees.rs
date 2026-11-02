@@ -1,13 +1,14 @@
 //! Fee state only. Callers retain responsibility for selection and barriers.
 use super::*;
 use crate::evidence::canonical::LegRef;
+use crate::quantity::DecisionRef;
 use std::collections::BTreeMap;
 
-fn bundle(decision: &Value) -> Option<String> {
-    if codec::truth(&decision["atomic_bundle_id"]) {
-        return Some(string(&decision["atomic_bundle_id"]));
+fn bundle(decision: DecisionRef<'_>) -> Option<String> {
+    if codec::truth(decision.at("atomic_bundle_id")) {
+        return Some(string(decision.at("atomic_bundle_id")));
     }
-    let claim = text(&decision["selected_claim_id"]);
+    let claim = text(decision.at("selected_claim_id"));
     claim
         .strip_prefix("pair:")
         .map(|tail| format!("pair:{}", tail.split(':').next().unwrap()))
@@ -20,18 +21,18 @@ pub struct FeeAllocation<'a> {
 }
 impl<'a> FeeAllocation<'a> {
     pub fn new(decisions: &[Value]) -> Result<Self, String> {
-        Self::from_decisions(decisions)
+        Self::from_decisions(decisions.iter().map(DecisionRef::Json))
     }
     pub(super) fn from_decisions<'d>(
-        decisions: impl IntoIterator<Item = &'d Value>,
+        decisions: impl IntoIterator<Item = DecisionRef<'d>>,
     ) -> Result<Self, String> {
         let mut result = Self::default();
         for decision in decisions {
-            if decision["destination_kind"] != "fee" {
+            if decision.at("destination_kind") != "fee" {
                 continue;
             }
             if let Some(bundle) = bundle(decision) {
-                let source = &decision["source"];
+                let source = decision.at("source");
                 let amount =
                     integer_big(&source["end_msat"])? - integer_big(&source["start_msat"])?;
                 *result.by_bundle.entry(bundle).or_default() += amount;
@@ -48,7 +49,11 @@ impl<'a> FeeAllocation<'a> {
         }
         integer_big(&source["fee_msat"])
     }
-    pub fn move_fee(&mut self, decision: &Value, source: LegRef<'a>) -> Result<BigInt, String> {
+    pub(crate) fn move_fee(
+        &mut self,
+        decision: DecisionRef<'_>,
+        source: LegRef<'a>,
+    ) -> Result<BigInt, String> {
         let bundle = bundle(decision);
         let reviewed = bundle
             .as_ref()
@@ -64,9 +69,9 @@ impl<'a> FeeAllocation<'a> {
         let raw = self.raw(source)?;
         Ok(
             if reviewed != BigInt::from(0)
-                && !decision["component_id"].is_null()
-                && decision["reason"] == "reviewed_custody_component"
-                && decision["transfer_kind"] != "swap-refund"
+                && !decision.at("component_id").is_null()
+                && decision.at("reason") == "reviewed_custody_component"
+                && decision.at("transfer_kind") != "swap-refund"
             {
                 reviewed
             } else {
@@ -74,13 +79,13 @@ impl<'a> FeeAllocation<'a> {
             },
         )
     }
-    pub fn reviewed_fee(&self, decision: &Value) -> Result<Option<BigInt>, String> {
+    pub(crate) fn reviewed_fee(&self, decision: DecisionRef<'_>) -> Result<Option<BigInt>, String> {
         if bundle(decision).is_some_and(|b| self.consumed_bundles.contains(&b)) {
             return Ok(None);
         }
         Ok(Some(
-            integer_big(&decision["source"]["end_msat"])?
-                - integer_big(&decision["source"]["start_msat"])?,
+            integer_big(&decision.at("source")["end_msat"])?
+                - integer_big(&decision.at("source")["start_msat"])?,
         ))
     }
 }
@@ -90,9 +95,9 @@ pub(super) fn evaluate(v: &Value) -> Result<Value, String> {
     let mut state = FeeAllocation::new(decisions)?;
     let mut result = Vec::new();
     for action in v["actions"].as_array().unwrap() {
-        let decision = &decisions[action["decision"].as_u64().unwrap() as usize];
+        let decision = DecisionRef::Json(&decisions[action["decision"].as_u64().unwrap() as usize]);
         let source =
-            LegRef::Json(&v["observations"][string(&decision["source"]["observation_hash"])]);
+            LegRef::Json(&v["observations"][string(&decision.at("source")["observation_hash"])]);
         result.push(match action["kind"].as_str().unwrap() {
             "raw" => number(&state.raw(source)?),
             "move" => number(&state.move_fee(decision, source)?),

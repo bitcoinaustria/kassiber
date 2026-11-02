@@ -360,7 +360,7 @@ fn state_input<'a>(
 ) -> Result<super::composition::Input<'a>, super::Error> {
     use std::borrow::Cow;
     let blocked = quantity.blocked_eligibility();
-    let decisions: Vec<&Value> = quantity.decisions().collect();
+    let decisions: Vec<crate::quantity::DecisionRef<'a>> = quantity.decisions().collect();
     let eligible = match blocked {
         Some(tax) => stored::list(stored::get(tax, "eligible_decisions"))
             .iter()
@@ -379,7 +379,7 @@ fn state_input<'a>(
                     )
                 )
             })
-            .map(|d| Cow::Borrowed(&d["source"]))
+            .map(|d| Cow::Borrowed(d.at("source")))
             .collect(),
     };
     let (blocked_anchors, issues) = issue_operands(quantity.issues())?;
