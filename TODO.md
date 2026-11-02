@@ -166,6 +166,12 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
 
 ## Daemon, contracts, and performance
 
+- [ ] Support OpenCode 2 OAuth-backed private turns once credentials can be
+  refreshed safely without persisting the session or invalidating the original
+  login. Key-backed private turns and ordinary sessions use the 2.x API now.
+- [ ] Replace OpenCode 2's tool-catalog settlement delay with an explicit
+  readiness barrier when its API provides one; the awaited MCP handshake and
+  listing do not await its separate debounced tool-registry reload.
 - [ ] Enforce AI consent, advertisement, and scope in one daemon-owned
   `authorize_and_execute` path shared by chat and MCP. MCP now runs within the
   user's External agents grant (per-call checks against the broker registry,

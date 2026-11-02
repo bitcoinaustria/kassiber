@@ -363,7 +363,17 @@ until that process stops. `kassiber status` reports the effective root.
   desktop's Incognito) ask Codex for an ephemeral thread, Claude for
   `--no-session-persistence`, and OpenCode for an in-memory database, and
   fail before sending anything if the CLI cannot comply (OpenCode Incognito
-  is refused on Windows); they keep their tools. OpenCode's session sharing,
+  is refused on Windows); they keep their tools. OpenCode 2 also refuses
+  OAuth-backed private turns: a refresh in a copied in-memory credential store
+  could invalidate the original login. Key-backed private turns transfer only
+  the selected integration's active credential in RAM over authenticated
+  loopback APIs; the source server receives no prompt. Provider-only JSON/JSONC
+  configuration is read into RAM, while user plugins, ambient MCP servers,
+  project instructions, and provider-native tools are excluded. All version 2
+  logs go to a null-device sink installed before launch; Windows, unaudited
+  channel builds, and system-managed configuration that cannot be isolated are
+  refused. Its server runs only for an explicit provider check or chat, never
+  for picker display or cached restoration. OpenCode's session sharing,
   which would upload the conversation to a public link, is forced off for
   every turn whatever the user's config says. Copilot is not refused: its Incognito session still exists for the
   turn, in the per-turn directory, and the desktop and CLI say so. Selected-

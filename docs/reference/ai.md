@@ -378,8 +378,9 @@ Codex, Claude, OpenCode, and GitHub Copilot CLI providers are
 supported for convenience, but they are not a local-privacy guarantee. The
 broker denies provider-native tools in layers — Claude loads no
 user/project/local settings, empties its built-in tool set, disables slash
-commands, and accepts only its temporary Kassiber MCP server; OpenCode serves
-with `--pure` and a deny-all session permission plus exact Kassiber MCP allows;
+commands, and accepts only its temporary Kassiber MCP server; OpenCode 1 serves
+with `--pure`, while OpenCode 2 receives isolated provider-only configuration.
+Both use deny-all permissions plus exact Kassiber MCP allows;
 Codex runs a read-only sandbox with network access off; the
 [Agent Client Protocol agent](#agent-client-protocol-agents) starts with its
 built-in tools removed — and any tool outside the advertised Kassiber catalog
@@ -398,8 +399,11 @@ choose them deliberately.
 Codex exposes no tool-free profile, so a local read there can begin before the
 abort lands; with its network disabled that content can only surface through
 assistant text on a turn Kassiber is already failing. Kassiber reuses their normal local
-authentication/config, telemetry, and model-provider routing without reading,
-copying, persisting, or displaying provider credentials. Treat them as
+authentication/config, telemetry, and model-provider routing. OpenCode 2 reads
+provider configuration into RAM; private turns also transfer only the selected
+integration's active key credential between authenticated local servers in RAM.
+These values never enter Kassiber's database, diagnostics, or renderer. Other
+CLI adapters do not read or copy provider credentials. Treat CLI providers as
 off-device unless the underlying configuration proves local or confidential
 inference.
 
@@ -550,6 +554,14 @@ deletes it; a later check that fails reports it marked stale. `cached_only`
 with `refresh` is refused. `ai.providers.list` also reports each provider's
 `last_checked_at` and `set_up`.
 
+The model picker restores these saved checks too, including local HTTP model
+lists and CLI runtime inventories. When both kinds exist, the newer check
+wins; a newer not-ready runtime clears an older model list. The picker keeps
+its checked inventory in memory for the app session and restores it from the
+book after a restart, scoped to the provider and checked endpoint. Restoring
+uses only `cached_only` reads; it never launches a CLI or contacts a provider.
+Fresh discovery still requires an explicit check.
+
 Built-in providers the user has not used yet are folded into a collapsed
 **N more providers** line at the end of the list: a built-in row still at its built-in address and name
 that is not the default, was never checked, and (off-device) was never
@@ -679,10 +691,45 @@ executables, reports `ready`, `missing executable`, or `authentication
 required`, and tells the user to run the provider's normal login command
 outside Kassiber when necessary. It uses Codex `app-server`, the Claude
 executable's `--output-format stream-json` event stream with strict MCP config,
-and the OpenCode SDK v2 against an ephemeral loopback OpenCode server, and the
+the OpenCode 1 SDK or OpenCode 2 HTTP API against a temporary loopback server, and the
 Agent Client Protocol for GitHub Copilot. A local Node.js executable
 meeting the [broker package requirements](../../ui-tauri/package.json) is
 required to run the bundled broker.
+
+OpenCode discovery and chat support the 1.x CLI (tested with 1.18.10) and stable
+2.x (tested with 2.2.0). Version 2 uses its current model/provider HTTP endpoints
+and a random-password-authenticated loopback server. Its provider settings are
+read into RAM from the user's JSON/JSONC configuration; user plugins, MCP
+servers, instructions, and project configuration are excluded. Native tools
+are denied, and only the advertised `kassiber_<tool>` MCP names are allowed,
+with MCP Code Mode disabled. The broker waits for its own MCP handshake and
+tool listing before prompting, then allows 250 ms for v2.2's 100 ms debounced
+tool-catalog reconciliation. That delay is a compatibility workaround: the
+API does not expose a registry-readiness barrier, so severe child-process
+event-loop delays can still postpone tool availability.
+
+Every OpenCode 2 turn starts a new native session from the visible transcript,
+with Kassiber's system instructions; no native session cursor is resumed or
+returned. Ordinary sessions remain in OpenCode's own database. Private turns
+use an in-memory database and transfer only the chosen integration's active
+key credential into it over authenticated loopback APIs, without sending a
+prompt to the persistent database. OAuth-backed private turns are refused:
+refreshing a copied OAuth token could invalidate the persistent login.
+Ordinary OAuth chats continue to use the native credential store.
+
+All OpenCode 2 process logs are redirected to a preinstalled null-device sink.
+Version 2 is refused on Windows, with system-managed configuration that cannot
+be isolated, and on prerelease/custom-channel builds whose log destination is
+not audited. Unknown future major versions are refused. A failed model-list
+command is a check error, not evidence that the user needs to log in. None of
+these processes starts merely by opening the picker or restoring cached models.
+
+Codex error notifications with `willRetry: true` leave the turn running so
+its own connection retries can complete. Terminal failures report only known
+protocol categories (such as authentication, usage limit, model or context)
+and bounded HTTP status codes; provider error text and additional details
+stay out of the response. `AI_REQUEST_INVALID` alone is the broker's fallback
+error code and does not establish that the user's prompt was invalid.
 
 ### Agent Client Protocol agents
 
@@ -883,11 +930,12 @@ never contacts a provider.
 
 Model rows show both their source namespace and privacy posture.
 OpenCode model IDs identify their source provider (`omlx/...`, `ollama/...`,
-`opencode/...`). OpenCode's model list carries no endpoint — `api.url` is empty
-for locally served models — so the route is judged by that source provider's
+`opencode/...`). For OpenCode 1, the route is judged by that source provider's
 resolved endpoint from `opencode debug config`, reading
-`provider.<id>.options.baseURL` and nothing else (the same options block can
-hold an `apiKey`, which never leaves the broker). A loopback endpoint (`127.0.0.0/8` matched as a literal IPv4
+`provider.<id>.options.baseURL`. OpenCode 2 uses the selected model's or
+provider's `settings.baseURL` from its HTTP API. Only the resulting posture
+leaves the broker; the same settings can hold an `apiKey` that is never exposed.
+A loopback endpoint (`127.0.0.0/8` matched as a literal IPv4
 address, `localhost`, `::1`) is labelled local, because the model cannot leave
 the machine. A loopback address that fronts a reverse proxy is the known
 limit of this check: it reports local while the proxy may forward inference
@@ -988,7 +1036,9 @@ daemon turns `persist: false` into the broker option `stateless_session:
 true`. The broker starts an ephemeral Codex thread (also with history
 persistence off), runs Claude with `--no-session-persistence`, and points
 OpenCode's database at memory and its data and state homes at the turn's
-directory. If the CLI cannot comply (Codex does not report the thread as
+directory. Legacy OpenCode selected-data isolation requires the audited 1.18.4
+runtime; version 2 uses the isolated configuration described above and refuses
+OAuth-backed private turns. If the CLI cannot comply (Codex does not report the thread as
 ephemeral, Claude's help lacks the flag, or OpenCode reports a database on
 disk), the turn fails before the prompt is sent. On Windows, OpenCode
 Incognito turns are refused before OpenCode starts. Keeping OpenCode's log

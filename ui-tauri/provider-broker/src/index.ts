@@ -58,6 +58,7 @@ async function main(): Promise<void> {
   }
   if (request.command === "models") {
     const snapshot = await status(request.provider);
+    if (snapshot.state === "error") throw new Error(snapshot.message);
     writeEvent({ type: "result", data: snapshot.models });
     return;
   }

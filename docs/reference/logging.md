@@ -6,6 +6,14 @@ outlives every redaction choice made in the UI, so the entire observability
 surface lives in bounded in-memory buffers and reaches disk only when the
 user explicitly exports it.
 
+The OpenCode 2 adapter installs null-device symlinks for the CLI's automatic
+log files before launching it, including version checks, and verifies the sink
+again before sending credentials or prompts. Its stdout/stderr diagnostics are
+drained without retention. Stable POSIX builds are supported; Windows and
+unaudited channel builds fail closed because the same discard guarantee is
+not available. Native provider session storage is a separate boundary described
+in [AI](ai.md#provider-setup); ordinary OpenCode sessions still persist there.
+
 The guiding principle:
 
 > **Capture everything into RAM, strip wallet/credential material before it

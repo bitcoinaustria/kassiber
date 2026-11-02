@@ -69,7 +69,7 @@ import {
 } from "./modelPickerKeys";
 import { permissionModeOption } from "./permissionMode";
 import { PostureBadge, ProviderGlyph } from "./ProviderGlyph";
-import { providerModelsQueryOptions } from "./providerModelQuery";
+import { providerModelsQueryOptions, useRestoreProviderModelChecks } from "./providerModelQuery";
 import { isCliProvider, providerDisplayName } from "./providerIdentity";
 import {
   canonicalModelFavorites,
@@ -218,6 +218,7 @@ export function ProviderModelPicker({
     onActiveProviderKindChange?.(selectedProvider?.kind ?? null);
   }, [onActiveProviderKindChange, selectedProvider?.kind]);
 
+  useRestoreProviderModelChecks(providers, enabled);
   const modelQueries = useQueries({
     queries: providers.map((provider) =>
       providerModelsQueryOptions(dataMode, daemonSession, provider),
