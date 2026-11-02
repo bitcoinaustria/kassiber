@@ -1,0 +1,302 @@
+[
+  {
+    "id": "json-frame-receive-limit",
+    "file": "crates/operator/src/protocol.rs",
+    "find": "    if size > limit {",
+    "replace": "    if size >= limit {",
+    "expect_failing": [
+      "frame_limits_hold_at_their_boundaries"
+    ],
+    "rule": "A frame of exactly the limit is read; one byte more is refused before its body."
+  },
+  {
+    "id": "json-frame-send-limit",
+    "file": "crates/operator/src/protocol.rs",
+    "find": "    if body.len() > MAX_JSON_FRAME {",
+    "replace": "    if body.len() >= MAX_JSON_FRAME {",
+    "expect_failing": [
+      "frame_limits_hold_at_their_boundaries"
+    ],
+    "rule": "A JSON body of exactly 8 MiB is sent."
+  },
+  {
+    "id": "secret-payload-send-limit",
+    "file": "crates/operator/src/protocol.rs",
+    "find": "    if secret.len() > MAX_SECRET_PAYLOAD_BYTES {\n        return Err(Error::App(\n",
+    "replace": "    if secret.len() >= MAX_SECRET_PAYLOAD_BYTES {\n        return Err(Error::App(\n",
+    "expect_failing": [
+      "secret_payload_limit_round_trips_at_the_shared_boundary"
+    ],
+    "rule": "A secret of exactly the shared payload limit is sent."
+  },
+  {
+    "id": "secret-frame-send-limit",
+    "file": "crates/operator/src/protocol.rs",
+    "find": "    if body_length > MAX_SECRET_FRAME {",
+    "replace": "    if body_length >= MAX_SECRET_FRAME {",
+    "expect_failing": [
+      "secret_payload_limit_round_trips_at_the_shared_boundary"
+    ],
+    "rule": "A secret frame of exactly 16 KiB is sent."
+  },
+  {
+    "id": "secret-payload-receive-limit",
+    "file": "crates/operator/src/protocol.rs",
+    "find": "    let secret = &body[index + 1..];\n    if secret.len() > MAX_SECRET_PAYLOAD_BYTES {",
+    "replace": "    let secret = &body[index + 1..];\n    if secret.len() > MAX_SECRET_PAYLOAD_BYTES + 1 {",
+    "expect_failing": [
+      "secret_payload_limit_round_trips_at_the_shared_boundary"
+    ],
+    "rule": "A received secret over the payload limit is refused even when the frame fits."
+  },
+  {
+    "id": "challenge-length",
+    "file": "crates/operator/src/protocol.rs",
+    "find": "    if left.len() != right.len() {\n        return false;",
+    "replace": "    if left.len() != right.len() && left.is_empty() {\n        return false;",
+    "expect_failing": [
+      "challenge_comparison_is_exact_and_length_checked",
+      "wrong_secret_challenge_fails_closed"
+    ],
+    "rule": "A challenge prefix never matches the issued challenge."
+  },
+  {
+    "id": "challenge-bytes",
+    "file": "crates/operator/src/protocol.rs",
+    "find": "        difference |= a ^ b;",
+    "replace": "        difference |= a & 0;",
+    "expect_failing": [
+      "challenge_comparison_is_exact_and_length_checked",
+      "wrong_secret_challenge_fails_closed"
+    ],
+    "rule": "Every challenge byte is compared."
+  },
+  {
+    "id": "peer-uid",
+    "file": "crates/operator/src/runtime.rs",
+    "find": "    if credentials.uid != expected_uid {",
+    "replace": "    if credentials.uid == u32::MAX {",
+    "expect_failing": [
+      "cross_user_unix_peer_is_rejected"
+    ],
+    "rule": "A peer of another OS user is refused."
+  },
+  {
+    "id": "runtime-mode",
+    "file": "crates/operator/src/runtime.rs",
+    "find": "        if info.mode() & 0o077 != 0 {",
+    "replace": "        if info.mode() & 0o007 != 0 {",
+    "expect_failing": [
+      "permissive_runtime_directory_is_rejected"
+    ],
+    "rule": "Group permission bits on the runtime directory are refused too."
+  },
+  {
+    "id": "runtime-owner",
+    "file": "crates/operator/src/runtime.rs",
+    "find": "        if info.uid() != kassiber_ipc::unix::current_uid() {\n            return Err(unsafe_directory(",
+    "replace": "        if info.uid() == u32::MAX {\n            return Err(unsafe_directory(",
+    "expect_failing": [
+      "runtime_directory_of_another_user_is_rejected"
+    ],
+    "rule": "A runtime directory of another OS user is refused."
+  },
+  {
+    "id": "runtime-symlink",
+    "file": "crates/operator/src/runtime.rs",
+    "find": "    if std::fs::symlink_metadata(path).is_ok_and(|info| info.file_type().is_symlink()) {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "runtime_directory_symlinks_and_files_are_refused"
+    ],
+    "rule": "A symlinked runtime directory is refused."
+  },
+  {
+    "id": "override-frozen",
+    "file": "crates/operator/src/runtime.rs",
+    "find": "            .filter(|dir| !dir.is_empty() && gate && !self.frozen)",
+    "replace": "            .filter(|dir| !dir.is_empty() && gate)",
+    "expect_failing": [
+      "runtime_override_requires_explicit_nonfrozen_test_gate"
+    ],
+    "rule": "A frozen build never honours the test runtime override."
+  },
+  {
+    "id": "stale-unlink-kinds",
+    "file": "crates/operator/src/runtime.rs",
+    "find": "                io::ErrorKind::ConnectionRefused | io::ErrorKind::NotFound\n",
+    "replace": "                io::ErrorKind::ConnectionRefused | io::ErrorKind::NotFound | io::ErrorKind::TimedOut\n",
+    "expect_failing": [
+      "only_refused_or_vanished_probes_allow_the_unlink"
+    ],
+    "rule": "Only a refused or vanished probe proves the socket stale."
+  },
+  {
+    "id": "stale-unlink-live",
+    "file": "crates/operator/src/runtime.rs",
+    "find": "        if stale_probe_allows_unlink(&probe) {",
+    "replace": "        if stale_probe_allows_unlink(&probe) || probe.is_ok() {",
+    "expect_failing": [
+      "live_endpoints_and_non_sockets_are_never_unlinked"
+    ],
+    "rule": "A live broker's endpoint is never unlinked."
+  },
+  {
+    "id": "stale-unlink-socket-type",
+    "file": "crates/operator/src/runtime.rs",
+    "find": "        if !info.file_type().is_socket() {",
+    "replace": "        if info.file_type().is_symlink() {",
+    "expect_failing": [
+      "live_endpoints_and_non_sockets_are_never_unlinked"
+    ],
+    "rule": "Only a socket is ever unlinked as stale."
+  },
+  {
+    "id": "close-inode",
+    "file": "crates/operator/src/runtime.rs",
+    "find": "                Ok(info) if self.identity == Some((info.dev(), info.ino())) => {",
+    "replace": "                Ok(info) if self.identity.is_some() || info.ino() == 0 => {",
+    "expect_failing": [
+      "listener_close_does_not_unlink_a_replacement_endpoint"
+    ],
+    "rule": "Closing unlinks only the inode this listener bound."
+  },
+  {
+    "id": "socket-read-timeout",
+    "file": "crates/operator/src/runtime.rs",
+    "find": "        stream.set_read_timeout(timeout)?;",
+    "replace": "        stream.set_read_timeout(None)?;",
+    "expect_failing": [
+      "ping_read_is_bounded_when_endpoint_accepts_but_never_replies",
+      "simple_requests_are_bounded_at_two_seconds"
+    ],
+    "rule": "Every receive is bounded by the connection's I/O deadline."
+  },
+  {
+    "id": "ping-timeout",
+    "file": "crates/operator/src/client.rs",
+    "find": "pub const PING_TIMEOUT: Duration = Duration::from_secs(1);",
+    "replace": "pub const PING_TIMEOUT: Duration = Duration::from_secs(3);",
+    "expect_failing": [
+      "ping_read_is_bounded_when_endpoint_accepts_but_never_replies",
+      "connection_timeouts_follow_each_action"
+    ],
+    "rule": "A ping waits at most one second to connect and per read."
+  },
+  {
+    "id": "simple-request-timeout",
+    "file": "crates/operator/src/client.rs",
+    "find": "pub const SIMPLE_REQUEST_IO_TIMEOUT: Duration = Duration::from_secs(2);",
+    "replace": "pub const SIMPLE_REQUEST_IO_TIMEOUT: Duration = Duration::from_secs(1);",
+    "expect_failing": [
+      "simple_requests_are_bounded_at_two_seconds",
+      "connection_timeouts_follow_each_action"
+    ],
+    "rule": "Simple requests keep Python's two-second I/O deadline."
+  },
+  {
+    "id": "same-build",
+    "file": "crates/operator/src/client.rs",
+    "find": "        if build.is_some_and(|build| py_eq(build, &this_build)) {",
+    "replace": "        if build.is_some() {",
+    "expect_failing": [
+      "unlock_never_sends_a_passphrase_to_another_builds_broker",
+      "build_identity_equality_is_pythons",
+      "the_broker_asking_for_the_secret_must_be_this_build"
+    ],
+    "rule": "A passphrase or command goes only to a broker that names this build."
+  },
+  {
+    "id": "accepted-build",
+    "file": "crates/operator/src/client.rs",
+    "find": "        if require_same_build && !py_eq(&build, &self.this_build()) {",
+    "replace": "        if require_same_build && matches!(build, Value::Null) {",
+    "expect_failing": [
+      "work_another_build_accepted_is_withdrawn_when_this_build_is_required",
+      "a_retry_accepted_by_another_build_is_still_refused"
+    ],
+    "rule": "Work another build accepted is withdrawn when this build is required."
+  },
+  {
+    "id": "build-equality-strings",
+    "file": "crates/operator/src/values.rs",
+    "find": "        (Value::Str(a), Value::Str(b)) => a == b,",
+    "replace": "        (Value::Str(_), Value::Str(_)) => true,",
+    "expect_failing": [
+      "equality_follows_python",
+      "build_identity_equality_is_pythons"
+    ],
+    "rule": "Build identities compare their strings."
+  },
+  {
+    "id": "secret-label-order",
+    "file": "crates/operator/src/client.rs",
+    "find": "            labels.sort_by(|(a, _), (b, _)| a.code_points().cmp(b.code_points()));",
+    "replace": "            labels.sort_by(|(a, _), (b, _)| b.code_points().cmp(a.code_points()));",
+    "expect_failing": [
+      "submit_sends_command_secrets_in_label_order_then_admin"
+    ],
+    "rule": "Command secrets follow in sorted label order."
+  },
+  {
+    "id": "egress-kill-switch",
+    "file": "crates/operator/src/client.rs",
+    "find": "        matches!(value.as_str(), \"1\" | \"true\" | \"yes\" | \"on\")",
+    "replace": "        matches!(value.as_str(), \"1\" | \"true\" | \"on\")",
+    "expect_failing": [
+      "submit_carries_the_callers_egress_kill_switch"
+    ],
+    "rule": "Every truthy KASSIBER_NO_EGRESS spelling reaches the broker."
+  },
+  {
+    "id": "inherit-cloexec",
+    "file": "crates/ipc/src/process.rs",
+    "find": "                        || libc::fcntl(*fd, libc::F_SETFD, flags & !libc::FD_CLOEXEC) == -1",
+    "replace": "                        || libc::fcntl(*fd, libc::F_SETFD, flags) == -1",
+    "expect_failing": [
+      "only_listed_descriptors_cross_exec",
+      "inherited_owner_handles_exclude_a_second_owner_after_parent_release"
+    ],
+    "rule": "Listed descriptors cross exec into the child."
+  },
+  {
+    "id": "prune-age-floor",
+    "file": "crates/ownership/src/lib.rs",
+    "find": "    mtime(path).is_some_and(|modified| now - modified >= PRUNE_MIN_AGE_SECONDS)",
+    "replace": "    mtime(path).is_some_and(|modified| now - modified >= 0.0)",
+    "expect_failing": [
+      "prune_spares_records_younger_than_the_age_floor"
+    ],
+    "rule": "Records younger than seven days are never swept."
+  },
+  {
+    "id": "prune-live",
+    "file": "crates/ownership/src/lib.rs",
+    "find": "        let dead = try_lock(&handle, false).unwrap_or(false);",
+    "replace": "        let dead = try_lock(&handle, true).unwrap_or(true) || true;",
+    "expect_failing": [
+      "prune_drops_dead_records_and_spares_live_ones"
+    ],
+    "rule": "A record a live process holds is never swept."
+  },
+  {
+    "id": "owner-record-bytes",
+    "file": "crates/ownership/src/lib.rs",
+    "find": "    let mut text = dumps(&record, &Options::new().sort_keys(true)).expect(\"owner record\");",
+    "replace": "    let mut text = dumps(&record, &Options::new().sort_keys(true).compact()).expect(\"owner record\");",
+    "expect_failing": [
+      "owner_records_are_python_json_dumps_bytes"
+    ],
+    "rule": "Owner records are Python's json.dumps(sort_keys=True) bytes."
+  },
+  {
+    "id": "in-use-pid-hint",
+    "file": "crates/ownership/src/lib.rs",
+    "find": "        .map_or_else(String::new, |pid| format!(\" It is held by pid {pid}.\"));",
+    "replace": "        .map_or_else(String::new, |_| String::new());",
+    "expect_failing": [
+      "conflict_names_the_holding_process"
+    ],
+    "rule": "project_in_use names the holder's pid."
+  }
+]

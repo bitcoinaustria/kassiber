@@ -392,6 +392,14 @@ mod tests {
         let error = sender.send_secret(&long, &payload).unwrap_err();
         assert_eq!(error.code(), Some("operator_secret_too_large"));
         assert_eq!(MAX_SECRET_PAYLOAD_BYTES, 16_335);
+        // A short challenge leaves room in the frame, not in the payload.
+        let mut raw = vec![b'S'];
+        raw.extend_from_slice(&((2 + MAX_SECRET_PAYLOAD_BYTES + 1) as u32).to_be_bytes());
+        raw.extend_from_slice(b"c\0");
+        raw.extend(std::iter::repeat_n(b's', MAX_SECRET_PAYLOAD_BYTES + 1));
+        let mut receiver = Channel::new(Loopback(Arc::new(Mutex::new(raw.into()))), None);
+        let error = receiver.receive_secret("c").unwrap_err();
+        assert_eq!(error.code(), Some("operator_secret_too_large"));
     }
 
     #[test]

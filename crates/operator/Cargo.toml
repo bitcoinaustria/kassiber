@@ -32,3 +32,11 @@ tempfile = "3"
 
 [lints.rust]
 unsafe_code = "forbid"
+
+[[example]]
+name = "operator_test_listener"
+required-features = ["test-harness"]
+
+[[example]]
+name = "operator_test_client"
+required-features = ["test-harness"]
