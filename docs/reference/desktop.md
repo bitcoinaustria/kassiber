@@ -70,6 +70,10 @@ started in, so opening another book starts a fresh one. "Ask about this" on a tr
 Details tab while the assistant comes forward), or a quarantine cause pins
 that record as typed screen context and prefills a question without
 sending it; see [AI](ai.md) for the screen-context contract.
+The composer's toolbar holds the attach button, one model picker and send.
+The picker carries the model, its reasoning level, the speed toggle and the
+chat's permission mode in one popover (see
+[AI](ai.md#in-app-surface)).
 
 Current development modes:
 

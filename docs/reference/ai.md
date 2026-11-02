@@ -149,7 +149,7 @@ replay out, once; a refusal naming neither drops the effort first. The answer th
 `notices` (and so `kassiber chat --machine`), stored history, and the
 desktop's notice under the answer.
 
-Model listings feed the effort menu. A model whose `supported_parameters`
+Model listings feed the picker's reasoning column. A model whose `supported_parameters`
 include `reasoning`, `include_reasoning`, or `reasoning_effort` (OpenRouter
 lists them) reports `supports_reasoning_effort: true` and `reasoning_efforts`
 with the HTTP levels it takes, narrowed by OpenRouter's
@@ -158,7 +158,7 @@ same list, or `null` when a listing says nothing, as OpenAI's does.
 `input_modalities` and `output_modalities` come from OpenRouter's
 `architecture`, as bounded lowercase lists.
 
-The desktop's effort menu offers an HTTP model only the levels in its
+The desktop's reasoning column offers an HTTP model only the levels in its
 `reasoning_efforts`, all three when it takes an effort without naming any, and
 none when its listing does not say it takes one (as OpenAI's never does) or
 before **Check models** has listed it. Levels a listing names elsewhere, such
@@ -634,7 +634,7 @@ Each row also carries:
   HTTP](#reasoning-effort-over-http)).
 - **A fast mode note** where one of the provider's models offers fast mode.
   Fast mode has no stored default: it is billed at a higher rate, so it stays
-  a per-session choice in the reasoning menu.
+  a per-session choice in the model picker's speed toggle.
 
 If Kassiber itself is running inside a container and Ollama is running on the
 host, seed the provider with the Docker host alias instead:
@@ -797,7 +797,7 @@ HTTP](#reasoning-effort-over-http)). Copilot, OpenCode
 and HTTP providers have no fast mode, and no provider stores it as a default.
 The option (`options.fast_mode`, a boolean) crosses to the provider broker only
 when it is `true` and is never put in an HTTP request body. The desktop offers
-the toggle in the reasoning menu only for a model whose checked row advertises
+the Standard | Fast toggle in the model picker's footer only for a model whose checked row advertises
 it; that row depends on the installed CLI's version, so nothing is offered
 before Check models (which never runs on its own). It drops the toggle when the
 selected model changes to one that does not offer it;
@@ -846,7 +846,40 @@ from the composer, the arrow keys and Enter pick a row, Mod+1…9 pick the nth
 row, Mod+D stars or unstars the highlighted row, and Mod+Shift+Up/Down switch
 provider. Keys that confirm an input-method composition never pick or star a
 model. The collapsed trigger shows the provider name, model and privacy
-posture.
+posture, then the chosen reasoning level (none for Auto), a bolt while fast
+mode is on, and an open lock while the chat runs in Full access.
+
+The picker is also where the model's traits live, laid out after T3 Code's
+composer picker: there are no separate effort or permission menus in the
+composer toolbar.
+
+- **Reasoning column.** Beside the list, under the selected model's name:
+  **Auto** (the default, which sends no level) and only the levels the
+  model advertises in its capability data (Kassiber's known levels low through
+  ultra, nothing made up). A model that takes no effort has no column,
+  including a native agent's model whose checked row says so, and a stored
+  level drops back to Auto. A native agent whose model is not checked yet
+  lists only Auto and a stored choice, with a hint that Check models names
+  the rest; Claude and Copilot list their published fixed levels. While an
+  answer streams the column is shown locked.
+- **Footer.** A **Standard | Fast** toggle, only for a model whose checked
+  row offers fast mode, with the higher-rate billing note shown beside it
+  while Fast is on, and the chat's permission mode as a menu of the
+  three modes with their descriptions. Changing the mode there behaves as
+  described under [Permission modes](#permission-modes).
+
+Picking a model with reasoning levels keeps the picker open and moves focus to
+those levels; picking one without levels closes it. Escape or a click outside
+closes it too. ArrowRight at the end of the search text picks a model the
+arrow keys highlighted and moves to its levels; when the highlight was left by
+the pointer or a provider switch, ArrowRight moves to the selected model's
+levels instead and Enter picks the highlighted one. In the column the arrow
+keys, Home and End move between levels and choose the one they land on, and
+ArrowLeft goes back to the search field; the arrow keys also switch the speed
+toggle. Mod+Shift+K opens the picker on the levels, or the search field when
+the model takes no effort, and moves there when it is open. Opening the picker or
+any of its sections reads only the provider list and cached check results; it
+never contacts a provider.
 
 The **All / Local** control filters the inventory by the posture Kassiber can
 prove. Model rows show both their source namespace and privacy posture.
@@ -1373,7 +1406,7 @@ network access and anything permanent. **Full access** never asks, syncs and
 other network actions included. New chats start in the mode set at Settings →
 Assistant → **New chats start in** (Auto unless changed). A saved chat reopens in the mode it
 last used, which the UI preferences keep by session id. Switching the mode in
-the composer while an answer streams sends `ai.chat.permission_mode` for that
+the model picker's footer while an answer streams sends `ai.chat.permission_mode` for that
 turn, and the daemon releases waiting approvals the new mode covers.
 
 Live chats advertise capability packs selected from the latest question and
@@ -1391,8 +1424,8 @@ The desktop sends `tool_profile` with every turn: the provider's tool set
 from Settings → Assistant, **All tools** (`full`), **Focused** (`scoped`)
 or **Minimal** (`core`), kept with the UI preferences by provider name. Every
 provider starts with all tools; Kassiber does not judge a model's strength.
-The set follows the provider, not the chat, so the composer offers only the
-permission mode.
+The set follows the provider, not the chat, so the composer's picker offers
+only the permission mode.
 
 Small local models are the reason `scoped` and `core` exist: every schema
 together is about 36k tokens, more than many local context windows. Instead,

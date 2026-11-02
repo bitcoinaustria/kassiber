@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
 //
-// Integration: the composer with the real ProviderModelPicker and effort
-// menu (the other composer tests mock the picker). Covers handing focus from
-// the open reasoning-effort menu to the picker via Mod+Shift+M, where the
-// menu's dismissal used to unmount the picker before a click could select.
+// Integration: the composer with the real ProviderModelPicker and its docked
+// reasoning column (the other composer tests mock the picker). Covers the
+// composer's Mod+Shift+M and Mod+Shift+K shortcuts, and picking a model with
+// the pointer while the picker stays open on its levels.
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import * as React from "react";
@@ -128,36 +128,42 @@ describe("Ai02 with the real model picker", () => {
     expect(screen.getByRole("combobox")).toBeTruthy();
   });
 
-  it("hands over from the open effort menu to the picker with Mod+Shift+M", async () => {
+  it("opens on the reasoning levels with Mod+Shift+K, and moves there when open", async () => {
+    render(<Harness onSelectionChange={vi.fn()} />);
+    const composer = screen.getByRole("textbox");
+    await act(async () => {
+      fireEvent.keyDown(composer, { key: "k", ctrlKey: true, shiftKey: true });
+    });
+    const column = document.querySelector<HTMLElement>("[data-model-picker-effort]")!;
+    expect(column).not.toBeNull();
+    expect(document.activeElement?.getAttribute("aria-checked")).toBe("true");
+    expect(column.contains(document.activeElement)).toBe(true);
+
+    // From the search field of the open picker, the shortcut moves, not closes.
+    const search = screen.getByRole("combobox");
+    search.focus();
+    await act(async () => {
+      fireEvent.keyDown(search, { key: "k", ctrlKey: true, shiftKey: true });
+    });
+    expect(screen.getByRole("combobox")).toBeTruthy();
+    expect(column.contains(document.activeElement)).toBe(true);
+    expect(mocks.invoke).not.toHaveBeenCalled();
+  });
+
+  it("picks a model with the pointer and stays open on its levels", async () => {
     const onSelectionChange = vi.fn();
     render(<Harness onSelectionChange={onSelectionChange} />);
-
-    const effortTrigger = screen.getByRole("button", { name: /Reasoning effort/ });
+    const composer = screen.getByRole("textbox");
     await act(async () => {
-      fireEvent.pointerDown(effortTrigger, { button: 0, pointerType: "mouse" });
+      fireEvent.keyDown(composer, { key: "m", ctrlKey: true, shiftKey: true });
     });
-    const menu = screen.getByRole("menu");
-    expect(menu).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByRole("combobox"));
 
-    // The shortcut arrives from inside the menu, which owns focus.
-    await act(async () => {
-      fireEvent.keyDown(document.activeElement ?? menu, {
-        key: "m",
-        ctrlKey: true,
-        shiftKey: true,
-      });
-    });
-    await act(async () => {
-      await new Promise((resolve) => window.setTimeout(resolve, 0));
-    });
-
-    // Only the picker is left open, and it owns focus.
-    expect(screen.queryByRole("menu")).toBeNull();
-    const search = screen.getByRole("combobox");
-    expect(document.activeElement).toBe(search);
-
-    // Clicking a model in the picker selects it.
     fireEvent.click(screen.getByRole("button", { name: "LM Studio · local" }));
+    // The rail switch hands focus back to the search field on the next frame.
+    await act(async () => {
+      await new Promise((resolve) => window.requestAnimationFrame(() => resolve(null)));
+    });
     const row = screen
       .getAllByRole("option")
       .find((option) => option.textContent?.includes("gemma-3-12b"));
@@ -170,6 +176,13 @@ describe("Ai02 with the real model picker", () => {
       provider: "lmstudio",
       model: "gemma-3-12b",
     });
+    await act(async () => {
+      await new Promise((resolve) => window.requestAnimationFrame(() => resolve(null)));
+    });
+    expect(screen.getByRole("combobox")).toBeTruthy();
+    expect(
+      document.querySelector("[data-model-picker-effort]")?.contains(document.activeElement),
+    ).toBe(true);
     expect(mocks.invoke).not.toHaveBeenCalled();
   });
 });

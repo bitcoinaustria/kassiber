@@ -72,6 +72,7 @@
     "modelContext": "Model context",
     "thinking": "Thinking",
     "reasoningEffort": "Reasoning effort",
+    "reasoning": "Reasoning",
     "effort": {
       "auto": "Auto",
       "low": "Low",
@@ -83,9 +84,9 @@
     },
     "effortDefault": "Default",
     "effortAutoHint": "Let the model decide",
+    "effortLevelsUnknown": "Use Check models to see this model's levels.",
     "newLine": "New line",
     "fastMode": {
-      "label": "Fast mode",
       "fast": "Fast",
       "standard": "Standard",
       "speed": "Speed",

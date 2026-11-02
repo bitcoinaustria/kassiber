@@ -253,5 +253,19 @@ describe("AI reasoning effort capability detection", () => {
         }),
       ).toBe(true);
     });
+
+    it("lets a checked agent row that takes no effort outrank the provider flag", () => {
+      const codex = [
+        { name: "codex", base_url: "codex-cli://default", kind: "remote" as const, has_api_key: false, is_default: true, supports_reasoning_effort: true },
+      ];
+      const models = [{ id: "nano", supports_reasoning_effort: false, reasoning_efforts: [] }];
+      expect(
+        selectedModelSupportsReasoningEffort({ selection: { provider: "codex", model: "nano" }, providers: codex, models }),
+      ).toBe(false);
+      // Not checked yet: the agent's flag still offers the column.
+      expect(
+        selectedModelSupportsReasoningEffort({ selection: { provider: "codex", model: "other" }, providers: codex, models }),
+      ).toBe(true);
+    });
   });
 });

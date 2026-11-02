@@ -530,7 +530,7 @@
     "signIn": "Anmeldung",
     "signInCli": "Verwendet die eigene Anmeldung der CLI; Kassiber liest oder speichert sie nie.",
     "noKey": "Kein Schlüssel",
-    "fastModeNote": "Für manche Modelle gibt es den Schnellmodus. Er wird zu einem höheren Tarif abgerechnet, deshalb wählst du ihn pro Chat im Denkaufwand-Menü; er wird nie als Standard gespeichert.",
+    "fastModeNote": "Für manche Modelle gibt es den Schnellmodus. Er wird zu einem höheren Tarif abgerechnet, deshalb wählst du ihn pro Chat in der Modellauswahl; er wird nie als Standard gespeichert.",
     "keyStorage": "Schlüsselspeicher",
     "setAsDefault": "Als Standard festlegen",
     "moveKeyToNative": "Schlüssel zu {{store}} verschieben",
