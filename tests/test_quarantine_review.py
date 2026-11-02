@@ -196,6 +196,8 @@ class QuarantineReviewTest(unittest.TestCase):
 
         self.assertTrue(page["summary"]["freshness"]["needs_processing"])
         self.assertEqual(page["summary"]["offset"], 1)
+        # Prices entered for held rows are read in the book's currency.
+        self.assertEqual(page["summary"]["fiat_currency"], "EUR")
         self.assertEqual([item["transaction_id"] for item in page["items"]], ["later-sale"])
 
 

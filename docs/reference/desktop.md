@@ -449,12 +449,23 @@ Review sits in the main nav and collects what waits on the owner, each item
 decided where it is listed. The pages with the full tools behind it
 (Transfers & Custody, Journals, Reconcile and Source Funds) sit under
 Extras above the calculators; the fold opens and is marked whenever one of
-its pages is open, however you got there. **Can't be booked yet** holds the quarantine
-causes, as [custody resolution](custody-resolution.md#why-a-transaction-is-quarantined)
-describes, with the journal freshness warning above them. A cause of
-approximate prices held for review offers **Accept these prices**, which
-accepts all of them in one previewed step (`accept_coarse_prices`). **Moves between your
-wallets** lists the transfer and swap candidates from `ui.transfers.suggest`.
+its pages is open, however you got there.
+**Moves between your wallets** comes first, because pairing a move often
+clears a quarantine cause with it. **Can't be booked yet** holds the
+quarantine causes, as [custody resolution](custody-resolution.md#why-a-transaction-is-quarantined)
+describes, with the journal freshness warning above them. Each card lists its
+transactions folded to three, with one Show more that shows the rest of the
+loaded page and then loads the next. A cause of approximate prices held for
+review offers **Accept these prices**, which accepts all of them in one
+previewed step (`accept_coarse_prices`). A price cause also offers **Enter
+prices**: a field per row for the receipt's total value or the price per
+unit, in the book currency (`summary.fiat_currency` of
+`ui.journals.quarantine`). Input is read in the owner's number format; a
+leading zero always starts a decimal, and the preview lists each price as it
+was read. Up to 50 typed prices go through one previewed step as
+`price_override` operations, each saved as exact and revertible from the
+transaction's history. **Moves between your wallets** lists the transfer
+and swap candidates from `ui.transfers.suggest`.
 Each has Pair, which pairs it with its default kind and policy, and Not a
 transfer, which dismisses it; Details opens it in Transfers & Custody. Exact
 candidates with carrying-value policy, no competing match and no ownership

@@ -11,9 +11,9 @@ import type { ReviewBadges } from "@/lib/reviewCount";
 import { screenShellClassName } from "@/lib/screen-layout";
 
 /**
- * Everything in the book that waits on the owner, in one place: what cannot
- * be booked yet, then moves between wallets to confirm. Each item is decided
- * here, and the journals recalculate after a decision.
+ * Everything in the book that waits on the owner, in one place: moves
+ * between wallets to confirm, then what cannot be booked yet. Each item is
+ * decided here, and the journals recalculate after a decision.
  */
 export function Review() {
   const { t } = useTranslation("review");
@@ -57,8 +57,10 @@ export function Review() {
         </div>
       ) : null}
 
-      <QuarantineSection onFailedRunChange={setFailedRun} />
+      {/* Quick yes-or-no decisions first: pairing a move often clears a
+          cause below with it. */}
       <ReviewTransfers onDecided={requestRefresh} refreshing={updating} />
+      <QuarantineSection onFailedRunChange={setFailedRun} />
     </div>
   );
 }

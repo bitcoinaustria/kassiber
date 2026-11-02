@@ -246,6 +246,10 @@ python3 -m kassiber journals quarantine clear \
   --transaction <TRANSACTION_ID>
 ```
 
+A price override, from the CLI or a review plan's `price_override`, is in
+the book's currency and is stored as exact with that currency, whatever
+currency an unpriced row was imported with.
+
 Each row explains itself: `category`, `blocks_reports`, the `root` for rows
 that only follow from another transaction, `evidence` and the next `actions`
 (see [why a transaction is quarantined](custody-resolution.md#why-a-transaction-is-quarantined)).

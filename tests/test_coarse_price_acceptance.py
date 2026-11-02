@@ -145,6 +145,23 @@ class CoarsePriceAcceptanceTest(unittest.TestCase):
         ]}
         self.assertEqual(review._coarse_price_cases(self.conn, self.profile(), state), ["a"])
 
+    def test_an_entered_price_is_stored_in_the_book_currency(self):
+        # The row came in labelled USD; the book, and its journals, read EUR.
+        self.conn.execute("UPDATE profiles SET fiat_currency = 'EUR' WHERE id = 'p'")
+        self.conn.execute("UPDATE transactions SET fiat_currency = 'USD' WHERE id = 'a'")
+        self.conn.commit()
+        artifact = self.plan({"type": "price_override", "transaction_id": "a",
+                              "reason": "Receipt", "fiat_value": "3000.50"})
+        review.apply_review(
+            self.conn, self.profile(), artifact=artifact, idempotency_key="price-a",
+            hooks=self.hooks,
+        )
+        row = self.conn.execute(
+            "SELECT fiat_currency, fiat_value_exact, pricing_quality FROM transactions WHERE id = 'a'"
+        ).fetchone()
+        self.assertEqual(tuple(row), ("EUR", "3000.50", "exact"))
+        self.assertEqual(self.held(), [("b", "pricing_review_required")])
+
     def test_a_changed_price_is_reviewed_again(self):
         artifact = self.plan({"type": "accept_coarse_prices", "reason": "Daily averages reviewed"})
         review.apply_review(

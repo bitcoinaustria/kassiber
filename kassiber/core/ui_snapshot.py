@@ -8041,6 +8041,8 @@ def build_journals_quarantine_snapshot(
             # is bound to it, never applied to a book switched to meanwhile.
             "workspace_id": str(profile["workspace_id"]),
             "profile_id": str(profile["id"]),
+            # A price entered for a held row is in this currency.
+            "fiat_currency": str(profile["fiat_currency"] or "").upper() or None,
             "count": total,
             "by_reason": [
                 {"reason": row["reason"], "count": int(row["count"] or 0)}

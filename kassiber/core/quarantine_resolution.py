@@ -37,7 +37,13 @@ def update_quarantine_metadata(
             raise AppError("Fiat rate must be positive and finite", code="validation")
         if value is not None and (not Decimal(value).is_finite() or value < 0):
             raise AppError("Fiat value must be nonnegative and finite", code="validation")
+        # A reviewed price is in the book's currency, which the journals read
+        # it in, whatever currency an unpriced row was imported with.
+        book = conn.execute(
+            "SELECT fiat_currency FROM profiles WHERE id = ?", (profile["id"],)
+        ).fetchone()
         kwargs["pricing_update"] = {
+            "fiat_currency": book["fiat_currency"] if book is not None else None,
             "fiat_rate": str(rate) if rate is not None else None,
             "fiat_value": str(value) if value is not None else None,
             "source_kind": pricing.SOURCE_MANUAL_OVERRIDE,

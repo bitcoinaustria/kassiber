@@ -99,6 +99,9 @@ class ReviewWorkflowTest(unittest.TestCase):
         self.assertEqual(self.conn.execute('SELECT count(*) FROM journal_quarantines').fetchone()[0],0)
         page=review.inspect_cases(self.conn,self.profile,limit=1)
         self.assertEqual(page['cases'][0]['transaction_id'],'a')
+        # Typed prices are stated in the book's currency; the cases say which.
+        fiat=self.conn.execute('SELECT fiat_currency FROM profiles').fetchone()[0]
+        self.assertEqual(page['fiat_currency'],str(fiat or '').strip().upper())
         second=review.inspect_cases(self.conn,self.profile,limit=1,cursor=page['next_cursor'])
         self.assertEqual(second['cases'][0]['transaction_id'],'b')
         self.assertIsNone(second['next_cursor'])
