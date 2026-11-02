@@ -856,6 +856,7 @@ mod tests {
                 "ui.reports.tax_summary",
                 "ui.reports.balance_history",
                 "ui.reports.privacy_hygiene",
+                "ui.reports.psbt_privacy",
                 "ui.reports.exit_tax_preview",
                 "ui.reports.export_csv",
                 "ui.reports.export_xlsx",
@@ -865,6 +866,7 @@ mod tests {
                 "ui.reports.export_exit_tax_xlsx",
                 "ui.reports.export_year_handoff",
                 "ui.reports.export_cross_check",
+                "ui.reports.lightning_profitability",
                 "ui.reports.cross_check",
             ]
         );
