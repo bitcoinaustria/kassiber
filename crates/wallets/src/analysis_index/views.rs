@@ -101,7 +101,7 @@ pub fn with_read<R>(
                 "Synchronize the local analysis index before reading it",
             )
         })?;
-        if field(&state, "version") != &Value::Int(2.into()) {
+        if field(&state, "version") != &Value::Int(super::durable::VERSION.into()) {
             return Err(AppError::new(
                 "chain_analysis_index_unavailable",
                 "Rebuild the local analysis index before reading it",

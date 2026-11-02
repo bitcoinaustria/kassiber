@@ -14,7 +14,7 @@ from generate_analysis_views import database, materialize
 from generate_analysis_sources import stored, inventory, dataset, label
 from generate_analysis_ingestion import q
 from kassiber.core.chain_analysis.index import AnalysisIndex, thaw
-from kassiber.core.chain_analysis.projection_store import _save, encoded
+from kassiber.core.chain_analysis.projection_store import VERSION, _save, encoded
 from kassiber.core.chain_analysis.projection import _View
 from kassiber.core import privacy_mirror, chain_analysis_ai
 
@@ -32,7 +32,8 @@ def captured_sql(snapshot):
             row['node_ids']=sorted(ident for ident in node_ids if ident in index.nodes and (index.nodes[ident]['chain'],index.nodes[ident]['network'])==(row.get('chain'),row.get('network')))
             conn.execute('INSERT INTO chain_index_labels VALUES(?,?,?)',('p',str(row['id']),encoded(row)))
             conn.executemany('INSERT INTO chain_index_label_nodes VALUES(?,?,?)',(('p',str(row['id']),ident) for ident in row['node_ids']))
-        conn.execute('INSERT INTO chain_index_state VALUES(?,?,?,?,?,?,?,?)',('p','fixture',2,0,1,index.snapshot_id,encoded(index.coverage),None))
+        # A captured view is a current materialization of the durable index.
+        conn.execute('INSERT INTO chain_index_state VALUES(?,?,?,?,?,?,?,?)',('p','fixture',VERSION,0,1,index.snapshot_id,encoded(index.coverage),None))
         sql=''
         for (table,) in conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'chain_index_%' ORDER BY name"):
             sql+=f'DELETE FROM {table};'

@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 #[path = "durable_schema.rs"]
 mod schema;
 
-pub const VERSION: i64 = 2;
+pub const VERSION: i64 = 3;
 pub const PHYSICAL: [&str; 5] = [
     "transactions",
     "transaction_graph_cache",

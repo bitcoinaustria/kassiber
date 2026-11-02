@@ -8714,8 +8714,8 @@
   {
     "id": "privacy-r5-count-changes",
     "file": "crates/reports/src/privacy_hygiene.rs",
-    "find": "else if processed_count != number(active) || version != processed_version {",
-    "replace": "else if processed_count != number(active) && version != processed_version {",
+    "find": "    } else if processed_count != number(active)\n        || version != processed_version\n",
+    "replace": "    } else if processed_count != number(active)\n        && version != processed_version\n",
     "expect_failing": [
       "privacy_hygiene_facts_match_python_and_all_112_tables"
     ],

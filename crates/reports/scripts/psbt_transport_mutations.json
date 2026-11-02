@@ -182,8 +182,8 @@
   {
     "id": "psbt-transport-daemon-registration",
     "file": "crates/daemon/src/reports.rs",
-    "find": "    \"ui.reports.psbt_privacy\",\n",
-    "replace": "",
+    "find": "    \"ui.reports.privacy_hygiene\",\n    \"ui.reports.psbt_privacy\",\n    \"ui.reports.exit_tax_preview\",\n    \"ui.reports.export_csv\",\n    \"ui.reports.export_xlsx\",\n    \"ui.reports.export_capital_gains_csv\",\n    \"ui.reports.export_austrian_e1kv_xlsx\",\n    \"ui.reports.export_austrian_e1kv_csv\",\n    \"ui.reports.export_exit_tax_xlsx\",\n    \"ui.reports.export_year_handoff\",\n    \"ui.reports.export_cross_check\",\n    \"ui.source_funds",
+    "replace": "    \"ui.reports.privacy_hygiene\",\n    \"ui.reports.exit_tax_preview\",\n    \"ui.reports.export_csv\",\n    \"ui.reports.export_xlsx\",\n    \"ui.reports.export_capital_gains_csv\",\n    \"ui.reports.export_austrian_e1kv_xlsx\",\n    \"ui.reports.export_austrian_e1kv_csv\",\n    \"ui.reports.export_exit_tax_xlsx\",\n    \"ui.reports.export_year_handoff\",\n    \"ui.reports.export_cross_check\",\n    \"ui.source_funds",
     "expect_failing": [
       "psbt_product_registration_and_wire_order_match_python"
     ],
