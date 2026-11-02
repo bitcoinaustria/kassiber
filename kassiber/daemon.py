@@ -8014,6 +8014,9 @@ def _validate_ai_review_operations(
         if kind == "repair_legacy_pair":
             raise AppError("Legacy pair revision is a local CLI review workflow",
                            code="interaction_required")
+        if kind == "confirm_distinct_import_rows":
+            raise AppError("Confirming distinct import rows is a local CLI review workflow",
+                           code="interaction_required")
         request = operation.get("request")
         action = request.get("action", "create") if isinstance(request, dict) else None
         if not full_access and (

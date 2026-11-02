@@ -88,6 +88,7 @@ WORKSPACE_SPLIT_POLICY: dict[str, Any] = {
         "transaction_pairs",
         "direct_swap_payouts",
         "transaction_pair_dismissals",
+        "synthetic_import_duplicate_reviews",
         "loan_legs",
         "swap_matching_rules",
         "saved_views",

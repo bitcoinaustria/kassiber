@@ -279,7 +279,10 @@ desktop or AI also refreshes the shared transfer-candidate count used by Review.
 Supported operations:
 Supported batch operations are exact price overrides, explicitly justified
 exclusions, pair-review removal (`unpair`), legacy fee-pair revision
-(`repair_legacy_pair`), typed custody components, and local
+(`repair_legacy_pair`), confirmation that held ID-less import rows are distinct
+trades (`confirm_distinct_import_rows`, see
+[identity compatibility](database-compatibility.md#id-less-csv-identity-compatibility)),
+typed custody components, and local
 inbound `kind_override` declarations. The CLI accepts the existing component
 create/revise/state actions. AI batches create components; conversion components
 remain drafts until separately reviewed. Missing-wallet gap investigation keeps

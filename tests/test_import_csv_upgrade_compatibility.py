@@ -356,3 +356,94 @@ def test_current_occurrence_reimport_still_reconciles_its_stored_row(tmp_path, c
         assert conn.execute("SELECT fingerprint FROM transactions").fetchone()[0] == fingerprint
     finally:
         conn.close()
+
+
+def _false_positive(tmp_path, case_index):
+    """Old code imported [jan], then [jan, jan] whose second row is genuine."""
+    conn, profile, wallet = _restore(tmp_path, case_index)
+    first, second = conn.execute("SELECT * FROM transactions ORDER BY external_id").fetchall()
+    batch = "repeat-batch"
+    _insert(conn, "import_batches", {**dict(conn.execute("SELECT * FROM import_batches").fetchone()),
+                                     "id": batch, "imported_at": "2025-04-01T00:00:00Z", "rows_inserted": 1})
+    conn.execute("UPDATE import_batch_transactions SET batch_id=? WHERE transaction_id=?", (batch, second["id"]))
+    conn.execute("UPDATE transactions SET excluded=0, fiat_rate=50000, fiat_rate_exact='50000'")
+    conn.commit()
+    return conn, profile, wallet, first, second, batch
+
+
+@pytest.mark.parametrize("case_index", range(len(CASES)))
+def test_owner_can_confirm_genuinely_distinct_rows_without_dropping_a_trade(tmp_path, case_index):
+    from kassiber.daemon import _validate_ai_review_operations
+    conn, profile, _, first, second, _ = _false_positive(tmp_path, case_index)
+    try:
+        hooks = review_workflow.ReviewHooks(metadata=handlers._metadata_hooks())
+        held = sorted(q["transaction_id"] for q in review_workflow._build(conn, profile)["quarantines"]
+                      if q["reason"] == ISSUE)
+        assert held == sorted([first["id"], second["id"]])
+        case = next(case for case in review_workflow.inspect_cases(conn, profile)["cases"] if case["reason"] == ISSUE)
+        assert case["supported_operations"] == ["exclude", "confirm_distinct_import_rows"]
+        assert case["import_duplicate"]["transaction_ids"] == held
+        operation = {"type": "confirm_distinct_import_rows", "transaction_id": case["transaction_id"],
+                     "expected_fingerprint": case["import_duplicate"]["group_fingerprint"],
+                     "reason": "Both rows are separate purchases in the provider statement"}
+        with pytest.raises(AppError) as ai_error:
+            _validate_ai_review_operations([operation])
+        assert ai_error.value.code == "interaction_required"
+        version = conn.execute("SELECT journal_input_version FROM profiles").fetchone()[0]
+        with pytest.raises(AppError) as stale:
+            review_workflow.plan_review(conn, profile, operations=[{**operation, "expected_fingerprint": "0" * 64}],
+                                        expected_input_version=version, hooks=hooks)
+        assert stale.value.code == "review_case_changed"
+        with pytest.raises(AppError):
+            review_workflow.plan_review(conn, profile, operations=[{**operation, "pair_id": "x"}],
+                                        expected_input_version=version, hooks=hooks)
+        before = [tuple(row) for row in conn.execute("SELECT * FROM transactions ORDER BY id")]
+        plan = review_workflow.plan_review(conn, profile, operations=[operation],
+                                           expected_input_version=version, hooks=hooks)
+        assert conn.execute("SELECT COUNT(*) FROM synthetic_import_duplicate_reviews").fetchone()[0] == 0
+        assert {q["reason"] for q in plan["before"]["quarantines"]} >= {ISSUE}
+        assert ISSUE not in {q["reason"] for q in plan["after"]["quarantines"]}
+        receipt = review_workflow.apply_review(conn, profile, artifact=plan, idempotency_key="distinct", hooks=hooks)
+        assert receipt["status"] == "verified"
+        assert receipt["transaction_ids"] == held
+        assert [tuple(row) for row in conn.execute("SELECT * FROM transactions ORDER BY id")] == before
+        state = review_workflow._build(conn, profile)
+        assert ISSUE not in {q["reason"] for q in state["quarantines"]}
+        assert {first["id"], second["id"]} <= {e["transaction_id"] for e in state["entries"]}
+        with pytest.raises(AppError):
+            review_workflow.apply_review(conn, profile, artifact=plan, idempotency_key="replay", hooks=hooks)
+        stored = conn.execute("SELECT * FROM synthetic_import_duplicate_reviews").fetchone()
+        assert (stored["reason"], stored["authored_source"]) == (operation["reason"], "user")
+        import sqlite3
+        with pytest.raises(sqlite3.DatabaseError):
+            conn.execute("UPDATE synthetic_import_duplicate_reviews SET reason='edited'")
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("case_index", [0, 4])
+def test_confirmation_covers_only_the_group_it_reviewed(tmp_path, case_index):
+    from kassiber.core.import_identity import confirm_distinct, held_duplicate_groups
+    conn, profile, _, first, second, _ = _false_positive(tmp_path, case_index)
+    try:
+        group, = held_duplicate_groups(conn, profile["id"])
+        confirm_distinct(conn, profile, transaction_id=first["id"], expected_fingerprint=group["group_fingerprint"],
+                         reason="Separate purchases", authored_source="cli")
+        conn.commit()
+        assert held_duplicate_groups(conn, profile["id"]) == []
+        with pytest.raises(AppError) as again:
+            confirm_distinct(conn, profile, transaction_id=first["id"], expected_fingerprint=group["group_fingerprint"],
+                             reason="Separate purchases", authored_source="cli")
+        assert again.value.code == "review_case_changed"
+        # A later third copy changes the group: the hold returns for all three.
+        copied = {**dict(second), "id": "third", "fingerprint": "third", "created_at": "2025-05-01T00:00:00Z"}
+        _insert(conn, "transactions", copied)
+        batch = import_batches.record_batch(conn, profile, wallet_id="btc", source_format=CASES[case_index][0],
+            source_filename="later.csv", column_map=None, outcome={"inserted_records": [{"transaction_id": "third"}]})
+        conn.execute("UPDATE import_batches SET imported_at='2025-05-01T00:00:00Z' WHERE id=?", (batch,))
+        conn.commit()
+        held = sorted(q["transaction_id"] for q in review_workflow._build(conn, profile)["quarantines"]
+                      if q["reason"] == ISSUE)
+        assert held == sorted([first["id"], second["id"], "third"])
+    finally:
+        conn.close()

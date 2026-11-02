@@ -150,6 +150,10 @@ that revision; never replace it with exclusion or automatic unpairing.
 across import batches. Every active member is held; Kassiber selects no survivor.
 Compare the source exports with the user before using `metadata exclude` for
 the copies they identify. Genuine identical repeats in one export are retained.
+If the user confirms every held row is a separate trade, the case offers
+`confirm_distinct_import_rows` with its `group_fingerprint`; that confirmation is
+local CLI only and AI cannot author it. Never exclude a row the user has not
+identified as a copy.
 
 In chat use `ui.review.cases`, inspect `ui.transactions.review_context` and
 `ui.transfers.review_context`, then `ui.review.plan`. Explain the returned

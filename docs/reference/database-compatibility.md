@@ -88,15 +88,26 @@ predated batches escaped the hold.
 
 The detector excludes and deletes nothing and chooses no survivor. Review the
 exports, use `metadata exclude --transaction <id>` for the copies the user
-identifies, and rebuild journals. Earlier version-2 and version-3 journals
+identifies, and rebuild journals. When every held row is a genuine separate
+trade (for example, an older build recorded only part of a batch that held real
+identical repeats), confirm that instead through `review plan`/`review apply`
+with `{"type": "confirm_distinct_import_rows", "transaction_id": "<held id>",
+"expected_fingerprint": "<group_fingerprint>", "reason": "..."}`. The case and
+quarantine detail carry the `group_fingerprint`. Apply appends a
+`synthetic_import_duplicate_reviews` row bound to the group's exact members and
+their exclusion state, then invalidates journals; it changes no transaction.
+A stale fingerprint returns `review_case_changed`, a replayed plan fails its
+input-version check, and any later change to the group (another copy, a removed
+or re-included row) re-opens the hold. The AI boundary refuses the operation
+with `interaction_required`. Earlier version-2 and version-3 journals
 require a current rebuild before report use; retained journals, authored reviews and saved/filed
 snapshots are unchanged until their normal explicit processing/review steps.
 
 Coverage: `tests/test_import_csv_upgrade_compatibility.py` restores exact rows
 written by the pre-change parsers/storage writer and checks all five families,
 overlapping exports, genuine repeats, reviewed gap evidence, cross-batch review,
-copies that predate batches, rolled-back imports, and either choice of excluded
-copy.
+copies that predate batches, rolled-back imports, either choice of excluded
+copy, and the confirmed-distinct review.
 
 ## Dependency-origin correction
 

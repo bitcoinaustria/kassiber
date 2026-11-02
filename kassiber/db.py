@@ -2126,6 +2126,31 @@ BEGIN
     SELECT RAISE(ABORT, 'review_workflow_receipt_immutable');
 END;
 
+-- Append-only owner confirmations that a held group of ID-less CSV rows with
+-- one economic identity holds genuinely distinct trades. Each binds the exact
+-- members (and their exclusion) it confirmed; any change re-opens the hold.
+CREATE TABLE IF NOT EXISTS synthetic_import_duplicate_reviews (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    wallet_id TEXT NOT NULL,
+    economic_hash TEXT NOT NULL,
+    group_fingerprint TEXT NOT NULL CHECK(length(group_fingerprint) = 64),
+    transaction_ids_json TEXT NOT NULL,
+    reason TEXT NOT NULL CHECK(length(trim(reason)) > 0),
+    authored_source TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_synthetic_import_duplicate_reviews_profile
+    ON synthetic_import_duplicate_reviews(profile_id, wallet_id, economic_hash);
+
+CREATE TRIGGER IF NOT EXISTS trg_synthetic_import_duplicate_review_immutable
+BEFORE UPDATE ON synthetic_import_duplicate_reviews
+BEGIN
+    SELECT RAISE(ABORT, 'synthetic_import_duplicate_review_immutable');
+END;
+
 CREATE TABLE IF NOT EXISTS custody_ai_assistance_audits (
     id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,

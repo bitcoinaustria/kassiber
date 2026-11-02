@@ -1735,7 +1735,8 @@ their identity. Mutable notes and labels do not participate in these keys.
 Old positional IDs are recognized from their stored raw rows without rewriting
 them, including excluded/reviewed evidence. Existing excess copies across import
 batches block reports as `synthetic_import_duplicate_review_required` until the
-user reviews the exports and excludes the duplicate rows. See
+user reviews the exports and either excludes the duplicate rows or confirms
+through the review workflow that every row is a distinct trade. See
 [identity compatibility](database-compatibility.md#id-less-csv-identity-compatibility).
 
 ```bash

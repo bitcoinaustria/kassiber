@@ -26,8 +26,8 @@ from .custody_pricing import finite_decimal
 from .custody_quantity import CUSTODY_SUSPENSE
 from . import (
     custody_component_planner, custody_components, custody_gap_reviews, custody_gaps,
-    custody_journal, custody_review_terms, metadata, pricing, quarantine_resolution,
-    quarantine_review, tax_events,
+    custody_journal, custody_review_terms, import_identity, metadata, pricing,
+    quarantine_resolution, quarantine_review, tax_events,
 )
 
 MAX_OPERATIONS = 50
@@ -170,6 +170,11 @@ def _inspect_cases(conn, profile, *, limit, cursor):
                 and transaction_id in pairs):
             case["pair"] = quarantine_review.pair_evidence(conn, transaction_id, pairs[transaction_id])
             case["supported_operations"] = ["unpair", *case["supported_operations"]]
+        if reasons[transaction_id] == import_identity.DUPLICATE_REVIEW:
+            detail = details[transaction_id]
+            case["import_duplicate"] = {key: detail.get(key) for key in (
+                "group_fingerprint", "transaction_ids", "active_count", "largest_single_batch_count")}
+            case["supported_operations"] = ["exclude", import_identity.CONFIRM_DISTINCT]
         if transaction_id in pairs:
             guidance = custody_review_terms.pair_review_guidance(conn, pairs[transaction_id])
             if guidance.get("repair"):
@@ -402,10 +407,11 @@ def _operations(operations):
             if set(operation["request"]) - allowed:
                 raise _error("Custody review request contains unsupported fields")
             continue
-        if kind in {"unpair", "repair_legacy_pair"}:
-            if set(operation) != {"type", "pair_id", "expected_fingerprint", "reason"}:
-                raise _error("Pair review requires exactly pair_id, expected_fingerprint and reason")
-            for key in ("pair_id", "expected_fingerprint", "reason"):
+        if kind in {"unpair", "repair_legacy_pair", import_identity.CONFIRM_DISTINCT}:
+            target = "transaction_id" if kind == import_identity.CONFIRM_DISTINCT else "pair_id"
+            if set(operation) != {"type", target, "expected_fingerprint", "reason"}:
+                raise _error(f"This review requires exactly {target}, expected_fingerprint and reason")
+            for key in (target, "expected_fingerprint", "reason"):
                 if not isinstance(operation[key], str) or not operation[key].strip():
                     raise _error(f"Review operation requires {key}")
                 operation[key] = operation[key].strip()
@@ -791,6 +797,13 @@ def _apply_operations(conn, profile, operations, hooks, authored_source, state, 
             result = custody_review_terms.update_pair_review(
                 conn, profile=profile, pair_id=operation["pair_id"], notes=notes,
                 commit=False, authored_source=authored_source,
+            )
+        elif kind == import_identity.CONFIRM_DISTINCT:
+            # Judged on the held group itself: another reason may head a member's case.
+            result = import_identity.confirm_distinct(
+                conn, profile, transaction_id=operation["transaction_id"],
+                expected_fingerprint=operation["expected_fingerprint"], reason=operation["reason"],
+                authored_source=authored_source,
             )
         elif kind == "unpair":
             if quarantine_review.pairs_by_id(conn, str(profile["id"])).get(operation["pair_id"]) is None:
