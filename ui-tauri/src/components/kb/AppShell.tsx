@@ -2309,6 +2309,14 @@ function SidebarActions({
     "/egress",
   ].some((route) => pathname === route || pathname.startsWith(`${route}/`));
   const [extrasOpen, setExtrasOpen] = React.useState(extrasActive);
+  // Arriving on one of its pages from elsewhere (a pill, a link on Reports)
+  // opens the fold too, not only on first load.
+  React.useEffect(() => {
+    if (extrasActive) setExtrasOpen(true);
+  }, [extrasActive]);
+  React.useEffect(() => {
+    if (supportActive) setSupportOpen(true);
+  }, [supportActive]);
   const onSupportClick = useRailSubmenuTrigger(setSupportOpen);
   const onExtrasClick = useRailSubmenuTrigger(setExtrasOpen);
 
@@ -2406,6 +2414,7 @@ function SidebarActions({
           <div>
             <CollapsibleTrigger asChild>
               <SidebarMenuButton
+                isActive={extrasActive}
                 tooltip={t("shell.extras.title")}
                 className={navRowClassName}
                 onClick={onExtrasClick}
@@ -2435,6 +2444,8 @@ function SidebarActions({
                     </SidebarMenuSubItem>
                   );
                 })}
+                {/* The book's review tools above, the calculators below. */}
+                <li role="separator" aria-hidden="true" className="mx-2 my-1 h-px bg-sidebar-border" />
                 <SidebarMenuSubItem>
                   <SidebarMenuSubButton
                     asChild
