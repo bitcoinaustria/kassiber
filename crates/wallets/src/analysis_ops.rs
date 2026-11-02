@@ -14,6 +14,7 @@ mod cases;
 pub mod datasets;
 #[cfg(any(test, feature = "test-harness"))]
 pub mod fixture;
+pub mod jobs;
 mod labels;
 mod routing;
 mod sources;

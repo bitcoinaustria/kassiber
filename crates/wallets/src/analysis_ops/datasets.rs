@@ -2,7 +2,7 @@ use super::*;
 use crate::analysis_index::reads::preview::{normalize_manifest, stream_claims, LineSource};
 use sha2::{Digest, Sha256};
 
-fn get_dataset(conn: &Connection, profile: &str, id: &Value) -> Result<Value> {
+pub(super) fn get_dataset(conn: &Connection, profile: &str, id: &Value) -> Result<Value> {
     let mut result = first(
         conn,
         "SELECT * FROM chain_analysis_datasets WHERE profile_id=? AND id=?",

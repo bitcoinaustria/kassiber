@@ -220,6 +220,17 @@ pub trait Book: Send {
         Err(not_implemented("chain_analysis", operation))
     }
 
+    /// Daemon dataset import over a staged token, and the `.start` job forms
+    /// on the shared analysis runtime (`daemon_chain_analysis.job_starter`).
+    fn chain_analysis_datasets(
+        &mut self,
+        _operation: &str,
+        _args: &Value,
+        _runtime: &std::sync::Arc<kassiber_wallets::analysis_index::runtime::Runtime>,
+    ) -> Result<Value, AppError> {
+        Err(not_implemented("chain-analysis", "datasets"))
+    }
+
     /// `chain-analysis datasets import` over a caller-opened local file.
     fn chain_analysis_import(
         &mut self,

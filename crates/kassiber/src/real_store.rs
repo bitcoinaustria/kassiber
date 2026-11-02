@@ -1291,6 +1291,54 @@ impl Book for RealBook {
             command,
         )
     }
+    fn chain_analysis_datasets(
+        &mut self,
+        operation: &str,
+        args: &Value,
+        runtime: &std::sync::Arc<kassiber_wallets::analysis_index::runtime::Runtime>,
+    ) -> Result<Value, AppError> {
+        use kassiber_wallets::analysis_ops::{jobs, Scope};
+        let (workspace_id, profile_id) = self.resolve_scope(None, None)?;
+        let scope = Scope {
+            workspace_id: &workspace_id,
+            profile_id: &profile_id,
+        };
+        let conn = self.conn()?;
+        if operation == "datasets.import" {
+            return jobs::import_token(
+                conn,
+                &scope,
+                runtime,
+                args,
+                &mut AnalysisSources::default(),
+            );
+        }
+        // The worker opens its own connection, fenced to this book's identity.
+        let identity = setting(conn, "database_instance_id")?.unwrap_or_default();
+        let root = self.data_root.clone();
+        let passphrase = self.db_passphrase.as_ref().map(|p| p.expose().to_owned());
+        let open: jobs::OpenWorker = Box::new(move || {
+            StoredBook::open(
+                Path::new(&root),
+                OpenOptions {
+                    passphrase: passphrase.as_deref(),
+                    expected_database_identity: Some(&identity),
+                    expected_project: None,
+                },
+            )
+            .map(|book| Box::new(book) as Box<dyn jobs::WorkerBook>)
+            .map_err(error)
+        });
+        jobs::start(
+            conn,
+            &scope,
+            runtime,
+            operation,
+            args,
+            open,
+            Box::new(AnalysisSources::default()),
+        )
+    }
     fn chain_analysis_import(
         &mut self,
         workspace: Option<&Value>,

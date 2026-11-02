@@ -22,7 +22,7 @@ impl Runtime for FixedRuntime {
 
 #[derive(Default)]
 pub struct FixedSources {
-    counter: u64,
+    pub counter: u64,
     pub timestamp: String,
 }
 impl Sources for FixedSources {
@@ -206,4 +206,122 @@ fn base64(text: &str) -> Vec<u8> {
         }
     }
     out
+}
+
+/// Drives the dataset job starters over a disk book and one staged local file.
+/// Tokens, job ids and elapsed times are replaced before comparison.
+pub fn evaluate_jobs(spec: &Value) -> Result<Value> {
+    use crate::analysis_index::runtime::{scope_key, Runtime};
+    let database = field(spec, "database").as_str().unwrap().to_owned();
+    let conn = Connection::open(&database).map_err(database_error)?;
+    conn.execute_batch("PRAGMA foreign_keys=ON")
+        .map_err(database_error)?;
+    let runtime = Runtime::new();
+    let scope = Scope {
+        workspace_id: "ws",
+        profile_id: "p",
+    };
+    let mut token = Value::Null;
+    let mut outputs = Vec::new();
+    let Value::List(steps) = field(spec, "steps") else {
+        panic!("job steps")
+    };
+    let redact = |value: Value| -> Value {
+        let mut value = value;
+        for key in ["job_id", "elapsed_ms", "source_token"] {
+            if get(&value, key).is_some() {
+                set(&mut value, key, s("<redacted>"));
+            }
+        }
+        value
+    };
+    let envelope = |kind: &str, outcome: Result<Value>| match outcome {
+        Ok(value) => success(kind, redact(value)),
+        Err(error) => build_error_envelope(
+            &error.code,
+            &error.message,
+            error.details,
+            error.hint.as_deref(),
+            error.retryable,
+            None,
+        ),
+    };
+    let mut ids_counter = 0u64;
+    for step in steps {
+        let operation = field(step, "operation").as_str().unwrap();
+        let mut args = field(step, "args").clone();
+        if get(&args, "source_token") == Some(&s("$token")) {
+            set(&mut args, "source_token", token.clone());
+        }
+        let key = scope_key(&conn, "p");
+        let value = match operation {
+            "stage" => {
+                let staged = runtime.stage(&conn, key, field(spec, "file"), &s("dataset"));
+                if let Ok(staged) = &staged {
+                    token = field(staged, "source_token").clone();
+                }
+                envelope("internal.chain_analysis.stage", staged)
+            }
+            "datasets.import" => {
+                let mut sources = FixedSources {
+                    counter: ids_counter,
+                    timestamp: "2026-01-01T00:00:00Z".into(),
+                };
+                let outcome =
+                    super::jobs::import_token(&conn, &scope, &runtime, &args, &mut sources);
+                ids_counter = sources.counter;
+                envelope("ui.chain_analysis.datasets.import", outcome)
+            }
+            _ => {
+                let path = database.clone();
+                let open: super::jobs::OpenWorker = Box::new(move || {
+                    let conn = Connection::open(&path).map_err(database_error)?;
+                    conn.execute_batch("PRAGMA foreign_keys=ON")
+                        .map_err(database_error)?;
+                    Ok(Box::new(conn) as Box<dyn super::jobs::WorkerBook>)
+                });
+                let sources = FixedSources {
+                    counter: ids_counter,
+                    timestamp: "2026-01-01T00:00:00Z".into(),
+                };
+                let outcome = super::jobs::start(
+                    &conn,
+                    &scope,
+                    &runtime,
+                    operation,
+                    &args,
+                    open,
+                    Box::new(sources),
+                );
+                let finished = outcome.and_then(|receipt| {
+                    let ident = field(&receipt, "job_id").clone();
+                    if truthy(field(step, "cancel")) {
+                        runtime.get(&scope_key(&conn, "p"), &ident, true)?;
+                    }
+                    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+                    loop {
+                        let current = runtime.get(&scope_key(&conn, "p"), &ident, false)?;
+                        if field(&current, "status") != &s("running")
+                            || std::time::Instant::now() > deadline
+                        {
+                            return Ok(current);
+                        }
+                        std::thread::sleep(std::time::Duration::from_millis(5));
+                    }
+                });
+                if field(step, "consumes_id") == &Value::Bool(true) {
+                    ids_counter += 1;
+                }
+                envelope(&format!("ui.chain_analysis.{operation}"), finished)
+            }
+        };
+        outputs.push(dict([
+            ("result", value),
+            (
+                "state",
+                crate::analysis_index::durable::fixture::capture(&conn)?,
+            ),
+        ]));
+    }
+    Ok(Value::List(outputs))
 }

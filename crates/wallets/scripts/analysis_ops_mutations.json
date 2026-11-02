@@ -438,5 +438,45 @@
       "analysis_dataset_imports_match_python_bytes_progress_and_all_112_tables"
     ],
     "rule": "Cleanup observes cancellation between bounded batches."
+  },
+  {
+    "id": "analysis-dataset-job-discard-precheck",
+    "file": "crates/wallets/src/analysis_ops/jobs.rs",
+    "find": "        if status != s(\"staging\") && status != s(\"failed\") {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "analysis_dataset_jobs_match_python_receipts_and_tables"
+    ],
+    "rule": "Cleanup jobs start only for incomplete packs."
+  },
+  {
+    "id": "analysis-dataset-job-source-precheck",
+    "file": "crates/wallets/src/analysis_ops/jobs.rs",
+    "find": "        drop(runtime.open(&key, &token, \"dataset\")?);",
+    "replace": "        let _ = runtime.open(&key, &token, \"dataset\");",
+    "expect_failing": [
+      "analysis_dataset_jobs_match_python_receipts_and_tables"
+    ],
+    "rule": "Import jobs refuse stale or foreign selections before a receipt exists."
+  },
+  {
+    "id": "analysis-dataset-job-phase",
+    "file": "crates/wallets/src/analysis_ops/jobs.rs",
+    "find": "        let phase = if discarding { \"discarding\" } else { \"staging\" };",
+    "replace": "        let phase = if discarding { \"discarding\" } else { \"importing\" };",
+    "expect_failing": [
+      "analysis_dataset_jobs_match_python_receipts_and_tables"
+    ],
+    "rule": "Job progress reports Python's phase names."
+  },
+  {
+    "id": "analysis-dataset-job-request",
+    "file": "crates/wallets/src/analysis_ops/jobs.rs",
+    "find": "        (\"manifest\", manifest.clone()),",
+    "replace": "        (\"manifest\", field(&args, \"manifest\").clone()),",
+    "expect_failing": [
+      "analysis_dataset_jobs_match_python_receipts_and_tables"
+    ],
+    "rule": "The receipt records the normalized submitted manifest."
   }
 ]

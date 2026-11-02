@@ -15321,15 +15321,20 @@ no-consent guards and offline off/on, on SQLite and SQLCipher in DELETE and
 WAL modes, and compares eight product CLI invocations per offline setting (16
 in total) byte for byte. Seven named mutations are killed.
 
-The daemon forms are not registered here. `datasets.import`,
-`datasets.import.start` and `datasets.discard.start` need the read branch's
-`analysis_index::runtime` (picker tokens via `internal.chain_analysis.stage`,
-`Runtime::start` receipts, `jobs.get`/`jobs.cancel`, lock and switch cleanup).
-At integration each `.start` handler validates arguments as Python's
-`job_starter` does, then calls `Runtime::start(conn, scope, request, compute)`
-with a compute that opens an identity-fenced worker connection, opens the
-token's `runtime::Source` as the `LineSource`, and calls `datasets::import` or
-`discard_with` with `Worker::progress` (prefixing `phase`) and
-`Worker::cancelled` plus the 1,800-second limit, mapping errors raised after
-cancellation to `{"status":"cancelled","reason":...}`. `jobs.cancel` is
-already served by that runtime.
+The daemon forms `ui.chain_analysis.datasets.import`, `datasets.import.start`
+and `datasets.discard.start` run on `analysis_index::runtime`, the read port's
+job and picker-token runtime from `4690dcee2`, carried here byte for byte with
+its daemon field, lock/switch/shutdown clearing and restore quiescing hunks. The
+read branch also registers `internal.chain_analysis.stage`, `jobs.get` and
+`jobs.cancel`; this branch does not duplicate them. `analysis_ops::jobs::start`
+ports `job_starter`: argument checks, the normalized submitted request,
+stale-token and incomplete-pack refusals before a receipt exists, a worker
+connection that `kassiber_store::Book::open` fences to the database identity,
+`phase`-prefixed progress, the 1,800-second limit and Python's cancelled
+receipts. `tests/test_rust_analysis_dataset_jobs.py` compares receipts,
+progress and all 112 tables with unchanged Python's `job_starter` over the same
+staged file (16 steps, also frozen in `analysis_dataset_jobs.json` for a named
+Rust test), checks cancellation leaves no active pack, and compares eight daemon
+refusals per offline setting byte for byte. Four named mutations are killed.
+At integration, drop the duplicated `runtime.rs`, `preview.rs` and daemon
+hunks in favour of the read branch's copies and keep `stream_claims`.

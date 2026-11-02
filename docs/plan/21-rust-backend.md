@@ -4473,6 +4473,7 @@ that refused or stale actions send nothing; see the
 
 The CLI's local attribution import runs natively (CLI inventory 177), sharing
 the read port's strict parser and matching Python's staging, activation,
-progress and cancellation byte for byte. The daemon import forms wait for the
-read branch's job and picker-token runtime; the integration steps are recorded
-in the [import checkpoint](../reference/rust-shell.md#chain-analysis-dataset-import-r5-partial).
+progress and cancellation byte for byte. The daemon import and cleanup job
+starters run on the read branch's job and picker-token runtime, carried here
+unchanged; the integration steps are recorded in the
+[import checkpoint](../reference/rust-shell.md#chain-analysis-dataset-import-r5-partial).

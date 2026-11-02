@@ -155,3 +155,44 @@ fn analysis_history_failure_rolls_back_label_and_import() {
     assert_eq!(crate::analysis_index::fixture::tables(&conn), before);
     assert!(conn.is_autocommit());
 }
+
+#[test]
+fn analysis_dataset_jobs_match_python_receipts_and_tables() {
+    let Value::List(cases) =
+        kassiber_pytext::loads(include_str!("../../tests/data/analysis_dataset_jobs.json"))
+            .unwrap()
+    else {
+        panic!("job corpus")
+    };
+    // Disposable book and source under the workspace target directory.
+    let scratch = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/r5-dataset-jobs/native");
+    std::fs::create_dir_all(&scratch).unwrap();
+    for case in &cases {
+        let database = scratch.join("book.db");
+        let source = scratch.join("pack.csv");
+        let _ = std::fs::remove_file(&database);
+        std::fs::write(&source, field(case, "source").as_str().unwrap()).unwrap();
+        let conn = Connection::open(&database).unwrap();
+        conn.execute_batch("PRAGMA foreign_keys=ON").unwrap();
+        conn.execute_batch(include_str!(
+            "../../../reports/tests/data/privacy_hygiene_seed.sql"
+        ))
+        .unwrap();
+        conn.execute_batch(include_str!("../../../reports/tests/data/book.sql"))
+            .unwrap();
+        drop(conn);
+        let actual = fixture::evaluate_jobs(&dict([
+            ("database", s(database.to_str().unwrap())),
+            ("file", s(source.to_str().unwrap())),
+            ("steps", field(case, "steps").clone()),
+        ]))
+        .unwrap();
+        assert_eq!(
+            canonical(&actual).unwrap(),
+            canonical(field(case, "expected")).unwrap(),
+            "{}",
+            field(case, "name").as_str().unwrap()
+        );
+    }
+}

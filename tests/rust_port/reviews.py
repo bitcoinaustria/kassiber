@@ -554,3 +554,8 @@ REVIEWS["tests/test_rust_analysis_dataset_import.py"] = {"*": {
     "disposition": "oracle", "group": "chain-sync",
     "reason": "compares native local attribution imports (CSV/JSONL/adapters, staging batches, replacement, failure marking, hash binding, progress and cancellation for the daemon job form, incomplete-pack cleanup) with unchanged Python bytes and all 112 tables, on SQLite/SQLCipher DELETE/WAL books and through the product CLI with offline mode off/on; nothing egresses",
 }}
+
+REVIEWS["tests/test_rust_analysis_dataset_jobs.py"] = {"*": {
+    "disposition": "oracle", "group": "chain-sync",
+    "reason": "compares the native dataset job starters and staged-token import on the shared analysis runtime with unchanged Python job_starter receipts, progress and all 112 tables over the same staged local file, checks cancellation leaves no active pack, and compares daemon refusals byte for byte with offline mode off/on",
+}}

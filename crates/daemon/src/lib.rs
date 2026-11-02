@@ -189,8 +189,22 @@ pub fn supported_kinds() -> Vec<&'static str> {
             .filter(|k| backends::KINDS.contains(k) && ["backends.reveal_token"].contains(k)),
     );
     kinds.push(SUPPORTED_KINDS[3]);
-    kinds.extend(chain_analysis_reads::KINDS);
-    kinds.splice(0..0, chain_analysis_ops::KINDS.iter().copied());
+    // Python lists the chain-analysis UI kinds first, sorted; the internal
+    // staging kind keeps its own place.
+    let mut analysis: Vec<&'static str> = chain_analysis_reads::KINDS
+        .iter()
+        .chain(chain_analysis_ops::KINDS)
+        .chain(chain_analysis_ops::DATASET_KINDS)
+        .copied()
+        .filter(|k| k.starts_with("ui.chain_analysis."))
+        .collect();
+    analysis.sort_unstable();
+    kinds.splice(0..0, analysis);
+    kinds.extend(
+        chain_analysis_reads::KINDS
+            .iter()
+            .filter(|k| !k.starts_with("ui.chain_analysis.")),
+    );
     #[cfg(feature = "test-kinds")]
     kinds.extend(test_kinds::KINDS);
     kinds
@@ -729,6 +743,22 @@ impl Daemon {
                 return Ok((Some(locked), false));
             }
             let payload = metadata::execute(self.book_mut()?.as_mut(), &kind_text, args.as_ref())?;
+            return Ok((
+                Some(with_request_id(success(&kind_text, payload), &request_id)),
+                false,
+            ));
+        }
+        if chain_analysis_ops::DATASET_KINDS.contains(&kind_text.as_str()) {
+            if let Some(locked) = self.open_lazily(&request_id)? {
+                return Ok((Some(locked), false));
+            }
+            let runtime = Arc::clone(&self.analysis);
+            let payload = chain_analysis_ops::execute_datasets(
+                self.book_mut()?.as_mut(),
+                &runtime,
+                &kind_text,
+                args.as_ref(),
+            )?;
             return Ok((
                 Some(with_request_id(success(&kind_text, payload), &request_id)),
                 false,

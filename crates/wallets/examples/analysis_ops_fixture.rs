@@ -21,7 +21,9 @@ fn main() {
         .read_to_string(&mut raw)
         .unwrap();
     let parsed = kassiber_pytext::loads(&raw).unwrap();
-    let result = if let Value::List(cases) = parsed {
+    let result = if let Some(spec) = get(&parsed, "jobs") {
+        kassiber_wallets::analysis_ops::fixture::evaluate_jobs(spec).unwrap()
+    } else if let Value::List(cases) = parsed {
         Value::List(
             cases
                 .iter()

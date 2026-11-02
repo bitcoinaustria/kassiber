@@ -40,3 +40,29 @@ pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<
         args,
     )
 }
+
+/// Staged-source imports and the dataset job starters share the daemon's
+/// analysis runtime with the read port's receipts and picker tokens.
+pub const DATASET_KINDS: &[&str] = &[
+    "ui.chain_analysis.datasets.discard.start",
+    "ui.chain_analysis.datasets.import",
+    "ui.chain_analysis.datasets.import.start",
+];
+
+pub fn execute_datasets(
+    book: &mut dyn Book,
+    runtime: &std::sync::Arc<kassiber_wallets::analysis_index::runtime::Runtime>,
+    kind: &str,
+    args: Option<&Value>,
+) -> Result<Value, AppError> {
+    let args = args.unwrap_or(&Value::Null);
+    if !matches!(args, Value::Null | Value::Dict(_)) {
+        return Err(AppError::new("validation", "daemon args must be an object")
+            .with_details(dict([("type", s(type_name(args)))])));
+    }
+    book.chain_analysis_datasets(
+        kind.strip_prefix("ui.chain_analysis.").unwrap(),
+        args,
+        runtime,
+    )
+}
