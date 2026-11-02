@@ -5,13 +5,8 @@ use crate::evidence::canonical::{EventRef, LegRef};
 use crate::python_text::PythonText;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
-/// `string` of a value, borrowed when the value is a string.
-fn string_ref(value: &Value) -> Cow<'_, str> {
-    match value {
-        Value::String(text) => Cow::Borrowed(text),
-        value => Cow::Owned(string(value)),
-    }
-}
+/// Observations by quantity hash.
+pub(super) type Observations<'a> = crate::fxhash::HashMap<Cow<'a, str>, LegRef<'a>>;
 fn array(v: &Value) -> &[Value] {
     v.as_array().map(Vec::as_slice).unwrap_or(&[])
 }
@@ -23,7 +18,7 @@ pub(super) struct Input<'a> {
     pub profile: Cow<'a, Value>,
     pub observations: Vec<LegRef<'a>>,
     pub decisions: Vec<&'a Value>,
-    pub eligible: Cow<'a, [Value]>,
+    pub eligible: Vec<Cow<'a, Value>>,
     pub events: Vec<EventRef<'a>>,
     pub pool_barriers: Cow<'a, Value>,
     pub pool_barrier_roots: Cow<'a, Value>,
@@ -41,7 +36,7 @@ impl<'a> Input<'a> {
             profile: Cow::Borrowed(&v["profile"]),
             observations: array(&v["observations"]).iter().map(LegRef::Json).collect(),
             decisions: array(&v["decisions"]).iter().collect(),
-            eligible: Cow::Borrowed(array(&v["eligible"])),
+            eligible: array(&v["eligible"]).iter().map(Cow::Borrowed).collect(),
             events: array(&v["events"]).iter().map(EventRef::Json).collect(),
             pool_barriers: Cow::Borrowed(&v["pool_barriers"]),
             pool_barrier_roots: Cow::Borrowed(&v["pool_barrier_roots"]),
@@ -64,17 +59,12 @@ fn internal(d: &Value) -> bool {
 fn strings(v: &[Value]) -> BTreeSet<String> {
     v.iter().filter(|v| codec::truth(v)).map(string).collect()
 }
-fn slice_key(v: &Value) -> Result<(String, BigInt, BigInt), String> {
-    Ok((
-        string(&v["observation_hash"]),
-        integer_big(&v["start_msat"])?,
-        integer_big(&v["end_msat"])?,
-    ))
+fn slice_key(v: &Value) -> Result<(Cow<'_, str>, Msat, Msat), String> {
+    let start = Msat::of(&v["start_msat"])?;
+    let end = Msat::of(&v["end_msat"])?;
+    Ok((string_ref(&v["observation_hash"]), start, end))
 }
-fn observation<'a>(
-    observations: &BTreeMap<String, LegRef<'a>>,
-    slice: &Value,
-) -> Result<LegRef<'a>, String> {
+fn observation<'a>(observations: &Observations<'a>, slice: &Value) -> Result<LegRef<'a>, String> {
     observations
         .get(&*string_ref(&slice["observation_hash"]))
         .copied()
@@ -83,7 +73,7 @@ fn observation<'a>(
 /// Close selected internal paths and propagate their complete root origins.
 pub(super) fn connected(
     decisions: &[&Value],
-    observations: &BTreeMap<String, LegRef<'_>>,
+    observations: &Observations<'_>,
     explicit: &BTreeSet<String>,
 ) -> Result<Value, String> {
     let mut neighbors: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
@@ -268,10 +258,10 @@ pub(super) fn evaluate_parts<'r>(
     } else {
         Value::Null
     };
-    let observations: BTreeMap<String, LegRef> = v
+    let observations: Observations = v
         .observations
         .iter()
-        .map(|o| (string(&o["quantity_hash"]), *o))
+        .map(|o| (string_ref(o.at("quantity_hash")), *o))
         .collect();
     let mut decisions: Vec<&Value> = v.decisions.clone();
     // Resolve every source before sorting, matching Python's key admission.
@@ -279,7 +269,10 @@ pub(super) fn evaluate_parts<'r>(
     for d in decisions.drain(..) {
         let source = observation(&observations, &d["source"])?;
         keyed.push((
-            (string(&source["occurred_at"]), slice_key(&d["source"])?),
+            (
+                string_ref(source.at("occurred_at")),
+                slice_key(&d["source"])?,
+            ),
             d,
         ));
     }
@@ -319,7 +312,11 @@ pub(super) fn evaluate_parts<'r>(
             .map(|o| held(*o, v, &order))
             .collect::<Vec<_>>()))?));
     }
-    let eligible: BTreeSet<_> = v.eligible.iter().map(slice_key).collect::<Result<_, _>>()?;
+    let eligible: crate::fxhash::HashSet<_> = v
+        .eligible
+        .iter()
+        .map(|e| slice_key(e))
+        .collect::<Result<_, _>>()?;
     let mut projected = Vec::new();
     let mut intra = Vec::new();
     let mut cross = Vec::new();
@@ -467,7 +464,7 @@ pub(super) fn evaluate_parts<'r>(
     }
     // Index the complete decision population once, including unselected targets.
     // Re-scanning it for every receipt makes finalization quadratic.
-    let mut targets_by_observation: BTreeMap<String, Vec<(BigInt, BigInt)>> = BTreeMap::new();
+    let mut targets_by_observation: BTreeMap<Cow<str>, Vec<(Msat, Msat)>> = BTreeMap::new();
     for decision in &decisions {
         if !decision["target"].is_null() {
             let (hash, start, end) = slice_key(&decision["target"])?;
@@ -478,7 +475,12 @@ pub(super) fn evaluate_parts<'r>(
         }
     }
     let mut ordered: Vec<LegRef> = v.observations.clone();
-    ordered.sort_by_cached_key(|o| (string(&o["occurred_at"]), string(&o["quantity_hash"])));
+    ordered.sort_by_cached_key(|o| {
+        (
+            string_ref(o.at("occurred_at")),
+            string_ref(o.at("quantity_hash")),
+        )
+    });
     for o in ordered {
         if o["direction"] != "inbound" || rows.get(&string_ref(&o["transaction_id"])).is_none() {
             continue;
@@ -499,36 +501,51 @@ pub(super) fn evaluate_parts<'r>(
             .cloned()
             .unwrap_or_default();
         targets.sort();
-        let mut cursor = BigInt::from(0);
+        let mut cursor = Msat::Small(0);
         for (start, end) in targets {
             if start > cursor {
-                let q = json!({"observation_hash":o["quantity_hash"],"start_msat":number(&cursor),"end_msat":number(&start)});
+                let q = json!({"observation_hash":o["quantity_hash"],"start_msat":cursor.value(),"end_msat":start.value()});
                 projected.push(slice_row(o, &q, rows, "inbound", &BigInt::from(0))?);
             }
             cursor = cursor.max(end);
         }
-        let principal = integer_big(&o["amount_msat"])?;
+        let principal = Msat::of(&o["amount_msat"])?;
         if cursor < principal {
-            let q = json!({"observation_hash":o["quantity_hash"],"start_msat":number(&cursor),"end_msat":number(&principal)});
+            let q = json!({"observation_hash":o["quantity_hash"],"start_msat":cursor.value(),"end_msat":principal.value()});
             projected.push(slice_row(o, &q, rows, "inbound", &BigInt::from(0))?);
         }
     }
-    let hashes: BTreeSet<_> = projected
+    let hashes: crate::fxhash::HashSet<_> = projected
         .iter()
-        .map(|r| text(&r["custody_quantity_hash"]))
+        .map(|r| text_ref(&r["custody_quantity_hash"]))
         .collect();
+    let mut fee_only = Vec::new();
     for o in v.observations.iter().copied() {
         if o["direction"] == "outbound"
-            && integer_big(&o["fee_msat"])? > BigInt::from(0)
+            && Msat::of(&o["fee_msat"])? > Msat::Small(0)
             && !hashes.contains(&*string_ref(&o["quantity_hash"]))
             && !blocked.contains(&*string_ref(&o["anchor_transaction_id"]))
             && !non_events.contains(&*string_ref(&o["anchor_transaction_id"]))
             && !held(o, v, &order)
         {
-            projected.push(fee_row(o, &integer_big(&o["fee_msat"])?, rows, "fee-only")?);
+            fee_only.push(fee_row(o, &integer_big(&o["fee_msat"])?, rows, "fee-only")?);
         }
     }
-    projected.sort_by_cached_key(|r| (string(&r["occurred_at"]), string(&r["id"])));
+    drop(hashes);
+    projected.extend(fee_only);
+    // Stable, as `sort_by_cached_key` is; the keys borrow the rows.
+    let keys: Vec<_> = projected
+        .iter()
+        .map(|r| (string_ref(&r["occurred_at"]), string_ref(&r["id"])))
+        .collect();
+    let mut order: Vec<usize> = (0..projected.len()).collect();
+    order.sort_by(|a, b| keys[*a].cmp(&keys[*b]));
+    drop(keys);
+    let mut slots: Vec<_> = projected.into_iter().map(Some).collect();
+    let projected: Vec<_> = order
+        .into_iter()
+        .map(|at| slots[at].take().expect("each row once"))
+        .collect();
     moves.sort_by_key(string);
     drop(selection_span);
     if finalize {

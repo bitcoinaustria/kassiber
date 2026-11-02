@@ -40,6 +40,14 @@ impl Record {
             .for_each(crate::codec::escape_wire_tags);
     }
 
+    pub fn len(&self) -> usize {
+        self.values.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
+    }
+
     pub fn contains_key(&self, key: &str) -> bool {
         self.get(key).is_some()
     }

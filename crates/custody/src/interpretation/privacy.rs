@@ -1,5 +1,6 @@
 //! Privacy annotations are uncertainty, never ownership or transfer authority.
 use super::{anchor, holds::Ids, recorded, Context};
+use crate::fields::{Fields, Row};
 use crate::{codec, graph::stored, python_text::PythonText};
 use kassiber_pyjson::{Options, Value as Py};
 use serde_json::{json, Value};
@@ -29,11 +30,11 @@ fn boolish(value: &Py) -> bool {
     )
 }
 
-fn evidence(row: &Value) -> Option<Py> {
-    if row["privacy_boundary"].is_null() {
+fn evidence<R: Fields + ?Sized>(row: &R) -> Option<Py> {
+    if row.at("privacy_boundary").is_null() {
         return None;
     }
-    let boundary = codec::pystr(&row["privacy_boundary"])
+    let boundary = codec::pystr(row.at("privacy_boundary"))
         .py_strip()
         .py_lower()
         .replace('-', "_");
@@ -43,7 +44,7 @@ fn evidence(row: &Value) -> Option<Py> {
     ) {
         return None;
     }
-    let raw = stored::object(&row["raw_json"]);
+    let raw = stored::object(row.at("raw_json"));
     let source = stored::get(&raw, "source");
     let mut detail = codec::from_json(&json!({"privacy_boundary":boundary,"privacy_hop":boundary,"islikelycoinjoin":LIKELY.iter().any(|key| boolish(stored::get(&raw,key))),"required_for":"explicit_user_owned_provenance"})).expect("detail object");
     stored::put(
@@ -58,8 +59,8 @@ fn evidence(row: &Value) -> Option<Py> {
     Some(detail)
 }
 
-pub(super) fn compute(
-    rows: &[Value],
+pub(super) fn compute<R: Row>(
+    rows: &[R],
     auto: &[Value],
     derived: &[Value],
     context: &Context,
@@ -71,7 +72,7 @@ pub(super) fn compute(
     resolved.extend(recorded::resolved_ids(auto, context, false));
     resolved.extend(recorded::resolved_ids(derived, context, false));
     for row in rows {
-        if row["observation_fee_attribution"] != "implicit_wallet_delta" {
+        if row.at("observation_fee_attribution") != "implicit_wallet_delta" {
             continue;
         }
         let id = anchor(row);
@@ -91,11 +92,11 @@ pub(super) fn compute(
     resolved.extend(native_ids.iter().cloned());
     let has_boundaries = rows
         .iter()
-        .any(|row| !row["privacy_boundary"].is_null() && row["privacy_boundary"] != "");
+        .any(|row| !row.at("privacy_boundary").is_null() && row.at("privacy_boundary") != "");
     let mut quarantines = Vec::new();
     if has_boundaries {
         for row in rows {
-            let id = codec::text(&row["id"]);
+            let id = codec::text(row.at("id"));
             if resolved.contains(&id) {
                 continue;
             }
@@ -103,11 +104,11 @@ pub(super) fn compute(
                 continue;
             };
             let wallet = wallets
-                .get(&codec::text(&row["wallet_id"]))
+                .get(&codec::text(row.at("wallet_id")))
                 .unwrap_or(&Value::Null);
-            let label = wallet.get("label").unwrap_or(&row["wallet_id"]);
+            let label = wallet.get("label").unwrap_or(row.at("wallet_id"));
             let mut detail = codec::from_json(
-                &json!({"wallet":label,"asset":codec::text(&row["asset"]).py_upper(),"direction":row["direction"]}),
+                &json!({"wallet":label,"asset":codec::text(row.at("asset")).py_upper(),"direction":row.at("direction")}),
             )?;
             if let Py::Dict(items) = extra {
                 for (key, value) in items {
@@ -119,7 +120,7 @@ pub(super) fn compute(
             }
             let detail = kassiber_pyjson::dumps(&detail, &Options::new().sort_keys(true))
                 .map_err(|e| e.to_string())?;
-            quarantines.push(json!({"transaction_id":id,"workspace_id":row["workspace_id"],"profile_id":row["profile_id"],"reason":"privacy_hop_unresolved","detail_json":detail}));
+            quarantines.push(json!({"transaction_id":id,"workspace_id":row.at("workspace_id"),"profile_id":row.at("profile_id"),"reason":"privacy_hop_unresolved","detail_json":detail}));
         }
     }
     let blocked: Ids = quarantines

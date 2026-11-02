@@ -162,7 +162,7 @@ pub(crate) fn transfer_object_ref_loaded<'v>(
     }
 }
 
-type Scope = Option<(String, String, String, String)>;
+pub(crate) type Scope = Option<(String, String, String, String)>;
 /// The row fields a scope reads.
 const SCOPE_FIELDS: [&str; 8] = [
     "id",
@@ -176,18 +176,20 @@ const SCOPE_FIELDS: [&str; 8] = [
 ];
 type ScopeFields = [Value; 8];
 thread_local! {
-    static SCOPES: std::cell::RefCell<std::collections::HashMap<String, Scope>> =
-        std::cell::RefCell::new(std::collections::HashMap::new());
+    static SCOPES: std::cell::RefCell<crate::fxhash::HashMap<String, Scope>> =
+        std::cell::RefCell::new(Default::default());
     /// A row address hint: a hit still compares every scope field.
-    static SCOPE_ROWS: std::cell::RefCell<std::collections::HashMap<usize, (Box<ScopeFields>, Scope)>> =
-        std::cell::RefCell::new(std::collections::HashMap::new());
+    static SCOPE_ROWS: std::cell::RefCell<crate::fxhash::HashMap<usize, (Box<ScopeFields>, Scope)>> =
+        std::cell::RefCell::new(Default::default());
 }
 
 /// Scopes of the operation's snapshot rows by position. The rows cannot
 /// change while an operation holds its snapshot, so a row found by address
 /// needs no field comparison.
 struct RowScopes {
-    start: usize,
+    /// The JSON rows' address once they are built; zero before.
+    start: std::cell::Cell<usize>,
+    records: usize,
     len: usize,
     scopes: Vec<std::cell::OnceCell<Scope>>,
 }
@@ -198,15 +200,38 @@ thread_local! {
 
 /// Registers the snapshot rows for one operation; dropping it ends that.
 pub(crate) struct RowScopesGuard(Option<std::rc::Rc<RowScopes>>);
-pub(crate) fn register_rows(rows: &[Value]) -> RowScopesGuard {
+/// The snapshot's JSON rows, if already built, hold the records' fields in
+/// the same order; rows built later are noted by `note_rows`.
+pub(crate) fn register_rows(
+    rows: Option<&[Value]>,
+    records: &[crate::snapshot::Record],
+) -> RowScopesGuard {
     let table = std::rc::Rc::new(RowScopes {
-        start: rows.as_ptr() as usize,
-        len: rows.len(),
-        scopes: (0..rows.len())
+        start: std::cell::Cell::new(0),
+        records: records.as_ptr() as usize,
+        len: records.len(),
+        scopes: (0..records.len())
             .map(|_| std::cell::OnceCell::new())
             .collect(),
     });
-    RowScopesGuard(ROW_SCOPES.with(|r| r.replace(Some(table))))
+    let guard = RowScopesGuard(ROW_SCOPES.with(|r| r.replace(Some(table))));
+    if let Some(rows) = rows {
+        note_rows(records, rows);
+    }
+    guard
+}
+/// Notes the JSON rows built from the registered records.
+pub(crate) fn note_rows(records: &[crate::snapshot::Record], rows: &[Value]) {
+    ROW_SCOPES.with(|r| {
+        if let Some(table) = r.borrow().as_ref() {
+            if table.records == records.as_ptr() as usize
+                && table.len == records.len()
+                && rows.len() == records.len()
+            {
+                table.start.set(rows.as_ptr() as usize);
+            }
+        }
+    });
 }
 impl Drop for RowScopesGuard {
     fn drop(&mut self) {
@@ -216,9 +241,29 @@ impl Drop for RowScopesGuard {
 }
 fn registered(row: &Value) -> Option<(std::rc::Rc<RowScopes>, usize)> {
     let table = ROW_SCOPES.with(|r| r.borrow().clone())?;
-    let offset = (row as *const Value as usize).checked_sub(table.start)?;
+    let start = table.start.get();
+    if start == 0 {
+        return None;
+    }
+    let offset = (row as *const Value as usize).checked_sub(start)?;
     let at = offset / std::mem::size_of::<Value>();
     (offset % std::mem::size_of::<Value>() == 0 && at < table.len).then_some((table, at))
+}
+fn registered_record(row: &crate::snapshot::Record) -> Option<(std::rc::Rc<RowScopes>, usize)> {
+    let table = ROW_SCOPES.with(|r| r.borrow().clone())?;
+    let size = std::mem::size_of::<crate::snapshot::Record>();
+    let offset = (row as *const crate::snapshot::Record as usize).checked_sub(table.records)?;
+    let at = offset / size;
+    (offset % size == 0 && at < table.len).then_some((table, at))
+}
+
+/// `onchain_scope` of a snapshot record, which holds its row's fields; a
+/// registered record shares its row's scope slot.
+pub(crate) fn record_scope(row: &crate::snapshot::Record) -> Scope {
+    match registered_record(row) {
+        Some((table, at)) => table.scopes[at].get_or_init(|| physical_scope(row)).clone(),
+        None => physical_scope(row),
+    }
 }
 
 /// Releases memoized scopes at the end of an operation.
@@ -259,32 +304,6 @@ pub fn onchain_scope(row: &Value) -> Scope {
     scope
 }
 
-/// `onchain_scope` of every row, in order. Misses are computed concurrently
-/// and memoized on the calling thread.
-pub(crate) fn onchain_scopes(rows: &[Value]) -> Vec<Scope> {
-    if rows.first().is_some_and(|row| registered(row).is_some()) {
-        return rows.iter().map(onchain_scope).collect();
-    }
-    let computed = crate::par::map(rows, |row| {
-        let key = scope_key(row);
-        let hit = SCOPES.with(|m| m.borrow().get(&key).cloned());
-        let scope = hit.unwrap_or_else(|| physical_scope(row));
-        (key, scope)
-    });
-    computed
-        .into_iter()
-        .map(|outcome| {
-            let (key, scope) = crate::par::unwrap(outcome);
-            SCOPES.with(|m| {
-                m.borrow_mut()
-                    .entry(key)
-                    .or_insert_with(|| scope.clone())
-                    .clone()
-            })
-        })
-        .collect()
-}
-
 fn scope_key(row: &Value) -> String {
     serde_json::to_string(&[
         &row["id"],
@@ -299,7 +318,7 @@ fn scope_key(row: &Value) -> String {
     .expect("JSON values")
 }
 
-fn physical_scope(row: &Value) -> Scope {
+fn physical_scope<R: crate::fields::Fields + ?Sized>(row: &R) -> Scope {
     if [
         "custody-tax:",
         "cross-split:",
@@ -309,17 +328,17 @@ fn physical_scope(row: &Value) -> Scope {
         "recorded-fanout:",
     ]
     .iter()
-    .any(|p| text(&row["id"]).starts_with(p))
+    .any(|p| text(row.at("id")).starts_with(p))
     {
         return None;
     }
-    let raw = transfer_object_ref(&row["raw_json"]);
-    let config = transfer_object_ref(if truth(&row["config_json"]) {
-        &row["config_json"]
+    let raw = transfer_object_ref(row.at("raw_json"));
+    let config = transfer_object_ref(if truth(row.at("config_json")) {
+        row.at("config_json")
     } else {
-        &row["wallet_config_json"]
+        row.at("wallet_config_json")
     });
-    let decoded = transfer_value(&row["raw_json"]);
+    let decoded = transfer_value(row.at("raw_json"));
     let mut maps = vec![&*raw];
     maps.extend(
         decoded
@@ -344,14 +363,14 @@ fn physical_scope(row: &Value) -> Scope {
     if txids.len() > 1 {
         return None;
     }
-    let external = strict_txid(&row["external_id"]);
+    let external = strict_txid(row.at("external_id"));
     let graph = txids.into_iter().next();
     if graph.is_some() && external.is_some() && graph != external {
         return None;
     }
     if graph.is_none() && external.is_some() {
-        let kind = if truth(&row["external_id_kind"]) {
-            text(&row["external_id_kind"])
+        let kind = if truth(row.at("external_id_kind")) {
+            text(row.at("external_id_kind"))
         } else {
             text(&raw["external_id_kind"])
         };
@@ -389,7 +408,7 @@ fn physical_scope(row: &Value) -> Scope {
         }
     }
     let txid = graph.or(external)?;
-    let mut kind = text(&row["wallet_kind"])
+    let mut kind = text(row.at("wallet_kind"))
         .py_strip()
         .py_lower()
         .replace('_', "-");
@@ -416,7 +435,7 @@ fn physical_scope(row: &Value) -> Scope {
     if chains.len() > 1 {
         return None;
     }
-    let asset = text(&row["asset"])
+    let asset = text(row.at("asset"))
         .py_strip()
         .py_upper()
         .replace("L-BTC", "LBTC");
@@ -519,7 +538,10 @@ pub(crate) fn prerequisites(snapshot: &Snapshot) -> Result<Value, String> {
     )
 }
 fn row_integer(row: &Value, key: &str) -> Result<BigInt, String> {
-    crate::interpretation::integer_or_zero(&row[key]).map(|n| graph_integer(&n))
+    row_integer_of(row, key)
+}
+fn row_integer_of<R: crate::fields::Fields + ?Sized>(row: &R, key: &str) -> Result<BigInt, String> {
+    crate::interpretation::integer_or_zero(row.at(key)).map(|n| graph_integer(&n))
 }
 fn parsed_integer(value: &kassiber_pyjson::Value) -> Option<BigInt> {
     if let kassiber_pyjson::Value::Int(n) = value {
@@ -612,22 +634,22 @@ pub(crate) fn native_wallet_delta_msat(
     }
     Ok(Some(delta))
 }
-pub fn native_zero_delta_ids(
-    rows: &[Value],
+pub(crate) fn native_zero_delta_ids<R: crate::fields::Row>(
+    rows: &[R],
     snapshot: &Snapshot,
 ) -> Result<BTreeSet<String>, String> {
     let mut ids = BTreeSet::new();
     for row in rows {
-        if row["direction"] != "outbound"
-            || row_integer(row, "amount")? != BigInt::from(0)
-            || row_integer(row, "fee")? != BigInt::from(0)
+        if row.at("direction") != "outbound"
+            || row_integer_of(row, "amount")? != BigInt::from(0)
+            || row_integer_of(row, "fee")? != BigInt::from(0)
         {
             continue;
         }
-        if native_wallet_delta_msat(row, snapshot, &text(&row["wallet_id"]))?
+        if native_wallet_delta_msat(&row.json(), snapshot, &text(row.at("wallet_id")))?
             == Some(BigInt::from(0))
         {
-            ids.insert(text(&row["id"]));
+            ids.insert(text(row.at("id")));
         }
     }
     Ok(ids)
@@ -847,12 +869,15 @@ pub fn normalize_owned_fees(rows: &mut [Value]) -> Result<(), String> {
 
 type ChainScope = (String, String, String, String);
 
-pub fn reconcile_receipts(rows: &[Value], snapshot: &Snapshot) -> Result<Value, String> {
+pub(crate) fn reconcile_receipts<R: crate::fields::Row>(
+    rows: &[R],
+    snapshot: &Snapshot,
+) -> Result<Value, String> {
     // A group reconciles only receipts of two or more wallets; with at most
     // one receiving wallet in the book no group can, and scopes are pure.
     let mut receiving = BTreeSet::new();
-    for row in rows.iter().filter(|r| r["direction"] == "inbound") {
-        receiving.insert(text(&row["wallet_id"]));
+    for row in rows.iter().filter(|r| r.at("direction") == "inbound") {
+        receiving.insert(text(row.at("wallet_id")));
         if receiving.len() > 1 {
             break;
         }
@@ -860,9 +885,9 @@ pub fn reconcile_receipts(rows: &[Value], snapshot: &Snapshot) -> Result<Value, 
     if receiving.len() <= 1 {
         return Ok(Value::Object(serde_json::Map::new()));
     }
-    let mut grouped: Vec<(ChainScope, Vec<&Value>)> = Vec::new();
+    let mut grouped: Vec<(ChainScope, Vec<&R>)> = Vec::new();
     let mut index = std::collections::HashMap::new();
-    for (row, scope) in rows.iter().zip(onchain_scopes(rows)) {
+    for (row, scope) in rows.iter().map(|row| (row, row.onchain_scope())) {
         if let Some(scope) = scope {
             codec::push_grouped(&mut grouped, &mut index, scope, row);
         }
@@ -874,16 +899,16 @@ pub fn reconcile_receipts(rows: &[Value], snapshot: &Snapshot) -> Result<Value, 
         }
         let inbound: BTreeSet<String> = group
             .iter()
-            .filter(|r| r["direction"] == "inbound")
-            .map(|r| text(&r["wallet_id"]))
+            .filter(|r| r.at("direction") == "inbound")
+            .map(|r| text(r.at("wallet_id")))
             .collect();
         if inbound.len() <= 1 {
             continue;
         }
-        let wallets: BTreeSet<String> = group.iter().map(|r| text(&r["wallet_id"])).collect();
+        let wallets: BTreeSet<String> = group.iter().map(|r| text(r.at("wallet_id"))).collect();
         let parsed: Vec<Option<Value>> = group
             .iter()
-            .map(|r| parse(&r["raw_json"]))
+            .map(|r| parse(r.at("raw_json")))
             .collect::<Result<_, _>>()?;
         let outputs: Vec<Value> = parsed
             .iter()
@@ -920,9 +945,9 @@ pub fn reconcile_receipts(rows: &[Value], snapshot: &Snapshot) -> Result<Value, 
         let valued = !outputs.is_empty() && outputs.iter().all(|o| !o["value_sats"].is_null());
         let observed: BigInt = group
             .iter()
-            .filter(|r| r["direction"] == "inbound")
+            .filter(|r| r.at("direction") == "inbound")
             .try_fold(BigInt::from(0), |sum, r| {
-                Ok::<_, String>(sum + graph_integer(&codec::integer_or_zero(&r["amount"])?))
+                Ok::<_, String>(sum + graph_integer(&codec::integer_or_zero(r.at("amount"))?))
             })?;
         let covered: BigInt = outputs
             .iter()
@@ -930,7 +955,7 @@ pub fn reconcile_receipts(rows: &[Value], snapshot: &Snapshot) -> Result<Value, 
             .filter(|(_, s)| valued && !s.is_empty())
             .map(|(o, _)| graph_integer(&o["value_sats"]) * 1000)
             .sum();
-        let kinds: BTreeSet<String> = group.iter().map(|r| text(&r["wallet_kind"])).collect();
+        let kinds: BTreeSet<String> = group.iter().map(|r| text(r.at("wallet_kind"))).collect();
         let historical = kinds.contains("address")
             && ["descriptor", "xpub", "silent-payment"]
                 .iter()
@@ -942,11 +967,11 @@ pub fn reconcile_receipts(rows: &[Value], snapshot: &Snapshot) -> Result<Value, 
             continue;
         }
         for row in &group {
-            result.insert(text(&row["id"]), Value::Null);
+            result.insert(text(row.at("id")), Value::Null);
         }
         if group
             .iter()
-            .any(|r| r["direction"] != "inbound" || int(&r["fee"]) != 0)
+            .any(|r| r.at("direction") != "inbound" || int(r.at("fee")) != 0)
             || wallets.len() != group.len()
             || parsed.iter().any(Option::is_none)
             || snapshot.owned_index.is_none()
@@ -955,7 +980,7 @@ pub fn reconcile_receipts(rows: &[Value], snapshot: &Snapshot) -> Result<Value, 
         }
         let mut authoritative = true;
         for row in &group {
-            authoritative &= truth(&evidence::authority(row)?["authoritative"]);
+            authoritative &= truth(&evidence::authority(&row.json())?["authoritative"]);
         }
         if !authoritative {
             continue;
@@ -1033,17 +1058,17 @@ pub fn reconcile_receipts(rows: &[Value], snapshot: &Snapshot) -> Result<Value, 
             );
         }
         if group.iter().try_fold(false, |bad, r| {
-            let w = text(&r["wallet_id"]);
+            let w = text(r.at("wallet_id"));
             Ok::<_, String>(
                 bad || canonical[&w] <= BigInt::from(0)
                     || ![&full[&w], &canonical[&w]]
-                        .contains(&&graph_integer(&codec::integer_or_zero(&r["amount"])?)),
+                        .contains(&&graph_integer(&codec::integer_or_zero(r.at("amount"))?)),
             )
         })? {
             continue;
         }
         for row in &group {
-            result.insert(text(&row["id"]),json!({"schema_version":1,"amount_msat":integer_value(&canonical[&text(&row["wallet_id"])]),"outputs":assignments}));
+            result.insert(text(row.at("id")),json!({"schema_version":1,"amount_msat":integer_value(&canonical[&text(row.at("wallet_id"))]),"outputs":assignments}));
         }
     }
     Ok(Value::Object(result))

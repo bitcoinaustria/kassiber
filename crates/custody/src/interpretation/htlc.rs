@@ -321,15 +321,15 @@ pub(super) fn output(row: &Value, vout: &BigInt) -> Result<Option<BigInt>, Strin
     }
     Ok(None)
 }
-pub(super) fn presence(rows: &[Value]) -> bool {
+pub(super) fn presence<R: crate::fields::Fields>(rows: &[R]) -> bool {
     rows.iter().any(|row| {
-        if codec::truth(&row["swap_refund_funding_txid"])
-            || codec::truth(&row["swap_refund_funding_outpoint"])
-            || row["payment_hash_source"] == "chain_script_unique_outpoint"
+        if codec::truth(row.at("swap_refund_funding_txid"))
+            || codec::truth(row.at("swap_refund_funding_outpoint"))
+            || *row.at("payment_hash_source") == "chain_script_unique_outpoint"
         {
             return true;
         }
-        let raw = &row["raw_json"];
+        let raw = row.at("raw_json");
         if raw
             .as_str()
             .is_some_and(|v| !v.contains("htlc_spend") && !v.contains("witness"))

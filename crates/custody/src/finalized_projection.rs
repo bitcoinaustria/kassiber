@@ -30,7 +30,7 @@ pub struct FinalizedProjection {
 }
 impl FinalizedProjection {
     /// The stage's Python value, given the snapshot rows its rows name.
-    pub fn py(&self, rows: &[Value]) -> Result<Py, String> {
+    pub fn py(&self, rows: &[crate::snapshot::Record]) -> Result<Py, String> {
         let mut result = Py::Dict(vec![
             (
                 kassiber_pyjson::Key::Str("$type".into()),
@@ -85,7 +85,7 @@ impl FinalizedProjection {
     /// value to its JSON equivalent; JSON that converts to itself is cloned.
     pub fn json_with<E: From<String>>(
         &self,
-        rows: &[Value],
+        rows: &[crate::snapshot::Record],
         convert: impl Fn(&Py) -> Result<Value, E>,
     ) -> Result<Value, E> {
         let exact = |v: &Value| -> Result<Value, E> {
@@ -165,6 +165,21 @@ fn string(value: &Value) -> String {
     }
     python_value_string(&codec::from_json(value).expect("JSON primitive input"))
 }
+/// `string` of a value, borrowed when the value is a string.
+fn string_ref(value: &Value) -> std::borrow::Cow<'_, str> {
+    match value {
+        Value::String(text) => std::borrow::Cow::Borrowed(text),
+        value => std::borrow::Cow::Owned(string(value)),
+    }
+}
+/// `text` of a value, borrowed when the value is a string.
+fn text_ref(value: &Value) -> std::borrow::Cow<'_, str> {
+    match value {
+        Value::String(text) => std::borrow::Cow::Borrowed(text),
+        value if codec::truth(value) => std::borrow::Cow::Owned(string(value)),
+        _ => std::borrow::Cow::Borrowed(""),
+    }
+}
 fn text(value: &Value) -> String {
     if codec::truth(value) {
         string(value)
@@ -182,7 +197,7 @@ fn validate_rows<R: row::Fields>(
     rows: &[R],
     pairs: &[Value],
 ) -> Result<(), (&'static str, &'static str)> {
-    let mut ids: BTreeSet<String> = BTreeSet::new();
+    let mut ids = crate::fxhash::HashSet::with_capacity_and_hasher(rows.len(), Default::default());
     for row in rows {
         if !codec::truth(row.field("custody_finalized_tax_projection")) {
             return Err((
@@ -190,7 +205,7 @@ fn validate_rows<R: row::Fields>(
                 "tax engines accept only finalized custody projection rows",
             ));
         }
-        let id = text(row.field("id"));
+        let id = text_ref(row.field("id"));
         if id.is_empty() || !ids.insert(id) {
             return Err((
                 "ValueError",
@@ -206,7 +221,7 @@ fn validate_rows<R: row::Fields>(
                 "finalized move pairs require projected out and in rows",
             ));
         }
-        if !ids.contains(&string(&out["id"])) || !ids.contains(&string(&input["id"])) {
+        if !ids.contains(&*string_ref(&out["id"])) || !ids.contains(&*string_ref(&input["id"])) {
             return Err((
                 "ValueError",
                 "finalized move pairs cannot reference raw/unprojected rows",
@@ -236,13 +251,16 @@ fn observed_hash(row: &Value) -> Result<(String, String), String> {
 }
 
 /// Capture closed authority on the original row, before its id/amount changes.
-fn chain_order(row: &Value) -> Result<Value, String> {
+fn chain_order(row: row::RowRef<'_>) -> Result<Value, String> {
     // int(None) fails, so rows without closed authority have no chain order.
     if row["observation_authority_version"].is_null()
         || codec::integer(&row["observation_authority_version"]).ok() != Some(json!(1))
     {
         return Ok(Value::Null);
     }
+    authority_chain_order(&row.value())
+}
+fn authority_chain_order(row: &Value) -> Result<Value, String> {
     if text(&row["observation_graph_hash"])
         != evidence::graph_hash(&row["raw_json"])
             .map_err(|e| e.code.to_owned())?
@@ -280,24 +298,24 @@ fn chain_order(row: &Value) -> Result<Value, String> {
 }
 
 trait Rows {
-    fn get(&self, id: &str) -> Option<&Value>;
+    fn get(&self, id: &str) -> Option<row::RowRef<'_>>;
 
     fn projected(&self, id: &str) -> row::FinalizedRow<'_> {
-        row::FinalizedRow::borrowed(self.row(id))
+        row::FinalizedRow::of(self.row(id))
     }
 
-    fn row(&self, id: &str) -> &Value {
-        self.get(id).unwrap_or(&Value::Null)
+    fn row(&self, id: &str) -> row::RowRef<'_> {
+        self.get(id).unwrap_or(row::RowRef::Value(&Value::Null))
     }
 
     fn nonempty(&self, id: &str) -> bool {
-        codec::truth(self.row(id))
+        self.row(id).truth()
     }
 }
 
 impl Rows for Value {
-    fn get(&self, id: &str) -> Option<&Value> {
-        Value::get(self, id)
+    fn get(&self, id: &str) -> Option<row::RowRef<'_>> {
+        Value::get(self, id).map(row::RowRef::Value)
     }
 }
 
@@ -309,11 +327,11 @@ fn base_row_with_rows<'a>(
     observation: LegRef<'_>,
     rows: &'a dyn Rows,
 ) -> Result<row::FinalizedRow<'a>, Error> {
-    let id = text(&observation["transaction_id"]);
+    let id = text_ref(observation.at("transaction_id"));
     let id = if rows.nonempty(&id) {
         id
     } else {
-        text(&observation["anchor_transaction_id"])
+        text_ref(observation.at("anchor_transaction_id"))
     };
     let mut result = if rows.nonempty(&id) {
         rows.projected(&id)
@@ -410,6 +428,50 @@ fn integer_big(v: &Value) -> Result<BigInt, String> {
     }
     let value = crate::interpretation::integer_or_zero(v)?;
     BigInt::from_str(&value.to_string()).map_err(|_| "ValueError".into())
+}
+/// `integer_big` of an amount, as a machine integer when it fits: keys and
+/// comparisons then need no big integer.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+enum Msat {
+    Small(i64),
+    Big(BigInt),
+}
+impl Msat {
+    fn of(v: &Value) -> Result<Self, String> {
+        if let Some(n) = v.as_i64() {
+            return Ok(Self::Small(n));
+        }
+        let big = integer_big(v)?;
+        Ok(match i64::try_from(&big) {
+            Ok(n) => Self::Small(n),
+            Err(_) => Self::Big(big),
+        })
+    }
+    fn big(&self) -> BigInt {
+        match self {
+            Self::Small(n) => BigInt::from(*n),
+            Self::Big(n) => n.clone(),
+        }
+    }
+    fn value(&self) -> Value {
+        match self {
+            Self::Small(n) => Value::from(*n),
+            Self::Big(n) => number(n),
+        }
+    }
+}
+impl Ord for Msat {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match (self, other) {
+            (Self::Small(a), Self::Small(b)) => a.cmp(b),
+            _ => self.big().cmp(&other.big()),
+        }
+    }
+}
+impl PartialOrd for Msat {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
 }
 fn number(n: &BigInt) -> Value {
     if let Ok(n) = i64::try_from(n) {

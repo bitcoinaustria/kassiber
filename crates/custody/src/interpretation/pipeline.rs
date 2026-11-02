@@ -103,7 +103,7 @@ fn annotate(profile: &Profile) -> Vec<Value> {
     result
 }
 
-fn quarantines(profile: &Profile, rows: &[Value], context: &Context) -> Result<Vec<Value>, String> {
+fn quarantines(profile: &Profile, rows: &Rows, context: &Context) -> Result<Vec<Value>, String> {
     if profile.consolidation.blocked_sources.is_empty()
         && profile.ownership.blocked_sources.is_empty()
         && profile.fanout.blocked_sources.is_empty()
@@ -123,6 +123,7 @@ fn quarantines(profile: &Profile, rows: &[Value], context: &Context) -> Result<V
         }
     }
     let by_id: BTreeMap<_, _> = rows
+        .values()
         .iter()
         .map(|row| {
             (
@@ -172,11 +173,48 @@ fn quarantines(profile: &Profile, rows: &[Value], context: &Context) -> Result<V
 
 /// Rows are borrowed from the snapshot unless a caller or the fee
 /// normalization owns a changed copy.
+/// Transaction rows for the interpretation passes: the snapshot's rows, read
+/// from its records until a pass needs their JSON objects, or rows a pass
+/// changed.
+#[derive(Clone)]
+pub(super) enum Rows<'a> {
+    Snapshot(&'a Snapshot),
+    Values(Cow<'a, [Value]>),
+}
+
+impl Rows<'_> {
+    /// The rows as JSON objects.
+    pub fn values(&self) -> &[Value] {
+        match self {
+            Self::Snapshot(snapshot) => snapshot.rows(),
+            Self::Values(rows) => rows,
+        }
+    }
+
+    /// The snapshot records, when these are the snapshot's own rows.
+    pub fn records(&self) -> Option<&[crate::snapshot::Record]> {
+        match self {
+            Self::Snapshot(snapshot) => Some(&snapshot.transactions),
+            Self::Values(_) => None,
+        }
+    }
+
+    fn to_mut(&mut self) -> &mut Vec<Value> {
+        if let Self::Snapshot(snapshot) = self {
+            *self = Self::Values(Cow::Borrowed(snapshot.rows()));
+        }
+        match self {
+            Self::Values(rows) => rows.to_mut(),
+            Self::Snapshot(_) => unreachable!("converted above"),
+        }
+    }
+}
+
 pub(super) struct Prepared<'a> {
-    pub rows: Cow<'a, [Value]>,
+    pub rows: Rows<'a>,
     pub recorded: Vec<Value>,
     pub handled: BTreeSet<String>,
-    pub normalized: Cow<'a, [Value]>,
+    pub normalized: Rows<'a>,
     pub candidates: Vec<Value>,
     pub derivation_quarantines: Vec<Value>,
     profile: Profile,
@@ -186,15 +224,14 @@ pub(super) fn prepare<'a>(
     snapshot: &'a Snapshot,
     context: &Context,
 ) -> Result<Prepared<'a>, String> {
-    let rows = snapshot.rows();
-    let recorded = recorded::detect(rows)?.0;
-    prepare_with_pairs(snapshot, context, Cow::Borrowed(rows), recorded)
+    let recorded = recorded::detect(snapshot.rows())?.0;
+    prepare_with_pairs(snapshot, context, Rows::Snapshot(snapshot), recorded)
 }
 
 pub(super) fn prepare_with_pairs<'a>(
     snapshot: &Snapshot,
     context: &Context,
-    rows: Cow<'a, [Value]>,
+    rows: Rows<'a>,
     recorded: Vec<Value>,
 ) -> Result<Prepared<'a>, String> {
     prepare_with_reserved(snapshot, context, rows, recorded, &BTreeSet::new())
@@ -203,7 +240,7 @@ pub(super) fn prepare_with_pairs<'a>(
 pub(super) fn prepare_with_reserved<'a>(
     snapshot: &Snapshot,
     context: &Context,
-    rows: Cow<'a, [Value]>,
+    rows: Rows<'a>,
     recorded: Vec<Value>,
     reserved: &BTreeSet<String>,
 ) -> Result<Prepared<'a>, String> {
@@ -216,7 +253,7 @@ pub(super) fn prepare_with_reserved<'a>(
 pub(super) fn prepare_with_samourai<'a>(
     snapshot: &Snapshot,
     context: &Context,
-    rows: Cow<'a, [Value]>,
+    rows: Rows<'a>,
     recorded: Vec<Value>,
     reserved: &BTreeSet<String>,
     samourai: &Value,
@@ -233,7 +270,7 @@ pub(super) fn prepare_with_samourai<'a>(
             .any(|event| event.key()["native_namespace"] == "chain");
     let mut normalized = rows.clone();
     if eligible {
-        for (index, row) in rows.iter().enumerate() {
+        for (index, row) in rows.values().iter().enumerate() {
             if let Some(observation) = context.observations.get(&anchor(row)) {
                 if row["observation_fee_attribution"] == "implicit_wallet_delta"
                     && observation["fee_attribution"] == "exact"
@@ -248,7 +285,7 @@ pub(super) fn prepare_with_samourai<'a>(
         }
     }
     let profile = if eligible {
-        derive(&normalized, snapshot, &handled)?
+        derive(normalized.values(), snapshot, &handled)?
     } else {
         Profile::default()
     };
@@ -277,7 +314,7 @@ pub(super) fn compile(snapshot: &Snapshot, context: &Context) -> Result<Value, S
         } = prepare(snapshot, context)?;
         let compiled = pairs::compile(&candidates, context, snapshot)?;
         Ok::<_, String>(
-            json!({"derivation":profile,"handled_ids":handled,"derivation_rows":normalized,"rows_after_consolidation":rows_after(&normalized,&profile.consolidation),"rows_after_fanout":rows_after(&rows_after(&normalized,&profile.consolidation),&profile.fanout),"derived_pairs":candidates,"claims":compiled["claims"],"blocked_transaction_ids":compiled["blocked_transaction_ids"],"quarantines":compiled["quarantines"],"derivation_quarantines":quarantines(&profile,&rows,context)?,"native_audits":pairs::native_audits(&candidates,context)?}),
+            json!({"derivation":profile,"handled_ids":handled,"derivation_rows":normalized.values(),"rows_after_consolidation":rows_after(normalized.values(),&profile.consolidation),"rows_after_fanout":rows_after(&rows_after(normalized.values(),&profile.consolidation),&profile.fanout),"derived_pairs":candidates,"claims":compiled["claims"],"blocked_transaction_ids":compiled["blocked_transaction_ids"],"quarantines":compiled["quarantines"],"derivation_quarantines":quarantines(&profile,&rows,context)?,"native_audits":pairs::native_audits(&candidates,context)?}),
         )
     };
     Ok(run().unwrap_or_else(|error| json!({"error":error})))
@@ -309,7 +346,7 @@ mod tests {
                     };
                     json!(quarantines(
                         &serde_json::from_value(vector["profile"].clone()).unwrap(),
-                        array(&vector["rows"]),
+                        &Rows::Values(Cow::Borrowed(array(&vector["rows"]))),
                         &context
                     )
                     .unwrap())

@@ -55,17 +55,19 @@ fn compose_impl(
         }
         let channel_blocked = blocked(&channel_quarantines);
         let samourai = samourai::compile(snapshot, context)?;
-        let rows = std::borrow::Cow::Borrowed(snapshot.rows());
+        let rows = pipeline::Rows::Snapshot(snapshot);
         let has_chain = context
             .canonical
             .iter()
             .iter()
             .any(|event| event.key()["native_namespace"] == "chain");
-        let has_hashes = rows
-            .iter()
-            .any(|row| !row["payment_hash"].is_null() && row["payment_hash"] != "");
+        // The snapshot records hold the same fields as `rows`.
+        let has_hashes = snapshot.transactions.iter().any(|row| {
+            row.get("payment_hash")
+                .is_some_and(|hash| !hash.is_null() && hash != "")
+        });
         let auto = if has_chain || has_hashes {
-            recorded::detect(&rows)?.0
+            recorded::detect(rows.values())?.0
         } else {
             Vec::new()
         };
@@ -104,15 +106,29 @@ fn compose_impl(
             .map(|wallet| (codec::pystr(&json!(wallet)["id"]), json!(wallet)))
             .collect();
         let derived = &prepared.candidates;
-        let privacy = privacy::compute(
-            rows,
-            &prepared.recorded,
-            derived,
-            context,
-            &wallets,
-            &ids(&samourai["candidate_ids"]),
-            &native_ids,
-        )?;
+        // Unchanged snapshot rows are read from their records, which hold the
+        // same fields and read faster.
+        let privacy = if let Some(records) = rows.records() {
+            privacy::compute(
+                records,
+                &prepared.recorded,
+                derived,
+                context,
+                &wallets,
+                &ids(&samourai["candidate_ids"]),
+                &native_ids,
+            )?
+        } else {
+            privacy::compute(
+                rows.values(),
+                &prepared.recorded,
+                derived,
+                context,
+                &wallets,
+                &ids(&samourai["candidate_ids"]),
+                &native_ids,
+            )?
+        };
         let derivation_blocked = blocked(&prepared.derivation_quarantines);
         let mut touched = derivation_blocked.clone();
         touched.extend(derived.iter().flat_map(holds::anchors));
@@ -157,16 +173,26 @@ fn compose_impl(
                 .filter(|(_, role)| *role == "channel_open" || *role == "channel_close")
                 .map(|(id, _)| id.clone()),
         );
-        let holds = holds::compute(holds::Inputs {
-            rows,
-            derivation_rows: &prepared.normalized,
-            pairs: &candidates,
-            wallets: &wallets,
-            has_chain_events: has_chain,
-            excluded: &context.excluded,
-            blocked: &other_blocked,
-            resolved: &resolved,
-        })?;
+        macro_rules! holds {
+            ($rows:expr, $derivation:expr) => {
+                holds::compute(holds::Inputs {
+                    rows: $rows,
+                    derivation_rows: $derivation,
+                    pairs: &candidates,
+                    wallets: &wallets,
+                    has_chain_events: has_chain,
+                    excluded: &context.excluded,
+                    blocked: &other_blocked,
+                    resolved: &resolved,
+                })?
+            };
+        }
+        let holds = match (rows.records(), prepared.normalized.records()) {
+            (Some(rows), Some(derivation)) => holds!(rows, derivation),
+            (Some(rows), None) => holds!(rows, prepared.normalized.values()),
+            (None, Some(derivation)) => holds!(rows.values(), derivation),
+            (None, None) => holds!(rows.values(), prepared.normalized.values()),
+        };
         let kept = holds::without_held(&candidates, &holds.blocked_ids);
         let derived = holds::without_held(derived, &holds.blocked_ids);
         let mut released_context = None;
@@ -197,6 +223,7 @@ fn compose_impl(
                 .map(|observation| codec::text(&observation["anchor_transaction_id"]))
                 .collect();
             let rows = rows
+                .values()
                 .iter()
                 .filter(|row| anchors.contains(&codec::text(&row["id"])))
                 .map(|row| (codec::text(&row["id"]), row.clone()))

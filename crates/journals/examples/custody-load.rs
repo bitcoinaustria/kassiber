@@ -115,7 +115,7 @@ fn run(input: &Value) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
                 let projection = stages
                     .finalized_projection
                     .expect("requested projection")
-                    .py(snapshot.custody().rows())?;
+                    .py(&snapshot.custody().transactions)?;
                 let text = kassiber_pyjson::dumps(
                     &projection_diagnostics(&projection),
                     &kassiber_pyjson::Options::new().ensure_ascii(true),

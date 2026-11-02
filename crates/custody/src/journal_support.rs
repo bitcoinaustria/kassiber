@@ -76,7 +76,7 @@ pub fn journal_operands(
         .finalized_projection
         .as_ref()
         .ok_or("journal build requires finalized custody projection")?
-        .json_with(raw.rows(), exact)?;
+        .json_with(&raw.transactions, exact)?;
     let (ignored, accounting_ignored) = interpretation::gap_ignored_ids(
         raw,
         &stages.components,

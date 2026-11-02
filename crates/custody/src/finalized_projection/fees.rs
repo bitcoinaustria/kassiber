@@ -13,17 +13,17 @@ fn bundle(decision: &Value) -> Option<String> {
         .map(|tail| format!("pair:{}", tail.split(':').next().unwrap()))
 }
 #[derive(Default)]
-pub struct FeeAllocation {
-    allocated_sources: BTreeSet<String>,
+pub struct FeeAllocation<'a> {
+    allocated_sources: crate::fxhash::HashSet<std::borrow::Cow<'a, str>>,
     by_bundle: BTreeMap<String, BigInt>,
     consumed_bundles: BTreeSet<String>,
 }
-impl FeeAllocation {
+impl<'a> FeeAllocation<'a> {
     pub fn new(decisions: &[Value]) -> Result<Self, String> {
         Self::from_decisions(decisions)
     }
-    pub(super) fn from_decisions<'a>(
-        decisions: impl IntoIterator<Item = &'a Value>,
+    pub(super) fn from_decisions<'d>(
+        decisions: impl IntoIterator<Item = &'d Value>,
     ) -> Result<Self, String> {
         let mut result = Self::default();
         for decision in decisions {
@@ -39,16 +39,16 @@ impl FeeAllocation {
         }
         Ok(result)
     }
-    pub fn raw(&mut self, source: LegRef<'_>) -> Result<BigInt, String> {
+    pub fn raw(&mut self, source: LegRef<'a>) -> Result<BigInt, String> {
         if !self
             .allocated_sources
-            .insert(string(&source["quantity_hash"]))
+            .insert(string_ref(source.at("quantity_hash")))
         {
             return Ok(BigInt::from(0));
         }
         integer_big(&source["fee_msat"])
     }
-    pub fn move_fee(&mut self, decision: &Value, source: LegRef<'_>) -> Result<BigInt, String> {
+    pub fn move_fee(&mut self, decision: &Value, source: LegRef<'a>) -> Result<BigInt, String> {
         let bundle = bundle(decision);
         let reviewed = bundle
             .as_ref()

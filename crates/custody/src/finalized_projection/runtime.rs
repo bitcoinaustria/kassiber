@@ -179,10 +179,14 @@ pub fn loaded_confirmations(snapshot: &Snapshot) -> Result<Vec<Value>, String> {
         .collect()
 }
 
-struct BorrowedRows<'a>(std::collections::HashMap<String, (&'a Value, Value)>);
+struct BorrowedRows<'a>(
+    crate::fxhash::HashMap<std::borrow::Cow<'a, str>, (&'a crate::snapshot::Record, Value)>,
+);
 impl super::Rows for BorrowedRows<'_> {
-    fn get(&self, id: &str) -> Option<&Value> {
-        self.0.get(id).map(|(row, _)| *row)
+    fn get(&self, id: &str) -> Option<super::row::RowRef<'_>> {
+        self.0
+            .get(id)
+            .map(|(row, _)| super::row::RowRef::Record(row))
     }
 
     fn nonempty(&self, id: &str) -> bool {
@@ -193,18 +197,19 @@ impl super::Rows for BorrowedRows<'_> {
         let Some((row, confirmation)) = self.0.get(id) else {
             return super::row::FinalizedRow::borrowed(&Value::Null);
         };
-        let mut projected = super::row::FinalizedRow::borrowed(row);
+        let mut projected = super::row::FinalizedRow::of(super::row::RowRef::Record(row));
         projected.set("_closed_confirmation_observation", confirmation.clone());
         projected
     }
 }
 fn confirmed_rows(snapshot: &Snapshot, captured: Vec<Value>) -> BorrowedRows<'_> {
-    let mut rows = std::collections::HashMap::with_capacity(captured.len());
-    for (row, confirmation) in snapshot.rows().iter().zip(captured) {
-        let id = if codec::truth(&row["id"]) {
-            codec::pystr(&row["id"])
-        } else {
-            String::new()
+    let mut rows =
+        crate::fxhash::HashMap::with_capacity_and_hasher(captured.len(), Default::default());
+    for (row, confirmation) in snapshot.transactions.iter().zip(captured) {
+        let id = match row.get("id").unwrap_or(&Value::Null) {
+            Value::String(id) => std::borrow::Cow::Borrowed(id.as_str()),
+            id if codec::truth(id) => std::borrow::Cow::Owned(codec::pystr(id)),
+            _ => std::borrow::Cow::Borrowed(""),
         };
         rows.insert(id, (row, confirmation));
     }
@@ -247,7 +252,7 @@ pub fn stage_from_state(
     let super::composition::Composition::Finalized(parts) = parts else {
         unreachable!("finalize composes a finalized projection")
     };
-    let source = snapshot.rows();
+    let source = &snapshot.transactions;
     Ok(super::FinalizedProjection {
         rows: parts
             .rows
@@ -359,7 +364,7 @@ fn state_input<'a>(
     let eligible = match blocked {
         Some(tax) => stored::list(stored::get(tax, "eligible_decisions"))
             .iter()
-            .map(|d| exact(stored::get(d, "source")))
+            .map(|d| exact(stored::get(d, "source")).map(Cow::Owned))
             .collect::<Result<Vec<_>, _>>()?,
         None => decisions
             .iter()
@@ -374,7 +379,7 @@ fn state_input<'a>(
                     )
                 )
             })
-            .map(|d| d["source"].clone())
+            .map(|d| Cow::Borrowed(&d["source"]))
             .collect(),
     };
     let (blocked_anchors, issues) = issue_operands(quantity.issues())?;
@@ -421,7 +426,7 @@ fn state_input<'a>(
         profile: Cow::Owned(Value::Object(snapshot.profile.clone().into_map())),
         observations,
         decisions,
-        eligible: Cow::Owned(eligible),
+        eligible,
         events,
         pool_barriers: Cow::Owned(pool_barriers),
         pool_barrier_roots: Cow::Owned(pool_barrier_roots),

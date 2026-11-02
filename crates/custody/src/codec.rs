@@ -647,8 +647,8 @@ pub(crate) enum Memo {
 }
 
 thread_local! {
-    static MEMOS: std::cell::RefCell<[std::collections::HashMap<String, Rc<Value>>; 2]> =
-        std::cell::RefCell::new([std::collections::HashMap::new(), std::collections::HashMap::new()]);
+    static MEMOS: std::cell::RefCell<[crate::fxhash::HashMap<String, Rc<Value>>; 2]> =
+        std::cell::RefCell::new([Default::default(), Default::default()]);
 }
 
 pub(crate) fn memo(kind: Memo, text: &str, convert: impl FnOnce() -> Value) -> Value {
@@ -668,7 +668,7 @@ pub(crate) fn memo_shared(kind: Memo, text: &str, convert: impl FnOnce() -> Valu
 /// the order a linear search over `groups` keeps, with a hashed lookup.
 pub(crate) fn push_grouped<K: Eq + std::hash::Hash + Clone, T>(
     groups: &mut Vec<(K, Vec<T>)>,
-    index: &mut std::collections::HashMap<K, usize>,
+    index: &mut std::collections::HashMap<K, usize, impl std::hash::BuildHasher>,
     key: K,
     item: T,
 ) {
@@ -685,7 +685,7 @@ pub(crate) fn clear_memos() {
     MEMOS.with(|m| {
         m.borrow_mut()
             .iter_mut()
-            .for_each(std::collections::HashMap::clear)
+            .for_each(crate::fxhash::HashMap::clear)
     });
     crate::graph::clear_scopes();
 }

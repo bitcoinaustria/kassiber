@@ -599,7 +599,6 @@ struct Posting<'a> {
     location: Value,
     amount: BigInt,
     state: Value,
-    domain: super::Domain,
 }
 impl Posting<'_> {
     fn py(self) -> Result<kassiber_pyjson::Value, String> {
@@ -610,7 +609,6 @@ impl Posting<'_> {
             &self.location,
             self.amount,
             &self.state,
-            &self.domain,
         )
     }
 }
@@ -621,9 +619,10 @@ fn posting_py(
     location: &Value,
     amount: BigInt,
     state: &Value,
-    domain: &super::Domain,
 ) -> Result<kassiber_pyjson::Value, String> {
     use kassiber_pyjson::Value as Py;
+    // A posting's domain is its observation's.
+    let domain = &super::Domain::of(&observation);
     Ok(super::py_dict([
         ("$type", Py::Str("QuantityPosting".into())),
         ("amount_msat", Py::Int(amount)),
@@ -658,7 +657,6 @@ fn postings<'a>(
         location,
         amount: n,
         state,
-        domain: super::Domain::of(&observation),
     };
     for (hash, &o) in by_hash {
         result.push(posting(
@@ -862,7 +860,6 @@ pub(super) struct PostingState {
     location: Value,
     amount: BigInt,
     state: Value,
-    domain: super::Domain,
 }
 
 /// The arbitration result, owning everything but its observations.
@@ -887,7 +884,6 @@ impl<'a> Projection<'a> {
                     location: p.location,
                     amount: p.amount,
                     state: p.state,
-                    domain: p.domain,
                 })
                 .collect(),
             errors: self.errors,
@@ -905,7 +901,7 @@ impl ProjectionState {
             .iter()
             .map(|p| {
                 let o = observation(p.observation);
-                let domain = &p.domain;
+                let domain = &super::Domain::of(&o);
                 let mut domain_value = serde_json::Map::new();
                 domain_value.insert("$type".into(), json!("QuantityDomain"));
                 domain_value.insert("exposure".into(), Value::String(domain.exposure.clone()));
@@ -969,7 +965,6 @@ impl ProjectionState {
                                 &p.location,
                                 p.amount.clone(),
                                 &p.state,
-                                &p.domain,
                             )
                         })
                         .collect::<Result<_, _>>()?,
@@ -988,10 +983,11 @@ pub(super) fn arbitrate<'a>(
     destination_overlaps(&mut decisions);
     atomic_bundles(&mut decisions, &claims);
     let postings = postings(&by_hash, observations, &decisions)?;
-    let mut totals: BTreeMap<(&str, &str), BigInt> = BTreeMap::new();
+    let mut totals: BTreeMap<_, BigInt> = BTreeMap::new();
     for p in &postings {
-        let d = &p.domain;
-        *totals.entry((&d.network, &d.exposure)).or_default() += &p.amount;
+        *totals
+            .entry(super::Domain::key(&p.observation))
+            .or_default() += &p.amount;
     }
     if totals.values().any(|n| *n != BigInt::from(0)) {
         return Err("AssertionError".into());

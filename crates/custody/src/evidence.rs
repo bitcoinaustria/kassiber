@@ -147,8 +147,38 @@ pub fn event_key(row: &Value) -> Result<EventKey, Error> {
     event_key_of(row)
 }
 
+/// Whether a payload key names a transaction id once lowercased and reduced
+/// to its alphanumeric characters.
+fn txid_name(key: &str) -> bool {
+    const NAMES: [&str; 5] = [
+        "txid",
+        "txhash",
+        "transactionid",
+        "transactionhash",
+        "onchaintxid",
+    ];
+    if key.is_ascii() {
+        // ASCII lowercasing and `isalnum` act per byte; no name is longer
+        // than 15 characters.
+        let mut name = [0; 15];
+        let mut len = 0;
+        for byte in key.bytes().filter(u8::is_ascii_alphanumeric) {
+            if len == name.len() {
+                return false;
+            }
+            name[len] = byte.to_ascii_lowercase();
+            len += 1;
+        }
+        return NAMES.iter().any(|known| known.as_bytes() == &name[..len]);
+    }
+    let name: String = key.py_lower().chars().filter(|c| isalnum(*c)).collect();
+    NAMES.contains(&name.as_str())
+}
+
 pub(crate) fn event_key_of<F: Fields + ?Sized>(row: &F) -> Result<EventKey, Error> {
-    let raw = crate::graph::transfer_object_ref(row.at("raw_json"));
+    // The JSON object of `raw_json` is read only by some branches below.
+    let raw = std::cell::OnceCell::new();
+    let raw = || raw.get_or_init(|| crate::graph::transfer_object_ref(row.at("raw_json")));
     let (chain, network) = scope_of(row)?;
     let null = Py::Null;
     let parsed;
@@ -185,22 +215,7 @@ pub(crate) fn event_key_of<F: Fields + ?Sized>(row: &F) -> Result<EventKey, Erro
         if let Py::Dict(items) = payload {
             for (key, value) in items {
                 if let Key::Str(key) = key {
-                    let name: String = key
-                        .as_str()
-                        .unwrap_or_default()
-                        .py_lower()
-                        .chars()
-                        .filter(|c| isalnum(*c))
-                        .collect();
-                    if [
-                        "txid",
-                        "txhash",
-                        "transactionid",
-                        "transactionhash",
-                        "onchaintxid",
-                    ]
-                    .contains(&name.as_str())
-                    {
+                    if txid_name(key.as_str().unwrap_or_default()) {
                         candidates.push(codec::to_json(value));
                     }
                 }
@@ -210,7 +225,7 @@ pub(crate) fn event_key_of<F: Fields + ?Sized>(row: &F) -> Result<EventKey, Erro
     let kind = if truth(row.at("external_id_kind")) {
         text(row.at("external_id_kind"))
     } else {
-        text(&raw["external_id_kind"])
+        text(&raw()["external_id_kind"])
     };
     if kind.py_strip().py_lower() == "txid" {
         candidates.extend([
@@ -228,7 +243,7 @@ pub(crate) fn event_key_of<F: Fields + ?Sized>(row: &F) -> Result<EventKey, Erro
             row.at("native_namespace"),
             row.at("source_ref"),
             row.at("backend_name"),
-            &raw["_kassiber_provenance"]["import_source"],
+            &raw()["_kassiber_provenance"]["import_source"],
             row.at("wallet_id"),
         ]
         .into_iter()
@@ -239,7 +254,7 @@ pub(crate) fn event_key_of<F: Fields + ?Sized>(row: &F) -> Result<EventKey, Erro
         .py_lower();
         let declared = [
             row.at("native_event_id"),
-            &raw["txid"],
+            &raw()["txid"],
             row.at("external_id"),
         ]
         .into_iter()
@@ -327,12 +342,16 @@ pub fn evidence_snapshot(
 /// Native zero-delta suppression uses the historical closed-row predicate,
 /// which binds both hashes but does not additionally validate canonical scope.
 pub fn current_observation(row: &Value) -> Result<bool, Error> {
-    if integer(&row["observation_authority_version"]).ok() != Some(json!(1)) {
+    current_observation_of(row)
+}
+
+pub(crate) fn current_observation_of<F: Fields + ?Sized>(row: &F) -> Result<bool, Error> {
+    if integer(row.at("observation_authority_version")).ok() != Some(json!(1)) {
         return Ok(false);
     }
     Ok(
-        row["observation_graph_hash"] == graph_hash(&row["raw_json"])?.0
-            && row["observation_quantity_hash"] == observed_hash(row)?.0,
+        *row.at("observation_graph_hash") == graph_hash(row.at("raw_json"))?.0
+            && *row.at("observation_quantity_hash") == observed_hash_of(row)?.0,
     )
 }
 
@@ -1097,13 +1116,11 @@ pub fn stage_prepared(
     snapshot: &Snapshot,
     prepared: Result<Prepared, Error>,
 ) -> Result<Evidence, Error> {
-    let span = crate::timing::span("evidence.rows");
-    let rows = snapshot.rows();
-    drop(span);
-    let span = crate::timing::span("evidence.zero_delta");
-    let non_events = crate::graph::native_zero_delta_ids(rows, snapshot)?;
-    drop(span);
+    // The snapshot records hold the rows' fields.
     let records = &snapshot.transactions;
+    let span = crate::timing::span("evidence.zero_delta");
+    let non_events = crate::graph::native_zero_delta_ids(records, snapshot)?;
+    drop(span);
     let Prepared {
         enriched,
         keys,
@@ -1116,7 +1133,7 @@ pub fn stage_prepared(
         .map(|(key, computed)| key.or_else(|| computed.into_inner()))
         .collect();
     let span = crate::timing::span("evidence.receipts");
-    let reconciliations = crate::graph::reconcile_receipts(rows, snapshot)?;
+    let reconciliations = crate::graph::reconcile_receipts(records, snapshot)?;
     drop(span);
     let span = crate::timing::span("evidence.canonical");
     let views: Vec<_> = enriched.iter().map(|e| e.view(records)).collect();
@@ -1137,6 +1154,36 @@ pub fn compute(snapshot: &Snapshot) -> Result<Value, Error> {
 #[cfg(test)]
 mod semantic_tests {
     use super::*;
+    #[test]
+    fn txid_names_match_python_normalization() {
+        let names = [
+            "txid",
+            "TxID",
+            "tx_hash",
+            "Transaction-Hash",
+            "onChainTxId",
+            "transaction id",
+            "txid1",
+            "abcdefghijklmnopqrstuvwxyz",
+            "transactionhashx",
+            "TX\u{130}D",
+            "t\u{e9}xid",
+            "tx\u{0}id",
+            "",
+        ];
+        for name in names {
+            let reference: String = name.py_lower().chars().filter(|c| isalnum(*c)).collect();
+            let expected = [
+                "txid",
+                "txhash",
+                "transactionid",
+                "transactionhash",
+                "onchaintxid",
+            ]
+            .contains(&reference.as_str());
+            assert_eq!(txid_name(name), expected, "{name:?}");
+        }
+    }
     #[test]
     fn cpython_event_semantics() {
         let vectors: Vec<Value> = serde_json::from_str(include_str!(

@@ -114,13 +114,35 @@ impl StageSnapshot {
     /// Each transaction row as a JSON object, in order; shared by every reader.
     pub fn rows(&self) -> &[Value] {
         self.rows.get_or_init(|| {
-            crate::par::map(&self.transactions, |row| {
+            let _span = crate::timing::span("snapshot.rows");
+            let rows: Vec<Value> = crate::par::map(&self.transactions, |row| {
                 Value::Object(row.clone().into_map())
             })
             .into_iter()
             .map(crate::par::unwrap)
-            .collect()
+            .collect();
+            // Moving the vector keeps its elements where they are.
+            crate::graph::note_rows(&self.transactions, &rows);
+            rows
         })
+    }
+
+    /// An owned copy of the JSON rows, built from the records when the
+    /// shared rows are not.
+    pub fn row_values(&self) -> Vec<Value> {
+        match self.rows.get() {
+            Some(rows) => rows.clone(),
+            None => self
+                .transactions
+                .iter()
+                .map(|row| Value::Object(row.clone().into_map()))
+                .collect(),
+        }
+    }
+
+    /// The JSON rows, if built.
+    pub(crate) fn built_rows(&self) -> Option<&[Value]> {
+        self.rows.get().map(Vec::as_slice)
     }
 
     /// Test-only legacy constructors receive the same typed schema admission.

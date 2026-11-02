@@ -191,11 +191,11 @@ pub(super) fn array(value: &Value) -> &[Value] {
     value.as_array().map(Vec::as_slice).unwrap_or(&[])
 }
 
-pub(super) fn anchor(row: &Value) -> String {
-    if truth(&row["journal_transaction_id"]) {
-        text(&row["journal_transaction_id"])
+pub(super) fn anchor<R: crate::fields::Fields + ?Sized>(row: &R) -> String {
+    if truth(row.at("journal_transaction_id")) {
+        text(row.at("journal_transaction_id"))
     } else {
-        text(&row["id"])
+        text(row.at("id"))
     }
 }
 

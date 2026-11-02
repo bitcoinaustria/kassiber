@@ -5,6 +5,7 @@ pub mod confirmation;
 pub mod evidence;
 mod fields;
 pub mod finalized_projection;
+mod fxhash;
 pub mod gaps;
 mod gates;
 mod graph;
@@ -230,7 +231,7 @@ fn run_admitted(
     finalized: bool,
     projection_rows: Vec<serde_json::Value>,
 ) -> Result<Stages, Refusal> {
-    let _rows = graph::register_rows(snapshot.rows());
+    let _rows = graph::register_rows(snapshot.built_rows(), &snapshot.transactions);
     // Evidence enrichment is pure; compute it first so components can share
     // it, and report its refusal only at the evidence stage.
     let prepared = evidence::prepare(snapshot);
@@ -287,7 +288,7 @@ fn run_admitted(
 pub fn response(snapshot: &snapshot::Snapshot, stages: &Stages, concurrent: bool) -> String {
     let projection = stages.finalized_projection.as_ref().map(|projection| {
         projection
-            .py(snapshot.rows())
+            .py(&snapshot.transactions)
             .expect("computed finalized projection")
     });
     let projection = projection.as_ref();

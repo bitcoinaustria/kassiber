@@ -182,8 +182,9 @@ pub(super) fn compute(
     context: &Context,
     occupied: &Ids,
 ) -> Result<Production, String> {
-    let rows = snapshot.rows();
-    if !htlc::presence(rows) {
+    // Snapshot records hold the rows' fields; reading them leaves the JSON
+    // rows unbuilt for books without HTLC evidence.
+    if !htlc::presence(&snapshot.transactions) {
         return Ok(Production {
             pairs: Vec::new(),
             proofs: BTreeMap::new(),
@@ -192,6 +193,7 @@ pub(super) fn compute(
             proof_values: Vec::new(),
         });
     }
+    let rows = snapshot.rows();
     // suggest_swap_candidates parses its explicit clock before row admission,
     // even though its own dismissal sequence is empty in this producer.
     instant(&json!(snapshot.as_of))?;

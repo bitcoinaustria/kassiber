@@ -66,7 +66,7 @@ fn projection_loaded_rows_keep_bytes_until_serialization() {
         let projection = stages
             .finalized_projection
             .unwrap()
-            .py(snapshot.rows())
+            .py(&snapshot.transactions)
             .unwrap();
         let Py::List(rows) = get(&projection, "rows") else {
             panic!("projection rows")
@@ -103,7 +103,7 @@ fn projection_json_rows_keep_literal_private_tag_maps() {
         let projection = stages
             .finalized_projection
             .unwrap()
-            .py(rows.rows())
+            .py(&rows.transactions)
             .unwrap();
         let Py::List(rows) = get(&projection, "rows") else {
             panic!("projection rows")
@@ -402,12 +402,12 @@ fn typed_finalized_matches_python_value_adapter() {
         if let (Ok(typed), Ok(python)) = (&typed, &python) {
             // The journal JSON is the JSON conversion of the Python value.
             assert_eq!(
-                typed.json_with(snapshot.rows(), journal_json),
+                typed.json_with(&snapshot.transactions, journal_json),
                 journal_json(python)
             );
         }
         assert_eq!(
-            encode(typed.map(|t| t.py(snapshot.rows()).unwrap())),
+            encode(typed.map(|t| t.py(&snapshot.transactions).unwrap())),
             encode(python)
         );
         compared += 1;
@@ -491,7 +491,7 @@ fn production_run_matches_separate_stages() {
         else {
             continue;
         };
-        let rows = snapshot.rows();
+        let rows = &snapshot.transactions;
         assert_eq!(stages.components, comp);
         assert_eq!(
             stages.evidence.value(&snapshot.transactions),

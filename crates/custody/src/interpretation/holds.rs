@@ -1,5 +1,6 @@
 //! Raw-observation safety. A hold only quarantines; it cannot create a MOVE.
 use super::{anchor, integer_or_zero, pairs};
+use crate::fields::{Fields, Row};
 use crate::{
     codec::{self, truth},
     components::time,
@@ -27,15 +28,15 @@ fn positive_sign(ordering: std::cmp::Ordering) -> bool {
     ordering.is_gt()
 }
 
-fn positive(row: &Value) -> Result<bool, String> {
-    if let Some(amount) = row["amount"].as_i64() {
+fn positive<R: Row + ?Sized>(row: &R) -> Result<bool, String> {
+    if let Some(amount) = row.at("amount").as_i64() {
         return Ok(positive_sign(amount.cmp(&0)));
     }
-    if let Some(amount) = row["amount"].as_u64() {
+    if let Some(amount) = row.at("amount").as_u64() {
         return Ok(positive_sign(amount.cmp(&0)));
     }
     Ok(positive_sign(
-        BigInt::from_str(&integer_or_zero(&row["amount"])?.to_string())
+        BigInt::from_str(&integer_or_zero(row.at("amount"))?.to_string())
             .expect("Python integer")
             .cmp(&BigInt::from(0)),
     ))
@@ -47,16 +48,16 @@ fn conflict_scope(row: &Value, parsed: Option<&Py>) -> Option<Physical> {
     conflict_scope_with_transfer(row, parsed, graph::onchain_scope(row))
 }
 
-fn conflict_scope_with_transfer(
-    row: &Value,
+fn conflict_scope_with_transfer<R: Row + ?Sized>(
+    row: &R,
     parsed: Option<&Py>,
     mut transfer: Option<graph::ownership::TransferScope>,
 ) -> Option<Physical> {
     // Only a synthetic id is renamed; other rows are probed as they are.
-    let id = codec::text(&row["id"]);
+    let id = codec::text(row.at("id"));
     if SYNTHETIC.iter().any(|prefix| id.starts_with(prefix)) {
-        let mut probe = row.clone();
-        probe["id"] = json!(format!("physical-anchor:{}", codec::pystr(&row["id"])));
+        let mut probe = row.json().into_owned();
+        probe["id"] = json!(format!("physical-anchor:{}", codec::pystr(row.at("id"))));
         transfer = graph::onchain_scope(&probe);
     }
     if let Some((chain, network, txid, _)) = transfer {
@@ -69,12 +70,12 @@ fn conflict_scope_with_transfer(
     if !raw_txid.is_empty() && parsed_txid.is_none() {
         return None;
     }
-    let external = graph::strict_txid(&row["external_id"]);
+    let external = graph::strict_txid(row.at("external_id"));
     if parsed_txid.is_some() && external.is_some() && parsed_txid != external {
         return None;
     }
     let txid = parsed_txid.or(external)?;
-    let asset = codec::text(&row["asset"])
+    let asset = codec::text(row.at("asset"))
         .py_strip()
         .py_upper()
         .replace("L-BTC", "LBTC");
@@ -83,11 +84,11 @@ fn conflict_scope_with_transfer(
         "LBTC" => "liquid",
         _ => return None,
     };
-    let raw = graph::transfer_object(&row["raw_json"]);
-    let config = graph::transfer_object(if truth(&row["config_json"]) {
-        &row["config_json"]
+    let raw = graph::transfer_object(row.at("raw_json"));
+    let config = graph::transfer_object(if truth(row.at("config_json")) {
+        row.at("config_json")
     } else {
-        &row["wallet_config_json"]
+        row.at("wallet_config_json")
     });
     let mut families = BTreeSet::new();
     let mut domains = BTreeSet::new();
@@ -132,8 +133,8 @@ fn has_nested_payload(raw: &Py, nested: bool) -> bool {
     nested && matches!(stored::get(raw, "tx"), Py::Dict(_))
 }
 
-fn payload(row: &Value, nested: bool) -> Py {
-    let raw = stored::object(&row["raw_json"]);
+fn payload<R: Row + ?Sized>(row: &R, nested: bool) -> Py {
+    let raw = stored::object(row.at("raw_json"));
     if has_nested_payload(&raw, nested) {
         stored::get(&raw, "tx").clone()
     } else {
@@ -148,7 +149,7 @@ fn explicit(payload: &Py) -> Option<bool> {
 }
 
 pub(crate) fn capture_confirmation(row: &Value) -> Result<Value, String> {
-    let authoritative = evidence::current_observation(row).map_err(|e| e.code.to_owned())?;
+    let authoritative = evidence::current_observation_of(row).map_err(|e| e.code.to_owned())?;
     if !authoritative {
         return Ok(Value::Null);
     }
@@ -196,8 +197,8 @@ struct TransferIdentityHint<'a> {
     txid: &'a str,
 }
 
-pub(super) fn invalid_transfer_identity(row: &Value) -> bool {
-    let Some(raw) = row["raw_json"].as_str().filter(|raw| raw.len() <= 4300) else {
+pub(super) fn invalid_transfer_identity<R: Row + ?Sized>(row: &R) -> bool {
+    let Some(raw) = row.at("raw_json").as_str().filter(|raw| raw.len() <= 4300) else {
         return false;
     };
     let Ok(hint) = serde_json::from_str::<TransferIdentityHint<'_>>(raw) else {
@@ -207,8 +208,11 @@ pub(super) fn invalid_transfer_identity(row: &Value) -> bool {
     !txid.is_empty() && graph::strict_txid(&json!(txid)).is_none()
 }
 
-fn graphless_facts(row: &Value) -> Option<Facts> {
-    let raw = row["raw_json"].as_str().filter(|raw| raw.len() <= 4300)?;
+fn graphless_facts<R: Row + ?Sized>(row: &R) -> Option<Facts> {
+    let raw = row
+        .at("raw_json")
+        .as_str()
+        .filter(|raw| raw.len() <= 4300)?;
     let hints: RawHints<'_> = serde_json::from_str(raw).ok()?;
     let txid = hints.txid?.py_strip();
     if txid.is_empty()
@@ -230,12 +234,12 @@ fn graphless_facts(row: &Value) -> Option<Facts> {
     })
 }
 
-pub(super) fn facts(rows: &[Value]) -> Vec<Facts> {
+pub(super) fn facts<R: Row>(rows: &[R]) -> Vec<Facts> {
     crate::par::map(rows, |row| {
         if let Some(facts) = graphless_facts(row) {
             return (facts, true);
         }
-        let raw = stored::object(&row["raw_json"]);
+        let raw = stored::object(row.at("raw_json"));
         let parsed = stored::parse_object(&raw);
         let raw_txid = stored::text(stored::get(&raw, "txid"));
         let invalid_txid =
@@ -262,7 +266,7 @@ pub(super) fn facts(rows: &[Value]) -> Vec<Facts> {
             return fact;
         }
         if !invalid_txid {
-            fact.transfer_scope = graph::onchain_scope(row);
+            fact.transfer_scope = row.onchain_scope();
         }
         fact.scope = match &fact.parsed {
             Ok(parsed) => {
@@ -275,8 +279,8 @@ pub(super) fn facts(rows: &[Value]) -> Vec<Facts> {
     .collect()
 }
 
-fn confirmation_states(
-    rows: &[Value],
+fn confirmation_states<R: Row>(
+    rows: &[R],
     facts: &[Facts],
     closed: bool,
 ) -> Result<BTreeMap<Physical, bool>, String> {
@@ -287,12 +291,14 @@ fn confirmation_states(
         let Some(scope) = fact.scope.clone() else {
             continue;
         };
-        let confirmed = fact.explicit.unwrap_or_else(|| truth(&row["confirmed_at"]));
+        let confirmed = fact
+            .explicit
+            .unwrap_or_else(|| truth(row.at("confirmed_at")));
         *legacy.entry(scope.clone()).or_insert(false) |= confirmed;
         if closed
-            && row["_closed_confirmation_observation"]["$type"] == "ChainConfirmationObservation"
+            && row.at("_closed_confirmation_observation")["$type"] == "ChainConfirmationObservation"
         {
-            let captured = &row["_closed_confirmation_observation"];
+            let captured = row.at("_closed_confirmation_observation");
             if captured["physical_scope"] == json!([scope.0, scope.1, scope.2]) {
                 if let Some(timestamp) = time::instant(&captured["observed_at"]["$datetime"])
                     .map_err(|e| e.code.to_owned())?
@@ -309,14 +315,14 @@ fn confirmation_states(
         }
         // Raw snapshot v1 never contains Python's captured dataclass. Recompute
         // its closed provenance from the raw hashes and chronology instead.
-        if !evidence::current_observation(row).map_err(|e| e.code.to_owned())? {
+        if !evidence::current_observation_of(row).map_err(|e| e.code.to_owned())? {
             continue;
         }
         let Some(confirmed) = fact.explicit else {
             continue;
         };
         let Some(timestamp) =
-            time::instant(&row["observation_observed_at"]).map_err(|e| e.code.to_owned())?
+            time::instant(row.at("observation_observed_at")).map_err(|e| e.code.to_owned())?
         else {
             continue;
         };
@@ -364,8 +370,8 @@ fn conflicts_impl(rows: &[Value], facts: &[Facts], closed: bool) -> Result<Ids, 
     let states = confirmation_states(rows, facts, closed)?;
     conflicts_from_states(rows, facts, &states)
 }
-fn conflicts_from_states(
-    rows: &[Value],
+fn conflicts_from_states<R: Row>(
+    rows: &[R],
     facts: &[Facts],
     states: &BTreeMap<Physical, bool>,
 ) -> Result<Ids, String> {
@@ -376,7 +382,7 @@ fn conflicts_from_states(
         let Some(scope) = fact.scope.clone() else {
             continue;
         };
-        row_txid.insert(codec::pystr(&row["id"]), scope.clone());
+        row_txid.insert(codec::pystr(row.at("id")), scope.clone());
         if let Some(parsed) = parsed {
             for entry in stored::list(stored::get(parsed, "inputs")) {
                 if let Some(outpoint) = canonical_outpoint(stored::get(entry, "outpoint")) {
@@ -420,8 +426,8 @@ fn pending_impl(rows: &[Value], facts: &[Facts], closed: bool) -> Result<Ids, St
     let states = confirmation_states(rows, facts, closed)?;
     pending_from_states(rows, facts, &states)
 }
-fn pending_from_states(
-    rows: &[Value],
+fn pending_from_states<R: Row>(
+    rows: &[R],
     facts: &[Facts],
     states: &BTreeMap<Physical, bool>,
 ) -> Result<Ids, String> {
@@ -435,7 +441,7 @@ fn pending_from_states(
         }
         fact.parsed.as_ref().map_err(Clone::clone)?;
         if let Some(scope) = fact.scope.clone() {
-            row_txid.insert(codec::pystr(&row["id"]), scope.clone());
+            row_txid.insert(codec::pystr(row.at("id")), scope.clone());
             explicit_txids.insert(scope);
         }
     }
@@ -448,7 +454,7 @@ fn pending_from_states(
         fact.parsed.as_ref().map_err(Clone::clone)?;
         if let Some(scope) = fact.scope.clone() {
             if pending.contains(&scope) {
-                row_txid.insert(codec::pystr(&row["id"]), scope);
+                row_txid.insert(codec::pystr(row.at("id")), scope);
             }
         }
     }
@@ -463,21 +469,21 @@ pub(super) fn fanout(rows: &[Value], covered: &Ids) -> Result<Ids, String> {
     fanout_with_facts(rows, covered, None)
 }
 
-fn fanout_with_facts(
-    rows: &[Value],
+fn fanout_with_facts<R: Row>(
+    rows: &[R],
     covered: &Ids,
     facts: Option<&[Facts]>,
 ) -> Result<Ids, String> {
-    let mut groups: Vec<(graph::ownership::TransferScope, Vec<&Value>)> = Vec::new();
+    let mut groups: Vec<(graph::ownership::TransferScope, Vec<&R>)> = Vec::new();
     let mut index = std::collections::HashMap::new();
     for (row_index, row) in rows.iter().enumerate() {
-        let id = codec::pystr(&row["id"]);
+        let id = codec::pystr(row.at("id"));
         if SYNTHETIC.iter().any(|p| id.starts_with(p)) {
             continue;
         }
         let scope = match facts {
             Some(facts) => facts[row_index].transfer_scope.clone(),
-            None => graph::onchain_scope(row),
+            None => row.onchain_scope(),
         };
         let Some(scope) = scope else {
             continue;
@@ -490,7 +496,7 @@ fn fanout_with_facts(
         let mut ins = Vec::new();
         for (direction, legs) in [("outbound", &mut outs), ("inbound", &mut ins)] {
             for row in &group {
-                if row["direction"] == direction && positive(row)? {
+                if row.at("direction") == direction && positive(row)? {
                     legs.push(*row);
                 }
             }
@@ -500,7 +506,7 @@ fn fanout_with_facts(
         }
         if !outs.iter().any(|out| {
             ins.iter().any(|incoming| {
-                codec::pystr(&out["wallet_id"]) != codec::pystr(&incoming["wallet_id"])
+                codec::pystr(out.at("wallet_id")) != codec::pystr(incoming.at("wallet_id"))
             })
         }) {
             continue;
@@ -508,14 +514,14 @@ fn fanout_with_facts(
         let positive_ids: Ids = outs
             .iter()
             .chain(&ins)
-            .map(|row| codec::pystr(&row["id"]))
+            .map(|row| codec::pystr(row.at("id")))
             .collect();
         if positive_ids.is_subset(covered) {
             continue;
         }
         let mut graph_bearing = false;
         for row in outs.iter().chain(&ins) {
-            if stored::parse(&row["raw_json"])?.is_some() {
+            if stored::parse(row.at("raw_json"))?.is_some() {
                 graph_bearing = true;
                 break;
             }
@@ -525,13 +531,13 @@ fn fanout_with_facts(
         }
         let handled = group
             .iter()
-            .any(|row| covered.contains(&codec::pystr(&row["id"])));
+            .any(|row| covered.contains(&codec::pystr(row.at("id"))));
         let uncovered_source = outs
             .iter()
-            .any(|row| !covered.contains(&codec::pystr(&row["id"])));
+            .any(|row| !covered.contains(&codec::pystr(row.at("id"))));
         let mut zero_outs = false;
         for row in &group {
-            if row["direction"] == "outbound" && !positive(row)? {
+            if row.at("direction") == "outbound" && !positive(row)? {
                 zero_outs = true;
                 break;
             }
@@ -539,7 +545,7 @@ fn fanout_with_facts(
         if handled && zero_outs && !uncovered_source {
             continue;
         }
-        held.extend(group.iter().map(|row| codec::pystr(&row["id"])));
+        held.extend(group.iter().map(|row| codec::pystr(row.at("id"))));
     }
     Ok(held)
 }
@@ -549,8 +555,8 @@ pub(super) fn unscoped(rows: &[Value]) -> Result<Ids, String> {
     unscoped_with_facts(rows, None)
 }
 
-fn unscoped_with_facts(rows: &[Value], facts: Option<&[Facts]>) -> Result<Ids, String> {
-    let mut groups: Vec<((String, String), Vec<&Value>)> = Vec::new();
+fn unscoped_with_facts<R: Row>(rows: &[R], facts: Option<&[Facts]>) -> Result<Ids, String> {
+    let mut groups: Vec<((String, String), Vec<&R>)> = Vec::new();
     let mut positions: std::collections::HashMap<(String, String), usize> =
         std::collections::HashMap::new();
     // `codec::text` of a string is the string itself.
@@ -561,17 +567,17 @@ fn unscoped_with_facts(rows: &[Value], facts: Option<&[Facts]>) -> Result<Ids, S
         }
     }
     for (index, row) in rows.iter().enumerate() {
-        let id = text(&row["id"]);
+        let id = text(row.at("id"));
         if id.starts_with("custody-tax:")
             || SYNTHETIC.iter().any(|p| id.starts_with(p))
             || match facts {
                 Some(facts) => facts[index].transfer_scope.is_some(),
-                None => graph::onchain_scope(row).is_some(),
+                None => row.onchain_scope().is_some(),
             }
         {
             continue;
         }
-        let external = text(&row["external_id"]);
+        let external = text(row.at("external_id"));
         let external = external.py_strip();
         if external.is_empty() {
             continue;
@@ -583,7 +589,7 @@ fn unscoped_with_facts(rows: &[Value], facts: Option<&[Facts]>) -> Result<Ids, S
         } else {
             graph::strict_txid(&json!(external)).unwrap_or_else(|| external.to_owned())
         };
-        let key = (external, codec::text(&row["asset"]).py_strip().py_upper());
+        let key = (external, codec::text(row.at("asset")).py_strip().py_upper());
         // Groups keep first-occurrence order, as a linear search kept them.
         if let Some(&at) = positions.get(&key) {
             groups[at].1.push(row);
@@ -598,16 +604,16 @@ fn unscoped_with_facts(rows: &[Value], facts: Option<&[Facts]>) -> Result<Ids, S
         let mut ins = Vec::new();
         for (direction, legs) in [("outbound", &mut outs), ("inbound", &mut ins)] {
             for row in &group {
-                if row["direction"] == direction && positive(row)? {
+                if row.at("direction") == direction && positive(row)? {
                     legs.push(*row);
                 }
             }
         }
         if outs.iter().any(|out| {
             ins.iter()
-                .any(|incoming| out["wallet_id"] != incoming["wallet_id"])
+                .any(|incoming| out.at("wallet_id") != incoming.at("wallet_id"))
         }) {
-            held.extend(group.iter().map(|row| codec::pystr(&row["id"])));
+            held.extend(group.iter().map(|row| codec::pystr(row.at("id"))));
         }
     }
     Ok(held)
@@ -650,9 +656,9 @@ pub(super) struct Holds {
     pub quarantines: Vec<Value>,
     pub transient_ids: Ids,
 }
-pub(super) struct Inputs<'a> {
-    pub rows: &'a [Value],
-    pub derivation_rows: &'a [Value],
+pub(super) struct Inputs<'a, R: Row, D: Row> {
+    pub rows: &'a [R],
+    pub derivation_rows: &'a [D],
     pub pairs: &'a [Value],
     pub wallets: &'a BTreeMap<String, Value>,
     pub has_chain_events: bool,
@@ -661,7 +667,14 @@ pub(super) struct Inputs<'a> {
     pub resolved: &'a Ids,
 }
 
-pub(super) fn compute(input: Inputs<'_>) -> Result<Holds, String> {
+/// Whether two row slices are the same rows (the same slice of one type).
+fn same_rows<R, D>(rows: &[R], other: &[D]) -> bool {
+    std::mem::size_of::<R>() == std::mem::size_of::<D>()
+        && std::ptr::eq(rows.as_ptr().cast::<()>(), other.as_ptr().cast::<()>())
+        && rows.len() == other.len()
+}
+
+pub(super) fn compute<R: Row, D: Row>(input: Inputs<'_, R, D>) -> Result<Holds, String> {
     let _span = crate::timing::span("interpretation.holds");
     let facts = facts(input.rows);
     let states = confirmation_states(input.rows, &facts, false)?;
@@ -674,7 +687,7 @@ pub(super) fn compute(input: Inputs<'_>) -> Result<Holds, String> {
     let by_id: BTreeMap<_, _> = input
         .rows
         .iter()
-        .map(|row| (codec::text(&row["id"]), row))
+        .map(|row| (codec::text(row.at("id")), row))
         .collect();
     let mut covered: Ids = input
         .excluded
@@ -690,7 +703,7 @@ pub(super) fn compute(input: Inputs<'_>) -> Result<Holds, String> {
         fanout_with_facts(
             input.derivation_rows,
             &covered,
-            std::ptr::eq(input.rows, input.derivation_rows).then_some(facts.as_slice()),
+            same_rows(input.rows, input.derivation_rows).then_some(facts.as_slice()),
         )?
     } else {
         Ids::new()
@@ -770,13 +783,13 @@ pub(super) fn compute(input: Inputs<'_>) -> Result<Holds, String> {
     let mut quarantines = Vec::new();
     for (id, reason) in &reasons {
         let row = by_id[id];
-        let wallet_id = codec::text(&row["wallet_id"]);
+        let wallet_id = codec::text(row.at("wallet_id"));
         let wallet = input.wallets.get(&wallet_id).unwrap_or(&Value::Null);
         let label = wallet
             .get("label")
             .cloned()
             .unwrap_or_else(|| json!(wallet_id));
-        let mut detail = json!({"wallet":label,"asset":codec::text(&row["asset"]).py_upper(),"direction":row["direction"],"external_id":codec::text(&row["external_id"])});
+        let mut detail = json!({"wallet":label,"asset":codec::text(row.at("asset")).py_upper(),"direction":row.at("direction"),"external_id":codec::text(row.at("external_id"))});
         let required = match *reason {
             "pending_onchain_confirmation" => Some("confirmed_chain_history"),
             "owned_fanout_unresolved" | "transfer_pair_dependency_blocked" => {
@@ -791,7 +804,7 @@ pub(super) fn compute(input: Inputs<'_>) -> Result<Holds, String> {
         if let Some(causes) = dependency_causes.get(id) {
             detail["blocked_by_transaction_ids"] = json!(causes);
         }
-        quarantines.push(json!({"transaction_id":id,"workspace_id":row["workspace_id"],"profile_id":row["profile_id"],"reason":reason,"detail_json":pairs::detail_json(&detail)?}));
+        quarantines.push(json!({"transaction_id":id,"workspace_id":row.at("workspace_id"),"profile_id":row.at("profile_id"),"reason":reason,"detail_json":pairs::detail_json(&detail)?}));
     }
     let mut transient_ids: Ids = reasons
         .iter()

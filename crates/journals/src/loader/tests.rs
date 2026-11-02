@@ -868,7 +868,7 @@ fn native_loader_blob_projection_retains_byte_identity() {
             .unwrap()
             .finalized_projection
             .unwrap()
-            .py(snapshot.custody().rows())
+            .py(&snapshot.custody().transactions)
             .unwrap();
         let Value::List(rows) = get(&projection, "rows") else {
             panic!("projection rows")

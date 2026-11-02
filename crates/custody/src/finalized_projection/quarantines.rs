@@ -170,7 +170,7 @@ impl<'a> Quarantines<'a> {
         &mut self,
         rows: &[R],
         receipts: &[Value],
-        observations: &BTreeMap<String, LegRef<'_>>,
+        observations: &super::composition::Observations<'_>,
     ) -> Result<(), String> {
         let mut groups: BTreeMap<(String, String), Vec<&Value>> = BTreeMap::new();
         for issue in self.input.issues.iter() {
@@ -243,7 +243,7 @@ impl<'a> Quarantines<'a> {
             .collect();
         let quarantined: BTreeSet<PyStr> = self.records.keys().map(|k| k.0.clone()).collect();
         for hash in receipts {
-            let observation = observations.get(&string(hash)).ok_or("KeyError")?;
+            let observation = observations.get(&*string_ref(hash)).ok_or("KeyError")?;
             let id = string(&observation["anchor_transaction_id"]);
             if !projected.contains(&id) && !quarantined.contains(&PyStr::from(id.as_str())) {
                 self.basis(*observation)?;

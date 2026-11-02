@@ -18,6 +18,7 @@ use crate::{
 pub use arbitration::project;
 use kassiber_pyjson::BigInt;
 use serde_json::{json, Value};
+use std::borrow::Cow;
 use std::str::FromStr;
 
 pub(super) fn array(v: &Value) -> &[Value] {
@@ -117,24 +118,38 @@ pub(super) struct Domain {
 }
 impl Domain {
     pub fn of<O: Obs + ?Sized>(v: &O) -> Self {
-        let network = text_key(&v["event_key"]["network"]);
-        let network = match network.as_ref() {
-            "liquidv1" => "main",
-            "liquidtestnet" => "test",
-            "elementsregtest" => "regtest",
-            _ => &network,
+        let (network, exposure) = Self::key(v);
+        Self {
+            network: network.into_owned(),
+            exposure: exposure.into_owned(),
+            rail: v["event_key"]["chain"].clone(),
+        }
+    }
+    /// The domain's network and exposure, borrowed where the observation
+    /// spells them.
+    pub fn key<O: Obs + ?Sized>(v: &O) -> (Cow<'_, str>, Cow<'_, str>) {
+        let network = match text_key(&v["event_key"]["network"]) {
+            Cow::Borrowed("liquidv1") => Cow::Borrowed("main"),
+            Cow::Borrowed("liquidtestnet") => Cow::Borrowed("test"),
+            Cow::Borrowed("elementsregtest") => Cow::Borrowed("regtest"),
+            Cow::Owned(network) => Cow::Owned(
+                match network.as_str() {
+                    "liquidv1" => "main",
+                    "liquidtestnet" => "test",
+                    "elementsregtest" => "regtest",
+                    other => other,
+                }
+                .to_owned(),
+            ),
+            network => network,
         };
         let asset = text_key(&v["asset"]);
         let exposure = if matches!(asset.as_ref(), "BTC" | "LBTC") {
-            "bitcoin".into()
+            Cow::Borrowed("bitcoin")
         } else {
-            format!("asset:{asset}")
+            Cow::Owned(format!("asset:{asset}"))
         };
-        Self {
-            network: network.into(),
-            exposure,
-            rail: v["event_key"]["chain"].clone(),
-        }
+        (network, exposure)
     }
     pub fn py(&self) -> Result<kassiber_pyjson::Value, String> {
         use kassiber_pyjson::Value as Py;

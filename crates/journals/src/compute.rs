@@ -55,13 +55,15 @@ pub fn compute_loaded(snapshot: Snapshot, finalized: bool) -> Result<Computed, R
 fn finish(snapshot: Snapshot, stages: Stages) -> Result<Computed, Refusal> {
     let fusion = match &stages.finalized_projection {
         Some(projection) => {
-            let projection = projection.py(snapshot.rows()).map_err(|message| Refusal {
-                stage: "fusion",
-                code: "ValueError".into(),
-                message,
-                hint: None,
-                details: Value::Null,
-            })?;
+            let projection = projection
+                .py(&snapshot.transactions)
+                .map_err(|message| Refusal {
+                    stage: "fusion",
+                    code: "ValueError".into(),
+                    message,
+                    hint: None,
+                    details: Value::Null,
+                })?;
             fuse(&snapshot, &projection)?
         }
         None => Fusion::Skipped,

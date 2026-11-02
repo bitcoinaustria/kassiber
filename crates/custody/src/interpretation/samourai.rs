@@ -17,15 +17,19 @@ use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub(super) fn compile(snapshot: &Snapshot, context: &Context) -> Result<Value, String> {
-    let rows = snapshot.rows();
-    let present = rows.iter().any(|row| {
+    // The snapshot records hold the rows' fields.
+    let present = snapshot.transactions.iter().any(|row| {
         row.get("config_text_mentions_samourai")
             .map(truth)
-            .unwrap_or_else(|| text(&row["config_json"]).py_lower().contains("samourai"))
+            .unwrap_or_else(|| {
+                text(row.get("config_json").unwrap_or(&Value::Null))
+                    .py_lower()
+                    .contains("samourai")
+            })
     });
     let mut grouped: BTreeMap<(String, String), Vec<(&Value, String)>> = BTreeMap::new();
     if present {
-        for row in rows {
+        for row in snapshot.rows() {
             // json.loads accepts text, not an already decoded mapping.
             let config = if truth(&row["config_json"]) {
                 row["config_json"].as_str()
@@ -161,7 +165,11 @@ pub(super) fn compile(snapshot: &Snapshot, context: &Context) -> Result<Value, S
     let rows_by_id: BTreeMap<_, _> = if unverified.is_empty() {
         BTreeMap::new()
     } else {
-        rows.iter().map(|row| (text(&row["id"]), row)).collect()
+        snapshot
+            .rows()
+            .iter()
+            .map(|row| (text(&row["id"]), row))
+            .collect()
     };
     let detail = kassiber_pyjson::dumps(&codec::from_json(&json!({"required_for":"authoritative_same_event_observation", "resolution":"sync every imported Samourai source with a chain observer"}))?, &kassiber_pyjson::Options::new().sort_keys(true)).map_err(|e| e.to_string())?;
     let quarantines: Vec<_> = unverified.iter().map(|id| {

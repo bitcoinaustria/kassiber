@@ -8,7 +8,6 @@ use super::{
 use crate::{
     codec::{self, text, truth},
     components::time,
-    graph,
     snapshot::Snapshot,
 };
 use serde_json::{json, Value};
@@ -235,11 +234,12 @@ pub(super) fn compile_with_proofs(
         .iter()
         .flat_map(|pair| [anchor(&pair["out"]), anchor(&pair["in"])])
         .collect();
+    // The snapshot records hold the rows' fields and share their scopes.
     let scopes = snapshot
-        .rows()
+        .transactions
         .iter()
-        .filter(|r| endpoints.contains(&anchor(r)))
-        .filter_map(|r| Some((anchor(r), graph::onchain_scope(r)?)))
+        .filter(|r| endpoints.contains(&anchor(*r)))
+        .filter_map(|r| Some((anchor(r), crate::fields::Row::onchain_scope(r)?)))
         .collect();
     compile_with_scopes(
         pairs,
@@ -601,7 +601,7 @@ mod tests {
             .iter()
             .filter_map(|r| {
                 let r = json!(r);
-                Some((anchor(&r), graph::onchain_scope(&r)?))
+                Some((anchor(&r), crate::graph::onchain_scope(&r)?))
             })
             .collect();
         let wallets = snapshot
