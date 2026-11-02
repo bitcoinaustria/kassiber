@@ -1,8 +1,9 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import i18n from "@/i18n";
 
+import type { Transaction } from "./model";
 import { RecentTransactionsTable } from "./RecentTransactionsTable";
 
 const row = (tag: string) => ({
@@ -52,3 +53,39 @@ describe("RecentTransactionsTable type chip", () => {
     expect(chipFor("Revenue")).toContain(">Revenue<");
   });
 });
+
+describe("RecentTransactionsTable rows", () => {
+  beforeEach(async () => {
+    await i18n.changeLanguage("en");
+  });
+
+  const render = (rows: Transaction[], limit?: number) =>
+    renderToStaticMarkup(
+      <RecentTransactionsTable
+        transactions={rows}
+        hideSensitive={false}
+        currency="btc"
+        priceEur={60_000}
+        fiatCurrency="EUR"
+        showAllTo={null}
+        onOpenTransaction={() => {}}
+        limit={limit}
+      />,
+    );
+
+  it("names a status only when it asks for something, and never twice", () => {
+    expect(render([row("Buy")])).not.toContain(">Confirmed<");
+    expect(render([{ ...row("Buy"), status: "pending" }])).toContain(">Pending<");
+    const tagged = render([{ ...row("Review"), status: "review" }]);
+    expect(tagged.match(/>Review</g)).toHaveLength(1);
+  });
+
+  it("lists at most the limit, with no scrolling inside the card", () => {
+    const rows = Array.from({ length: 5 }, (_, index) => ({ ...row("Buy"), id: `tx-${index}` }));
+    const html = render(rows, 3);
+    expect(html.match(/data-recent-row/g)).toHaveLength(3);
+    expect(html).not.toContain("overflow-auto");
+    expect(render(rows).match(/data-recent-row/g)).toHaveLength(5);
+  });
+});
+
