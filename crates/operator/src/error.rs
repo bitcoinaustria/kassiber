@@ -107,3 +107,16 @@ pub(crate) fn app(code: &str, message: impl Into<String>) -> AppError {
 pub(crate) fn protocol(message: &str) -> Error {
     Error::App(app("operator_protocol_error", message))
 }
+
+/// A storage-crate error as the `AppError` Python raises for it.
+pub fn from_paths(error: kassiber_paths::Error) -> Error {
+    let details = if error.details.is_null() {
+        None
+    } else {
+        kassiber_pytext::loads(&error.details.to_string()).ok()
+    };
+    let mut app = AppError::new(error.code, error.message).retryable(error.retryable);
+    app.hint = error.hint.map(|hint| Box::from(hint.as_ref()));
+    app.details = details;
+    Error::App(app)
+}

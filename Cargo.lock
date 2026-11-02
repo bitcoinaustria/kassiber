@@ -1793,6 +1793,7 @@ dependencies = [
  "getrandom 0.4.3",
  "kassiber-envelope",
  "kassiber-ipc",
+ "kassiber-ownership",
  "kassiber-paths",
  "kassiber-pyjson",
  "kassiber-pytext",

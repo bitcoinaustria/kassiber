@@ -16,6 +16,7 @@ test-harness = []
 [dependencies]
 kassiber-ipc = { path = "../ipc" }
 kassiber-envelope = { path = "../envelope" }
+kassiber-ownership = { path = "../ownership" }
 kassiber-paths = { path = "../paths" }
 kassiber-pyjson = { path = "../pyjson" }
 kassiber-pytext = { path = "../pytext" }
