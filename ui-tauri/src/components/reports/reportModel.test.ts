@@ -74,8 +74,20 @@ describe("reportTotals", () => {
       cost: 640_808.28,
       gain: 1_136_666.57,
       income: 0,
+      taxFreeGain: 0,
     });
     expect(reportTotals(report()).rowCount).toBe(0);
+  });
+
+  it("reads the tax-free part of the gain from the core's breakdown", () => {
+    const totals = reportTotals(
+      report({
+        jurisdictionCode: "AT",
+        breakdown: [bucket("174"), bucket("tax_free", { gainLossEur: 300 })],
+      }),
+    );
+
+    expect(totals.taxFreeGain).toBe(300);
   });
 });
 

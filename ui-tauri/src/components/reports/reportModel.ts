@@ -42,16 +42,20 @@ export interface ReportTotals {
   /** Disposal gains plus income, as the daemon totals them. */
   gain: number;
   income: number;
+  /** The part of `gain` from tax-free Altbestand, which is not filed. */
+  taxFreeGain: number;
 }
 
 /** The year's totals over every disposal and income row. */
 export function reportTotals(report: CapitalGainsReport): ReportTotals {
+  const taxFree = report.breakdown?.find((bucket) => bucket.key === "tax_free");
   return {
     rowCount: report.totals?.rowCount ?? 0,
     proceeds: report.totals?.proceedsEur ?? 0,
     cost: report.totals?.costEur ?? 0,
     gain: report.totals?.gainLossEur ?? 0,
     income: report.totals?.incomeEur ?? 0,
+    taxFreeGain: taxFree?.gainLossEur ?? 0,
   };
 }
 

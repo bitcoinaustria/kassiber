@@ -35,7 +35,8 @@ export function ReportRules({
       ? [
           ["Region", "Austria"],
           ["Method", methodLabel(method)],
-          ["Tax", `E 1kv ${rate || "27.5 %"} · KZ 801 income-tax rate`],
+          // The rate is the core's; without one (a non-EUR book) none is shown.
+          ["Tax", `E 1kv${rate ? ` ${rate}` : ""} · KZ 801 income-tax rate`],
           ["Altbestand", "Bought before 1 Mar 2021 · tax-free after a year"],
           ["Tax year", "Calendar year, Vienna time"],
         ]

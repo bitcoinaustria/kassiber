@@ -13,6 +13,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
+  Loader2,
   RefreshCw,
   ShieldAlert,
 } from "lucide-react";
@@ -247,6 +248,7 @@ function ReportOverview() {
       onYearChange={setSelectedYear}
       wallets={wallets.data?.data?.wallets ?? []}
       completeness={completeness}
+      completenessPending={overview.isLoading}
     />
   );
 }
@@ -259,6 +261,8 @@ interface ReportsViewProps {
   wallets: WalletListData["wallets"];
   /** Book completeness from ui.overview.snapshot; `null` while not loaded. */
   completeness: FiatCompleteness | null;
+  /** The completeness read is still loading, so it is neither known nor unknown. */
+  completenessPending?: boolean;
 }
 
 function ReportsView({
@@ -268,6 +272,7 @@ function ReportsView({
   onYearChange,
   wallets,
   completeness,
+  completenessPending = false,
 }: ReportsViewProps) {
   const navigate = useNavigate();
   const year = report.year;
@@ -358,8 +363,16 @@ function ReportsView({
     totals.rowCount,
     effectiveYear,
     completeness,
+    completenessPending,
   );
-  const provisional = reportFiguresProvisional(report, completeness);
+  const provisional = reportFiguresProvisional(
+    report,
+    completeness,
+    completenessPending,
+  );
+  // The notice names what blocks the figures, so the header does not repeat it.
+  const showReadinessNotice =
+    readiness.tone === "warning" || readiness.tone === "alert";
   const currentExportStatus = reportExportStatusForYear(
     exportStatus,
     effectiveYear,
@@ -563,7 +576,7 @@ function ReportsView({
         // A new year reloads the report and unmounts this view, so a running
         // export would lose its save dialog and notification.
         yearLocked={activeExport !== null}
-        readiness={readiness}
+        readiness={showReadinessNotice ? null : readiness}
       />
 
       <ReportMetricStrip
@@ -575,9 +588,7 @@ function ReportsView({
         provisional={provisional}
       />
 
-      {readiness.tone === "warning" || readiness.tone === "alert" ? (
-        <ReadinessNotice readiness={readiness} />
-      ) : null}
+      {showReadinessNotice ? <ReadinessNotice readiness={readiness} /> : null}
 
       <div className="grid items-start gap-(--kb-page-gap) @5xl/reports:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="flex min-w-0 flex-col gap-(--kb-page-gap)">
@@ -653,9 +664,10 @@ function ReportHeader({
   availableYears: number[];
   onYearChange: (year: number) => void;
   yearLocked?: boolean;
-  readiness: ReportReadiness;
+  /** `null` while the readiness notice below states it. */
+  readiness: ReportReadiness | null;
 }) {
-  const ReadinessIcon = readiness.icon;
+  const ReadinessIcon = readiness?.icon;
   const handleYearChange = (value: string) => {
     const nextYear = Number(value);
     if (!Number.isInteger(nextYear)) return;
@@ -691,18 +703,20 @@ function ReportHeader({
           {formatReportPeriod(selectedYear)}
         </span>
       </div>
-      <div className={pageHeaderActionsClassName}>
-        <span
-          className={cn(
-            "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2 text-xs font-medium",
-            readinessToneStyles[readiness.tone],
-          )}
-          title={readiness.detail}
-        >
-          <ReadinessIcon className="size-4" aria-hidden="true" />
-          {readiness.title}
-        </span>
-      </div>
+      {readiness && ReadinessIcon ? (
+        <div className={pageHeaderActionsClassName}>
+          <span
+            className={cn(
+              "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2 text-xs font-medium",
+              readinessToneStyles[readiness.tone],
+            )}
+            title={readiness.detail}
+          >
+            <ReadinessIcon className="size-4" aria-hidden="true" />
+            {readiness.title}
+          </span>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -751,10 +765,15 @@ function ReportMetricStrip({
 }) {
   const sensitive = hideSensitive ? "sensitive" : "";
   const money = (value: number) => formatFiatAmount(value, fiatCurrency);
-  const disposals =
+  // The gain sums every row; say which parts are income or stay off the return.
+  const gainParts = [
     totals.income > 0
-      ? `${formatCount(totals.rowCount)} disposal and income rows`
-      : `${formatCount(totals.rowCount)} disposal${totals.rowCount === 1 ? "" : "s"}`;
+      ? `${hideSensitive ? "—" : money(totals.income)} income`
+      : null,
+    Math.abs(totals.taxFreeGain) >= 0.005
+      ? `${hideSensitive ? "—" : signedFiat(totals.taxFreeGain, fiatCurrency)} tax-free (Altbestand)`
+      : null,
+  ].filter((part): part is string => part !== null);
   const metrics: Array<{
     label: string;
     value: ReactNode;
@@ -767,7 +786,6 @@ function ReportMetricStrip({
     {
       label: "Proceeds",
       value: <span className={sensitive}>{money(totals.proceeds)}</span>,
-      sub: disposals,
     },
     {
       label: "Cost basis",
@@ -790,10 +808,7 @@ function ReportMetricStrip({
           {signedFiat(totals.gain, fiatCurrency)}
         </span>
       ),
-      sub:
-        totals.income > 0
-          ? `Includes ${hideSensitive ? "—" : money(totals.income)} income`
-          : undefined,
+      sub: gainParts.length ? `Includes ${gainParts.join(" · ")}` : undefined,
       basisDependent: true,
     },
     ...(taxEstimate
@@ -817,18 +832,20 @@ function ReportMetricStrip({
   ];
   return (
     <div className="kb-surface min-w-0 overflow-hidden">
+      {/* The page's width, not the window's, sets the columns; the 1px gaps
+          over the border colour draw the dividers in every layout. */}
       <div
         className={cn(
-          "grid grid-cols-1 divide-x-0 divide-y divide-border sm:divide-y-0 lg:divide-x",
+          "grid grid-cols-1 gap-px bg-border/70",
           metrics.length === 4
-            ? "sm:grid-cols-2 lg:grid-cols-4"
-            : "sm:grid-cols-3 sm:divide-x",
+            ? "@xl/reports:grid-cols-2 @5xl/reports:grid-cols-4"
+            : "@2xl/reports:grid-cols-3",
         )}
       >
         {metrics.map((metric) => (
           <div
             key={metric.label}
-            className="group relative isolate overflow-hidden p-3 transition-colors before:absolute before:inset-0 before:z-0 before:origin-left before:scale-x-0 before:bg-muted/45 before:content-[''] before:transition-transform before:duration-200 before:ease-out hover:before:scale-x-100 focus-within:before:scale-x-100"
+            className="group relative isolate overflow-hidden bg-card p-3 transition-colors before:absolute before:inset-0 before:z-0 before:origin-left before:scale-x-0 before:bg-muted/45 before:content-[''] before:transition-transform before:duration-200 before:ease-out hover:before:scale-x-100 focus-within:before:scale-x-100"
           >
             <div className="pointer-events-none relative z-20 space-y-1.5">
             <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
@@ -868,12 +885,14 @@ function ReportMetricStrip({
 function reportFiguresProvisional(
   report: CapitalGainsReport,
   completeness: FiatCompleteness | null,
+  completenessPending = false,
 ) {
   return (
     Boolean(report.status?.needsJournals) ||
     (report.status?.quarantines ?? 0) > 0 ||
-    // Unknown completeness (older daemon, overview not loaded) is never final.
-    !completeness?.costBasisComplete
+    // Unknown completeness (older daemon, failed read) is never final; a
+    // read still loading is not unknown yet.
+    (!completenessPending && !completeness?.costBasisComplete)
   );
 }
 
@@ -882,6 +901,7 @@ function buildReportReadiness(
   rowCount: number,
   year: number,
   completeness: FiatCompleteness | null = null,
+  completenessPending = false,
 ): ReportReadiness {
   const needsJournals = Boolean(report.status?.needsJournals);
   const quarantines = report.status?.quarantines ?? 0;
@@ -904,12 +924,21 @@ function buildReportReadiness(
   if (quarantines > 0) {
     return {
       title: "Review queue open",
-      detail: `${quarantines} quarantined item${
+      detail: `${formatCount(quarantines)} quarantined item${
         quarantines === 1 ? "" : "s"
       } should be resolved before filing.`,
       tone: "alert",
       icon: ShieldAlert,
       action: { label: "Review queue", href: "/quarantine" },
+    };
+  }
+
+  if (completenessPending) {
+    return {
+      title: "Checking completeness",
+      detail: "Kassiber is still reading whether the cost basis is complete.",
+      tone: "neutral",
+      icon: Loader2,
     };
   }
 
@@ -927,7 +956,7 @@ function buildReportReadiness(
     const count = completeness.missingPriceCount;
     return {
       title: "Prices missing",
-      detail: `${count} transaction${count === 1 ? " has" : "s have"} no price; figures are provisional.`,
+      detail: `${formatCount(count)} transaction${count === 1 ? " has" : "s have"} no price; figures are provisional.`,
       tone: "warning",
       icon: AlertTriangle,
       action: { label: "Review queue", href: "/quarantine" },

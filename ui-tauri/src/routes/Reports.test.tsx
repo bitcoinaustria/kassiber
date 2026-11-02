@@ -8,6 +8,7 @@ import type { CapitalGainsReport } from "@/mocks/reports";
 const state = vi.hoisted(() => ({
   report: null as CapitalGainsReport | null,
   costBasisComplete: true,
+  overviewLoading: false,
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -23,6 +24,7 @@ vi.mock("@/daemon/client", () => ({
       return { data: { data: state.report }, isLoading: false };
     }
     if (kind === "ui.overview.snapshot") {
+      if (state.overviewLoading) return { isLoading: true };
       return {
         data: {
           data: {
@@ -30,7 +32,7 @@ vi.mock("@/daemon/client", () => ({
               completeness: {
                 state: state.costBasisComplete ? "complete" : "incomplete",
                 costBasisComplete: state.costBasisComplete,
-                reasons: state.costBasisComplete ? [] : ["quarantine"],
+                reasons: state.costBasisComplete ? [] : ["quarantines"],
               },
             },
           },
@@ -75,6 +77,7 @@ const breakdown = [
 describe("Reports", () => {
   beforeEach(() => {
     state.costBasisComplete = true;
+    state.overviewLoading = false;
   });
 
   it("shows a generic book's own rules and no tax estimate", () => {
@@ -92,7 +95,8 @@ describe("Reports", () => {
 
     // The year's totals, not the sum of the capped rows.
     expect(html).toContain("€ 1.777.474,85");
-    expect(html).toContain("554 disposals");
+    // The table counts transactions, so the tile counts no journal rows.
+    expect(html).not.toContain("554 disposal");
     expect(html).not.toContain("KESt");
     expect(html).not.toContain("Indicative tax");
     expect(html).not.toContain("Tax fields");
@@ -132,7 +136,7 @@ describe("Reports", () => {
       totals,
       kennzahlRows: [
         { code: "174", label: "", form: "E 1kv", amount: 13_224.43, rowCount: 1 },
-        { code: "801", label: "", form: "E 1", amount: 40, rowCount: 1 },
+        { code: "801", label: "", form: "E 1", amount: -40, rowCount: 1 },
       ],
       indicativeTax: {
         estimatedTaxEurCents: 363_672,
@@ -152,6 +156,38 @@ describe("Reports", () => {
     // The core's caveats open from the tile's info button, not in the page.
     expect(html).toContain('aria-label="About Indicative tax · 27.5 %"');
     expect(html).toContain("E 1kv 2025 with every row");
+    expect(html).toContain("E 1kv 27.5 % · KZ 801 income-tax rate");
+  });
+
+  it("states the tax-free part of the gain and no rate the core did not give", () => {
+    state.report = {
+      jurisdictionCode: "AT",
+      fiatCurrency: "EUR",
+      year: 2025,
+      method: "moving_average_at",
+      totals: { ...totals, incomeEur: 70.2 },
+      breakdown: [
+        { ...breakdown[0], key: "174" },
+        {
+          key: "tax_free",
+          rowCount: 1,
+          transactionCount: 1,
+          transactionIds: ["tx-alt"],
+          costEur: 10,
+          proceedsEur: 310,
+          incomeEur: 0,
+          gainLossEur: 300,
+        },
+      ],
+      indicativeTax: null,
+    };
+    const html = render();
+
+    // The tile's figure stays the core's total; the sub-line names its parts.
+    expect(html).toContain("+ € 1.136.666,57");
+    expect(html).toContain("Includes € 70,20 income · + € 300,00 tax-free (Altbestand)");
+    expect(html).toContain("E 1kv · KZ 801 income-tax rate");
+    expect(html).not.toContain("27.5 %");
   });
 
   it("names what blocks the figures and marks them provisional", () => {
@@ -168,5 +204,31 @@ describe("Reports", () => {
     expect(html).toContain("3 quarantined items should be resolved before filing.");
     expect(html).toContain('href="/quarantine"');
     expect(html.match(/>Provisional</g)).toHaveLength(2);
+    // The notice states it, so the header pill does not repeat it.
+    expect(html).not.toContain("Review queue open");
+  });
+
+  it("waits for the completeness read before calling the figures provisional", () => {
+    state.overviewLoading = true;
+    state.report = {
+      jurisdictionCode: "GENERIC",
+      year: 2025,
+      method: "fifo",
+      totals,
+      status: { needsJournals: false, quarantines: 0 },
+    };
+    const loading = render();
+
+    expect(loading).toContain("Checking completeness");
+    expect(loading).not.toContain('role="status"');
+    expect(loading).not.toContain(">Provisional<");
+    expect(loading).not.toContain("Completeness unknown");
+
+    // A read that came back without the block stays unknown.
+    state.overviewLoading = false;
+    state.costBasisComplete = false;
+    const unknown = render();
+    expect(unknown).toContain("could not confirm that the cost basis is complete");
+    expect(unknown).toContain(">Provisional<");
   });
 });

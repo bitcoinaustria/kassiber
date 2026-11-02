@@ -87,6 +87,10 @@ describe("ReportFilesPanel", () => {
 
     const done = render({ successfulExport: "csv" });
     expect(done).not.toContain('disabled=""');
+    const buttons = done.match(/<button[^>]*aria-label="Export[^"]*"[^>]*>.*?<\/button>/g) ?? [];
+    const checked = buttons.filter((button) => button.includes("lucide-check "));
+    expect(checked).toHaveLength(1);
+    expect(checked[0]).toContain('aria-label="Export Tax report as CSV"');
   });
 
   it("keeps the last export's outcome beside the files", () => {

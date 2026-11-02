@@ -3,9 +3,9 @@
  * per format. The tax report and the bookkeeping handoff are what a filer or
  * bookkeeper receives; the summary PDF and the audit package follow, each
  * with options folded under its row. The ledger's own exports live on
- * Transactions. The
- * outcome of the last export (saved, saved with notes, blocked, failed) sits
- * at the top so it stays beside the files after its notification goes away.
+ * Transactions. The outcome of the last export (saved, saved with notes,
+ * blocked, failed) sits at the top so it stays beside the files after its
+ * notification goes away.
  */
 
 import { useState, type ReactNode } from "react";
