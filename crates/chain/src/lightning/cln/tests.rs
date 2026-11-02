@@ -218,7 +218,9 @@ fn cln_checked_report_refuses_between_resources_and_before_return() {
             }
         });
         assert_eq!(result.unwrap_err().code, "interaction_required");
-        assert_eq!(gate.attempts().records.len(), stop - 1);
+        // The ledger records every launch; attempts are only observed when a
+        // test egress guard is armed in the environment.
+        assert_eq!(gate.ledger().snapshot(0, 100).records.len(), stop - 1);
     }
 }
 
