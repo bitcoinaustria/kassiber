@@ -395,6 +395,52 @@ class CapitalGainsSnapshotParityTests(unittest.TestCase):
             [("174", ["t-sell"]), ("swaps", ["t-swap-out"])],
         )
 
+    def test_austrian_breakdown_keeps_tax_free_and_unassigned_rows_apart(self):
+        conn = self._conn(tax_country="at", gains_algorithm="moving_average_at")
+        conn.execute("INSERT INTO wallets VALUES ('w1', 'p1', 'Hot')")
+        cases = (
+            ("j-neu", "neu_gain", 174, 40.0, 90.0, 50.0),
+            ("j-alt", "alt_taxfree", None, 10.0, 310.0, 300.0),
+            ("j-other", None, None, 5.0, 12.5, 7.5),
+        )
+        for entry_id, category, kennzahl, cost, proceeds, gain in cases:
+            occurred_at = "2025-06-01T10:00:00Z"
+            conn.execute(
+                "INSERT INTO transactions VALUES (?,?,?,?,?,?,?,?)",
+                (f"t-{entry_id}", "p1", "w1", 0, 1, occurred_at, "BTC", 1_000_000_000),
+            )
+            conn.execute(
+                "INSERT INTO journal_entries (id, profile_id, transaction_id, entry_type, "
+                "occurred_at, quantity, cost_basis, proceeds, gain_loss, at_category, "
+                "at_kennzahl, capital_gains_type, created_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (entry_id, "p1", f"t-{entry_id}", "disposal", occurred_at,
+                 -1_000_000_000, cost, proceeds, gain, category, kennzahl, "short",
+                 occurred_at),
+            )
+
+        with patch.object(
+            ui_snapshot, "_journal_freshness", return_value={"needs_processing": False}
+        ), patch.object(
+            ui_snapshot, "_austrian_kennzahl_snapshot_rows", return_value=[]
+        ):
+            snapshot = ui_snapshot.build_capital_gains_snapshot(conn, tax_year=2025)
+
+        # Tax-free Altbestand and rows without a field stay out of the field
+        # groups, in a fixed order after them.
+        self.assertEqual(
+            [(bucket["key"], bucket["transactionIds"], bucket["gainLossEur"])
+             for bucket in snapshot["breakdown"]],
+            [
+                ("174", ["t-j-neu"], 50.0),
+                ("tax_free", ["t-j-alt"], 300.0),
+                ("unassigned", ["t-j-other"], 7.5),
+            ],
+        )
+        # The year's total still sums every row; the desktop states the
+        # tax-free part from its group.
+        self.assertEqual(snapshot["totals"]["gainLossEur"], 357.5)
+
     def test_swap_breakdown_counts_a_split_swap_once_and_scopes_by_entry_asset(self):
         conn = self._conn(tax_country="at", gains_algorithm="moving_average_at")
         conn.executemany(
