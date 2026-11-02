@@ -515,7 +515,12 @@
       "kind_override": "Classify acquisition",
       "kindCleared": "imported classification",
       "expiresDays_one": "for {{count}} day",
-      "expiresDays_other": "for {{count}} days"
+      "expiresDays_other": "for {{count}} days",
+      "undismiss_pair": "Restore pair suggestion",
+      "accept_coarse_prices": "Accept approximate prices",
+      "transactions_one": "{{count}} transaction",
+      "transactions_other": "{{count}} transactions",
+      "allCoarse": "every transaction waiting on its approximate price"
     },
     "tax": {
       "title": "Tax change by year",

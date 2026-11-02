@@ -448,7 +448,9 @@ deferred reporting-language policy in [i18n.md](i18n.md).
 Review sits in the main nav and collects what waits on the owner, each item
 decided where it is listed. **Can't be booked yet** holds the quarantine
 causes, as [custody resolution](custody-resolution.md#why-a-transaction-is-quarantined)
-describes, with the journal freshness warning above them. **Moves between your
+describes, with the journal freshness warning above them. A cause of
+approximate prices held for review offers **Accept these prices**, which
+accepts all of them in one previewed step (`accept_coarse_prices`). **Moves between your
 wallets** lists the transfer and swap candidates from `ui.transfers.suggest`.
 Each has Pair, which pairs it with its default kind and policy, and Not a
 transfer, which dismisses it; Details opens it in Transfers & Custody. Exact

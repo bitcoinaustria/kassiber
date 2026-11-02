@@ -86,10 +86,6 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
   "Recalculate", "Process ledger"), and a book with any quarantine shows the
   first-sync card on every refresh. Done when the bell carries events only and
   one verb is used everywhere.
-- [ ] Let the owner accept the coarse prices of a whole "approximate price"
-  cause in one reviewed step instead of entering each price. Done when a
-  `review plan/apply` operation records the acceptance per transaction,
-  keeps the price's coarse provenance, and Review offers it on that cause.
 - [ ] Finish folding the old review pages into Review and its neighbours:
   paired-transfer history as a Transactions filter, matching rules in book
   settings, the address/txid ownership lookup in Search, the CoinTracking/

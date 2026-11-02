@@ -259,7 +259,8 @@ The shared `core/review_workflow.py` module exposes four operations:
 
 One batch carries every write that changes journal meaning, so a single
 approval covers a whole repair and applies atomically. Each operation runs
-against the book as the previous ones left it; any failure rolls back all of
+against the book as the previous ones left it, including expansion and validation
+of coarse-price acceptance targets after an earlier repair; any failure rolls back all of
 them. Supported operations:
 
 | Type | Fields | Core service |
@@ -272,6 +273,7 @@ them. Supported operations:
 | `custody_component` | `request` with `action` `create`, `revise`, `undo`, `activate` or `supersede` | `transfers components plan/apply` |
 | `custody_gap` | `action` (`create`, `dismiss`, `revise`, `reopen`, `classify_residual` with `classification`), `gap_id`, `reason` | `custody review` |
 | `kind_override` | `transaction_id`, `kind` (inbound kind or null), optional `valuation_mode`, `reason` | acquisition review (below) |
+| `accept_coarse_prices` | `reason`, optional `transaction_ids` (1 to 5000) | coarse-price acceptance (below) |
 
 When a component's interpretation was wrong, supersede it and create the
 corrected component on the same anchors in one batch, or revise it. A
@@ -298,6 +300,27 @@ before; its `estimated_tax_eur_cents` is null when either side is withheld.
 The preview stores the computed journal inside a savepoint that is always
 rolled back, so it never persists. Apply recomputes both sides and refuses an
 artifact whose `delta` does not match them.
+
+Coarse-price acceptance answers `pricing_review_required`, the hold a book
+with `require_coarse_review` puts on a price from a daily or coarser source.
+It records that the owner accepts the price as it stands. The price keeps its
+source and its `coarse_fallback` quality, so reports still mark it as
+estimated. The acceptance is bound to that exact price
+(`pricing_review_accepted_price`, `rate:<exact>` or `value:<exact>`, rate
+first like the journals, taken from the transaction's own stored price before
+the custody projection re-slices it): a rate rebuild or new sample that changes
+the price holds the transaction again. Only a transaction with a coarse price
+of its own is accepted; a transfer's other leg held for the same reason clears
+with it. Each transaction gets an append-only history event that
+can be reverted on its own. Without `transaction_ids`, the plan names every
+current `pricing_review_required` case, so the artifact and receipt list each
+one. Naming a transaction that no longer waits on that review fails with
+`review_case_changed`. A chat plan holds about 1000 ids; the CLI takes up to
+5000 per operation. Cases with that reason whose transaction has a coarse
+price of its own list `accept_coarse_prices` first in `supported_operations`;
+a leg that clears with it does not. The accepted price is compared by value,
+so a rebuild that writes `3197.60` for `3197.6` does not hold it again. In the desktop, the cause's card offers it
+as **Accept these prices**, previewed and confirmed once.
 
 Acquisition review is available in the desktop Tax tab, the CLI and chat. It
 accepts a non-quarantined inbound transaction, using existing authored metadata

@@ -317,8 +317,8 @@ If in doubt, keep inference local, or restrict the provider's agent access.
 Each provider has an `agent_access` setting, `full` by default. With full
 access the assistant gets every tool and unprojected result: custody-gap,
 coverage and lineage reads and `ui.custody.review.apply`; review batches
-with pairs, dismissals, component revisions, custody-gap actions and
-acquisition kinds; chain-analysis
+with pairs, dismissals, component revisions, custody-gap actions,
+acquisition kinds and coarse-price acceptance; chain-analysis
 sources, acquisition and dataset tools; chain-analysis results with their
 txids, outpoints and labels instead of opaque references; and an attached
 file's cell values and name. `restricted` keeps an off-device provider to the
@@ -1714,8 +1714,8 @@ income and, for Austrian EUR books, Kennzahlen and the core's indicative tax
 change. The model answers "what does this change do to my taxes?" from that,
 not from its own arithmetic. With full agent access a batch may also create
 pairs, dismiss candidates, revise/undo/activate/supersede components, run
-custody-gap actions and declare acquisition kinds; a restricted provider keeps
-prices, exclusions, unpairs and component creation. Conversion components
+custody-gap actions, declare acquisition kinds and accept coarse prices; a
+restricted provider keeps prices, exclusions, unpairs and component creation. Conversion components
 stay drafts for the owner in either mode. Operation shapes and the tax fields
 are in [custody resolution](custody-resolution.md#resolve-with-the-cli-or-chat).
 

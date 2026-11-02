@@ -31,7 +31,7 @@ export interface ReviewTaxDeltaYear extends ReviewRecord {
 }
 /** Every operation the shared review core accepts; the daemon decides authority. */
 export const REVIEW_OPERATION_TYPES = ["price_override", "exclude", "custody_component", "unpair", "pair",
-  "dismiss_pair", "custody_gap", "kind_override"];
+  "dismiss_pair", "undismiss_pair", "custody_gap", "kind_override", "accept_coarse_prices"];
 
 export interface ReviewArtifact extends ReviewRecord {
   schema_version: number;

@@ -414,7 +414,24 @@ def _positive_fiat_value(row: Mapping[str, Any], fallback: Decimal) -> Decimal:
 
 
 def _pricing_needs_review(row: Mapping[str, Any]) -> bool:
-    return _row_get(row, "pricing_quality") == pricing.QUALITY_COARSE_FALLBACK
+    """A coarse price waits for review unless the owner accepted this price.
+
+    An acceptance is bound to the exact price accepted: a price that changed
+    since (a rate rebuild, a new provider sample) is reviewed again.
+    """
+    if _row_get(row, "pricing_quality") != pricing.QUALITY_COARSE_FALLBACK:
+        return False
+    accepted = _row_get(row, "pricing_review_accepted_price")
+    if not accepted:
+        return True
+    # A projected row carries the price of its transaction as reviewed; it
+    # may itself hold a re-sliced rate.
+    reviewed = (
+        _row_get(row, "pricing_review_price")
+        if hasattr(row, "keys") and "pricing_review_price" in row.keys()
+        else pricing.reviewed_price(row)
+    )
+    return not pricing.same_reviewed_price(accepted, reviewed)
 
 
 def _profile_requires_coarse_review(profile: Mapping[str, Any]) -> bool:

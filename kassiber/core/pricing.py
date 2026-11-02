@@ -7,7 +7,7 @@ accounting values and review decisions should use these typed provenance
 fields wherever possible.
 """
 
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any, Mapping
 
 from ..msat import dec
@@ -59,6 +59,46 @@ def decimal_from_exact(*values: Any) -> Decimal | None:
         if value not in (None, ""):
             return dec(value)
     return None
+
+
+def reviewed_price(row: Mapping[str, Any]) -> str | None:
+    """The price a coarse-price review accepts, the way journals read it.
+
+    Journals take the rate first and fall back to the value, so the review is
+    bound to whichever of them prices the row: ``rate:<exact>`` or
+    ``value:<exact>``. None when the row has no positive price.
+    """
+
+    def field(key: str) -> Any:
+        return row[key] if key in row.keys() else None
+
+    rate = decimal_from_exact(field("fiat_rate_exact"), field("fiat_rate"))
+    if rate is not None and rate > 0:
+        return f"rate:{format(rate, 'f')}"
+    value = decimal_from_exact(field("fiat_value_exact"), field("fiat_value"))
+    if value is not None and value > 0:
+        return f"value:{format(value, 'f')}"
+    return None
+
+
+def same_reviewed_price(accepted: str | None, reviewed: str | None) -> bool:
+    """Whether an accepted review still names the price, digit for digit.
+
+    ``rate:3197.6`` and ``rate:3197.60`` are one price; a stored or rebuilt
+    decimal may carry trailing zeros, which must not hold the row again.
+    """
+    if not accepted or not reviewed:
+        return False
+    if accepted == reviewed:
+        return True
+    accepted_kind, _, accepted_amount = accepted.partition(":")
+    reviewed_kind, _, reviewed_amount = reviewed.partition(":")
+    if accepted_kind != reviewed_kind:
+        return False
+    try:
+        return Decimal(accepted_amount) == Decimal(reviewed_amount)
+    except (InvalidOperation, ValueError):
+        return False
 
 
 def legacy_source_for(source_kind: str | None) -> str | None:

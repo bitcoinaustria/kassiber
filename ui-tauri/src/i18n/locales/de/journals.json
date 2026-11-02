@@ -586,6 +586,20 @@
     },
     "section": {
       "title": "Noch nicht buchbar"
+    },
+    "accept": {
+      "action_one": "Diesen Kurs übernehmen",
+      "action_other": "Diese {{count}} Kurse übernehmen",
+      "titlePending": "Ungefähre Kurse übernehmen?",
+      "title_one": "{{count}} ungefähren Kurs übernehmen?",
+      "title_other": "{{count}} ungefähre Kurse übernehmen?",
+      "body": "Jede Transaktion behält ihren Tageskurs, und Berichte zeigen ihn weiterhin als ungefähr an. Ändert sich ein Kurs später, wird diese Transaktion erneut zur Prüfung zurückgehalten.",
+      "undo": "Jede Übernahme steht im Verlauf der Transaktion und lässt sich dort rückgängig machen.",
+      "confirm_one": "{{count}} Kurs übernehmen",
+      "confirm_other": "{{count}} Kurse übernehmen",
+      "doneTitle_one": "{{count}} ungefährer Kurs übernommen",
+      "doneTitle_other": "{{count}} ungefähre Kurse übernommen",
+      "confirmPending": "Kurse übernehmen"
     }
   },
   "review": {

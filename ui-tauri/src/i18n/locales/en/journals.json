@@ -586,6 +586,20 @@
     },
     "section": {
       "title": "Can't be booked yet"
+    },
+    "accept": {
+      "action_one": "Accept this price",
+      "action_other": "Accept these {{count}} prices",
+      "titlePending": "Accept the approximate prices?",
+      "title_one": "Accept {{count}} approximate price?",
+      "title_other": "Accept {{count}} approximate prices?",
+      "body": "Each transaction keeps the daily price it has, and reports still show it as approximate. If a price changes later, that transaction is held for review again.",
+      "undo": "Each acceptance shows in the transaction's history and can be reverted there.",
+      "confirm_one": "Accept {{count}} price",
+      "confirm_other": "Accept {{count}} prices",
+      "doneTitle_one": "{{count}} approximate price accepted",
+      "doneTitle_other": "{{count}} approximate prices accepted",
+      "confirmPending": "Accept prices"
     }
   },
   "review": {
