@@ -40,7 +40,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 
 import { Badge } from "@/components/ui/badge";
-import { BITCOIN_SWAP_KINDS } from "@/components/review/transferModel";
+import { BITCOIN_SWAP_KINDS, DISMISS_REASON } from "@/components/review/transferModel";
 import { RailBadge, RailIcon } from "@/components/kb/BitcoinRail";
 import { displayAssetLabel, railForLeg } from "@/lib/bitcoinRail";
 import { Button } from "@/components/ui/button";
@@ -1994,10 +1994,10 @@ function PairingReview({
     await dismissMutation.mutateAsync({
       tx_out: candidate.out_id,
       tx_in: candidate.in_id,
-      reason: t("swap.dismissReason"),
+      reason: DISMISS_REASON,
     });
     void refetch();
-  }, [dismissMutation, refetch, t]);
+  }, [dismissMutation, refetch]);
 
   const openExactPreview = useCallback(() => {
     setPreviewError(null);

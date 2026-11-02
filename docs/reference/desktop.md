@@ -496,9 +496,12 @@ reading less what was decided, because a read of stale journals lists more
 candidates than are open. One number counts what is left: `ui.review.badges`
 `review`, which is `quarantine_attention` plus the cached transfer candidates
 (an ownership-graph move counts once, under its held transaction).
-The sidebar's Review badge, the bell, and Overview's Review row all show it,
-in red while a quarantine holds rows back from the reports. Stale journals
-with nothing else open show a dot. `/quarantine` and `kassiber://quarantine`
+The sidebar's Review badge, the bell, search, and Overview's Review row all
+show it, in red while a quarantine holds rows back from the reports. Stale
+journals with nothing else open show a dot. The side panel's Review queue
+counts causes and transactions as the screen does and opens Review; a
+dismissal is stored with an English reason whatever the app's language, like
+accepted and entered prices. `/quarantine` and `kassiber://quarantine`
 open Review, and the native menu's Review item keeps Quarantine's shortcut.
 
 Reports shows one tax year from `ui.reports.capital_gains`: whether it can be

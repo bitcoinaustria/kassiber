@@ -319,10 +319,13 @@ describe("review transfers", () => {
   it("renders nothing when there is nothing to decide", async () => {
     daemon.candidates = [];
     mount();
+    // The heading holds the place while the list loads, then goes.
     await waitFor(() =>
       expect(daemon.calls.some((call) => call.kind === "ui.transfers.suggest")).toBe(true),
     );
-    expect(screen.queryByRole("heading", { name: /Moves between your wallets/ })).toBeNull();
+    await waitFor(() =>
+      expect(screen.queryByRole("heading", { name: /Moves between your wallets/ })).toBeNull(),
+    );
   });
 });
 

@@ -4,6 +4,12 @@
  * Pairing is the owner's call; a suggestion never pairs on its own.
  */
 
+/**
+ * The reason stored with a dismissal. The book keeps one language, whatever
+ * the app is shown in, like the reasons stored for accepted and entered prices.
+ */
+export const DISMISS_REASON = "user dismissed from review queue";
+
 export interface TransferCandidate {
   out_id: string;
   in_id: string;

@@ -549,7 +549,6 @@
       "categoryNavigation": "Navigation",
       "categoryActions": "Actions"
     },
-    "dismissReason": "user dismissed from review queue",
     "loadMore": "Load more"
   },
   "reconcile": {
@@ -969,8 +968,7 @@
       "pairedMany_other": "Paired {{count}} transfers.",
       "dismissed": "Set aside {{route}}.",
       "undo": "Undo",
-      "showAll": "Show all {{count}}",
-      "showFewer": "Show fewer",
+      "showFewer": "Show fewer moves",
       "failed": "That did not work. Nothing was changed.",
       "unavailable": "Transfer suggestions could not be loaded.",
       "bulk": {
@@ -1001,7 +999,9 @@
         "exact": "Exact",
         "likely": "Likely",
         "ownership": "Own wallets"
-      }
+      },
+      "showMore_one": "Show {{count}} more move",
+      "showMore_other": "Show {{count}} more moves"
     }
   }
 }

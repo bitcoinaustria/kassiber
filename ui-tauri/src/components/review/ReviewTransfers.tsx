@@ -28,6 +28,7 @@ import { useUiStore } from "@/store/ui";
 import {
   bulkPairable,
   candidateKey,
+  DISMISS_REASON,
   moveType,
   type TransferCandidate,
   type TransferSuggestions,
@@ -226,7 +227,7 @@ export function ReviewTransfers({
         const envelope = await dismiss.mutateAsync({
           tx_out: candidate.out_id,
           tx_in: candidate.in_id,
-          reason: t("swap.dismissReason"),
+          reason: DISMISS_REASON,
         });
         const id = envelope.data?.id;
         setUndo(
@@ -323,7 +324,17 @@ export function ReviewTransfers({
     }
   };
 
-  if (suggest.isLoading) return null;
+  if (suggest.isLoading) {
+    // Holds the place, so the causes below do not jump down when it loads.
+    return (
+      <section className="space-y-3" aria-busy="true" aria-labelledby="review-transfers-title">
+        <h2 id="review-transfers-title" className="text-sm font-semibold">
+          {t("inbox.transfers.title")}
+        </h2>
+        <div className="kb-surface h-20 animate-pulse motion-reduce:animate-none" />
+      </section>
+    );
+  }
   if (suggest.isError || suggest.data?.error) {
     return (
       <section className="kb-surface p-(--kb-card-padding)" role="alert">
@@ -336,7 +347,7 @@ export function ReviewTransfers({
 
   return (
     <section className="space-y-3" aria-labelledby="review-transfers-title">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-center gap-2">
           <h2
             id="review-transfers-title"
@@ -418,9 +429,10 @@ export function ReviewTransfers({
           aria-controls="review-transfers-list"
           onClick={() => setExpanded((value) => !value)}
         >
+          {/* Worded like the causes' fold below, so one screen folds one way. */}
           {expanded
             ? t("inbox.transfers.showFewer")
-            : t("inbox.transfers.showAll", { count: candidates.length })}
+            : t("inbox.transfers.showMore", { count: candidates.length - SHOWN })}
         </Button>
       ) : null}
 
@@ -455,7 +467,7 @@ function RouteSide({ wallet, rail, hideSensitive }: { wallet: string; rail: Swap
     <span className="flex min-w-0 items-center gap-1.5">
       <RailIcon rail={rail} size="compact" />
       <span
-        className={cn("truncate text-[13px]", hideSensitive && "sensitive")}
+        className={cn("truncate text-sm", hideSensitive && "sensitive")}
         title={hideSensitive ? undefined : wallet}
       >
         {wallet}
@@ -513,16 +525,16 @@ function CandidateRow({
     (bitcoin(candidate.out_asset) || candidate.out_asset.toUpperCase() === candidate.in_asset.toUpperCase());
   const showReceived = !sameAsset || candidate.swap_fee_msat <= 0;
   return (
-    <li className="grid grid-cols-[auto_minmax(0,1fr)_minmax(9rem,auto)] items-center gap-x-3 gap-y-1 px-3 py-2 hover:bg-muted/30 @min-[52rem]/moves:grid-cols-[auto_minmax(0,1fr)_minmax(9rem,auto)_10rem_auto] @min-[52rem]/moves:gap-x-4">
+    <li className="grid grid-cols-[auto_minmax(0,1fr)_minmax(9rem,auto)] items-center gap-x-3 gap-y-1 px-3 py-2 @min-[60rem]/moves:grid-cols-[auto_minmax(0,1fr)_minmax(9rem,auto)_10rem_auto] @min-[60rem]/moves:gap-x-4">
       <span
         className={cn(
-          "col-start-1 row-start-2 text-2xs whitespace-nowrap text-muted-foreground tabular-nums @min-[52rem]/moves:row-start-1 @min-[52rem]/moves:text-xs",
+          "col-start-1 row-start-2 text-2xs whitespace-nowrap text-muted-foreground tabular-nums @min-[60rem]/moves:row-start-1 @min-[60rem]/moves:text-xs",
           hideSensitive && "sensitive",
         )}
       >
         {formatShortDate(candidate.out_occurred_at)}
       </span>
-      <span className="col-span-2 col-start-1 row-start-1 grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 @min-[52rem]/moves:col-span-1 @min-[52rem]/moves:col-start-2">
+      <span className="col-span-2 col-start-1 row-start-1 grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 @min-[60rem]/moves:col-span-1 @min-[60rem]/moves:col-start-2">
         <RouteSide
           wallet={candidate.out_wallet_label}
           rail={railForLeg(candidate.out_asset, candidate.out_wallet_kind)}
@@ -538,7 +550,8 @@ function CandidateRow({
       <span className="col-start-3 row-start-1 text-right leading-tight">
         <span
           className={cn(
-            "block font-mono text-xs font-semibold whitespace-nowrap tabular-nums",
+            // Set like the amounts in the cause cards below.
+            "block text-sm whitespace-nowrap tabular-nums",
             hideSensitive && "sensitive",
           )}
         >
@@ -560,7 +573,7 @@ function CandidateRow({
           </span>
         )}
       </span>
-      <span className="col-start-2 row-start-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs @min-[52rem]/moves:col-start-4 @min-[52rem]/moves:row-start-1">
+      <span className="col-start-2 row-start-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs @min-[60rem]/moves:col-start-4 @min-[60rem]/moves:row-start-1">
         {type === "transfer" ? (
           <span className="inline-flex items-center gap-1 text-muted-foreground">
             <TypeIcon className="size-3" aria-hidden="true" />
@@ -601,7 +614,7 @@ function CandidateRow({
           </span>
         ) : null}
       </span>
-      <span className="col-start-3 row-start-2 flex items-center justify-end gap-0.5 @min-[52rem]/moves:col-start-5 @min-[52rem]/moves:row-start-1">
+      <span className="col-start-3 row-start-2 flex items-center justify-end gap-0.5 @min-[60rem]/moves:col-start-5 @min-[60rem]/moves:row-start-1">
         <Button
           type="button"
           size="sm"

@@ -910,6 +910,10 @@ function CauseTransactionList({
         (item, index) => index < SHOWN_ROWS || Boolean(priceEntry?.entries[item.transaction_id]?.trim()),
       );
   const currency = priceEntry?.currency ?? "";
+  const priceUnitLabel =
+    priceEntry?.unit === "rate"
+      ? t("quarantine.price.unitRate", { asset: priceEntry.asset })
+      : t("quarantine.price.unitValue");
   return (
     <div className="mt-3 border-t pt-2" data-testid="quarantine-cause-transactions">
       {priceEntry ? (
@@ -968,9 +972,17 @@ function CauseTransactionList({
                 className={cn("h-8 w-36 shrink-0 text-right tabular-nums", sensitiveClass(hideSensitive))}
                 placeholder={currency}
                 aria-label={
+                  // Names what is typed: a total or a price per unit.
                   currency
-                    ? t("quarantine.price.inputLabel", { row: quarantineRowMeta(item), currency })
-                    : t("quarantine.price.inputLabelNoCurrency", { row: quarantineRowMeta(item) })
+                    ? t("quarantine.price.inputLabel", {
+                        unit: priceUnitLabel,
+                        row: quarantineRowMeta(item),
+                        currency,
+                      })
+                    : t("quarantine.price.inputLabelNoCurrency", {
+                        unit: priceUnitLabel,
+                        row: quarantineRowMeta(item),
+                      })
                 }
                 aria-invalid={priceEntry.invalid.has(item.transaction_id) || undefined}
                 value={priceEntry.entries[item.transaction_id] ?? ""}

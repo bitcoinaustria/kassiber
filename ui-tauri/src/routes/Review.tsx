@@ -59,8 +59,12 @@ export function Review() {
 
       {/* Quick yes-or-no decisions first: pairing a move often clears a
           cause below with it. */}
-      <ReviewTransfers onDecided={requestRefresh} refreshing={updating} />
-      <QuarantineSection onFailedRunChange={setFailedRun} />
+      {/* Wider apart than the rows inside them, so the second heading reads
+          as a section of its own, not a footer of the moves. */}
+      <div className="space-y-6">
+        <ReviewTransfers onDecided={requestRefresh} refreshing={updating} />
+        <QuarantineSection onFailedRunChange={setFailedRun} />
+      </div>
     </div>
   );
 }

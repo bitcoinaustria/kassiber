@@ -458,7 +458,8 @@ describe("entering prices on a cause's rows", () => {
       },
     };
   };
-  const inputs = () => screen.queryAllByRole("textbox", { name: /^Price for .*, in EUR$/ });
+  // The label names what is typed: a total value unless switched to a rate.
+  const inputs = () => screen.queryAllByRole("textbox", { name: /^Total value for .*, in EUR$/ });
 
   it("saves exactly the prices typed on the rows, through one preview", async () => {
     mount(priceSnapshot([priceRow("p-1"), priceRow("p-2")]));

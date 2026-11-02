@@ -43,6 +43,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useDaemon } from "@/daemon/client";
+import { reviewTotal, type ReviewBadges } from "@/lib/reviewCount";
 import { formatShortcut } from "@/lib/shortcutLabel";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
@@ -214,11 +215,17 @@ export function ShellSearch({
       }),
     [aiFeaturesEnabled, developerToolsEnabled, translate],
   );
+  // The sidebar's own read, so search counts what is left the same way.
+  const reviewBadges = useDaemon<ReviewBadges>("ui.review.badges", undefined, {
+    enabled: daemonEnabled,
+  }).data?.data;
+  const reviewCount = reviewBadges ? reviewTotal(reviewBadges) : undefined;
   const searchResults = React.useMemo(
     () =>
       buildAppSearchResults({
         snapshot,
         query,
+        reviewCount,
         aiFeaturesEnabled,
         developerToolsEnabled,
         resolvedTransaction: resolvedTransaction.data?.data ?? null,
@@ -236,6 +243,7 @@ export function ShellSearch({
       resolvedTransaction.isFetching,
       resolvedTransaction.isLoading,
       shouldResolveTransaction,
+      reviewCount,
       translate,
     ],
   );
