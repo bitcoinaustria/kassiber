@@ -929,3 +929,48 @@ def test_batch_sequence_survives_encrypting_the_book(tmp_path):
             "SELECT id, import_sequence FROM import_batches ORDER BY id")] == before
     finally:
         conn.close()
+
+
+@pytest.mark.parametrize("case_index", range(len(CASES)))
+def test_refill_names_the_copy_from_the_latest_import_not_the_lowest_index(tmp_path, case_index):
+    conn, profile, wallet, first, second, _ = _held_after_old_cumulative_export(tmp_path, case_index)
+    fmt, january, date_column = CASES[case_index]
+    try:
+        # Old [feb, jan] stored January at index 2 first; the later export put
+        # it at index 1. Both copies share one created_at second.
+        earlier, later = _batch_ids(conn)
+        conn.execute("UPDATE import_batch_transactions SET batch_id=? WHERE transaction_id=?", (later, first["id"]))
+        conn.execute("UPDATE import_batch_transactions SET batch_id=? WHERE transaction_id=?", (earlier, second["id"]))
+        conn.commit()
+        _exclude(conn, first["id"])
+        _exclude(conn, second["id"])
+        march, february = _months(january, date_column, "03", "02")
+        assert _import_reviewed(conn, profile, wallet, tmp_path / "export.csv", fmt,
+                                [march, february, january, january])["imported"] == 2
+        held, state = _held(conn, profile)
+        assert held == _januaries(conn, first["id"], second["id"])
+        detail = json.loads(next(q["detail_json"] for q in state["quarantines"] if q["reason"] == ISSUE))
+        assert detail["refilled_excluded_transaction_ids"] == [first["id"]]
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("case_index", range(len(CASES)))
+def test_excluding_a_later_import_row_does_not_answer_an_earlier_refill(tmp_path, case_index):
+    conn, profile, wallet, first, second, _ = _held_after_old_cumulative_export(tmp_path, case_index)
+    fmt, january, _ = CASES[case_index]
+    path = tmp_path / "export.csv"
+    try:
+        _exclude(conn, second["id"])
+        assert _import_reviewed(conn, profile, wallet, path, fmt, [january, january])["imported"] == 1
+        repeat, = _januaries(conn, first["id"], second["id"])
+        assert _import_reviewed(conn, profile, wallet, path, fmt, [january] * 3)["imported"] == 1
+        third, = _januaries(conn, first["id"], second["id"], repeat)
+        _exclude(conn, third, "Copy from the longer export")
+        # Whether the first excluded copy was the refilled repeat is still open.
+        held, state = _held(conn, profile)
+        assert held == sorted([first["id"], repeat])
+        detail = json.loads(next(q["detail_json"] for q in state["quarantines"] if q["reason"] == ISSUE))
+        assert detail["refilled_excluded_transaction_ids"] == [second["id"]]
+    finally:
+        conn.close()
