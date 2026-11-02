@@ -981,10 +981,11 @@
       "bulk": {
         "title_one": "Pair {{count}} exact match?",
         "title_other": "Pair {{count}} exact matches?",
-        "body": "Each becomes a move between your own wallets, so neither side counts as a sale or a purchase. Matches with competing candidates or ownership proofs stay for you to decide one by one. You can undo this right after.",
+        "body": "Each becomes a move between your own wallets using carrying value. Taxable matches, competing candidates and ownership proofs stay for individual review. Each step includes up to 50 matches. You can undo it right after.",
         "cancel": "Cancel",
         "confirm_one": "Pair {{count}}",
         "confirm_other": "Pair {{count}}",
+        "reason": "Pair reviewed exact transfers",
         "none": "Nothing was paired: the exact matches changed. The list is up to date again."
       },
       "saving": "Saving…"

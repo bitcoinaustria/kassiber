@@ -1,64 +1,59 @@
 import * as React from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useIsMutating, useQueryClient } from "@tanstack/react-query";
 
-import { invalidateDaemonQueriesForMutation } from "@/daemon/client";
-import { getTransport } from "@/daemon/transport";
-import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
+import { daemonMutationKey, useDaemon, useDaemonStreamMutation } from "@/daemon/client";
+import type { ProfilesSnapshot } from "@/mocks/profiles";
 import { useUiStore } from "@/store/ui";
 
-/** How long a run waits for further decisions before it starts. */
 const SETTLE_MS = 800;
 
-/**
- * Recalculates the journals once the owner stops deciding, so a decision
- * shows up in the counts without a separate step. Processing is local and
- * makes no network request, and it pairs nothing automatically: only what
- * the owner decided changes. A decision made while a run is going schedules
- * one more run after it, and one still waiting when the screen closes runs
- * anyway.
- */
+/** Queued work survives navigation and can only process its originating book. */
 export function useJournalRefreshAfterDecisions() {
-  const { runJournalProcessing, isProcessingJournals } = useJournalProcessingAction({
-    autoPair: false,
-  });
   const queryClient = useQueryClient();
   const dataMode = useUiStore((s) => s.dataMode);
+  const session = useUiStore((s) => s.daemonSession);
+  const profiles = useDaemon<ProfilesSnapshot>("ui.profiles.snapshot");
+  const workspaceId = profiles.data?.data?.activeWorkspaceId;
+  const profileId = profiles.data?.data?.activeProfileId;
+  const { mutateAsync } = useDaemonStreamMutation("ui.journals.process");
+  const isProcessingJournals = useIsMutating({ mutationKey: daemonMutationKey(dataMode, "ui.journals.process") }) > 0;
   const [pending, setPending] = React.useState(false);
-  const pendingRef = React.useRef(false);
-  pendingRef.current = pending;
-  const scope = React.useRef({ queryClient, dataMode });
-  scope.current = { queryClient, dataMode };
-
+  const mounted = React.useRef(false);
+  const timer = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   React.useEffect(() => {
-    if (!pending || isProcessingJournals) return;
-    const timer = window.setTimeout(() => {
-      setPending(false);
-      runJournalProcessing();
-    }, SETTLE_MS);
-    return () => window.clearTimeout(timer);
-  }, [isProcessingJournals, pending, runJournalProcessing]);
-
-  // Leaving before the run started: run it without the progress row, which
-  // belongs to this screen, and refresh what reads the journals after.
-  React.useEffect(
-    () => () => {
-      if (!pendingRef.current) return;
-      const { queryClient: client, dataMode: mode } = scope.current;
-      void getTransport()
-        .stream({ kind: "ui.journals.process", args: { auto_pair: false } })
-        .catch(() => undefined)
-        .finally(() => invalidateDaemonQueriesForMutation(client, mode, "ui.journals.process"));
-    },
-    [],
-  );
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+  React.useEffect(() => { setPending(false); }, [session]);
 
   const requestRefresh = React.useCallback(() => {
-    setPending(true);
-    // The sidebar and the bell show the journals as stale at once.
+    if (!workspaceId || !profileId || useUiStore.getState().daemonSession !== session) return;
+    if (mounted.current) setPending(true);
     void queryClient.invalidateQueries({
       queryKey: ["daemon", dataMode],
       predicate: (query) => query.queryKey.includes("ui.review.badges"),
     });
-  }, [dataMode, queryClient]);
-  return { requestRefresh, runJournalProcessing, isProcessingJournals, refreshPending: pending };
+    clearTimeout(timer.current);
+    const run = async () => {
+      // The daemon also checks expected_scope, covering a switch in flight.
+      if (useUiStore.getState().daemonSession !== session) return;
+      if (queryClient.isMutating({ mutationKey: daemonMutationKey(dataMode, "ui.journals.process") })) {
+        timer.current = setTimeout(() => void run(), SETTLE_MS);
+        return;
+      }
+      if (mounted.current) setPending(false);
+      try {
+        await mutateAsync({ auto_pair: false, expected_scope: { workspace_id: workspaceId, profile_id: profileId } });
+      } catch {
+        // A failed refresh leaves the decision stored and the existing
+        // freshness barrier visible until this book is processed again.
+        void queryClient.invalidateQueries({ queryKey: ["daemon", dataMode] });
+      }
+    };
+    // Keep this timer alive on unmount, including a response arriving after
+    // unmount. Neither case needs another React render to start work.
+    timer.current = setTimeout(() => void run(), SETTLE_MS);
+  }, [dataMode, mutateAsync, profileId, queryClient, session, workspaceId]);
+
+  return { requestRefresh, isProcessingJournals, refreshPending: pending };
 }

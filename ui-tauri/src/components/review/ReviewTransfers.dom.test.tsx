@@ -14,6 +14,8 @@ const daemon = vi.hoisted(() => ({
   candidates: [] as unknown[],
   failUnpair: new Set<string>(),
   failPair: false,
+  staleApply: false,
+  planned: null as Record<string, unknown> | null,
   calls: [] as Array<{ kind: string; args: Record<string, unknown> }>,
 }));
 
@@ -51,18 +53,19 @@ vi.mock("@/daemon/transport", async (importOriginal) => {
           };
         }
         if (kind === "ui.transfers.dismiss") return { kind, schema_version: 1, data: { id: "dismissal-1" } };
-        if (kind === "ui.transfers.bulk_pair") {
-          return {
-            kind,
-            schema_version: 1,
-            data: {
-              applied: [
-                { id: "pair-a", out_transaction_id: "out-a", in_transaction_id: "in-a" },
-                { id: "pair-b", out_transaction_id: "out-b", in_transaction_id: "in-b" },
-              ],
-              summary: { count: 2, skipped_conflicts: 0, total_swap_fee_msat: 0 },
-            },
-          };
+        if (kind === "ui.profiles.snapshot") return { kind, schema_version: 1, data: { activeWorkspaceId: "ws", activeProfileId: "book" } };
+        if (kind === "ui.review.cases") return { kind, schema_version: 1, data: { input_version: 7 } };
+        if (kind === "ui.review.plan") {
+          const effects = { entries_count: 0, quarantine_count: 0, report_ready: true, quarantines: [] };
+          daemon.planned = { schema_version: 1, workspace_id: "ws", profile_id: "book", base_input_version: 7,
+            digest: "a".repeat(64), operations: args.operations, before: effects, after: effects };
+          return { kind, schema_version: 1, data: daemon.planned };
+        }
+        if (kind === "ui.review.apply") {
+          if (daemon.staleApply) return { kind: "error", schema_version: 1, error: { code: "review_stale", message: "Book changed since preview", retryable: false } };
+          const artifact = args.artifact as { operations: Array<Record<string, string>> };
+          return { kind, schema_version: 1, data: { operations: artifact.operations.map((op) => ({ type: "pair",
+            result: { pair_id: op.out_transaction_id.replace("out-", "pair-"), transaction_ids: [op.out_transaction_id, op.in_transaction_id] } })) } };
         }
         return { kind, schema_version: 1, data: {} };
       },
@@ -127,6 +130,8 @@ beforeEach(() => {
   daemon.candidates = [candidate("a"), candidate("b")];
   daemon.failUnpair = new Set();
   daemon.failPair = false;
+  daemon.staleApply = false;
+  daemon.planned = null;
   daemon.calls = [];
 });
 
@@ -206,22 +211,49 @@ describe("review transfers", () => {
       candidate("b", { confidence: "exact" }),
       candidate("c", { confidence: "exact", method: "ownership_graph" }),
       candidate("d", { confidence: "exact", conflict_size: 2 }),
+      candidate("taxable", { confidence: "exact", default_policy: "taxable" }),
     ];
     mount();
-    await waitFor(() => expect(rows()).toHaveLength(4));
+    await waitFor(() => expect(rows()).toHaveLength(5));
 
     fireEvent.click(screen.getByRole("button", { name: "Pair all 2 exact matches" }));
     expect(daemon.calls.some((call) => call.kind === "ui.transfers.bulk_pair")).toBe(false);
     const dialog = await screen.findByRole("dialog");
     await act(async () => {
+      await waitFor(() => expect((within(dialog).getByRole("button", { name: "Pair 2" }) as HTMLButtonElement).disabled).toBe(false));
       fireEvent.click(within(dialog).getByRole("button", { name: "Pair 2" }));
     });
 
-    expect(daemon.calls.find((call) => call.kind === "ui.transfers.bulk_pair")?.args).toEqual({
-      confidence: "exact",
+    expect(daemon.calls.find((call) => call.kind === "ui.review.plan")?.args).toMatchObject({
+      expected_scope: { workspace_id: "ws", profile_id: "book" }, expected_input_version: 7,
+      operations: [
+        { type: "pair", out_transaction_id: "out-a", in_transaction_id: "in-a", policy: "carrying-value" },
+        { type: "pair", out_transaction_id: "out-b", in_transaction_id: "in-b", policy: "carrying-value" },
+      ],
     });
-    expect(rows()).toHaveLength(2);
+    expect(daemon.calls.find((call) => call.kind === "ui.review.apply")?.args).toMatchObject({
+      expected_scope: { workspace_id: "ws", profile_id: "book" }, artifact: daemon.planned,
+    });
+    expect(rows()).toHaveLength(3);
     expect(screen.getByRole("status").textContent).toContain("Paired 2 transfers.");
+  });
+
+  it("keeps the confirmed set when new candidates arrive and refuses a stale preview", async () => {
+    daemon.candidates = [candidate("a", { confidence: "exact" })];
+    mount();
+    await waitFor(() => expect(rows()).toHaveLength(1));
+    fireEvent.click(screen.getByRole("button", { name: "Pair 1 exact match" }));
+    const dialog = await screen.findByRole("dialog");
+    await waitFor(() => expect((within(dialog).getByRole("button", { name: "Pair 1" }) as HTMLButtonElement).disabled).toBe(false));
+    daemon.candidates.push(candidate("new", { confidence: "exact" }));
+    daemon.staleApply = true;
+    await act(async () => { fireEvent.click(within(dialog).getByRole("button", { name: "Pair 1" })); });
+    const applied = daemon.calls.find((call) => call.kind === "ui.review.apply")?.args.artifact as { operations: unknown[] };
+    expect(applied.operations).toHaveLength(1);
+    expect(screen.getByRole("alert").textContent).toContain("Book changed since preview");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(rows()).toHaveLength(2);
+    expect(daemon.calls.some((call) => call.kind === "ui.transfers.bulk_pair")).toBe(false);
   });
 
   it("takes the matches that competed for a paired leg off the list, and back on undo", async () => {
@@ -248,8 +280,10 @@ describe("review transfers", () => {
     mount();
     await waitFor(() => expect(rows()).toHaveLength(2));
     fireEvent.click(screen.getByRole("button", { name: "Pair all 2 exact matches" }));
+    const dialog = await screen.findByRole("dialog");
+    await waitFor(() => expect((within(dialog).getByRole("button", { name: "Pair 2" }) as HTMLButtonElement).disabled).toBe(false));
     await act(async () => {
-      fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Pair 2" }));
+      fireEvent.click(within(dialog).getByRole("button", { name: "Pair 2" }));
     });
     expect(rows()).toHaveLength(0);
 

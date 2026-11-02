@@ -981,10 +981,11 @@
       "bulk": {
         "title_one": "{{count}} exakten Treffer paaren?",
         "title_other": "{{count}} exakte Treffer paaren?",
-        "body": "Jeder wird zu einer Übertragung zwischen deinen eigenen Wallets, keine Seite zählt als Verkauf oder Kauf. Treffer mit konkurrierenden Kandidaten oder Eigentumsnachweisen bleiben für dich zur Einzelentscheidung. Du kannst das gleich danach rückgängig machen.",
+        "body": "Jeder Treffer wird zum Buchwert zwischen deinen eigenen Wallets übertragen. Steuerpflichtige Treffer, konkurrierende Kandidaten und Eigentumsnachweise bleiben zur Einzelprüfung. Ein Schritt umfasst bis zu 50 Treffer. Du kannst ihn gleich danach rückgängig machen.",
         "cancel": "Abbrechen",
         "confirm_one": "{{count}} paaren",
         "confirm_other": "{{count}} paaren",
+        "reason": "Geprüfte exakte Übertragungen paaren",
         "none": "Nichts wurde gepaart: Die exakten Treffer haben sich geändert. Die Liste ist wieder aktuell."
       },
       "saving": "Wird gespeichert…"

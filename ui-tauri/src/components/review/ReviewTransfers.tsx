@@ -3,6 +3,9 @@ import { Link } from "@tanstack/react-router";
 import { ArrowRight, ArrowUpRight, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+import { ReviewTaxDeltaView } from "@/components/ai/ReviewWorkflowCard";
+import { reviewArtifact, type ReviewArtifact } from "@/components/ai/reviewWorkflow";
+import type { ProfilesSnapshot } from "@/mocks/profiles";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -22,7 +25,6 @@ import {
   bulkPairable,
   candidateKey,
   isSameAsset,
-  type BulkPairResult,
   type TransferCandidate,
   type TransferSuggestions,
 } from "./transferModel";
@@ -65,7 +67,10 @@ export function ReviewTransfers({
   const quiet = { invalidateQueries: false };
   const pair = useDaemonMutation<{ id?: string }>("ui.transfers.pair", quiet);
   const dismiss = useDaemonMutation<{ id?: string }>("ui.transfers.dismiss", quiet);
-  const bulkPair = useDaemonMutation<BulkPairResult>("ui.transfers.bulk_pair", quiet);
+  const profiles = useDaemon<ProfilesSnapshot>("ui.profiles.snapshot");
+  const cases = useDaemonMutation<{ input_version: number }>("ui.review.cases", quiet);
+  const plan = useDaemonMutation<ReviewArtifact>("ui.review.plan", quiet);
+  const bulkPair = useDaemonMutation<{ operations: Array<{ result: { pair_id: string; transaction_ids: string[] } }> }>("ui.review.apply", quiet);
   const unpair = useDaemonMutation("ui.transfers.unpair", quiet);
   const undismiss = useDaemonMutation("ui.transfers.dismissals.delete", quiet);
   const [hidden, setHidden] = React.useState<ReadonlySet<string>>(() => new Set());
@@ -76,6 +81,8 @@ export function ReviewTransfers({
   // Decisions sent and not answered yet.
   const [saving, setSaving] = React.useState(0);
   const [confirmBulk, setConfirmBulk] = React.useState(false);
+  const [bulkPreview, setBulkPreview] = React.useState<{ artifact: ReviewArtifact; key: string } | null>(null);
+  const bulkBusy = cases.isPending || plan.isPending || bulkPair.isPending;
   const [undo, setUndo] = React.useState<Undo | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -226,36 +233,52 @@ export function ReviewTransfers({
     }
   };
 
-  const pairAllExact = async () => {
+  const prepareBulk = async () => {
     setError(null);
+    setBulkPreview(null);
+    setConfirmBulk(true);
+    // Capture the selected transactions before any asynchronous read.
+    const operations = exact.map((candidate) => ({
+      type: "pair", out_transaction_id: candidate.out_id, in_transaction_id: candidate.in_id,
+      pair_kind: candidate.default_kind, policy: candidate.default_policy,
+      reason: t("inbox.transfers.bulk.reason"),
+    }));
+    const snapshot = profiles.data?.data;
+    const expected_scope = { workspace_id: snapshot?.activeWorkspaceId, profile_id: snapshot?.activeProfileId };
+    const session = useUiStore.getState().daemonSession;
     try {
-      const envelope = await bulkPair.mutateAsync({ confidence: "exact" });
-      const applied = envelope.data?.applied ?? [];
-      setConfirmBulk(false);
-      if (!applied.length) {
-        setError(t("inbox.transfers.bulk.none"));
-        void suggest.refetch();
-        return;
-      }
-      // What the daemon paired, which is what the dialog counted unless the
-      // book changed in between; the count says so if it did.
-      const decisions: Decision[] = applied.map((entry) => ({
-        kind: "pair",
-        pairId: entry.id,
-        keys: [`${entry.out_transaction_id}->${entry.in_transaction_id}`],
-      }));
-      hide(decisions.flatMap((decision) => decision.keys), true);
-      setUndo({
-        decisions,
-        label: t("inbox.transfers.pairedMany", { count: applied.length }),
-        deadline: Date.now() + UNDO_MS,
-      });
-      setFocusRow(0);
-      onDecided();
+      if (!expected_scope.workspace_id || !expected_scope.profile_id) throw new Error(t("inbox.transfers.bulk.none"));
+      const version = (await cases.mutateAsync({ limit: 1, expected_scope })).data?.input_version;
+      if (useUiStore.getState().daemonSession !== session) throw new Error(t("inbox.transfers.bulk.none"));
+      const artifact = reviewArtifact((await plan.mutateAsync({ operations, expected_input_version: version, expected_scope })).data);
+      if (!artifact || useUiStore.getState().daemonSession !== session) throw new Error(t("inbox.transfers.bulk.none"));
+      setBulkPreview({ artifact, key: crypto.randomUUID() });
     } catch (cause) {
       setConfirmBulk(false);
       fail(cause);
-      void suggest.refetch();
+    }
+  };
+
+  const pairAllExact = async () => {
+    if (!bulkPreview) return;
+    setError(null);
+    try {
+      const { artifact, key } = bulkPreview;
+      const envelope = await bulkPair.mutateAsync({ artifact, idempotency_key: key,
+        expected_scope: { workspace_id: artifact.workspace_id, profile_id: artifact.profile_id } });
+      const applied = envelope.data?.operations ?? [];
+      setConfirmBulk(false);
+      const decisions: Decision[] = applied.map(({ result }) => ({
+        kind: "pair", pairId: result.pair_id,
+        keys: [`${result.transaction_ids[0]}->${result.transaction_ids[1]}`],
+      }));
+      hide(decisions.flatMap((decision) => decision.keys), true);
+      setUndo({ decisions, label: t("inbox.transfers.pairedMany", { count: applied.length }), deadline: Date.now() + UNDO_MS });
+      setFocusRow(0);
+      onDecided();
+    } catch (cause) {
+      // Keep the same artifact and idempotency key if the response was lost.
+      fail(cause);
     }
   };
 
@@ -322,7 +345,7 @@ export function ReviewTransfers({
           {/* While the journals recalculate the daemon could pair more than
               the list shows, so the bulk step waits for the fresh list. */}
           {exact.length ? (
-            <Button type="button" size="sm" disabled={refreshing} onClick={() => setConfirmBulk(true)}>
+            <Button type="button" size="sm" disabled={refreshing || saving > 0 || bulkBusy} onClick={() => void prepareBulk()}>
               {t("inbox.transfers.pairExact", { count: exact.length })}
             </Button>
           ) : null}
@@ -440,19 +463,23 @@ export function ReviewTransfers({
         </Button>
       ) : null}
 
-      <Dialog open={confirmBulk} onOpenChange={(open) => (bulkPair.isPending ? null : setConfirmBulk(open))}>
+      <Dialog open={confirmBulk} onOpenChange={(open) => (bulkBusy ? null : setConfirmBulk(open))}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{t("inbox.transfers.bulk.title", { count: exact.length })}</DialogTitle>
+            <DialogTitle>{t("inbox.transfers.bulk.title", { count: bulkPreview?.artifact.operations.length ?? exact.length })}</DialogTitle>
             <DialogDescription>{t("inbox.transfers.bulk.body")}</DialogDescription>
           </DialogHeader>
+          {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
+          {bulkPreview ? <div className={hideSensitive ? "sensitive" : undefined}>
+            <ReviewTaxDeltaView artifact={bulkPreview.artifact} />
+          </div> : <p role="status">{t("inbox.transfers.saving")}</p>}
           <DialogFooter>
-            <Button type="button" variant="outline" disabled={bulkPair.isPending} onClick={() => setConfirmBulk(false)}>
+            <Button type="button" variant="outline" disabled={bulkBusy} onClick={() => setConfirmBulk(false)}>
               {t("inbox.transfers.bulk.cancel")}
             </Button>
-            <Button type="button" disabled={bulkPair.isPending} onClick={() => void pairAllExact()}>
+            <Button type="button" disabled={bulkBusy || !bulkPreview} onClick={() => void pairAllExact()}>
               {bulkPair.isPending ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
-              {t("inbox.transfers.bulk.confirm", { count: exact.length })}
+              {t("inbox.transfers.bulk.confirm", { count: bulkPreview?.artifact.operations.length ?? exact.length })}
             </Button>
           </DialogFooter>
         </DialogContent>

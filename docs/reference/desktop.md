@@ -452,12 +452,17 @@ describes, with the journal freshness warning above them. **Moves between your
 wallets** lists the transfer and swap candidates from `ui.transfers.suggest`.
 Each has Pair, which pairs it with its default kind and policy, and Not a
 transfer, which dismisses it; Details opens it in Transfers & Custody. Exact
-candidates with no competing match and no ownership proof can be paired all at
-once after a confirmation (`ui.transfers.bulk_pair`). Ownership-graph
-candidates stay one at a time. A decision can be undone for 20 seconds
+candidates with carrying-value policy, no competing match and no ownership
+proof can be paired in groups of up to 50. `ui.review.plan` binds their exact
+transaction IDs, policies, input version and book to the confirmation;
+`ui.review.apply` refuses stale confirmations and applies the preview atomically.
+Taxable and ownership-graph candidates stay one at a time. A decision can be undone for 20 seconds
 (`ui.transfers.unpair`, or `ui.transfers.dismissals.delete` for a dismissal).
 Once the owner stops deciding, the journals recalculate. That is local and
-makes no network request. Until it finishes, the list keeps its earlier
+makes no network request. The queued refresh survives navigation, including a
+decision response received after leaving Review. It carries the originating
+book scope and is abandoned after a book switch, leaving that book visibly
+stale until it is processed. Until it finishes, the list keeps its earlier
 reading less what was decided, because a read of stale journals lists more
 candidates than are open. One number counts what is left: `ui.review.badges`
 `review`, which is `quarantine_attention` plus the cached transfer candidates

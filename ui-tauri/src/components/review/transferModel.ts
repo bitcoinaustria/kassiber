@@ -42,15 +42,17 @@ export const candidateKey = (candidate: TransferCandidate) =>
 /**
  * The candidates the exact bulk step pairs: exact evidence, no competing
  * match, and never an ownership-graph proof, which stays a one-at-a-time
- * confirmation. Mirrors the daemon's `bulk_pair` selection, which decides.
+ * confirmation. Taxable policies require an individual decision. The
+ * review core caps each atomic plan at 50 operations.
  */
 export function bulkPairable(candidates: TransferCandidate[]) {
   return candidates.filter(
     (candidate) =>
       candidate.confidence === "exact" &&
       candidate.conflict_size <= 1 &&
-      candidate.method !== "ownership_graph",
-  );
+      candidate.method !== "ownership_graph" &&
+      candidate.default_policy === "carrying-value",
+  ).slice(0, 50);
 }
 
 /** Same asset on both legs: a move between wallets rather than a swap. */
