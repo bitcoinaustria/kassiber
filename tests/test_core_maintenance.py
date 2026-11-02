@@ -205,6 +205,23 @@ class CoreMaintenanceTest(unittest.TestCase):
                         "2026-01-01T10:00:00Z",
                     ),
                 )
+                conn.execute(
+                    """
+                    INSERT INTO synthetic_import_duplicate_reviews(
+                        id, workspace_id, profile_id, wallet_id, economic_hash,
+                        group_fingerprint, transaction_ids_json, reason,
+                        authored_source, created_at
+                    ) VALUES('reset-import-review', ?, ?, 'wallet', 'economic',
+                             ?, ?, 'Separate trades', 'user', ?)
+                    """,
+                    (
+                        workspace_id,
+                        profile_id,
+                        "b" * 64,
+                        json.dumps([transaction_id]),
+                        "2026-01-01T10:00:00Z",
+                    ),
+                )
                 payload = maintenance.reset_current_profile_data(conn, str(data_root))
 
                 self.assertTrue(payload["reset"])
@@ -221,6 +238,9 @@ class CoreMaintenanceTest(unittest.TestCase):
                 )
                 self.assertGreaterEqual(payload["removed"]["journal_entries"], 1)
                 self.assertEqual(payload["removed"]["attachments"], 1)
+                self.assertEqual(
+                    payload["removed"]["synthetic_import_duplicate_reviews"], 1
+                )
                 self.assertEqual(payload["removed"]["attachment_files"], 1)
                 self.assertEqual(payload["removed"]["ai_chat_sessions"], 1)
                 self.assertEqual(payload["removed"]["ai_chat_messages"], 2)
@@ -245,6 +265,7 @@ class CoreMaintenanceTest(unittest.TestCase):
                     "custody_component_purge_authorizations",
                     "custody_gap_reviews",
                     "custody_gap_review_transactions",
+                    "synthetic_import_duplicate_reviews",
                 ):
                     count = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
                     self.assertEqual(count, 0, table)

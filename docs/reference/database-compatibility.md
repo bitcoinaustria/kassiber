@@ -60,7 +60,11 @@ their `raw_json`, separately per wallet. A stored current ID holds exactly the
 occurrence number in its suffix. Old positional rows, ordered unbatched first,
 then by import-batch time and old numeric row index, fill only the lowest
 occurrence numbers no current row holds. Incoming occurrence *n* is already
-present when a stored row, including an excluded one, holds *n*. A rolled-back
+present when a stored row, including an excluded one, holds *n*. The exception
+is an excluded cross-batch copy: when a group holds more rows than its largest
+single-import count, that many excluded rows (latest import first) hold no
+number, so a reviewed copy cannot stand in for a later genuine repeat. A
+rolled-back
 first import therefore leaves its occurrence free for the next re-import
 instead of letting a later occurrence stand in for it. The compatibility match
 changes no stored IDs, fingerprints, raw observations, batch memberships, or
@@ -84,7 +88,10 @@ current occurrence suffix also establishes that count when its batch inserted
 only the new remainder of an overlapping export. Unbatched rows alone cannot
 establish two distinct imports. One export's genuine identical repeats remain
 valid. Version 3 ignored unbatched copies, so a duplicate whose first copy
-predated batches escaped the hold.
+predated batches escaped the hold. Version 5 also holds a group when an active
+current row took an occurrence number that, among earlier imports, only an
+excluded copy had occupied: the exclusion does not say whether that copy was
+the same trade, so the owner excludes the new row or confirms distinct trades.
 
 The detector excludes and deletes nothing and chooses no survivor. Review the
 exports, use `metadata exclude --transaction <id>` for the copies the user
@@ -99,7 +106,7 @@ their exclusion state, then invalidates journals; it changes no transaction.
 A stale fingerprint returns `review_case_changed`, a replayed plan fails its
 input-version check, and any later change to the group (another copy, a removed
 or re-included row) re-opens the hold. The AI boundary refuses the operation
-with `interaction_required`. Earlier version-2 and version-3 journals
+with `interaction_required`. Earlier version-2 through version-4 journals
 require a current rebuild before report use; retained journals, authored reviews and saved/filed
 snapshots are unchanged until their normal explicit processing/review steps.
 
@@ -107,7 +114,8 @@ Coverage: `tests/test_import_csv_upgrade_compatibility.py` restores exact rows
 written by the pre-change parsers/storage writer and checks all five families,
 overlapping exports, genuine repeats, reviewed gap evidence, cross-batch review,
 copies that predate batches, rolled-back imports, either choice of excluded
-copy, the confirmed-distinct review, and a network partition that must carry
+copy, a genuine repeat after an excluded copy, the confirmed-distinct review
+and its binding to exclusion state, and a network partition that must carry
 import batches with their rows so a held group stays held.
 
 ## Dependency-origin correction

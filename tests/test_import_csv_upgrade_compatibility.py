@@ -547,3 +547,121 @@ def test_network_partition_blocks_a_batch_that_spans_partitions(tmp_path):
         assert {"code": "relation_crosses_partition", "wallet_ids": ["btc", "btc2"]} in plan["blockers"]
     finally:
         conn.close()
+
+
+def _months(january, date_column, *months):
+    return [{**january, date_column: january[date_column].replace("01-01", f"{month}-01")} for month in months]
+
+
+@pytest.mark.parametrize("case_index", range(len(CASES)))
+@pytest.mark.parametrize("copy", ["later", "earlier"])
+def test_excluded_cross_batch_copy_does_not_swallow_a_later_genuine_repeat(tmp_path, case_index, copy):
+    conn, profile, wallet, first, second, _ = _held_after_old_cumulative_export(tmp_path, case_index)
+    fmt, january, date_column = CASES[case_index]
+    path = tmp_path / "export.csv"
+    def imported(rows):
+        # Coinfinity and Pocket exclude rows no wallet observation matches;
+        # only the owner's reviewed exclusion matters here.
+        result = _import(conn, profile, wallet, path, fmt, rows)
+        conn.execute("UPDATE transactions SET excluded=0 WHERE id NOT IN (SELECT transaction_id FROM transaction_edit_events)")
+        conn.commit()
+        return result
+    try:
+        march, february = _months(january, date_column, "03", "02")
+        assert imported([march, february, january])["imported"] == 1
+        excluded = second if copy == "later" else first
+        kept = first if copy == "later" else second
+        metadata.update_transaction_metadata(conn, "ws", "profile", excluded["id"], handlers._metadata_hooks(),
+            excluded=True, reason="Reviewed duplicated import occurrence")
+        assert _held(conn, profile)[0] == []
+        # The unchanged export still holds one January trade.
+        assert imported([march, february, january])["imported"] == 0
+        assert _held(conn, profile)[0] == []
+        # A later export shows a genuine second January trade.
+        result = imported([march, february, january, january])
+        assert (result["imported"], result["skipped"]) == (1, 3)
+        repeat, = [row[0] for row in conn.execute(
+            "SELECT id FROM transactions WHERE id NOT IN (?, ?) AND occurred_at LIKE '2025-01-01%'",
+            (first["id"], second["id"]))]
+        # The excluded copy could have been this same trade: hold, never guess.
+        held, state = _held(conn, profile)
+        assert held == sorted([kept["id"], repeat])
+        assert state["custody_quantity"].report_blocked
+        assert imported([march, february, january, january])["imported"] == 0
+        case = next(case for case in review_workflow.inspect_cases(conn, profile)["cases"] if case["reason"] == ISSUE)
+        from kassiber.core.import_identity import confirm_distinct
+        confirm_distinct(conn, profile, transaction_id=case["transaction_id"],
+                         expected_fingerprint=case["import_duplicate"]["group_fingerprint"],
+                         reason="The provider statement shows two January trades", authored_source="user")
+        conn.commit()
+        assert _held(conn, profile)[0] == []
+        assert imported([march, february, january, january])["imported"] == 0
+        assert conn.execute("SELECT COUNT(*) FROM transactions WHERE excluded=0").fetchone()[0] == 4
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("case_index", [0, 4])
+def test_excluding_the_refilled_repeat_resolves_the_hold(tmp_path, case_index):
+    conn, profile, wallet, first, second, _ = _held_after_old_cumulative_export(tmp_path, case_index)
+    fmt, january, _ = CASES[case_index]
+    path = tmp_path / "export.csv"
+    try:
+        metadata.update_transaction_metadata(conn, "ws", "profile", second["id"], handlers._metadata_hooks(),
+            excluded=True, reason="Reviewed duplicated import occurrence")
+        assert _import(conn, profile, wallet, path, fmt, [january, january])["imported"] == 1
+        held = _held(conn, profile)[0]
+        assert len(held) == 2 and first["id"] in held
+        repeat, = set(held) - {first["id"]}
+        metadata.update_transaction_metadata(conn, "ws", "profile", repeat, handlers._metadata_hooks(),
+            excluded=True, reason="Same trade as the excluded copy")
+        assert _held(conn, profile)[0] == []
+        assert _import(conn, profile, wallet, path, fmt, [january, january])["imported"] == 0
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("case_index", [0, 4])
+def test_excluded_rows_within_one_export_keep_their_occurrence(tmp_path, case_index):
+    conn, profile, wallet = _restore(tmp_path, case_index)
+    fmt, january, _ = CASES[case_index]
+    try:
+        conn.execute("UPDATE transactions SET excluded = (external_id LIKE '%:2')")
+        conn.commit()
+        assert _import(conn, profile, wallet, tmp_path / "export.csv", fmt, [january, january])["imported"] == 0
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("case_index", [0, 4])
+def test_confirmation_is_bound_to_exclusion_state_and_invalidates_journals(tmp_path, case_index):
+    from kassiber.core.import_identity import confirm_distinct, held_duplicate_groups
+    conn, profile, _, first, second, _ = _false_positive(tmp_path, case_index)
+    try:
+        copied = {**dict(second), "id": "third", "fingerprint": "third", "created_at": "2025-05-01T00:00:00Z",
+                  "excluded": 1}
+        _insert(conn, "transactions", copied)
+        batch = import_batches.record_batch(conn, profile, wallet_id="btc", source_format=CASES[case_index][0],
+            source_filename="later.csv", column_map=None, outcome={"inserted_records": [{"transaction_id": "third"}]})
+        conn.execute("UPDATE import_batches SET imported_at='2025-05-01T00:00:00Z' WHERE id=?", (batch,))
+        conn.commit()
+        state = review_workflow._build(conn, profile)
+        custody_journal.store_ledger_state(conn, profile, state)
+        conn.commit()
+        assert custody_journal.projection_freshness(conn, profile["id"])["is_current"]
+        version = conn.execute("SELECT journal_input_version FROM profiles").fetchone()[0]
+        group, = held_duplicate_groups(conn, profile["id"])
+        assert sorted(row["id"] for row in group["active"]) == sorted([first["id"], second["id"]])
+        confirm_distinct(conn, profile, transaction_id=first["id"], expected_fingerprint=group["group_fingerprint"],
+                         reason="Separate purchases", authored_source="user")
+        conn.commit()
+        assert conn.execute("SELECT journal_input_version FROM profiles").fetchone()[0] == version + 1
+        assert not custody_journal.projection_freshness(conn, profile["id"])["is_current"]
+        assert held_duplicate_groups(conn, profile["id"]) == []
+        # Re-including the third copy changes only its exclusion: review again.
+        conn.execute("UPDATE transactions SET excluded=0 WHERE id='third'")
+        conn.commit()
+        group, = held_duplicate_groups(conn, profile["id"])
+        assert sorted(row["id"] for row in group["active"]) == sorted([first["id"], second["id"], "third"])
+    finally:
+        conn.close()

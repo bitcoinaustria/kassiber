@@ -68,25 +68,72 @@ def stored_synthetic_occurrences(conn, *, profile_id, wallet_id=None):
     return dict(groups)
 
 
-def occurrence_slots(members):
-    """Map each occurrence number to the stored row that already holds it.
+def largest_export_count(members):
+    """The most occurrences any one import proves, excluded rows included.
 
-    A current ID names its own occurrence exactly. Old positional rows carry a
-    file position instead, so they fill only the lowest numbers no current row
-    holds, in stored order.
+    Unbatched rows count together as one import. A current occurrence suffix
+    proves that many rows appeared in its source export, even when the batch
+    created only the new remainder.
     """
-    slots = {}
+    counts = Counter(row["batch_id"] for row in members)
     for row in members:
         if not row["legacy"]:
+            counts[row["batch_id"]] = max(counts[row["batch_id"]], row["ordinal"])
+    return max(counts.values(), default=0)
+
+
+def _excluded_excess(members):
+    """Excluded rows beyond the largest single-export count, latest first.
+
+    Such a row is a reviewed cross-batch copy, not an occurrence of its own,
+    so it must not stand in for a later genuine repeat.
+    """
+    excess = len(members) - largest_export_count(members)
+    excluded = [row for row in reversed(members) if row["excluded"]]
+    return {row["id"] for row in excluded[:max(excess, 0)]}
+
+
+def _assign_slots(members, skipped=frozenset()):
+    slots = {}
+    for row in members:
+        if not row["legacy"] and row["id"] not in skipped:
             slots.setdefault(row["ordinal"], row)
     free = 0
     for row in members:
-        if row["legacy"]:
+        if row["legacy"] and row["id"] not in skipped:
             free += 1
             while free in slots:
                 free += 1
             slots[free] = row
     return slots
+
+
+def occurrence_slots(members):
+    """Map each occurrence number to the stored row that already holds it.
+
+    A current ID names its own occurrence exactly. Old positional rows carry a
+    file position instead, so they fill only the lowest numbers no current row
+    holds, in stored order. An excluded cross-batch excess copy holds none.
+    """
+    return _assign_slots(members, _excluded_excess(members))
+
+
+def _refills_excluded_copy(members):
+    """Whether an active current row took a number only an excluded copy freed.
+
+    The owner's exclusion does not say whether that copy was the same trade as
+    the new row, so the group needs review rather than a guess.
+    """
+    def imported(row):
+        return (row["batch_id"] is not None, row["imported_at"] or row["created_at"], row["batch_id"] or "")
+    for row in members:
+        if row["legacy"] or row["excluded"]:
+            continue
+        prior = [other for other in members if imported(other) < imported(row)]
+        if (row["ordinal"] in _assign_slots(prior)
+                and row["ordinal"] not in _assign_slots(prior, _excluded_excess(prior))):
+            return True
+    return False
 
 
 def group_fingerprint(wallet_id, economic, members):
@@ -112,14 +159,8 @@ def held_duplicate_groups(conn, profile_id):
         batches = {row["batch_id"] for row in active}
         if len(batches) < 2:
             continue
-        counts = Counter(row["batch_id"] for row in members)
-        # A current occurrence suffix proves that many rows appeared in its
-        # source export, even when the batch created only the new remainder.
-        for row in members:
-            if not row["legacy"]:
-                counts[row["batch_id"]] = max(counts[row["batch_id"]], row["ordinal"])
-        largest = max(counts.values())
-        if len(active) <= largest:
+        largest = largest_export_count(members)
+        if len(active) <= largest and not _refills_excluded_copy(members):
             continue
         fingerprint = group_fingerprint(wallet_id, economic, members)
         if (wallet_id, economic, fingerprint) in confirmed:
