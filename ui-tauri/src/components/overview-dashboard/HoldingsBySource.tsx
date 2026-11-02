@@ -1,9 +1,10 @@
 import { Link } from "@tanstack/react-router";
+import type { CSSProperties } from "react";
 import { ArrowUpRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { RailIcon } from "@/components/kb/BitcoinRail";
-import { type Currency } from "@/lib/currency";
+import { formatBtc, formatWholeFiatAmount, type Currency } from "@/lib/currency";
 import { fiatCompleteness } from "@/lib/fiatCompleteness";
 import { cn } from "@/lib/utils";
 import type { OverviewSnapshot } from "@/mocks/seed";
@@ -12,19 +13,17 @@ import {
   activeMarketFiatCurrency,
   activeMarketFiatRate,
   blurClass,
+  btcFromEur,
   buildHoldingsBySource,
-  formatCompactDisplayMoney,
   portfolioCompletenessDetail,
-  useHoverHighlight,
 } from "./model";
 
 /** Sources listed before the rest fold into "Other sources". */
 const SHOWN_SOURCES = 8;
 
 /**
- * Where the bitcoin sits, across the page under the chart: one bar split by
- * source, and each source with its rail's logo, value and share. Hovering a
- * source lights up its part of the bar.
+ * Where the bitcoin sits, across the page under the chart: the sources
+ * largest first, each with its rail's logo, a bar, its value and share.
  */
 export const HoldingsBySourceChart = ({
   snapshot,
@@ -39,23 +38,25 @@ export const HoldingsBySourceChart = ({
   const isBitcoinMode = currency === "btc";
   const fiatCurrency = activeMarketFiatCurrency(snapshot);
   const fiatRate = activeMarketFiatRate(snapshot);
-  const { active, handleHover } = useHoverHighlight<number>();
   const holdings = buildHoldingsBySource(snapshot, SHOWN_SOURCES);
   const completenessDetail = portfolioCompletenessDetail(snapshot);
   const unrealizedPercent = snapshot.fiat.eurCostBasis
     ? (snapshot.fiat.eurUnrealized / snapshot.fiat.eurCostBasis) * 100
     : 0;
   const total = holdings.reduce((sum, item) => sum + item.value, 0);
+  const largest = Math.max(0, ...holdings.map((item) => item.value));
   // Without a market rate a fiat figure would be a stale or zero placeholder.
   const fiatValueUnavailable =
     !isBitcoinMode && fiatCompleteness(snapshot.fiat).marketRateMissing;
   const valueLabel = (value: number) =>
     fiatValueUnavailable
       ? "—"
-      : formatCompactDisplayMoney(value, fiatRate, currency, fiatCurrency);
+      : isBitcoinMode
+        ? formatBtc(btcFromEur(value, fiatRate), { precision: 3 })
+        : formatWholeFiatAmount(value, fiatCurrency);
 
   return (
-    <section className="kb-surface space-y-3 p-3 sm:px-4" aria-label={t("holdings.aria")}>
+    <section className="@container/holdings kb-surface space-y-2.5 p-3 sm:px-4" aria-label={t("holdings.aria")}>
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-0.5">
           <h2 className="text-sm font-medium">{t("holdings.title")}</h2>
@@ -102,46 +103,52 @@ export const HoldingsBySourceChart = ({
       </div>
 
       {holdings.length ? (
-        <>
-          <div className="flex h-2 gap-0.5 overflow-hidden rounded-full" aria-hidden="true">
-            {holdings.map((item, index) => (
-              <span
-                key={item.nameKey ?? item.name}
-                className={cn(
-                  "h-full transition-opacity duration-200 motion-reduce:transition-none",
-                  active !== null && active !== index && "opacity-30",
-                )}
-                style={{ width: `${total ? (item.value / total) * 100 : 0}%`, backgroundColor: item.color }}
-              />
-            ))}
-          </div>
-          <ul className="grid gap-x-6 gap-y-0.5 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
-            {holdings.map((item, index) => (
-              <li
-                key={item.nameKey ?? item.name}
-                className={cn(
-                  "flex min-w-0 items-center gap-2 py-1 text-xs transition-opacity duration-200 motion-reduce:transition-none",
-                  active !== null && active !== index && "opacity-50",
-                )}
-                onMouseEnter={() => handleHover(index)}
-                onMouseLeave={() => handleHover(null)}
-              >
-                <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: item.color }} aria-hidden="true" />
+        // A ranked bar list, read down the first column and then the next:
+        // each bar is the source's size against the largest one. The value
+        // column has a fixed width so every bar's track is the same length.
+        <ul
+          className={cn(
+            "grid gap-x-8 gap-y-1",
+            holdings.length > 1 &&
+              "@min-[44rem]/holdings:grid-flow-col @min-[44rem]/holdings:grid-cols-2 @min-[44rem]/holdings:grid-rows-[repeat(var(--holding-rows),auto)]",
+          )}
+          style={{ "--holding-rows": Math.ceil(holdings.length / 2) } as CSSProperties}
+        >
+          {holdings.map((item) => (
+            <li
+              key={item.nameKey ?? item.name}
+              className="grid min-w-0 grid-cols-[1.5rem_minmax(0,1fr)_6.5rem_2.5rem] items-center gap-2 text-xs"
+            >
+              <span className="flex justify-center">
                 {item.rail ? <RailIcon rail={item.rail} size="compact" /> : null}
-                <span className="min-w-0 flex-1 truncate" title={item.nameKey ? undefined : item.name}>
+              </span>
+              <span className="min-w-0 space-y-1 py-1">
+                <span
+                  className={cn("block truncate", item.nameKey && "text-muted-foreground")}
+                  title={item.nameKey ? undefined : item.name}
+                >
                   {/* dynamic key */}
                   {item.nameKey ? t(item.nameKey as never) : item.name}
                 </span>
-                <span className={cn("shrink-0 font-medium tabular-nums", blurClass(hideSensitive))}>
-                  {valueLabel(item.value)}
+                {/* The bar is a share, so it hides with the figures. */}
+                <span className="block h-[3px] overflow-hidden rounded-full bg-muted" aria-hidden="true">
+                  {hideSensitive ? null : (
+                    <span
+                      className="block h-full rounded-full bg-primary/70"
+                      style={{ width: `${largest ? Math.max((item.value / largest) * 100, 1) : 0}%` }}
+                    />
+                  )}
                 </span>
-                <span className={cn("w-9 shrink-0 text-right text-muted-foreground tabular-nums", blurClass(hideSensitive))}>
-                  {item.percent}%
-                </span>
-              </li>
-            ))}
-          </ul>
-        </>
+              </span>
+              <span className={cn("self-start truncate pt-1 text-right font-medium tabular-nums", blurClass(hideSensitive))}>
+                {valueLabel(item.value)}
+              </span>
+              <span className={cn("self-start pt-1 text-right text-muted-foreground tabular-nums", blurClass(hideSensitive))}>
+                {item.percent === 0 && item.value > 0 ? "<1%" : `${item.percent}%`}
+              </span>
+            </li>
+          ))}
+        </ul>
       ) : null}
     </section>
   );

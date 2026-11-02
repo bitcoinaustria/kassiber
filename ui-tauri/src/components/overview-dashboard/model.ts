@@ -112,7 +112,6 @@ export type HoldingsItem = {
   percent: number;
   /** The source's rail, for its logo; none for the "Other sources" row. */
   rail?: SwapRail;
-  color: string;
 };
 
 export type PortfolioChartPoint = {
@@ -2308,18 +2307,12 @@ export function buildHoldingsBySource(snapshot: OverviewSnapshot, shown = 4): Ho
           },
         ]
       : rows;
-  // Shades of one colour, largest source darkest; "Other sources" is muted.
-  const shades = [100, 78, 60, 46, 35, 27, 21, 16];
-  const other = `color-mix(in oklch, var(--muted-foreground) 45%, ${mixBase})`;
-  return visibleRows.map((item, index) => ({
+  return visibleRows.map((item) => ({
     name: item.name,
     nameKey: item.nameKey,
     value: item.value,
     percent: percentOf(item.value, total),
     rail: item.rail,
-    color: item.nameKey
-      ? other
-      : `color-mix(in oklch, var(--primary) ${shades[Math.min(index, shades.length - 1)]}%, ${mixBase})`,
   }));
 }
 

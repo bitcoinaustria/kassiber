@@ -431,9 +431,10 @@ chart once the page is about 64rem wide (measured on the page, so a docked
 assistant counts), as many whole rows as fit the chart's height, and under it
 otherwise; the list never scrolls inside the page, and Show all opens
 Transactions. A row names its status only when it asks for something.
-Holdings by Source runs across the page below: one bar split by source and up
-to eight sources with their rail's logo, value and share, the rest folded into
-Other sources.
+Holdings by Source runs across the page below as a ranked list, largest
+first: each source with its rail's logo, a bar against the largest source,
+its value (whole currency units in fiat) and share. Past eight, the smallest
+fold into one Other sources row. The bars hide with the other figures.
 
 Overview, Wallets, the book-set overview, and the Reports metric strip read the
 daemon's `fiat.completeness` block (see [the daemon reference](daemon.md)) instead of
