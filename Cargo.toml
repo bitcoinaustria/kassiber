@@ -22,6 +22,7 @@ members = [
   "crates/release",
   "crates/paths",
   "crates/ownership",
+  "crates/ipc",
   "crates/store",
   "crates/transactions",
   "crates/transfers",

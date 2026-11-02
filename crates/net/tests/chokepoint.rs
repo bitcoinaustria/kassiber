@@ -232,6 +232,26 @@ fn source_without_reviewed_children(relative: &Path, source: &str) -> String {
         .join("\n")
 }
 
+/// `kassiber-ipc` alone may name std's `AF_UNIX` module and make `AF_UNIX`
+/// socket and connect calls (docs/reference/r6-ai-operator-port.md, R6-1).
+/// Every other connector form, an `AF_INET` socket included, still fails.
+const IPC_SOURCE: &str = "crates/ipc/src";
+
+fn local_ipc_allowance(source: &str) -> String {
+    let source = source.replace("std::os::unix::net", "ReviewedLocalIpc");
+    let compacted = compact(&source);
+    if !compacted.contains("libc::socket(") && !compacted.contains("libc::connect(") {
+        return source;
+    }
+    // Socket calls are reviewed in their compacted form only; the result is
+    // what the bypass check reads, so no other connector can hide in it.
+    let reviewed = compacted.replace("libc::socket(libc::AF_UNIX,", "ReviewedLocalSocket(");
+    if reviewed.contains("libc::socket(") {
+        return reviewed;
+    }
+    reviewed.replace("libc::connect(", "ReviewedLocalConnect(")
+}
+
 fn scan(path: &Path, own: &Path, failures: &mut Vec<String>) {
     walk(path, path, own, false, failures);
 }
@@ -315,6 +335,11 @@ fn walk(path: &Path, root: &Path, own: &Path, in_crate: bool, failures: &mut Vec
             let bytes = fs::read(path).unwrap();
             let source = String::from_utf8_lossy(&bytes);
             let source = source_without_reviewed_children(relative, &source);
+            let source = if relative.starts_with(IPC_SOURCE) {
+                local_ipc_allowance(&source)
+            } else {
+                source
+            };
             let literal_checked = source
                 .replace(
                     "use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};",
@@ -453,6 +478,28 @@ fn scanner_catches_common_import_and_dependency_forms() {
     assert!(!unreviewed_dependencies(
         "[dependencies]\nkassiber-net = { path = \"../net\" }"
     ));
+}
+
+#[test]
+fn local_ipc_allowance_admits_only_af_unix_forms() {
+    for source in [
+        "pub use std::os::unix::net::{UnixListener, UnixStream};",
+        "libc::socket(\n    libc::AF_UNIX,\n    libc::SOCK_STREAM | libc::SOCK_CLOEXEC,\n    0,\n)",
+        "libc::socket(libc::AF_UNIX, libc::SOCK_STREAM, 0); libc::connect(fd, address, length)",
+    ] {
+        assert!(bypass(source), "{source} needs the allowance");
+        assert!(!bypass(&local_ipc_allowance(source)), "{source}");
+    }
+    for source in [
+        "use std::net::TcpStream;",
+        "std::os::unix::net::UnixStream; std::net::UdpSocket::bind(addr)",
+        "libc::socket(libc::AF_INET, libc::SOCK_STREAM, 0); libc::connect(fd, address, length)",
+        "libc::socket(libc::AF_UNIX, 1, 0); libc::socket(libc::AF_INET6, 1, 0)",
+        "libc::socket(libc::AF_UNIX, 1, 0); libc::sendto(fd, data, 1, 0, addr, len)",
+        "libc::socket(libc::AF_UNIX, 1, 0); use libc::*;",
+    ] {
+        assert!(bypass(&local_ipc_allowance(source)), "{source}");
+    }
 }
 
 #[test]
