@@ -108,8 +108,9 @@ invariants, parity evidence and remaining work.
 
 The native catalog includes `wallets import-btcpay`, `wallets import-ledger`,
 `wallets import-wasabi`, `wallets import-samourai`, `wallets preview-document`,
-`wallets import-document` and the
-[eleven local Chain Analysis read leaves](#chain-analysis-local-read-checkpoint-r5-partial).
+`wallets import-document` and the fifteen local Chain Analysis read leaves
+([local reads](#chain-analysis-local-read-checkpoint-r5-partial) and the
+[PSBT/preview completion](#chain-analysis-psbt-preview-and-receipt-completion-r5)).
 `commands describe` lists the supported leaves from `crates/cli/src/describe.rs`;
 each family registers through its own CLI
 module. Every other leaf parses exactly as in Python and then fails
@@ -14948,14 +14949,10 @@ across those seeds. The retained repro and variants are
 `crates/wallets/tests/data/chain_analysis_reads_hashseeds.json`; Python product
 code is unchanged. Round 9 owns reference determinism.
 
-This checkpoint leaves four requested CLI reads and eight daemon kinds open:
-PSBT analyze/compare/entropy, dataset preview, entropy/PSBT-entropy/dataset-preview
-`.start`, and `ui.chain_analysis.jobs.get`. The base has PSBT public-feature
-primitives but no native PSBT parser/comparison service or purpose/book-scoped
-source/job runtime. Those paths still need source lifetime validation,
-cancellation and book-switch fencing, exact receipts/events and native process
-acceptance. They remain unregistered and fail closed with zero product fallback.
-Acquisition, mutations and watches belong to the parallel operations worker.
+This checkpoint left four CLI reads and eight daemon kinds open. The
+[completion checkpoint](#chain-analysis-psbt-preview-and-receipt-completion-r5)
+registers them. Acquisition, mutations and watches belong to the parallel
+operations worker.
 
 Local verification passes all 42 native analysis-index tests, four CLI catalog
 checks, eleven daemon protocol checks and seven Python/native read checks without
@@ -14978,3 +14975,114 @@ scratch and builds stay in this worktree's `target/`. Owned mutation and
 verification build trees are removed after summarizing. There are no dependency
 or lockfile changes, push, PR or external comments. Full workspace,
 Python/frontend quality-gate and packaged/platform acceptance are not claimed.
+
+## Chain Analysis PSBT, preview and receipt completion (R5)
+
+`t3code/r5-chain-analysis-reads-2` continues the
+[local read checkpoint](#chain-analysis-local-read-checkpoint-r5-partial) at
+`00636290f`. It cherry-picks the native PSBT parser `fff419a68` as `76f39a6e5`.
+The four remaining CLI leaves are `chain-analysis psbt analyze`,
+`psbt compare`, `psbt entropy` and `datasets preview`. The daemon adds
+`ui.chain_analysis.psbt.analyze`, `.psbt.compare`, `.psbt.entropy`,
+`.datasets.preview`, `.entropy.start`, `.psbt.entropy.start`,
+`.datasets.preview.start`, `.jobs.get` and `.jobs.cancel`. It also adds
+`internal.chain_analysis.stage`, which issues the source tokens these kinds
+consume. Every requested Chain Analysis read is now served natively. AI
+projections stay in Python. Registry additions are appended after the earlier
+read kinds.
+
+`kassiber-wallets::psbt` gains proposal comparison and explicit BIP78 checks.
+These include BIP143 commitments for the six supported sighash types, verified
+with libsecp256k1. Public-key encodings follow embit's refusals: no hybrid keys,
+and high-S signatures fail. Redacted analysis keeps Python's dict insertion
+order, including the different field order of PSBT-adapter signature rows.
+`analysis_index::runtime` holds the daemon's receipts and grants, under the
+reference limits:
+
+- Receipts: 16 retained, 2 concurrent, a one-hour lifetime, busy refusals and
+  the start/get/cancel receipt shape.
+- Grants: 32 retained for 30 minutes. Each is pinned to a book, a purpose and
+  the selected file's device, inode, size and timestamps. Every read re-checks
+  that identity.
+- Previews: completed results are remembered for later import consent.
+
+Receipt IDs and tokens come from SQLite's OS-seeded `randomblob`. Workers never
+hold the caller's connection. `daemon.lock`, a successful `ui.profiles.switch`,
+restore close and shutdown clear grants and receipts. Restore first quiesces
+workers for up to five seconds, as `JOBS.quiesce` does.
+
+`reads::preview` streams `utf-8-sig` records bounded to 64 KiB and the 8 GiB
+input limit. It ports CPython 3.11's strict excel CSV reader state machine and
+DictReader shape checks. It also ports JSONL row bounds, Maru92/generic claim
+mapping, manifest and claim text/date/window rules, and `urlsplit`'s
+credential/query/fragment, bracketed-host and NFKC delimiter refusals (the
+Unicode 14.0 table). Lone surrogates in a subject are now refused as invalid
+subjects in the shared `canonical_subject`, matching Python's `_text` acceptance
+followed by a parse failure.
+
+Python's `normalize_manifest` iterates a `set`, so the manifest field order, and
+which of several invalid required fields is reported, follow `PYTHONHASHSEED`.
+The native port uses sorted order. `tests/rust_port/repro_dataset_manifest_hashseed.py`
+records eight seeds in
+`crates/wallets/tests/data/chain_analysis_dataset_manifest_hashseeds.json`: eight
+key orders, three first-error variants and one canonical value. Python is not
+changed. The oracles pin the reference's set to sorted order, and process tests
+reorder only the reference's manifest objects before comparing bytes.
+
+Unchanged-Python oracles compare unsorted compact envelope bytes, schema and all
+112 table commitments, and transaction state:
+
+- PSBT: 254 cases, covering text, hex, binary and file payloads, all BIP vectors,
+  validation order, entropy limits and scenarios, and 37 Payjoin constraint
+  cases. Another 52 signed receiver proposals cover p2wpkh and p2sh-p2wpkh under
+  every sighash, with corrupted, high-S, hybrid-key, missing-witness and
+  fee-contribution cases.
+- Dataset preview: 207 cases, covering manifests, 34 source URLs, CSV quoting,
+  newlines, BOM, limits, NUL and UTF-8 errors, JSONL bounds, duplicate and
+  surrogate keys, NaN values, Maru92 and am-i-exposed adapters, and Liquid
+  addresses.
+
+Whole-process CLI and daemon runs use strict no-consent guards with product
+offline mode off and on; no configured provider, DNS, HTTP, RPC, socket or
+loopback probe runs. Daemon transcripts mask only receipt IDs, elapsed time,
+request IDs, the first receipt's completion race and a cancellation race.
+
+| CLI leaf (`chain-analysis.` prefix) | Rust | Python |
+| --- | ---: | ---: |
+| `psbt.analyze` | 16 | 0 |
+| `psbt.compare` | 10 | 0 |
+| `psbt.entropy` | 8 | 0 |
+| `datasets.preview` | 24 | 0 |
+
+Four native daemon sessions compare 44 PSBT/receipt responses and 29
+preview/receipt responses each, with zero Python fallback. The responses cover
+staging, token reuse across purposes, changed files, failed and completed
+workers, and lock fencing.
+
+Known boundaries: Python's JSONL recursion cutoff depends on the caller's stack
+depth, while native parsing stops at 1,000 nested containers. Bracketed IPv6
+hosts use Rust's address parser. Non-UTF-8 staged file names are reported
+lossily. Non-Unix grants pin size and modification time only. None of these
+widens authority or egress.
+
+Named mutations live in `chain_analysis_psbt_reads_mutations.json` (14) and
+`chain_analysis_dataset_preview_mutations.json` (14). All 28 compile in scratch
+trees and are killed by their named tests. The doubled-quote CSV recipe first
+survived because no case showed a literal quote. It was killed on rerun after
+the `csv-doubled-quote` case was added.
+
+Local verification on Linux passes:
+
+- all 52 native analysis-index tests, including 15 read, PSBT, preview and
+  runtime tests;
+- 64 daemon, CLI and runtime crate tests;
+- 40 Python/native checks across the read, PSBT, preview, PSBT-primitive and
+  inherited dataset/source/analytics oracles, without skips;
+- workspace formatting, and Clippy for the affected crates with warnings denied;
+- the required classifier update (5,775 definitions) and CI preflight (57 tests).
+
+Toolchains were Rust 1.99.1, locked Python 3.11.17 and offline Cargo. Account
+`HOME` was preserved. Evidence stays under `target/r5-reads-2/`; scratch
+mutation trees are removed. There are no dependency or lockfile changes. The
+full workspace suite, the Python/frontend quality gate and packaged/platform
+acceptance are not claimed.

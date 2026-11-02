@@ -388,9 +388,10 @@ The native Rust backend now serves local overview/trace/path queries, synchronou
 transaction entropy, saved-case list/get/compare, label listing, and dataset
 list/get/exact-query reads through both CLI and daemon adapters. The
 [R5 read checkpoint](rust-shell.md#chain-analysis-local-read-checkpoint-r5-partial)
-records exact envelope and all-table comparisons. Native PSBT analysis/comparison,
-dataset preview and asynchronous jobs remain separate port work. AI projections
-remain in Python.
+records exact envelope and all-table comparisons. The
+[completion checkpoint](rust-shell.md#chain-analysis-psbt-preview-and-receipt-completion-r5)
+adds PSBT analysis/comparison/entropy, dataset preview, staged source grants and
+the bounded receipt runtime. AI projections remain in Python.
 
 `core/chain_analysis/` owns immutable evidence indexing, bounded traversal and
 pure analytical algorithms. `chain_analysis_api.py` dispatches explicit

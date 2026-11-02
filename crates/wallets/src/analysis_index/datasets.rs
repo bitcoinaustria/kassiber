@@ -37,8 +37,18 @@ pub fn canonical_subject(
     subject: &Value,
 ) -> Result<Value, AppError> {
     let (chain, network) = domain(chain, network)?;
-    let value = subject
-        .as_str()
+    // Lone surrogates are valid Python text but never a valid subject form.
+    let lossy: Option<String> = match subject {
+        Value::Str(v) if v.has_surrogates() => Some(
+            v.code_points()
+                .map(|p| char::from_u32(p).unwrap_or('\u{fffd}'))
+                .collect(),
+        ),
+        _ => None,
+    };
+    let value = lossy
+        .as_deref()
+        .or_else(|| subject.as_str())
         .filter(|v| {
             !kassiber_pytext::strip(v).is_empty()
                 && v.chars().count() <= 20064

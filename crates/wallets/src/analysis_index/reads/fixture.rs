@@ -24,6 +24,11 @@ pub fn evaluate(case: &Value, conn: &Connection) -> Result<Value> {
                     local.files.push((key.as_str().unwrap().to_owned(), bytes));
                 }
             }
+            if let Some(raw) = get(action, "stream") {
+                use bitcoin::hex::FromHex;
+                let bytes = Vec::<u8>::from_hex(raw_text(raw)).expect("fixture hex");
+                local.stream = Some(Box::new(std::io::Cursor::new(bytes)));
+            }
             match execute_local(
                 conn,
                 "ws",

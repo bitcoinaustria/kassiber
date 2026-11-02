@@ -84,11 +84,52 @@ fn psbt(book: &mut dyn Book, action: &str, args: &Namespace) -> Result<Value, Ap
     )
 }
 
+/// `datasets preview`: the manifest is parsed before the file is opened, and
+/// the file is open before the book scope is resolved, as in Python.
+fn dataset_preview(book: &mut dyn Book, args: &Namespace) -> Result<Value, AppError> {
+    let manifest = document(args.text("manifest").unwrap_or(""))?;
+    let payload = dict([
+        ("manifest", manifest),
+        (
+            "format",
+            args.get("source_format").cloned().unwrap_or(Value::Null),
+        ),
+        (
+            "adapter",
+            args.get("adapter").cloned().unwrap_or(Value::Null),
+        ),
+    ]);
+    let unreadable = kassiber_wallets::analysis_index::reads::unreadable_dataset;
+    let path = crate::render::expand_user(
+        args.text("file").unwrap_or(""),
+        std::env::var("HOME").ok().as_deref(),
+    )
+    .map_err(|_| unreadable())?;
+    let file = std::fs::File::open(path).map_err(|_| unreadable())?;
+    if file.metadata().map_err(|_| unreadable())?.is_dir() {
+        return Err(unreadable());
+    }
+    let mut local = Local {
+        stream: Some(Box::new(std::io::BufReader::with_capacity(64 * 1024, file))),
+        ..Local::default()
+    };
+    book.chain_analysis_reads(
+        args.get("workspace"),
+        args.get("profile"),
+        "datasets.preview",
+        &payload,
+        &mut local,
+    )
+}
+
 pub fn execute(book: &mut dyn Book, command: &str, args: &Namespace) -> Result<Value, AppError> {
     let mut payload = Vec::new();
     let mode = command.trim_start_matches("chain-analysis.");
     if let Some(action) = mode.strip_prefix("psbt.") {
         return psbt(book, action, args);
+    }
+    if mode == "datasets.preview" {
+        return dataset_preview(book, args);
     }
     let operation = if ["overview", "trace", "path"].contains(&mode) {
         for key in [

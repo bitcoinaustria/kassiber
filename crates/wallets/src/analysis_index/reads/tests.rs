@@ -14,6 +14,15 @@ fn compare_psbt(prefix: &str) {
     );
 }
 
+fn compare_preview(prefixes: &[&str]) {
+    for prefix in prefixes {
+        compare_in(
+            include_str!("../../../tests/data/chain_analysis_dataset_preview.json"),
+            prefix,
+        );
+    }
+}
+
 fn compare_in(data: &str, prefix: &str) {
     let cases = kassiber_pytext::loads(data).unwrap();
     let mut checked = 0;
@@ -339,4 +348,120 @@ fn chain_analysis_jobs_fence_scope_capacity_and_cancellation() {
         )
         .unwrap();
     wait(&runtime, &scope, field(&next, "job_id"));
+}
+
+#[test]
+fn chain_analysis_dataset_preview_normalizes_manifests_and_urls() {
+    compare_preview(&["manifest", "url", "options", "arguments"]);
+}
+#[test]
+fn chain_analysis_dataset_preview_parses_strict_csv() {
+    compare_preview(&["csv"]);
+}
+#[test]
+fn chain_analysis_dataset_preview_bounds_jsonl_claims() {
+    compare_preview(&["jsonl", "maru92", "am-i", "liquid"]);
+}
+
+#[test]
+fn chain_analysis_dataset_preview_jobs_remember_completed_validation() {
+    let dir = scratch("preview");
+    let conn = Connection::open_in_memory().unwrap();
+    conn.execute_batch(include_str!(
+        "../../../../reports/tests/data/privacy_hygiene_seed.sql"
+    ))
+    .unwrap();
+    conn.execute_batch(include_str!("../../../../reports/tests/data/book.sql"))
+        .unwrap();
+    let file = dir.join("pack.csv");
+    let mut data = String::from("subject,label\n");
+    for i in 0..4100 {
+        data.push_str(&format!("{i:064x},Entity\n"));
+    }
+    std::fs::write(&file, data).unwrap();
+    let runtime = Runtime::new();
+    let scope = runtime::scope_key(&conn, "p");
+    let staged = runtime
+        .stage(
+            &conn,
+            scope.clone(),
+            &s(file.to_str().unwrap()),
+            &s("dataset"),
+        )
+        .unwrap();
+    let token = field(&staged, "source_token").clone();
+    let manifest = kassiber_pytext::loads(r#"{"dataset_key":"k","name":"n","version":"1","chain":"bitcoin","network":"main","source":"s","license":"l","attribution_method":"m","visibility":"public"}"#).unwrap();
+    let args = dict([
+        ("manifest", manifest.clone()),
+        ("source_token", token.clone()),
+    ]);
+    let run = |operation: &str, args: &Value, runtime: Option<Arc<Runtime>>| {
+        execute_local(
+            &conn,
+            "ws",
+            "p",
+            operation,
+            args,
+            &mut engine::durable::fixture::FixedSources("2026-01-01T00:00:00Z".to_owned()),
+            &mut Local {
+                runtime,
+                ..Local::default()
+            },
+        )
+    };
+    assert_eq!(
+        code(run("datasets.preview.start", &args, None)),
+        "daemon_required"
+    );
+    let receipt = run("datasets.preview.start", &args, Some(Arc::clone(&runtime))).unwrap();
+    assert_eq!(
+        field(field(&receipt, "request"), "operation"),
+        &s("datasets.preview.start")
+    );
+    let done = wait(&runtime, &scope, field(&receipt, "job_id"));
+    assert_eq!(field(&done, "status"), &s("completed"));
+    let result = field(&done, "result").clone();
+    assert_eq!(field(&result, "row_count"), &Value::Int(4100.into()));
+    assert_eq!(
+        field(field(&done, "progress"), "row_count"),
+        &Value::Int(4000.into())
+    );
+    assert_eq!(field(field(&done, "progress"), "phase"), &s("validating"));
+    let recipe = dict([
+        ("manifest", field(&result, "manifest").clone()),
+        ("format", s("csv")),
+        ("adapter", s("generic")),
+    ]);
+    assert_eq!(
+        runtime
+            .preview(&scope, &token, &recipe, field(&result, "sha256"))
+            .unwrap(),
+        result
+    );
+    assert_eq!(
+        runtime
+            .preview(&scope, &token, &recipe, &s("other"))
+            .unwrap_err()
+            .code,
+        "chain_analysis_preview_required"
+    );
+    let sync = run("datasets.preview", &args, Some(Arc::clone(&runtime))).unwrap();
+    assert_eq!(sync, result);
+    let invalid = dict([
+        ("manifest", manifest),
+        ("source_token", token),
+        ("format", s("xml")),
+    ]);
+    let failed = run(
+        "datasets.preview.start",
+        &invalid,
+        Some(Arc::clone(&runtime)),
+    )
+    .unwrap();
+    let failed = wait(&runtime, &scope, field(&failed, "job_id"));
+    assert_eq!(
+        (field(&failed, "status"), field(&failed, "error_code")),
+        (&s("failed"), &s("validation"))
+    );
+    let _ = std::fs::remove_dir_all(&dir);
 }

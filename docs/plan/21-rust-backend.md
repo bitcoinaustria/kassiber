@@ -4396,3 +4396,14 @@ and `jobs.get` remain open. The pinned base has shared PSBT public-feature
 primitives, but no native PSBT parser/comparison service or source/job runtime.
 Those contracts need their own native implementation and process acceptance;
 unsupported entry points continue to fail closed without Python fallback.
+
+### R5 Chain Analysis: PSBT, preview and receipt completion
+
+The [completion checkpoint](../reference/rust-shell.md#chain-analysis-psbt-preview-and-receipt-completion-r5)
+closes the read inventory. It reuses the native PSBT parser and adds proposal
+comparison with BIP78 commitment checks, conditional PSBT entropy, streaming
+dataset preview, and staged source grants. A bounded receipt runtime serves the
+`.start`, `jobs.get` and `jobs.cancel` kinds. Lock, profile switch and restore
+clear grants and receipts and cancel workers. Python's hash-seed-dependent
+manifest field order is recorded; the native port uses sorted order. AI
+projections remain in Python, and nothing introduces egress.

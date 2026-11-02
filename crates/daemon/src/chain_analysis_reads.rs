@@ -22,6 +22,8 @@ pub const KINDS: &[&str] = &[
     "ui.chain_analysis.jobs.get",
     "ui.chain_analysis.jobs.cancel",
     "internal.chain_analysis.stage",
+    "ui.chain_analysis.datasets.preview",
+    "ui.chain_analysis.datasets.preview.start",
 ];
 
 pub fn execute(

@@ -1191,6 +1191,14 @@ do not stage sources, acquire observations, probe configured providers or grant
 network permission. See the
 [read checkpoint](rust-shell.md#chain-analysis-local-read-checkpoint-r5-partial).
 
+Native PSBT and dataset-preview reads parse caller-supplied bytes in memory and
+retain neither the bytes nor file paths in results or receipts. Staged grants
+pin a picker-selected regular file to one book and purpose by device, inode,
+size and timestamps. Every read re-checks that identity, and lock, profile
+switch and restore forget the grant. Receipt workers hold no database
+connection and contact no provider. See the
+[completion checkpoint](rust-shell.md#chain-analysis-psbt-preview-and-receipt-completion-r5).
+
 After-statement observation and disk-book drivers exist only in the test harness.
 Their synthetic parity fixtures and SQLite/SQLCipher interruption artifacts stay
 under the disposable worktree data root; they are not product disk logging or

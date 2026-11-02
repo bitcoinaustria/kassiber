@@ -231,6 +231,7 @@ pub const IMPLEMENTED: &[&str] = &[
     "chain-analysis.psbt.analyze",
     "chain-analysis.psbt.compare",
     "chain-analysis.psbt.entropy",
+    "chain-analysis.datasets.preview",
 ];
 
 /// `_NO_BOOTSTRAP_DATABASE_PREFIXES`.

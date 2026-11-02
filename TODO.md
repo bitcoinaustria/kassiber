@@ -665,10 +665,14 @@ registers them; exit-tax preserves its reference no-registration boundary.
   case list/get/compare, label listing and dataset list/get/query reads through
   the CLI and daemon, retaining byte/all-table parity and zero fallback; see the
   [read checkpoint](docs/reference/rust-shell.md#chain-analysis-local-read-checkpoint-r5-partial).
-- [ ] Finish the Chain Analysis read port: PSBT analyze/compare/entropy, dataset
-  preview, entropy/PSBT-entropy/dataset-preview `.start`, and `jobs.get`, including
-  purpose/book-scoped source tokens, cancellation/book-switch fencing, exact
-  receipts/events and native transport acceptance. AI projections stay Python.
+- [x] Finish the Chain Analysis read port: PSBT analyze/compare/entropy, dataset
+  preview, entropy/PSBT-entropy/dataset-preview `.start`, `jobs.get`/`jobs.cancel`
+  and `internal.chain_analysis.stage`, with purpose/book-scoped source grants,
+  lock/profile-switch/restore fencing and byte/all-table process parity; see the
+  [completion checkpoint](docs/reference/rust-shell.md#chain-analysis-psbt-preview-and-receipt-completion-r5).
+  AI projections stay Python.
+- [ ] Share the native analysis receipt/grant runtime with the dataset
+  import/discard `.start` workers when the operations slice registers them.
 - [x] Port full-report, Austrian bundle and transaction CSV artifacts, saved
   export registration and their daemon kinds. Preserve
   sealed summaries, hashes and phase-4 append-only impact history.

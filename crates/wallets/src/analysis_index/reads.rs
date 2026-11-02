@@ -13,6 +13,7 @@ mod cursor;
 mod datasets;
 #[cfg(any(test, feature = "test-harness"))]
 pub mod fixture;
+mod preview;
 mod psbt;
 #[cfg(test)]
 mod tests;
@@ -37,6 +38,8 @@ pub const OPERATIONS: &[&str] = &[
     "jobs.get",
     "jobs.cancel",
     "internal.stage",
+    "datasets.preview",
+    "datasets.preview.start",
 ];
 
 /// Caller-supplied local inputs. File bytes come from the CLI; the runtime
@@ -44,8 +47,11 @@ pub const OPERATIONS: &[&str] = &[
 #[derive(Default)]
 pub struct Local {
     pub files: Vec<(String, Vec<u8>)>,
+    /// A CLI-opened dataset file; previews from it are not remembered.
+    pub stream: Option<Box<dyn std::io::BufRead + Send>>,
     pub runtime: Option<Arc<Runtime>>,
 }
+pub use preview::unreadable as unreadable_dataset;
 impl Local {
     /// The reference keeps one process-wide registry; callers without a
     /// daemon runtime share this one.
@@ -253,6 +259,9 @@ pub fn execute_local(
             )
         }
         op if op.starts_with("psbt.") => psbt::execute(conn, profile, op, &args, local),
+        "datasets.preview" | "datasets.preview.start" => {
+            dataset_preview(conn, profile, operation, &args, local)
+        }
         "cases.list" => page(conn, profile, &args, false),
         "cases.get" => {
             arguments(&args, &["id"], &["id"])?;
@@ -322,6 +331,133 @@ fn stage(
         runtime::scope_key(conn, profile),
         field(args, "source_file"),
         field(args, "purpose"),
+    )
+}
+
+/// `_datasets` preview and the daemon's `datasets.preview.start` worker.
+fn dataset_preview(
+    conn: &Connection,
+    profile: &str,
+    operation: &str,
+    args: &Value,
+    local: &mut Local,
+) -> Result<Value> {
+    let fields = [
+        "source_token",
+        "manifest",
+        "format",
+        "adapter",
+        "expected_sha256",
+    ];
+    let scope = runtime::scope_key(conn, profile);
+    let format = get(args, "format").cloned().unwrap_or_else(|| s("csv"));
+    let adapter = get(args, "adapter")
+        .cloned()
+        .unwrap_or_else(|| s("generic"));
+    let token = field(args, "source_token").clone();
+    let recipe = |result: &Value, format: &Value, adapter: &Value| {
+        dict([
+            ("manifest", field(result, "manifest").clone()),
+            ("format", format.clone()),
+            ("adapter", adapter.clone()),
+        ])
+    };
+    if operation == "datasets.preview" {
+        arguments(args, &fields, &["manifest"])?;
+        let never = || false;
+        if let Some(stream) = local.stream.take() {
+            return preview::preview(
+                field(args, "manifest"),
+                &mut preview::Stream(stream),
+                &format,
+                &adapter,
+                &mut |_| {},
+                &never,
+            );
+        }
+        let runtime = local.runtime();
+        let mut source = runtime.open(&scope, &token, "dataset")?;
+        let result = preview::preview(
+            field(args, "manifest"),
+            &mut source,
+            &format,
+            &adapter,
+            &mut |_| {},
+            &never,
+        )?;
+        runtime.remember_preview(&scope, &token, &recipe(&result, &format, &adapter), &result);
+        return Ok(result);
+    }
+    let Some(runtime) = local.runtime.clone() else {
+        return Err(AppError::new(
+            "daemon_required",
+            "Background dataset work requires a running daemon; use the synchronous CLI operation",
+        ));
+    };
+    arguments(args, &fields, &["source_token", "manifest"])?;
+    let manifest = preview::normalize_manifest(field(args, "manifest"))?;
+    // Refuse stale or foreign selections before creating a running receipt.
+    drop(runtime.open(&scope, &token, "dataset")?);
+    let submitted = dict([
+        ("operation", s(operation)),
+        ("manifest", manifest.clone()),
+        ("format", format.clone()),
+        ("adapter", adapter.clone()),
+        ("expected_sha256", field(args, "expected_sha256").clone()),
+    ]);
+    let worker_runtime = Arc::clone(&runtime);
+    let worker_scope = scope.clone();
+    runtime.start(
+        conn,
+        scope,
+        submitted,
+        Box::new(move |worker| {
+            let began = std::time::Instant::now();
+            let stopped =
+                || worker.cancelled() || began.elapsed() >= std::time::Duration::from_secs(1800);
+            if stopped() {
+                return Ok(dict([("status", s("cancelled"))]));
+            }
+            let outcome = (|| {
+                let mut source = worker_runtime.open(&worker_scope, &token, "dataset")?;
+                let mut update = |value: Value| {
+                    let mut progress = dict([("phase", s("validating"))]);
+                    merge(&mut progress, value);
+                    worker.progress(progress);
+                };
+                let result = preview::preview(
+                    &manifest,
+                    &mut source,
+                    &format,
+                    &adapter,
+                    &mut update,
+                    &stopped,
+                )?;
+                if !stopped() {
+                    worker_runtime.remember_preview(
+                        &worker_scope,
+                        &token,
+                        &recipe(&result, &format, &adapter),
+                        &result,
+                    );
+                }
+                Ok(result)
+            })();
+            match outcome {
+                Err(_) if stopped() => Ok(dict([
+                    ("status", s("cancelled")),
+                    (
+                        "reason",
+                        s(if worker.cancelled() {
+                            "cancelled"
+                        } else {
+                            "duration_limit"
+                        }),
+                    ),
+                ])),
+                other => other,
+            }
+        }),
     )
 }
 

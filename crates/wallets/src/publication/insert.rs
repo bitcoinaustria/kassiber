@@ -180,7 +180,7 @@ fn opt(value: Option<String>) -> Value {
 }
 
 /// `time_utils.parse_timestamp`.
-fn parse_timestamp(value: &Value) -> Result<String> {
+pub(crate) fn parse_timestamp(value: &Value) -> Result<String> {
     if !truthy(value) {
         return Err(AppError::new("app_error", "Missing occurred_at/date value"));
     }
