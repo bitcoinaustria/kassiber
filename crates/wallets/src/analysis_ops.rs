@@ -9,6 +9,7 @@ use kassiber_pyjson::{dumps, Key, Options, Value};
 use kassiber_pytext::{lower, strip_py};
 use kassiber_store::rusqlite::{params, types::Value as Sql, Connection};
 
+mod acquisition;
 mod cases;
 mod datasets;
 #[cfg(any(test, feature = "test-harness"))]
@@ -112,6 +113,7 @@ pub fn execute_with_sources(
         | "watches.evaluate" => {
             watches::dispatch(conn, scope.profile_id, &operation[8..], &args, sources)
         }
+        "acquire.plan" => acquisition::plan(conn, scope.profile_id, &args, sources),
         "sources.plan" | "sources.authorize" | "sources.list" | "sources.revoke"
         | "sources.run" => {
             sources::dispatch(conn, scope.profile_id, operation, &args, sources, runtime)

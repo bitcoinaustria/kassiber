@@ -252,6 +252,7 @@ pub const IMPLEMENTED: &[&str] = &[
     "chain-analysis.sources.list",
     "chain-analysis.sources.revoke",
     "chain-analysis.sources.run",
+    "chain-analysis.acquire.plan",
 ];
 
 /// `_NO_BOOTSTRAP_DATABASE_PREFIXES`.

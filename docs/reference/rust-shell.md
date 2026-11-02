@@ -15275,3 +15275,18 @@ CLI and corpus only.
 
 The background source runner that performs the authorized Bitcoin Core block
 and subject reads is not yet ported.
+
+## Chain-analysis acquisition plans (R5, partial)
+
+`analysis_ops::acquisition::prepare` ports `_prepare_acquisition`, serving
+`acquire.plan` (CLI 175 registrations, one daemon kind). Planning validates
+the explicit domain, budgets and genesis pin, reads only the saved backend row,
+checks capability, book domain and chain instance, synchronizes the local index
+and resolves seeds without contacting the backend. The plan identity binds the
+profile, every reviewed field, the backend `updated_at` revision, the seeds and
+the credential-free routing identity. `generate_analysis_acquisition.py`
+records 52 plan cases with all 112 tables; `tests/test_rust_analysis_acquisition.py`
+replays them natively and compares five CLI invocations and three daemon
+requests per offline setting (10 and 6 in total) byte for byte. Four named
+mutations are killed. `acquire.apply`, which performs the reviewed egress,
+is the next slice.

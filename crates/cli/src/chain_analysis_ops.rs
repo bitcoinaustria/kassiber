@@ -24,6 +24,7 @@ pub const COMMANDS: &[&str] = &[
     "chain-analysis.sources.list",
     "chain-analysis.sources.revoke",
     "chain-analysis.sources.run",
+    "chain-analysis.acquire.plan",
 ];
 
 fn document(raw: &str) -> Result<Value, AppError> {
@@ -60,6 +61,16 @@ pub fn execute(book: &mut dyn Book, path: &str, ns: &Namespace) -> Result<Value,
     // `cli.chain_analysis.dispatch`: the attributes each leaf forwards.
     let allowed: &[&str] = match path {
         "chain-analysis.watches.inbox" => &["limit", "before"],
+        "chain-analysis.acquire.plan" => &[
+            "backend",
+            "subject",
+            "chain",
+            "network",
+            "direction",
+            "depth",
+            "max_transactions",
+            "genesis_hash",
+        ],
         _ => &[
             "id",
             "other_id",

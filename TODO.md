@@ -684,7 +684,8 @@ registers them; exit-tax preserves its reference no-registration boundary.
   authorize, list, revoke, queue) with byte parity, all-112-table checks and
   named mutations; see the [source-grant checkpoint](docs/reference/rust-shell.md#chain-analysis-source-grants-r5-partial).
 - [ ] Finish the chain-analysis operations assignment: the background watch
-  tick, event delivery and authorized source runner, dataset import, acquisition plan/apply,
+  tick, event delivery and authorized source runner, dataset import, acquisition apply
+  (plan is ported; see the [plan checkpoint](docs/reference/rust-shell.md#chain-analysis-acquisition-plans-r5-partial)),
   matching daemon kinds, dataset import/discard async starts and job cancel.
   Preserve exact-action/once-only consent and source-revision fencing, gated
   egress, offline refusals and revocation/cancellation with loopback tests.

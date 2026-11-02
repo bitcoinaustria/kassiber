@@ -539,3 +539,8 @@ REVIEWS["tests/test_rust_analysis_grants.py"] = {"*": {
     "disposition": "oracle", "group": "chain-sync",
     "reason": "compares all five native recurring-acquisition source CLI/daemon routes with unchanged Python bytes and all 112 tables; covers plan identity and routing fingerprints, encryption, exact-plan authorization, revision, expiry, source/book/domain fences, offline refusal, SQLCipher DELETE/WAL rollback, named mutations and zero-fallback processes; no source is contacted and the background runner remains unported",
 }}
+
+REVIEWS["tests/test_rust_analysis_acquisition.py"] = {"*": {
+    "disposition": "oracle", "group": "chain-sync",
+    "reason": "compares the native acquisition planner with unchanged Python bytes and all 112 tables across argument, genesis-pin, backend capability, domain, instance and subject-resolution cases, plus encrypted-book CLI/daemon parity with offline off/on; planning contacts no backend",
+}}

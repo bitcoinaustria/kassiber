@@ -278,5 +278,45 @@
       "analysis_source_grants_match_python_bytes_and_all_112_tables"
     ],
     "rule": "Container choices fail like Python set membership."
+  },
+  {
+    "id": "analysis-acquire-plan-routing",
+    "file": "crates/wallets/src/analysis_ops/acquisition.rs",
+    "find": "        routing_identity(&backend)?,\n    ]))?;",
+    "replace": "        Value::Null,\n    ]))?;",
+    "expect_failing": [
+      "analysis_acquisition_plans_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "A plan identity binds the backend route."
+  },
+  {
+    "id": "analysis-acquire-genesis-pin",
+    "file": "crates/wallets/src/analysis_ops/acquisition.rs",
+    "find": "        if supplied != &Value::Null && supplied != &s(consensus) {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "analysis_acquisition_plans_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "A standard network rejects a conflicting genesis pin."
+  },
+  {
+    "id": "analysis-acquire-seed-budget",
+    "file": "crates/wallets/src/analysis_ops/acquisition.rs",
+    "find": "    if seeds.len() as i64 > maximum {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "analysis_acquisition_plans_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "A subject cannot exceed the reviewed transaction budget."
+  },
+  {
+    "id": "analysis-acquire-backend-kind",
+    "file": "crates/wallets/src/analysis_ops/acquisition.rs",
+    "find": "    if ![\"bitcoinrpc\", \"esplora\", \"liquid-esplora\", \"electrum\"].contains(&kind.as_str()) {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "analysis_acquisition_plans_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Only observation-capable backends can be planned."
   }
 ]

@@ -3,6 +3,7 @@ use kassiber_pyjson::Value;
 use kassiber_runtime::store::Book;
 
 pub const KINDS: &[&str] = &[
+    "ui.chain_analysis.acquire.plan",
     "ui.chain_analysis.cases.delete",
     "ui.chain_analysis.cases.save",
     "ui.chain_analysis.datasets.discard",
