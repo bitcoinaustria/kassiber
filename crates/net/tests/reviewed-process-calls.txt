@@ -31,3 +31,4 @@ crates/kassiber/tests/legacy_privacy_transport.rs|reference|let result = Command
 # std launch behind kassiber-ipc's explicit-inheritance builder, and its tests.
 crates/ipc/src/process.rs|spawn|let mut child = std::process::Command::new(&command.program);
 crates/ipc/src/process.rs|shell|let mut command = ChildCommand::new("/bin/sh");
+crates/operator/src/client.rs|launch_broker|let mut command = kassiber_ipc::process::ChildCommand::new(&self.executable);

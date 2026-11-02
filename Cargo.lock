@@ -1790,7 +1790,16 @@ dependencies = [
 name = "kassiber-operator"
 version = "0.1.0"
 dependencies = [
+ "getrandom 0.4.3",
+ "kassiber-envelope",
  "kassiber-ipc",
+ "kassiber-paths",
+ "kassiber-pyjson",
+ "kassiber-pytext",
+ "nix 0.30.1",
+ "sha2 0.11.1",
+ "tempfile",
+ "zeroize",
 ]
 
 [[package]]

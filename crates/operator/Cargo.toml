@@ -1,0 +1,34 @@
+[package]
+name = "kassiber-operator"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "The operator broker's protocol, runtime directory, build identity and client (plan 21, R6)"
+
+[features]
+# Test builds only: report `frozen: false`, which admits the gated
+# KASSIBER_OPERATOR_RUNTIME_DIR override. Never in a release build.
+test-harness = []
+
+[dependencies]
+kassiber-ipc = { path = "../ipc" }
+kassiber-envelope = { path = "../envelope" }
+kassiber-paths = { path = "../paths" }
+kassiber-pyjson = { path = "../pyjson" }
+kassiber-pytext = { path = "../pytext" }
+# std has no portable cryptographic source for challenges and labels.
+getrandom = "=0.4.3"
+sha2 = "0.11"
+zeroize = "1"
+
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.30", features = ["user", "fs"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints.rust]
+unsafe_code = "forbid"

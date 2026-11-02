@@ -14,13 +14,15 @@
 //!   or handles, optionally detached into a new session;
 //! - [`signal`]: termination signals delivered to a flag and a wake-up
 //!   descriptor;
-//! - [`poll`]: waiting for a pipe to become readable with a timeout.
+//! - [`poll`]: waiting for a pipe to become readable with a timeout;
+//! - [`descriptor`]: a caller-supplied descriptor number read and closed.
 //!
 //! The only sockets it creates are `AF_UNIX`; it never resolves names or
 //! opens a network route; the workspace chokepoint scanner holds it to that.
 //! Policy (which uid or SID is acceptable, what an error is called) belongs
 //! to `kassiber-operator`; this crate reports what the OS says.
 
+pub mod descriptor;
 pub mod poll;
 pub mod process;
 pub mod signal;
