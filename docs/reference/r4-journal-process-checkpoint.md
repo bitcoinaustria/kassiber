@@ -1123,6 +1123,42 @@ records that boundary instead of registering it. A public no-pairing daemon
 kind would not substitute for it. Both runtimes write identical stored state,
 so reports read either runtime's rebuild.
 
+### Registered-route CPU (eighth continuation)
+
+The [route record](r4-journal-route-measurements.json) times the registered
+routes from process start to exit with `scripts/benchmark-journal-routes.py`.
+Each cell runs five alternating Python/native pairs on fresh copies of one
+bench book. Python is the unchanged CLI or daemon under the registered tests'
+clock binding. Native is a release build with the test harness, which binds
+the same clock and identities and adds its write observer. CPU is the child's
+user and system time across all threads, including startup, book open,
+response, deferred checkpoint and exit. All **60 pairs** match exit status,
+output bytes or ordered desktop rows, and every table scalar-exactly.
+
+Each CPU cell is **best / median of five**, seconds; the ratio uses medians.
+
+| Book | Route | Python CPU | Native CPU | Speedup | 1-min load |
+| --- | --- | ---: | ---: | ---: | ---: |
+| generic 2k | plain | 1.915 / 1.929 | 1.293 / 1.341 | 1.44× | 7.9–9.2 |
+| generic 2k | `--auto-pair` | 2.097 / 2.156 | 1.290 / 1.316 | 1.64× | 8.5–9.2 |
+| generic 2k | desktop | 2.135 / 2.233 | 1.516 / 1.623 | 1.38× | 8.9–11.8 |
+| multi-wallet 2k | plain | 2.342 / 2.397 | 1.807 / 1.841 | 1.30× | 12.6–12.8 |
+| multi-wallet 2k | `--auto-pair` | 2.753 / 2.811 | 1.855 / 1.909 | 1.47× | 11.5–12.8 |
+| multi-wallet 2k | desktop | 2.671 / 2.721 | 2.065 / 2.092 | 1.30× | 9.6–11.7 |
+| generic 20k | plain | 13.114 / 13.400 | 12.076 / 12.817 | 1.05× | 7.6–13.1 |
+| generic 20k | `--auto-pair` | 16.319 / 17.023 | 12.333 / 12.933 | 1.32× | 12.4–20.8 |
+| generic 20k | desktop | 16.297 / 16.739 | 13.516 / 13.693 | 1.22× | 11.8–23.9 |
+| multi-wallet 20k | plain | 21.487 / 22.260 | 15.984 / 16.342 | 1.36× | 10.8–15.3 |
+| multi-wallet 20k | `--auto-pair` | 26.306 / 26.587 | 16.130 / 16.213 | 1.64× | 7.5–11.7 |
+| multi-wallet 20k | desktop | 26.298 / 27.823 | 17.561 / 17.964 | 1.55× | 6.2–109.6 |
+
+Native wall medians are 1.10 / 1.42 / 9.48 / 11.35 seconds on the plain route.
+The owner's 4× end-to-end CPU target is unmet on every cell. The last
+multi-wallet desktop pairs ran while other workers raised the load sharply,
+so that cell is the least reliable. This record does not attribute time to
+phases; that remains with the separate performance track. Python retains
+production authority until R4-16.
+
 ### Seventh-continuation remaining work
 
 Run all **25,030 generated** and **318 recorded** operands through the
