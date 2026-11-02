@@ -45,6 +45,15 @@ def _secret_name(token: str) -> str:
                  and (name not in _LAST_PART_NAMES or name == parts[-1])), "")
 
 
+_COUNT_PARTS = frozenset("count num max min limit length len size ttl".split())
+_COUNT_VALUE = re.compile(r"[0-9]{1,9}(?![^ \t\r\n,;)\]}])")
+
+
+def _count_name(key: str, name: str) -> bool:
+    parts = [part.lower().strip("0123456789") for part in _KEY_PARTS.split(_VERSION.sub("", key).strip("_.-"))]
+    return any(part in _COUNT_PARTS or (part == name + "s" and part not in _NAMES) for part in parts)
+
+
 def _quote_at(text: str, pos: int) -> tuple[str, int]:
     end = pos
     while end < len(text) and text[end] == "\\":
@@ -273,6 +282,10 @@ def _keyed_spans(text: str, offsets: list[int] | range | None = None) -> list[_S
             # continuation), so neither exceptions nor masks stop at the first.
             line_end = _continued_end(text, pos, match.start() - line_start)
             whole = text[pos:line_end].strip(" \t")
+            # A bare count after a count-shaped name (`max_tokens: 16`,
+            # `descriptors=3`, `token_ttl=3600`) is metadata, not a credential.
+            if _COUNT_VALUE.match(text, pos) and _count_name(key, name):
+                continue
             # Exceptions describe the entire value. A familiar first word never
             # licenses the rest of an otherwise unquoted credential.
             if separator == ":" and not key_quote and (

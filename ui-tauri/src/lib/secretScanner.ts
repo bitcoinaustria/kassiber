@@ -37,6 +37,15 @@ function secretName(value: string): string {
   return ORDERED_NAMES.find((name) => compact.includes(name) && (!PART_NAMES.includes(name) || parts.includes(name)) && (!LAST_PART_NAMES.includes(name) || name === parts.at(-1))) ?? "";
 }
 
+const COUNT_PARTS = new Set("count num max min limit length len size ttl".split(" "));
+const COUNT_VALUE = /[0-9]{1,9}(?![^ \t\r\n,;)\]}])/y;
+
+function countName(key: string, name: string): boolean {
+  const token = key.replace(/[_-]v[0-9]+_*$/i, "").replace(/^[_.-]+|[_.-]+$/g, "");
+  const parts = token.split(/[_.-]+|(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|(?<=[0-9])(?=[A-Za-z])/).map((part) => part.toLowerCase().replace(/^[0-9]+|[0-9]+$/g, ""));
+  return parts.some((part) => COUNT_PARTS.has(part) || (part === name + "s" && !NAMES.has(part)));
+}
+
 function quoteAt(text: string, pos: number): [string, number] {
   let end = pos;
   while (end < text.length && text[end] === "\\") end += 1;
@@ -258,6 +267,10 @@ function keyedSpans(text: string, offsets?: number[]): Span[] {
       // continuation), so neither exceptions nor masks stop at the first.
       const line = continuedEnd(text, pos, match.index - lineStart);
       const whole = text.slice(pos, line).replace(/^[ \t]+|[ \t]+$/g, "");
+      // A bare count after a count-shaped name (`max_tokens: 16`,
+      // `descriptors=3`, `token_ttl=3600`) is metadata, not a credential.
+      COUNT_VALUE.lastIndex = pos;
+      if (COUNT_VALUE.test(text) && countName(key, name)) continue;
       if (separator === ":" && !keyQuote && (
         ["none", "expired", "(not set)"].includes(whole.toLowerCase())
         || (WEAK_NAMES.has(name) && aliasProse(name, whole))

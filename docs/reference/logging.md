@@ -254,7 +254,10 @@ the final part (`db_pw`, not `spinner`). A spaced name such as `api key:` or
 `"Secret Key":` is secret when the second word changes the first word's
 meaning; `user name:` and `token count:` are not. Metadata
 suffixes such as `-file`, `-fd`, `_hint` and `_statistics` do not become inline
-secret values. Assignments accept `=`, `:`, `=>`, `:=`, `->` and repeated/spaced
+secret values. A bare integer after a count-shaped name (a plural such as
+`max_tokens` or `descriptors`, or a `count`, `max`, `min`, `limit`, `length`,
+`size` or `ttl` part) is metadata and stays readable, so provider error bodies
+keep their structure. Assignments accept `=`, `:`, `=>`, `:=`, `->` and repeated/spaced
 `=` operators. Unquoted `&` and `|` remain part of an ambiguous value, including
 query tails. Cookie/cookies assignments, objects, headers and curl `-b` lose all
 cookie pairs; authorization and cookie headers include indented continuations.
