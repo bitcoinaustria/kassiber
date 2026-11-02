@@ -453,13 +453,20 @@ mod tests {
         write.write_all(" synthetic '🔑 \r\n".as_bytes()).unwrap();
         drop(write);
         let fd = read.into_raw_fd();
+        // SAFETY: fstat only reads metadata of the still-open pipe end.
+        let identity = |fd| unsafe {
+            let mut stat = std::mem::zeroed::<libc::stat>();
+            (libc::fstat(fd, &mut stat) == 0).then_some((stat.st_dev, stat.st_ino))
+        };
+        let pipe = identity(fd).unwrap();
         let args = dict([
             ("machine", Value::Bool(true)),
             ("new_passphrase_fd", Value::from(fd)),
         ]);
         let secret = passphrase(&args, "new_passphrase_fd", "unused", true).unwrap();
         assert_eq!(secret.expose(), " synthetic '🔑 ");
-        // SAFETY: fcntl validates this now-closed integer descriptor.
-        assert_eq!(unsafe { libc::fcntl(fd, libc::F_GETFD) }, -1);
+        // A concurrently running test may reuse the closed number, so the
+        // pipe is closed when the number is free or names another file.
+        assert_ne!(identity(fd), Some(pipe));
     }
 }
