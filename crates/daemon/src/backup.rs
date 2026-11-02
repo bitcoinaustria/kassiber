@@ -71,6 +71,7 @@ impl Host for Daemon {
         Ok(Box::new((lease, quiesced)))
     }
     fn close_database(&mut self, expected: &Fingerprint) -> Result<(), AppError> {
+        self.stop_watch_worker(true)?;
         self.analysis.clear();
         self.book
             .as_mut()

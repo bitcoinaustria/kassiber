@@ -256,6 +256,89 @@ pub fn mark_delivered(conn: &Connection, ids: &[String], sources: &mut dyn Sourc
     Ok(())
 }
 
+/// A runtime whose cancellation is the worker's stop flag.
+struct Stoppable<'a> {
+    inner: &'a dyn Runtime,
+    stop: &'a dyn Fn() -> bool,
+}
+impl Runtime for Stoppable<'_> {
+    fn epoch(&self) -> i64 {
+        self.inner.epoch()
+    }
+    fn offline(&self) -> bool {
+        self.inner.offline()
+    }
+    fn cancelled(&self) -> bool {
+        (self.stop)()
+    }
+    fn no_egress(&self) -> bool {
+        self.inner.no_egress()
+    }
+    fn gate(&self) -> kassiber_net::Gate {
+        self.inner.gate()
+    }
+}
+
+/// `daemon_chain_analysis_watches.start_worker`: requires a keyed book.
+pub fn watch_worker_ready(conn: &Connection) -> bool {
+    watches::require_encrypted(conn).is_ok()
+}
+
+/// The worker thread's state: its own fenced connection, opened on first use.
+pub struct LocalWorker {
+    open: Option<jobs::OpenWorker>,
+    book: Option<Box<dyn jobs::WorkerBook>>,
+    sources: Box<dyn Sources + Send>,
+    runtime: Box<dyn Runtime + Send>,
+}
+
+impl LocalWorker {
+    pub fn new(
+        open: jobs::OpenWorker,
+        sources: Box<dyn Sources + Send>,
+        runtime: Box<dyn Runtime + Send>,
+    ) -> Self {
+        Self {
+            open: Some(open),
+            book: None,
+            sources,
+            runtime,
+        }
+    }
+
+    fn ensure_open(&mut self) -> Result<()> {
+        if self.book.is_none() {
+            let open = self.open.take().ok_or_else(|| {
+                AppError::new("internal_error", "Local evidence worker unavailable")
+            })?;
+            self.book = Some(open()?);
+        }
+        Ok(())
+    }
+
+    /// `worker_tick` then `deliver_pending`'s query; failures roll back.
+    pub fn pass(&mut self, stop: &dyn Fn() -> bool) -> Result<Vec<String>> {
+        self.ensure_open()?;
+        let conn = self.book.as_ref().unwrap().connection();
+        let runtime = Stoppable {
+            inner: &*self.runtime,
+            stop,
+        };
+        let result =
+            worker_tick(conn, &mut *self.sources, &runtime).and_then(|()| pending_deliveries(conn));
+        if result.is_err() && !conn.is_autocommit() {
+            let _ = conn.execute_batch("ROLLBACK");
+        }
+        result
+    }
+
+    pub fn delivered(&mut self, ids: &[String]) -> Result<()> {
+        self.ensure_open()?;
+        let conn = self.book.as_ref().unwrap().connection();
+        mark_delivered(conn, ids, &mut *self.sources)
+    }
+}
+
 /// `expected_scope`: an operation stays bound to its original book.
 fn check_scope(args: &Value, scope: &Scope<'_>) -> Result<()> {
     if let Some(expected) = get(args, "expected_scope") {

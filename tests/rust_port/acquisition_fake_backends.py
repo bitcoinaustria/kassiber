@@ -35,13 +35,39 @@ def build_chain():
     return [ancestor, root, child, grandchild]
 
 
+def _merkle(txids):
+    import hashlib
+    leaves = [bytes.fromhex(t)[::-1] for t in txids]
+    while len(leaves) > 1:
+        if len(leaves) % 2:
+            leaves.append(leaves[-1])
+        leaves = [hashlib.sha256(hashlib.sha256(leaves[i] + leaves[i + 1]).digest()).digest() for i in range(0, len(leaves), 2)]
+    return leaves[0]
+
+
+def build_blocks(transactions, groups, *, genesis=GENESIS):
+    """Synthetic linked blocks above `genesis`; hashes bind header bytes only."""
+    import hashlib
+    blocks, parent = [], genesis
+    for height, group in enumerate(groups, 1):
+        txs = [transactions[i] for i in group]
+        header = (2).to_bytes(4, 'little') + bytes.fromhex(parent)[::-1] + _merkle([t.txid().hex() for t in txs]) \
+            + (1_700_000_000 + height).to_bytes(4, 'little') + bytes.fromhex('1d00ffff')[::-1] + height.to_bytes(4, 'little')
+        raw = header + bytes([len(txs)]) + b''.join(t.serialize() for t in txs)
+        block_hash = hashlib.sha256(hashlib.sha256(header).digest()).digest()[::-1].hex()
+        blocks.append((block_hash, raw.hex()))
+        parent = block_hash
+    return blocks
+
+
 class Chain:
-    def __init__(self, transactions, *, genesis=GENESIS, spender_index=True, broken=()):
+    def __init__(self, transactions, *, genesis=GENESIS, spender_index=True, broken=(), blocks=()):
         self.transactions = {tx.txid().hex(): tx for tx in transactions}
         self.order = [tx.txid().hex() for tx in transactions]
         self.genesis = genesis
         self.spender_index = spender_index
         self.broken = set(broken)
+        self.blocks = list(blocks)
 
     def spender(self, txid, vout):
         for candidate in self.transactions.values():
@@ -160,8 +186,20 @@ def http_server(chain, recorder, *, mode='esplora'):
                 return self.reply(200, json.dumps({'result': value, 'error': None, 'id': ident}))
             def error(code, message, status=500):
                 return self.reply(status, json.dumps({'result': None, 'error': {'code': code, 'message': message}, 'id': ident}))
+            if method == 'getblockcount':
+                return result(len(chain.blocks))
             if method == 'getblockhash':
-                return result(chain.genesis)
+                height = params[0] if params else 0
+                if height == 0:
+                    return result(chain.genesis)
+                if 0 < height <= len(chain.blocks):
+                    return result(chain.blocks[height - 1][0])
+                return error(-8, 'Block height out of range')
+            if method == 'getblock':
+                for block_hash, raw in chain.blocks:
+                    if block_hash == params[0]:
+                        return result(raw)
+                return error(-5, 'Block not found')
             if method == 'getindexinfo':
                 return result({'txospenderindex': {'synced': chain.spender_index, 'best_block_height': 103}} if chain.spender_index is not None else {})
             if method == 'getrawtransaction':

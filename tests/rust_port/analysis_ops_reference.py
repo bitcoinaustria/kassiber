@@ -37,6 +37,8 @@ def main():
         if os.environ.get('KASSIBER_RUST_TEST_ANALYSIS_EPOCH'):
             epoch = int(os.environ['KASSIBER_RUST_TEST_ANALYSIS_EPOCH'])
             stack.enter_context(patch.object(backfill,'time',SimpleNamespace(time=lambda: epoch)))
+        from kassiber import daemon_chain_analysis_watches as watch_worker
+        stack.enter_context(patch.object(watch_worker,'now_iso',return_value=REFERENCE.NOW))
         if os.environ.get('KASSIBER_ANALYSIS_REFERENCE_NO_WATCH_WORKER') == '1':
             # Request/response parity only; the background tick has its own test.
             from kassiber import daemon

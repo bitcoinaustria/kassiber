@@ -63,7 +63,7 @@ BLOCKS = {'backend': 'core', 'network': 'main', 'mode': 'blocks', 'start_height'
 def grant_env(tmp_path, offline):
     env = OPS.product_env(tmp_path)
     env['KASSIBER_RUST_TEST_ANALYSIS_EPOCH'] = str(REFERENCE.EPOCH)
-    env['KASSIBER_ANALYSIS_REFERENCE_NO_WATCH_WORKER'] = '1'
+    env['KASSIBER_ANALYSIS_REFERENCE_NO_WATCH_WORKER'] = env['KASSIBER_RUST_TEST_NO_WATCH_WORKER'] = '1'
     if offline: (tmp_path/'offline.json').write_text(json.dumps({'schema_version': 1, 'enabled': True}))
     return env
 

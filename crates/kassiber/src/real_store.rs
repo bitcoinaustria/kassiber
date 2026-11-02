@@ -817,6 +817,17 @@ impl kassiber_wallets::publication::wallet::Sources for AnalysisSources {
         self.0.now()
     }
 }
+/// The background local-evidence pass on its own fenced connection.
+struct WatchWorker(kassiber_wallets::analysis_ops::LocalWorker);
+impl kassiber_runtime::store::WatchWorker for WatchWorker {
+    fn pass(&mut self, cancelled: &dyn Fn() -> bool) -> Result<Vec<String>, AppError> {
+        self.0.pass(cancelled)
+    }
+    fn delivered(&mut self, ids: &[String]) -> Result<(), AppError> {
+        self.0.delivered(ids)
+    }
+}
+
 /// The wall clock and a fresh, fail-closed read of the offline preference.
 struct AnalysisRuntime;
 impl kassiber_wallets::analysis_ops::Runtime for AnalysisRuntime {
@@ -1290,6 +1301,36 @@ impl Book for RealBook {
             },
             command,
         )
+    }
+    fn chain_analysis_watch_worker(
+        &mut self,
+    ) -> Result<Option<Box<dyn kassiber_runtime::store::WatchWorker>>, AppError> {
+        let conn = self.conn()?;
+        if !kassiber_wallets::analysis_ops::watch_worker_ready(conn) {
+            return Ok(None);
+        }
+        let identity = setting(conn, "database_instance_id")?.unwrap_or_default();
+        let root = self.data_root.clone();
+        let passphrase = self.db_passphrase.as_ref().map(|p| p.expose().to_owned());
+        let open: kassiber_wallets::analysis_ops::jobs::OpenWorker = Box::new(move || {
+            StoredBook::open(
+                Path::new(&root),
+                OpenOptions {
+                    passphrase: passphrase.as_deref(),
+                    expected_database_identity: Some(&identity),
+                    expected_project: None,
+                },
+            )
+            .map(|book| Box::new(book) as Box<dyn kassiber_wallets::analysis_ops::jobs::WorkerBook>)
+            .map_err(error)
+        });
+        Ok(Some(Box::new(WatchWorker(
+            kassiber_wallets::analysis_ops::LocalWorker::new(
+                open,
+                Box::new(AnalysisSources::default()),
+                Box::new(AnalysisRuntime),
+            ),
+        ))))
     }
     fn chain_analysis_datasets(
         &mut self,

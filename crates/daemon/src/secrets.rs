@@ -105,6 +105,7 @@ pub(super) fn handle(
     daemon.reap_freshness(true)?;
     // Authentication and owner validation precede connection retirement. A
     // failed close preserves the connection and its lease for a later retry.
+    daemon.stop_watch_worker(true)?;
     if let Some(mut book) = daemon.book.take() {
         if let Err(error) = book.close() {
             daemon.book = Some(book);

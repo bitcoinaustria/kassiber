@@ -1113,7 +1113,13 @@ local save. Redirects are refused and environment proxies are never read.
 Loopback fakes prove that native and Python send the same request sequence and
 that refused, stale or offline actions send nothing. See the
 [acquisition egress record](rust-port-egress.md#chain-analysis-acquisition-apply-r5).
-The recurring source runner is not yet native.
+The native daemon's background worker runs authorized recurring sources with
+a narrowly scoped grant bound to the saved Bitcoin Core route, only while the
+encrypted book is unlocked and offline mode is off. Each request first
+revalidates the lease, revision, expiry, book, domain and source fingerprint
+and durably reserves quota; revocation, lock, restore, passphrase rotation and
+shutdown stop it at the next request. See the
+[source runner record](rust-port-egress.md#chain-analysis-source-runner-r5).
 
 ## Native configuration privacy hygiene
 

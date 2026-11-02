@@ -842,3 +842,31 @@ mutations are killed. Known divergence, retained as a Python reference repro in
 transaction bytes raise a `RuntimeError` in embit, which escapes Python's
 frontier handling and aborts the whole acquisition; the native port records a
 `transaction_unavailable` frontier instead.
+
+## Chain-analysis source runner (R5)
+
+`analysis_ops::acquisition::runner` ports `chain_analysis_backfill.run` and
+`run_due`; `analysis_ops::worker_tick` and the daemon's `watches` thread port
+`daemon_chain_analysis_watches`. The worker starts after a request only for an
+unlocked keyed book, opens its own connection fenced to the database identity,
+and runs at most one due grant per profile and pass, then due watches. Offline
+mode pauses acquisition; local watch evaluation continues. A pass leases the
+grant for 90 seconds; every request settles the previous reservation, checks
+`KASSIBER_NO_EGRESS` and offline mode, revalidates the leased grant and reserves
+8 MiB of lifetime quota before transport, through a `narrowly_scoped` grant for
+the backend's exact route. Block ranges are parsed with the consensus decoder,
+checked against the header hash and merkle commitment, and stored as sanitized
+reference assertions; a changed cursor block withholds the source and rewinds
+one block per pass. The worker emits only the generic
+`ui.chain_analysis.watches.changed` event; inbox identities never leave the
+book. Lock, restore, passphrase rotation and shutdown stop it, waiting up to 10
+seconds for a bounded read.
+
+`tests/test_rust_analysis_watch_worker.py` runs both daemons against a loopback
+Bitcoin Core fake and compares events, request sequences and all 112 tables for
+watch evaluation, subject and block-range runs, and a reorg with resume. Rust
+unit tests with the `kassiber-net` loopback fake pin lease exclusion, quota
+reservation and refund, the lifetime quota pause, lease release and the offline
+pause; five named mutations are killed. Malformed block bytes that make embit
+raise outside Python's handled exception types abort the Python pass; the native
+runner records `invalid_observation` instead.

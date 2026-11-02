@@ -559,3 +559,8 @@ REVIEWS["tests/test_rust_analysis_dataset_jobs.py"] = {"*": {
     "disposition": "oracle", "group": "chain-sync",
     "reason": "compares the native dataset job starters and staged-token import on the shared analysis runtime with unchanged Python job_starter receipts, progress and all 112 tables over the same staged local file, checks cancellation leaves no active pack, and compares daemon refusals byte for byte with offline mode off/on",
 }}
+
+REVIEWS["tests/test_rust_analysis_watch_worker.py"] = {"*": {
+    "disposition": "oracle", "group": "chain-sync",
+    "reason": "runs the native and unchanged-Python daemon background workers on encrypted books and compares wake-up events, loopback Bitcoin Core request sequences and all 112 tables for watch evaluation, subject and block-range source runs, and a reorg with resume; a delivered event is not repeated",
+}}

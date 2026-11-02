@@ -185,7 +185,7 @@ def test_watch_product_cli_bytes_all_tables_and_zero_fallback(tmp_path, offline)
 def test_watch_product_daemon_bytes_and_all_tables(tmp_path, offline):
     if not os.environ.get('KASSIBER_RUST_BIN'): pytest.skip('requires kassiber test-harness build')
     env = OPS.product_env(tmp_path)
-    env['KASSIBER_ANALYSIS_REFERENCE_NO_WATCH_WORKER'] = '1'
+    env['KASSIBER_ANALYSIS_REFERENCE_NO_WATCH_WORKER'] = env['KASSIBER_RUST_TEST_NO_WATCH_WORKER'] = '1'
     if offline: env['KASSIBER_NO_EGRESS'] = '1'
     else: env.pop('KASSIBER_NO_EGRESS', None)
     roots = books(tmp_path)

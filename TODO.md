@@ -683,14 +683,16 @@ registers them; exit-tax preserves its reference no-registration boundary.
 - [x] Port the five chain-analysis `sources` commands and daemon kinds (plan,
   authorize, list, revoke, queue) with byte parity, all-112-table checks and
   named mutations; see the [source-grant checkpoint](docs/reference/rust-shell.md#chain-analysis-source-grants-r5-partial).
-- [ ] Finish the chain-analysis operations assignment: the background watch
-  tick, event delivery and authorized source runner (acquisition plan/apply,
-  dataset import and the daemon dataset job starters are ported;
-  see the [plan checkpoint](docs/reference/rust-shell.md#chain-analysis-acquisition-plans-r5-partial)
-  and [import checkpoint](docs/reference/rust-shell.md#chain-analysis-dataset-import-r5-partial)),
-  matching daemon kinds, dataset import/discard async starts and job cancel.
-  Preserve exact-action/once-only consent and source-revision fencing, gated
-  egress, offline refusals and revocation/cancellation with loopback tests.
+- [x] Port the chain-analysis operations assignment: watches, sources,
+  acquisition plan/apply, CLI and daemon dataset import with the import/discard
+  job starters, and the daemon background worker (source runner, watch tick and
+  event delivery); see the [plan checkpoint](docs/reference/rust-shell.md#chain-analysis-acquisition-plans-r5-partial),
+  [import checkpoint](docs/reference/rust-shell.md#chain-analysis-dataset-import-r5-partial)
+  and [source runner record](docs/reference/rust-port-egress.md#chain-analysis-source-runner-r5).
+- [x] Integrate the chain-analysis operations and reads branches (R10): keep one copy
+  of `analysis_index::runtime`, `reads/preview.rs` (plus `stream_claims`) and
+  the daemon runtime hunks, sort the combined chain-analysis kinds into one
+  block, and drop the `dataset_stream` shim.
 - [x] Port full-report, Austrian bundle and transaction CSV artifacts, saved
   export registration and their daemon kinds. Preserve
   sealed summaries, hashes and phase-4 append-only impact history.

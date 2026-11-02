@@ -15210,9 +15210,10 @@ case-based watches, foreign books, corrupt stored rows and caller rollback.
 `tests/test_rust_analysis_watches.py` replays them natively with strict
 no-consent guards and offline off/on, on SQLCipher DELETE and WAL disk books,
 and compares whole-process CLI and daemon bytes against unchanged Python on an
-encrypted book. The daemon reference disables Python's background watch worker;
-the native daemon has no worker yet, so the tick and its
-`ui.chain_analysis.watches.changed` delivery remain unported.
+encrypted book. These request/response sessions disable both daemons'
+background workers; `tests/test_rust_analysis_watch_worker.py` compares the
+worker's tick and `ui.chain_analysis.watches.changed` delivery separately (see
+the [source runner record](rust-port-egress.md#chain-analysis-source-runner-r5)).
 
 `tests/rust_port/repro_watch_acknowledge_transaction.py` records a Python
 reference quirk: acknowledging a missing inbox event leaves the driver's
@@ -15273,8 +15274,8 @@ CLI and corpus only.
 | `sources.run` | 6 | 4 |
 | **Total** | **30** | **18** |
 
-The background source runner that performs the authorized Bitcoin Core block
-and subject reads is not yet ported.
+The daemon's background worker performs the authorized Bitcoin Core block and
+subject reads; see the [source runner record](rust-port-egress.md#chain-analysis-source-runner-r5).
 
 ## Chain-analysis acquisition plans (R5, partial)
 

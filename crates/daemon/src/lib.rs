@@ -403,6 +403,8 @@ pub(crate) struct Daemon {
     backup_sessions: kassiber_backup::desktop::Sessions,
     /// Chain Analysis receipts and staged sources, cleared at book boundaries.
     analysis: Arc<kassiber_wallets::analysis_index::runtime::Runtime>,
+    /// The local-evidence worker (`daemon_chain_analysis_watches`).
+    watch_worker: Option<watches::Thread>,
 }
 
 impl Daemon {
@@ -425,6 +427,7 @@ impl Daemon {
             unlocked_passphrase: None,
             backup_sessions: Default::default(),
             analysis: Default::default(),
+            watch_worker: None,
         }
     }
 
@@ -582,6 +585,7 @@ impl Daemon {
                     return 1;
                 }
             }
+            self.start_watch_worker();
             if shutdown {
                 return 0;
             }
@@ -1218,6 +1222,7 @@ impl Daemon {
     /// passphrase.
     fn lock(&mut self) -> Result<(), AppError> {
         self.reap_freshness(true)?;
+        self.stop_watch_worker(true)?;
         self.analysis.clear();
         if let Some(mut book) = self.book.take() {
             if let Err(error) = book.close() {
@@ -1319,6 +1324,7 @@ impl Daemon {
     /// The `finally` of Python's `run`: forget the passphrase, close the
     /// book, and release ownership.
     fn shutdown_resources(&mut self) {
+        let _ = self.stop_watch_worker(false);
         self.analysis.clear();
         self.backup_sessions.clear();
         self.unlocked_passphrase = None;
@@ -1343,6 +1349,7 @@ mod offline;
 mod profiles;
 mod services;
 mod views;
+mod watches;
 mod workspaces;
 
 #[cfg(test)]

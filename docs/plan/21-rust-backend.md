@@ -4477,3 +4477,13 @@ progress and cancellation byte for byte. The daemon import and cleanup job
 starters run on the read branch's job and picker-token runtime, carried here
 unchanged; the integration steps are recorded in the
 [import checkpoint](../reference/rust-shell.md#chain-analysis-dataset-import-r5-partial).
+
+### R5 chain analysis: background worker
+
+The daemon's local-evidence worker runs natively: authorized source runs with
+durable quota, lease and revision fencing (subject and block-range modes with
+reorg handling), then due watch evaluation and the generic wake-up event. Both
+daemons' workers produce identical events, loopback request sequences and
+tables; see the [source runner record](../reference/rust-port-egress.md#chain-analysis-source-runner-r5).
+The operations assignment is complete apart from integration with the reads
+branch.

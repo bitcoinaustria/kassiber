@@ -478,5 +478,55 @@
       "analysis_dataset_jobs_match_python_receipts_and_tables"
     ],
     "rule": "The receipt records the normalized submitted manifest."
+  },
+  {
+    "id": "analysis-source-runner-lease",
+    "file": "crates/wallets/src/analysis_ops/acquisition/runner.rs",
+    "find": "        if truthy(field(&live, \"lease_token\")) && small(field(&live, \"lease_until\")) > now {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "source_runner_skips_a_leased_grant_and_pauses_offline"
+    ],
+    "rule": "A live lease keeps a second runner away."
+  },
+  {
+    "id": "analysis-source-runner-refund",
+    "file": "crates/wallets/src/analysis_ops/acquisition/runner.rs",
+    "find": "            let refund = (MAX_RESPONSE_BYTES - self.response_bytes).max(0);",
+    "replace": "            let refund = 0;",
+    "expect_failing": [
+      "source_runner_reserves_quota_settles_and_releases_its_lease"
+    ],
+    "rule": "Successful responses refund unused quota."
+  },
+  {
+    "id": "analysis-source-runner-quota",
+    "file": "crates/wallets/src/analysis_ops/acquisition/runner.rs",
+    "find": "                    > small(field(&spec, \"max_bytes\"))\n            {",
+    "replace": "                    > small(field(&spec, \"max_bytes\"))\n                && false\n            {",
+    "expect_failing": [
+      "source_runner_pauses_at_its_lifetime_quota"
+    ],
+    "rule": "Requests stop at the authorized lifetime quota."
+  },
+  {
+    "id": "analysis-source-runner-release",
+    "file": "crates/wallets/src/analysis_ops/acquisition/runner.rs",
+    "find": "next_run_at=?,lease_token=NULL,lease_until=NULL",
+    "replace": "next_run_at=?",
+    "expect_failing": [
+      "source_runner_reserves_quota_settles_and_releases_its_lease"
+    ],
+    "rule": "A finished pass releases its own lease."
+  },
+  {
+    "id": "analysis-worker-offline",
+    "file": "crates/wallets/src/analysis_ops.rs",
+    "find": "    let acquire = !runtime.offline();",
+    "replace": "    let acquire = true;",
+    "expect_failing": [
+      "source_runner_skips_a_leased_grant_and_pauses_offline"
+    ],
+    "rule": "Offline mode pauses authorized acquisition in the worker."
   }
 ]

@@ -198,6 +198,16 @@ pub struct ReviewedDocument<'a> {
 }
 
 /// An open, unlocked book.
+/// The daemon's background local-evidence pass
+/// (`daemon_chain_analysis_watches`): authorized source runs, then due watch
+/// evaluation, on the worker's own connection to the same book.
+pub trait WatchWorker: Send {
+    /// One `worker_tick`, then the undelivered inbox ids for a wake-up event.
+    fn pass(&mut self, cancelled: &dyn Fn() -> bool) -> Result<Vec<String>, AppError>;
+    /// The receipt after the event was written.
+    fn delivered(&mut self, ids: &[String]) -> Result<(), AppError>;
+}
+
 pub trait Book: Send {
     fn process_journals(
         &mut self,
@@ -218,6 +228,11 @@ pub trait Book: Send {
         _local: &mut kassiber_wallets::analysis_index::reads::Local,
     ) -> Result<Value, AppError> {
         Err(not_implemented("chain_analysis", operation))
+    }
+
+    /// A background worker for an encrypted book; plaintext books get none.
+    fn chain_analysis_watch_worker(&mut self) -> Result<Option<Box<dyn WatchWorker>>, AppError> {
+        Ok(None)
     }
 
     /// Daemon dataset import over a staged token, and the `.start` job forms

@@ -153,7 +153,7 @@ def test_dataset_job_corpus_frozen_python_receipts():
 def test_dataset_job_daemon_refusals_match_python(tmp_path, offline):
     if not os.environ.get('KASSIBER_RUST_BIN'): pytest.skip('requires kassiber test-harness build')
     env = OPS.product_env(tmp_path)
-    env['KASSIBER_ANALYSIS_REFERENCE_NO_WATCH_WORKER'] = '1'
+    env['KASSIBER_ANALYSIS_REFERENCE_NO_WATCH_WORKER'] = env['KASSIBER_RUST_TEST_NO_WATCH_WORKER'] = '1'
     if offline: env['KASSIBER_NO_EGRESS'] = '1'
     else: env.pop('KASSIBER_NO_EGRESS', None)
     roots = WATCHES.books(tmp_path, REFERENCE_PACKS)
