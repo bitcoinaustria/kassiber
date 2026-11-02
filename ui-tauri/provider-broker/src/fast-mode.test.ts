@@ -91,6 +91,8 @@ describe("Codex fast tier", () => {
     rejectTurnStart?: string;
     /** Run the provider status check instead of a chat turn. */
     status?: boolean;
+    notifications?: Array<Record<string, unknown>>;
+    completion?: { status: string; error?: unknown };
   };
 
   const CATALOG = [
@@ -141,7 +143,10 @@ createInterface({input:process.stdin}).on('line',line=>{
       : { userAgent: `kassiber/${fixture.version ?? "0.160.0"} (Linux 6.0; x86_64) xterm` },
   )}:{};
  console.log(JSON.stringify({id:m.id,result}));
- if(m.method==='turn/start') console.log(JSON.stringify({method:'turn/completed',params:{turn:{status:'completed'}}}));
+ if(m.method==='turn/start') {
+  for(const notification of ${JSON.stringify(fixture.notifications ?? [])}) console.log(JSON.stringify(notification));
+  console.log(JSON.stringify({method:'turn/completed',params:{turn:${JSON.stringify(fixture.completion ?? { status: "completed" })}}}));
+ }
 });
 `,
     );
@@ -180,6 +185,7 @@ createInterface({input:process.stdin}).on('line',line=>{
         methods: wire.map((message) => message.method),
         unavailable: events.filter((event) => event.phase === "fast_mode_unavailable").length,
         sessionId: events.find((event) => event.type === "done")?.provider_session_id,
+        events,
       };
     } finally {
       output.mockRestore();
@@ -189,6 +195,42 @@ createInterface({input:process.stdin}).on('line',line=>{
   }
 
   const posix = process.platform !== "win32";
+
+  it.runIf(posix)("lets Codex recover from retryable provider errors", async () => {
+    const turn = await codexTurn({ notifications: [
+      { method: "error", params: { threadId: "fixture", willRetry: true,
+        error: { codexErrorInfo: "internalServerError", message: "private provider detail" } } },
+      { method: "item/agentMessage/delta", params: { itemId: "reply", delta: "Recovered" } },
+    ] });
+    expect(turn.error).toBeUndefined();
+    expect(turn.events).toContainEqual({ type: "status", phase: "retrying", message: "Codex is retrying the request." });
+    expect(turn.events).toContainEqual({ type: "delta", content: "Recovered" });
+    expect(turn.sessionId).toBeTruthy();
+    expect(JSON.stringify(turn.events)).not.toContain("private provider detail");
+  });
+
+  it.runIf(posix).each([
+    ["unauthorized", "Codex requires authentication. Run `codex login` outside Kassiber."],
+    ["usageLimitExceeded", "Codex reported that the account's usage limit was reached."],
+    ["badRequest", "Codex rejected the request. Check the selected model and reasoning level."],
+    [{ httpConnectionFailed: { httpStatusCode: 503 } }, "Codex could not connect to the provider (HTTP 503)."],
+    ["token=private-unknown-value", "Codex reported a provider error."],
+  ])("describes terminal Codex failures safely (%j)", async (codexErrorInfo, expected) => {
+    const error = { codexErrorInfo, message: "private prompt and credential", additionalDetails: "secret" };
+    const turn = await codexTurn({ notifications: [
+      { method: "error", params: { threadId: "fixture", willRetry: false, error } },
+    ], completion: { status: "failed", error } });
+    expect(String(turn.error)).toBe(`Error: ${expected}`);
+    expect(turn.sessionId).toBeUndefined();
+  });
+
+  it.runIf(posix)("describes a failed completed turn even without an error notification", async () => {
+    const turn = await codexTurn({ completion: {
+      status: "failed", error: { codexErrorInfo: "contextWindowExceeded", message: "private prompt" },
+    } });
+    expect(String(turn.error)).toBe("Error: Codex reached the context limit. Start a new chat.");
+    expect(turn.sessionId).toBeUndefined();
+  });
 
   it("reads per-turn tier support from the app-server's version", () => {
     for (const agent of [
