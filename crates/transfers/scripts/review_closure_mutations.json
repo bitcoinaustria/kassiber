@@ -32,7 +32,7 @@
   {
     "id": "RVC-fusion-bytes",
     "file": "crates/journals/src/compute.rs",
-    "find": "    let projection =\n        kassiber_custody::journal_support::exact_operand(projection).map_err(|message| {\n            Refusal {\n                stage: \"fusion\",\n                code: \"ValueError\".into(),\n                message,\n            }\n        })?;\n",
+    "find": "    let projection =\n        kassiber_custody::journal_support::exact_operand(projection).map_err(|message| {\n            Refusal {\n                stage: \"fusion\",\n                code: \"ValueError\".into(),\n                message,\n                hint: None,\n                details: Value::Null,\n            }\n        })?;\n",
     "replace": "    let text = kassiber_pyjson::dumps(projection, &kassiber_pyjson::Options::new()).unwrap();\n    let projection = codec::to_json(&codec::loads(&text).unwrap());\n",
     "expect_failing": [
       "fusion_preserves_unused_bytes_and_refuses_lossy_scalars_without_panicking"
@@ -114,7 +114,7 @@
   },
   {
     "id": "RVC-metadata-reason-identity",
-    "file": "crates/transfers/src/review_simulation.rs",
+    "file": "crates/journals/src/review_simulation.rs",
     "find": "Some(Value::Str(reason)) => Some(reason.clone()),",
     "replace": "Some(Value::Str(reason)) => Some(kassiber_envelope::py_str(&Value::Str(reason.clone())).into()),",
     "expect_failing": [
@@ -175,8 +175,8 @@
   {
     "id": "RVC-stored-bytes",
     "file": "crates/journals/src/persistence.rs",
-    "find": "Ok(kassiber_pyjson::Value::Bytes(bytes)) => Sql::Blob(bytes),",
-    "replace": "Ok(kassiber_pyjson::Value::Bytes(_)) => return Err(Refusal::new(\"ProgrammingError\", \"unsupported SQLite binding\")),",
+    "find": "    if let Some(bytes) = kassiber_custody::codec::raw_bytes(v) {\n        return Ok(Sql::Blob(bytes));\n    }\n",
+    "replace": "    if kassiber_custody::codec::raw_bytes(v).is_some() {\n        return Err(Refusal::new(\"ProgrammingError\", \"unsupported SQLite binding\"));\n    }\n",
     "expect_failing": [
       "review_apply_preserves_raw_loader_storage_classes_and_receipts"
     ],

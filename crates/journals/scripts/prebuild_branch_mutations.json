@@ -142,8 +142,8 @@
   {
     "id": "JA-sqlite-family",
     "file": "crates/journals/src/persistence.rs",
-    "find": "rusqlite::ErrorCode::ConstraintViolation => \"IntegrityError\",",
-    "replace": "rusqlite::ErrorCode::ConstraintViolation => \"DatabaseError\",",
+    "find": "ffi::SQLITE_CONSTRAINT | ffi::SQLITE_MISMATCH => \"IntegrityError\",",
+    "replace": "ffi::SQLITE_CONSTRAINT | ffi::SQLITE_MISMATCH => \"DatabaseError\",",
     "expect_failing": [
       "prebuild_sqlite_refusals_retain_python_families",
       "prebuild_sources_late_sql_refusal_restores_all_tables"

@@ -12,7 +12,7 @@
   {
     "id": "RVE-entry-scale",
     "file": "crates/journals/src/review_effects.rs",
-    "find": "(\"quantity\", s(row.quantity.0.to_string()))",
+    "find": "(\"quantity\", s(row.quantity.to_string()))",
     "replace": "(\"quantity\", s(\"0\"))",
     "expect_failing": [
       "review_effects_bind_full_output_before_bounding_and_preserve_exact_scalars"

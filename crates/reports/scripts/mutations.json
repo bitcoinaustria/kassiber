@@ -7253,8 +7253,8 @@
   {
     "id": "cross-cli-scope",
     "file": "crates/cli/src/reports.rs",
-    "find": "(k, args.get(k).cloned().unwrap_or(Value::Null))",
-    "replace": "(k, Value::Null)",
+    "find": "            \"xlsx\",\n        ]\n        .map(|k| (k, args.get(k).cloned().unwrap_or(Value::Null))),",
+    "replace": "            \"xlsx\",\n        ]\n        .map(|k| (k, Value::Null)),",
     "expect_failing": [
       "cross_check_cli_forwards_filters_files_and_native_registration"
     ],
@@ -7273,8 +7273,8 @@
   {
     "id": "cross-daemon-registration",
     "file": "crates/daemon/src/reports.rs",
-    "find": "    \"ui.reports.export_cross_check\",\n    \"ui.source_funds.cases.list\",",
-    "replace": "    \"ui.source_funds.cases.list\",",
+    "find": "    \"ui.reports.export_cross_check\",\n    \"ui.source_funds.preview\",",
+    "replace": "    \"ui.source_funds.preview\",",
     "expect_failing": [
       "cross_check_daemon_preserves_uploaded_bytes_and_registration"
     ],
@@ -10594,8 +10594,8 @@
   {
     "id": "sof-link-daemon-registration",
     "file": "crates/daemon/src/reports.rs",
-    "find": "    \"ui.source_funds.links.review\",\n    \"ui.source_funds.links.attach\",",
-    "replace": "    \"ui.source_funds.links.review\",",
+    "find": "    \"ui.source_funds.links.bulk_review\",\n    \"ui.source_funds.links.attach\",",
+    "replace": "    \"ui.source_funds.links.bulk_review\",",
     "expect_failing": [
       "source_funds_link_daemon_preserves_arguments_and_registers_mutations"
     ],
@@ -10604,8 +10604,8 @@
   {
     "id": "sof-diagnostic-omit-native-debug",
     "file": "crates/daemon/src/lib.rs",
-    "find": "if error.code == \"internal_error\"\n        && matches!",
-    "replace": "if false\n        && matches!",
+    "find": "if error.code == \"internal_error\"\n        && kind.is_some_and(",
+    "replace": "if false\n        && kind.is_some_and(",
     "expect_failing": [
       "source_funds_errors_preserve_non_debug_fields_and_empty_native_debug"
     ],
@@ -10614,8 +10614,8 @@
   {
     "id": "sof-diagnostic-typed-errors",
     "file": "crates/daemon/src/lib.rs",
-    "find": "if error.code == \"internal_error\"\n        && matches!",
-    "replace": "if true\n        && matches!",
+    "find": "if error.code == \"internal_error\"\n        && kind.is_some_and(",
+    "replace": "if true\n        && kind.is_some_and(",
     "expect_failing": [
       "source_funds_debug_never_crosses_typed_errors_or_unregistered_kinds"
     ],
@@ -10664,8 +10664,8 @@
   {
     "id": "sof-diagnostic-redaction",
     "file": "crates/daemon/src/lib.rs",
-    "find": "let mut envelope = app_error_envelope(error, &RequestId::or_null(request));",
-    "replace": "let mut envelope = with_request_id(error.envelope(None), &RequestId::or_null(request));",
+    "find": "    app_error_envelope(error, &RequestId::or_null(request), kind)\n",
+    "replace": "    let _ = kind;\n    with_request_id(error.envelope(Some(\"\")), &RequestId::or_null(request))\n",
     "expect_failing": [
       "source_funds_failure_dispatch_redacts_and_rolls_back_before_reply"
     ],
@@ -11564,8 +11564,8 @@
   {
     "id": "sof-producer-daemon-registration",
     "file": "crates/daemon/src/reports.rs",
-    "find": "    \"ui.source_funds.preview\",\n    \"ui.source_funds.links.list\",",
-    "replace": "    \"ui.source_funds.links.list\",",
+    "find": "    \"ui.source_funds.preview\",\n    \"ui.source_funds.review_context\",",
+    "replace": "    \"ui.source_funds.review_context\",",
     "expect_failing": [
       "source_funds_stored_daemon_preserves_arguments_and_registers_only_lists"
     ],
@@ -11864,8 +11864,8 @@
   {
     "id": "sof-save-daemon-registration",
     "file": "crates/daemon/src/reports.rs",
-    "find": "    \"ui.source_funds.cases.save\",\n    \"ui.source_funds.review_context\",\n    \"ui.source_funds.request_input\",\n    \"ui.source_funds.coverage\",\n    \"ui.source_funds.suggest\",\n    \"ui.source_funds.assemble\",\n];",
-    "replace": "    \"ui.source_funds.review_context\",\n    \"ui.source_funds.request_input\",\n    \"ui.source_funds.coverage\",\n    \"ui.source_funds.suggest\",\n    \"ui.source_funds.assemble\",\n];",
+    "find": "    \"ui.source_funds.request_input\",\n    \"ui.source_funds.cases.save\",",
+    "replace": "    \"ui.source_funds.request_input\",",
     "expect_failing": [
       "source_funds_case_save_daemon_preserves_recipe_fingerprint_and_registration"
     ],
@@ -11874,8 +11874,8 @@
   {
     "id": "sof-save-context-registration",
     "file": "crates/daemon/src/reports.rs",
-    "find": "    \"ui.source_funds.cases.save\",\n    \"ui.source_funds.review_context\",\n    \"ui.source_funds.request_input\",\n    \"ui.source_funds.coverage\",\n    \"ui.source_funds.suggest\",\n    \"ui.source_funds.assemble\",\n];",
-    "replace": "    \"ui.source_funds.cases.save\",\n    \"ui.source_funds.request_input\",\n    \"ui.source_funds.coverage\",\n    \"ui.source_funds.suggest\",\n    \"ui.source_funds.assemble\",\n];",
+    "find": "    \"ui.source_funds.preview\",\n    \"ui.source_funds.review_context\",\n    \"ui.source_funds.request_input\",",
+    "replace": "    \"ui.source_funds.preview\",\n    \"ui.source_funds.request_input\",",
     "expect_failing": [
       "source_funds_stored_daemon_preserves_arguments_and_registers_only_lists"
     ],
@@ -11892,47 +11892,7 @@
     "rule": "The native inspection surface retains the strict daemon recipe allowlist."
   },
   {
-    "id": "sof-debug-presence",
-    "file": "crates/daemon/src/lib.rs",
-    "find": "kassiber_envelope::set(&mut fields, \"debug\", s(\"\"));",
-    "replace": "kassiber_envelope::set(&mut fields, \"debug\", Value::Null);",
-    "expect_failing": [
-      "source_funds_internal_diagnostics_preserve_native_debug_presence_and_redaction"
-    ],
-    "rule": "Unhandled source-funds errors include an honest empty native debug string instead of a missing traceback field."
-  },
-  {
-    "id": "sof-debug-internal-only",
-    "file": "crates/daemon/src/lib.rs",
-    "find": "if error.code == \"internal_error\"",
-    "replace": "if true",
-    "expect_failing": [
-      "source_funds_internal_diagnostics_preserve_native_debug_presence_and_redaction"
-    ],
-    "rule": "Typed source-funds refusals keep null debug while uncaught reference failures include native debug."
-  },
-  {
-    "id": "sof-debug-family-boundary",
-    "file": "crates/daemon/src/lib.rs",
-    "find": "kind.starts_with(\"ui.source_funds.\") && reports::KINDS.contains(&kind)",
-    "replace": "kind.starts_with(\"ui.\") && reports::KINDS.contains(&kind)",
-    "expect_failing": [
-      "source_funds_internal_diagnostics_preserve_native_debug_presence_and_redaction"
-    ],
-    "rule": "The source-funds diagnostic contract does not alter unrelated report kinds."
-  },
-  {
-    "id": "sof-debug-registered-only",
-    "file": "crates/daemon/src/lib.rs",
-    "find": "kind.starts_with(\"ui.source_funds.\") && reports::KINDS.contains(&kind)",
-    "replace": "kind.starts_with(\"ui.source_funds.\")",
-    "expect_failing": [
-      "source_funds_internal_diagnostics_preserve_native_debug_presence_and_redaction"
-    ],
-    "rule": "Only admitted native source-funds routes receive the native internal-failure diagnostic contract."
-  },
-  {
-    "id": "sof-debug-normalization-scope",
+    "id": "sof-debug-normalization-scope-wire",
     "file": "tests/test_rust_source_funds_diagnostics.py",
     "find": "        assert native_line == encode(e), (a, e)",
     "replace": "        assert native_line == native_line, (a, e)",
@@ -12534,8 +12494,8 @@
   {
     "id": "sof-coverage-daemon-registration",
     "file": "crates/daemon/src/reports.rs",
-    "find": "    \"ui.source_funds.request_input\",\n    \"ui.source_funds.coverage\",\n    \"ui.source_funds.suggest\",\n    \"ui.source_funds.assemble\",\n];",
-    "replace": "    \"ui.source_funds.request_input\",\n    \"ui.source_funds.suggest\",\n    \"ui.source_funds.assemble\",\n];",
+    "find": "    \"ui.source_funds.evidence.list\",\n    \"ui.source_funds.coverage\",",
+    "replace": "    \"ui.source_funds.evidence.list\",",
     "expect_failing": [
       "source_funds_stored_daemon_preserves_arguments_and_registers_only_lists"
     ],
@@ -13065,8 +13025,8 @@
   {
     "id": "sof-pass-daemon-suggest",
     "file": "crates/daemon/src/reports.rs",
-    "find": "    \"ui.source_funds.coverage\",\n    \"ui.source_funds.suggest\",\n    \"ui.source_funds.assemble\",\n];",
-    "replace": "    \"ui.source_funds.coverage\",\n    \"ui.source_funds.assemble\",\n];",
+    "find": "    \"ui.source_funds.links.attach\",\n    \"ui.source_funds.suggest\",",
+    "replace": "    \"ui.source_funds.links.attach\",",
     "expect_failing": [
       "source_funds_stored_daemon_preserves_arguments_and_registers_only_lists"
     ],
@@ -13075,8 +13035,8 @@
   {
     "id": "sof-pass-daemon-assemble",
     "file": "crates/daemon/src/reports.rs",
-    "find": "    \"ui.source_funds.coverage\",\n    \"ui.source_funds.suggest\",\n    \"ui.source_funds.assemble\",\n];",
-    "replace": "    \"ui.source_funds.coverage\",\n    \"ui.source_funds.suggest\",\n];",
+    "find": "    \"ui.source_funds.suggest\",\n    \"ui.source_funds.assemble\",",
+    "replace": "    \"ui.source_funds.suggest\",",
     "expect_failing": [
       "source_funds_stored_daemon_preserves_arguments_and_registers_only_lists"
     ],

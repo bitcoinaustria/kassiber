@@ -2075,8 +2075,8 @@
   {
     "id": "gap-current-journal",
     "file": "crates/transfers/src/gap_candidates.rs",
-    "find": "let current = count > 0",
-    "replace": "let current = false && count > 0",
+    "find": "    ) && count > 0\n        && truthy(&value(&profile, \"last_processed_at\"))",
+    "replace": "    ) && false && count > 0\n        && truthy(&value(&profile, \"last_processed_at\"))",
     "expect_failing": [
       "gap_reviews_match_python_complete_database_rows_and_refusals"
     ],

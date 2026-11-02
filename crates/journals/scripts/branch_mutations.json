@@ -262,7 +262,7 @@
   {
     "id": "JRB-graph-scope-refusal",
     "file": "crates/journals/src/boundary/joins.rs",
-    "find": "graph_refusal(error, graph::scope_error_operand(parsed, &c[\"owned_index\"]))",
+    "find": "graph_refusal(error, graph::scope_error_operand(parsed, c.owned_index))",
     "replace": "Refusal::from(error)",
     "expect_failing": [
       "graph_scopes_owners_and_tolerances_match_python"

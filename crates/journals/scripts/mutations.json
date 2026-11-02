@@ -1582,8 +1582,8 @@
   {
     "id": "JP-typed-quantity",
     "file": "crates/journals/src/storage/calculation.rs",
-    "find": "if !exact_integer_text(\n            &fragment.quantity_msat.value(),\n            Some(&fragment.quantity_msat_exact),\n        )",
-    "replace": "if false && !exact_integer_text(\n            &fragment.quantity_msat.value(),\n            Some(&fragment.quantity_msat_exact),\n        )",
+    "find": "if !exact_integer_text(&fragment.quantity_msat, Some(&fragment.quantity_msat_exact)) {",
+    "replace": "if false && !exact_integer_text(&fragment.quantity_msat, Some(&fragment.quantity_msat_exact)) {",
     "expect_failing": [
       "typed_calculations_preserve_compact_bytes_and_all_dynamic_fallbacks"
     ],
@@ -3292,8 +3292,8 @@
   {
     "id": "JP-compare-direct-lot",
     "file": "crates/journals/src/storage/calculation/compare.rs",
-    "find": "                && fragment.lot.as_ref().is_none_or(valid_source)",
-    "replace": "                && true",
+    "find": "                    .is_none_or(|source| valid_source(source))",
+    "replace": "                    .is_none_or(|_| true)",
     "expect_failing": [
       "comparison_dispatch_and_refusals_preserve_exact_storage_bytes"
     ],
@@ -3332,7 +3332,7 @@
   {
     "id": "JP-compare-equal-crypto-fee",
     "file": "crates/journals/src/storage/calculation/compare.rs",
-    "find": "integer(&a.crypto_fee_msat) == integer(&b.crypto_fee_msat)",
+    "find": "integer_equal(&a.crypto_fee_msat, &b.crypto_fee_msat)",
     "replace": "true",
     "expect_failing": [
       "comparison_source_dictionary_retains_every_field_and_cache_identity"
@@ -3372,7 +3372,7 @@
   {
     "id": "JP-compare-equal-pricing",
     "file": "crates/journals/src/storage/calculation/compare.rs",
-    "find": "a.provenance.pricing.0 == b.provenance.pricing.0",
+    "find": "a.provenance.pricing.iter().eq(b.provenance.pricing.iter())",
     "replace": "true",
     "expect_failing": [
       "comparison_source_dictionary_retains_every_field_and_cache_identity"
@@ -3518,16 +3518,6 @@
       "physical_savepoint_driver_failures_require_whole_caller_rollback"
     ],
     "rule": "Savepoint driver failures propagate before the caller can publish success."
-  },
-  {
-    "id": "JP-compare-equal-zero",
-    "file": "crates/journals/src/storage/calculation/compare.rs",
-    "find": "        if s == \"-0\" {\n            \"0\"\n        } else {\n            s\n        }",
-    "replace": "        s",
-    "expect_failing": [
-      "comparison_scalars_refuse_noncanonical_tokens"
-    ],
-    "rule": "Source equality canonicalizes raw negative integer zero before deduplication."
   },
   {
     "id": "JP-quantity-key-fallback",
@@ -4032,8 +4022,8 @@
   {
     "id": "JP-typed-optional-some",
     "file": "crates/journals/src/storage/calculation.rs",
-    "find": "dumps_str_into(value, options, out);",
-    "replace": "out.push_str(value);",
+    "find": "dumps_str_into(value.as_ref(), options, out);",
+    "replace": "out.push_str(value.as_ref());",
     "expect_failing": [
       "typed_scalar_encoding_preserves_tokens_and_refuses_noncompact_values"
     ],
@@ -4512,8 +4502,8 @@
   {
     "id": "JP-delta-insert-changed",
     "file": "crates/journals/src/storage.rs",
-    "find": "        if changed[index] {\n            insert.execute(params_from_iter(",
-    "replace": "        if true {\n            insert.execute(params_from_iter(",
+    "find": "        if changed[index] {\n            for (index, prior) in bound.iter_mut().enumerate() {",
+    "replace": "        if true {\n            for (index, prior) in bound.iter_mut().enumerate() {",
     "expect_failing": [
       "posting_deltas_reject_duplicates_and_keep_unchanged_rows"
     ],

@@ -3100,26 +3100,6 @@
     "rule": "Mixed revision references carry the validation code rather than an internal failure."
   },
   {
-    "id": "JL-review-strict-admission",
-    "file": "crates/journals/src/pipeline.rs",
-    "find": "        snapshot.validate().map_err(strict_error)?;",
-    "replace": "",
-    "expect_failing": [
-      "review_assembler_retains_strict_admission_and_refusal_ownership"
-    ],
-    "rule": "The unported review assembler retains strict typed admission until its separate lossless parity closure."
-  },
-  {
-    "id": "JL-review-strict-refusal",
-    "file": "crates/journals/src/pipeline.rs",
-    "find": "let strict_error = |message| load_error(loader::Error::Invalid(message));",
-    "replace": "let strict_error = |message| Refusal::new(\"ValueError\", message);",
-    "expect_failing": [
-      "review_assembler_retains_strict_admission_and_refusal_ownership"
-    ],
-    "rule": "Strict review admission keeps its inherited bounded refusal instead of exposing typed parsing details."
-  },
-  {
     "id": "JL-review-raw-admission",
     "file": "crates/journals/src/pipeline.rs",
     "find": "Self::from_computed(crate::compute_loaded(snapshot, true).map_err(stage_error)?)",

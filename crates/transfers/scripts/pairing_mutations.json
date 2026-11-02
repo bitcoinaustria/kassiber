@@ -332,7 +332,7 @@
   {
     "id": "pairing-nonfinite-event-id",
     "file": "crates/custody/src/evidence.rs",
-    "find": "pub fn event_key(row: &Value) -> Result<EventKey, Error> {\n    let raw = crate::graph::transfer_object(&row[\"raw_json\"]);",
+    "find": "pub fn event_key(row: &Value) -> Result<EventKey, Error> {\n    let raw = crate::graph::transfer_object_ref(&row[\"raw_json\"]);",
     "replace": "pub fn event_key(row: &Value) -> Result<EventKey, Error> {\n    let raw = codec::object(&row[\"raw_json\"]);",
     "expect_failing": [
       "pairing_services_match_python_seeded_complete_database_rows_and_ordered_results"

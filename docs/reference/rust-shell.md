@@ -12828,6 +12828,7 @@ remain required. Node-snapshot/backend-test routes and AI projections retain
 their separately scoped deferrals.
 
 > Inherited from `t3code/r4-15-journal-refresh@dfeaf1533`; pending r10 verification.
+
 ## Journal freshness integration (R4-15)
 
 The [R4-15 checkpoint](r4-journal-freshness-checkpoint.md) now connects that
@@ -12853,6 +12854,7 @@ trips with zero served-shape fallbacks. Eleven touched mutations are killed;
 formatting, production/harness clippy and all 57 required preflight checks pass.
 The inventory records 5,979 definitions. The checkpoint above records the
 refusal census, encrypted replay/cancellation proof and the unrun broader gates.
+
 ### Document CLI review checkpoint (R5, partial)
 
 The CLI review adapter renders the visible accounting fields, source page,
@@ -12931,6 +12933,7 @@ The required classifier update inventories 5,752 Python tests, and
 `python_test_shards.py run preflight --ci` passes all 57 tests. The separately
 owned 58 loopback sandbox tests and the full workspace/frontend quality gate
 were not run in this local continuation.
+
 ## Source-funds producer integration on the mutation line (R5 partial)
 
 `t3code/r5-sof-mutations-4` integrates the missing disclosure prerequisite
@@ -13151,6 +13154,7 @@ The implementation is committed locally as `5b1cbeaa8`; the final ownership and
 backlog update records the same verified scope. This is Linux service and
 transport verification, without full workspace, frontend, live-regtest or
 platform/package acceptance. No push or pull request is part of this boundary.
+
 ## Lightning shared service foundation (R5 continuation)
 
 `t3code/r5-reports-lightning-5` starts at `d1178136a`. Its first boundary
@@ -13860,6 +13864,7 @@ Payjoin verification and conditional entropy transports, Mirror delivery and
 legacy scorer are separate work. AI dispatch, schema, dependencies, lockfiles,
 spending-key authority, signing and broadcasting remain unchanged. No push, PR
 or remote comment is made.
+
 ## Legacy hygiene scorer prerequisite (R5 privacy legacy, partial)
 
 `t3code/r5-privacy-legacy-scorer` starts at `a731608b1`. The native
@@ -14665,6 +14670,7 @@ The current transport registration lists still exclude Mirror and product
 served-by counts remain zero. Unsupported product entry points fail closed.
 There are no dependency, lockfile, schema or egress-permission changes. Full
 workspace, frontend and platform gates are not claimed.
+
 ## Mirror durable triggers and contributions (R5, partial)
 
 `t3code/r5-privacy-mirror-5a` starts at `f40ca3663`.

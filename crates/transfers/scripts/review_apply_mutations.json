@@ -42,7 +42,7 @@
   {
     "id": "RVA-version",
     "file": "crates/journals/src/review_apply.rs",
-    "find": "        review_support::require_input_version(\n            conn,\n            scope,\n            &value(artifact, \"base_input_version\"),\n        )?;",
+    "find": "        review_support::require_input_version(conn, scope, &value(artifact, \"base_input_version\"))?;\n",
     "replace": "",
     "expect_failing": [
       "review_apply_admission_and_version_checks_precede_domain_writes"
