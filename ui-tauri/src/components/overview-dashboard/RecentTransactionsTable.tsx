@@ -22,6 +22,7 @@ import {
   formatSignedDisplayMoney,
   overviewFlowLabelKeys,
   overviewFlowStyles,
+  rowsThatFit,
   statusLabelKeys,
   statusStyles,
   transactionBtc,
@@ -42,6 +43,7 @@ export const RecentTransactionsTable = ({
   showAllLabel,
   showAllTo = "/transactions",
   onOpenTransaction,
+  limit,
 }: {
   className?: string;
   title?: string;
@@ -53,6 +55,12 @@ export const RecentTransactionsTable = ({
   showAllLabel?: string;
   showAllTo?: "/transactions" | null;
   onOpenTransaction?: (transaction: Transaction) => void;
+  /**
+   * Show only this many, with no scrolling inside the card: the card fills
+   * the height it is given and Show all opens the rest. Without it the list
+   * scrolls and loads more as it nears its end.
+   */
+  limit?: number;
 }) => {
   const { t } = useTranslation("overview");
   const { t: tTransactions } = useTranslation("transactions");
@@ -60,9 +68,38 @@ export const RecentTransactionsTable = ({
   const resolvedShowAllLabel = showAllLabel ?? t("recentTx.showAll");
   const [visibleCount, setVisibleCount] = React.useState(RECENT_TX_REVEAL_STEP);
 
+  // With a limit, and while the card takes its height from around it (laid
+  // absolutely beside the chart), the rows that fit: whole rows only, so
+  // none shows cut off at the bottom. Otherwise all `limit` rows.
+  const listRef = React.useRef<HTMLDivElement>(null);
+  const [fits, setFits] = React.useState<number | null>(null);
+  React.useLayoutEffect(() => {
+    const list = listRef.current;
+    if (!limit || !list || typeof ResizeObserver === "undefined") return;
+    const measure = () => {
+      const card = list.parentElement;
+      const sized = card ? getComputedStyle(card).position === "absolute" : false;
+      // A row below the first carries the divider, so it is the full step.
+      // Fractional heights: rounded ones add up to a cut-off last row.
+      const rows = list.querySelectorAll<HTMLElement>("[data-recent-row]");
+      const rowStep = rows[1]
+        ? rows[1].getBoundingClientRect().height
+        : rows[0]
+          ? rows[0].getBoundingClientRect().height + 1
+          : 0;
+      setFits(sized ? rowsThatFit(list.getBoundingClientRect().height, rowStep) : null);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(list);
+    if (list.parentElement) observer.observe(list.parentElement);
+    return () => observer.disconnect();
+    // Read again when the list changes: in a sized card new rows do not
+    // resize anything the observer watches.
+  }, [limit, transactions]);
   const visibleTransactions = React.useMemo(
-    () => transactions.slice(0, visibleCount),
-    [transactions, visibleCount],
+    () => transactions.slice(0, limit ? Math.min(limit, fits ?? limit) : visibleCount),
+    [fits, limit, transactions, visibleCount],
   );
 
   React.useEffect(() => {
@@ -88,7 +125,7 @@ export const RecentTransactionsTable = ({
 
   return (
     <>
-      <div className={cn("kb-surface overflow-hidden", className)}>
+      <div className={cn("kb-surface flex flex-col overflow-hidden", className)}>
       <div className="flex items-center justify-between gap-3 border-b px-3 py-2.5 sm:px-4">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium">
@@ -107,8 +144,9 @@ export const RecentTransactionsTable = ({
       </div>
 
       <div
-        className="max-h-[340px] min-h-0 overflow-auto"
-        onScroll={handleScroll}
+        ref={listRef}
+        className={limit ? "min-h-0 flex-1 overflow-hidden" : "max-h-[340px] min-h-0 overflow-auto"}
+        onScroll={limit ? undefined : handleScroll}
       >
         {visibleTransactions.length === 0 ? (
           <div className="m-3 flex h-24 items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground sm:m-4">
@@ -154,58 +192,59 @@ export const RecentTransactionsTable = ({
                 ? transactionTypeLabel(tTransactions, tx.tags[0])
                 : flowLabel;
               const extraTags = Math.max(0, tx.tags.length - 1);
+              // The status only when it asks for something, and never twice:
+              // a row tagged Review keeps the Review chip and names its
+              // direction instead of the tag.
+              const statusLabel = t(statusLabelKeys[tx.status]);
+              const showStatus = tx.status !== "confirmed";
+              const tagIsStatus =
+                showStatus &&
+                (tx.tags[0]?.toLowerCase() === tx.status ||
+                  statusLabel.toLowerCase() === primaryTag.toLowerCase());
+              const typeLabel = tagIsStatus ? flowLabel : primaryTag;
               const rowClassName =
-                "group flex min-w-0 items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-4";
+                "group flex min-w-0 items-center gap-2.5 px-3 py-1.5 text-left transition-colors hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:px-4";
               const rowContent = (
                 <>
                   <span
                     className={cn(
-                      "flex size-8 shrink-0 items-center justify-center rounded-md",
-                      "border",
+                      "flex size-6 shrink-0 items-center justify-center rounded-md border",
                       overviewFlowStyles[flow],
                     )}
                     aria-hidden="true"
                   >
-                    <FlowIcon className="size-4" />
+                    <FlowIcon className="size-3.5" />
                   </span>
-                  <span className="min-w-0 flex-1">
+                  <span className="min-w-0 flex-1 leading-tight">
                     <span
                       className={cn(
-                        "block truncate text-sm font-medium text-foreground",
+                        "block truncate text-[13px] font-medium text-foreground",
                         blurClass(hideSensitive),
                       )}
                     >
                       {tx.counterparty || tx.txid}
                     </span>
-                    <span className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
-                      <span
-                        className={cn(
-                          "inline-flex items-center rounded-md px-1.5 py-0.5 text-2xs font-medium",
-                          overviewFlowStyles[flow],
-                        )}
-                      >
-                        {primaryTag}
+                    <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-2xs text-muted-foreground">
+                      <span className="shrink-0 tabular-nums">{tx.date}</span>
+                      <span aria-hidden="true">·</span>
+                      <span className="truncate">
+                        {extraTags > 0 ? `${typeLabel} +${extraTags}` : typeLabel}
                       </span>
-                      {extraTags > 0 && (
-                        <span className="text-2xs text-muted-foreground">
-                          +{extraTags}
+                      {showStatus ? (
+                        <span
+                          className={cn(
+                            // The line's own height, so every row is as tall as the next.
+                            "shrink-0 rounded-md px-1 font-medium",
+                            statusStyles[tx.status],
+                          )}
+                        >
+                          {statusLabel}
                         </span>
-                      )}
-                      <span
-                        className={cn(
-                          "inline-flex items-center rounded-md px-1.5 py-0.5 text-2xs font-medium",
-                          statusStyles[tx.status],
-                        )}
-                      >
-                        {t(statusLabelKeys[tx.status])}
-                      </span>
-                      <span className="truncate text-2xs text-muted-foreground">
-                        {tx.date}
-                      </span>
+                      ) : null}
                       {tx.scopeLabel ? (
                         <span
                           className={cn(
-                            "truncate text-2xs font-medium text-muted-foreground",
+                            "truncate font-medium",
                             blurClass(hideSensitive),
                           )}
                         >
@@ -214,10 +253,10 @@ export const RecentTransactionsTable = ({
                       ) : null}
                     </span>
                   </span>
-                  <span className="ml-auto flex shrink-0 flex-col items-end gap-0.5 pl-2 text-right">
+                  <span className="ml-auto flex shrink-0 flex-col items-end pl-2 text-right leading-tight">
                     <CurrencyToggleText
                       className={cn(
-                        "text-sm font-semibold tabular-nums",
+                        "text-[13px] font-semibold tabular-nums",
                         amountTone,
                         blurClass(hideSensitive),
                       )}
@@ -226,7 +265,7 @@ export const RecentTransactionsTable = ({
                     </CurrencyToggleText>
                     <span
                       className={cn(
-                        "text-2xs text-muted-foreground tabular-nums",
+                        "mt-0.5 text-2xs text-muted-foreground tabular-nums",
                         blurClass(hideSensitive),
                       )}
                     >
@@ -239,6 +278,7 @@ export const RecentTransactionsTable = ({
                 return (
                   <button
                     key={tx.id}
+                    data-recent-row
                     type="button"
                     className={cn(rowClassName, "w-full")}
                     onClick={() => onOpenTransaction(tx)}
@@ -250,6 +290,7 @@ export const RecentTransactionsTable = ({
               return (
                 <Link
                   key={tx.id}
+                  data-recent-row
                   to={transactionDetailHref(tx.id)}
                   className={rowClassName}
                 >

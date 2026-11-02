@@ -422,6 +422,22 @@ Unsupported file/BTCPay/Lightning-style sources show an unsupported state, and
 Liquid sources show an unblind blocker unless Kassiber has descriptor material
 that can unblind outputs locally.
 
+Overview leads with one readiness pill that names what holds the book back
+(sources, stale journals, open review, custody gaps, missing prices) and opens
+where that is dealt with; stale journals it reprocesses in place. Then three
+tiles: BTC price, the bitcoin held and in how many wallets (observed, so it
+carries no status and opens Wallets), and what it is worth with its change
+against cost basis, both shown whichever currency the app displays. The
+latest transactions sit beside the activity chart once the page is about
+64rem wide (measured on the page, so a docked assistant counts), as many whole
+rows as fit the chart's height, and under it otherwise; the list never
+scrolls inside the page, and Show all opens Transactions. A row names its
+status only when it asks for something. Holdings by Source runs across the
+page below as a ranked list, largest first: each source with its rail's logo,
+its value (whole currency units in fiat) and its share of the bitcoin held.
+Past eight, the smallest fold into one Other sources row. Its header leaves an
+incomplete cost basis to the tile and the chart.
+
 Overview, Wallets, the book-set overview, and the Reports metric strip read the
 daemon's `fiat.completeness` block (see [the daemon reference](daemon.md)) instead of
 trusting cost basis as-is. While it is incomplete, the fiat portfolio card turns amber
@@ -438,7 +454,7 @@ each cause (stale journals, quarantine, custody gaps, missing prices) links to
 the page that resolves it.
 Without a market rate, fiat values show "—"
 instead of €0 or -100 %. Custody gaps and missing prices also show in the
-readiness pill and Book readiness panel. Book-set rows get a per-book badge, and
+readiness pill. Book-set rows get a per-book badge, and
 the fiat total says how many books are incomplete. Reports marks cost basis,
 gain/loss, and indicative tax as Provisional while journals are stale or
 quarantines, custody gaps, or missing prices exist, and names the cause with a
@@ -496,12 +512,13 @@ reading less what was decided, because a read of stale journals lists more
 candidates than are open. One number counts what is left: `ui.review.badges`
 `review`, which is `quarantine_attention` plus the cached transfer candidates
 (an ownership-graph move counts once, under its held transaction).
-The sidebar's Review badge, the bell, search, and Overview's Review row all
-show it, in red while a quarantine holds rows back from the reports. Stale
-journals with nothing else open show a dot. The side panel's Review queue
-counts causes and transactions as the screen does and opens Review; a
-dismissal is stored with an English reason whatever the app's language, like
-accepted and entered prices. `/quarantine` and `kassiber://quarantine`
+The sidebar's Review badge, the bell and search show it, in red while a
+quarantine holds rows back from the reports, and so does Overview's readiness
+pill while a quarantine is open and nothing more pressing is. Stale journals
+with nothing else open show a dot. The side panel's Review queue counts
+causes and transactions as the screen does and opens Review; a dismissal is
+stored with an English reason whatever the app's language, like accepted and
+entered prices. `/quarantine` and `kassiber://quarantine`
 open Review, and the native menu's Review item keeps Quarantine's shortcut.
 
 Reports shows one tax year from `ui.reports.capital_gains`: whether it can be

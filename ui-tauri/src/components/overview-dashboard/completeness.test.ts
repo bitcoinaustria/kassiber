@@ -7,9 +7,7 @@ import {
 } from "@/mocks/seed";
 
 import {
-  buildOverviewHealthItems,
   buildOverviewReadiness,
-  buildPrimaryOverviewAction,
   enrichTreasuryChartData,
   getDataForPeriod,
   portfolioCompletenessDetail,
@@ -134,11 +132,7 @@ describe("overview readiness completeness signals", () => {
     expect(buildOverviewReadiness(snapshot).title.key).toBe(
       "readiness.custodyUnresolved.title",
     );
-    expect(buildPrimaryOverviewAction(snapshot)?.href).toBe("/journals");
-    const basis = buildOverviewHealthItems(snapshot).find(
-      (item) => item.key === "basis",
-    );
-    expect(basis?.value.key).toBe("health.basis.custody");
+    expect(buildOverviewReadiness(snapshot).href).toBe("/journals");
   });
 
   it("surfaces missing prices with their count", () => {
@@ -152,17 +146,28 @@ describe("overview readiness completeness signals", () => {
     const readiness = buildOverviewReadiness(snapshot);
     expect(readiness.title.key).toBe("readiness.missingPrices.title");
     expect(readiness.detail.params).toEqual({ count: 3 });
-    expect(
-      buildOverviewHealthItems(snapshot).find((item) => item.key === "basis")
-        ?.value,
-    ).toEqual({ key: "health.basis.missingPrices", params: { count: 3 } });
+    expect(readiness.href).toBe("/review");
   });
 
-  it("adds no standing basis row for a complete book", () => {
+  it("counts open review the way the sidebar does when it has that count", () => {
+    const snapshot = {
+      ...snapshotWith(MOCK_OVERVIEW.fiat.completeness!),
+      status: { ...MOCK_OVERVIEW.status!, quarantines: 988, needsJournals: false },
+    };
+    expect(buildOverviewReadiness(snapshot).detail.params).toEqual({ count: 988 });
+    expect(buildOverviewReadiness(snapshot, 986).detail.params).toEqual({ count: 986 });
+    expect(buildOverviewReadiness(snapshot).href).toBe("/review");
+  });
+
+  it("calls a complete book ready and points at its reports", () => {
     const snapshot = snapshotWith(MOCK_OVERVIEW.fiat.completeness!);
 
-    expect(
-      buildOverviewHealthItems(snapshot).some((item) => item.key === "basis"),
-    ).toBe(false);
+    const readiness = buildOverviewReadiness({
+      ...snapshot,
+      status: { ...snapshot.status!, quarantines: 0, needsJournals: false },
+      connections: snapshot.connections.map((connection) => ({ ...connection, status: "synced" as const })),
+    });
+    expect(readiness.title.key).toBe("readiness.readyForReports.title");
+    expect(readiness.href).toBe("/reports");
   });
 });
