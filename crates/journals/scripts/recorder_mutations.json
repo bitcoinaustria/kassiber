@@ -27,6 +27,6 @@
     "expect_failing": [
       "tests/test_journal_prebuild_campaign.py::test_prebuild_native_guard_preserves_import_time_diagnostics"
     ],
-    "rule": "The pre-exec syscall guard must not generate import-time stderr that contaminates the native probe response."
+    "rule": "The pre-exec system-call guard must not generate import-time stderr that contaminates the native probe response."
   }
 ]

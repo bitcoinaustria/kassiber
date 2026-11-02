@@ -102,14 +102,14 @@ pub fn canonical_subject(
             let address = value
                 .parse::<bitcoin::Address<_>>()
                 .map_err(|_| invalid())?;
-            let net = match network.as_str() {
+            let bitcoin_network = match network.as_str() {
                 "main" => bitcoin::Network::Bitcoin,
                 "regtest" => bitcoin::Network::Regtest,
                 "signet" => bitcoin::Network::Signet,
                 _ => bitcoin::Network::Testnet,
             };
             address
-                .require_network(net)
+                .require_network(bitcoin_network)
                 .map_err(|_| invalid())?
                 .script_pubkey()
                 .to_hex_string()

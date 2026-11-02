@@ -35,7 +35,7 @@ objc2-app-kit std NSWindow
 objc2-foundation
 pyo3 macros abi3-py310
 rpassword
-rusqlite bundled-sqlcipher bundled-sqlcipher-vendored-openssl backup functions
+rusqlite bundled-sqlcipher bundled-sqlcipher-vendored-openssl backup functions hooks
 security-framework OSX_10_15
 security-framework-sys
 serde derive
@@ -77,7 +77,7 @@ kassiber-setup
 kassiber-transactions
 kassiber-transfers test-harness
 kassiber-imports
-kassiber-wallets
+kassiber-wallets test-harness
 # Stored-journal reports: SQLite/Decimal/JSON only; no transport or process API.
 kassiber-reports
 # Journal composition and review probes reuse existing local services only.
