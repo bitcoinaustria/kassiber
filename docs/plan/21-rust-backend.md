@@ -4627,3 +4627,25 @@ without a dependency cycle. Graph public lookups, report-read refresh of
 rates/BTCPay/Lightning/Silent Payments sources and the no-backend refresh path
 refuse with `not_implemented`. All 21 mutation entries are killed by named
 tests. Python product code is unchanged.
+
+### R6-1 local IPC, operator protocol and ownership
+
+`crates/ipc` (the only crate allowed `unsafe`) holds the `AF_UNIX`
+peer-credential, named-pipe, explicit-inheritance launch, signal and
+pipe-wait primitives. `crates/operator` ports Python's frames and limits,
+the challenge, the passwd-home runtime directory, the endpoint election,
+build identity and the client for all 14 actions. `crates/ownership` now
+writes Python's record bytes, names the holder's pid, ports the seven-day
+janitor and the Windows `OPEN_ALWAYS` probe, and hands out inheritable
+duplicates. Nothing is registered yet.
+
+Parity rests on a Python-generated corpus of frames, refusals and per-action
+client bytes, replayed in Rust and checked for drift. Python's client also
+talks to a Rust listener, and the Rust client to the Python broker fixture.
+A store-interop case shows a Rust-launched child's inherited locks blocking
+Python. The 74 Python protocol, client and project tests are ported or mapped.
+All 29 mutation entries are killed.
+
+The Windows code is not compiled here because no Windows target is
+installed. The [checkpoint](../reference/rust-shell.md#operator-protocol-local-ipc-and-ownership-r6-1)
+records its tests, reviewed differences and what R6-2 builds on it.

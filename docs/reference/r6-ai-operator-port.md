@@ -407,6 +407,10 @@ while the rest proceeds.
 
 ### R6-1 Local IPC, child-process primitives and the operator protocol
 
+Done on branch `t3code/r6-1-ipc-protocol`; the
+[checkpoint](rust-shell.md#operator-protocol-local-ipc-and-ownership-r6-1)
+records its verification and what is left for R6-2.
+
 **Scope:**
 
 - **`crates/ipc`:**

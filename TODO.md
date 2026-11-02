@@ -1205,11 +1205,15 @@ journal registration remains on R4-13.
 ## Rust backend R6
 
 The [R6 port design](docs/reference/r6-ai-operator-port.md) lists the
-census, slices, oracles and owner decisions. Nothing is native yet.
+census, slices, oracles and owner decisions. R6-1's libraries are native; no
+R6 command or kind is registered yet.
 
-- [ ] R6-1: local IPC and child-process primitives (`crates/ipc`), the operator
-  protocol and client, and the remaining ownership pieces.
-- [ ] R6-2: broker service, server, runner and broker-child mode.
+- [x] R6-1: local IPC and child-process primitives (`crates/ipc`), the operator
+  protocol and client, and the remaining ownership pieces; see the
+  [R6-1 checkpoint](docs/reference/rust-shell.md#operator-protocol-local-ipc-and-ownership-r6-1).
+  Its Windows code has not been compiled: build and run it on a Windows runner.
+- [ ] R6-2: broker service, server, runner and broker-child mode, on the
+  R6-1 listener, `ChildCommand` launches and client.
 - [ ] R6-3: operator leaves, brokered routing, agent sessions and
   `ui.agent_access.*`.
 - [ ] R6-4: Touch ID flow, including the signed hardware run on a Mac.
@@ -1220,8 +1224,9 @@ census, slices, oracles and owner decisions. Nothing is native yet.
 - [ ] R6-7: `ai.chat`, cancellation, consent, history, `chat` and `chats`.
 - [ ] R6-8: MCP server, direct books first, then brokered books.
 - [ ] Owner decisions in the design's risks section: registration timing,
-  shared broker endpoint, broker ledger rows, `unsafe` in `crates/ipc`, the
-  broker bundle location, and an owner for chain analysis.
+  broker ledger rows, the broker bundle location, and an owner for chain
+  analysis. Settled on 2026-11-02: Python and Rust brokers share one
+  endpoint, and `unsafe` stays in `crates/ipc`.
 
 ## Accounting correctness and custody
 

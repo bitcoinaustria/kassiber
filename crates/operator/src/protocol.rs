@@ -341,6 +341,12 @@ mod tests {
         let error = receiver.receive_secret("second").unwrap_err();
         assert_eq!(error.code(), Some("operator_secret_challenge_mismatch"));
         assert_eq!(error.to_string(), "operator secret challenge did not match");
+        // The same length, one byte different.
+        sender.send_secret("fires", b"secret").unwrap();
+        assert!(is_code(
+            &receiver.receive_secret("first").unwrap_err(),
+            "operator_secret_challenge_mismatch"
+        ));
         // A prefix of the expected challenge and a frame without separator.
         sender.send_secret("firs", b"secret").unwrap();
         assert!(is_code(

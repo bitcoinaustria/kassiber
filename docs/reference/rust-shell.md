@@ -32,6 +32,8 @@ verification, including per-command Rust routing counts.
 | `crates/backup` | encrypted archive export, staging/install import and Python-compatible tar/manifest validation |
 | `crates/transfers` | pair/payout authoring, shared automatic pairing, component/gap reads and plans, matching rules, advisory dismissals and historical receipts |
 | `crates/transactions` | local loan marks, managed attachment evidence, metadata edits and append-only history shared by both transports |
+| `crates/ipc` | the only crate with `unsafe`: `AF_UNIX` sockets with peer credentials, Windows named pipes with SID checks and deadlines, launches that inherit only listed descriptors or handles, signal-to-flag delivery and pipe waits ([R6-1](#operator-protocol-local-ipc-and-ownership-r6-1)) |
+| `crates/operator` | the operator protocol: frames and limits, the challenge, the runtime directory and endpoint election, build identity and the broker client for all 14 actions |
 | `crates/reports` | stored-journal summaries, Austrian forms, exit-tax estimates, gains and retained explanations, live/historical holdings and journal listing, cross-check diagnostics, report readiness, CSV and transaction/Austrian/full-report/exit-tax/cross-check XLSX artifacts with full-report verification, and append-only saved/filed snapshot markers, configuration privacy hygiene and reduced PSBT privacy reads |
 
 ## Command line
@@ -7143,7 +7145,9 @@ full workspace/frontend, regtest or packaging gates.
 The diagnostics slice now implements explicit public reports and native debug
 provenance (below). There is no cached update banner, no RAM log
 ring or request log, and no operator broker or broker child. A bound brokered
-project's commands fail `not_implemented`.
+project's commands fail `not_implemented`. The operator protocol, endpoint and
+client exist as libraries ([R6-1](#operator-protocol-local-ipc-and-ownership-r6-1))
+but nothing registers them yet.
 
 ## Reviewed differences
 
@@ -16349,3 +16353,196 @@ current `kassiber-net` client stays.
 | UUIDv5 (`crates/transfers/src/component_review.rs`, `crates/journals/src/persistence/filed.rs`) | Two copies over `bitcoin_hashes` SHA-1 | Use `uuid` (already locked, `v5` feature) or one shared helper |
 | Base64 decoders (`crates/wallets/src/psbt.rs`, `crates/release/src/verify.rs`) | Python-`b64decode` and OpenBSD-`b64_pton` compatible decoders | Keep. Each mirrors a reference's exact accept/refuse rules that `base64` does not offer |
 | Python-compatible JSON, decimal and text (`pyjson`, `pydecimal`, `pytext`) | CPython ports | Keep; byte parity is their purpose |
+
+## Operator protocol, local IPC and ownership (R6-1)
+
+Slice R6-1 of the [R6 design](r6-ai-operator-port.md#r6-1-local-ipc-child-process-primitives-and-the-operator-protocol).
+It adds libraries only. `--operator-broker-server`, the `operator` leaves and
+brokered routing still answer `not_implemented`; R6-2 and R6-3 register them.
+The owner settled the design's choices on 2026-11-02:
+
+- Python and Rust brokers share the one per-user endpoint, and whichever
+  starts first serves;
+- `unsafe` code stays in `crates/ipc`;
+- no new external crate is added, only the `windows-sys` features
+  `Win32_System_Pipes` and `Win32_System_IO`.
+
+### What is native
+
+- **`crates/ipc`** holds every platform call:
+  - `AF_UNIX` listeners bound in Python's order (bind, `chmod 0600`,
+    `listen(32)`). Connects follow CPython's timeout rules: only an
+    in-progress or interrupted connect waits, and `EAGAIN` fails at once.
+  - Peer credentials: `SO_PEERCRED` on Linux, `getpeereid` plus
+    `LOCAL_PEERPID` on macOS.
+  - Windows named pipes with the `D:P(A;;GA;;;<SID>)` DACL,
+    `FILE_FLAG_FIRST_PIPE_INSTANCE`, `PIPE_REJECT_REMOTE_CLIENTS` and
+    overlapped I/O with whole-call deadlines. A timed-out operation gets
+    `CancelIoEx`, and its buffer is kept until the cancel drains. Accept
+    reports the client's SID and pid; connect reports the server's SID.
+  - `ChildCommand` launches inherit exactly the listed descriptors. On POSIX,
+    `pre_exec` clears `FD_CLOEXEC` and a detached child calls `setsid`. On
+    Windows, `CreateProcessW` takes `PROC_THREAD_ATTRIBUTE_HANDLE_LIST` and
+    `subprocess.list2cmdline` quoting (pinned by CPython vectors), and launches
+    are serialized.
+  - SIGTERM and SIGINT set a flag and wake a pipe. Pipe waits take a timeout,
+    and a caller's descriptor number can be adopted, read and closed as
+    `os.fdopen` does.
+- **`crates/operator`** is `kassiber/operator/protocol.py`, `build.py` and
+  `client.py`:
+  - `J` frames are `json.dumps(sort_keys=True)` with compact separators,
+    escaped through `kassiber-pyjson` and parsed through `kassiber-pytext`.
+  - `S` frames are `challenge\0secret` and are zeroized. The frame limits are
+    8 MiB and 16 KiB, and the payload limit is 16,335 bytes.
+  - Challenges are 48 hex characters from `getrandom`, compared in constant
+    time.
+  - The runtime directory comes from the passwd home. Missing parents get the
+    default mode and the leaf gets 0700, as Python's `mkdir(parents=True)`.
+    Symlinks, other owners and group or other bits are refused. The
+    `KASSIBER_OPERATOR_RUNTIME_DIR` override is admitted only in builds that
+    are not frozen, which means `test-harness` builds.
+  - POSIX listeners win `operator-v1.start.lock` before touching the endpoint.
+    They unlink a stale socket only when it is this user's socket and a probe
+    is refused or finds no file. Close unlinks the endpoint only while it is
+    still the inode the listener bound.
+  - The build identity is `{version, channel, commit, frozen, origin}`.
+    `frozen` is `true` in release builds, and `origin` hashes the resolved
+    executable, or the AppImage file inside `APPDIR`.
+  - The client covers all 14 actions with Python's timeouts, build binding,
+    caller context, lost-acknowledgement reconciliation and errors. It
+    launches a broker only from `ensure_running`, which `unlock`, `set_mode`,
+    the Touch ID actions and a `submit` with `start_broker` call.
+  - `prepare_arguments` and `parse_duration` port the client's helpers.
+- **`crates/ownership`** is completed against `kassiber/operator/project.py`:
+  - owner records are Python's `json.dumps(sort_keys=True)` bytes;
+  - `project_in_use` names the holder's pid in its hint;
+  - every error carries Python's message, hint and details, including
+    `link_count` and "a different project at this path";
+  - the seven-day janitor sweeps dead records under each key's admission
+    lock, at most once a day;
+  - Windows probes open with `OPEN_ALWAYS`, and an admission failure there
+    becomes "busy", as in Python;
+  - `duplicate_for_child` returns the numbers a `ChildCommand` inherits.
+
+`crates/net/tests/chokepoint.rs` admits `std::os::unix::net` and `AF_UNIX`
+`socket`/`connect` calls in `crates/ipc/src` only. An `AF_INET` socket, any
+TCP or UDP type and `libc::*` still fail there, and a test pins each form.
+Every `ChildCommand` construction site is listed in
+`reviewed-process-calls.txt`.
+
+### Verification
+
+- **Rust tests:**
+  - `kassiber-ipc`: 13.
+  - `kassiber-operator`: 17 unit tests, 35 client tests and 18 endpoint
+    tests. The client and endpoint tests port `test_operator_client.py` and
+    the POSIX half of `test_operator_protocol.py`.
+  - The operator corpus replay: 5 tests.
+  - `kassiber-ownership`: 5 unit tests and 20 project tests, which port
+    `test_operator_project.py`.
+  - `crates/operator/tests/windows_pipe.rs` ports the Windows-only Python
+    tests and compiles on Windows only.
+- **Corpus.** `crates/operator/scripts/generate_protocol_corpus.py` writes
+  `protocol_corpus.json` from the Python code. It holds 11 `J` frames, 4 `S`
+  frames, 11 refused frames and 30 client scenarios covering every action
+  except the heartbeat, which is a frame entry. The scenarios record the
+  bytes sent on each connection, the connect timeouts and the result or
+  `AppError`. `tests/test_rust_operator_protocol.py` regenerates the corpus
+  and fails on drift, and `crates/operator/tests/corpus.rs` replays it.
+- **Cross-language.** `tests/test_rust_operator_protocol.py` runs:
+  - Python's `BrokerClient.ping`/`status` against the Rust test listener,
+    whose re-encoded requests equal Python's frames;
+  - the Rust client's `ping`/`status` against the Python broker from
+    `tests/operator_server_fixture.py`, with identical results;
+  - the Rust client with no broker, which reports it stopped and launches
+    nothing.
+
+  Every endpoint is a disposable 0700 directory, and the examples run under
+  `KASSIBER_TEST_NO_EGRESS=strict`.
+- **Store interop.** `tests/test_rust_store_interop.py` gains two cases. In
+  one, a child launched through `ChildCommand` holds inherited owner locks
+  after the Rust parent releases its lease, so Python is refused that role
+  (the hint names the parent's pid) and admitted to the other. The other
+  shows that Rust-written owner records are Python's bytes.
+- **Mutations.** `crates/operator/scripts/mutations.json` holds 29 entries,
+  each killed by named tests. The scratch-tree run killed 28. `challenge-bytes` survived because
+  no test sent a same-length challenge; once one did, a rerun of that entry killed it. They cover:
+  - the frame and payload limits at their boundaries;
+  - challenge length and bytes;
+  - the peer uid;
+  - runtime-directory mode, owner and symlink checks, and the frozen gate;
+  - the stale-socket unlink conditions and the inode check on close;
+  - read deadlines and the ping and simple-request timeouts;
+  - build-identity equality and withdrawal;
+  - the secret-label order and the egress kill switch;
+  - explicit inheritance;
+  - the janitor's age floor and live check;
+  - owner-record bytes and the pid hint.
+
+### Not tested here
+
+- No Windows target is installed on the development machine, so `crates/ipc/src/windows`,
+  the Windows arms of `crates/operator/src/runtime.rs` and `windows_pipe.rs`
+  were written against `windows-sys` 0.61 and reviewed, but not compiled.
+  Windows CI must build and run them.
+- `other_crates_cannot_open_connections_or_depend_on_network_clients` already
+  fails at the base commit on eight files outside these crates.
+  `crates/ipc` and `crates/operator` pass it.
+
+### Reviewed differences
+
+- The Rust `origin` always hashes the executable; a Python source checkout
+  hashes its package directory. Python and Rust brokers therefore never
+  share a build and refuse each other's secrets, as the design intends.
+- `PYINSTALLER_RESET_ENVIRONMENT` is not set for a launched broker: the Rust
+  binary does not unpack itself.
+- A frame holding an int over 4,300 digits or nesting deeper than 1,000
+  fails as a programming error (`Error::Value`); Python lets `ValueError` or
+  `RecursionError` escape. Neither is an `AppError`.
+- Python's `canonical_project` creates `~/.kassiber/run/operator-owners` as a
+  side effect; Rust creates it when it acquires. A failure there is
+  `project_owner_lock_unavailable`; Python raises a bare `OSError`.
+- Ownership error details come from `kassiber-paths` as `serde_json`, so
+  envelopes list their keys sorted; Python lists `project, owner,
+  generation, pid`. This predates R6-1. Over the broker's protocol, both
+  sort.
+- A non-UTF-8 executable path is hashed as bytes; Python fails to encode it.
+- Windows has no signal-to-flag delivery; Python installs no handler there.
+  A launch through `std::process::Command` elsewhere in the process could
+  inherit a handle that `ChildCommand` marked inheritable for its own
+  launch, so the R6-2 broker must launch every child through `crates/ipc`.
+- A child forked while another thread releases an owner lock briefly holds a
+  copy of it until exec, in Rust as in Python. The ownership tests run one at
+  a time for this reason.
+
+### Left for R6-2
+
+- **Service.** `crates/operator` gains the service: leases, per-project FIFO
+  queues, the operation state machine with retention and tombstones, replay
+  by operation id, single-use admin authorization, auth backoff, the lease
+  janitor, idle restart and `set_unlock_mode`/`bind_project_policy`.
+- **Runner.** Children launch through `ChildCommand` with the lease
+  passphrase and secret-label pipes and `duplicate_for_child` tokens. Output
+  is read UTF-8-lossy, stderr is redacted, and `operator_result_too_large` is
+  measured on the escaped length.
+- **Server.**
+  - At most 64 connection threads, using `listen`/`accept` and
+    `install_stop_signals` with a `poll` on the listener and the wake pipe.
+  - The Linux login-lifetime check, read from `/run/systemd/users/<uid>`.
+  - The `--operator-broker-server` entry, and `restart_for_native_auth`
+    handling.
+  - Version and error responses through the public-safe detail filter.
+- **Argv classification.** A `classify` API in `crates/cli` that reports
+  declared destinations.
+- **The broker child in `crates/cli`.** It replaces the `not_implemented`
+  stubs: it enters the caller's directory, verifies the project and
+  database identities, and drains the lease pipe eagerly.
+- **Oracles.**
+  - `test_operator_service.py`, `test_operator_server.py` and
+    `test_operator_modes.py` become Rust tests.
+  - `test_operator_integration.py` gets the broker switch. The Rust binary
+    honours the gated runtime override already, and a `test-harness` logind
+    override is still needed.
+  - The brokered-versus-direct differential driver.
+- **Recheck.** The Windows code is compiled and its tests run on a Windows
+  runner.
