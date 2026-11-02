@@ -31,6 +31,7 @@ rusqlite = { version = "=0.40.1", features = ["bundled-sqlcipher-vendored-openss
 
 [dev-dependencies]
 kassiber-secrets = { path = "../secrets" }
+kassiber-ipc = { path = "../ipc" }
 serde = { version = "1", features = ["derive"] }
 
 [[example]]

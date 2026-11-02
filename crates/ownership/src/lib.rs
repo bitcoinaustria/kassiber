@@ -1,10 +1,14 @@
-//! Python-compatible owner exclusion. A broker and a desktop may coexist for
-//! one file identity; duplicate roles and different files at a held path cannot.
+//! Python-compatible owner exclusion (`kassiber/operator/project.py`). A
+//! broker and a desktop may coexist for one file identity; duplicate roles
+//! and different files at a held path cannot. Records, errors and the
+//! seven-day janitor match Python's, so either implementation can hold or
+//! sweep a project the other one opened.
 #[cfg(windows)]
 use kassiber_paths::windows;
 use kassiber_paths::{canonicalize_allow_missing, resolve_database_path, Error, ErrorKind, Result};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
+use std::time::{SystemTime, UNIX_EPOCH};
 use std::{
     collections::HashSet,
     fs::{self, File, OpenOptions},
@@ -12,6 +16,22 @@ use std::{
     path::{Path, PathBuf},
     time::{Duration, Instant},
 };
+
+/// `json.dumps(record, sort_keys=True)` plus a newline: the owner record
+/// exactly as Python writes it (default separators, ASCII escapes).
+fn record_bytes(role: OwnerKind, generation: &str, identity: &str) -> Vec<u8> {
+    use kassiber_pyjson::{dumps, Key, Options, Value as Py};
+    let record = Py::Dict(vec![
+        (Key::from("schema_version"), Py::from(2)),
+        (Key::from("owner"), Py::Str(role.as_str().into())),
+        (Key::from("generation"), Py::Str(generation.into())),
+        (Key::from("identity"), Py::Str(identity.into())),
+        (Key::from("pid"), Py::from(std::process::id())),
+    ]);
+    let mut text = dumps(&record, &Options::new().sort_keys(true)).expect("owner record");
+    text.push('\n');
+    text.into_bytes()
+}
 
 fn digest(text: &str) -> String {
     Sha256::digest(text.as_bytes())
@@ -42,7 +62,7 @@ impl OwnerNamespace {
         let root = nix::unistd::User::from_uid(nix::unistd::getuid())
             .ok()
             .flatten()
-            .ok_or_else(unavailable)?
+            .ok_or_else(|| unavailable(None))?
             .dir
             .join(".kassiber/run/operator-owners");
         #[cfg(windows)]
@@ -51,6 +71,19 @@ impl OwnerNamespace {
             root,
             harden_parent: true,
         })
+    }
+    /// The namespace `system()` derives from an account home, for tests that
+    /// stand in a disposable home for the passwd entry.
+    #[doc(hidden)]
+    pub fn for_account_home(home: &Path) -> Self {
+        Self {
+            root: home.join(".kassiber/run/operator-owners"),
+            harden_parent: true,
+        }
+    }
+    /// The root this namespace keeps its records in.
+    pub fn root(&self) -> &Path {
+        &self.root
     }
     pub fn isolated(root: PathBuf) -> Self {
         Self {
@@ -67,7 +100,7 @@ impl OwnerNamespace {
                 "project database path is not valid Unicode",
             )
         })?;
-        let parent = database.parent().ok_or_else(unavailable)?;
+        let parent = database.parent().ok_or_else(|| unavailable(None))?;
         let material = match fs::metadata(&database) {
             Ok(info) => {
                 validate_database_metadata(&database, &info)?;
@@ -76,13 +109,13 @@ impl OwnerNamespace {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 if parent.exists() {
                     let info = fs::metadata(parent).map_err(Error::io)?;
-                    require_owner(parent, &info)?;
                     if !info.is_dir() {
                         return Err(Error::new(
                             ErrorKind::UnsafeProjectDatabase,
-                            "project data path is not a directory",
+                            "the project data directory is not a directory",
                         ));
                     }
+                    require_owner(parent, &info)?;
                 }
                 format!("path:{}", database.display())
             }
@@ -103,8 +136,8 @@ impl OwnerNamespace {
             database,
         })
     }
-    /// Acquire before opening a long-lived book. No stale-record unlinking is
-    /// needed for exclusion; Python's optional age-based janitor may prune it.
+    /// Acquire before opening a long-lived book, then sweep dead records
+    /// (`acquire_project_ownership`); a failed sweep never denies the owner.
     pub fn acquire(
         &self,
         project: CanonicalProject,
@@ -121,7 +154,7 @@ impl OwnerNamespace {
             ensure_directory(parent)?;
         }
         if !self.harden_parent && !self.root.parent().is_some_and(Path::is_dir) {
-            return Err(unavailable());
+            return Err(unavailable(None));
         }
         ensure_directory(&self.root)?;
         let mut lease = OwnerLease {
@@ -136,6 +169,8 @@ impl OwnerNamespace {
         for path in [&p.lock_path, &p.alias_lock_path, &p.local_lock_path] {
             lease.add_path(path, &p)?;
         }
+        // Janitorial only: a sweep that fails must never deny a valid owner.
+        let _ = prune_owner_locks(p.lock_path.parent().unwrap_or(&self.root), now());
         Ok(lease)
     }
 }
@@ -168,12 +203,44 @@ pub struct OwnerLease {
     handles: Vec<File>,
     paths: HashSet<PathBuf>,
 }
+/// Parent-side duplicates of every held lock for one child
+/// (`ProjectOwnerChildHandles`). They are close-on-exec and non-inheritable
+/// here; `kassiber_ipc::process::ChildCommand::inherit` passes exactly these
+/// numbers to the child. Closing them after the launch leaves the child's
+/// copies holding the locks.
+pub struct ChildHandles {
+    files: Vec<File>,
+}
+impl ChildHandles {
+    /// The numbers the child inherits (`tokens`): descriptors on POSIX,
+    /// handle values on Windows.
+    #[cfg(unix)]
+    pub fn tokens(&self) -> Vec<std::os::fd::RawFd> {
+        use std::os::fd::AsRawFd;
+        self.files.iter().map(AsRawFd::as_raw_fd).collect()
+    }
+    /// The numbers the child inherits (`tokens`): descriptors on POSIX,
+    /// handle values on Windows.
+    #[cfg(windows)]
+    pub fn tokens(&self) -> Vec<std::os::windows::io::RawHandle> {
+        use std::os::windows::io::AsRawHandle;
+        self.files.iter().map(AsRawHandle::as_raw_handle).collect()
+    }
+    /// Close every parent-side duplicate.
+    pub fn close(self) {
+        drop(self.files);
+    }
+}
 impl OwnerLease {
     /// Bind a newly created file while retaining the path/local reservations.
     /// An existing file may never use this operation to accept replacement.
     pub fn bind_created_database(&mut self, namespace: &OwnerNamespace) -> Result<()> {
-        let current =
-            namespace.canonical_project(self.project.database.parent().ok_or_else(unavailable)?)?;
+        let current = namespace.canonical_project(
+            self.project
+                .database
+                .parent()
+                .ok_or_else(|| unavailable(None))?,
+        )?;
         if current.identity == self.project.identity {
             return Ok(());
         }
@@ -181,8 +248,7 @@ impl OwnerLease {
             return self.verify_current(namespace);
         }
         self.add_path(&current.lock_path, &current)?;
-        let record = json!({"schema_version":2,"owner":self.role.as_str(),"generation":self.generation,"identity":current.identity,"pid":std::process::id()});
-        let bytes = serde_json::to_vec(&record).expect("owner record");
+        let bytes = record_bytes(self.role, &self.generation, &current.identity);
         for file in &mut self.handles {
             let old = read_record(file);
             if old.get("generation").and_then(Value::as_str) == Some(&self.generation)
@@ -191,7 +257,6 @@ impl OwnerLease {
                 file.set_len(0).map_err(Error::io)?;
                 file.seek(SeekFrom::Start(0)).map_err(Error::io)?;
                 file.write_all(&bytes).map_err(Error::io)?;
-                file.write_all(b"\n").map_err(Error::io)?;
             }
         }
         self.project = current;
@@ -207,17 +272,23 @@ impl OwnerLease {
     pub fn release(self) {
         drop(self);
     }
-    /// Copies are CLOEXEC/non-inheritable by default. A broker explicitly marks
-    /// only these child copies inheritable as part of its launch protocol.
-    pub fn duplicate_for_child(&self) -> Result<Vec<File>> {
-        self.handles
+    /// `duplicate_for_child`: one duplicate of every held lock for a child.
+    pub fn duplicate_for_child(&self) -> Result<ChildHandles> {
+        let files = self
+            .handles
             .iter()
             .map(|f| f.try_clone().map_err(Error::io))
-            .collect()
+            .collect::<Result<_>>()?;
+        Ok(ChildHandles { files })
     }
     pub fn verify_current(&self, namespace: &OwnerNamespace) -> Result<()> {
         if namespace
-            .canonical_project(self.project.database.parent().ok_or_else(unavailable)?)?
+            .canonical_project(
+                self.project
+                    .database
+                    .parent()
+                    .ok_or_else(|| unavailable(None))?,
+            )?
             .identity
             != self.project.identity
         {
@@ -232,7 +303,7 @@ impl OwnerLease {
         if project.identity != self.project.identity {
             return Err(Error::new(
                 ErrorKind::ProjectOwnerMismatch,
-                "project alias resolves to a different database",
+                "the project alias resolves to a different database",
             ));
         }
         let original = self.handles.len();
@@ -247,7 +318,7 @@ impl OwnerLease {
         result
     }
     fn add_path(&mut self, path: &Path, project: &CanonicalProject) -> Result<()> {
-        let _admission = admission(path)?;
+        let _admission = admission(path, &project.public_id)?;
         let original = self.handles.len();
         let original_paths = self.paths.clone();
         let result = (|| {
@@ -258,9 +329,10 @@ impl OwnerLease {
             if !self.paths.contains(&role_path) {
                 self.add_lock(&role_path, false, project)?;
             }
-            if let Some(record) = active_record(&suffixed(path, self.role.other().as_str()))? {
+            let other = suffixed(path, self.role.other().as_str());
+            if let Some(record) = active_record(&other, &project.public_id)? {
                 if record.get("identity").and_then(Value::as_str) != Some(&project.identity) {
-                    return Err(in_use(project, record));
+                    return Err(different_project(project, &record));
                 }
             }
             Ok(())
@@ -272,30 +344,21 @@ impl OwnerLease {
         result
     }
     fn add_lock(&mut self, path: &Path, shared: bool, project: &CanonicalProject) -> Result<()> {
-        let mut file = match open_lock(path, shared, false) {
-            Ok(f) => f,
-            Err(e) if e.kind == ErrorKind::ProjectInUse => {
-                let record = open_lock(path, false, true)
-                    .map(|mut f| read_record(&mut f))
-                    .unwrap_or(json!({}));
-                return Err(in_use(project, record));
-            }
-            Err(e) => return Err(e),
-        };
+        // A Windows share-mode holder is refused at open, as in Python,
+        // without an owner label.
+        let mut file = open_lock(path, &project.public_id, shared, false)?;
         if !try_lock(&file, shared)? {
             return Err(in_use(project, read_record(&mut file)));
         }
         if !shared {
-            let record = json!({"schema_version":2,"owner":self.role.as_str(),"generation":self.generation,"identity":project.identity,"pid":std::process::id()});
             file.set_len(0).map_err(Error::io)?;
             file.seek(SeekFrom::Start(0)).map_err(Error::io)?;
-            file.write_all(
-                serde_json::to_string(&record)
-                    .expect("JSON record")
-                    .as_bytes(),
-            )
+            file.write_all(&record_bytes(
+                self.role,
+                &self.generation,
+                &project.identity,
+            ))
             .map_err(Error::io)?;
-            file.write_all(b"\n").map_err(Error::io)?;
         }
         self.handles.push(file);
         self.paths.insert(path.into());
@@ -308,39 +371,48 @@ fn suffixed(path: &Path, suffix: &str) -> PathBuf {
         path.file_name().unwrap_or_default().to_string_lossy()
     ))
 }
-fn admission(path: &Path) -> Result<File> {
+const ADMISSION_TIMEOUT: Duration = Duration::from_secs(5);
+const ADMISSION_RETRY: Duration = Duration::from_millis(10);
+/// `_acquire_admission_lock`: serializes acquisitions of one lock path for
+/// up to five seconds.
+fn admission(path: &Path, project_id: &str) -> Result<File> {
     let path = suffixed(path, "admission");
-    let deadline = Instant::now() + Duration::from_secs(5);
+    let deadline = Instant::now() + ADMISSION_TIMEOUT;
+    #[cfg(unix)]
+    {
+        let file = open_lock(&path, project_id, false, false)?;
+        while !try_lock(&file, false)? {
+            if Instant::now() >= deadline {
+                return Err(admission_busy(project_id));
+            }
+            std::thread::sleep(ADMISSION_RETRY);
+        }
+        Ok(file)
+    }
+    #[cfg(windows)]
     loop {
-        match open_lock(&path, false, false) {
-            Ok(file) => {
-                #[cfg(unix)]
-                {
-                    while !try_lock(&file, false)? {
-                        if Instant::now() >= deadline {
-                            return Err(admission_busy());
-                        }
-                        std::thread::sleep(Duration::from_millis(10));
-                    }
-                }
-                return Ok(file);
+        match open_lock(&path, project_id, false, false) {
+            Ok(file) => return Ok(file),
+            // Python turns every AppError at this point into "busy".
+            Err(error) if error.kind != ErrorKind::ProjectInUse || Instant::now() >= deadline => {
+                return Err(admission_busy(project_id))
             }
-            Err(e) if e.kind == ErrorKind::ProjectInUse && Instant::now() < deadline => {
-                std::thread::sleep(Duration::from_millis(10))
-            }
-            Err(e) => return Err(e),
+            Err(_) => std::thread::sleep(ADMISSION_RETRY),
         }
     }
 }
-#[cfg(unix)]
-fn admission_busy() -> Error {
-    Error::new(ErrorKind::ProjectInUse, "project owner admission is busy").retryable(true)
+fn admission_busy(project_id: &str) -> Error {
+    Error::new(ErrorKind::ProjectInUse, "project owner admission is busy")
+        .hint("Retry after the other Kassiber process finishes opening.")
+        .details(json!({ "project": project_id }))
+        .retryable(true)
 }
-fn active_record(path: &Path) -> Result<Option<Value>> {
-    let mut file = match open_lock(path, false, false) {
+/// `_active_owner_record`: the record of a live holder, or `None`.
+fn active_record(path: &Path, project_id: &str) -> Result<Option<Value>> {
+    let mut file = match open_lock(path, project_id, false, false) {
         Ok(file) => file,
         Err(e) if cfg!(windows) && e.kind == ErrorKind::ProjectInUse => {
-            return open_lock(path, false, true).map(|mut f| Some(read_record(&mut f)))
+            return open_lock(path, project_id, false, true).map(|mut f| Some(read_record(&mut f)))
         }
         Err(e) => return Err(e),
     };
@@ -353,7 +425,7 @@ fn active_record(path: &Path) -> Result<Option<Value>> {
 /// than POSIX flock. This is an explicit maintenance read, never a status probe.
 #[cfg(windows)]
 pub fn legacy_owner_lock_is_active(path: &Path) -> Result<bool> {
-    Ok(active_record(path)?.is_some())
+    Ok(active_record(path, "legacy")?.is_some())
 }
 fn read_record(file: &mut File) -> Value {
     let mut bytes = Vec::new();
@@ -365,98 +437,188 @@ fn read_record(file: &mut File) -> Value {
         .filter(Value::is_object)
         .unwrap_or(json!({}))
 }
-fn in_use(project: &CanonicalProject, record: Value) -> Error {
-    let owner = record
+fn record_owner(record: &Value) -> &str {
+    record
         .get("owner")
         .and_then(Value::as_str)
         .filter(|s| ["desktop", "broker"].contains(s))
-        .unwrap_or("unknown");
+        .unwrap_or("unknown")
+}
+/// `_project_in_use_error`: name the conflicting owner and, when its record
+/// says, the holder's pid. Same-user, 0700 namespace: nothing is disclosed
+/// the principal cannot already read.
+fn in_use(project: &CanonicalProject, record: Value) -> Error {
+    let owner = record_owner(&record);
     let generation = record.get("generation").and_then(Value::as_str);
-    let pid = record.get("pid").filter(|v| v.is_i64() || v.is_u64());
+    let pid = record
+        .get("pid")
+        .filter(|v| v.is_i64() || v.is_u64())
+        .cloned();
+    let held_by = pid
+        .as_ref()
+        .map_or_else(String::new, |pid| format!(" It is held by pid {pid}."));
+    let (message, hint) = match owner {
+        "desktop" => (
+            "another desktop app or preview owns this project",
+            Some(format!(
+                "Reuse or close the existing desktop app or preview.{held_by} \
+A CLI broker can coexist, but a second desktop cannot."
+            )),
+        ),
+        "broker" => (
+            "another CLI broker owns this project",
+            Some(format!(
+                "Reuse or lock the existing CLI broker, then retry.{held_by}"
+            )),
+        ),
+        _ => (
+            "another long-lived process owns this project path",
+            Some(held_by.trim().to_owned()).filter(|hint| !hint.is_empty()),
+        ),
+    };
+    let error = Error::new(ErrorKind::ProjectInUse, message)
+        .retryable(true)
+        .details(
+            json!({"project":project.public_id,"owner":owner,"generation":generation,"pid":pid}),
+        );
+    match hint {
+        Some(hint) => error.hint_text(hint),
+        None => error,
+    }
+}
+/// `_require_compatible_other_owner`: the other role holds a different file
+/// at this path.
+fn different_project(project: &CanonicalProject, record: &Value) -> Error {
     Error::new(
         ErrorKind::ProjectInUse,
-        match owner {
-            "desktop" => "another desktop app or preview owns this project",
-            "broker" => "another CLI broker owns this project",
-            _ => "another long-lived process owns this project path",
-        },
+        "another long-lived process owns a different project at this path",
     )
+    .hint("Close the process using the replaced project path, then retry.")
+    .details(json!({
+        "project": project.public_id,
+        "owner": record_owner(record),
+        "generation": record.get("generation").and_then(Value::as_str),
+    }))
     .retryable(true)
-    .details(json!({"project":project.public_id,"owner":owner,"generation":generation,"pid":pid}))
 }
-fn unavailable() -> Error {
-    Error::new(
+fn unavailable(project_id: Option<&str>) -> Error {
+    let error = Error::new(
         ErrorKind::ProjectOwnerLockUnavailable,
-        "project ownership lock is unavailable",
+        "the project ownership lock is unavailable",
     )
-    .retryable(true)
-}
-fn ensure_directory(path: &Path) -> Result<()> {
-    if path.is_symlink() {
-        return Err(Error::new(
-            ErrorKind::UnsafeProjectOwnerLock,
-            "project owner directory may not be a symlink",
-        ));
+    .retryable(true);
+    match project_id {
+        Some(project) => error.details(json!({ "project": project })),
+        None => error,
     }
+}
+/// `Path.mkdir(mode=0o700, parents=True, exist_ok=True)`: missing parents
+/// get the default mode and only the leaf gets 0700.
+fn make_directory(path: &Path) -> std::io::Result<()> {
     let mut builder = fs::DirBuilder::new();
-    builder.recursive(true);
     #[cfg(unix)]
     {
         use std::os::unix::fs::DirBuilderExt;
         builder.mode(0o700);
     }
-    builder.create(path).map_err(|_| unavailable())?;
-    let info = fs::metadata(path).map_err(|_| unavailable())?;
+    match builder.create(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            let Some(parent) = path.parent().filter(|parent| *parent != path) else {
+                return Err(error);
+            };
+            if let Err(error) = fs::create_dir_all(parent) {
+                if !parent.is_dir() {
+                    return Err(error);
+                }
+            }
+            match builder.create(path) {
+                Err(_) if path.is_dir() => Ok(()),
+                other => other,
+            }
+        }
+        Err(_) if path.is_dir() => Ok(()),
+        Err(error) => Err(error),
+    }
+}
+/// `_ensure_owner_lock_directory`.
+fn ensure_directory(path: &Path) -> Result<()> {
+    if path.is_symlink() {
+        return Err(Error::new(
+            ErrorKind::UnsafeProjectOwnerLock,
+            "the project owner lock directory may not be a symlink",
+        ));
+    }
+    make_directory(path).map_err(|_| unavailable(None))?;
+    let info = fs::metadata(path).map_err(|_| unavailable(None))?;
     if !info.is_dir() {
         return Err(Error::new(
             ErrorKind::UnsafeProjectOwnerLock,
-            "project owner path is not a directory",
+            "the project owner lock path is not a directory",
         ));
     }
     require_owner(path, &info)?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(path, fs::Permissions::from_mode(0o700)).map_err(|_| unavailable())?;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o700))
+            .map_err(|_| unavailable(None))?;
     }
     Ok(())
 }
-fn open_lock(path: &Path, shared: bool, probe: bool) -> Result<File> {
+/// `_open_owner_lock`. A probe (Windows only) opens read-only with full
+/// sharing and, as Python's `OPEN_ALWAYS` does, creates a missing file.
+fn open_lock(path: &Path, project_id: &str, shared: bool, probe: bool) -> Result<File> {
     let mut options = OpenOptions::new();
-    options.read(true).write(!probe).create(!probe);
     #[cfg(unix)]
     {
         use std::os::unix::fs::OpenOptionsExt;
+        let _ = (shared, probe);
         options
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
             .mode(0o600)
             .custom_flags(nix::libc::O_NOFOLLOW | nix::libc::O_NONBLOCK);
-        let _ = shared;
     }
     #[cfg(windows)]
     {
         use std::os::windows::fs::OpenOptionsExt;
+        // std requires write access to create; access_mode then narrows a
+        // probe to GENERIC_READ (0x80000000) as Python requests.
+        options.read(true).write(true).create(true).truncate(false);
+        if probe {
+            options.access_mode(0x8000_0000);
+        }
         options.share_mode(if shared || probe { 3 } else { 1 });
     }
     let file = options.open(path).map_err(|e| {
         if cfg!(windows) && matches!(e.raw_os_error(), Some(32 | 33)) {
-            Error::new(ErrorKind::ProjectInUse, "project ownership lock is held").retryable(true)
+            Error::new(
+                ErrorKind::ProjectInUse,
+                "another long-lived process owns this project",
+            )
+            .details(json!({"project": project_id, "owner": "unknown"}))
+            .retryable(true)
         } else {
-            unavailable()
+            unavailable(Some(project_id))
         }
     })?;
-    let info = file.metadata().map_err(|_| unavailable())?;
+    let info = file.metadata().map_err(|_| unavailable(Some(project_id)))?;
     if !info.is_file() {
         return Err(Error::new(
             ErrorKind::UnsafeProjectOwnerLock,
-            "project ownership lock is unsafe",
-        ));
+            "the project ownership lock is unsafe",
+        )
+        .details(json!({ "project": project_id })));
     }
     require_owner(path, &info)?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         file.set_permissions(fs::Permissions::from_mode(0o600))
-            .map_err(|_| unavailable())?;
+            .map_err(|_| unavailable(Some(project_id)))?;
     }
     Ok(file)
 }
@@ -471,38 +633,132 @@ fn try_lock(file: &File, shared: bool) -> Result<bool> {
         match result {
             Ok(()) => Ok(true),
             Err(std::fs::TryLockError::WouldBlock) => Ok(false),
-            Err(std::fs::TryLockError::Error(_)) => Err(unavailable()),
+            Err(std::fs::TryLockError::Error(_)) => Err(unavailable(None)),
         }
     }
     #[cfg(windows)]
     {
+        // The requested share mode was acquired atomically on open.
         let _ = (file, shared);
         Ok(true)
     }
 }
+
+const PRUNE_STAMP_FILENAME: &str = "prune-stamp";
+const PRUNE_INTERVAL_SECONDS: f64 = 24.0 * 60.0 * 60.0;
+/// Records younger than this are never swept (`_OWNER_PRUNE_MIN_AGE_SECONDS`).
+pub const PRUNE_MIN_AGE_SECONDS: f64 = 7.0 * 24.0 * 60.0 * 60.0;
+
+fn now() -> f64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0.0, |elapsed| elapsed.as_secs_f64())
+}
+
+fn mtime(path: &Path) -> Option<f64> {
+    let modified = fs::metadata(path).ok()?.modified().ok()?;
+    Some(match modified.duration_since(UNIX_EPOCH) {
+        Ok(after) => after.as_secs_f64(),
+        Err(before) => -before.duration().as_secs_f64(),
+    })
+}
+
+/// `_prune_owner_locks`: at most once a day, unlink the records no live
+/// process holds. Keys are per project, so throwaway data roots would
+/// otherwise accumulate forever.
+pub fn prune_owner_locks(lock_root: &Path, now: f64) -> Result<()> {
+    let stamp = lock_root.join(PRUNE_STAMP_FILENAME);
+    if mtime(&stamp).is_some_and(|modified| now - modified < PRUNE_INTERVAL_SECONDS) {
+        return Ok(());
+    }
+    // Claim the sweep before running it so concurrent opens do not all scan.
+    let claimed = open_lock(&stamp, "prune", false, false)?;
+    let when = UNIX_EPOCH + Duration::from_secs_f64(now.max(0.0));
+    claimed
+        .set_times(fs::FileTimes::new().set_accessed(when).set_modified(when))
+        .map_err(Error::io)?;
+    drop(claimed);
+    let mut keys = std::collections::BTreeSet::new();
+    for entry in fs::read_dir(lock_root).map_err(Error::io)? {
+        let name = entry.map_err(Error::io)?.file_name();
+        let name = name.to_string_lossy();
+        if let Some((key, _)) = name.split_once(".lock") {
+            keys.insert(format!("{key}.lock"));
+        }
+    }
+    for key in keys {
+        prune_owner_lock_key(&lock_root.join(key), now);
+    }
+    Ok(())
+}
+
+fn prunable(path: &Path, now: f64) -> bool {
+    mtime(path).is_some_and(|modified| now - modified >= PRUNE_MIN_AGE_SECONDS)
+}
+
+/// `_prune_owner_lock_key`: drop one project's dead records under its
+/// admission lock, which every acquisition holds between open and lock, so
+/// no acquirer can be moved onto an unlinked inode. The admission file
+/// itself is never removed; it is what makes the sweep safe.
+fn prune_owner_lock_key(lock_path: &Path, now: f64) {
+    let records = [
+        lock_path.to_path_buf(),
+        suffixed(lock_path, "desktop"),
+        suffixed(lock_path, "broker"),
+    ];
+    if !records.iter().any(|path| prunable(path, now)) {
+        return;
+    }
+    let Ok(admission) = open_lock(&suffixed(lock_path, "admission"), "prune", false, false) else {
+        return;
+    };
+    if !try_lock(&admission, false).unwrap_or(false) {
+        return;
+    }
+    for path in &records {
+        if !prunable(path, now) {
+            continue;
+        }
+        // A Windows share-mode holder is refused at open time.
+        let Ok(handle) = open_lock(path, "prune", false, false) else {
+            continue;
+        };
+        let dead = try_lock(&handle, false).unwrap_or(false);
+        drop(handle);
+        if dead {
+            let _ = fs::remove_file(path);
+        }
+    }
+    drop(admission);
+}
 pub fn validate_database_file(path: &Path) -> Result<()> {
     validate_database_metadata(path, &fs::metadata(path).map_err(Error::io)?)
 }
+/// `validate_project_database_file`.
 fn validate_database_metadata(path: &Path, info: &fs::Metadata) -> Result<()> {
     if !info.is_file() {
         return Err(Error::new(
             ErrorKind::UnsafeProjectDatabase,
-            "project database is not a regular file",
+            "the project database is not a regular file",
         ));
     }
     #[cfg(unix)]
-    {
+    let links = {
         use std::os::unix::fs::MetadataExt;
-        if info.nlink() != 1 {
-            return Err(Error::new(
-                ErrorKind::UnsafeProjectDatabase,
-                "project database has multiple filesystem links",
-            ));
-        }
-    }
+        info.nlink()
+    };
     #[cfg(windows)]
-    {
-        windows::validate_links(path)?;
+    let links = u64::from(windows::link_count(path)?);
+    if links != 1 {
+        return Err(Error::new(
+            ErrorKind::UnsafeProjectDatabase,
+            "the project database has multiple filesystem links",
+        )
+        .hint(
+            "Remove every hard-link alias except the intended project database \
+path before unlocking or changing its unlock policy.",
+        )
+        .details(json!({ "link_count": links })));
     }
     require_owner(path, info)
 }
@@ -524,7 +780,7 @@ fn require_owner(path: &Path, info: &fs::Metadata) -> Result<()> {
     }
     Err(Error::new(
         ErrorKind::UnsafeProjectOwner,
-        "project path is owned by another OS user",
+        "the project path is owned by another OS user",
     ))
 }
 fn principal() -> Result<String> {
@@ -632,6 +888,55 @@ mod tests {
             .is_err());
         drop(copies);
         assert!(ns.acquire(p, OwnerKind::Desktop, "released").is_ok());
+    }
+    #[test]
+    fn rejected_alias_rolls_back_only_its_new_locks() {
+        let t = tempfile::tempdir().unwrap();
+        let first = t.path().join("first");
+        let alias_root = t.path().join("alias");
+        fs::create_dir(&first).unwrap();
+        fs::create_dir(&alias_root).unwrap();
+        fs::write(first.join("kassiber.sqlite3"), "database").unwrap();
+        // A different book whose desktop owns the alias directory's local lock.
+        fs::write(alias_root.join("kassiber.sqlite3"), "other").unwrap();
+        fs::create_dir(t.path().join("run")).unwrap();
+        let ns = OwnerNamespace::isolated(t.path().join("run/owners"));
+        let project = ns.canonical_project(&first).unwrap();
+        let other = ns.canonical_project(&alias_root).unwrap();
+        let _desktop = ns.acquire(other, OwnerKind::Desktop, "other").unwrap();
+        let mut owner = ns
+            .acquire(project.clone(), OwnerKind::Broker, "broker")
+            .unwrap();
+        let handles = owner.handles.len();
+        let paths = owner.paths.clone();
+        let alias = CanonicalProject {
+            database: alias_root.join("kassiber.sqlite3"),
+            alias_lock_path: ns.root().join("path-alias.lock"),
+            local_lock_path: alias_root.join(".operator-owner.lock"),
+            ..project
+        };
+        let error = owner.add_alias(&alias).unwrap_err();
+        assert_eq!(error.code, "project_in_use");
+        assert_eq!(
+            error.message,
+            "another long-lived process owns a different project at this path"
+        );
+        assert_eq!(
+            error.hint.as_deref(),
+            Some("Close the process using the replaced project path, then retry.")
+        );
+        assert_eq!(error.details["owner"], "desktop");
+        assert_eq!(owner.handles.len(), handles);
+        assert_eq!(owner.paths, paths);
+    }
+    #[test]
+    fn owner_records_are_python_json_dumps_bytes() {
+        let bytes = record_bytes(OwnerKind::Broker, "g\u{e4}", "abc");
+        let expected = format!(
+            "{{\"generation\": \"g\\u00e4\", \"identity\": \"abc\", \"owner\": \"broker\", \"pid\": {}, \"schema_version\": 2}}\n",
+            std::process::id()
+        );
+        assert_eq!(String::from_utf8(bytes).unwrap(), expected);
     }
     #[test]
     fn hardlinks_are_refused() {

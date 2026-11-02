@@ -116,6 +116,38 @@ fn run(request: &Value, input: &mut impl BufRead) -> Result<Value> {
             }
             Ok(json!({"released":true}))
         }
+        // A Rust-launched child inherits the owner-lock duplicates; the probe
+        // then releases its own lease, so only the child holds the locks.
+        #[cfg(unix)]
+        "lock-child" => {
+            use kassiber_ipc::process::{ChildCommand, Stdio};
+            let ns = namespace(request)?;
+            let project = ns.canonical_project(Path::new(string(request, "data_root")?))?;
+            let role = match string(request, "role")? {
+                "desktop" => OwnerKind::Desktop,
+                "broker" => OwnerKind::Broker,
+                _ => return Err(Error::new(ErrorKind::Validation, "invalid role")),
+            };
+            let lease = ns.acquire(project, role, "r6-inherited-probe")?;
+            let inherited = lease.duplicate_for_child()?;
+            let mut command = ChildCommand::new("/bin/sh");
+            command.arg("-c").arg("cat >/dev/null").stdin(Stdio::Pipe);
+            for token in inherited.tokens() {
+                command.inherit(token);
+            }
+            let mut child = command.spawn().map_err(Error::io)?;
+            inherited.close();
+            lease.release();
+            println!(
+                "{}",
+                json!({"ok":true,"data":{"holding":true,"child":child.id()}})
+            );
+            io::stdout().flush().map_err(Error::io)?;
+            let mut release = String::new();
+            input.read_line(&mut release).map_err(Error::io)?;
+            let status = child.wait().map_err(Error::io)?;
+            Ok(json!({"released":true,"child_exit":status.code()}))
+        }
         #[cfg(windows)]
         "inherited-handle" => {
             use std::os::windows::io::{FromRawHandle, OwnedHandle};

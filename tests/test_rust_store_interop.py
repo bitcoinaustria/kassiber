@@ -384,6 +384,58 @@ def test_rust_owner_blocks_python_cli_and_python_owner_blocks_rust(probe, tmp_pa
     _probe(probe, {**request, "op": "lock-once"})
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX inherited-fd launch harness")
+@pytest.mark.parametrize("role", ["broker", "desktop"])
+def test_rust_launched_child_holds_inherited_owner_locks_against_python(probe, tmp_path, isolated, role):
+    # R6-1: the broker hands its children owner-lock duplicates. Once the Rust
+    # parent released its own lease, the child's inherited copies alone must
+    # still exclude a Python owner of the same role, and only them.
+    _, owners = isolated
+    data = _book(tmp_path, owners)
+    request = {"op": "lock-child", "data_root": str(data), "owner_root": str(owners), "role": role}
+    process = subprocess.Popen([str(probe)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    project = ownership.canonical_project(data)
+    try:
+        process.stdin.write(json.dumps(request) + "\n")
+        process.stdin.flush()
+        holding = json.loads(process.stdout.readline())["data"]
+        assert holding["holding"] is True
+        with pytest.raises(AppError) as error:
+            ownership.acquire_project_ownership(project, owner_kind=role, generation="python-r6-synthetic")
+        assert error.value.code == "project_in_use"
+        assert error.value.details["owner"] == role
+        # The record names the Rust parent that wrote it, not the child.
+        assert error.value.details["pid"] == process.pid
+        assert f"pid {process.pid}" in error.value.hint
+        other = "desktop" if role == "broker" else "broker"
+        ownership.acquire_project_ownership(project, owner_kind=other, generation="python-r6-other").release()
+    finally:
+        out, err = process.communicate("release\n", timeout=30)
+    assert process.returncode == 0, err
+    assert json.loads(out)["data"] == {"released": True, "child_exit": 0}
+    ownership.acquire_project_ownership(project, owner_kind=role, generation="python-r6-after").release()
+
+
+def test_rust_owner_records_are_python_bytes(probe, tmp_path, isolated):
+    _, owners = isolated
+    data = _book(tmp_path, owners)
+    request = {"op": "lock-hold", "data_root": str(data), "owner_root": str(owners), "role": "broker"}
+    process = subprocess.Popen([str(probe)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    project = ownership.canonical_project(data)
+    try:
+        process.stdin.write(json.dumps(request) + "\n")
+        process.stdin.flush()
+        assert json.loads(process.stdout.readline())["data"]["holding"] is True
+        record = {"schema_version": 2, "owner": "broker", "generation": "r1-synthetic-probe", "identity": project.identity, "pid": process.pid}
+        expected = (json.dumps(record, sort_keys=True) + "\n").encode("utf-8")
+        for lock_path in (project.lock_path, project.alias_lock_path, project.local_lock_path):
+            assert ownership._owner_kind_lock_path(lock_path, "broker").read_bytes() == expected
+            # The shared compatibility locks carry no record.
+            assert lock_path.read_bytes() == b""
+    finally:
+        process.communicate("release\n", timeout=30)
+
+
 @pytest.mark.skipif(sys.platform != "linux", reason="Linux Secret Service integration")
 def test_python_secret_service_item_rust_reads_updates_in_place(probe, isolated):
     if not os.environ.get("DBUS_SESSION_BUS_ADDRESS"):

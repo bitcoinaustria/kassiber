@@ -118,7 +118,7 @@ pub struct Error {
     pub code: &'static str,
     pub message: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub hint: Option<&'static str>,
+    pub hint: Option<std::borrow::Cow<'static, str>>,
     pub retryable: bool,
     pub details: Value,
 }
@@ -138,7 +138,12 @@ impl Error {
         self
     }
     pub fn hint(mut self, hint: &'static str) -> Self {
-        self.hint = Some(hint);
+        self.hint = Some(hint.into());
+        self
+    }
+    /// A hint built at run time, such as one naming the holder's pid.
+    pub fn hint_text(mut self, hint: String) -> Self {
+        self.hint = Some(hint.into());
         self
     }
     pub fn details(mut self, value: Value) -> Self {

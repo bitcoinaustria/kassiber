@@ -163,14 +163,9 @@ pub fn file_identity(path: &Path) -> Result<String> {
         ((i.nFileIndexHigh as u64) << 32) | i.nFileIndexLow as u64
     ))
 }
-pub fn validate_links(path: &Path) -> Result<()> {
-    if info(path)?.nNumberOfLinks != 1 {
-        return Err(Error::new(
-            ErrorKind::UnsafeProjectDatabase,
-            "project database has multiple filesystem links",
-        ));
-    }
-    Ok(())
+/// The file's hard-link count (`st_nlink`).
+pub fn link_count(path: &Path) -> Result<u32> {
+    Ok(info(path)?.nNumberOfLinks)
 }
 
 /// Rust canonicalize returns verbatim paths; Python realpath removes the
