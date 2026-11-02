@@ -21,6 +21,7 @@ mod reviewed;
 mod safety;
 mod samourai;
 pub(crate) mod text;
+use crate::evidence::canonical::{EventRef, LegRef};
 use crate::{
     codec::{text, truth},
     components, evidence,
@@ -123,12 +124,18 @@ pub(crate) fn gap_ignored_ids(
             })
         })
         .collect();
-    let observations: BTreeMap<_, _> = array(&evidence.canonical()["events"])
-        .iter()
-        .flat_map(|event| array(&event["legs"]))
-        .filter(|leg| !needed.is_empty() && needed.contains(&text(&leg["quantity_hash"])))
-        .map(|leg| (text(&leg["quantity_hash"]), text(&leg["transaction_id"])))
-        .collect();
+    let observations: BTreeMap<_, _> = if needed.is_empty() {
+        BTreeMap::new()
+    } else {
+        evidence
+            .canonical_input()
+            .events()
+            .iter()
+            .flat_map(|event| event.legs())
+            .filter(|leg| needed.contains(&text(&leg["quantity_hash"])))
+            .map(|leg| (text(&leg["quantity_hash"]), text(&leg["transaction_id"])))
+            .collect()
+    };
     for claim in stored::list(stored::get(interpretation, "claims")) {
         if matches!(stored::get(claim, "target"), Py::Null) {
             continue;
@@ -192,38 +199,118 @@ pub(super) fn anchor(row: &Value) -> String {
     }
 }
 
+/// One context observation: a canonical leg read by field, or an owned
+/// JSON object. A typed leg builds its JSON object only when a reader needs it.
+#[derive(Clone, Debug)]
+pub(super) enum Observed<'a> {
+    Leg(LegRef<'a>, std::sync::OnceLock<Value>),
+    Owned(Value),
+}
+impl Observed<'_> {
+    fn leg(leg: LegRef<'_>) -> Observed<'_> {
+        Observed::Leg(leg, std::sync::OnceLock::new())
+    }
+    /// The observation's JSON object, owned from here on.
+    #[cfg(test)]
+    pub fn to_mut(&mut self) -> &mut Value {
+        if let Observed::Leg(..) = self {
+            *self = Observed::Owned((**self).clone());
+        }
+        match self {
+            Observed::Owned(value) => value,
+            Observed::Leg(..) => unreachable!("owned observation"),
+        }
+    }
+    fn into_owned(self) -> Observed<'static> {
+        match self {
+            Observed::Owned(value) => Observed::Owned(value),
+            leg => Observed::Owned((*leg).clone()),
+        }
+    }
+}
+impl std::ops::Deref for Observed<'_> {
+    type Target = Value;
+    fn deref(&self) -> &Value {
+        match self {
+            Observed::Leg(LegRef::Json(value), _) => value,
+            Observed::Leg(LegRef::Typed(leg), value) => value.get_or_init(|| leg.value()),
+            Observed::Owned(value) => value,
+        }
+    }
+}
+impl std::ops::Index<&str> for Observed<'_> {
+    type Output = Value;
+    fn index(&self, key: &str) -> &Value {
+        match self {
+            Observed::Leg(leg, _) => leg.at(key),
+            Observed::Owned(value) => &value[key],
+        }
+    }
+}
+
 /// Keep the canonical event alias iteration: an alias may resolve to a keeper
 /// whose transaction id differs from the original row's id.
-fn observations(canonical: &Value) -> BTreeMap<String, Cow<'_, Value>> {
+fn observations<'a>(events: &[EventRef<'a>]) -> BTreeMap<String, Observed<'a>> {
     fn identity(value: &Value) -> Cow<'_, str> {
         match value.as_str() {
             Some(value) => Cow::Borrowed(value),
             None => Cow::Owned(text(value)),
         }
     }
-    let by_hash: std::collections::HashMap<_, _> = array(&canonical["events"])
+    let by_hash: std::collections::HashMap<_, _> = events
         .iter()
-        .flat_map(|event| array(&event["legs"]))
-        .map(|item| (identity(&item["quantity_hash"]), item))
+        .flat_map(|event| event.legs())
+        .map(|item| (identity(item.at("quantity_hash")), item))
         .collect();
-    array(&canonical["events"])
+    events
         .iter()
-        .flat_map(|event| array(&event["observation_aliases"]))
+        .flat_map(|event| event.aliases())
         .map(|alias| {
             (
                 text(&alias[0]),
-                Cow::Borrowed(by_hash[&identity(&alias[1])]),
+                Observed::leg(by_hash[&identity(&alias[1])]),
             )
         })
         .collect()
+}
+
+/// Owned context observations from a JSON object of fixture values.
+#[cfg(test)]
+pub(super) fn owned_observations(value: &Value) -> BTreeMap<String, Observed<'static>> {
+    value
+        .as_object()
+        .into_iter()
+        .flatten()
+        .map(|(k, v)| (k.clone(), Observed::Owned(v.clone())))
+        .collect()
+}
+
+/// The context's canonical events: borrowed from evidence, or owned JSON.
+#[derive(Clone, Debug)]
+pub(super) enum Events<'a> {
+    Borrowed(Vec<EventRef<'a>>),
+    Owned(Vec<Value>),
+}
+impl Events<'_> {
+    /// The events of a JSON canonical input fixture.
+    #[cfg(test)]
+    pub fn json(canonical: &Value) -> Events<'static> {
+        Events::Owned(array(&canonical["events"]).to_vec())
+    }
+    pub fn iter(&self) -> Vec<EventRef<'_>> {
+        match self {
+            Events::Borrowed(events) => events.clone(),
+            Events::Owned(events) => events.iter().map(EventRef::Json).collect(),
+        }
+    }
 }
 
 /// Canonical evidence and its observations are borrowed from the evidence
 /// stage; interpreters only replace whole observations in their own copies.
 #[derive(Clone)]
 pub(super) struct Context<'a> {
-    pub observations: BTreeMap<String, Cow<'a, Value>>,
-    pub canonical: Cow<'a, Value>,
+    pub observations: BTreeMap<String, Observed<'a>>,
+    pub canonical: Events<'a>,
     pub excluded: BTreeSet<String>,
 }
 impl Context<'_> {
@@ -237,9 +324,15 @@ impl Context<'_> {
             observations: self
                 .observations
                 .into_iter()
-                .map(|(k, v)| (k, Cow::Owned(v.into_owned())))
+                .map(|(k, v)| (k, v.into_owned()))
                 .collect(),
-            canonical: Cow::Owned(self.canonical.into_owned()),
+            canonical: Events::Owned(
+                self.canonical
+                    .iter()
+                    .into_iter()
+                    .map(|event| event.value().into_owned())
+                    .collect(),
+            ),
             excluded: self.excluded,
         }
     }
@@ -247,9 +340,15 @@ impl Context<'_> {
 impl<'a> Context<'a> {
     fn from_stages(components: &Value, evidence: &'a evidence::Evidence) -> Self {
         let excluded = excluded(components);
+        let events: Vec<EventRef<'a>> = evidence
+            .canonical_input()
+            .events()
+            .iter()
+            .map(EventRef::Typed)
+            .collect();
         Self {
-            observations: observations(evidence.canonical()),
-            canonical: Cow::Borrowed(evidence.canonical()),
+            observations: observations(&events),
+            canonical: Events::Borrowed(events),
             excluded,
         }
     }
@@ -330,7 +429,7 @@ pub fn partial(snapshot: &Snapshot) -> Result<Value, String> {
     let context = Context::load(snapshot)?;
     Ok(
         json!({"native": native::compile(snapshot, &context), "channels": channels::compile(snapshot), "graph": crate::graph::prerequisites(snapshot).unwrap_or_else(|error|json!({"error":error})), "safety": safety::compile(snapshot, &context)?, "pipeline": pipeline::compile(snapshot, &context)?, "consolidation": consolidation::compile(snapshot, &context)?, "ownership": ownership::compile(snapshot, &context)?, "fanout": fanout::compile(snapshot, &context)?, "recorded": recorded::compile(snapshot, &context)?, "samourai": samourai::compile(snapshot, &context)?, "shared": {
-            "observations_by_transaction": context.observations,
+            "observations_by_transaction": context.observations.iter().map(|(k, v)| (k.clone(), (**v).clone())).collect::<BTreeMap<_, _>>(),
             "excluded_transaction_ids": context.excluded,
             "row_anchor_ids": snapshot.transactions.iter().map(|row| anchor(&json!(row))).collect::<Vec<_>>()
         }}),

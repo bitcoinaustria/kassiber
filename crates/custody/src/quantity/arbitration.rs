@@ -1,7 +1,7 @@
 //! Port of custody_quantity.py: validate bundles, split sources, reject target
 //! overlap, enforce atomic completeness, and conserve exact exposure postings.
 use super::{array, delta, domain, exact, number, principal, validate_observation};
-use crate::{codec, python_text::PythonText};
+use crate::{codec, evidence::canonical::LegRef, python_text::PythonText};
 use kassiber_pyjson::BigInt;
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
@@ -26,7 +26,12 @@ impl Slice {
         &self.end - &self.start
     }
     fn value(&self) -> Value {
-        json!({"$type":"QuantitySlice","observation_hash":self.hash,"start_msat":number(&self.start),"end_msat":number(&self.end)})
+        let mut slice = serde_json::Map::new();
+        slice.insert("$type".into(), Value::String("QuantitySlice".into()));
+        slice.insert("end_msat".into(), number(&self.end));
+        slice.insert("observation_hash".into(), Value::String(self.hash.clone()));
+        slice.insert("start_msat".into(), number(&self.start));
+        Value::Object(slice)
     }
     fn py(self) -> kassiber_pyjson::Value {
         use kassiber_pyjson::Value as Py;
@@ -179,7 +184,29 @@ impl Decision {
         }
     }
     pub(super) fn value(&self) -> &Value {
-        self.value.get_or_init(|| json!({"$type":"ArbitratedSlice","source":self.source.value(),"state":"external_presumed","reason":"unmatched_outbound_default","selected_claim_id":null,"atomic_bundle_id":null,"transfer_kind":null,"transfer_policy":null,"component_id":null,"target":null,"destination_kind":null,"external_economic_subtype":null,"contender_claim_ids":[]}))
+        self.value.get_or_init(|| {
+            // The default decision `new` leaves unbuilt, without `json!`
+            // serializing each part again.
+            let mut decision = serde_json::Map::new();
+            for (key, value) in [
+                ("$type", Value::String("ArbitratedSlice".into())),
+                ("atomic_bundle_id", Value::Null),
+                ("component_id", Value::Null),
+                ("contender_claim_ids", Value::Array(Vec::new())),
+                ("destination_kind", Value::Null),
+                ("external_economic_subtype", Value::Null),
+                ("reason", Value::String("unmatched_outbound_default".into())),
+                ("selected_claim_id", Value::Null),
+                ("source", self.source.value()),
+                ("state", Value::String("external_presumed".into())),
+                ("target", Value::Null),
+                ("transfer_kind", Value::Null),
+                ("transfer_policy", Value::Null),
+            ] {
+                decision.insert(key.into(), value);
+            }
+            Value::Object(decision)
+        })
     }
     fn value_mut(&mut self) -> &mut Value {
         self.value();
@@ -227,11 +254,11 @@ impl Decision {
     }
 }
 
-type Validated<'a> = (BTreeMap<String, &'a Value>, Vec<Claim>, Vec<Value>);
-fn validate<'a>(observations: &[&'a Value], claims: &[Value]) -> Result<Validated<'a>, String> {
+type Validated<'a> = (BTreeMap<String, LegRef<'a>>, Vec<Claim>, Vec<Value>);
+fn validate<'a>(observations: &[LegRef<'a>], claims: &[Value]) -> Result<Validated<'a>, String> {
     let mut by_hash = BTreeMap::new();
     for &observation in observations {
-        validate_observation(observation)?;
+        validate_observation(&observation)?;
         if by_hash
             .insert(codec::text(&observation["quantity_hash"]), observation)
             .is_some()
@@ -336,7 +363,7 @@ fn validate<'a>(observations: &[&'a Value], claims: &[Value]) -> Result<Validate
         let source = Slice {
             hash: hash.clone(),
             start: BigInt::from(0),
-            end: principal(by_hash[&hash])?,
+            end: principal(&by_hash[&hash])?,
         };
         let value = json!({"claim_id":format!("malformed-claim-bundle:{hash}"),"source":source.value(),"state":"custody_suspense","priority":{"value":priority},"reason":"malformed_claim_bundle"});
         valid.push(Claim::parse(&value)?);
@@ -346,7 +373,7 @@ fn validate<'a>(observations: &[&'a Value], claims: &[Value]) -> Result<Validate
 }
 
 fn source_decisions(
-    by_hash: &BTreeMap<String, &Value>,
+    by_hash: &BTreeMap<String, LegRef<'_>>,
     claims: &[Claim],
 ) -> Result<Vec<Decision>, String> {
     let mut by_source: BTreeMap<&str, Vec<&Claim>> = BTreeMap::new();
@@ -567,7 +594,7 @@ fn atomic_bundles(decisions: &mut [Decision], claims: &[Claim]) {
 
 struct Posting<'a> {
     id: String,
-    observation: &'a Value,
+    observation: LegRef<'a>,
     kind: String,
     location: Value,
     amount: BigInt,
@@ -589,7 +616,7 @@ impl Posting<'_> {
 }
 fn posting_py(
     id: String,
-    observation: &Value,
+    observation: LegRef<'_>,
     kind: String,
     location: &Value,
     amount: BigInt,
@@ -614,13 +641,13 @@ fn posting_py(
 }
 
 fn postings<'a>(
-    by_hash: &BTreeMap<String, &'a Value>,
-    input: &[&'a Value],
+    by_hash: &BTreeMap<String, LegRef<'a>>,
+    input: &[LegRef<'a>],
     decisions: &[Decision],
 ) -> Result<Vec<Posting<'a>>, String> {
     let mut result = Vec::new();
     let posting = |id: String,
-                   observation: &'a Value,
+                   observation: LegRef<'a>,
                    kind: &str,
                    location: Value,
                    n: BigInt,
@@ -631,15 +658,15 @@ fn postings<'a>(
         location,
         amount: n,
         state,
-        domain: super::Domain::of(observation),
+        domain: super::Domain::of(&observation),
     };
-    for (hash, o) in by_hash {
+    for (hash, &o) in by_hash {
         result.push(posting(
             format!("observed:{hash}"),
             o,
             "wallet",
             o["wallet_id"].clone(),
-            delta(o)?,
+            delta(&o)?,
             json!("observed"),
         ));
         let fee = exact(&o["fee_msat"])?;
@@ -702,7 +729,7 @@ fn postings<'a>(
     for targets in targets.values_mut() {
         targets.sort_by_cached_key(|s| (&s.start, &s.end));
     }
-    for o in input.iter().filter(|o| o["direction"] == "inbound") {
+    for &o in input.iter().filter(|o| o["direction"] == "inbound") {
         let hash = codec::text(&o["quantity_hash"]);
         let mut cursor = BigInt::from(0);
         let mut uncovered = Vec::new();
@@ -712,7 +739,7 @@ fn postings<'a>(
             }
             cursor = t.end.clone();
         }
-        let end = principal(o)?;
+        let end = principal(&o)?;
         if cursor < end {
             uncovered.push((cursor, end));
         }
@@ -740,27 +767,31 @@ pub fn project(observations: &[Value], claims: &[Value]) -> Result<Value, String
 /// `project` over borrowed observations; only the projection's own list
 /// copies them.
 pub(crate) fn project_refs(observations: &[&Value], claims: &[Value]) -> Result<Value, String> {
-    arbitrate(observations, claims)?
+    let observations: Vec<_> = observations.iter().map(|o| LegRef::Json(o)).collect();
+    arbitrate(&observations, claims)?
         .py()
         .map(|v| codec::to_json(&v))
 }
 
 pub(super) struct Projection<'a> {
-    by_hash: BTreeMap<String, &'a Value>,
+    by_hash: BTreeMap<String, LegRef<'a>>,
     decisions: Vec<Decision>,
     postings: Vec<Posting<'a>>,
     errors: Vec<Value>,
 }
 
 pub(super) struct View<'a> {
-    pub observations: Vec<&'a Value>,
+    pub observations: Vec<LegRef<'a>>,
     pub decisions: Vec<&'a Value>,
     pub errors: &'a [Value],
 }
 impl<'a> View<'a> {
     pub fn of(value: &'a Value) -> Self {
         Self {
-            observations: array(&value["observations"]).iter().collect(),
+            observations: array(&value["observations"])
+                .iter()
+                .map(LegRef::Json)
+                .collect(),
             decisions: array(&value["decisions"]).iter().collect(),
             errors: array(&value["claim_errors"]),
         }
@@ -804,7 +835,7 @@ impl Projection<'_> {
                 Py::List(
                     self.by_hash
                         .into_values()
-                        .map(super::borrowed_py)
+                        .map(|o| super::borrowed_py(&o.value()))
                         .collect::<Result<_, _>>()?,
                 ),
             ),
@@ -842,7 +873,7 @@ pub(super) struct ProjectionState {
     pub errors: Vec<Value>,
 }
 impl<'a> Projection<'a> {
-    pub fn located(self, locate: impl Fn(&'a Value) -> Located) -> ProjectionState {
+    pub fn located(self, locate: impl Fn(LegRef<'a>) -> Located) -> ProjectionState {
         ProjectionState {
             observations: self.by_hash.into_values().map(&locate).collect(),
             decisions: self.decisions,
@@ -867,7 +898,7 @@ impl ProjectionState {
     /// The postings' JSON objects, as `py` would convert back to JSON.
     pub fn postings_json<'v, E: From<String>>(
         &'v self,
-        observation: impl Fn(Located) -> &'v Value,
+        observation: impl Fn(Located) -> LegRef<'v>,
         exact: &impl Fn(&Value) -> Result<Value, E>,
     ) -> Result<Vec<Value>, E> {
         self.postings
@@ -898,7 +929,7 @@ impl ProjectionState {
     /// `Projection::py` of the arbitration this state came from.
     pub fn py<'v>(
         &'v self,
-        observation: impl Fn(Located) -> &'v Value,
+        observation: impl Fn(Located) -> LegRef<'v>,
     ) -> Result<kassiber_pyjson::Value, String> {
         use kassiber_pyjson::Value as Py;
         Ok(super::py_dict([
@@ -921,7 +952,7 @@ impl ProjectionState {
                 Py::List(
                     self.observations
                         .iter()
-                        .map(|at| super::borrowed_py(observation(*at)))
+                        .map(|at| super::borrowed_py(&observation(*at).value()))
                         .collect::<Result<_, _>>()?,
                 ),
             ),
@@ -949,7 +980,7 @@ impl ProjectionState {
 }
 
 pub(super) fn arbitrate<'a>(
-    observations: &[&'a Value],
+    observations: &[LegRef<'a>],
     claims: &[Value],
 ) -> Result<Projection<'a>, String> {
     let (by_hash, claims, errors) = validate(observations, claims)?;

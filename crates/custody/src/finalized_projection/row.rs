@@ -39,6 +39,11 @@ impl<'a> FinalizedRow<'a> {
         }
     }
 
+    /// The source row the generated fields override.
+    pub(super) fn source(&self) -> &Value {
+        &self.source
+    }
+
     /// Replace a field without first copying its source value.
     pub(super) fn set(&mut self, key: &'static str, value: Value) {
         self.overrides.insert(key, value);

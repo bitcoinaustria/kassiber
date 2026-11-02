@@ -10,6 +10,7 @@ use kassiber_pyjson::{Key, Value as Py};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
+pub mod canonical;
 mod observation;
 
 fn integer_or_zero(value: &Value) -> Result<Value, Error> {
@@ -801,6 +802,7 @@ pub fn canonical_input(
     non_events: &BTreeSet<String>,
 ) -> Result<Value, Error> {
     canonical_with_keys(rows, reconciliations, non_events, Vec::new())
+        .map(canonical::Canonical::into_value)
 }
 
 fn canonical_with_keys<F: Fields + Sync>(
@@ -808,7 +810,7 @@ fn canonical_with_keys<F: Fields + Sync>(
     reconciliations: &Value,
     non_events: &BTreeSet<String>,
     mut prepared: Vec<Option<EventKey>>,
-) -> Result<Value, Error> {
+) -> Result<canonical::Canonical, Error> {
     let mut groups: BTreeMap<EventKey, Vec<&F>> = BTreeMap::new();
     let mut rejected = Vec::new();
     let mut events = Vec::new();
@@ -850,8 +852,8 @@ fn canonical_with_keys<F: Fields + Sync>(
     // Groups are independent; build them in key order, so the first refusal
     // and every output keep their order.
     let span = crate::timing::span("evidence.canonical.events");
-    for (key, group) in &groups {
-        match canonical_event(key, group, reconciliations)? {
+    for (key, group) in groups {
+        match canonical_event(key, &group, reconciliations)? {
             Ok(event) => events.push(event),
             Err(issue) => rejected.push(issue),
         }
@@ -867,20 +869,15 @@ fn canonical_with_keys<F: Fields + Sync>(
             v["transaction_ids"].to_string(),
         )
     });
-    // The object json! would build, with the lists moved rather than copied.
-    let mut input = serde_json::Map::new();
-    input.insert("$type".into(), json!("CanonicalQuantityInput"));
-    input.insert("events".into(), Value::Array(events));
-    input.insert("rejected_events".into(), Value::Array(rejected));
-    Ok(Value::Object(input))
+    Ok(canonical::Canonical::new(events, rejected))
 }
 
 /// One canonical event group: its event, a rejection issue, or a refusal.
 fn canonical_event<F: Fields>(
-    key: &EventKey,
+    key: EventKey,
     group: &[&F],
     reconciliations: &Value,
-) -> Result<Result<Value, Value>, Error> {
+) -> Result<Result<canonical::Event, Value>, Error> {
     let reconciled = |row: &F| {
         if reconciliations.as_object().is_some_and(|m| m.is_empty()) {
             None
@@ -893,7 +890,7 @@ fn canonical_event<F: Fields>(
         .any(|r| reconciled(r).is_some_and(Value::is_null))
     {
         return Ok(Err(issue(
-            key,
+            &key,
             "source_overlap_quantity_unresolved",
             "overlapping wallet receipts lack complete disjoint output coverage",
             group,
@@ -904,7 +901,7 @@ fn canonical_event<F: Fields>(
     let mut errors = BTreeSet::new();
     for row in group {
         let built = (|| {
-            let mut observation = observation::Observation::new(*row, key)?;
+            let mut observation = observation::Observation::new(*row, &key)?;
             if let Some(proof) = reconciled(row).filter(|v| !v.is_null()) {
                 observation.reconcile(proof)?;
             }
@@ -920,7 +917,7 @@ fn canonical_event<F: Fields>(
     }
     if !errors.is_empty() {
         return Ok(Err(issue(
-            key,
+            &key,
             "canonical_event_leg_invalid",
             "one or more wallet-event aggregate legs are invalid",
             group,
@@ -943,13 +940,14 @@ fn canonical_event<F: Fields>(
     }
     if !contradictions.is_empty() {
         return Ok(Err(issue(
-            key,
+            &key,
             "canonical_event_leg_contradiction",
             "wallet-event aggregate observations disagree",
             group,
             json!({"contradictory_slots":contradictions}),
         )));
     }
+    let key_value = std::sync::Arc::new(key.value());
     let mut selected = vec![0; observations.len()];
     let mut legs = Vec::with_capacity(slots.len());
     for items in slots.values() {
@@ -960,7 +958,7 @@ fn canonical_event<F: Fields>(
         for index in items {
             selected[*index] = keeper;
         }
-        legs.push(observations[keeper].value());
+        legs.push(observations[keeper].leg(&key_value));
     }
     let mut aliases = Vec::with_capacity(observations.len());
     let mut snapshots = BTreeMap::new();
@@ -977,17 +975,26 @@ fn canonical_event<F: Fields>(
         snapshots.insert(item.commitment.detail_hash.as_str(), &item.commitment);
     }
     aliases.sort();
-    let snapshots: Vec<_> = snapshots.into_values().map(|item| {
-        json!({"$type":"EvidenceSnapshot","quantity_hash":item.quantity_hash,"detail_hash":item.detail_hash,"payload_json":item.payload_json})
-    }).collect();
-    let mut event = serde_json::Map::new();
-    event.insert("$type".into(), json!("CanonicalQuantityEvent"));
-    event.insert("event_key".into(), key.value());
-    event.insert("legs".into(), Value::Array(legs));
-    event.insert("evidence_snapshots".into(), Value::Array(snapshots));
-    event.insert("source_transaction_ids".into(), json!(ids));
-    event.insert("observation_aliases".into(), json!(aliases));
-    Ok(Ok(Value::Object(event)))
+    let string = |value: &str| Value::String(value.to_owned());
+    let snapshots = snapshots
+        .into_values()
+        .map(|item| {
+            let mut snapshot = serde_json::Map::new();
+            snapshot.insert("$type".into(), string("EvidenceSnapshot"));
+            snapshot.insert("detail_hash".into(), string(&item.detail_hash));
+            snapshot.insert("payload_json".into(), string(&item.payload_json));
+            snapshot.insert("quantity_hash".into(), string(&item.quantity_hash));
+            Value::Object(snapshot)
+        })
+        .collect();
+    let aliases = aliases
+        .into_iter()
+        .map(|(id, hash)| Value::Array(vec![string(id), string(hash)]))
+        .collect();
+    let ids = ids.into_iter().map(string).collect();
+    Ok(Ok(canonical::Event::new(
+        key, key_value, legs, snapshots, ids, aliases,
+    )))
 }
 
 /// The evidence stage: enriched rows by source-row index, the canonical input
@@ -995,15 +1002,19 @@ fn canonical_event<F: Fields>(
 #[derive(Clone, Debug)]
 pub struct Evidence {
     enriched: Vec<Enriched>,
-    canonical: std::sync::Arc<Value>,
+    canonical: std::sync::Arc<canonical::Canonical>,
     reconciliations: Value,
     non_events: BTreeSet<String>,
 }
 impl Evidence {
+    /// The canonical input's JSON object, built on first request.
     pub fn canonical(&self) -> &Value {
+        self.canonical.value()
+    }
+    pub fn canonical_input(&self) -> &canonical::Canonical {
         &self.canonical
     }
-    pub(crate) fn canonical_arc(&self) -> std::sync::Arc<Value> {
+    pub(crate) fn canonical_arc(&self) -> std::sync::Arc<canonical::Canonical> {
         self.canonical.clone()
     }
     pub fn non_event_ids(&self) -> &BTreeSet<String> {
@@ -1019,7 +1030,7 @@ impl Evidence {
             "enriched_rows".into(),
             Value::Array(self.enriched.iter().map(|e| e.view(rows).value()).collect()),
         );
-        stage.insert("canonical_input".into(), (*self.canonical).clone());
+        stage.insert("canonical_input".into(), self.canonical.value().clone());
         stage.insert(
             "receipt_reconciliations".into(),
             self.reconciliations.clone(),

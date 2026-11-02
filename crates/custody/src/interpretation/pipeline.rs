@@ -111,8 +111,9 @@ fn quarantines(profile: &Profile, rows: &[Value], context: &Context) -> Result<V
         return Ok(Vec::new());
     }
     let mut members = BTreeMap::new();
-    for event in array(&context.canonical["events"]) {
-        let mut ids: Vec<_> = array(&event["observation_aliases"])
+    for event in context.canonical.iter() {
+        let mut ids: Vec<_> = event
+            .aliases()
             .iter()
             .map(|alias| codec::text(&alias[0]))
             .collect();
@@ -225,9 +226,11 @@ pub(super) fn prepare_with_samourai<'a>(
     handled.extend(reserved.iter().cloned());
     handled.extend(array(&samourai["touched_ids"]).iter().map(codec::text));
     let eligible = snapshot.owned_index.is_some()
-        || array(&context.canonical["events"])
+        || context
+            .canonical
             .iter()
-            .any(|event| event["event_key"]["native_namespace"] == "chain");
+            .iter()
+            .any(|event| event.key()["native_namespace"] == "chain");
     let mut normalized = rows.clone();
     if eligible {
         for (index, row) in rows.iter().enumerate() {
@@ -301,7 +304,7 @@ mod tests {
                 "quarantine" => {
                     let context = Context {
                         observations: BTreeMap::new(),
-                        canonical: std::borrow::Cow::Owned(vector["canonical"].clone()),
+                        canonical: super::super::Events::json(&vector["canonical"]),
                         excluded: array(&vector["excluded"]).iter().map(codec::text).collect(),
                     };
                     json!(quarantines(

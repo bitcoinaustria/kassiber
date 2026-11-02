@@ -1,5 +1,6 @@
 //! Comparison-only runtime composition. No persistence or authority boundary.
-use super::{array, domain};
+use super::{array, domain, Canon, QEvent};
+use crate::evidence::canonical::{EventRef, LegRef, Obs};
 use crate::{codec, python_text::PythonText};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -12,7 +13,7 @@ fn text(v: &Value) -> String {
         String::new()
     }
 }
-fn pool(o: &Value) -> Pool {
+fn pool<O: Obs + ?Sized>(o: &O) -> Pool {
     let d = domain(o);
     [
         text(&o["profile_id"]),
@@ -71,14 +72,14 @@ pub fn tax_eligibility(
     rows: &impl Rows,
 ) -> Result<Value, String> {
     tax_eligibility_events(
-        &array(&canonical["events"]).iter().collect::<Vec<_>>(),
+        &crate::evidence::canonical::json_events(canonical),
         &super::arbitration::View::of(projection),
         issues,
         rows,
     )
 }
 fn tax_eligibility_events(
-    events: &[&Value],
+    events: &[EventRef],
     projection: &super::arbitration::View,
     issues: &[Value],
     rows: &impl Rows,
@@ -87,10 +88,10 @@ fn tax_eligibility_events(
     let mut pools = BTreeMap::new();
     let mut aliases = BTreeMap::new();
     for event in events {
-        let key = &event["event_key"];
+        let key = event.key();
         let order: Order = [
-            array(&event["legs"])
-                .iter()
+            event
+                .legs()
                 .map(|o| text(&o["occurred_at"]))
                 .min()
                 .unwrap_or_default(),
@@ -99,13 +100,13 @@ fn tax_eligibility_events(
             text(&key["native_namespace"]),
             text(&key["native_event_id"]),
         ];
-        for alias in array(&event["observation_aliases"]) {
+        for alias in event.aliases() {
             aliases.insert(text(&alias[0]), text(&alias[1]));
         }
-        for leg in array(&event["legs"]) {
+        for leg in event.legs() {
             let hash = text(&leg["quantity_hash"]);
             orders.insert(hash.clone(), order.clone());
-            pools.insert(hash, pool(leg));
+            pools.insert(hash, pool(&leg));
         }
     }
     let mut barriers: BTreeMap<Pool, Order> = BTreeMap::new();
@@ -277,16 +278,17 @@ fn issue(
 ) -> Value {
     json!({"$type":"QuantityIssue","issue_id":id,"issue_type":kind,"state":"conflicting","asset":asset,"amount_msat":null,"occurred_at":at,"transaction_ids":ids,"reason":reason,"details":details})
 }
-fn observations(c: &Value) -> Result<Vec<(String, &Value)>, String> {
+fn observations(c: Canon<'_>) -> Result<Vec<(String, LegRef<'_>)>, String> {
     observations_needed(c, true)
 }
-fn observations_needed(c: &Value, needed: bool) -> Result<Vec<(String, &Value)>, String> {
+fn observations_needed(c: Canon<'_>, needed: bool) -> Result<Vec<(String, LegRef<'_>)>, String> {
+    let events = c.events();
     if !needed
-        && array(&c["events"]).iter().all(|event| {
-            array(&event["observation_aliases"]).iter().all(|alias| {
+        && events.iter().all(|event| {
+            event.aliases().iter().all(|alias| {
                 alias[1].as_str().is_some_and(|hash| {
-                    array(&event["legs"])
-                        .iter()
+                    event
+                        .legs()
                         .take(8)
                         .any(|leg| leg["quantity_hash"].as_str() == Some(hash))
                 })
@@ -295,15 +297,15 @@ fn observations_needed(c: &Value, needed: bool) -> Result<Vec<(String, &Value)>,
     {
         return Ok(Vec::new());
     }
-    let hashes: HashMap<_, _> = array(&c["events"])
+    let hashes: HashMap<_, _> = events
         .iter()
-        .flat_map(|e| array(&e["legs"]))
-        .map(|o| (super::text_key(&o["quantity_hash"]), o))
+        .flat_map(|e| e.legs())
+        .map(|o| (super::text_key(o.at("quantity_hash")), o))
         .collect();
-    let mut result: Vec<(String, &Value)> = Vec::new();
+    let mut result: Vec<(String, LegRef)> = Vec::new();
     let mut positions: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
-    for event in array(&c["events"]) {
-        for a in array(&event["observation_aliases"]) {
+    for event in &events {
+        for a in event.aliases() {
             let o = *hashes
                 .get(super::text_key(&a[1]).as_ref())
                 .ok_or("KeyError")?;
@@ -336,31 +338,33 @@ pub fn component_claims(
     components: &[Value],
     evidence: &Value,
 ) -> Result<Value, String> {
+    let canonical = Canon::Json(canonical);
     component_claims_observed(canonical, components, evidence, &observations(canonical)?)
 }
 fn component_claims_observed(
-    canonical: &Value,
+    canonical: Canon<'_>,
     components: &[Value],
     evidence: &Value,
-    obs: &[(String, &Value)],
+    obs: &[(String, LegRef<'_>)],
 ) -> Result<Value, String> {
     if components.is_empty() {
         return Ok(json!([[], [], [], []]));
     }
     let observed =
         super::reviewed::Observations::new(obs.iter().map(|(k, v)| (k.clone(), *v)).collect());
-    let mut first_observation: HashMap<&str, &Value> = HashMap::new();
+    let mut first_observation: HashMap<&str, LegRef> = HashMap::new();
     let mut hashes_by_tx: HashMap<&str, Vec<String>> = HashMap::new();
     for (tx, o) in obs {
-        first_observation.entry(tx.as_str()).or_insert(o);
+        first_observation.entry(tx.as_str()).or_insert(*o);
         hashes_by_tx
             .entry(tx.as_str())
             .or_default()
             .push(text(&o["quantity_hash"]));
     }
-    let snapshot_hashes: BTreeSet<_> = array(&canonical["events"])
-        .iter()
-        .flat_map(|e| array(&e["evidence_snapshots"]))
+    let snapshot_hashes: BTreeSet<_> = canonical
+        .events()
+        .into_iter()
+        .flat_map(|e| e.snapshots())
         .map(|s| text(&s["quantity_hash"]))
         .collect();
     let mut components = components.to_vec();
@@ -427,7 +431,7 @@ fn component_claims_observed(
             }
         }
         let (code, message, details) = error.unwrap();
-        let mut sources: Vec<&Value> = Vec::new();
+        let mut sources: Vec<LegRef> = Vec::new();
         for tx in &ids {
             if let Some(&o) = first_observation.get(tx.as_str()) {
                 if o["direction"] == "outbound"
@@ -510,7 +514,7 @@ pub fn whole_issues(
     blockers: &[Value],
 ) -> Result<Value, String> {
     whole_issues_rejected(
-        &canonical["rejected_events"],
+        array(&canonical["rejected_events"]),
         &super::arbitration::View::of(projection),
         rows,
         component,
@@ -520,7 +524,7 @@ pub fn whole_issues(
     )
 }
 fn whole_issues_rejected(
-    rejected: &Value,
+    rejected: &[Value],
     projection: &super::arbitration::View,
     rows: &impl Rows,
     component: &[Value],
@@ -529,7 +533,7 @@ fn whole_issues_rejected(
     blockers: &[Value],
 ) -> Result<Value, String> {
     let mut issues = Vec::new();
-    for rejected in array(rejected) {
+    for rejected in rejected {
         let key = &rejected["event_key"];
         let mut details = json!({"message":rejected["message"],"event_scope":{"chain":key["chain"],"network":key["network"],"namespace":key["native_namespace"]}});
         if let Some(d) = rejected["details"].as_object() {
@@ -682,7 +686,7 @@ fn whole_issues_rejected(
 /// Private typed runtime operands by reference, indexed by their operand
 /// names; an unknown name is null, as in a JSON object.
 struct Operands<'a> {
-    canonical: &'a Value,
+    canonical: Canon<'a>,
     rows: RowSource<'a>,
     components: &'a Value,
     evidence: &'a Value,
@@ -696,7 +700,7 @@ struct Operands<'a> {
 impl<'a> Operands<'a> {
     fn of(v: &'a Value) -> Self {
         Self {
-            canonical: &v["canonical"],
+            canonical: Canon::Json(&v["canonical"]),
             rows: RowSource::Values(array(&v["rows"])),
             components: &v["components"],
             evidence: &v["evidence"],
@@ -714,7 +718,6 @@ impl std::ops::Index<&str> for Operands<'_> {
     fn index(&self, key: &str) -> &Value {
         static NULL: Value = Value::Null;
         match key {
-            "canonical" => self.canonical,
             "components" => self.components,
             "evidence" => self.evidence,
             "claims" => self.claims,
@@ -745,7 +748,7 @@ impl State<'_> {
         let events = &self.native.events;
         let projection = self
             .projection
-            .py(|(e, l)| &array(&events[e as usize]["legs"])[l as usize])?;
+            .py(|(e, l)| events[e as usize].get().leg(l as usize))?;
         let tax = match self.tax {
             Some(tax) => tax,
             None => unblocked_eligibility(&projection),
@@ -760,17 +763,20 @@ impl State<'_> {
                 Py::List(
                     self.native
                         .events
-                        .into_iter()
-                        .map(|e| match e {
-                            std::borrow::Cow::Borrowed(e) => super::borrowed_py(e),
-                            std::borrow::Cow::Owned(e) => super::into_py(e),
-                        })
+                        .iter()
+                        .map(|e| super::borrowed_py(&e.get().value()))
                         .collect::<Result<_, _>>()?,
                 ),
             ),
             (
                 Key::Str("rejected_events".into()),
-                super::borrowed_py(self.native.rejected)?,
+                Py::List(
+                    self.native
+                        .rejected
+                        .iter()
+                        .map(super::borrowed_py)
+                        .collect::<Result<_, _>>()?,
+                ),
             ),
         ]);
         let mut gaps = self.gaps;
@@ -824,13 +830,14 @@ fn compose<'a>(v: &Operands<'a>) -> Result<State<'a>, String> {
             .filter(|v| codec::truth(v))
             .map(codec::pystr),
     );
+    let canonical_events = canonical.events();
     let by_hash: HashMap<_, _> = if array(&v["claims"]).is_empty() {
         HashMap::new()
     } else {
-        array(&canonical["events"])
+        canonical_events
             .iter()
-            .flat_map(|e| array(&e["legs"]))
-            .map(|o| (super::text_key(&o["quantity_hash"]), o))
+            .flat_map(|e| e.legs())
+            .map(|o| (super::text_key(o.at("quantity_hash")), o))
             .collect()
     };
     for c in array(&v["claims"]) {
@@ -841,7 +848,7 @@ fn compose<'a>(v: &Operands<'a>) -> Result<State<'a>, String> {
         }
     }
     let span = crate::timing::span("quantity.holds");
-    let mut gaps = super::holds::compose(
+    let mut gaps = super::holds::compose_canon(
         canonical,
         &ignored.into_iter().map(|s| json!(s)).collect::<Vec<_>>(),
         &v["dismissed"],
@@ -849,16 +856,38 @@ fn compose<'a>(v: &Operands<'a>) -> Result<State<'a>, String> {
     )?;
     drop(span);
     let span = crate::timing::span("quantity.native");
-    let mut native = super::native::compile_borrowed(
-        canonical,
-        array(&v["native"]),
-        &component_ids
-            .into_iter()
-            .map(|s| json!(s))
-            .collect::<Vec<_>>(),
-        &json!({}),
-        Some(&aliases),
-    )?;
+    let audits = array(&v["native"]);
+    let key = |event: &EventRef| {
+        let key = event.key();
+        ["chain", "network", "native_namespace", "native_event_id"]
+            .map(|field| super::text_key(&key[field]).into_owned())
+    };
+    // Without audits, sorted canonical events are the compilation's events;
+    // otherwise the native compiler reads the JSON input.
+    let mut native = if audits.is_empty()
+        && canonical_events
+            .windows(2)
+            .all(|pair| key(&pair[0]) < key(&pair[1]))
+    {
+        super::native::Compilation {
+            events: canonical_events.iter().copied().map(QEvent::Ref).collect(),
+            rejected: canonical.rejected(),
+            claims: vec![],
+            issues: vec![],
+        }
+    } else {
+        let shared = matches!(canonical, Canon::Json(_)).then_some(aliases.as_slice());
+        super::native::compile_borrowed(
+            canonical.json(),
+            audits,
+            &component_ids
+                .into_iter()
+                .map(|s| json!(s))
+                .collect::<Vec<_>>(),
+            &json!({}),
+            shared,
+        )?
+    };
     let mut claims = match comp[0].take() {
         Value::Array(claims) => claims,
         _ => vec![],
@@ -868,8 +897,8 @@ fn compose<'a>(v: &Operands<'a>) -> Result<State<'a>, String> {
     }
     claims.append(&mut native.claims);
     claims.extend_from_slice(array(&v["claims"]));
-    let events: Vec<&Value> = native.events.iter().map(|e| e.as_ref()).collect();
-    let observations: Vec<&Value> = events.iter().flat_map(|e| array(&e["legs"])).collect();
+    let events: Vec<EventRef> = native.events.iter().map(QEvent::get).collect();
+    let observations: Vec<LegRef> = events.iter().flat_map(|e| e.legs()).collect();
     drop(span);
     let span = crate::timing::span("quantity.project");
     let projection = super::arbitration::arbitrate(&observations, &claims)?;
@@ -904,12 +933,13 @@ fn compose<'a>(v: &Operands<'a>) -> Result<State<'a>, String> {
     // Locate each observation by its event slot and leg, so the result
     // owns no borrow of the events it reads.
     let mut located = HashMap::new();
-    for (slot, event) in native.events.iter().enumerate() {
-        for (leg, observation) in array(&event["legs"]).iter().enumerate() {
-            located.insert(observation as *const Value, (slot as u32, leg as u32));
+    for (slot, event) in events.iter().enumerate() {
+        for (leg, observation) in event.legs().enumerate() {
+            located.insert(identity(observation), (slot as u32, leg as u32));
         }
     }
-    let projection = projection.located(|o| located[&(o as *const Value)]);
+    let projection = projection.located(|o| located[&identity(o)]);
+    drop(events);
     Ok(State {
         native,
         projection,
@@ -918,6 +948,14 @@ fn compose<'a>(v: &Operands<'a>) -> Result<State<'a>, String> {
         gaps,
         comp,
     })
+}
+
+/// An observation's address, the identity `located` maps.
+fn identity(observation: LegRef) -> usize {
+    match observation {
+        LegRef::Typed(leg) => leg as *const _ as usize,
+        LegRef::Json(value) => value as *const _ as usize,
+    }
 }
 /// Recompute quantity from preceding Rust stages and the raw snapshot only.
 pub fn stage(
@@ -1066,7 +1104,7 @@ pub fn stage(
     let ignored = Value::Array(ignored.into_iter().map(Value::String).collect());
     let dismissed = crate::gaps::dismissed_fingerprints(&reviews);
     let state = compose(&Operands {
-        canonical: evidence.canonical(),
+        canonical: Canon::Typed(evidence.canonical_input()),
         rows: RowSource::Enriched(evidence.enriched(), &snapshot.transactions),
         components: &components,
         evidence: &snapshots,
@@ -1087,17 +1125,30 @@ pub fn stage(
         mut comp,
     } = state;
     let canonical = evidence.canonical_arc();
-    let shared: HashMap<*const Value, usize> = array(&canonical["events"])
+    let typed: HashMap<usize, usize> = canonical
+        .events()
         .iter()
         .enumerate()
-        .map(|(i, event)| (event as *const Value, i))
+        .map(|(i, event)| (event as *const _ as usize, i))
+        .collect();
+    // A native recompilation reads the canonical input's built JSON.
+    let json: HashMap<usize, usize> = canonical
+        .built_value()
+        .map(|value| array(&value["events"]))
+        .unwrap_or(&[])
+        .iter()
+        .enumerate()
+        .map(|(i, event)| (event as *const _ as usize, i))
         .collect();
     let events = native
         .events
         .into_iter()
         .map(|event| match event {
-            std::borrow::Cow::Borrowed(event) => Slot::Shared(shared[&(event as *const Value)]),
-            std::borrow::Cow::Owned(event) => Slot::Owned(event),
+            QEvent::Ref(EventRef::Typed(event)) => {
+                Slot::Typed(typed[&(event as *const _ as usize)])
+            }
+            QEvent::Ref(EventRef::Json(event)) => Slot::Json(json[&(event as *const _ as usize)]),
+            QEvent::Owned(event) => Slot::Owned(event),
         })
         .collect();
     let mut issues = match super::into_py(issues)? {
@@ -1170,14 +1221,17 @@ pub(crate) fn plain(value: &Value) -> bool {
 /// A quantity event: a canonical event shared with evidence, or one native
 /// augmentation rewrote.
 enum Slot {
-    Shared(usize),
+    /// A typed canonical event.
+    Typed(usize),
+    /// An event of the canonical input's built JSON.
+    Json(usize),
     Owned(Value),
 }
 
 /// The quantity stage. Observations stay in their canonical events; its
 /// Python value is built only on request.
 pub struct QuantityState {
-    canonical: std::sync::Arc<Value>,
+    canonical: std::sync::Arc<crate::evidence::canonical::Canonical>,
     events: Vec<Slot>,
     projection: super::arbitration::ProjectionState,
     gap_candidate_transaction_ids: Value,
@@ -1189,20 +1243,21 @@ pub struct QuantityState {
     tax: Option<kassiber_pyjson::Value>,
 }
 impl QuantityState {
-    pub(crate) fn event(&self, slot: usize) -> &Value {
+    pub(crate) fn event(&self, slot: usize) -> EventRef<'_> {
         match &self.events[slot] {
-            Slot::Shared(at) => &array(&self.canonical["events"])[*at],
-            Slot::Owned(event) => event,
+            Slot::Typed(at) => EventRef::Typed(&self.canonical.events()[*at]),
+            Slot::Json(at) => EventRef::Json(&array(&self.canonical.value()["events"])[*at]),
+            Slot::Owned(event) => EventRef::Json(event),
         }
     }
-    pub(crate) fn events(&self) -> impl Iterator<Item = &Value> {
+    pub(crate) fn events(&self) -> impl Iterator<Item = EventRef<'_>> {
         (0..self.events.len()).map(|slot| self.event(slot))
     }
-    fn located(&self, (event, leg): super::arbitration::Located) -> &Value {
-        &array(&self.event(event as usize)["legs"])[leg as usize]
+    fn located(&self, (event, leg): super::arbitration::Located) -> LegRef<'_> {
+        self.event(event as usize).leg(leg as usize)
     }
     /// Projection observations, in quantity-hash order.
-    pub(crate) fn observations(&self) -> impl Iterator<Item = &Value> {
+    pub(crate) fn observations(&self) -> impl Iterator<Item = LegRef<'_>> {
         self.projection
             .observations
             .iter()
@@ -1244,13 +1299,22 @@ impl QuantityState {
             }
         };
         let canonical = if canonical {
-            let events = self.events().map(exact).collect::<Result<Vec<_>, E>>()?;
+            let events = self
+                .events()
+                .map(|e| exact(&e.value()))
+                .collect::<Result<Vec<_>, E>>()?;
             Some(object([
                 ("$type", json!("CanonicalQuantityInput")),
                 ("events", Value::Array(events)),
                 (
                     "rejected_events",
-                    exact(&self.canonical["rejected_events"])?,
+                    Value::Array(
+                        self.canonical
+                            .rejected()
+                            .iter()
+                            .map(exact)
+                            .collect::<Result<_, E>>()?,
+                    ),
                 ),
             ]))
         } else {
@@ -1301,9 +1365,17 @@ impl QuantityState {
                 ]))
             }
         };
+        // A typed observation's JSON is built once and moved when plain.
+        let owned = |v: std::borrow::Cow<'_, Value>| -> Result<Value, E> {
+            if plain(&v) {
+                Ok(v.into_owned())
+            } else {
+                convert(&super::borrowed_py(&v)?)
+            }
+        };
         let observations = self
             .observations()
-            .map(exact)
+            .map(|o| owned(o.value()))
             .collect::<Result<Vec<_>, E>>()?;
         let postings = self
             .projection
@@ -1360,13 +1432,19 @@ impl QuantityState {
                 Key::Str("events".into()),
                 Py::List(
                     self.events()
-                        .map(super::borrowed_py)
+                        .map(|e| super::borrowed_py(&e.value()))
                         .collect::<Result<_, _>>()?,
                 ),
             ),
             (
                 Key::Str("rejected_events".into()),
-                super::borrowed_py(&self.canonical["rejected_events"])?,
+                kassiber_pyjson::Value::List(
+                    self.canonical
+                        .rejected()
+                        .iter()
+                        .map(super::borrowed_py)
+                        .collect::<Result<_, _>>()?,
+                ),
             ),
         ]);
         let parts = [
@@ -1510,18 +1588,24 @@ mod tests {
             {"legs":[{"quantity_hash":"a"}],"observation_aliases":[["tx-a","a"]]},
             {"legs":[{"quantity_hash":"b"}],"observation_aliases":[["tx-b","b"]]}
         ]});
-        assert!(observations_needed(&canonical, false).unwrap().is_empty());
+        assert!(observations_needed(Canon::Json(&canonical), false)
+            .unwrap()
+            .is_empty());
         canonical["events"][0]["observation_aliases"][0][1] = json!("b");
-        assert!(observations_needed(&canonical, false).unwrap().is_empty());
-        let indexed = observations_needed(&canonical, true).unwrap();
+        assert!(observations_needed(Canon::Json(&canonical), false)
+            .unwrap()
+            .is_empty());
+        let indexed = observations_needed(Canon::Json(&canonical), true).unwrap();
         assert_eq!(indexed[0].1["quantity_hash"], "b");
         canonical["events"][0]["observation_aliases"][0][1] = json!("missing");
         assert_eq!(
-            observations_needed(&canonical, false).unwrap_err(),
+            observations_needed(Canon::Json(&canonical), false).unwrap_err(),
             "KeyError"
         );
         canonical["events"][0]["legs"][0]["quantity_hash"] = json!(0);
         canonical["events"][0]["observation_aliases"][0][1] = json!("");
-        assert!(observations_needed(&canonical, false).unwrap().is_empty());
+        assert!(observations_needed(Canon::Json(&canonical), false)
+            .unwrap()
+            .is_empty());
     }
 }

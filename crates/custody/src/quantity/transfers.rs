@@ -38,7 +38,7 @@ pub fn canonical_internal_transfer_rows(
         };
         let amount =
             exact(&decision["source"]["end_msat"])? - exact(&decision["source"]["start_msat"])?;
-        let scope = domain(source);
+        let scope = domain(*source);
         let mut row = json!({
             "out_transaction_id":source["anchor_transaction_id"],
             "in_transaction_id":target["anchor_transaction_id"],

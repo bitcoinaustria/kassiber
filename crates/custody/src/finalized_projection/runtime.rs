@@ -1,4 +1,5 @@
 //! Raw-stage finalized-projection adapter; no persistence authority.
+use crate::evidence::canonical::LegRef;
 use crate::{codec, graph::stored, interpretation, snapshot::Snapshot};
 use kassiber_pyjson::Value as Py;
 use serde_json::{json, Map, Value};
@@ -193,7 +194,7 @@ impl super::Rows for BorrowedRows<'_> {
             return super::row::FinalizedRow::borrowed(&Value::Null);
         };
         let mut projected = super::row::FinalizedRow::borrowed(row);
-        projected["_closed_confirmation_observation"] = confirmation.clone();
+        projected.set("_closed_confirmation_observation", confirmation.clone());
         projected
     }
 }
@@ -386,7 +387,7 @@ fn state_input<'a>(
             .into_iter()
             .map(Value::String),
     );
-    let observations: Vec<&Value> = quantity.observations().collect();
+    let observations: Vec<LegRef> = quantity.observations().collect();
     let (pool_barriers, pool_barrier_roots) = match blocked {
         Some(tax) => (
             pools(stored::get(tax, "pool_barriers"))?,

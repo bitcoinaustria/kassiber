@@ -1,5 +1,6 @@
 //! Exact native audit augmentation, isolated from production authority.
 use super::{array, exact, number, principal};
+use crate::evidence::canonical::{EventRef, LegRef};
 use crate::{
     codec,
     evidence::{self, EventKey},
@@ -217,12 +218,18 @@ fn parse(
     audits: &[Value],
     excluded: &BTreeSet<String>,
     issues: &mut Vec<Value>,
-    shared: Option<&[(String, &Value)]>,
+    shared: Option<&[(String, LegRef<'_>)]>,
 ) -> Result<Vec<Leg>, String> {
-    let by_tx = if let Some(aliases) = shared {
-        aliases.iter().map(|(id, o)| (id.clone(), *o)).collect()
-    } else {
-        observation_refs(events)?
+    // Shared aliases name the same JSON legs `observation_refs` finds.
+    let by_tx = match shared {
+        Some(aliases) if aliases.iter().all(|(_, o)| matches!(o, LegRef::Json(_))) => aliases
+            .iter()
+            .map(|(id, o)| match o {
+                LegRef::Json(o) => (id.clone(), *o),
+                LegRef::Typed(_) => unreachable!("JSON alias"),
+            })
+            .collect(),
+        _ => observation_refs(events)?,
     };
     let mut legs = Vec::new();
     let mut audits: Vec<_> = audits
@@ -398,7 +405,7 @@ fn targets(
             .collect();
         if !existing.is_empty() && (existing.len() != 1 || principal(existing[0])? != amount) {
             invalid.insert(slot.clone());
-            issues.push(issue("native_audit_target_contradiction",&audit,ids,json!(asset),number(&amount),json!({"wallet_id":wallet,"observed_target_amounts_msat":existing.iter().map(|o|principal(o).map(|n|number(&n))).collect::<Result<Vec<_>,_>>()?,"chain":k.chain,"network":k.network}))?);
+            issues.push(issue("native_audit_target_contradiction",&audit,ids,json!(asset),number(&amount),json!({"wallet_id":wallet,"observed_target_amounts_msat":existing.iter().map(|o|principal(*o).map(|n|number(&n))).collect::<Result<Vec<_>,_>>()?,"chain":k.chain,"network":k.network}))?);
             continue;
         }
         if !existing.is_empty() {
@@ -522,14 +529,14 @@ pub fn compile(
 }
 
 pub(super) struct Compilation<'a> {
-    pub events: Vec<Cow<'a, Value>>,
-    pub rejected: &'a Value,
+    pub events: Vec<super::QEvent<'a>>,
+    pub rejected: &'a [Value],
     pub claims: Vec<Value>,
     pub issues: Vec<Value>,
 }
 impl Compilation<'_> {
     pub fn input(&self) -> Value {
-        json!({"$type":"CanonicalQuantityInput","events":self.events.iter().map(|v|v.as_ref()).collect::<Vec<_>>(),"rejected_events":self.rejected})
+        json!({"$type":"CanonicalQuantityInput","events":self.events.iter().map(|v|v.get().value().into_owned()).collect::<Vec<_>>(),"rejected_events":self.rejected})
     }
 }
 
@@ -538,7 +545,7 @@ pub(super) fn compile_borrowed<'a>(
     audits: &[Value],
     excluded: &[Value],
     reservation: &Value,
-    shared: Option<&[(String, &Value)]>,
+    shared: Option<&[(String, LegRef<'_>)]>,
 ) -> Result<Compilation<'a>, String> {
     let original = array(&canonical["events"]);
     let event_key = |event: &'a Value| {
@@ -553,8 +560,11 @@ pub(super) fn compile_borrowed<'a>(
             .all(|pair| event_key(&pair[0]) < event_key(&pair[1]))
     {
         return Ok(Compilation {
-            events: original.iter().map(Cow::Borrowed).collect(),
-            rejected: &canonical["rejected_events"],
+            events: original
+                .iter()
+                .map(|e| super::QEvent::Ref(EventRef::Json(e)))
+                .collect(),
+            rejected: array(&canonical["rejected_events"]),
             claims: vec![],
             issues: vec![],
         });
@@ -658,8 +668,14 @@ pub(super) fn compile_borrowed<'a>(
     claims.sort_by_cached_key(|c| text(&c["claim_id"]));
     issues.sort_by_cached_key(|i| text(&i["issue_id"]));
     Ok(Compilation {
-        events: events.into_values().collect(),
-        rejected: &canonical["rejected_events"],
+        events: events
+            .into_values()
+            .map(|e| match e {
+                Cow::Borrowed(e) => super::QEvent::Ref(EventRef::Json(e)),
+                Cow::Owned(e) => super::QEvent::Owned(e),
+            })
+            .collect(),
+        rejected: array(&canonical["rejected_events"]),
         claims,
         issues,
     })

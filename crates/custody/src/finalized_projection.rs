@@ -1,5 +1,6 @@
 //! Finalized-projection compiler and comparison primitives.
 //! Snapshot stage results remain comparison-only; no result grants persistence authority.
+use crate::evidence::canonical::LegRef;
 use crate::{codec, evidence, graph, interpretation::python_value_string};
 use kassiber_pyjson::{BigInt, Value as Py};
 use serde_json::{json, Value};
@@ -301,11 +302,11 @@ impl Rows for Value {
 }
 
 pub fn base_row(observation: &Value, rows: &Value) -> Result<Value, Error> {
-    base_row_with_rows(observation, rows).map(row::FinalizedRow::into_json)
+    base_row_with_rows(LegRef::Json(observation), rows).map(row::FinalizedRow::into_json)
 }
 
 fn base_row_with_rows<'a>(
-    observation: &Value,
+    observation: LegRef<'_>,
     rows: &'a dyn Rows,
 ) -> Result<row::FinalizedRow<'a>, Error> {
     let id = text(&observation["transaction_id"]);
@@ -325,15 +326,18 @@ fn base_row_with_rows<'a>(
         "fiat_rate",
         "fiat_rate_exact",
     ] {
-        if !money::empty(&result[field]) && !money::plain_finite(&result[field]) {
+        let value = &result[field];
+        if !money::empty(value) && !money::plain_finite(value) {
             let label = format!(
                 "transaction {}: {field}",
                 string(&observation["anchor_transaction_id"])
             );
-            money::Money::finite_field(&result[field], &label)?;
+            money::Money::finite_field(value, &label)?;
         }
     }
-    result.set("custody_chain_order", chain_order(rows.row(&id))?);
+    // The projected source row is the row `rows` holds for this id.
+    let order = chain_order(result.source())?;
+    result.set("custody_chain_order", order);
     for key in ["wallet_id", "asset", "direction", "occurred_at"] {
         result.set(key, observation[key].clone());
     }
@@ -356,11 +360,12 @@ pub fn fee_row(
     rows: &Value,
     side: &str,
 ) -> Result<Value, Error> {
-    fee_row_with_rows(observation, amount, rows, side).map(row::FinalizedRow::into_json)
+    fee_row_with_rows(LegRef::Json(observation), amount, rows, side)
+        .map(row::FinalizedRow::into_json)
 }
 
 fn fee_row_with_rows<'a>(
-    observation: &Value,
+    observation: LegRef<'_>,
     amount: &BigInt,
     rows: &'a dyn Rows,
     side: &str,
@@ -465,10 +470,12 @@ pub fn primitive(value: &Value) -> Value {
         .map_err(Error::legacy_code),
         "payout_valid" => payouts::valid(&value["records"], &value["rows"]),
         "payout_time" => payouts::time(&value["payout"]),
-        "payout_settlement" => {
-            payouts::settlement(&value["observation"], &value["payout"], &value["rows"])
-                .map_err(Error::legacy_code)
-        }
+        "payout_settlement" => payouts::settlement(
+            LegRef::Json(&value["observation"]),
+            &value["payout"],
+            &value["rows"],
+        )
+        .map_err(Error::legacy_code),
         "payout_price" => {
             payouts::price(value["row"].clone(), &value["payout"], &integer("amount"))
         }

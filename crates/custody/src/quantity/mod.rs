@@ -10,7 +10,11 @@ pub mod reviewed;
 pub mod runtime;
 pub mod transfers;
 
-use crate::{codec, python_text::PythonText};
+use crate::{
+    codec,
+    evidence::canonical::{EventRef, Obs},
+    python_text::PythonText,
+};
 pub use arbitration::project;
 use kassiber_pyjson::BigInt;
 use serde_json::{json, Value};
@@ -18,6 +22,48 @@ use std::str::FromStr;
 
 pub(super) fn array(v: &Value) -> &[Value] {
     v.as_array().map(Vec::as_slice).unwrap_or(&[])
+}
+
+/// The canonical input: typed from evidence, or a JSON operand.
+#[derive(Clone, Copy)]
+pub(super) enum Canon<'a> {
+    Typed(&'a crate::evidence::canonical::Canonical),
+    Json(&'a Value),
+}
+impl<'a> Canon<'a> {
+    pub fn events(self) -> Vec<EventRef<'a>> {
+        match self {
+            Self::Typed(c) => c.events().iter().map(EventRef::Typed).collect(),
+            Self::Json(v) => crate::evidence::canonical::json_events(v),
+        }
+    }
+    pub fn rejected(self) -> &'a [Value] {
+        match self {
+            Self::Typed(c) => c.rejected(),
+            Self::Json(v) => array(&v["rejected_events"]),
+        }
+    }
+    /// The JSON object; a typed input builds it on first request.
+    pub fn json(self) -> &'a Value {
+        match self {
+            Self::Typed(c) => c.value(),
+            Self::Json(v) => v,
+        }
+    }
+}
+
+/// A quantity event: a canonical event, or one native augmentation rewrote.
+pub(super) enum QEvent<'a> {
+    Ref(EventRef<'a>),
+    Owned(Value),
+}
+impl QEvent<'_> {
+    pub fn get(&self) -> EventRef<'_> {
+        match self {
+            Self::Ref(event) => *event,
+            Self::Owned(event) => EventRef::Json(event),
+        }
+    }
 }
 pub(super) fn number(n: &BigInt) -> Value {
     if let Ok(n) = i64::try_from(n) {
@@ -44,7 +90,7 @@ pub fn principal_msat(v: &Value) -> Result<Value, String> {
     principal(v).map(|n| number(&n))
 }
 
-pub(super) fn principal(v: &Value) -> Result<BigInt, String> {
+pub(super) fn principal<O: Obs + ?Sized>(v: &O) -> Result<BigInt, String> {
     let amount = exact(&v["amount_msat"])?;
     Ok(
         if v["direction"] == "outbound" && codec::truth(&v["amount_includes_fee"]) {
@@ -54,7 +100,7 @@ pub(super) fn principal(v: &Value) -> Result<BigInt, String> {
         },
     )
 }
-pub(super) fn delta(v: &Value) -> Result<BigInt, String> {
+pub(super) fn delta<O: Obs + ?Sized>(v: &O) -> Result<BigInt, String> {
     let amount = exact(&v["amount_msat"])?;
     Ok(if v["direction"] == "inbound" {
         amount
@@ -70,7 +116,7 @@ pub(super) struct Domain {
     pub rail: Value,
 }
 impl Domain {
-    pub fn of(v: &Value) -> Self {
+    pub fn of<O: Obs + ?Sized>(v: &O) -> Self {
         let network = text_key(&v["event_key"]["network"]);
         let network = match network.as_ref() {
             "liquidv1" => "main",
@@ -101,11 +147,11 @@ impl Domain {
         ]))
     }
 }
-pub(super) fn domain(v: &Value) -> Value {
+pub(super) fn domain<O: Obs + ?Sized>(v: &O) -> Value {
     let d = Domain::of(v);
     json!({"$type":"QuantityDomain","network":d.network,"exposure":d.exposure,"unit":"msat","rail":d.rail})
 }
-pub(super) fn validate_observation(v: &Value) -> Result<(), String> {
+pub(super) fn validate_observation<O: Obs + ?Sized>(v: &O) -> Result<(), String> {
     let fail = || Err("ValueError".into());
     for key in ["transaction_id", "anchor_transaction_id", "wallet_id"] {
         if !codec::truth(&v[key]) {

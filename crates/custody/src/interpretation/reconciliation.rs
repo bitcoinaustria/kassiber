@@ -76,7 +76,7 @@ pub(super) fn digest(expected: &Expected) -> Result<String, String> {
 
 pub(super) fn reconcile(
     components: &[Value],
-    observations: &BTreeMap<String, std::borrow::Cow<'_, Value>>,
+    observations: &BTreeMap<String, super::Observed<'_>>,
     native_claims: &[Value],
     blocked: &Ids,
     rows: &BTreeMap<String, Value>,
@@ -420,7 +420,7 @@ mod tests {
             let value = &v["value"];
             let result = reconcile(
                 array(&value["components"]),
-                &serde_json::from_value(value["observations"].clone()).unwrap(),
+                &super::super::owned_observations(&value["observations"]),
                 array(&value["native_claims"]),
                 &array(&value["blocked_transaction_ids"])
                     .iter()

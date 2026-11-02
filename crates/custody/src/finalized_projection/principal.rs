@@ -1,4 +1,5 @@
 use super::*;
+use crate::evidence::canonical::LegRef;
 
 /// Construct one principal slice, retaining the raw unit rate when supplied.
 pub fn slice_row(
@@ -8,11 +9,12 @@ pub fn slice_row(
     side: &str,
     fee: &BigInt,
 ) -> Result<Value, Error> {
-    slice_row_with_rows(observation, quantity, rows, side, fee).map(row::FinalizedRow::into_json)
+    slice_row_with_rows(LegRef::Json(observation), quantity, rows, side, fee)
+        .map(row::FinalizedRow::into_json)
 }
 
 pub(super) fn slice_row_with_rows<'a>(
-    observation: &Value,
+    observation: LegRef<'_>,
     quantity: &Value,
     rows: &'a dyn Rows,
     side: &str,

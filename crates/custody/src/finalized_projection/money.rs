@@ -50,6 +50,11 @@ mod tests {
             "12",
             "-3",
             "\"00012.5\"",
+            "47454.0",
+            "1.5",
+            "1e-12",
+            "-0.0",
+            "1e300",
         ] {
             let value: Value = serde_json::from_str(raw).unwrap();
             assert!(plain_finite(&value), "{raw}");
@@ -62,10 +67,12 @@ mod tests {
             "\"1.\"",
             "\".5\"",
             "\"1_0\"",
-            "1.5",
             "\"\"",
             "true",
             "\"\\u0661\"",
+            "1e-13",
+            "1e301",
+            "18446744073709551616",
         ] {
             assert!(!plain_finite(&serde_json::from_str(raw).unwrap()), "{raw}");
         }
@@ -110,11 +117,18 @@ pub(super) fn plain_finite(v: &Value) -> bool {
     let spelling = match v {
         Value::String(s) => s.as_str(),
         Value::Number(n) => {
-            // str() of an integer is its digits; floats take the full path.
-            if n.as_i64().is_none() {
+            // str() of an integer is its digits. A float's repr is finite,
+            // and within these bounds its exponent and magnitude are in range.
+            if n.as_i64().is_some() {
+                return true;
+            }
+            let spelling = n.to_string();
+            if !spelling.contains(['.', 'e', 'E']) {
                 return false;
             }
-            return true;
+            return spelling
+                .parse::<f64>()
+                .is_ok_and(|f| f == 0.0 || (1e-12..=1e300).contains(&f.abs()));
         }
         _ => return false,
     };

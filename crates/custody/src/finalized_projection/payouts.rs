@@ -1,5 +1,6 @@
 //! Reviewed payout admission, legacy time and settlement/pricing primitives.
 use super::*;
+use crate::evidence::canonical::LegRef;
 use crate::python_text::{decimal_digit, PythonText};
 use money::{empty, Money};
 
@@ -325,7 +326,7 @@ pub(super) fn time(payout: &Value) -> Result<Value, String> {
         .ok_or_else(|| "AppError".into())
 }
 
-pub(super) fn settlement(obs: &Value, payout: &Value, rows: &dyn Rows) -> Result<Value, Error> {
+pub(super) fn settlement(obs: LegRef<'_>, payout: &Value, rows: &dyn Rows) -> Result<Value, Error> {
     let amount = integer_big(&payout["payout_amount"])?;
     let value = &payout["payout_fiat_value"];
     if amount <= BigInt::from(0) || empty(value) {

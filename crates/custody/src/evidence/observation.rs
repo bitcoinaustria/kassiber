@@ -309,6 +309,32 @@ impl<'a> Observation<'a> {
         self.validate()
     }
 
+    /// The typed observation, sharing its event's key object.
+    pub fn leg(&self, event_key: &std::sync::Arc<Value>) -> super::canonical::Leg {
+        let string = |value: &str| Value::String(value.to_owned());
+        super::canonical::Leg::new(
+            [
+                Value::Bool(self.quantity.included),
+                crate::quantity::number(&self.quantity.amount),
+                string(&self.anchor_id),
+                string(&self.quantity.asset),
+                Value::Bool(self.authoritative),
+                string(&self.quantity.direction),
+                string(&self.commitment.detail_hash),
+                string(&self.commitment.payload_json),
+                string(&self.fee_attribution),
+                crate::quantity::number(&self.quantity.fee),
+                string(&self.authority_reason),
+                string(&self.occurred_at),
+                string(&self.profile_id),
+                string(&self.commitment.quantity_hash),
+                string(&self.transaction_id),
+                string(&self.quantity.wallet),
+            ],
+            event_key.clone(),
+        )
+    }
+
     pub fn value(&self) -> Value {
         json!({"$type":"QuantityObservation","transaction_id":self.transaction_id,"anchor_transaction_id":self.anchor_id,"quantity_hash":self.commitment.quantity_hash,"evidence_detail_hash":self.commitment.detail_hash,"evidence_payload_json":self.commitment.payload_json,"event_key":self.quantity.key.value(),"profile_id":self.profile_id,"authoritative_chain_observation":self.authoritative,"observation_authority_reason":self.authority_reason,"fee_attribution":self.fee_attribution,"wallet_id":self.quantity.wallet,"asset":self.quantity.asset,"direction":self.quantity.direction,"amount_msat":crate::quantity::number(&self.quantity.amount),"fee_msat":crate::quantity::number(&self.quantity.fee),"amount_includes_fee":self.quantity.included,"occurred_at":self.occurred_at})
     }

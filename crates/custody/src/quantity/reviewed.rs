@@ -1,5 +1,6 @@
 //! Reviewed allocations are comparison-only compiler inputs, never snapshot facts.
 use super::{array, exact, number, principal};
+use crate::evidence::canonical::LegRef;
 use crate::{codec, python_text::PythonText};
 use kassiber_pyjson::BigInt;
 use serde_json::{json, Value};
@@ -272,7 +273,7 @@ fn flatten(
 fn payout(
     term: &Value,
     sink: &Value,
-    source: &Value,
+    source: LegRef<'_>,
     id: &str,
     amount: &BigInt,
     target: &BigInt,
@@ -281,13 +282,13 @@ fn payout(
 }
 /// Observation pairs in order, indexed for the lookups a compilation makes.
 pub struct Observations<'a> {
-    entries: Vec<(String, &'a Value)>,
+    entries: Vec<(String, LegRef<'a>)>,
     last: HashMap<String, usize>,
     first_hash: HashMap<String, usize>,
     positions: HashMap<String, Vec<usize>>,
 }
 impl<'a> Observations<'a> {
-    pub fn new(entries: Vec<(String, &'a Value)>) -> Self {
+    pub fn new(entries: Vec<(String, LegRef<'a>)>) -> Self {
         let mut last = HashMap::new();
         let mut first_hash = HashMap::new();
         let mut positions: HashMap<String, Vec<usize>> = HashMap::new();
@@ -313,13 +314,17 @@ pub fn compile(c: &Value, observations: &Value) -> Result<Value, Error> {
         Some(Observations::new(
             array(observations)
                 .iter()
-                .map(|p| (s(&p[0]), &p[1]))
+                .map(|p| (s(&p[0]), LegRef::Json(&p[1])))
                 .collect(),
         ))
     } else {
-        observations
-            .as_object()
-            .map(|o| Observations::new(o.iter().map(|(k, v)| (k.clone(), v)).collect()))
+        observations.as_object().map(|o| {
+            Observations::new(
+                o.iter()
+                    .map(|(k, v)| (k.clone(), LegRef::Json(v)))
+                    .collect(),
+            )
+        })
     };
     compile_observed(c, observed.as_ref())
 }
@@ -457,7 +462,7 @@ pub fn compile_observed(c: &Value, observations: Option<&Observations>) -> Resul
                 .get(&hash)
                 .map(|&at| observations.entries[at].1)
                 .unwrap();
-            let cap = principal(o).map_err(|e| family(&e))?;
+            let cap = principal(&o).map_err(|e| family(&e))?;
             if n > cap {
                 return Err(error(
                     "component claims exceed observed source principal",
@@ -520,7 +525,7 @@ pub fn compile_observed(c: &Value, observations: Option<&Observations>) -> Resul
         let hash = text(&o["quantity_hash"]);
         let start = sources.get(&hash).cloned().unwrap_or_default();
         let end = &start + &amount;
-        let cap = principal(o).map_err(|e| family(&e))?;
+        let cap = principal(&o).map_err(|e| family(&e))?;
         if end > cap {
             return Err(error(
                 "component claims exceed observed source principal",
@@ -573,7 +578,7 @@ pub fn compile_observed(c: &Value, observations: Option<&Observations>) -> Resul
                     let th = text(&t["quantity_hash"]);
                     let ts = targets.get(&th).cloned().unwrap_or_default();
                     let te = &ts + &target_amount;
-                    let tc = principal(t).map_err(|e| family(&e))?;
+                    let tc = principal(&t).map_err(|e| family(&e))?;
                     if te > tc {
                         return Err(error(
                             "component claims exceed observed target principal",

@@ -1,6 +1,7 @@
 //! Explaining diagnostics for the private finalized-projection compiler.
 //! A diagnostic never grants ownership, basis, or permission to book a row.
 use super::*;
+use crate::evidence::canonical::LegRef;
 use crate::graph::stored;
 use kassiber_pyjson::PyStr;
 use std::collections::BTreeMap;
@@ -127,7 +128,7 @@ impl<'a> Quarantines<'a> {
         );
         Ok(())
     }
-    pub(super) fn basis(&mut self, source: &Value) -> Result<(), String> {
+    pub(super) fn basis(&mut self, source: LegRef<'_>) -> Result<(), String> {
         let id = string(&source["anchor_transaction_id"]);
         if self.rows.get(&id).is_none() {
             return Ok(());
@@ -157,7 +158,7 @@ impl<'a> Quarantines<'a> {
             true,
         )
     }
-    pub(super) fn payout(&mut self, source: &Value, payout: &Value) -> Result<(), String> {
+    pub(super) fn payout(&mut self, source: LegRef<'_>, payout: &Value) -> Result<(), String> {
         self.insert(
             &string(&source["anchor_transaction_id"]),
             "at_swap_price_required",
@@ -169,7 +170,7 @@ impl<'a> Quarantines<'a> {
         &mut self,
         rows: &[R],
         receipts: &[Value],
-        observations: &BTreeMap<String, &Value>,
+        observations: &BTreeMap<String, LegRef<'_>>,
     ) -> Result<(), String> {
         let mut groups: BTreeMap<(String, String), Vec<&Value>> = BTreeMap::new();
         for issue in self.input.issues.iter() {
@@ -245,7 +246,7 @@ impl<'a> Quarantines<'a> {
             let observation = observations.get(&string(hash)).ok_or("KeyError")?;
             let id = string(&observation["anchor_transaction_id"]);
             if !projected.contains(&id) && !quarantined.contains(&PyStr::from(id.as_str())) {
-                self.basis(observation)?;
+                self.basis(*observation)?;
             }
         }
         Ok(())

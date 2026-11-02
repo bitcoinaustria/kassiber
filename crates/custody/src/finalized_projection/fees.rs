@@ -1,5 +1,6 @@
 //! Fee state only. Callers retain responsibility for selection and barriers.
 use super::*;
+use crate::evidence::canonical::LegRef;
 use std::collections::BTreeMap;
 
 fn bundle(decision: &Value) -> Option<String> {
@@ -38,7 +39,7 @@ impl FeeAllocation {
         }
         Ok(result)
     }
-    pub fn raw(&mut self, source: &Value) -> Result<BigInt, String> {
+    pub fn raw(&mut self, source: LegRef<'_>) -> Result<BigInt, String> {
         if !self
             .allocated_sources
             .insert(string(&source["quantity_hash"]))
@@ -47,7 +48,7 @@ impl FeeAllocation {
         }
         integer_big(&source["fee_msat"])
     }
-    pub fn move_fee(&mut self, decision: &Value, source: &Value) -> Result<BigInt, String> {
+    pub fn move_fee(&mut self, decision: &Value, source: LegRef<'_>) -> Result<BigInt, String> {
         let bundle = bundle(decision);
         let reviewed = bundle
             .as_ref()
@@ -90,7 +91,8 @@ pub(super) fn evaluate(v: &Value) -> Result<Value, String> {
     let mut result = Vec::new();
     for action in v["actions"].as_array().unwrap() {
         let decision = &decisions[action["decision"].as_u64().unwrap() as usize];
-        let source = &v["observations"][string(&decision["source"]["observation_hash"])];
+        let source =
+            LegRef::Json(&v["observations"][string(&decision["source"]["observation_hash"])]);
         result.push(match action["kind"].as_str().unwrap() {
             "raw" => number(&state.raw(source)?),
             "move" => number(&state.move_fee(decision, source)?),

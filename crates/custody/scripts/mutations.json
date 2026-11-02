@@ -1673,8 +1673,8 @@
   {
     "id": "I-shared-aliases",
     "file": "crates/custody/src/interpretation/mod.rs",
-    "find": ".flat_map(|event| array(&event[\"observation_aliases\"]))",
-    "replace": ".flat_map(|event| array(&event[\"observation_aliases\"]).iter().take(1))",
+    "find": ".flat_map(|event| event.aliases())",
+    "replace": ".flat_map(|event| event.aliases().iter().take(1))",
     "expect_failing": [
       "interpretation_shared_aliases"
     ],
@@ -14596,7 +14596,7 @@
   {
     "id": "QT-source-domain",
     "file": "crates/custody/src/quantity/transfers.rs",
-    "find": "let scope = domain(source);",
+    "find": "let scope = domain(*source);",
     "replace": "let scope = domain(target);",
     "expect_failing": [
       "quantity_transfer_vectors"
@@ -14876,8 +14876,8 @@
   {
     "id": "QR-027",
     "file": "crates/custody/src/quantity/reviewed.rs",
-    "find": ".map(|&at| observations.entries[at].1)\n                .unwrap();\n            let cap = principal(o).map_err(|e| family(&e))?;\n            if n > cap {\n                return Err(error(\n                    \"component claims exceed observed source prin",
-    "replace": ".map(|&at| observations.entries[at].1)\n                .unwrap();\n            let cap = principal(o).map_err(|e| family(&e))?;\n            if false && (n > cap) {\n                return Err(error(\n                    \"component claims exceed observed source prin",
+    "find": ".map(|&at| observations.entries[at].1)\n                .unwrap();\n            let cap = principal(&o).map_err(|e| family(&e))?;\n            if n > cap {\n                return Err(error(\n                    \"component claims exceed observed source prin",
+    "replace": ".map(|&at| observations.entries[at].1)\n                .unwrap();\n            let cap = principal(&o).map_err(|e| family(&e))?;\n            if false && (n > cap) {\n                return Err(error(\n                    \"component claims exceed observed source prin",
     "expect_failing": [
       "quantity_reviewed_compilation_vectors"
     ],
@@ -14916,8 +14916,8 @@
   {
     "id": "QR-035",
     "file": "crates/custody/src/quantity/reviewed.rs",
-    "find": "ult();\n        let end = &start + &amount;\n        let cap = principal(o).map_err(|e| family(&e))?;\n        if end > cap {\n            return Err(error(\n                \"component claims exceed observed source principal\",\n",
-    "replace": "ult();\n        let end = &start + &amount;\n        let cap = principal(o).map_err(|e| family(&e))?;\n        if false && (end > cap) {\n            return Err(error(\n                \"component claims exceed observed source principal\",\n",
+    "find": "ult();\n        let end = &start + &amount;\n        let cap = principal(&o).map_err(|e| family(&e))?;\n        if end > cap {\n            return Err(error(\n                \"component claims exceed observed source principal\",\n",
+    "replace": "ult();\n        let end = &start + &amount;\n        let cap = principal(&o).map_err(|e| family(&e))?;\n        if false && (end > cap) {\n            return Err(error(\n                \"component claims exceed observed source principal\",\n",
     "expect_failing": [
       "quantity_reviewed_compilation_vectors"
     ],
@@ -14966,8 +14966,8 @@
   {
     "id": "QR-040",
     "file": "crates/custody/src/quantity/reviewed.rs",
-    "find": " let te = &ts + &target_amount;\n                    let tc = principal(t).map_err(|e| family(&e))?;\n                    if te > tc {\n                        return Err(error(\n                            \"component claims exceed obse",
-    "replace": " let te = &ts + &target_amount;\n                    let tc = principal(t).map_err(|e| family(&e))?;\n                    if false && (te > tc) {\n                        return Err(error(\n                            \"component claims exceed obse",
+    "find": " let te = &ts + &target_amount;\n                    let tc = principal(&t).map_err(|e| family(&e))?;\n                    if te > tc {\n                        return Err(error(\n                            \"component claims exceed obse",
+    "replace": " let te = &ts + &target_amount;\n                    let tc = principal(&t).map_err(|e| family(&e))?;\n                    if false && (te > tc) {\n                        return Err(error(\n                            \"component claims exceed obse",
     "expect_failing": [
       "quantity_reviewed_compilation_vectors"
     ],
@@ -16916,8 +16916,8 @@
   {
     "id": "QN-074",
     "file": "crates/custody/src/quantity/native.rs",
-    "find": "            issues.push(issue(\"native_audit_target_contradiction\",&audit,ids,json!(asset),number(&amount),json!({\"wallet_id\":wallet,\"observed_target_amounts_msat\":existing.iter().map(|o|principal(o).map(|n|number(&n))).collect::<Result<Vec<_>,_>>()?,\"chain\":k.chain,\"network\":k.network}))?);",
-    "replace": "            issues.push(issue(\"native_audit_target_contradiction\",&audit,ids,json!(asset),number(&amount),json!({\"wallet_id_mutated\":wallet,\"observed_target_amounts_msat\":existing.iter().map(|o|principal(o).map(|n|number(&n))).collect::<Result<Vec<_>,_>>()?,\"chain\":k.chain,\"network\":k.network}))?);",
+    "find": "            issues.push(issue(\"native_audit_target_contradiction\",&audit,ids,json!(asset),number(&amount),json!({\"wallet_id\":wallet,\"observed_target_amounts_msat\":existing.iter().map(|o|principal(*o).map(|n|number(&n))).collect::<Result<Vec<_>,_>>()?,\"chain\":k.chain,\"network\":k.network}))?);",
+    "replace": "            issues.push(issue(\"native_audit_target_contradiction\",&audit,ids,json!(asset),number(&amount),json!({\"wallet_id_mutated\":wallet,\"observed_target_amounts_msat\":existing.iter().map(|o|principal(*o).map(|n|number(&n))).collect::<Result<Vec<_>,_>>()?,\"chain\":k.chain,\"network\":k.network}))?);",
     "expect_failing": [
       "quantity_native_augmentation_vectors"
     ],
@@ -16926,8 +16926,8 @@
   {
     "id": "QN-075",
     "file": "crates/custody/src/quantity/native.rs",
-    "find": "            issues.push(issue(\"native_audit_target_contradiction\",&audit,ids,json!(asset),number(&amount),json!({\"wallet_id\":wallet,\"observed_target_amounts_msat\":existing.iter().map(|o|principal(o).map(|n|number(&n))).collect::<Result<Vec<_>,_>>()?,\"chain\":k.chain,\"network\":k.network}))?);",
-    "replace": "            issues.push(issue(\"native_audit_target_contradiction\",&audit,ids,json!(asset),number(&amount),json!({\"wallet_id\":wallet,\"observed_target_amounts_msat_mutated\":existing.iter().map(|o|principal(o).map(|n|number(&n))).collect::<Result<Vec<_>,_>>()?,\"chain\":k.chain,\"network\":k.network}))?);",
+    "find": "            issues.push(issue(\"native_audit_target_contradiction\",&audit,ids,json!(asset),number(&amount),json!({\"wallet_id\":wallet,\"observed_target_amounts_msat\":existing.iter().map(|o|principal(*o).map(|n|number(&n))).collect::<Result<Vec<_>,_>>()?,\"chain\":k.chain,\"network\":k.network}))?);",
+    "replace": "            issues.push(issue(\"native_audit_target_contradiction\",&audit,ids,json!(asset),number(&amount),json!({\"wallet_id\":wallet,\"observed_target_amounts_msat_mutated\":existing.iter().map(|o|principal(*o).map(|n|number(&n))).collect::<Result<Vec<_>,_>>()?,\"chain\":k.chain,\"network\":k.network}))?);",
     "expect_failing": [
       "quantity_native_augmentation_vectors"
     ],
@@ -16936,8 +16936,8 @@
   {
     "id": "QN-076",
     "file": "crates/custody/src/quantity/native.rs",
-    "find": "            issues.push(issue(\"native_audit_target_contradiction\",&audit,ids,json!(asset),number(&amount),json!({\"wallet_id\":wallet,\"observed_target_amounts_msat\":existing.iter().map(|o|principal(o).map(|n|number(&n))).collect::<Result<Vec<_>,_>>()?,\"chain\":k.chain,\"network\":k.network}))?);",
-    "replace": "            issues.push(issue(\"native_audit_target_contradiction\",&audit,ids,json!(asset),number(&amount),json!({\"wallet_id\":wallet,\"observed_target_amounts_msat\":existing.iter().map(|o|principal(o).map(|n|number(&n))).collect::<Result<Vec<_>,_>>()?,\"chain_mutated\":k.chain,\"network\":k.network}))?);",
+    "find": "            issues.push(issue(\"native_audit_target_contradiction\",&audit,ids,json!(asset),number(&amount),json!({\"wallet_id\":wallet,\"observed_target_amounts_msat\":existing.iter().map(|o|principal(*o).map(|n|number(&n))).collect::<Result<Vec<_>,_>>()?,\"chain\":k.chain,\"network\":k.network}))?);",
+    "replace": "            issues.push(issue(\"native_audit_target_contradiction\",&audit,ids,json!(asset),number(&amount),json!({\"wallet_id\":wallet,\"observed_target_amounts_msat\":existing.iter().map(|o|principal(*o).map(|n|number(&n))).collect::<Result<Vec<_>,_>>()?,\"chain_mutated\":k.chain,\"network\":k.network}))?);",
     "expect_failing": [
       "quantity_native_augmentation_vectors"
     ],
@@ -16946,8 +16946,8 @@
   {
     "id": "QN-077",
     "file": "crates/custody/src/quantity/native.rs",
-    "find": "            issues.push(issue(\"native_audit_target_contradiction\",&audit,ids,json!(asset),number(&amount),json!({\"wallet_id\":wallet,\"observed_target_amounts_msat\":existing.iter().map(|o|principal(o).map(|n|number(&n))).collect::<Result<Vec<_>,_>>()?,\"chain\":k.chain,\"network\":k.network}))?);",
-    "replace": "            issues.push(issue(\"native_audit_target_contradiction\",&audit,ids,json!(asset),number(&amount),json!({\"wallet_id\":wallet,\"observed_target_amounts_msat\":existing.iter().map(|o|principal(o).map(|n|number(&n))).collect::<Result<Vec<_>,_>>()?,\"chain\":k.chain,\"network_mutated\":k.network}))?);",
+    "find": "            issues.push(issue(\"native_audit_target_contradiction\",&audit,ids,json!(asset),number(&amount),json!({\"wallet_id\":wallet,\"observed_target_amounts_msat\":existing.iter().map(|o|principal(*o).map(|n|number(&n))).collect::<Result<Vec<_>,_>>()?,\"chain\":k.chain,\"network\":k.network}))?);",
+    "replace": "            issues.push(issue(\"native_audit_target_contradiction\",&audit,ids,json!(asset),number(&amount),json!({\"wallet_id\":wallet,\"observed_target_amounts_msat\":existing.iter().map(|o|principal(*o).map(|n|number(&n))).collect::<Result<Vec<_>,_>>()?,\"chain\":k.chain,\"network_mutated\":k.network}))?);",
     "expect_failing": [
       "quantity_native_augmentation_vectors"
     ],
@@ -17496,8 +17496,8 @@
   {
     "id": "QN-134",
     "file": "crates/custody/src/quantity/native.rs",
-    "find": "\"events\":self.events.iter().map(|v|v.as_ref()).collect::<Vec<_>>()",
-    "replace": "\"events_mutated\":self.events.iter().map(|v|v.as_ref()).collect::<Vec<_>>()",
+    "find": "\"events\":self.events.iter().map(|v|v.get().value().into_owned()).collect::<Vec<_>>()",
+    "replace": "\"events_mutated\":self.events.iter().map(|v|v.get().value().into_owned()).collect::<Vec<_>>()",
     "expect_failing": [
       "quantity_native_augmentation_vectors"
     ],
@@ -19996,8 +19996,8 @@
   {
     "id": "R2-review-audit-arbitration-590",
     "file": "crates/custody/src/quantity/arbitration.rs",
-    "find": "for o in input.iter().filter(|o| o[\"direction\"] == \"inbound\") {",
-    "replace": "for o in input.iter().filter(|o| o[\"direction\"] != \"inbound\") {",
+    "find": "for &o in input.iter().filter(|o| o[\"direction\"] == \"inbound\") {",
+    "replace": "for &o in input.iter().filter(|o| o[\"direction\"] != \"inbound\") {",
     "expect_failing": [
       "quantity_operator_audit_vectors"
     ],
@@ -20466,8 +20466,8 @@
   {
     "id": "projection-base-order",
     "file": "crates/custody/src/finalized_projection.rs",
-    "find": "result.set(\"custody_chain_order\", chain_order(rows.row(&id))?);",
-    "replace": "result.set(\"custody_chain_order\", Value::Null);",
+    "find": "    let order = chain_order(result.source())?;",
+    "replace": "    let order = Value::Null;",
     "expect_failing": [
       "projection_fee_row_vectors"
     ],
@@ -21746,8 +21746,8 @@
   {
     "id": "projection5-base-price-admission",
     "file": "crates/custody/src/finalized_projection.rs",
-    "find": "money::Money::finite_field(&result[field], &label)?;",
-    "replace": "let _ = &result[field];",
+    "find": "money::Money::finite_field(value, &label)?;",
+    "replace": "let _ = value;",
     "expect_failing": [
       "projection_slice_pricing_vectors"
     ],
@@ -22546,7 +22546,7 @@
   {
     "id": "projection-review-sweep-M16",
     "file": "crates/custody/src/finalized_projection/quarantines.rs",
-    "find": "self.basis(observation)?;",
+    "find": "self.basis(*observation)?;",
     "replace": "",
     "expect_failing": [
       "projection_review_operator_sweep"
@@ -23287,8 +23287,8 @@
   {
     "id": "projection-borrowed-confirmation",
     "file": "crates/custody/src/finalized_projection/runtime.rs",
-    "find": "projected[\"_closed_confirmation_observation\"] = confirmation.clone();",
-    "replace": "projected[\"_closed_confirmation_observation\"] = Value::Null;",
+    "find": "projected.set(\"_closed_confirmation_observation\", confirmation.clone());",
+    "replace": "projected.set(\"_closed_confirmation_observation\", Value::Null);",
     "expect_failing": [
       "projection_borrowed_rows_match_materialized_rows"
     ],
@@ -23677,8 +23677,8 @@
   {
     "id": "typed-quantity-located-leg",
     "file": "crates/custody/src/quantity/runtime.rs",
-    "find": "&array(&self.event(event as usize)[\"legs\"])[leg as usize]",
-    "replace": "&array(&self.event(event as usize)[\"legs\"])[0]",
+    "find": "self.event(event as usize).leg(leg as usize)",
+    "replace": "self.event(event as usize).leg(0)",
     "expect_failing": [
       "quantity_runtime_wrapper_vectors"
     ],
@@ -23707,8 +23707,8 @@
   {
     "id": "typed-finalized-channel-non-events",
     "file": "crates/custody/src/finalized_projection/runtime.rs",
-    "find": "    let mut non_events = exact(stored::get(interpreter, \"non_event_transaction_ids\"))?\n        .as_array()\n        .ok_or(\"TypeError\")?\n        .clone();\n    non_events.extend(\n        interpretation::channel_non_event_ids(snapshot)?\n            .into_iter()\n            .map(Value::String),\n    );\n    let observations: Vec<&Value> = quantity.observations().collect();",
-    "replace": "    let mut non_events = exact(stored::get(interpreter, \"non_event_transaction_ids\"))?\n        .as_array()\n        .ok_or(\"TypeError\")?\n        .clone();\n    non_events.extend(\n        Vec::<String>::new()\n            .into_iter()\n            .map(Value::String),\n    );\n    let observations: Vec<&Value> = quantity.observations().collect();",
+    "find": "    let mut non_events = exact(stored::get(interpreter, \"non_event_transaction_ids\"))?\n        .as_array()\n        .ok_or(\"TypeError\")?\n        .clone();\n    non_events.extend(\n        interpretation::channel_non_event_ids(snapshot)?\n            .into_iter()\n            .map(Value::String),\n    );\n    let observations: Vec<LegRef> = quantity.observations().collect();",
+    "replace": "    let mut non_events = exact(stored::get(interpreter, \"non_event_transaction_ids\"))?\n        .as_array()\n        .ok_or(\"TypeError\")?\n        .clone();\n    non_events.extend(\n        Vec::<String>::new()\n            .into_iter()\n            .map(Value::String),\n    );\n    let observations: Vec<LegRef> = quantity.observations().collect();",
     "expect_failing": [
       "typed_finalized_matches_python_value_adapter"
     ],
@@ -23777,7 +23777,7 @@
   {
     "id": "native-shared-enrichment-provenance",
     "file": "crates/custody/src/components/commitments.rs",
-    "find": "                && r.get(\"observation_authority_version\").is_none_or(Value::is_null)",
+    "find": "                && r.get(\"observation_authority_version\")\n                    .is_none_or(Value::is_null)",
     "replace": "                && true",
     "expect_failing": [
       "native_support_shares_evidence_enrichment"
@@ -23803,6 +23803,56 @@
       "native_support_shares_evidence_enrichment"
     ],
     "rule": "Shared native observations key inbound rows from their enriched rows."
+  },
+  {
+    "id": "canonical-leg-index",
+    "file": "crates/custody/src/evidence/canonical.rs",
+    "find": "                Ok(at) => &self.fields[at],",
+    "replace": "                Ok(at) => &self.fields[(at + 1) % 16],",
+    "expect_failing": [
+      "quantity_runtime_wrapper_vectors"
+    ],
+    "rule": "Typed observations read each field by its own name."
+  },
+  {
+    "id": "canonical-leg-event-key",
+    "file": "crates/custody/src/evidence/canonical.rs",
+    "find": "        object.insert(\"event_key\".into(), (*self.event_key).clone());",
+    "replace": "        object.insert(\"event_key\".into(), Value::Null);",
+    "expect_failing": [
+      "quantity_runtime_wrapper_vectors"
+    ],
+    "rule": "Typed observations keep their event key in their JSON object."
+  },
+  {
+    "id": "canonical-event-aliases",
+    "file": "crates/custody/src/evidence/canonical.rs",
+    "find": "            \"observation_aliases\".into(),\n            Value::Array(self.aliases.clone()),",
+    "replace": "            \"observation_aliases\".into(),\n            Value::Array(Vec::new()),",
+    "expect_failing": [
+      "quantity_runtime_wrapper_vectors"
+    ],
+    "rule": "Typed canonical events keep their observation aliases."
+  },
+  {
+    "id": "context-observed-index",
+    "file": "crates/custody/src/interpretation/mod.rs",
+    "find": "            Observed::Leg(leg, _) => leg.at(key),",
+    "replace": "            Observed::Leg(leg, _) => leg.at(\"asset\"),",
+    "expect_failing": [
+      "interpretation_full_vectors"
+    ],
+    "rule": "Context observations read each field by name without building their JSON."
+  },
+  {
+    "id": "evidence-leg-payload",
+    "file": "crates/custody/src/evidence/observation.rs",
+    "find": "                string(&self.commitment.payload_json),",
+    "replace": "                string(\"\"),",
+    "expect_failing": [
+      "quantity_runtime_wrapper_vectors"
+    ],
+    "rule": "Typed observations carry their commitment payload."
   },
   {
     "id": "R4-evidence-alias-slot-index",

@@ -1,6 +1,7 @@
 //! Private selected-row and complete diagnostic composition.
 //! Snapshot stage admission remains a separate parity gate.
 use super::*;
+use crate::evidence::canonical::{EventRef, LegRef};
 use crate::python_text::PythonText;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
@@ -13,10 +14,10 @@ fn array(v: &Value) -> &[Value] {
 pub(super) struct Input<'a> {
     pub op: &'a str,
     pub profile: Cow<'a, Value>,
-    pub observations: Vec<&'a Value>,
+    pub observations: Vec<LegRef<'a>>,
     pub decisions: Vec<&'a Value>,
     pub eligible: Cow<'a, [Value]>,
-    pub events: Vec<&'a Value>,
+    pub events: Vec<EventRef<'a>>,
     pub pool_barriers: Cow<'a, Value>,
     pub pool_barrier_roots: Cow<'a, Value>,
     pub issues: Cow<'a, [Value]>,
@@ -31,10 +32,10 @@ impl<'a> Input<'a> {
         Self {
             op: v["op"].as_str().unwrap_or(""),
             profile: Cow::Borrowed(&v["profile"]),
-            observations: array(&v["observations"]).iter().collect(),
+            observations: array(&v["observations"]).iter().map(LegRef::Json).collect(),
             decisions: array(&v["decisions"]).iter().collect(),
             eligible: Cow::Borrowed(array(&v["eligible"])),
-            events: array(&v["events"]).iter().collect(),
+            events: array(&v["events"]).iter().map(EventRef::Json).collect(),
             pool_barriers: Cow::Borrowed(&v["pool_barriers"]),
             pool_barrier_roots: Cow::Borrowed(&v["pool_barrier_roots"]),
             issues: Cow::Borrowed(array(&v["issues"])),
@@ -64,9 +65,9 @@ fn slice_key(v: &Value) -> Result<(String, BigInt, BigInt), String> {
     ))
 }
 fn observation<'a>(
-    observations: &BTreeMap<String, &'a Value>,
+    observations: &BTreeMap<String, LegRef<'a>>,
     slice: &Value,
-) -> Result<&'a Value, String> {
+) -> Result<LegRef<'a>, String> {
     observations
         .get(&string(&slice["observation_hash"]))
         .copied()
@@ -75,7 +76,7 @@ fn observation<'a>(
 /// Close selected internal paths and propagate their complete root origins.
 pub(super) fn connected(
     decisions: &[&Value],
-    observations: &BTreeMap<String, &Value>,
+    observations: &BTreeMap<String, LegRef<'_>>,
     explicit: &BTreeSet<String>,
 ) -> Result<Value, String> {
     let mut neighbors: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
@@ -112,7 +113,7 @@ pub(super) fn connected(
     }
     Ok(json!({"blocked":blocked,"origins":origins}))
 }
-pub(super) fn pool(o: &Value) -> Value {
+pub(super) fn pool(o: LegRef<'_>) -> Value {
     let network = match o["event_key"]["network"].as_str().unwrap_or("") {
         "liquidv1" => "main",
         "liquidtestnet" => "test",
@@ -127,7 +128,7 @@ pub(super) fn pool(o: &Value) -> Value {
     };
     json!({"profile_id":o["profile_id"],"network":network,"exposure":exposure,"unit":"msat"})
 }
-pub(super) fn barrier(o: &Value, v: &Input) -> Option<Value> {
+pub(super) fn barrier(o: LegRef<'_>, v: &Input) -> Option<Value> {
     let own = pool(o);
     array(&v.pool_barriers)
         .iter()
@@ -138,24 +139,24 @@ pub(super) fn barrier(o: &Value, v: &Input) -> Option<Value> {
         })
         .map(|p| p[1].clone())
 }
-fn orders(events: &[&Value]) -> BTreeMap<String, Vec<String>> {
+fn orders(events: &[EventRef]) -> BTreeMap<String, Vec<String>> {
     let mut result = BTreeMap::new();
     for event in events {
-        let mut order = vec![array(&event["legs"])
-            .iter()
+        let mut order = vec![event
+            .legs()
             .map(|o| string(&o["occurred_at"]))
             .min()
             .unwrap_or_default()];
         for k in ["chain", "network", "native_namespace", "native_event_id"] {
-            order.push(string(&event["event_key"][k]));
+            order.push(string(&event.key()[k]));
         }
-        for leg in array(&event["legs"]) {
+        for leg in event.legs() {
             result.insert(string(&leg["quantity_hash"]), order.clone());
         }
     }
     result
 }
-fn held(o: &Value, v: &Input, orders: &BTreeMap<String, Vec<String>>) -> bool {
+fn held(o: LegRef<'_>, v: &Input, orders: &BTreeMap<String, Vec<String>>) -> bool {
     if array(&v.pool_barriers).is_empty() {
         return false;
     }
@@ -260,7 +261,7 @@ pub(super) fn evaluate_parts<'r>(
     } else {
         Value::Null
     };
-    let observations: BTreeMap<String, &Value> = v
+    let observations: BTreeMap<String, LegRef> = v
         .observations
         .iter()
         .map(|o| (string(&o["quantity_hash"]), *o))
@@ -308,7 +309,7 @@ pub(super) fn evaluate_parts<'r>(
         return Ok(Composition::Other(codec::from_json(&json!(v
             .observations
             .iter()
-            .map(|o| held(o, v, &order))
+            .map(|o| held(*o, v, &order))
             .collect::<Vec<_>>()))?));
     }
     let eligible: BTreeSet<_> = v.eligible.iter().map(slice_key).collect::<Result<_, _>>()?;
@@ -469,7 +470,7 @@ pub(super) fn evaluate_parts<'r>(
                 .push((start, end));
         }
     }
-    let mut ordered: Vec<&Value> = v.observations.clone();
+    let mut ordered: Vec<LegRef> = v.observations.clone();
     ordered.sort_by_cached_key(|o| (string(&o["occurred_at"]), string(&o["quantity_hash"])));
     for o in ordered {
         if o["direction"] != "inbound" || rows.get(&string(&o["transaction_id"])).is_none() {

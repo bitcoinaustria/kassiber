@@ -158,8 +158,8 @@ mod tests {
                     .collect()
             };
             let context = Context {
-                observations: serde_json::from_value(vector["observations"].clone()).unwrap(),
-                canonical: std::borrow::Cow::Owned(Value::Null),
+                observations: super::super::owned_observations(&vector["observations"]),
+                canonical: super::super::Events::json(&Value::Null),
                 excluded: ids("excluded"),
             };
             let result = compute(

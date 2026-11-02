@@ -56,9 +56,11 @@ fn compose_impl(
         let channel_blocked = blocked(&channel_quarantines);
         let samourai = samourai::compile(snapshot, context)?;
         let rows = std::borrow::Cow::Borrowed(snapshot.rows());
-        let has_chain = array(&context.canonical["events"])
+        let has_chain = context
+            .canonical
             .iter()
-            .any(|event| event["event_key"]["native_namespace"] == "chain");
+            .iter()
+            .any(|event| event.key()["native_namespace"] == "chain");
         let has_hashes = rows
             .iter()
             .any(|row| !row["payment_hash"].is_null() && row["payment_hash"] != "");

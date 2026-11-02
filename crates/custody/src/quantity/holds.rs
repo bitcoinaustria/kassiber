@@ -182,7 +182,7 @@ fn validate<'a>(
     if total == BigInt::from(0) {
         return Err(err("division by zero", json!({})));
     }
-    let expected = json!({"source_total_msat":number(&total),"source_fee_msat":number(&src.iter().map(|o|exact(&o["fee_msat"]).unwrap()).sum()),"source_debit_msat":number(&src.iter().map(|o|-delta(o).unwrap()).sum()),"return_total_msat":number(&ret),"retained_msat":number(&retained),"residual_msat":number(&(&total-&retained)),"excess_msat":number(&(&ret-&retained)),"coverage_ppm":number(&(&retained*1_000_000/&total))});
+    let expected = json!({"source_total_msat":number(&total),"source_fee_msat":number(&src.iter().map(|o|exact(&o["fee_msat"]).unwrap()).sum()),"source_debit_msat":number(&src.iter().map(|o|-delta(*o).unwrap()).sum()),"return_total_msat":number(&ret),"retained_msat":number(&retained),"residual_msat":number(&(&total-&retained)),"excess_msat":number(&(&ret-&retained)),"coverage_ppm":number(&(&retained*1_000_000/&total))});
     let actual: serde_json::Map<_, _> = expected
         .as_object()
         .unwrap()
@@ -236,12 +236,23 @@ pub fn compose(
     dismissed: &Value,
     search: &Value,
 ) -> Result<Value, String> {
+    compose_canon(super::Canon::Json(canonical), ignored, dismissed, search)
+}
+
+/// `compose`; a typed canonical input is read as JSON only when a hold needs it.
+pub(super) fn compose_canon(
+    canonical: super::Canon<'_>,
+    ignored: &[Value],
+    dismissed: &Value,
+    search: &Value,
+) -> Result<Value, String> {
     if !codec::truth(&search["search_complete"])
         && array(&search["accounting_candidates"]).is_empty()
         && array(&search["blocking_source_ids"]).is_empty()
     {
         return Ok(json!([[], [], [], []]));
     }
+    let canonical = canonical.json();
     let by_hash: BTreeMap<_, _> = array(&canonical["events"])
         .iter()
         .flat_map(|e| array(&e["legs"]))
