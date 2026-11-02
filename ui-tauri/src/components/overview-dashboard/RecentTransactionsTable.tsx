@@ -22,6 +22,7 @@ import {
   formatSignedDisplayMoney,
   overviewFlowLabelKeys,
   overviewFlowStyles,
+  rowsThatFit,
   statusLabelKeys,
   statusStyles,
   transactionBtc,
@@ -79,13 +80,14 @@ export const RecentTransactionsTable = ({
       const card = list.parentElement;
       const sized = card ? getComputedStyle(card).position === "absolute" : false;
       // A row below the first carries the divider, so it is the full step.
+      // Fractional heights: rounded ones add up to a cut-off last row.
       const rows = list.querySelectorAll<HTMLElement>("[data-recent-row]");
-      const rowHeight = rows[1]?.offsetHeight ?? (rows[0] ? rows[0].offsetHeight + 1 : 0);
-      setFits(
-        sized && rowHeight && list.clientHeight
-          ? Math.max(1, Math.floor((list.clientHeight + 1) / rowHeight))
-          : null,
-      );
+      const rowStep = rows[1]
+        ? rows[1].getBoundingClientRect().height
+        : rows[0]
+          ? rows[0].getBoundingClientRect().height + 1
+          : 0;
+      setFits(sized ? rowsThatFit(list.getBoundingClientRect().height, rowStep) : null);
     };
     measure();
     const observer = new ResizeObserver(measure);
@@ -191,12 +193,15 @@ export const RecentTransactionsTable = ({
                 : flowLabel;
               const extraTags = Math.max(0, tx.tags.length - 1);
               // The status only when it asks for something, and never twice:
-              // a row tagged Review needs no second Review chip.
+              // a row tagged Review keeps the Review chip and names its
+              // direction instead of the tag.
               const statusLabel = t(statusLabelKeys[tx.status]);
-              const showStatus =
-                tx.status !== "confirmed" &&
-                tx.tags[0]?.toLowerCase() !== tx.status &&
-                statusLabel.toLowerCase() !== primaryTag.toLowerCase();
+              const showStatus = tx.status !== "confirmed";
+              const tagIsStatus =
+                showStatus &&
+                (tx.tags[0]?.toLowerCase() === tx.status ||
+                  statusLabel.toLowerCase() === primaryTag.toLowerCase());
+              const typeLabel = tagIsStatus ? flowLabel : primaryTag;
               const rowClassName =
                 "group flex min-w-0 items-center gap-2.5 px-3 py-1.5 text-left transition-colors hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:px-4";
               const rowContent = (
@@ -223,7 +228,7 @@ export const RecentTransactionsTable = ({
                       <span className="shrink-0 tabular-nums">{tx.date}</span>
                       <span aria-hidden="true">·</span>
                       <span className="truncate">
-                        {extraTags > 0 ? `${primaryTag} +${extraTags}` : primaryTag}
+                        {extraTags > 0 ? `${typeLabel} +${extraTags}` : typeLabel}
                       </span>
                       {showStatus ? (
                         <span

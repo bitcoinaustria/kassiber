@@ -33,7 +33,9 @@ export const WelcomeSection = ({
   const ReadinessIcon = readiness.icon;
   // dynamic key
   const readinessTitle = t(readiness.title.key as never, readiness.title.params);
-  const needsJournals = Boolean(snapshot.status?.needsJournals);
+  // Stale journals are fixed in place: the pill reprocesses them. Branch on
+  // what the pill says, so a source error ahead of them still opens Wallets.
+  const reprocesses = readiness.title.key === "readiness.reprocessJournals.title";
   const hideReadinessPill = readiness.title.key === "readiness.connectSource.title";
   const readinessClassName = cn(
     "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2 text-xs font-medium",
@@ -43,7 +45,7 @@ export const WelcomeSection = ({
   return (
     <div className={pageHeaderClassName}>
       <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
-        {hideReadinessPill ? null : needsJournals ? (
+        {hideReadinessPill ? null : reprocesses ? (
           <button
             type="button"
             className={cn(

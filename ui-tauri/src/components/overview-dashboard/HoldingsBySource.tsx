@@ -11,9 +11,7 @@ import type { OverviewSnapshot } from "@/mocks/seed";
 
 import {
   activeMarketFiatCurrency,
-  activeMarketFiatRate,
   blurClass,
-  btcFromEur,
   buildHoldingsBySource,
   portfolioCompletenessDetail,
 } from "./model";
@@ -37,21 +35,21 @@ export const HoldingsBySourceChart = ({
   const { t } = useTranslation("overview");
   const isBitcoinMode = currency === "btc";
   const fiatCurrency = activeMarketFiatCurrency(snapshot);
-  const fiatRate = activeMarketFiatRate(snapshot);
   const holdings = buildHoldingsBySource(snapshot, SHOWN_SOURCES);
   const completenessDetail = portfolioCompletenessDetail(snapshot);
   const unrealizedPercent = snapshot.fiat.eurCostBasis
     ? (snapshot.fiat.eurUnrealized / snapshot.fiat.eurCostBasis) * 100
     : 0;
-  const total = holdings.reduce((sum, item) => sum + item.value, 0);
+  const totalBtc = holdings.reduce((sum, item) => sum + item.btc, 0);
+  const totalValue = holdings.reduce((sum, item) => sum + item.value, 0);
   // Without a market rate a fiat figure would be a stale or zero placeholder.
   const fiatValueUnavailable =
     !isBitcoinMode && fiatCompleteness(snapshot.fiat).marketRateMissing;
-  const valueLabel = (value: number) =>
-    fiatValueUnavailable
-      ? "—"
-      : isBitcoinMode
-        ? formatBtc(btcFromEur(value, fiatRate), { precision: 3 })
+  const valueLabel = (btc: number, value: number) =>
+    isBitcoinMode
+      ? formatBtc(btc, { precision: 3 })
+      : fiatValueUnavailable
+        ? "—"
         : formatWholeFiatAmount(value, fiatCurrency);
 
   return (
@@ -60,23 +58,10 @@ export const HoldingsBySourceChart = ({
         <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-0.5">
           <h2 className="text-sm font-medium">{t("holdings.title")}</h2>
           <span className={cn("text-sm font-semibold tabular-nums", blurClass(hideSensitive))}>
-            {valueLabel(total)}
+            {valueLabel(totalBtc, totalValue)}
           </span>
-          {isBitcoinMode ? null : completenessDetail ? (
-            // No "+X % vs cost basis" while the basis misses rows or the
-            // value has no market rate; say what is missing instead.
-            <p
-              className={cn(
-                "truncate text-xs text-amber-600 dark:text-amber-400",
-                // The copy can carry the uncovered BTC amount.
-                completenessDetail.copy.params && blurClass(hideSensitive),
-              )}
-              title={t(completenessDetail.hintKey)}
-            >
-              {/* dynamic key */}
-              {t(completenessDetail.copy.key as never, completenessDetail.copy.params)}
-            </p>
-          ) : (
+          {/* Tile and chart already say when the basis is incomplete. */}
+          {isBitcoinMode || completenessDetail ? null : (
             <p className="text-xs text-muted-foreground">
               <span
                 className={cn(
@@ -128,7 +113,7 @@ export const HoldingsBySourceChart = ({
                 {item.nameKey ? t(item.nameKey as never) : item.name}
               </span>
               <span className={cn("truncate text-right font-medium tabular-nums", blurClass(hideSensitive))}>
-                {valueLabel(item.value)}
+                {valueLabel(item.btc, item.value)}
               </span>
               <span className={cn("text-right text-muted-foreground tabular-nums", blurClass(hideSensitive))}>
                 {item.percent === 0 && item.value > 0 ? "<1%" : `${item.percent}%`}
@@ -136,7 +121,9 @@ export const HoldingsBySourceChart = ({
             </li>
           ))}
         </ul>
-      ) : null}
+      ) : (
+        <p className="text-xs text-muted-foreground">{t("holdings.empty")}</p>
+      )}
     </section>
   );
 };

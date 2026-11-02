@@ -114,21 +114,19 @@
       "portfolioValue": "Portfolio value"
     },
     "comparison": {
-      "vsLastMonth": "vs Last Month",
-      "bitcoinBalance": "Bitcoin balance",
       "vsCostBasis": "vs cost basis",
       "fromLoadedRows": "from loaded rows"
     },
     "status": {
-      "current": "Current",
       "clear": "Clear",
       "estimate": "Estimate",
       "needsJournals": "Needs journals",
       "reviewQuarantines_one": "{{count}} quarantine",
-      "reviewQuarantines_other": "{{count}} quarantines",
-      "reviewRequired": "Review required",
-      "open": "Open"
-    }
+      "reviewQuarantines_other": "{{count}} quarantines"
+    },
+    "heldIn_zero": "No wallet holds bitcoin yet",
+    "heldIn_one": "in {{count}} wallet",
+    "heldIn_other": "in {{count}} wallets"
   },
   "welcome": {
     "reprocessingJournals": "Reprocessing journals",
@@ -179,22 +177,13 @@
     "title": "Holdings by Source",
     "aria": "Holdings by source",
     "vsCostBasis": "vs cost basis",
-    "viewConnections": "View connections",
-    "moreOptions": "More options",
-    "rail": {
-      "onchain": "On-chain",
-      "lightning": "Lightning",
-      "liquid": "Liquid",
-      "other": "Other"
-    },
-    "otherSources": "Other sources"
+    "viewConnections": "View wallets",
+    "otherSources": "Other sources",
+    "empty": "No wallet holds bitcoin yet."
   },
   "recentTx": {
     "title": "Recent Transactions",
     "showAll": "Show all",
-    "filter": "Filter",
-    "filterByStatus": "Filter by Status",
-    "allStatuses": "All Statuses",
     "empty": "No transactions found.",
     "unassigned": "Unassigned"
   },

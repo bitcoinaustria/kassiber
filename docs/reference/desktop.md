@@ -424,16 +424,19 @@ that can unblind outputs locally.
 
 Overview leads with one readiness pill that names what holds the book back
 (sources, stale journals, open review, custody gaps, missing prices) and opens
-where that is dealt with, then three tiles: BTC price, the bitcoin held, and
-what it is worth with its change against cost basis, both shown whichever
-currency the app displays. The latest transactions sit beside the activity
-chart once the page is about 64rem wide (measured on the page, so a docked
-assistant counts), as many whole rows as fit the chart's height, and under it
-otherwise; the list never scrolls inside the page, and Show all opens
-Transactions. A row names its status only when it asks for something.
-Holdings by Source runs across the page below as a ranked list, largest
-first: each source with its rail's logo, its value (whole currency units in
-fiat) and share. Past eight, the smallest fold into one Other sources row.
+where that is dealt with; stale journals it reprocesses in place. Then three
+tiles: BTC price, the bitcoin held and in how many wallets (observed, so it
+carries no status and opens Wallets), and what it is worth with its change
+against cost basis, both shown whichever currency the app displays. The
+latest transactions sit beside the activity chart once the page is about
+64rem wide (measured on the page, so a docked assistant counts), as many whole
+rows as fit the chart's height, and under it otherwise; the list never
+scrolls inside the page, and Show all opens Transactions. A row names its
+status only when it asks for something. Holdings by Source runs across the
+page below as a ranked list, largest first: each source with its rail's logo,
+its value (whole currency units in fiat) and its share of the bitcoin held.
+Past eight, the smallest fold into one Other sources row. Its header leaves an
+incomplete cost basis to the tile and the chart.
 
 Overview, Wallets, the book-set overview, and the Reports metric strip read the
 daemon's `fiat.completeness` block (see [the daemon reference](daemon.md)) instead of

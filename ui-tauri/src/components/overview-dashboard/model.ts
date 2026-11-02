@@ -108,6 +108,8 @@ export type HoldingsItem = {
   // i18n key in the `overview` namespace for synthetic rows (e.g. "Other
   // sources"); undefined for real connection rows that display `name`.
   nameKey?: string;
+  btc: number;
+  /** The bitcoin held at the active market rate, in its fiat. */
   value: number;
   percent: number;
   /** The source's rail, for its logo; none for the "Other sources" row. */
@@ -584,19 +586,6 @@ export function useResolvedColorMode() {
     : "light";
 }
 
-const portfolioStat: StatItem = {
-  id: "portfolioValue",
-  titleKey: "stats.title.portfolioValue",
-  previousValue: 198502,
-  value: 312842.77,
-  changePercent: 27.86,
-  isPositive: true,
-  icon: CircleDollarSign,
-  format: "currency",
-  comparisonLabelKey: "stats.comparison.vsLastMonth",
-  href: "/reports",
-};
-
 export function latestPortfolioBalanceBtc(snapshot: OverviewSnapshot) {
   if (snapshot.portfolioSeries?.length) {
     const latest = [...snapshot.portfolioSeries].sort((a, b) =>
@@ -614,30 +603,32 @@ export function latestPortfolioBalanceBtc(snapshot: OverviewSnapshot) {
   return fiatBalance;
 }
 
-export function buildStatsData(
-  snapshot: OverviewSnapshot,
-  currency: Currency,
-): StatItem[] {
-  const isBitcoinMode = currency === "btc";
+/** The portfolio value tile: what the bitcoin is worth against its basis. */
+export function buildPortfolioStat(snapshot: OverviewSnapshot): StatItem {
   // A basis that misses quarantined/unresolved rows would turn the change
   // percentage into a confident but wrong number.
   const basisTrusted = fiatCompleteness(snapshot.fiat).costBasisComplete;
-  return [
-    {
-      ...portfolioStat,
-      value: snapshot.fiat.eurBalance,
-      previousValue: isBitcoinMode ? 0 : snapshot.fiat.eurCostBasis,
-      changePercent: !isBitcoinMode && basisTrusted && snapshot.fiat.eurCostBasis
-        ? (snapshot.fiat.eurUnrealized / snapshot.fiat.eurCostBasis) * 100
-        : 0,
-      isPositive: snapshot.fiat.eurUnrealized >= 0,
-      comparisonLabelKey: isBitcoinMode
-        ? "stats.comparison.bitcoinBalance"
-        : snapshot.fiat.eurCostBasis
-          ? "stats.comparison.vsCostBasis"
-          : "stats.comparison.fromLoadedRows",
-    },
-  ];
+  return {
+    id: "portfolioValue",
+    titleKey: "stats.title.portfolioValue",
+    icon: CircleDollarSign,
+    format: "currency",
+    href: "/reports",
+    value: snapshot.fiat.eurBalance,
+    previousValue: snapshot.fiat.eurCostBasis,
+    changePercent: basisTrusted && snapshot.fiat.eurCostBasis
+      ? (snapshot.fiat.eurUnrealized / snapshot.fiat.eurCostBasis) * 100
+      : 0,
+    isPositive: snapshot.fiat.eurUnrealized >= 0,
+    comparisonLabelKey: snapshot.fiat.eurCostBasis
+      ? "stats.comparison.vsCostBasis"
+      : "stats.comparison.fromLoadedRows",
+  };
+}
+
+/** How many sources hold bitcoin, for the balance tile. */
+export function sourcesHoldingBitcoin(snapshot: OverviewSnapshot) {
+  return snapshot.connections.filter((connection) => connection.balance > 0).length;
 }
 
 export type BasisHintKey =
@@ -2224,56 +2215,6 @@ export function railForConnection(kind: string, label: string): BalanceRail {
   return "onchain";
 }
 
-export function buildBalanceRailItems(snapshot: OverviewSnapshot) {
-  const fiatRate = activeMarketFiatRate(snapshot);
-  const byRail: Record<BalanceRail, number> = {
-    onchain: 0,
-    lightning: 0,
-    liquid: 0,
-    other: 0,
-  };
-  for (const connection of snapshot.connections) {
-    if (connection.balance <= 0) continue;
-    const rail = railForConnection(connection.kind, connection.label);
-    byRail[rail] += connection.balance * fiatRate;
-  }
-  const total = Object.values(byRail).reduce((sum, value) => sum + value, 0);
-  const items = [
-    {
-      key: "onchain",
-      labelKey: "holdings.rail.onchain",
-      value: byRail.onchain,
-      percent: percentOf(byRail.onchain, total),
-      color: palette.primary,
-    },
-    {
-      key: "lightning",
-      labelKey: "holdings.rail.lightning",
-      value: byRail.lightning,
-      percent: percentOf(byRail.lightning, total),
-      color: palette.secondary.light,
-    },
-    {
-      key: "liquid",
-      labelKey: "holdings.rail.liquid",
-      value: byRail.liquid,
-      percent: percentOf(byRail.liquid, total),
-      color: palette.tertiary.light,
-    },
-    {
-      key: "other",
-      labelKey: "holdings.rail.other",
-      value: byRail.other,
-      percent: percentOf(byRail.other, total),
-      color: `color-mix(in oklch, var(--muted-foreground) 70%, ${mixBase})`,
-    },
-  ];
-  return {
-    total,
-    items: total > 0 ? items.filter((item) => item.value > 0) : items,
-  };
-}
-
 function holdingRail(connection: OverviewSnapshot["connections"][number]): SwapRail | undefined {
   const rail = railForConnection(connection.kind, connection.label);
   if (rail === "other") return undefined;
@@ -2283,6 +2224,7 @@ function holdingRail(connection: OverviewSnapshot["connections"][number]): SwapR
 /**
  * The sources holding bitcoin, largest first. Past `shown` sources the
  * smallest fold into one "Other sources" row, so the list stays `shown` long.
+ * Ranks and shares come from the bitcoin held, so they hold without a rate.
  */
 export function buildHoldingsBySource(snapshot: OverviewSnapshot, shown = 4): HoldingsItem[] {
   const fiatRate = activeMarketFiatRate(snapshot);
@@ -2290,28 +2232,29 @@ export function buildHoldingsBySource(snapshot: OverviewSnapshot, shown = 4): Ho
     .filter((connection) => connection.balance > 0)
     .map((connection) => ({
       name: connection.label,
-      value: connection.balance * fiatRate,
+      btc: connection.balance,
       // An exchange, file or ecash source gets no rail logo, not a guessed one.
       rail: holdingRail(connection),
     }))
-    .sort((a, b) => b.value - a.value);
-  const total = rows.reduce((sum, item) => sum + item.value, 0);
-  const visibleRows: Array<{ name: string; nameKey?: string; value: number; rail?: SwapRail }> =
+    .sort((a, b) => b.btc - a.btc);
+  const total = rows.reduce((sum, item) => sum + item.btc, 0);
+  const visibleRows: Array<{ name: string; nameKey?: string; btc: number; rail?: SwapRail }> =
     rows.length > shown
       ? [
           ...rows.slice(0, shown - 1),
           {
             name: "",
             nameKey: "holdings.otherSources",
-            value: rows.slice(shown - 1).reduce((sum, item) => sum + item.value, 0),
+            btc: rows.slice(shown - 1).reduce((sum, item) => sum + item.btc, 0),
           },
         ]
       : rows;
   return visibleRows.map((item) => ({
     name: item.name,
     nameKey: item.nameKey,
-    value: item.value,
-    percent: percentOf(item.value, total),
+    btc: item.btc,
+    value: item.btc * fiatRate,
+    percent: percentOf(item.btc, total),
     rail: item.rail,
   }));
 }
@@ -2337,6 +2280,16 @@ export const statusStyles: Record<TransactionStatus, string> = {
 };
 
 // i18n keys in the `overview` namespace, resolved via `t()` at the call site.
+/**
+ * Whole rows that fit a list `listHeight` tall when each row after the first
+ * takes `rowStep` (its height plus the divider above it); at least one.
+ */
+export function rowsThatFit(listHeight: number, rowStep: number): number | null {
+  if (!(listHeight > 0) || !(rowStep > 0)) return null;
+  // n rows take n * rowStep - 1; the epsilon absorbs float noise.
+  return Math.max(1, Math.floor((listHeight + 1) / rowStep + 1e-6));
+}
+
 export const statusLabelKeys = {
   confirmed: "txStatus.confirmed",
   pending: "txStatus.pending",

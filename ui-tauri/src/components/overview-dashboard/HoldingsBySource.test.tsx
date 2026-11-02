@@ -27,19 +27,42 @@ const UNCOVERED: FiatCompleteness = {
 };
 
 describe("holdings header", () => {
-  it("masks the uncovered BTC amount when sensitive values are hidden", () => {
-    const render = (hideSensitive: boolean) =>
-      renderToStaticMarkup(
-        createElement(HoldingsBySourceChart, {
-          snapshot: { ...MOCK_OVERVIEW, fiat: { ...MOCK_OVERVIEW.fiat, completeness: UNCOVERED } },
-          hideSensitive,
-          currency: "eur",
-        }),
-      );
-    const hidden = render(true);
-    const amountLine = hidden.match(/<p class="([^"]*)"[^>]*>[^<]*0\.12/);
-    expect(amountLine?.[1]).toContain("sensitive");
-    expect(render(false).match(/<p class="([^"]*)"[^>]*>[^<]*0\.12/)?.[1]).not.toContain("sensitive");
+  const render = (snapshot: typeof MOCK_OVERVIEW, currency: "btc" | "eur" = "eur") =>
+    renderToStaticMarkup(
+      createElement(HoldingsBySourceChart, { snapshot, hideSensitive: false, currency }),
+    );
+
+  it("leaves an incomplete basis to the tile and the chart", () => {
+    const html = render({ ...MOCK_OVERVIEW, fiat: { ...MOCK_OVERVIEW.fiat, completeness: UNCOVERED } });
+    expect(html).not.toContain("without cost basis");
+    expect(html).not.toContain("vs cost basis");
+  });
+
+  it("ranks and sizes sources by the bitcoin held when there is no rate", () => {
+    const connections = [0.5, 2].map((balance, index) => ({
+      ...MOCK_OVERVIEW.connections[0],
+      id: `wallet-${index}`,
+      label: `Wallet ${index}`,
+      balance,
+    }));
+    const html = render(
+      {
+        ...MOCK_OVERVIEW,
+        connections,
+        priceEur: 0,
+        priceUsd: 0,
+        marketRate: { ...MOCK_OVERVIEW.marketRate!, rate: null },
+      },
+      "btc",
+    );
+    expect(html.indexOf("Wallet 1")).toBeLessThan(html.indexOf("Wallet 0"));
+    expect(html).toContain("80%");
+    expect(html).toContain("20%");
+    expect(html).toMatch(/2\.500/);
+  });
+
+  it("says so when no wallet holds bitcoin", () => {
+    expect(render({ ...MOCK_OVERVIEW, connections: [] })).toContain("No wallet holds bitcoin yet.");
   });
 });
 

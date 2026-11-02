@@ -27,7 +27,7 @@ import i18n from "@/i18n";
 import { normalizeOverviewSnapshot } from "@/lib/normalizeUiSnapshots";
 import { MOCK_OVERVIEW, type FiatCompleteness } from "@/mocks/seed";
 
-import { buildStatsData } from "./model";
+import { buildPortfolioStat } from "./model";
 import { StatsCards } from "./StatsCards";
 import { statStatusText } from "./statStatus";
 
@@ -46,17 +46,10 @@ const INCOMPLETE: FiatCompleteness = {
 };
 
 describe("overview stats cards", () => {
-  it("does not label the BTC balance as an estimate", () => {
-    const bitcoinBalanceStat = buildStatsData(MOCK_OVERVIEW, "btc")[0];
-    const zeroBitcoinBalanceStat = { ...bitcoinBalanceStat, value: 0 };
-    const fiatPortfolioStat = {
-      ...buildStatsData(MOCK_OVERVIEW, "eur")[0],
-      previousValue: 0,
-    };
+  it("calls a portfolio value without a basis an estimate", () => {
+    const fiatPortfolioStat = { ...buildPortfolioStat(MOCK_OVERVIEW), previousValue: 0 };
 
-    expect(statStatusText(bitcoinBalanceStat, true)).toBe("Current");
-    expect(statStatusText(zeroBitcoinBalanceStat, true)).toBe("Current");
-    expect(statStatusText(fiatPortfolioStat, false)).toBe("Estimate");
+    expect(statStatusText(fiatPortfolioStat)).toBe("Estimate");
   });
 
   it("shows the price, the bitcoin held and what it is worth, and nothing else", () => {
@@ -88,11 +81,16 @@ describe("overview stats cards", () => {
     expect(html).not.toContain('data-slot="skeleton"');
   });
 
-  it("does not call the main balance current while journals are quarantined", () => {
+  it("puts quarantines on the portfolio value and gives the observed balance its wallets", () => {
     const html = renderToStaticMarkup(
       createElement(StatsCards, {
         snapshot: {
           ...MOCK_OVERVIEW,
+          connections: [
+            { ...MOCK_OVERVIEW.connections[0], id: "a", balance: 1 },
+            { ...MOCK_OVERVIEW.connections[0], id: "b", balance: 0.236 },
+            { ...MOCK_OVERVIEW.connections[0], id: "c", balance: 0 },
+          ],
           balanceSummary: {
             totalBtc: 1.236,
             status: "quarantines",
@@ -109,9 +107,10 @@ describe("overview stats cards", () => {
       }),
     );
 
-    expect(html).toContain("2 quarantines");
+    expect(html.match(/2 quarantines/g)).toHaveLength(1);
     expect(html).toContain('href="/review"');
-    expect(html).not.toContain(">Current<");
+    expect(html).toContain("in 2 wallets");
+    expect(html).toContain('href="/connections"');
   });
 
   it("marks the fiat value incomplete and names the BTC without cost basis", () => {
@@ -223,19 +222,16 @@ describe("overview stats cards", () => {
   });
 
   it("reports the completeness badge through statStatusText", () => {
-    const fiatPortfolioStat = buildStatsData(MOCK_OVERVIEW, "eur")[0];
-    const bitcoinBalanceStat = buildStatsData(MOCK_OVERVIEW, "btc")[0];
+    const fiatPortfolioStat = buildPortfolioStat(MOCK_OVERVIEW);
 
-    expect(statStatusText(fiatPortfolioStat, false, INCOMPLETE)).toBe("Incomplete");
-    // The observed BTC balance is not basis-derived.
-    expect(statStatusText(bitcoinBalanceStat, true, INCOMPLETE)).toBe("Current");
+    expect(statStatusText(fiatPortfolioStat, INCOMPLETE)).toBe("Incomplete");
   });
 
   it("drops the change percentage when the basis is incomplete", () => {
-    const stat = buildStatsData(
-      { ...MOCK_OVERVIEW, fiat: { ...MOCK_OVERVIEW.fiat, completeness: INCOMPLETE } },
-      "eur",
-    )[0];
+    const stat = buildPortfolioStat({
+      ...MOCK_OVERVIEW,
+      fiat: { ...MOCK_OVERVIEW.fiat, completeness: INCOMPLETE },
+    });
 
     expect(stat.changePercent).toBe(0);
   });

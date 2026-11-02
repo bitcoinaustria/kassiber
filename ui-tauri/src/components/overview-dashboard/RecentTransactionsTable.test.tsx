@@ -3,7 +3,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import i18n from "@/i18n";
 
-import type { Transaction } from "./model";
+import { rowsThatFit, type Transaction } from "./model";
 import { RecentTransactionsTable } from "./RecentTransactionsTable";
 
 const row = (tag: string) => ({
@@ -76,8 +76,19 @@ describe("RecentTransactionsTable rows", () => {
   it("names a status only when it asks for something, and never twice", () => {
     expect(render([row("Buy")])).not.toContain(">Confirmed<");
     expect(render([{ ...row("Buy"), status: "pending" }])).toContain(">Pending<");
+    // A row tagged Review keeps its Review chip and names its direction.
     const tagged = render([{ ...row("Review"), status: "review" }]);
     expect(tagged.match(/>Review</g)).toHaveLength(1);
+    expect(tagged).toMatch(/rounded-md px-1 font-medium[^"]*">Review</);
+  });
+
+  it("fits whole rows only", () => {
+    // Five 40px rows with four 1px dividers take 204px.
+    expect(rowsThatFit(204, 41)).toBe(5);
+    expect(rowsThatFit(203.9, 41)).toBe(4);
+    expect(rowsThatFit(20, 41)).toBe(1);
+    expect(rowsThatFit(0, 41)).toBeNull();
+    expect(rowsThatFit(204, 0)).toBeNull();
   });
 
   it("lists at most the limit, with no scrolling inside the card", () => {
