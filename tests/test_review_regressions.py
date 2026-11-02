@@ -16034,7 +16034,10 @@ class ReviewBadgesSnapshotTest(unittest.TestCase):
         self._seed_book(conn, with_transactions=True, processed=True)
         cache_swap_candidate_count(conn, "ws-b", "pf-b", 4)
         conn.commit()
-        self.assertEqual(build_review_badges_snapshot(conn)["swaps"], 4)
+        snapshot = build_review_badges_snapshot(conn)
+        self.assertEqual(snapshot["swaps"], 4)
+        # The Review total is what needs the user plus the candidates.
+        self.assertEqual(snapshot["review"], snapshot["quarantine_attention"] + 4)
         # A matched count of 0 reports 0 (UI hides it), distinct from the
         # never-computed None on a fresh book.
         cache_swap_candidate_count(conn, "ws-b", "pf-b", 0)

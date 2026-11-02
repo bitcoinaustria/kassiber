@@ -28,8 +28,8 @@ least 480px), and carries a tab per open thing: the assistant, the panel's own
 surfaces, and open transactions' details, which open as tabs instead of a
 second sheet. The surfaces are the review queue (the causes the journals hold
 transactions for, transfers still to match, and journals waiting to be
-processed, read with the same daemon calls as the Quarantine page and the
-side nav's hints), Changes (recent edit history as a diff, with undo, from
+processed, read with the same daemon calls as the Review screen and the
+sidebar's Review badge), Changes (recent edit history as a diff, with undo, from
 the Activity page's history read) and Logs (a live tail of the redacted
 in-memory log). Changes and Logs open only while developer tools are on,
 like their pages, and close when they are turned off. A surface reads
@@ -426,7 +426,7 @@ Overview, Wallets, the book-set overview, and the Reports metric strip read the
 daemon's `fiat.completeness` block (see [the daemon reference](daemon.md)) instead of
 trusting cost basis as-is. While it is incomplete, the fiat portfolio card turns amber
 and shows an Incomplete or Outdated badge instead of the "vs cost basis"
-percentage. It names the BTC without cost basis and links to Quarantine, or to
+percentage. It names the BTC without cost basis and links to Review, or to
 Journals when stale. The holdings header and chart summary drop their unrealized
 percentage. Chart points from the first gap on show cost basis, average cost, and
 unrealized as "—" with an explanation, the average-cost line stops there, and
@@ -444,6 +444,33 @@ gain/loss, and indicative tax as Provisional while journals are stale or
 quarantines, custody gaps, or missing prices exist, and names the cause with a
 link to the page that resolves it. Reports copy stays English under the
 deferred reporting-language policy in [i18n.md](i18n.md).
+
+Review sits in the main nav and collects what waits on the owner, each item
+decided where it is listed. **Can't be booked yet** holds the quarantine
+causes, as [custody resolution](custody-resolution.md#why-a-transaction-is-quarantined)
+describes, with the journal freshness warning above them. **Moves between your
+wallets** lists the transfer and swap candidates from `ui.transfers.suggest`.
+Each has Pair, which pairs it with its default kind and policy, and Not a
+transfer, which dismisses it; Details opens it in Transfers & Custody. Exact
+candidates with carrying-value policy, no competing match and no ownership
+proof can be paired in groups of up to 50. `ui.review.plan` binds their exact
+transaction IDs, policies, input version and book to the confirmation;
+`ui.review.apply` refuses stale confirmations and applies the preview atomically.
+Taxable and ownership-graph candidates stay one at a time. A decision can be undone for 20 seconds
+(`ui.transfers.unpair`, or `ui.transfers.dismissals.delete` for a dismissal).
+Once the owner stops deciding, the journals recalculate. That is local and
+makes no network request. The queued refresh survives navigation, including a
+decision response received after leaving Review. It carries the originating
+book scope and is abandoned after a book switch, leaving that book visibly
+stale until it is processed. Until it finishes, the list keeps its earlier
+reading less what was decided, because a read of stale journals lists more
+candidates than are open. One number counts what is left: `ui.review.badges`
+`review`, which is `quarantine_attention` plus the cached transfer candidates
+(an ownership-graph move counts once, under its held transaction).
+The sidebar's Review badge, the bell, and Overview's Review row all show it,
+in red while a quarantine holds rows back from the reports. Stale journals
+with nothing else open show a dot. `/quarantine` and `kassiber://quarantine`
+open Review, and the native menu's Review item keeps Quarantine's shortcut.
 
 Reports shows one tax year from `ui.reports.capital_gains`: whether it can be
 filed, its result and how that result is built, and the files that carry it.

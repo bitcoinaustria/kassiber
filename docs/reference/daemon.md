@@ -148,7 +148,8 @@ Stream records add `approval` to `ai.chat.tool_call` and `reversible`,
 
 `ui.transfers.dismissals.delete` takes `dismissal_id`, or `tx_out` and `tx_in`,
 removes that dismissal, invalidates journals and returns `deleted` plus the
-removed `dismissal` (legs, reason, expiry). `ui.transfers.unpair` now also
+removed `dismissal` (legs, reason, expiry). The desktop's Review screen calls it
+to undo "Not a transfer". `ui.transfers.unpair` now also
 returns the removed `pair`, and `ui.transfers.rules.delete` the removed `rule`,
 so either can be recreated.
 
@@ -952,7 +953,14 @@ I/O and honors the policy's `journals` source class. Its outcome is returned as
 `cancelled`, or `skipped`; a failed or deferred step never turns the finished
 sync or import into an error. `ui.freshness.run` returns the same summary when
 journals were requested, including `disabled` when the policy skips them.
-`ui.journals.process` runs the same step (always rebuilding);
+`ui.journals.process` runs the same step (always rebuilding); its only
+argument, `auto_pair: false`, skips automatic pairing. The Review screen
+passes it after the owner's own decisions, so a recalculation never pairs
+what the owner did not choose. A run without automatic pairing, and a run
+whose automatic pairing paired something, recount the open transfer
+candidates for `ui.review.badges` on the rebuilt journals; so do a review
+apply that pairs, unpairs or dismisses a move (from the assistant or `review
+apply`) and the CLI's `journals process`.
 `kassiber journals process --auto-pair` is the CLI equivalent. The assistant's
 `ui.wallets.sync` and `ui.journals.process` tools rebuild without automatic
 pairing, because their consent does not cover authoring transfer pairs.

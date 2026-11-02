@@ -197,12 +197,12 @@
       "detailCurrent": "Berichte sind aus dem aktuellen Journalstand bereit."
     },
     "review": {
-      "title": "Prüfwarteschlange",
+      "title": "Prüfen",
       "open_one": "{{count}} offen",
       "open_other": "{{count}} offen",
       "clear": "Leer",
-      "detailOpen": "Löse Zeilen in Quarantäne vor der Steuerberichterstattung auf.",
-      "detailClear": "Keine Transaktionen in Quarantäne in diesem Buch."
+      "detailOpen": "Entscheide, was nicht buchbar ist und welche Übertragungen gepaart werden.",
+      "detailClear": "Nichts wartet auf dich."
     },
     "connections": {
       "title": "Verbindungen",
@@ -217,8 +217,8 @@
     },
     "primary": {
       "reviewQuarantines": {
-        "title": "Quarantäne prüfen",
-        "detail": "Behebe zuerst fehlende Kurse oder nicht unterstützte Semantik."
+        "title": "Prüfen öffnen",
+        "detail": "Nicht buchbare Transaktionen halten die Berichte zurück."
       },
       "checkConnections": {
         "title": "Verbindungen prüfen",
@@ -337,7 +337,7 @@
       "custody": "Verwahrungslücken offen",
       "missingPrices_one": "{{count}} Transaktion ohne Kurs",
       "missingPrices_other": "{{count}} Transaktionen ohne Kurs",
-      "openQuarantine": "Quarantäne",
+      "openQuarantine": "Prüfen",
       "openJournals": "Journale"
     },
     "series": {

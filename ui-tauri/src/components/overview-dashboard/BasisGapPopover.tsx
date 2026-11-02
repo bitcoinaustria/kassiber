@@ -62,7 +62,7 @@ export function BasisGapPopover({
                   to={cause.href}
                   className="inline-flex shrink-0 items-center gap-1 font-medium text-foreground underline-offset-4 hover:underline"
                 >
-                  {cause.href === "/quarantine"
+                  {cause.href === "/review"
                     ? t("treasury.basisGap.openQuarantine")
                     : t("treasury.basisGap.openJournals")}
                   <ArrowRight className="size-3" aria-hidden="true" />

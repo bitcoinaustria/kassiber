@@ -328,7 +328,7 @@ the dialog writes the days its preview resolved. It previews each file before
 it is written (`ui.exports.preview`): the real column headers, the first rows,
 the row count, the resolved days and any warnings, such as a draft list. A
 quarantine block shows there, with the blocking rows and a link to the
-Quarantine screen, before export. The year handoff is on the Reports screen
+Review screen, before export. The year handoff is on the Reports screen
 and the CoinTracking/Blockpit comparison on Reconcile, not in this dialog.
 It exports the chosen scope, not the screen's
 transient view filters. Fiat columns reflect the currency each transaction was

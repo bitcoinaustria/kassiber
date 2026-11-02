@@ -262,6 +262,6 @@ describe("TransactionsExportDialog", () => {
     expect(screen.getByText("missing_spot_price")).toBeTruthy();
     expect(exportButton().disabled).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: /dashboard.export.blocked.review/ }));
-    expect(daemon.navigate).toHaveBeenCalledWith({ to: "/quarantine" });
+    expect(daemon.navigate).toHaveBeenCalledWith({ to: "/review" });
   });
 });

@@ -197,12 +197,12 @@
       "detailCurrent": "Reports are ready from the current journal state."
     },
     "review": {
-      "title": "Review queue",
+      "title": "Review",
       "open_one": "{{count}} open",
       "open_other": "{{count}} open",
       "clear": "Clear",
-      "detailOpen": "Resolve quarantined rows before tax reporting.",
-      "detailClear": "No quarantined transactions in this book."
+      "detailOpen": "Decide what can't be booked and which moves to pair.",
+      "detailClear": "Nothing waits on you."
     },
     "connections": {
       "title": "Connections",
@@ -217,8 +217,8 @@
     },
     "primary": {
       "reviewQuarantines": {
-        "title": "Review quarantines",
-        "detail": "Clear missing prices or unsupported semantics first."
+        "title": "Open Review",
+        "detail": "Transactions that can't be booked hold back the reports."
       },
       "checkConnections": {
         "title": "Check connections",
@@ -337,7 +337,7 @@
       "custody": "Custody gaps open",
       "missingPrices_one": "{{count}} transaction without a price",
       "missingPrices_other": "{{count}} transactions without a price",
-      "openQuarantine": "Quarantine",
+      "openQuarantine": "Review",
       "openJournals": "Journals"
     },
     "series": {

@@ -131,7 +131,7 @@ export const StatsCards = ({
             : statusKey === "stats.status.needsJournals"
               ? "/journals"
               : statusKey === "stats.status.reviewQuarantines"
-                ? "/quarantine"
+                ? "/review"
                 : null;
           const showComparisonLabel =
             !completenessIssue &&

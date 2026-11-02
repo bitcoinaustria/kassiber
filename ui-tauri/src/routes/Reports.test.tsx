@@ -265,7 +265,7 @@ describe("Reports", () => {
     const html = render();
 
     expect(html).toContain("3 quarantined items should be resolved before filing.");
-    expect(html).toContain('href="/quarantine"');
+    expect(html).toContain('href="/review"');
     expect(html.match(/>Provisional</g)).toHaveLength(2);
     // The notice states it, so the header pill does not repeat it.
     expect(html).not.toContain("Review queue open");

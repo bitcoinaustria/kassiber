@@ -938,5 +938,57 @@
     "actionConfigure": "Configure",
     "actionSetup": "Setup",
     "actionPlanned": "Planned"
+  },
+  "inbox": {
+    "updating": "Updating the books…",
+    "clear": {
+      "title": "Nothing to review",
+      "body": "Every transaction is booked and every suggested transfer is decided."
+    },
+    "transfers": {
+      "title": "Moves between your wallets",
+      "count_one": "{{count}} to confirm",
+      "count_other": "{{count}} to confirm",
+      "why": "A paired move is not a sale. Unpaired, each side counts on its own.",
+      "pairExact_one": "Pair {{count}} exact match",
+      "pairExact_other": "Pair all {{count}} exact matches",
+      "tools": "Matching tools",
+      "route": "{{from}} to {{to}}",
+      "to": "to",
+      "fee": "fee {{amount}}",
+      "evidence": {
+        "exact": "exact evidence",
+        "likely": "time and amount match",
+        "ownership": "your wallets on both sides"
+      },
+      "competing_one": "{{count}} other possible match",
+      "competing_other": "{{count}} other possible matches",
+      "pair": "Pair",
+      "pairLabel": "Pair {{route}}",
+      "dismiss": "Not a transfer",
+      "dismissLabel": "Not a transfer: {{route}}",
+      "details": "Details",
+      "detailsLabel": "Details for {{route}}",
+      "paired": "Paired {{route}}.",
+      "pairedMany_one": "Paired {{count}} transfer.",
+      "pairedMany_other": "Paired {{count}} transfers.",
+      "dismissed": "Set aside {{route}}.",
+      "undo": "Undo",
+      "showAll": "Show all {{count}}",
+      "showFewer": "Show fewer",
+      "failed": "That did not work. Nothing was changed.",
+      "unavailable": "Transfer suggestions could not be loaded.",
+      "bulk": {
+        "title_one": "Pair {{count}} exact match?",
+        "title_other": "Pair {{count}} exact matches?",
+        "body": "Each becomes a move between your own wallets using carrying value. Taxable matches, competing candidates and ownership proofs stay for individual review. Each step includes up to 50 matches. You can undo it right after.",
+        "cancel": "Cancel",
+        "confirm_one": "Pair {{count}}",
+        "confirm_other": "Pair {{count}}",
+        "reason": "Pair reviewed exact transfers",
+        "none": "Nothing was paired: the exact matches changed. The list is up to date again."
+      },
+      "saving": "Saving…"
+    }
   }
 }

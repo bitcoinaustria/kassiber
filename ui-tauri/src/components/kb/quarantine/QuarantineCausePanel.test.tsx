@@ -312,7 +312,7 @@ describe("quarantine cause panel", () => {
     const [focus, prompt] = askAbout.mock.calls[0];
     expect(focus).toEqual({
       context: {
-        route: "/quarantine",
+        route: "/review",
         entityType: "transaction",
         entityId: "out",
         capabilities: ["review"],

@@ -99,7 +99,7 @@ describe("overview stats cards", () => {
     );
 
     expect(html).toContain("2 quarantines");
-    expect(html).toContain('href="/quarantine"');
+    expect(html).toContain('href="/review"');
     expect(html).not.toContain(">Current<");
   });
 
@@ -146,7 +146,7 @@ describe("overview stats cards", () => {
 
     expect(html).toContain("Incomplete");
     expect(html).toContain("\u20bf 0.12000000 without cost basis");
-    expect(html).toContain('href="/quarantine"');
+    expect(html).toContain('href="/review"');
     expect(html).toContain("text-amber-600");
     expect(html).not.toContain("vs cost basis");
     // The misleading "+57.6%" unrealized-vs-basis percentage is gone.

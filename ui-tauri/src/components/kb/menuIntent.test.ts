@@ -41,7 +41,7 @@ describe("isAppRoutePath", () => {
       "/connections",
       "/books",
       "/journals",
-      "/quarantine",
+      "/review",
       "/logs",
       "/settings",
       "/assistant",

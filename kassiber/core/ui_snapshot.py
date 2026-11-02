@@ -1539,6 +1539,7 @@ REVIEW_BADGE_DEFINITIONS = {
     "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
     "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
     "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+    "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted.",
 }
 WORKSPACE_HEALTH_COUNT_DEFINITIONS = {
     "wallets": "Wallets in the active book.",
@@ -1593,6 +1594,8 @@ def build_review_badges_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         "quarantine_attention": attention,
         "journals_needs_processing": bool(freshness["needs_processing"]),
         "swaps": swaps,
+        # One number for every surface that says how much is left to review.
+        "review": attention + (swaps or 0),
         "definitions": dict(REVIEW_BADGE_DEFINITIONS),
     }
 

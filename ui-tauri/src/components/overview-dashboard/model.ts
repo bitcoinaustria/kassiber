@@ -320,7 +320,7 @@ export type OverviewHealthTone = "good" | "warning" | "alert" | "neutral";
 export type OverviewHref =
   | "/connections"
   | "/journals"
-  | "/quarantine"
+  | "/review"
   | "/reports"
   | "/transactions";
 
@@ -690,7 +690,7 @@ const statsData: StatItem[] = [
     icon: CreditCard,
     format: "currency",
     comparisonLabelKey: "stats.comparison.vsLastMonth",
-    href: "/quarantine",
+    href: "/review",
   },
 ];
 
@@ -843,7 +843,7 @@ export function portfolioCompletenessDetail(
 export type BasisGapCause = {
   key: "journals_stale" | "quarantines" | "custody_unresolved" | "missing_prices";
   copy: OverviewCopy;
-  href: "/journals" | "/quarantine";
+  href: "/journals" | "/review";
 };
 
 /** What keeps the cost basis incomplete, each with the page that resolves it. */
@@ -868,7 +868,7 @@ export function basisGapCauses(
         key: "treasury.basisGap.quarantines",
         params: { count: completeness.quarantineCount },
       },
-      href: "/quarantine",
+      href: "/review",
     });
   }
   if (has("custody_unresolved")) {
@@ -885,7 +885,7 @@ export function basisGapCauses(
         key: "treasury.basisGap.missingPrices",
         params: { count: completeness.missingPriceCount },
       },
-      href: "/quarantine",
+      href: "/review",
     });
   }
   return causes;
@@ -2791,10 +2791,19 @@ export function buildOverviewReadiness(snapshot: OverviewSnapshot): OverviewRead
   };
 }
 
-export function buildOverviewHealthItems(snapshot: OverviewSnapshot): OverviewHealthItem[] {
+/**
+ * The books' health rows. `review` is the shared Review count
+ * (ui.review.badges); without it the row falls back to quarantined rows.
+ */
+export function buildOverviewHealthItems(
+  snapshot: OverviewSnapshot,
+  review?: { total: number; blocksReports: boolean },
+): OverviewHealthItem[] {
   const status = snapshot.status;
   const needsJournals = Boolean(status?.needsJournals);
   const quarantines = status?.quarantines ?? 0;
+  const reviewOpen = review ? review.total : quarantines;
+  const reviewBlocks = review ? review.blocksReports : quarantines > 0;
   const totalConnections = snapshot.connections.length;
   const syncingConnections = snapshot.connections.filter(
     (connection) => connection.status === "syncing",
@@ -2822,7 +2831,7 @@ export function buildOverviewHealthItems(snapshot: OverviewSnapshot): OverviewHe
                   params: { count: completeness.missingPriceCount },
                 },
             detail: { key: "health.basis.detail" },
-            href: custodyUnresolved ? "/journals" : "/quarantine",
+            href: custodyUnresolved ? "/journals" : "/review",
             icon: ShieldAlert,
             tone: custodyUnresolved ? "alert" : "warning",
           },
@@ -2848,17 +2857,17 @@ export function buildOverviewHealthItems(snapshot: OverviewSnapshot): OverviewHe
     {
       key: "review",
       title: { key: "health.review.title" },
-      value: quarantines
-        ? { key: "health.review.open", params: { count: quarantines } }
+      value: reviewOpen
+        ? { key: "health.review.open", params: { count: reviewOpen } }
         : { key: "health.review.clear" },
       detail: {
-        key: quarantines
+        key: reviewOpen
           ? "health.review.detailOpen"
           : "health.review.detailClear",
       },
-      href: "/quarantine",
-      icon: quarantines ? ShieldAlert : CheckCircle2,
-      tone: quarantines ? "alert" : "good",
+      href: "/review",
+      icon: reviewOpen ? ShieldAlert : CheckCircle2,
+      tone: reviewBlocks ? "alert" : reviewOpen ? "warning" : "good",
     },
     ...basisItem,
     {
@@ -2905,7 +2914,7 @@ export function buildPrimaryOverviewAction(snapshot: OverviewSnapshot) {
     return {
       title: { key: "health.primary.reviewQuarantines.title" } as OverviewCopy,
       detail: { key: "health.primary.reviewQuarantines.detail" } as OverviewCopy,
-      href: "/quarantine",
+      href: "/review",
       icon: ShieldAlert,
       tone: "alert" as const,
     };
@@ -2937,7 +2946,7 @@ export function buildPrimaryOverviewAction(snapshot: OverviewSnapshot) {
         key: "readiness.missingPrices.detail",
         params: { count: completeness.missingPriceCount },
       } as OverviewCopy,
-      href: "/quarantine" as const,
+      href: "/review" as const,
       icon: ShieldAlert,
       tone: "warning" as const,
     };

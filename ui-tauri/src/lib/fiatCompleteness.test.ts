@@ -49,7 +49,7 @@ describe("fiat completeness helpers", () => {
   });
 
   it("routes stale books to journals and quarantines to the queue", () => {
-    expect(completenessHref(GAP)).toBe("/quarantine");
+    expect(completenessHref(GAP)).toBe("/review");
     expect(completenessHref({ ...GAP, state: "stale" })).toBe("/journals");
     expect(
       completenessHref({

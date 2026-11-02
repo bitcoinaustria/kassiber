@@ -159,7 +159,7 @@ vi.mock("@/components/transactions", async (importOriginal) => {
 
 import { useUiStore } from "@/store/ui";
 
-import { Quarantine } from "./Quarantine";
+import { QuarantineSection } from "./QuarantineSection";
 
 function row(transactionId: string, overrides: Partial<QuarantineItem> = {}): QuarantineItem {
   return {
@@ -208,7 +208,7 @@ function mount() {
   });
   render(
     <QueryClientProvider client={client}>
-      <Quarantine />
+      <QuarantineSection />
     </QueryClientProvider>,
   );
 }
@@ -244,12 +244,12 @@ beforeEach(() => {
   daemon.failAttentionPage = false;
   daemon.sheetFingerprint = "fp-1";
   daemon.calls = [];
-  window.history.replaceState(null, "", "/quarantine");
+  window.history.replaceState(null, "", "/review");
 });
 
 afterEach(cleanup);
 
-describe("quarantine route", () => {
+describe("quarantine section", () => {
   it("shows a failed waiting list as an error with retry, not an empty queue", async () => {
     daemon.items = [row("root"), waitingRow("w1")];
     daemon.failWaiting = true;

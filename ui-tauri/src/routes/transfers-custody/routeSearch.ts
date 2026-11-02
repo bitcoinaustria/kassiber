@@ -23,7 +23,10 @@ export function parseTransfersCustodySearch(raw: Record<string, unknown>): Trans
   const focus = [raw.focus, raw.tx, raw.transaction].map(entityId).find(Boolean);
   const method = raw.method === "ownership_graph" ? raw.method : undefined;
   if (focus || method) {
-    return { tab: "review", mode: "transfers", view: "review", ...(focus ? { focus } : {}), ...(method ? { method } : {}) };
+    // A focused swap opens on the swaps tab; an ownership proof is always a
+    // transfer, whatever mode lingers in the history.
+    const mode = raw.mode === "swaps" && !method ? "swaps" : "transfers";
+    return { tab: "review", mode, view: "review", ...(focus ? { focus } : {}), ...(method ? { method } : {}) };
   }
   const gap = [raw.gap, raw.gap_id].map(entityId).find(Boolean);
   return {

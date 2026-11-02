@@ -104,7 +104,7 @@ describe("Book Set Overview rendering", () => {
     expect(html).toContain("Overview");
     expect(html).toContain("Transactions");
     expect(html).toContain("Journals");
-    expect(html).toContain("Quarantine");
+    expect(html).toContain("Review");
     expect(html).toContain("Wallets");
     expect(html).toContain("Reports");
   });

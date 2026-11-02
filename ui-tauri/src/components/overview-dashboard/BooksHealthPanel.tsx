@@ -2,6 +2,8 @@ import { Link } from "@tanstack/react-router";
 import { CheckCircle2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+import { useDaemon } from "@/daemon/client";
+import { reviewTotal, type ReviewBadges } from "@/lib/reviewCount";
 import { cn } from "@/lib/utils";
 import type { OverviewSnapshot } from "@/mocks/seed";
 
@@ -33,7 +35,12 @@ export const BooksHealthPanel = ({
   isProcessingJournals: boolean;
 }) => {
   const { t } = useTranslation("overview");
-  const healthItems = buildOverviewHealthItems(snapshot);
+  // The same number as the sidebar's Review badge, from the same read.
+  const badges = useDaemon<ReviewBadges>("ui.review.badges").data?.data;
+  const healthItems = buildOverviewHealthItems(
+    snapshot,
+    badges ? { total: reviewTotal(badges), blocksReports: badges.quarantine > 0 } : undefined,
+  );
   const primaryAction = buildPrimaryOverviewAction(snapshot);
   const PrimaryIcon = primaryAction?.icon;
   const needsJournals = Boolean(snapshot.status?.needsJournals);

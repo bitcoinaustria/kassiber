@@ -25,7 +25,7 @@ export function useAskAssistantAbout(): ((target: AskAboutTarget) => void) | nul
   if (!askAbout) return null;
   return ({ kind, transactionId, date }) => {
     const context = assistantScreenContextFor(
-      kind === "quarantine" ? "/quarantine" : "/transactions",
+      kind === "quarantine" ? "/review" : "/transactions",
       `?tx=${encodeURIComponent(transactionId)}`,
     );
     if (context.entityType !== "transaction" || !context.entityId) return;

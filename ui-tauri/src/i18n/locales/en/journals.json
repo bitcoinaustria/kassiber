@@ -141,8 +141,6 @@
       "title": "Quarantine unavailable",
       "fallback": "The daemon did not return quarantine data."
     },
-    "emptyTitle": "Nothing in quarantine",
-    "emptyBody": "When Kassiber can't book a transaction, it shows up here with what to do.",
     "actions": {
       "fixWithAssistant": "Fix with assistant"
     },
@@ -492,9 +490,6 @@
       "previous": "Previous",
       "next": "Next"
     },
-    "page": {
-      "description": "Transactions Kassiber can't book yet are held out of your tax journals and reports until their cause is fixed. They stay in their wallets, and wallet balances still include them."
-    },
     "summary": {
       "needsYou_one": "{{count}} transaction needs you",
       "needsYou_other": "{{count}} transactions need you",
@@ -504,7 +499,6 @@
       "showWaiting": "Show them"
     },
     "causes": {
-      "title": "What to fix",
       "whatToDo": "What to do",
       "waiting_one": "{{count}} later transaction waits on this and clears once it is fixed.",
       "waiting_other": "{{count}} later transactions wait on this and clear once it is fixed.",
@@ -589,6 +583,9 @@
       "notACase": "This pair is not one of the pairs to review here. Unpair it from Transfers & Custody.",
       "sheetChanged": "This pair reads differently now than the sheet showed it. Nothing was unpaired; look at it again.",
       "reviewLine": "Reviewed as {{kind}}: {{sent}} sent, {{received}} received"
+    },
+    "section": {
+      "title": "Can't be booked yet"
     }
   },
   "review": {

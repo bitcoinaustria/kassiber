@@ -9040,6 +9040,25 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(processed["data"]["processed_transactions"], 1)
             self.assertEqual(processed["data"]["quarantined"], 0)
 
+            # The Review screen recalculates without automatic pairing; the
+            # open candidate count is cached all the same.
+            _write_payload(
+                proc,
+                {"request_id": "process-2", "kind": "ui.journals.process", "args": {"auto_pair": False}},
+            )
+            manual = _read_until_kind(proc, "ui.journals.process")
+            self.assertNotIn("auto_pair", manual["data"])
+            _write_payload(proc, {"request_id": "badges-1", "kind": "ui.review.badges"})
+            badges = _read_payload_timeout(proc)
+            self.assertEqual(badges["data"]["swaps"], 0)
+            for bad_args in ({"auto_pair": "no"}, {"rebuild": True}):
+                _write_payload(
+                    proc,
+                    {"request_id": "process-bad", "kind": "ui.journals.process", "args": bad_args},
+                )
+                rejected = _read_until_kind(proc, "error")
+                self.assertEqual(rejected["error"]["code"], "validation")
+
             _write_payload(proc, {"request_id": "journals-1", "kind": "ui.journals.snapshot"})
             journals = _read_payload_timeout(proc)
             self.assertEqual(journals["kind"], "ui.journals.snapshot")

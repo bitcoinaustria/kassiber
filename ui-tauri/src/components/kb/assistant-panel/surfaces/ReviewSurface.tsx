@@ -83,7 +83,7 @@ export function ReviewSurface() {
   const openCause = (group: QuarantineGroup) => {
     const root = group.root_transaction_id ?? group.root_transaction_ids[0];
     if (!root) {
-      void navigate({ to: "/quarantine" });
+      void navigate({ to: "/review" });
       return;
     }
     openTransaction(root, sheetTabForCause(group.reason, group.category, group.evidence));
@@ -209,7 +209,7 @@ export function ReviewSurface() {
           variant="ghost"
           size="xs"
           className="ml-auto gap-1 text-muted-foreground"
-          onClick={() => void navigate({ to: "/quarantine" })}
+          onClick={() => void navigate({ to: "/review" })}
         >
           {t("assistant:panel.review.openPage")}
           <ArrowUpRight className="size-3" aria-hidden="true" />

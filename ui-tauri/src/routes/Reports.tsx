@@ -78,7 +78,7 @@ import type { CapitalGainsReport } from "@/mocks/reports";
 import { useUiStore } from "@/store/ui";
 
 type ReportTone = "good" | "warning" | "alert" | "neutral";
-type ReportHref = "/journals" | "/quarantine";
+type ReportHref = "/journals" | "/review";
 
 interface ReportExportResult {
   reconciled?: boolean;
@@ -634,7 +634,7 @@ function ReportsView({
             openingExportPath={openingExportPath}
             onExport={handleExport}
             onOpenExport={handleOpenExport}
-            onReviewQuarantine={() => void navigate({ to: "/quarantine" })}
+            onReviewQuarantine={() => void navigate({ to: "/review" })}
             wallets={walletChoices}
             selectedWalletIds={summaryWalletIds}
             onToggleWallet={(id) => {
@@ -944,7 +944,7 @@ function buildReportReadiness(
       } should be resolved before filing.`,
       tone: "alert",
       icon: ShieldAlert,
-      action: { label: "Review queue", href: "/quarantine" },
+      action: { label: "Review", href: "/review" },
     };
   }
 
@@ -974,7 +974,7 @@ function buildReportReadiness(
       detail: `${formatCount(count)} transaction${count === 1 ? " has" : "s have"} no price; figures are provisional.`,
       tone: "warning",
       icon: AlertTriangle,
-      action: { label: "Review queue", href: "/quarantine" },
+      action: { label: "Review", href: "/review" },
     };
   }
 
