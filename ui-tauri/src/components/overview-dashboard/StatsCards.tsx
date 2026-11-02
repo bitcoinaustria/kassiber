@@ -1,11 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 
-import {
-  fiatNumberFormatter,
-  formatBtc,
-  type Currency,
-} from "@/lib/currency";
+import { formatBtc } from "@/lib/currency";
 import { fiatCompleteness } from "@/lib/fiatCompleteness";
 import { cn } from "@/lib/utils";
 import type { OverviewSnapshot } from "@/mocks/seed";
@@ -25,26 +21,27 @@ import {
 } from "./model";
 import { statStatusKey } from "./statStatus";
 
-const numberFormatter = fiatNumberFormatter("EUR");
-
 export const StatsCards = ({
   snapshot,
   hideSensitive,
-  currency,
   isRefreshing,
   isMarketRateRefreshing,
   onRefreshMarketRate,
 }: {
   snapshot: OverviewSnapshot;
   hideSensitive: boolean;
-  currency: Currency;
   isRefreshing?: boolean;
   isMarketRateRefreshing?: boolean;
   onRefreshMarketRate?: () => void;
 }) => {
   const { t } = useTranslation("overview");
   const to = t as OverviewTranslate;
-  const stats = buildStatsData(snapshot, currency);
+  // The bitcoin held and what it is worth, both at once whichever currency
+  // the app shows: the toggle would otherwise turn one into the other.
+  const tiles = [
+    { stat: buildStatsData(snapshot, "btc")[0], isBitcoinPortfolio: true },
+    { stat: buildStatsData(snapshot, "eur")[0], isBitcoinPortfolio: false },
+  ];
   const fiatCurrency = activeMarketFiatCurrency(snapshot);
   const fiatRate = activeMarketFiatRate(snapshot);
   const marketRateIsSynced = Boolean(
@@ -59,7 +56,7 @@ export const StatsCards = ({
       role={isRefreshing ? "status" : undefined}
       aria-live={isRefreshing ? "polite" : undefined}
     >
-      <div className="grid grid-cols-1 divide-x-0 divide-y divide-border sm:grid-cols-2 sm:divide-y-0 xl:grid-cols-5 xl:divide-x">
+      <div className="grid grid-cols-1 divide-y divide-border sm:grid-cols-3 sm:divide-x sm:divide-y-0">
         <button
           type="button"
           onClick={(event) => {
@@ -100,9 +97,7 @@ export const StatsCards = ({
             </p>
           </div>
         </button>
-        {stats.map((stat) => {
-          const isBitcoinPortfolio =
-            currency === "btc" && stat.id === "portfolioValue";
+        {tiles.map(({ stat, isBitcoinPortfolio }) => {
           const balanceStatus = snapshot.balanceSummary ?? snapshot.status;
           const statusKey = statStatusKey(
             stat,
@@ -138,8 +133,6 @@ export const StatsCards = ({
             (!statusKey ||
               ![
                 "stats.status.current",
-                "stats.status.loaded",
-                "stats.status.configured",
               ].includes(statusKey));
           const valueUnavailable =
             Boolean(completenessIssue) && completeness.marketRateMissing;
@@ -150,16 +143,15 @@ export const StatsCards = ({
 
           return (
             <div
-              key={stat.id}
+              key={isBitcoinPortfolio ? "bitcoinBalance" : stat.id}
               className="group relative isolate overflow-hidden p-3 transition-colors before:absolute before:inset-0 before:z-0 before:origin-left before:scale-x-0 before:bg-muted/45 before:content-[''] before:transition-transform before:duration-200 before:ease-out hover:before:scale-x-100 focus-within:before:scale-x-100"
             >
               <>
                 <Link
-                  // In BTC mode this card is the Bitcoin balance, so it belongs
-                  // to the wallets overview — that is where the balance is made
-                  // of parts. (That page is routed at `/connections`, which is
-                  // also where the nav's "Wallets" row goes.) The fiat card is a
-                  // portfolio value and stays on Reports.
+                  // The Bitcoin balance belongs to the wallets overview — that
+                  // is where the balance is made of parts. (That page is routed
+                  // at `/connections`, which is also where the nav's "Wallets"
+                  // row goes.) The portfolio value stays on Reports.
                   to={
                     balanceWarningHref ??
                     (isBitcoinPortfolio ? "/connections" : stat.href)
@@ -193,17 +185,15 @@ export const StatsCards = ({
                           precision: 3,
                         })}
                       </span>
-                    ) : stat.format === "currency" ? (
+                    ) : (
                       <span>
                         {formatCompactDisplayMoney(
                           stat.value,
                           fiatRate,
-                          currency,
+                          "eur",
                           fiatCurrency,
                         )}
                       </span>
-                    ) : (
-                      numberFormatter.format(stat.value)
                     )}
                   </p>
                   <div className="flex min-w-0 items-center gap-1.5 text-2xs sm:text-xs">

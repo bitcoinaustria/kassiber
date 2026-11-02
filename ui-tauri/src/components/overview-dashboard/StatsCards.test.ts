@@ -59,12 +59,24 @@ describe("overview stats cards", () => {
     expect(statStatusText(fiatPortfolioStat, false)).toBe("Estimate");
   });
 
+  it("shows the price, the bitcoin held and what it is worth, and nothing else", () => {
+    const html = renderToStaticMarkup(
+      createElement(StatsCards, { snapshot: MOCK_OVERVIEW, hideSensitive: false }),
+    );
+
+    expect(html).toContain("BTC price");
+    expect(html).toContain("Bitcoin balance");
+    expect(html).toContain("Portfolio value");
+    expect(html).not.toContain(">Transactions<");
+    expect(html).not.toContain(">Connections<");
+    expect(html).not.toContain(">Open review<");
+  });
+
   it("keeps metric values visible during refresh", () => {
     const html = renderToStaticMarkup(
       createElement(StatsCards, {
         snapshot: MOCK_OVERVIEW,
         hideSensitive: false,
-        currency: "btc",
         isRefreshing: true,
         isMarketRateRefreshing: true,
       }),
@@ -94,34 +106,12 @@ describe("overview stats cards", () => {
           },
         },
         hideSensitive: false,
-        currency: "btc",
       }),
     );
 
     expect(html).toContain("2 quarantines");
     expect(html).toContain('href="/review"');
     expect(html).not.toContain(">Current<");
-  });
-
-  it("formats overview counts with Austrian grouping", () => {
-    const html = renderToStaticMarkup(
-      createElement(StatsCards, {
-        snapshot: {
-          ...MOCK_OVERVIEW,
-          status: {
-            ...MOCK_OVERVIEW.status!,
-            transactionCount: 1_234,
-          },
-        },
-        hideSensitive: false,
-        currency: "eur",
-        isRefreshing: false,
-        isMarketRateRefreshing: false,
-      }),
-    );
-
-    expect(html).toContain("1\u00a0234");
-    expect(html).not.toContain("1,234");
   });
 
   it("marks the fiat value incomplete and names the BTC without cost basis", () => {
@@ -140,7 +130,6 @@ describe("overview stats cards", () => {
       createElement(StatsCards, {
         snapshot,
         hideSensitive: false,
-        currency: "eur",
       }),
     );
 
@@ -172,7 +161,6 @@ describe("overview stats cards", () => {
       createElement(StatsCards, {
         snapshot,
         hideSensitive: false,
-        currency: "eur",
       }),
     );
 
@@ -201,7 +189,6 @@ describe("overview stats cards", () => {
       createElement(StatsCards, {
         snapshot,
         hideSensitive: false,
-        currency: "eur",
       }),
     );
 
@@ -225,7 +212,6 @@ describe("overview stats cards", () => {
         createElement(StatsCards, {
           snapshot,
           hideSensitive: false,
-          currency: "eur",
         }),
       );
 

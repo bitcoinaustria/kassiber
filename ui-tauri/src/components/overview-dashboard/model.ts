@@ -1,21 +1,13 @@
 import {
-  ArrowDownRight,
-  ArrowLeftRight,
-  ArrowUpRight,
   CheckCircle2,
   CircleDollarSign,
-  ClipboardList,
-  CreditCard,
-  FileText,
   Plus,
   RefreshCw,
   ShieldAlert,
-  Users,
   WalletCards,
 } from "lucide-react";
 import * as React from "react";
 
-import { type ChartConfig } from "@/components/ui/chart";
 import {
   formatBtc,
   formatCompactFiatAmount,
@@ -24,6 +16,7 @@ import {
   MISSING_FIAT_LABEL,
   type Currency,
 } from "@/lib/currency";
+import { type SwapRail } from "@/lib/bitcoinRail";
 import { formatShortDate } from "@/lib/date";
 import {
   basisIncompleteFromMs,
@@ -90,12 +83,7 @@ function resolveTranslate(t?: OverviewTranslate): OverviewTranslate {
   return t ?? fallbackTranslate;
 }
 
-export type StatId =
-  | "portfolioValue"
-  | "transactions"
-  | "reviewedEvents"
-  | "openReview"
-  | "connections";
+export type StatId = "portfolioValue";
 
 export type StatItem = {
   // Stable slug for React keys and equality checks; never a translated string.
@@ -122,17 +110,9 @@ export type HoldingsItem = {
   nameKey?: string;
   value: number;
   percent: number;
+  /** The source's rail, for its logo; none for the "Other sources" row. */
+  rail?: SwapRail;
   color: string;
-};
-
-export type BalanceDriverItem = {
-  key: "incoming" | "outgoing" | "swap" | "fees";
-  // i18n key in the `overview` namespace for the visible driver label.
-  labelKey: string;
-  valueBtc: number;
-  count: number;
-  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
-  toneClassName: string;
 };
 
 export type PortfolioChartPoint = {
@@ -349,19 +329,11 @@ export type OverviewCopy = {
   params?: Record<string, unknown>;
 };
 
-export type OverviewHealthItem = {
-  key: string;
-  title: OverviewCopy;
-  value: OverviewCopy;
-  detail: OverviewCopy;
-  href: OverviewHref;
-  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
-  tone: OverviewHealthTone;
-};
-
 export type OverviewReadiness = {
   title: OverviewCopy;
   detail: OverviewCopy;
+  /** Where the owner deals with it; none while there is nothing to open. */
+  href?: OverviewHref;
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
   tone: OverviewHealthTone;
 };
@@ -417,18 +389,6 @@ export function formatPortfolioMoney(
 ) {
   if (currency === "btc") return formatBtc(amount);
   return formatDisplayMoney(amount, fiatRate, currency, fiatCurrency);
-}
-
-export function formatDriverValue(
-  btc: number,
-  fiatRate: number,
-  currency: Currency,
-  fiatCurrency = "EUR",
-) {
-  if (currency === "btc") {
-    return formatBtc(btc, { precision: btc > 0 && btc < 0.001 ? 8 : 3 });
-  }
-  return formatCompactDisplayMoney(btc * fiatRate, fiatRate, currency, fiatCurrency);
 }
 
 export function activeMarketFiatCurrency(snapshot: OverviewSnapshot) {
@@ -540,14 +500,6 @@ export function marketRateDetailLabel(
   return `${formatMarketRateSource(source, t)} · ${pair}`;
 }
 
-export function donutCenterValueClass(value: string) {
-  const length = value.replace(/\s+/g, "").length;
-  if (length <= 7) return "text-sm sm:text-base";
-  if (length <= 9) return "text-xs sm:text-sm";
-  if (length <= 11) return "text-[11px] sm:text-xs";
-  return "text-[10px] sm:text-[11px]";
-}
-
 export function transactionBtc(tx: Transaction, priceEur: number) {
   return tx.amountBtc ?? btcFromEur(tx.amount ?? 0, priceEur);
 }
@@ -633,66 +585,18 @@ export function useResolvedColorMode() {
     : "light";
 }
 
-// Recharts `ChartConfig` `label`s are not surfaced visibly here — the holdings
-// donut renders a custom legend (translated at the call site) and has no
-// recharts `<Tooltip>`. These stay as inert internal config values.
-export const holdingsChartConfig = {
-  onchain: { label: "On-chain BTC", color: palette.primary },
-  lightning: { label: "Lightning", theme: palette.secondary },
-  liquid: { label: "Liquid", theme: palette.tertiary },
-  other: { label: "Other", theme: palette.quaternary },
-} satisfies ChartConfig;
-
-const statsData: StatItem[] = [
-  {
-    id: "portfolioValue",
-    titleKey: "stats.title.portfolioValue",
-    previousValue: 198502,
-    value: 312842.77,
-    changePercent: 27.86,
-    isPositive: true,
-    icon: CircleDollarSign,
-    format: "currency",
-    comparisonLabelKey: "stats.comparison.vsLastMonth",
-    href: "/reports",
-  },
-  {
-    id: "transactions",
-    titleKey: "stats.title.transactions",
-    previousValue: 184,
-    value: 218,
-    changePercent: 18.4,
-    isPositive: true,
-    icon: ClipboardList,
-    format: "number",
-    comparisonLabelKey: "stats.comparison.vsLastMonth",
-    href: "/transactions",
-  },
-  {
-    id: "reviewedEvents",
-    titleKey: "stats.title.reviewedEvents",
-    previousValue: 412,
-    value: 497,
-    changePercent: 20.8,
-    isPositive: true,
-    icon: Users,
-    format: "number",
-    comparisonLabelKey: "stats.comparison.vsLastMonth",
-    href: "/connections",
-  },
-  {
-    id: "openReview",
-    titleKey: "stats.title.openReview",
-    previousValue: 98,
-    value: 84,
-    changePercent: 13.73,
-    isPositive: false,
-    icon: CreditCard,
-    format: "currency",
-    comparisonLabelKey: "stats.comparison.vsLastMonth",
-    href: "/review",
-  },
-];
+const portfolioStat: StatItem = {
+  id: "portfolioValue",
+  titleKey: "stats.title.portfolioValue",
+  previousValue: 198502,
+  value: 312842.77,
+  changePercent: 27.86,
+  isPositive: true,
+  icon: CircleDollarSign,
+  format: "currency",
+  comparisonLabelKey: "stats.comparison.vsLastMonth",
+  href: "/reports",
+};
 
 export function latestPortfolioBalanceBtc(snapshot: OverviewSnapshot) {
   if (snapshot.portfolioSeries?.length) {
@@ -716,13 +620,12 @@ export function buildStatsData(
   currency: Currency,
 ): StatItem[] {
   const isBitcoinMode = currency === "btc";
-  const transactionCount = snapshot.status?.transactionCount ?? snapshot.txs.length;
   // A basis that misses quarantined/unresolved rows would turn the change
   // percentage into a confident but wrong number.
   const basisTrusted = fiatCompleteness(snapshot.fiat).costBasisComplete;
   return [
     {
-      ...statsData[0],
+      ...portfolioStat,
       value: snapshot.fiat.eurBalance,
       previousValue: isBitcoinMode ? 0 : snapshot.fiat.eurCostBasis,
       changePercent: !isBitcoinMode && basisTrusted && snapshot.fiat.eurCostBasis
@@ -734,35 +637,6 @@ export function buildStatsData(
         : snapshot.fiat.eurCostBasis
           ? "stats.comparison.vsCostBasis"
           : "stats.comparison.fromLoadedRows",
-    },
-    {
-      ...statsData[1],
-      value: transactionCount,
-      previousValue: 0,
-      changePercent: 0,
-      isPositive: true,
-      comparisonLabelKey: "stats.comparison.loadedRows",
-    },
-    {
-      ...statsData[2],
-      id: "connections",
-      titleKey: "stats.title.connections",
-      value: snapshot.connections.length,
-      previousValue: 0,
-      changePercent: 0,
-      isPositive: true,
-      comparisonLabelKey: "stats.comparison.configured",
-    },
-    {
-      ...statsData[3],
-      id: "openReview",
-      titleKey: "stats.title.openReview",
-      value: snapshot.status?.quarantines ?? 0,
-      previousValue: 0,
-      changePercent: 0,
-      isPositive: (snapshot.status?.quarantines ?? 0) === 0,
-      format: "number",
-      comparisonLabelKey: "stats.comparison.journalQuarantine",
     },
   ];
 }
@@ -2401,133 +2275,52 @@ export function buildBalanceRailItems(snapshot: OverviewSnapshot) {
   };
 }
 
-export function buildHoldingsBySource(snapshot: OverviewSnapshot): HoldingsItem[] {
+function holdingRail(connection: OverviewSnapshot["connections"][number]): SwapRail | undefined {
+  const rail = railForConnection(connection.kind, connection.label);
+  if (rail === "other") return undefined;
+  return connection.chain === "liquid" ? "liquid" : rail;
+}
+
+/**
+ * The sources holding bitcoin, largest first. Past `shown` sources the
+ * smallest fold into one "Other sources" row, so the list stays `shown` long.
+ */
+export function buildHoldingsBySource(snapshot: OverviewSnapshot, shown = 4): HoldingsItem[] {
   const fiatRate = activeMarketFiatRate(snapshot);
   const rows = snapshot.connections
     .filter((connection) => connection.balance > 0)
     .map((connection) => ({
       name: connection.label,
       value: connection.balance * fiatRate,
+      // An exchange, file or ecash source gets no rail logo, not a guessed one.
+      rail: holdingRail(connection),
     }))
     .sort((a, b) => b.value - a.value);
   const total = rows.reduce((sum, item) => sum + item.value, 0);
-  const visibleRows: Array<{ name: string; nameKey?: string; value: number }> =
-    rows.length > 4
+  const visibleRows: Array<{ name: string; nameKey?: string; value: number; rail?: SwapRail }> =
+    rows.length > shown
       ? [
-          ...rows.slice(0, 3),
+          ...rows.slice(0, shown - 1),
           {
             name: "",
             nameKey: "holdings.otherSources",
-            value: rows.slice(3).reduce((sum, item) => sum + item.value, 0),
+            value: rows.slice(shown - 1).reduce((sum, item) => sum + item.value, 0),
           },
         ]
       : rows;
-  const colors = [
-    palette.primary,
-    palette.secondary.light,
-    palette.tertiary.light,
-    `color-mix(in oklch, var(--muted-foreground) 70%, ${mixBase})`,
-  ];
+  // Shades of one colour, largest source darkest; "Other sources" is muted.
+  const shades = [100, 78, 60, 46, 35, 27, 21, 16];
+  const other = `color-mix(in oklch, var(--muted-foreground) 45%, ${mixBase})`;
   return visibleRows.map((item, index) => ({
     name: item.name,
     nameKey: item.nameKey,
     value: item.value,
     percent: percentOf(item.value, total),
-    color: colors[index] ?? colors[colors.length - 1],
+    rail: item.rail,
+    color: item.nameKey
+      ? other
+      : `color-mix(in oklch, var(--primary) ${shades[Math.min(index, shades.length - 1)]}%, ${mixBase})`,
   }));
-}
-
-export function buildBalanceDrivers(snapshot: OverviewSnapshot) {
-  const totals = {
-    incomingBtc: 0,
-    outgoingBtc: 0,
-    swapBtc: 0,
-    feesBtc: 0,
-    incomingCount: 0,
-    outgoingCount: 0,
-    swapCount: 0,
-    feeCount: 0,
-  };
-  for (const tx of snapshot.txs.filter((row) => !row.excluded)) {
-    const flow = flowForOverviewTx(tx);
-    const amountBtc = satToBtc(Math.abs(tx.amountSat));
-    const feeBtc = satToBtc(Math.abs(tx.feeSat ?? 0));
-    if (flow === "incoming") {
-      totals.incomingBtc += amountBtc;
-      totals.incomingCount += 1;
-    } else if (flow === "outgoing") {
-      totals.outgoingBtc += amountBtc;
-      totals.outgoingCount += 1;
-    } else if (flow === "swap") {
-      const pairedVolume = Math.max(
-        amountBtc,
-        satToBtc(Math.abs(tx.pair?.outAmountSat ?? 0)),
-        satToBtc(Math.abs(tx.pair?.inAmountSat ?? 0)),
-      );
-      totals.swapBtc += pairedVolume;
-      totals.swapCount += 1;
-    }
-    if (feeBtc > 0) {
-      totals.feesBtc += feeBtc;
-      totals.feeCount += 1;
-    }
-  }
-  const netBtc = totals.incomingBtc - totals.outgoingBtc - totals.feesBtc;
-  const items: BalanceDriverItem[] = [
-    {
-      key: "incoming",
-      labelKey: "drivers.incoming",
-      valueBtc: totals.incomingBtc,
-      count: totals.incomingCount,
-      icon: ArrowDownRight,
-      toneClassName: "text-emerald-700 dark:text-emerald-300",
-    },
-    {
-      key: "outgoing",
-      labelKey: "drivers.outgoing",
-      valueBtc: totals.outgoingBtc,
-      count: totals.outgoingCount,
-      icon: ArrowUpRight,
-      toneClassName: "text-red-700 dark:text-red-300",
-    },
-    {
-      key: "swap",
-      labelKey: "drivers.swapVolume",
-      valueBtc: totals.swapBtc,
-      count: totals.swapCount,
-      icon: ArrowLeftRight,
-      toneClassName: "text-sky-700 dark:text-sky-300",
-    },
-    {
-      key: "fees",
-      labelKey: "drivers.fees",
-      valueBtc: totals.feesBtc,
-      count: totals.feeCount,
-      icon: CircleDollarSign,
-      toneClassName: "text-muted-foreground",
-    },
-  ];
-  return {
-    rows: items,
-    maxValueBtc: Math.max(...items.map((item) => item.valueBtc), 0),
-    netBtc,
-    transactionCount: snapshot.txs.filter((row) => !row.excluded).length,
-  };
-}
-
-export function transactionsDriverSearch(driver: BalanceDriverItem["key"]) {
-  const search: Record<string, string> = {};
-  if (typeof window !== "undefined") {
-    const currentParams = new URLSearchParams(window.location.search);
-    const period = currentParams.get("period");
-    if (period) search.period = period;
-  }
-  if (driver === "fees") {
-    search.fees = "with-fees";
-  } else {
-    search.flow = driver;
-  }
-  return search;
 }
 
 export const readinessToneStyles: Record<OverviewHealthTone, string> = {
@@ -2684,7 +2477,12 @@ export function transactionSetHref(transactionIds: string[]) {
   return `/transactions?${params.toString()}#transactions-table`;
 }
 
-export function buildOverviewReadiness(snapshot: OverviewSnapshot): OverviewReadiness {
+/**
+ * What holds the book back, most pressing first. `reviewCount` is the shared
+ * Review count (`ui.review.badges`), so the pill says the number the sidebar
+ * and the bell say; without it the quarantined rows are counted.
+ */
+export function buildOverviewReadiness(snapshot: OverviewSnapshot, reviewCount?: number): OverviewReadiness {
   const status = snapshot.status;
   const needsJournals = Boolean(status?.needsJournals);
   const quarantines = status?.quarantines ?? 0;
@@ -2721,6 +2519,7 @@ export function buildOverviewReadiness(snapshot: OverviewSnapshot): OverviewRead
   if (erroredConnections) {
     return {
       title: { key: "readiness.sourceAttention.title" },
+      href: "/connections",
       detail: {
         key: "readiness.sourceAttention.detail",
         params: { count: erroredConnections },
@@ -2742,9 +2541,10 @@ export function buildOverviewReadiness(snapshot: OverviewSnapshot): OverviewRead
   if (quarantines > 0) {
     return {
       title: { key: "readiness.reviewQueueOpen.title" },
+      href: "/review",
       detail: {
         key: "readiness.reviewQueueOpen.detail",
-        params: { count: quarantines },
+        params: { count: reviewCount ?? quarantines },
       },
       icon: ShieldAlert,
       tone: "alert",
@@ -2756,6 +2556,7 @@ export function buildOverviewReadiness(snapshot: OverviewSnapshot): OverviewRead
   if (completeness.reasons.includes("custody_unresolved")) {
     return {
       title: { key: "readiness.custodyUnresolved.title" },
+      href: "/journals",
       detail: { key: "readiness.custodyUnresolved.detail" },
       icon: ShieldAlert,
       tone: "alert",
@@ -2765,6 +2566,7 @@ export function buildOverviewReadiness(snapshot: OverviewSnapshot): OverviewRead
   if (completeness.reasons.includes("missing_prices")) {
     return {
       title: { key: "readiness.missingPrices.title" },
+      href: "/review",
       detail: {
         key: "readiness.missingPrices.detail",
         params: { count: completeness.missingPriceCount },
@@ -2777,6 +2579,7 @@ export function buildOverviewReadiness(snapshot: OverviewSnapshot): OverviewRead
   if (syncingConnections) {
     return {
       title: { key: "readiness.syncInProgress.title" },
+      href: "/connections",
       detail: sourceDetail,
       icon: RefreshCw,
       tone: "warning",
@@ -2785,185 +2588,10 @@ export function buildOverviewReadiness(snapshot: OverviewSnapshot): OverviewRead
 
   return {
     title: { key: "readiness.readyForReports.title" },
+    href: "/reports",
     detail: sourceDetail,
     icon: CheckCircle2,
     tone: "good",
   };
 }
 
-/**
- * The books' health rows. `review` is the shared Review count
- * (ui.review.badges); without it the row falls back to quarantined rows.
- */
-export function buildOverviewHealthItems(
-  snapshot: OverviewSnapshot,
-  review?: { total: number; blocksReports: boolean },
-): OverviewHealthItem[] {
-  const status = snapshot.status;
-  const needsJournals = Boolean(status?.needsJournals);
-  const quarantines = status?.quarantines ?? 0;
-  const reviewOpen = review ? review.total : quarantines;
-  const reviewBlocks = review ? review.blocksReports : quarantines > 0;
-  const totalConnections = snapshot.connections.length;
-  const syncingConnections = snapshot.connections.filter(
-    (connection) => connection.status === "syncing",
-  ).length;
-  const erroredConnections = snapshot.connections.filter(
-    (connection) => connection.status === "error",
-  ).length;
-  const syncedConnections = snapshot.connections.filter(
-    (connection) => connection.status === "synced",
-  ).length;
-  const completeness = fiatCompleteness(snapshot.fiat);
-  const custodyUnresolved = completeness.reasons.includes("custody_unresolved");
-  const missingPrices = completeness.reasons.includes("missing_prices");
-  // Only rendered in the actionable state (no standing "all good" row).
-  const basisItem: OverviewHealthItem[] =
-    custodyUnresolved || missingPrices
-      ? [
-          {
-            key: "basis",
-            title: { key: "health.basis.title" },
-            value: custodyUnresolved
-              ? { key: "health.basis.custody" }
-              : {
-                  key: "health.basis.missingPrices",
-                  params: { count: completeness.missingPriceCount },
-                },
-            detail: { key: "health.basis.detail" },
-            href: custodyUnresolved ? "/journals" : "/review",
-            icon: ShieldAlert,
-            tone: custodyUnresolved ? "alert" : "warning",
-          },
-        ]
-      : [];
-
-  return [
-    {
-      key: "journals",
-      title: { key: "health.journals.title" },
-      value: {
-        key: needsJournals ? "health.journals.reprocess" : "health.journals.current",
-      },
-      detail: {
-        key: needsJournals
-          ? "health.journals.detailReprocess"
-          : "health.journals.detailCurrent",
-      },
-      href: "/journals",
-      icon: needsJournals ? RefreshCw : CheckCircle2,
-      tone: needsJournals ? "warning" : "good",
-    },
-    {
-      key: "review",
-      title: { key: "health.review.title" },
-      value: reviewOpen
-        ? { key: "health.review.open", params: { count: reviewOpen } }
-        : { key: "health.review.clear" },
-      detail: {
-        key: reviewOpen
-          ? "health.review.detailOpen"
-          : "health.review.detailClear",
-      },
-      href: "/review",
-      icon: reviewOpen ? ShieldAlert : CheckCircle2,
-      tone: reviewBlocks ? "alert" : reviewOpen ? "warning" : "good",
-    },
-    ...basisItem,
-    {
-      key: "connections",
-      title: { key: "health.connections.title" },
-      value: erroredConnections
-        ? { key: "health.connections.issues", params: { count: erroredConnections } }
-        : syncingConnections
-          ? {
-              key: "health.connections.refreshing",
-              params: { count: syncingConnections },
-            }
-          : totalConnections
-            ? {
-                key: "health.connections.current",
-                params: { synced: syncedConnections, total: totalConnections },
-              }
-            : { key: "health.connections.none" },
-      detail: totalConnections
-        ? {
-            key: "health.connections.detail",
-            params: { count: totalConnections },
-          }
-        : { key: "health.connections.detailEmpty" },
-      href: "/connections",
-      icon: WalletCards,
-      tone: erroredConnections
-        ? "alert"
-        : syncingConnections
-          ? "warning"
-          : totalConnections
-            ? "good"
-            : "neutral",
-    },
-  ];
-}
-
-export function buildPrimaryOverviewAction(snapshot: OverviewSnapshot) {
-  const status = snapshot.status;
-  if (status?.needsJournals) {
-    return null;
-  }
-  if ((status?.quarantines ?? 0) > 0) {
-    return {
-      title: { key: "health.primary.reviewQuarantines.title" } as OverviewCopy,
-      detail: { key: "health.primary.reviewQuarantines.detail" } as OverviewCopy,
-      href: "/review",
-      icon: ShieldAlert,
-      tone: "alert" as const,
-    };
-  }
-  if (snapshot.connections.some((connection) => connection.status === "error")) {
-    return {
-      title: { key: "health.primary.checkConnections.title" } as OverviewCopy,
-      detail: { key: "health.primary.checkConnections.detail" } as OverviewCopy,
-      href: "/connections",
-      icon: WalletCards,
-      tone: "alert" as const,
-    };
-  }
-  // "Open reports" would be the wrong nudge while basis inputs are missing.
-  const completeness = fiatCompleteness(snapshot.fiat);
-  if (completeness.reasons.includes("custody_unresolved")) {
-    return {
-      title: { key: "readiness.custodyUnresolved.title" } as OverviewCopy,
-      detail: { key: "readiness.custodyUnresolved.detail" } as OverviewCopy,
-      href: "/journals" as const,
-      icon: ShieldAlert,
-      tone: "alert" as const,
-    };
-  }
-  if (completeness.reasons.includes("missing_prices")) {
-    return {
-      title: { key: "readiness.missingPrices.title" } as OverviewCopy,
-      detail: {
-        key: "readiness.missingPrices.detail",
-        params: { count: completeness.missingPriceCount },
-      } as OverviewCopy,
-      href: "/review" as const,
-      icon: ShieldAlert,
-      tone: "warning" as const,
-    };
-  }
-  return {
-    title: {
-      key: snapshot.txs.length
-        ? "health.primary.openReports.title"
-        : "health.primary.addConnection.title",
-    } as OverviewCopy,
-    detail: {
-      key: snapshot.txs.length
-        ? "health.primary.openReports.detail"
-        : "health.primary.addConnection.detail",
-    } as OverviewCopy,
-    href: snapshot.txs.length ? "/reports" : "/connections",
-    icon: snapshot.txs.length ? FileText : Plus,
-    tone: "good" as const,
-  };
-}

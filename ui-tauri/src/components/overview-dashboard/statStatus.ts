@@ -55,8 +55,6 @@ export function statStatusKey(
   if (isBitcoinPortfolio) return "stats.status.current";
   if (stat.value === 0) return "stats.status.clear";
   if (stat.id === "portfolioValue") return "stats.status.estimate";
-  if (stat.id === "transactions") return "stats.status.loaded";
-  if (stat.id === "connections") return "stats.status.configured";
   return "stats.status.open";
 }
 
@@ -66,8 +64,6 @@ const STAT_STATUS_EN: Record<string, string> = {
   "stats.status.current": "Current",
   "stats.status.clear": "Clear",
   "stats.status.estimate": "Estimate",
-  "stats.status.loaded": "Loaded",
-  "stats.status.configured": "Configured",
   "stats.status.open": "Open",
   "completeness.badge.noMarketRate": "No market rate",
   "completeness.badge.stale": "Outdated",

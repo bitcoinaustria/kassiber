@@ -10,7 +10,7 @@ vi.mock("@tanstack/react-router", () => ({
 
 import { MOCK_OVERVIEW, type FiatCompleteness } from "@/mocks/seed";
 
-import { HoldingsBySourceChart } from "./OverviewSidePanel";
+import { HoldingsBySourceChart } from "./HoldingsBySource";
 
 const UNCOVERED: FiatCompleteness = {
   state: "incomplete",
@@ -42,3 +42,25 @@ describe("holdings header", () => {
     expect(render(false).match(/<p class="([^"]*)"[^>]*>[^<]*0\.12/)?.[1]).not.toContain("sensitive");
   });
 });
+
+describe("holdings by source", () => {
+  it("lists each source with its share and folds the smallest into Other sources", () => {
+    const connections = Array.from({ length: 10 }, (_, index) => ({
+      ...MOCK_OVERVIEW.connections[0],
+      id: `wallet-${index}`,
+      label: `Wallet ${index}`,
+      balance: 10 - index,
+    }));
+    const html = renderToStaticMarkup(
+      createElement(HoldingsBySourceChart, {
+        snapshot: { ...MOCK_OVERVIEW, connections },
+        hideSensitive: false,
+        currency: "btc",
+      }),
+    );
+    for (const index of [0, 6]) expect(html).toContain(`Wallet ${index}`);
+    expect(html).not.toContain("Wallet 7");
+    expect(html).toContain("Other sources");
+  });
+});
+

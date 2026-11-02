@@ -1,7 +1,10 @@
+import { Link } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
+import { useDaemon } from "@/daemon/client";
+import { reviewTotal, type ReviewBadges } from "@/lib/reviewCount";
 import {
   pageHeaderActionClassName,
   pageHeaderActionsClassName,
@@ -24,7 +27,9 @@ export const WelcomeSection = ({
   snapshot: OverviewSnapshot;
 }) => {
   const { t } = useTranslation("overview");
-  const readiness = buildOverviewReadiness(snapshot);
+  // The same number as the sidebar's Review badge, from the same read.
+  const badges = useDaemon<ReviewBadges>("ui.review.badges").data?.data;
+  const readiness = buildOverviewReadiness(snapshot, badges ? reviewTotal(badges) : undefined);
   const ReadinessIcon = readiness.icon;
   // dynamic key
   const readinessTitle = t(readiness.title.key as never, readiness.title.params);
@@ -56,6 +61,19 @@ export const WelcomeSection = ({
               ? t("welcome.reprocessingJournals")
               : readinessTitle}
           </button>
+        ) : readiness.href ? (
+          // The one place the overview names what holds the book back, so it
+          // opens where that is dealt with.
+          <Link
+            to={readiness.href}
+            className={cn(
+              readinessClassName,
+              "transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            )}
+          >
+            <ReadinessIcon className="size-4" aria-hidden="true" />
+            {readinessTitle}
+          </Link>
         ) : (
           <span className={readinessClassName}>
             <ReadinessIcon className="size-4" aria-hidden="true" />

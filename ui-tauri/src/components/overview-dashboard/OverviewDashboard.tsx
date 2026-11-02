@@ -12,10 +12,9 @@ import { cn } from "@/lib/utils";
 import type { OverviewSnapshot } from "@/mocks/seed";
 import { useUiStore } from "@/store/ui";
 
-import { BooksHealthPanel } from "./BooksHealthPanel";
 import { RecentTransactionsTable } from "./RecentTransactionsTable";
 import { BtcActivityChart } from "./BtcActivityChart";
-import { OverviewSidePanel } from "./OverviewSidePanel";
+import { HoldingsBySourceChart } from "./HoldingsBySource";
 import { StatsCards } from "./StatsCards";
 import {
   activeMarketFiatCurrency,
@@ -24,6 +23,9 @@ import {
 } from "./model";
 import { useOverviewTransactionDetail } from "./useOverviewTransactionDetail";
 import { WelcomeSection } from "./WelcomeSection";
+
+/** Transactions listed, fewer beside the chart if fewer fit; the rest are one click away. */
+const RECENT_ROWS = 12;
 
 export const OverviewDashboard = ({
   className,
@@ -182,43 +184,43 @@ export const OverviewDashboard = ({
         <StatsCards
           snapshot={snapshot}
           hideSensitive={hideSensitive}
-          currency={currency}
           isRefreshing={isSnapshotRefreshing || isRefreshingOverview}
           isMarketRateRefreshing={refreshMarketRate.isPending}
           onRefreshMarketRate={refreshMarketRateState}
         />
-        <div className="grid grid-cols-1 items-start gap-(--kb-page-gap) 2xl:grid-cols-[minmax(0,1fr)_348px]">
-          <div className="grid min-w-0 gap-(--kb-page-gap)">
-            <BtcActivityChart
-              snapshot={snapshot}
-              hideSensitive={hideSensitive}
-              currency={currency}
-              onOpenTransactionDetail={openTransactionDetail}
-              onRefresh={refreshOverviewState}
-              isRefreshing={isRefreshingOverview}
-            />
+        {/* The latest transactions sit beside the chart where the page is wide
+            enough, so both are in view without scrolling; below that they
+            follow it. Either way the list never scrolls inside the page. */}
+        <div className="@container/overview-main">
+        <div className="grid grid-cols-1 gap-(--kb-page-gap) @min-[64rem]/overview-main:grid-cols-[minmax(0,1fr)_minmax(320px,30%)]">
+          <BtcActivityChart
+            snapshot={snapshot}
+            hideSensitive={hideSensitive}
+            currency={currency}
+            onOpenTransactionDetail={openTransactionDetail}
+            onRefresh={refreshOverviewState}
+            isRefreshing={isRefreshingOverview}
+          />
+          {/* Beside the chart the list takes the chart's height, not its own:
+              rows that do not fit are left to Show all. */}
+          <div className="relative min-w-0">
             <RecentTransactionsTable
-              className="min-w-0"
+              className="@min-[64rem]/overview-main:absolute @min-[64rem]/overview-main:inset-0"
               transactions={transactions}
               hideSensitive={hideSensitive}
               currency={currency}
               priceEur={fiatRate}
               fiatCurrency={fiatCurrency}
-            />
-          </div>
-          <div className="grid min-w-0 gap-(--kb-page-gap)">
-            <OverviewSidePanel
-              snapshot={snapshot}
-              hideSensitive={hideSensitive}
-              currency={currency}
-            />
-            <BooksHealthPanel
-              snapshot={snapshot}
-              onProcessJournals={runJournalProcessing}
-              isProcessingJournals={isProcessingJournals}
+              limit={RECENT_ROWS}
             />
           </div>
         </div>
+        </div>
+        <HoldingsBySourceChart
+          snapshot={snapshot}
+          hideSensitive={hideSensitive}
+          currency={currency}
+        />
       </div>
       {detailSheet}
     </>
