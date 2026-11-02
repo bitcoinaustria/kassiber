@@ -2,9 +2,49 @@
 //! Snapshot stage admission remains a separate parity gate.
 use super::*;
 use crate::python_text::PythonText;
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 fn array(v: &Value) -> &[Value] {
     v.as_array().map(Vec::as_slice).unwrap_or(&[])
+}
+
+/// The compiler's operands. Observations, decisions and events are borrowed
+/// from their stage; JSON fixtures read them from one operand object.
+pub(super) struct Input<'a> {
+    pub op: &'a str,
+    pub profile: Cow<'a, Value>,
+    pub observations: Vec<&'a Value>,
+    pub decisions: Vec<&'a Value>,
+    pub eligible: Cow<'a, [Value]>,
+    pub events: Vec<&'a Value>,
+    pub pool_barriers: Cow<'a, Value>,
+    pub pool_barrier_roots: Cow<'a, Value>,
+    pub issues: Cow<'a, [Value]>,
+    pub blocked_anchor_ids: Cow<'a, [Value]>,
+    pub blocked_transaction_ids: Cow<'a, [Value]>,
+    pub non_event_transaction_ids: Cow<'a, [Value]>,
+    pub payouts: Cow<'a, Value>,
+    pub reviewed: Cow<'a, [Value]>,
+}
+impl<'a> Input<'a> {
+    pub fn from_json(v: &'a Value) -> Self {
+        Self {
+            op: v["op"].as_str().unwrap_or(""),
+            profile: Cow::Borrowed(&v["profile"]),
+            observations: array(&v["observations"]).iter().collect(),
+            decisions: array(&v["decisions"]).iter().collect(),
+            eligible: Cow::Borrowed(array(&v["eligible"])),
+            events: array(&v["events"]).iter().collect(),
+            pool_barriers: Cow::Borrowed(&v["pool_barriers"]),
+            pool_barrier_roots: Cow::Borrowed(&v["pool_barrier_roots"]),
+            issues: Cow::Borrowed(array(&v["issues"])),
+            blocked_anchor_ids: Cow::Borrowed(array(&v["blocked_anchor_ids"])),
+            blocked_transaction_ids: Cow::Borrowed(array(&v["blocked_transaction_ids"])),
+            non_event_transaction_ids: Cow::Borrowed(array(&v["non_event_transaction_ids"])),
+            payouts: Cow::Borrowed(&v["payouts"]),
+            reviewed: Cow::Borrowed(array(&v["reviewed"])),
+        }
+    }
 }
 fn internal(d: &Value) -> bool {
     !d["target"].is_null()
@@ -13,12 +53,8 @@ fn internal(d: &Value) -> bool {
             Some("internal_verified" | "internal_reviewed")
         )
 }
-fn strings(v: &Value) -> BTreeSet<String> {
-    array(v)
-        .iter()
-        .filter(|v| codec::truth(v))
-        .map(string)
-        .collect()
+fn strings(v: &[Value]) -> BTreeSet<String> {
+    v.iter().filter(|v| codec::truth(v)).map(string).collect()
 }
 fn slice_key(v: &Value) -> Result<(String, BigInt, BigInt), String> {
     Ok((
@@ -91,9 +127,9 @@ pub(super) fn pool(o: &Value) -> Value {
     };
     json!({"profile_id":o["profile_id"],"network":network,"exposure":exposure,"unit":"msat"})
 }
-pub(super) fn barrier(o: &Value, v: &Value) -> Option<Value> {
+pub(super) fn barrier(o: &Value, v: &Input) -> Option<Value> {
     let own = pool(o);
-    array(&v["pool_barriers"])
+    array(&v.pool_barriers)
         .iter()
         .find(|p| {
             ["profile_id", "network", "exposure", "unit"]
@@ -102,9 +138,9 @@ pub(super) fn barrier(o: &Value, v: &Value) -> Option<Value> {
         })
         .map(|p| p[1].clone())
 }
-fn orders(events: &Value) -> BTreeMap<String, Vec<String>> {
+fn orders(events: &[&Value]) -> BTreeMap<String, Vec<String>> {
     let mut result = BTreeMap::new();
-    for event in array(events) {
+    for event in events {
         let mut order = vec![array(&event["legs"])
             .iter()
             .map(|o| string(&o["occurred_at"]))
@@ -119,8 +155,8 @@ fn orders(events: &Value) -> BTreeMap<String, Vec<String>> {
     }
     result
 }
-fn held(o: &Value, v: &Value, orders: &BTreeMap<String, Vec<String>>) -> bool {
-    if array(&v["pool_barriers"]).is_empty() {
+fn held(o: &Value, v: &Input, orders: &BTreeMap<String, Vec<String>>) -> bool {
+    if array(&v.pool_barriers).is_empty() {
         return false;
     }
     let Some(b) = barrier(o, v) else {
@@ -151,28 +187,29 @@ pub(super) fn evaluate(v: &Value) -> Result<Value, String> {
 
 /// Diagnostic records remain CPython values for their entire lifetime.
 pub(super) fn evaluate_lossless(v: &Value, diagnostics: &[Py]) -> Result<Py, Error> {
-    evaluate_with_rows(v, diagnostics, &v["rows"])
+    evaluate_with_rows(&Input::from_json(v), diagnostics, &v["rows"])
 }
 
 pub(super) fn evaluate_with_rows(
-    v: &Value,
+    v: &Input,
     diagnostics: &[Py],
     rows: &dyn Rows,
 ) -> Result<Py, Error> {
     use super::fee_row_with_rows as fee_row;
     use super::principal::slice_row_with_rows as slice_row;
     let selection_span = crate::timing::span("finalized.select");
-    let finalize = v["op"] == "finalize";
-    let payouts = if v["op"] == "compose" || finalize {
-        payouts::valid(&v["payouts"], rows)?
+    let finalize = v.op == "finalize";
+    let payouts = if v.op == "compose" || finalize {
+        payouts::valid(&v.payouts, rows)?
     } else {
         Value::Null
     };
-    let observations: BTreeMap<String, &Value> = array(&v["observations"])
+    let observations: BTreeMap<String, &Value> = v
+        .observations
         .iter()
-        .map(|o| (string(&o["quantity_hash"]), o))
+        .map(|o| (string(&o["quantity_hash"]), *o))
         .collect();
-    let mut decisions: Vec<_> = array(&v["decisions"]).iter().collect();
+    let mut decisions: Vec<&Value> = v.decisions.clone();
     // Resolve every source before sorting, matching Python's key admission.
     let mut keyed = Vec::new();
     for d in decisions.drain(..) {
@@ -184,16 +221,16 @@ pub(super) fn evaluate_with_rows(
     }
     keyed.sort_by(|a, b| a.0.cmp(&b.0));
     decisions = keyed.into_iter().map(|(_, d)| d).collect();
-    let explicit = strings(&v["blocked_transaction_ids"]);
+    let explicit = strings(&v.blocked_transaction_ids);
     let closure = connected(&decisions, &observations, &explicit)?;
-    if v["op"] == "connected" {
+    if v.op == "connected" {
         return Ok(codec::from_json(&json!({"blocked":closure["blocked"]}))?);
     }
-    let blocked = strings(&closure["blocked"]);
-    let non_events = strings(&v["non_event_transaction_ids"]);
-    let mut blocked_anchors = strings(&v["blocked_anchor_ids"]);
+    let blocked = strings(array(&closure["blocked"]));
+    let non_events = strings(&v.non_event_transaction_ids);
+    let mut blocked_anchors = strings(&v.blocked_anchor_ids);
     if finalize {
-        for issue in array(&v["issues"]) {
+        for issue in v.issues.iter() {
             if text(&issue["reason"]).starts_with("custody_component_")
                 || matches!(
                     issue["issue_type"].as_str(),
@@ -204,21 +241,19 @@ pub(super) fn evaluate_with_rows(
             }
         }
     }
-    let order = if array(&v["pool_barriers"]).is_empty() {
+    let order = if array(&v.pool_barriers).is_empty() {
         BTreeMap::new()
     } else {
-        orders(&v["events"])
+        orders(&v.events)
     };
-    if v["op"] == "basis" {
-        return Ok(codec::from_json(&json!(array(&v["observations"])
+    if v.op == "basis" {
+        return Ok(codec::from_json(&json!(v
+            .observations
             .iter()
             .map(|o| held(o, v, &order))
             .collect::<Vec<_>>()))?);
     }
-    let eligible: BTreeSet<_> = array(&v["eligible"])
-        .iter()
-        .map(slice_key)
-        .collect::<Result<_, _>>()?;
+    let eligible: BTreeSet<_> = v.eligible.iter().map(slice_key).collect::<Result<_, _>>()?;
     let mut projected = Vec::new();
     let mut intra = Vec::new();
     let mut cross = Vec::new();
@@ -325,7 +360,7 @@ pub(super) fn evaluate_with_rows(
         let carry = codec::truth(payout)
             && payout["policy"] == "carrying-value"
             && source_asset != asset
-            && (text(&v["profile"]["tax_country"]).py_lower() == "at"
+            && (text(&v.profile["tax_country"]).py_lower() == "at"
                 || (BTreeSet::from([
                     source_asset.py_strip().py_upper(),
                     asset.py_strip().py_upper(),
@@ -376,7 +411,7 @@ pub(super) fn evaluate_with_rows(
                 .push((start, end));
         }
     }
-    let mut ordered: Vec<_> = array(&v["observations"]).iter().collect();
+    let mut ordered: Vec<&Value> = v.observations.clone();
     ordered.sort_by_cached_key(|o| (string(&o["occurred_at"]), string(&o["quantity_hash"])));
     for o in ordered {
         if o["direction"] != "inbound" || rows.get(&string(&o["transaction_id"])).is_none() {
@@ -416,7 +451,7 @@ pub(super) fn evaluate_with_rows(
         .iter()
         .map(|r| text(&r["custody_quantity_hash"]))
         .collect();
-    for o in array(&v["observations"]) {
+    for o in v.observations.iter().copied() {
         if o["direction"] == "outbound"
             && integer_big(&o["fee_msat"])? > BigInt::from(0)
             && !hashes.contains(&string(&o["quantity_hash"]))
@@ -432,7 +467,7 @@ pub(super) fn evaluate_with_rows(
     drop(selection_span);
     if finalize {
         quarantines.finish(&projected, &barrier_receipts, &observations)?;
-        cross = super::conversions::evaluate_rows(&projected, cross, array(&v["reviewed"]))?;
+        cross = super::conversions::evaluate_rows(&projected, cross, &v.reviewed)?;
         let quarantines = quarantines.sorted()?;
         validate_rows(&projected, &intra).map_err(|(family, _)| family.to_owned())?;
         let _span = crate::timing::span("finalized.emit");

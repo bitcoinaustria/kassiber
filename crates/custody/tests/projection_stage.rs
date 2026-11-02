@@ -340,3 +340,65 @@ fn projection_receipts_before_barrier_keep_event_order() {
         .any(|row| get(row, "journal_transaction_id") == &Py::Str("other".into())));
     assert_eq!(get(&result, "quarantines"), &Py::List(vec![]));
 }
+
+/// The typed quantity stage finalizes exactly as its Python value does
+/// through the Python-value adapter, refusals included.
+#[test]
+fn typed_finalized_matches_python_value_adapter() {
+    use kassiber_custody::{components, evidence, gaps, interpretation, quantity};
+    let mut inputs = Vec::new();
+    for fixture in [
+        include_str!("../../../tests/fixtures/custody_interpretation_cases.json"),
+        include_str!("../../../tests/fixtures/custody_projection_stage.json"),
+        include_str!("../../../tests/fixtures/custody_projection_adapter.json"),
+        include_str!("../../../tests/fixtures/custody_gap_stages.json"),
+    ] {
+        let cases: Vec<serde_json::Value> = serde_json::from_str(fixture).unwrap();
+        inputs.extend(cases.into_iter().map(|case| case["input"].clone()));
+    }
+    let mut compared = 0;
+    for input in inputs {
+        let Ok(snapshot) = serde_json::from_value::<Snapshot>(input) else {
+            continue;
+        };
+        // Stage fragments without a profile are not complete snapshots.
+        if snapshot.profile.get("id").is_none() || snapshot.validate().is_err() {
+            continue;
+        }
+        let run = || -> Result<_, String> {
+            interpretation::admit_channels(&snapshot)?;
+            let comp = components::compute(&snapshot).map_err(|e| e.code.to_owned())?;
+            let migration = interpretation::migration_quarantines(&snapshot)?;
+            let ev = evidence::stage(&snapshot).map_err(|e| e.code.to_owned())?;
+            let i = interpretation::stage(&snapshot, &comp, &ev, migration)?;
+            let g = gaps::stage(&snapshot, &comp, &ev, &i)?;
+            let q = quantity::runtime::stage(&snapshot, &comp, &ev, &i, &g)?;
+            Ok((i, q))
+        };
+        let Ok((interpreter, state)) = run() else {
+            continue;
+        };
+        let captured = runtime::loaded_confirmations(&snapshot).unwrap();
+        let encode = |result: Result<Py, kassiber_custody::finalized_projection::Error>| {
+            result
+                .map(|v| codec::dumps(&v, true).unwrap())
+                .map_err(|e| (e.code, e.message))
+        };
+        assert_eq!(
+            encode(runtime::stage_from_state(
+                &snapshot,
+                captured.clone(),
+                &state,
+                &interpreter
+            )),
+            encode(runtime::stage_with_confirmations(
+                &snapshot,
+                captured,
+                &state.py().unwrap(),
+                &interpreter
+            ))
+        );
+        compared += 1;
+    }
+    assert!(compared > 50, "{compared}");
+}

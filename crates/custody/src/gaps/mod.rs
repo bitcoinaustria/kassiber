@@ -163,7 +163,7 @@ fn seconds(delta: i64) -> i64 {
 pub fn stage(
     snapshot: &Snapshot,
     components: &Value,
-    evidence: &Value,
+    evidence: &crate::evidence::Evidence,
     interpretation: &Py,
 ) -> Result<Value, String> {
     let span = crate::timing::span("gaps.ignored");
@@ -387,7 +387,7 @@ mod tests {
         for case in vectors().iter().filter(|c| c.get("error").is_none()) {
             let snapshot: Snapshot = serde_json::from_value(case["input"].clone()).unwrap();
             let components = crate::components::compute(&snapshot).unwrap();
-            let evidence = crate::evidence::compute(&snapshot).unwrap();
+            let evidence = crate::evidence::stage(&snapshot).unwrap();
             let migration = crate::interpretation::migration_quarantines(&snapshot).unwrap();
             let interpretation =
                 crate::interpretation::stage(&snapshot, &components, &evidence, migration).unwrap();

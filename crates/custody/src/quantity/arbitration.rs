@@ -161,7 +161,7 @@ impl Claim {
     }
 }
 #[derive(Clone)]
-struct Decision {
+pub(super) struct Decision {
     value: std::cell::OnceCell<Value>,
     source: Slice,
     target: Option<Slice>,
@@ -178,7 +178,7 @@ impl Decision {
             target: None,
         }
     }
-    fn value(&self) -> &Value {
+    pub(super) fn value(&self) -> &Value {
         self.value.get_or_init(|| json!({"$type":"ArbitratedSlice","source":self.source.value(),"state":"external_presumed","reason":"unmatched_outbound_default","selected_claim_id":null,"atomic_bundle_id":null,"transfer_kind":null,"transfer_policy":null,"component_id":null,"target":null,"destination_kind":null,"external_economic_subtype":null,"contender_claim_ids":[]}))
     }
     fn value_mut(&mut self) -> &mut Value {
@@ -190,10 +190,10 @@ impl Decision {
             .get()
             .and_then(|v| v["selected_claim_id"].as_str())
     }
-    fn py(self) -> Result<kassiber_pyjson::Value, String> {
+    fn py(&self) -> Result<kassiber_pyjson::Value, String> {
         use kassiber_pyjson::Value as Py;
-        if let Some(value) = self.value.into_inner() {
-            return super::into_py(value);
+        if let Some(value) = self.value.get() {
+            return super::borrowed_py(value);
         }
         Ok(super::py_dict([
             ("$type", Py::Str("ArbitratedSlice".into())),
@@ -204,7 +204,7 @@ impl Decision {
             ("external_economic_subtype", Py::Null),
             ("reason", Py::Str("unmatched_outbound_default".into())),
             ("selected_claim_id", Py::Null),
-            ("source", self.source.py()),
+            ("source", self.source.clone().py()),
             ("state", Py::Str("external_presumed".into())),
             ("target", Py::Null),
             ("transfer_kind", Py::Null),
@@ -576,22 +576,41 @@ struct Posting<'a> {
 }
 impl Posting<'_> {
     fn py(self) -> Result<kassiber_pyjson::Value, String> {
-        use kassiber_pyjson::Value as Py;
-        Ok(super::py_dict([
-            ("$type", Py::Str("QuantityPosting".into())),
-            ("amount_msat", Py::Int(self.amount)),
-            ("asset", super::borrowed_py(&self.observation["asset"])?),
-            ("domain", self.domain.py()?),
-            ("location_id", super::into_py(self.location)?),
-            ("location_kind", Py::Str(self.kind.into())),
-            (
-                "observation_hash",
-                super::borrowed_py(&self.observation["quantity_hash"])?,
-            ),
-            ("posting_id", Py::Str(self.id.into())),
-            ("state", super::into_py(self.state)?),
-        ]))
+        posting_py(
+            self.id,
+            self.observation,
+            self.kind,
+            &self.location,
+            self.amount,
+            &self.state,
+            &self.domain,
+        )
     }
+}
+fn posting_py(
+    id: String,
+    observation: &Value,
+    kind: String,
+    location: &Value,
+    amount: BigInt,
+    state: &Value,
+    domain: &super::Domain,
+) -> Result<kassiber_pyjson::Value, String> {
+    use kassiber_pyjson::Value as Py;
+    Ok(super::py_dict([
+        ("$type", Py::Str("QuantityPosting".into())),
+        ("amount_msat", Py::Int(amount)),
+        ("asset", super::borrowed_py(&observation["asset"])?),
+        ("domain", domain.py()?),
+        ("location_id", super::borrowed_py(location)?),
+        ("location_kind", Py::Str(kind.into())),
+        (
+            "observation_hash",
+            super::borrowed_py(&observation["quantity_hash"])?,
+        ),
+        ("posting_id", Py::Str(id.into())),
+        ("state", super::borrowed_py(state)?),
+    ]))
 }
 
 fn postings<'a>(
@@ -775,7 +794,7 @@ impl Projection<'_> {
                 "decisions",
                 Py::List(
                     self.decisions
-                        .into_iter()
+                        .iter()
                         .map(Decision::py)
                         .collect::<Result<_, _>>()?,
                 ),
@@ -801,6 +820,134 @@ impl Projection<'_> {
         ]))
     }
 }
+/// A located observation: its event slot and leg index.
+pub(super) type Located = (u32, u32);
+
+/// A posting whose observation is located rather than borrowed.
+pub(super) struct PostingState {
+    id: String,
+    observation: Located,
+    kind: String,
+    location: Value,
+    amount: BigInt,
+    state: Value,
+    domain: super::Domain,
+}
+
+/// The arbitration result, owning everything but its observations.
+pub(super) struct ProjectionState {
+    pub observations: Vec<Located>,
+    pub decisions: Vec<Decision>,
+    postings: Vec<PostingState>,
+    pub errors: Vec<Value>,
+}
+impl<'a> Projection<'a> {
+    pub fn located(self, locate: impl Fn(&'a Value) -> Located) -> ProjectionState {
+        ProjectionState {
+            observations: self.by_hash.into_values().map(&locate).collect(),
+            decisions: self.decisions,
+            postings: self
+                .postings
+                .into_iter()
+                .map(|p| PostingState {
+                    id: p.id,
+                    observation: locate(p.observation),
+                    kind: p.kind,
+                    location: p.location,
+                    amount: p.amount,
+                    state: p.state,
+                    domain: p.domain,
+                })
+                .collect(),
+            errors: self.errors,
+        }
+    }
+}
+impl ProjectionState {
+    /// The postings' JSON objects, as `py` would convert back to JSON.
+    pub fn postings_json<'v, E: From<String>>(
+        &'v self,
+        observation: impl Fn(Located) -> &'v Value,
+        exact: &impl Fn(&Value) -> Result<Value, E>,
+    ) -> Result<Vec<Value>, E> {
+        self.postings
+            .iter()
+            .map(|p| {
+                let o = observation(p.observation);
+                let domain = &p.domain;
+                let mut domain_value = serde_json::Map::new();
+                domain_value.insert("$type".into(), json!("QuantityDomain"));
+                domain_value.insert("exposure".into(), Value::String(domain.exposure.clone()));
+                domain_value.insert("network".into(), Value::String(domain.network.clone()));
+                domain_value.insert("rail".into(), exact(&domain.rail)?);
+                domain_value.insert("unit".into(), json!("msat"));
+                let mut posting = serde_json::Map::new();
+                posting.insert("$type".into(), json!("QuantityPosting"));
+                posting.insert("amount_msat".into(), super::number(&p.amount));
+                posting.insert("asset".into(), exact(&o["asset"])?);
+                posting.insert("domain".into(), Value::Object(domain_value));
+                posting.insert("location_id".into(), exact(&p.location)?);
+                posting.insert("location_kind".into(), Value::String(p.kind.clone()));
+                posting.insert("observation_hash".into(), exact(&o["quantity_hash"])?);
+                posting.insert("posting_id".into(), Value::String(p.id.clone()));
+                posting.insert("state".into(), exact(&p.state)?);
+                Ok(Value::Object(posting))
+            })
+            .collect()
+    }
+    /// `Projection::py` of the arbitration this state came from.
+    pub fn py<'v>(
+        &'v self,
+        observation: impl Fn(Located) -> &'v Value,
+    ) -> Result<kassiber_pyjson::Value, String> {
+        use kassiber_pyjson::Value as Py;
+        Ok(super::py_dict([
+            ("$type", Py::Str("QuantityProjection".into())),
+            (
+                "claim_errors",
+                super::borrowed_py(&Value::Array(self.errors.clone()))?,
+            ),
+            (
+                "decisions",
+                Py::List(
+                    self.decisions
+                        .iter()
+                        .map(Decision::py)
+                        .collect::<Result<_, _>>()?,
+                ),
+            ),
+            (
+                "observations",
+                Py::List(
+                    self.observations
+                        .iter()
+                        .map(|at| super::borrowed_py(observation(*at)))
+                        .collect::<Result<_, _>>()?,
+                ),
+            ),
+            (
+                "postings",
+                Py::List(
+                    self.postings
+                        .iter()
+                        .map(|p| {
+                            posting_py(
+                                p.id.clone(),
+                                observation(p.observation),
+                                p.kind.clone(),
+                                &p.location,
+                                p.amount.clone(),
+                                &p.state,
+                                &p.domain,
+                            )
+                        })
+                        .collect::<Result<_, _>>()?,
+                ),
+            ),
+        ]))
+    }
+}
+
 pub(super) fn arbitrate<'a>(
     observations: &[&'a Value],
     claims: &[Value],

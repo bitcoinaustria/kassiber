@@ -1,8 +1,10 @@
 //! Port of custody_evidence's canonical identities, commitments and quantities.
 use crate::codec::{self, int, integer, text, truth, wide};
 use crate::components::Error;
+use crate::fields::Fields;
 use crate::python_text::PythonText;
 use crate::python_text::{isalnum, strip};
+use crate::snapshot::Record;
 use crate::snapshot::Snapshot;
 use kassiber_pyjson::{Key, Value as Py};
 use serde::{Deserialize, Serialize};
@@ -81,6 +83,10 @@ pub fn scope(row: &Value) -> Result<(String, String), Error> {
     scope_fields(|key| &row[key])
 }
 
+fn scope_of<F: Fields + ?Sized>(row: &F) -> Result<(String, String), Error> {
+    scope_fields(|key| row.at(key))
+}
+
 pub(crate) fn scope_fields<'a>(row: impl Fn(&str) -> &'a Value) -> Result<(String, String), Error> {
     let raw = crate::graph::transfer_object_ref(row("raw_json"));
     let config = crate::graph::transfer_object_ref(if truth(row("config_json")) {
@@ -137,12 +143,16 @@ pub fn txid(value: &Value) -> Option<String> {
 }
 
 pub fn event_key(row: &Value) -> Result<EventKey, Error> {
-    let raw = crate::graph::transfer_object_ref(&row["raw_json"]);
-    let (chain, network) = scope(row)?;
-    let raw_ordered = if let Some(s) = row["raw_json"].as_str() {
+    event_key_of(row)
+}
+
+pub(crate) fn event_key_of<F: Fields + ?Sized>(row: &F) -> Result<EventKey, Error> {
+    let raw = crate::graph::transfer_object_ref(row.at("raw_json"));
+    let (chain, network) = scope_of(row)?;
+    let raw_ordered = if let Some(s) = row.at("raw_json").as_str() {
         codec::loads(s).unwrap_or(Py::Null)
     } else {
-        codec::from_json(&row["raw_json"])?
+        codec::from_json(row.at("raw_json"))?
     };
     fn member<'a>(value: &'a Py, name: &str) -> Option<&'a Py> {
         if let Py::Dict(items) = value {
@@ -188,13 +198,16 @@ pub fn event_key(row: &Value) -> Result<EventKey, Error> {
             }
         }
     }
-    let kind = if truth(&row["external_id_kind"]) {
-        text(&row["external_id_kind"])
+    let kind = if truth(row.at("external_id_kind")) {
+        text(row.at("external_id_kind"))
     } else {
         text(&raw["external_id_kind"])
     };
     if kind.py_strip().py_lower() == "txid" {
-        candidates.extend([row["native_event_id"].clone(), row["external_id"].clone()]);
+        candidates.extend([
+            row.at("native_event_id").clone(),
+            row.at("external_id").clone(),
+        ]);
     }
     let physical = candidates.iter().find_map(txid);
     let (namespace, id) = if let Some(physical) =
@@ -203,11 +216,11 @@ pub fn event_key(row: &Value) -> Result<EventKey, Error> {
         ("chain".into(), physical)
     } else {
         let ns = [
-            &row["native_namespace"],
-            &row["source_ref"],
-            &row["backend_name"],
+            row.at("native_namespace"),
+            row.at("source_ref"),
+            row.at("backend_name"),
             &raw["_kassiber_provenance"]["import_source"],
-            &row["wallet_id"],
+            row.at("wallet_id"),
         ]
         .into_iter()
         .find(|v| truth(v))
@@ -215,13 +228,17 @@ pub fn event_key(row: &Value) -> Result<EventKey, Error> {
         .unwrap_or_default()
         .py_strip()
         .py_lower();
-        let declared = [&row["native_event_id"], &raw["txid"], &row["external_id"]]
-            .into_iter()
-            .find(|v| !v.is_null() && **v != Value::String(String::new()));
+        let declared = [
+            row.at("native_event_id"),
+            &raw["txid"],
+            row.at("external_id"),
+        ]
+        .into_iter()
+        .find(|v| !v.is_null() && **v != Value::String(String::new()));
         let native = declared
             .filter(|v| truth(v))
             .or_else(|| {
-                [&row["fingerprint"], &row["id"]]
+                [row.at("fingerprint"), row.at("id")]
                     .into_iter()
                     .find(|v| truth(v))
             })
@@ -242,8 +259,12 @@ pub fn event_key(row: &Value) -> Result<EventKey, Error> {
     })
 }
 pub fn quantity_payload(row: &Value, key: &EventKey) -> Result<Value, Error> {
+    quantity_payload_of(row, key)
+}
+
+fn quantity_payload_of<F: Fields + ?Sized>(row: &F, key: &EventKey) -> Result<Value, Error> {
     Ok(
-        json!({"schema_version":1,"event":key.payload(),"wallet_id":text(&row["wallet_id"]),"direction":text(&row["direction"]).py_lower(),"asset":text(&row["asset"]).py_upper(),"amount_msat":integer_or_zero(&row["amount"])? ,"fee_msat":integer_or_zero(&row["fee"])? ,"amount_includes_fee":truth(&row["amount_includes_fee"])}),
+        json!({"schema_version":1,"event":key.payload(),"wallet_id":text(row.at("wallet_id")),"direction":text(row.at("direction")).py_lower(),"asset":text(row.at("asset")).py_upper(),"amount_msat":integer_or_zero(row.at("amount"))? ,"fee_msat":integer_or_zero(row.at("fee"))? ,"amount_includes_fee":truth(row.at("amount_includes_fee"))}),
     )
 }
 pub fn raw_py(value: &Value, opaque_key: &str) -> Result<Py, Error> {
@@ -267,7 +288,11 @@ pub fn raw_py(value: &Value, opaque_key: &str) -> Result<Py, Error> {
 }
 
 pub fn observed_hash(row: &Value) -> Result<(String, String), Error> {
-    let a = strip(&text(&row["asset"])).to_owned();
+    observed_hash_of(row)
+}
+
+fn observed_hash_of<F: Fields + ?Sized>(row: &F) -> Result<(String, String), Error> {
+    let a = strip(&text(row.at("asset"))).to_owned();
     let asset = if a.len() == 64 && a.chars().all(|c| c.is_ascii_hexdigit()) {
         a.py_lower()
     } else if ["l-btc", "lbtc"].contains(&a.py_lower().as_str()) {
@@ -276,7 +301,7 @@ pub fn observed_hash(row: &Value) -> Result<(String, String), Error> {
         a.py_upper()
     };
     codec::hash(
-        &json!({"schema_version":1,"wallet_id":text(&row["wallet_id"]),"external_id":strip(&text(&row["external_id"])).py_lower(),"direction":strip(&text(&row["direction"])).py_lower(),"asset":asset,"amount_msat":integer_or_zero(&row["amount"])? ,"fee_msat":integer_or_zero(&row["fee"])? ,"amount_includes_fee":truth(&row["amount_includes_fee"])}),
+        &json!({"schema_version":1,"wallet_id":text(row.at("wallet_id")),"external_id":strip(&text(row.at("external_id"))).py_lower(),"direction":strip(&text(row.at("direction"))).py_lower(),"asset":asset,"amount_msat":integer_or_zero(row.at("amount"))? ,"fee_msat":integer_or_zero(row.at("fee"))? ,"amount_includes_fee":truth(row.at("amount_includes_fee"))}),
         true,
     ).map_err(Error::from)
 }
@@ -336,8 +361,8 @@ pub fn authority(row: &Value) -> Result<Value, Error> {
     authority_facts(row).map(Authority::value)
 }
 
-fn authority_facts(row: &Value) -> Result<Authority, Error> {
-    let version = &row["observation_authority_version"];
+fn authority_facts<F: Fields + ?Sized>(row: &F) -> Result<Authority, Error> {
+    let version = row.at("observation_authority_version");
     if version.is_null() || *version == json!("") {
         return Ok(Authority::new(
             false,
@@ -356,7 +381,7 @@ fn authority_facts(row: &Value) -> Result<Authority, Error> {
             None,
         ));
     }
-    let key = match event_key(row) {
+    let key = match event_key_of(row) {
         Ok(key) => key,
         Err(_) => {
             return Ok(Authority::new(
@@ -377,8 +402,8 @@ fn authority_facts(row: &Value) -> Result<Authority, Error> {
             None,
         ));
     }
-    let q = observed_hash(row)?.0;
-    if text(&row["observation_quantity_hash"])
+    let q = observed_hash_of(row)?.0;
+    if text(row.at("observation_quantity_hash"))
         .py_strip()
         .py_lower()
         != q
@@ -391,8 +416,8 @@ fn authority_facts(row: &Value) -> Result<Authority, Error> {
             Some(q),
         ));
     }
-    let g = graph_hash(&row["raw_json"])?.0;
-    if strip(&text(&row["observation_graph_hash"])).py_lower() != g {
+    let g = graph_hash(row.at("raw_json"))?.0;
+    if strip(&text(row.at("observation_graph_hash"))).py_lower() != g {
         return Ok(Authority::new(
             false,
             "graph_hash_mismatch",
@@ -401,7 +426,7 @@ fn authority_facts(row: &Value) -> Result<Authority, Error> {
             Some(q),
         ));
     }
-    if row["observation_graph_hash"] != g || row["observation_quantity_hash"] != q {
+    if *row.at("observation_graph_hash") != g || *row.at("observation_quantity_hash") != q {
         return Ok(Authority::new(
             false,
             "authoritative_observation_invalid",
@@ -413,7 +438,46 @@ fn authority_facts(row: &Value) -> Result<Authority, Error> {
     Ok(Authority::new(true, "matched", Some(1), Some(g), Some(q)))
 }
 
-const FIELDS:&str="id journal_transaction_id profile_id wallet_id wallet_kind fingerprint external_id external_id_kind native_event_id native_namespace source_ref backend_name occurred_at confirmed_at direction asset amount fee amount_includes_fee kind payment_hash payment_hash_source swap_refund_funding_txid swap_refund_funding_vout raw_json config_json wallet_config_json chain network observation_authority_version observation_graph_hash observation_quantity_hash observation_fee_attribution observation_application_revision observation_observed_at";
+/// The row fields enrichment retains.
+fn retained(key: &str) -> bool {
+    matches!(
+        key,
+        "id" | "journal_transaction_id"
+            | "profile_id"
+            | "wallet_id"
+            | "wallet_kind"
+            | "fingerprint"
+            | "external_id"
+            | "external_id_kind"
+            | "native_event_id"
+            | "native_namespace"
+            | "source_ref"
+            | "backend_name"
+            | "occurred_at"
+            | "confirmed_at"
+            | "direction"
+            | "asset"
+            | "amount"
+            | "fee"
+            | "amount_includes_fee"
+            | "kind"
+            | "payment_hash"
+            | "payment_hash_source"
+            | "swap_refund_funding_txid"
+            | "swap_refund_funding_vout"
+            | "raw_json"
+            | "config_json"
+            | "wallet_config_json"
+            | "chain"
+            | "network"
+            | "observation_authority_version"
+            | "observation_graph_hash"
+            | "observation_quantity_hash"
+            | "observation_fee_attribution"
+            | "observation_application_revision"
+            | "observation_observed_at"
+    )
+}
 pub trait RowRecord: Sync {
     fn field(&self, key: &str) -> Option<&Value>;
     fn fields(&self) -> impl Iterator<Item = (&String, &Value)>;
@@ -442,32 +506,124 @@ impl RowRecord for crate::snapshot::Record {
         self.iter()
     }
 }
+
+/// The retained fields of a source row, before enrichment adds its own.
+struct Retained<'a, R>(&'a R);
+impl<R: RowRecord> Fields for Retained<'_, R> {
+    fn get(&self, key: &str) -> Option<&Value> {
+        if retained(key) {
+            self.0.field(key)
+        } else {
+            None
+        }
+    }
+}
+
+/// One enriched row: its source row's index and the fields enrichment and
+/// fee normalization set. The source row is never copied.
+#[derive(Clone, Debug)]
+pub struct Enriched {
+    row: usize,
+    verified: Option<Value>,
+    chain: Value,
+    network: Value,
+    amount: Option<Value>,
+    fee: Option<Value>,
+    attribution: Option<Value>,
+    native_normalized: Option<Value>,
+    duplicate_normalized: Option<Value>,
+}
+impl Enriched {
+    pub fn row(&self) -> usize {
+        self.row
+    }
+    pub(crate) fn view<'a, R>(&'a self, rows: &'a [R]) -> EnrichedRow<'a, R> {
+        EnrichedRow {
+            facts: self,
+            row: &rows[self.row],
+        }
+    }
+}
+
+/// An enriched row read through its source row.
+pub(crate) struct EnrichedRow<'a, R> {
+    facts: &'a Enriched,
+    row: &'a R,
+}
+impl<R> Clone for EnrichedRow<'_, R> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl<R> Copy for EnrichedRow<'_, R> {}
+impl<'a, R: RowRecord> EnrichedRow<'a, R> {
+    fn overrides(&self) -> [(&'static str, Option<&'a Value>); 8] {
+        let f = self.facts;
+        [
+            ("_kassiber_verified_chain_observation", f.verified.as_ref()),
+            ("chain", Some(&f.chain)),
+            ("network", Some(&f.network)),
+            ("amount", f.amount.as_ref()),
+            ("fee", f.fee.as_ref()),
+            ("observation_fee_attribution", f.attribution.as_ref()),
+            (
+                "custody_native_fee_normalized",
+                f.native_normalized.as_ref(),
+            ),
+            (
+                "custody_duplicate_event_fee_normalized",
+                f.duplicate_normalized.as_ref(),
+            ),
+        ]
+    }
+    /// The enriched row as the JSON object Python builds.
+    pub fn value(&self) -> Value {
+        let mut item: serde_json::Map<String, Value> = self
+            .row
+            .fields()
+            .filter(|(key, _)| retained(key) && key.as_str() != "config_json")
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        for (key, value) in self.overrides() {
+            if let Some(value) = value {
+                item.insert(key.into(), value.clone());
+            }
+        }
+        Value::Object(item)
+    }
+}
+impl<R: RowRecord> Fields for EnrichedRow<'_, R> {
+    fn get(&self, key: &str) -> Option<&Value> {
+        let f = self.facts;
+        match key {
+            "_kassiber_verified_chain_observation" => f.verified.as_ref(),
+            "chain" => Some(&f.chain),
+            "network" => Some(&f.network),
+            "config_json" => None,
+            "amount" => f.amount.as_ref().or_else(|| self.row.field(key)),
+            "fee" => f.fee.as_ref().or_else(|| self.row.field(key)),
+            "observation_fee_attribution" => f.attribution.as_ref().or_else(|| self.row.field(key)),
+            "custody_native_fee_normalized" => f.native_normalized.as_ref(),
+            "custody_duplicate_event_fee_normalized" => f.duplicate_normalized.as_ref(),
+            _ if retained(key) => self.row.field(key),
+            _ => None,
+        }
+    }
+}
+
 pub fn enriched_rows<R: RowRecord>(rows: &[R]) -> Result<Vec<Value>, Error> {
-    enrich_with_keys(rows).map(|(rows, _)| rows)
+    let (enriched, _) = enrich_with_keys(rows)?;
+    Ok(enriched.iter().map(|e| e.view(rows).value()).collect())
 }
 
 fn enrich_with_keys<R: RowRecord>(
     rows: &[R],
-) -> Result<(Vec<Value>, Vec<Option<EventKey>>), Error> {
-    let fields: BTreeSet<&str> = FIELDS.split_whitespace().collect();
+) -> Result<(Vec<Enriched>, Vec<Option<EventKey>>), Error> {
     // Rows are enriched independently; keep them, or the first refusal, in order.
-    let enrich = |value: &R| -> Result<Value, Error> {
-        let row = value;
+    let enrich = |(index, row): (usize, &R)| -> Result<Enriched, Error> {
         // Indexing a JSON object yields null for an absent field.
         let original = |key: &str| row.field(key).unwrap_or(&Value::Null);
-        let mut item = Value::Object(
-            row.fields()
-                .filter(|(key, _)| fields.contains(key.as_str()))
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect(),
-        );
-        let auth = authority_facts(&item)?;
-        let Value::Object(mut item) = std::mem::take(&mut item) else {
-            unreachable!("row object")
-        };
-        if auth.authoritative {
-            item.insert("_kassiber_verified_chain_observation".into(), auth.value());
-        }
+        let auth = authority_facts(&Retained(row))?;
         let config = crate::graph::transfer_object_ref(original("config_json"));
         let raw = crate::graph::transfer_object_ref(original("raw_json"));
         let mut chain = if truth(&raw["chain"]) {
@@ -479,31 +635,55 @@ fn enrich_with_keys<R: RowRecord>(
         {
             chain = json!("lightning");
         }
-        item.insert("chain".into(), chain);
-        item.insert(
-            "network".into(),
-            if truth(&raw["network"]) {
-                raw["network"].clone()
-            } else {
-                config["network"].clone()
-            },
-        );
-        item.remove("config_json");
-        Ok(Value::Object(item))
+        let network = if truth(&raw["network"]) {
+            raw["network"].clone()
+        } else {
+            config["network"].clone()
+        };
+        Ok(Enriched {
+            row: index,
+            verified: auth.authoritative.then(|| auth.value()),
+            chain,
+            network,
+            amount: None,
+            fee: None,
+            attribution: None,
+            native_normalized: None,
+            duplicate_normalized: None,
+        })
     };
     let mut result = Vec::with_capacity(rows.len());
-    for item in crate::par::map(rows, enrich) {
-        result.push(crate::par::unwrap(item)?);
+    for (index, row) in rows.iter().enumerate() {
+        result.push(enrich((index, row))?);
     }
-    crate::graph::normalize_owned_fees(&mut result)?;
-    let keys: Vec<_> = crate::par::map(&result, |row| {
-        (row["direction"] == "outbound")
-            .then(|| event_key(row).ok())
-            .flatten()
-    })
-    .into_iter()
-    .map(crate::par::unwrap)
-    .collect();
+    // Owned-fee normalization reads and writes only verified rows; run it on
+    // their JSON objects and keep the fields it may set.
+    let verified: Vec<usize> = (0..result.len())
+        .filter(|i| result[*i].verified.as_ref().is_some_and(Value::is_object))
+        .collect();
+    if !verified.is_empty() {
+        let mut values: Vec<Value> = verified
+            .iter()
+            .map(|i| result[*i].view(rows).value())
+            .collect();
+        crate::graph::normalize_owned_fees(&mut values)?;
+        for (i, value) in verified.into_iter().zip(values) {
+            let e = &mut result[i];
+            e.amount = value.get("amount").cloned();
+            e.fee = value.get("fee").cloned();
+            e.attribution = value.get("observation_fee_attribution").cloned();
+            e.native_normalized = value.get("custody_native_fee_normalized").cloned();
+        }
+    }
+    let keys: Vec<_> = result
+        .iter()
+        .map(|e| {
+            let row = e.view(rows);
+            (*row.at("direction") == "outbound")
+                .then(|| event_key_of(&row).ok())
+                .flatten()
+        })
+        .collect();
     let mut groups: BTreeMap<&EventKey, Vec<usize>> = BTreeMap::new();
     for (i, key) in keys.iter().enumerate() {
         if let Some(key) = key {
@@ -512,36 +692,45 @@ fn enrich_with_keys<R: RowRecord>(
             }
         }
     }
+    fn field<R: RowRecord>(result: &[Enriched], rows: &[R], i: usize, key: &str) -> Value {
+        result[i].view(rows).at(key).clone()
+    }
     for group in groups.values() {
         let positive: Vec<usize> = group
             .iter()
             .copied()
             .filter(|i| {
-                int(&result[*i]["fee"]) > 0 && !truth(&result[*i]["custody_native_fee_normalized"])
+                int(&field(&result, rows, *i, "fee")) > 0
+                    && !truth(&field(&result, rows, *i, "custody_native_fee_normalized"))
             })
             .collect();
-        let fees: BTreeSet<i64> = positive.iter().map(|i| int(&result[*i]["fee"])).collect();
+        let fees: BTreeSet<i64> = positive
+            .iter()
+            .map(|i| int(&field(&result, rows, *i, "fee")))
+            .collect();
         if positive.len() <= 1 || fees.len() != 1 {
             continue;
         }
         let keeper = *positive
             .iter()
-            .min_by_key(|i| text(&result[**i]["id"]))
+            .min_by_key(|i| text(&field(&result, rows, **i, "id")))
             .unwrap();
         for i in positive {
             if i != keeper {
-                let fee = int(&result[i]["fee"]);
-                if !truth(&result[i]["amount_includes_fee"]) {
-                    let amount = integer_or_zero(&result[i]["amount"])?;
-                    result[i]["amount"] = match codec::checked_wide(&amount)
-                        .and_then(|amount| amount.checked_add(i128::from(fee)))
-                    {
-                        Some(sum) => json!(sum),
-                        None => codec::number(&(codec::big(&amount) + fee)),
-                    };
+                let fee = int(&field(&result, rows, i, "fee"));
+                if !truth(&field(&result, rows, i, "amount_includes_fee")) {
+                    let amount = integer_or_zero(&field(&result, rows, i, "amount"))?;
+                    result[i].amount = Some(
+                        match codec::checked_wide(&amount)
+                            .and_then(|amount| amount.checked_add(i128::from(fee)))
+                        {
+                            Some(sum) => json!(sum),
+                            None => codec::number(&(codec::big(&amount) + fee)),
+                        },
+                    );
                 }
-                result[i]["fee"] = json!(0);
-                result[i]["custody_duplicate_event_fee_normalized"] = json!(true);
+                result[i].fee = Some(json!(0));
+                result[i].duplicate_normalized = Some(json!(true));
             }
         }
     }
@@ -574,11 +763,17 @@ pub(crate) fn observation_fields(row: &Value, key: &EventKey) -> Result<Value, E
     let result = json!({"$type":"QuantityObservation","transaction_id":text(&row["id"]),"anchor_transaction_id":if truth(&row["journal_transaction_id"]) {text(&row["journal_transaction_id"])} else {text(&row["id"])},"quantity_hash":snapshot["quantity_hash"],"evidence_detail_hash":snapshot["detail_hash"],"evidence_payload_json":snapshot["payload_json"],"event_key":key.value(),"profile_id":text(&row["profile_id"]),"authoritative_chain_observation":auth["authoritative"],"observation_authority_reason":auth["reason"],"fee_attribution":attr,"wallet_id":text(&row["wallet_id"]),"asset":text(&row["asset"]).py_upper(),"direction":text(&row["direction"]).py_lower(),"amount_msat":integer_or_zero(&row["amount"])? ,"fee_msat":integer_or_zero(&row["fee"])? ,"amount_includes_fee":truth(&row["amount_includes_fee"]),"occurred_at":text(&row["occurred_at"])});
     Ok(result)
 }
-fn issue(key: &EventKey, code: &str, message: &str, rows: &[&Value], details: Value) -> Value {
+fn issue<F: Fields>(
+    key: &EventKey,
+    code: &str,
+    message: &str,
+    rows: &[F],
+    details: Value,
+) -> Value {
     let ids: BTreeSet<String> = rows
         .iter()
-        .filter(|row| !row["id"].is_null() && row["id"] != "")
-        .map(|row| text(&row["id"]))
+        .filter(|row| !row.at("id").is_null() && *row.at("id") != "")
+        .map(|row| text(row.at("id")))
         .collect();
     json!({"$type":"CanonicalEventIssue","event_key":key.value(),"code":code,"message":message,"transaction_ids":ids,"details":details})
 }
@@ -590,30 +785,30 @@ pub fn canonical_input(
     canonical_with_keys(rows, reconciliations, non_events, Vec::new())
 }
 
-fn canonical_with_keys(
-    rows: &[Value],
+fn canonical_with_keys<F: Fields + Sync>(
+    rows: &[F],
     reconciliations: &Value,
     non_events: &BTreeSet<String>,
     mut prepared: Vec<Option<EventKey>>,
 ) -> Result<Value, Error> {
-    let mut groups: BTreeMap<EventKey, Vec<&Value>> = BTreeMap::new();
+    let mut groups: BTreeMap<EventKey, Vec<&F>> = BTreeMap::new();
     let mut rejected = Vec::new();
     let mut events = Vec::new();
     for (ordinal, row) in rows.iter().enumerate() {
-        if non_events.contains(&codec::pystr(&row["id"])) {
+        if non_events.contains(&codec::pystr(row.at("id"))) {
             continue;
         }
         let key = prepared
             .get_mut(ordinal)
             .and_then(Option::take)
-            .map_or_else(|| event_key(row), Ok);
+            .map_or_else(|| event_key_of(row), Ok);
         match key {
             Ok(key) => groups.entry(key).or_default().push(row),
             Err(message) if message.is_value_or_type() => {
-                let id = if truth(&row["id"]) {
-                    text(&row["id"])
-                } else if truth(&row["fingerprint"]) {
-                    text(&row["fingerprint"])
+                let id = if truth(row.at("id")) {
+                    text(row.at("id"))
+                } else if truth(row.at("fingerprint")) {
+                    text(row.at("fingerprint"))
                 } else {
                     format!("row-{ordinal}")
                 };
@@ -634,20 +829,16 @@ fn canonical_with_keys(
             Err(error) => return Err(error),
         }
     }
-    // Groups are independent; build them concurrently and apply the outcomes
-    // in key order, so the first refusal and every output keep their order.
-    let groups: Vec<_> = groups.into_iter().collect();
+    // Groups are independent; build them in key order, so the first refusal
+    // and every output keep their order.
     let span = crate::timing::span("evidence.canonical.events");
-    let outcomes = crate::par::map(&groups, |(key, group)| {
-        canonical_event(key, group, reconciliations)
-    });
-    drop(span);
-    for outcome in outcomes {
-        match crate::par::unwrap(outcome)? {
+    for (key, group) in &groups {
+        match canonical_event(key, group, reconciliations)? {
             Ok(event) => events.push(event),
             Err(issue) => rejected.push(issue),
         }
     }
+    drop(span);
     rejected.sort_by_key(|v| {
         (
             text(&v["event_key"]["chain"]),
@@ -667,16 +858,22 @@ fn canonical_with_keys(
 }
 
 /// One canonical event group: its event, a rejection issue, or a refusal.
-fn canonical_event(
+fn canonical_event<F: Fields>(
     key: &EventKey,
-    group: &[&Value],
+    group: &[&F],
     reconciliations: &Value,
 ) -> Result<Result<Value, Value>, Error> {
-    if group.iter().any(|r| {
-        reconciliations
-            .get(text(&r["id"]))
-            .is_some_and(Value::is_null)
-    }) {
+    let reconciled = |row: &F| {
+        if reconciliations.as_object().is_some_and(|m| m.is_empty()) {
+            None
+        } else {
+            reconciliations.get(text(row.at("id")))
+        }
+    };
+    if group
+        .iter()
+        .any(|r| reconciled(r).is_some_and(Value::is_null))
+    {
         return Ok(Err(issue(
             key,
             "source_overlap_quantity_unresolved",
@@ -689,11 +886,8 @@ fn canonical_event(
     let mut errors = BTreeSet::new();
     for row in group {
         let built = (|| {
-            let mut observation = observation::Observation::new(row, key)?;
-            if let Some(proof) = reconciliations
-                .get(text(&row["id"]))
-                .filter(|v| !v.is_null())
-            {
+            let mut observation = observation::Observation::new(*row, key)?;
+            if let Some(proof) = reconciled(row).filter(|v| !v.is_null()) {
                 observation.reconcile(proof)?;
             }
             Ok::<_, Error>(observation)
@@ -778,7 +972,49 @@ fn canonical_event(
     Ok(Ok(Value::Object(event)))
 }
 
-pub fn compute(snapshot: &Snapshot) -> Result<Value, Error> {
+/// The evidence stage: enriched rows by source-row index, the canonical input
+/// and the receipt and zero-delta facts. Its JSON is built only on request.
+#[derive(Clone, Debug)]
+pub struct Evidence {
+    enriched: Vec<Enriched>,
+    canonical: std::sync::Arc<Value>,
+    reconciliations: Value,
+    non_events: BTreeSet<String>,
+}
+impl Evidence {
+    pub fn canonical(&self) -> &Value {
+        &self.canonical
+    }
+    pub(crate) fn canonical_arc(&self) -> std::sync::Arc<Value> {
+        self.canonical.clone()
+    }
+    pub fn non_event_ids(&self) -> &BTreeSet<String> {
+        &self.non_events
+    }
+    pub fn enriched(&self) -> &[Enriched] {
+        &self.enriched
+    }
+    /// The stage object, given the snapshot rows the enriched rows read.
+    pub fn value(&self, rows: &[Record]) -> Value {
+        let mut stage = serde_json::Map::new();
+        stage.insert(
+            "enriched_rows".into(),
+            Value::Array(self.enriched.iter().map(|e| e.view(rows).value()).collect()),
+        );
+        stage.insert("canonical_input".into(), (*self.canonical).clone());
+        stage.insert(
+            "receipt_reconciliations".into(),
+            self.reconciliations.clone(),
+        );
+        stage.insert(
+            "native_non_event_ids".into(),
+            Value::Array(self.non_events.iter().cloned().map(Value::String).collect()),
+        );
+        Value::Object(stage)
+    }
+}
+
+pub fn stage(snapshot: &Snapshot) -> Result<Evidence, Error> {
     let span = crate::timing::span("evidence.rows");
     let rows = snapshot.rows();
     drop(span);
@@ -786,25 +1022,26 @@ pub fn compute(snapshot: &Snapshot) -> Result<Value, Error> {
     let non_events = crate::graph::native_zero_delta_ids(rows, snapshot)?;
     drop(span);
     let span = crate::timing::span("evidence.enriched");
-    let (enriched, keys) = enrich_with_keys(&snapshot.transactions)?;
+    let records = &snapshot.transactions;
+    let (enriched, keys) = enrich_with_keys(records)?;
     drop(span);
     let span = crate::timing::span("evidence.receipts");
     let reconciliations = crate::graph::reconcile_receipts(rows, snapshot)?;
     drop(span);
     let span = crate::timing::span("evidence.canonical");
-    let canonical = canonical_with_keys(&enriched, &reconciliations, &non_events, keys)?;
+    let views: Vec<_> = enriched.iter().map(|e| e.view(records)).collect();
+    let canonical = canonical_with_keys(&views, &reconciliations, &non_events, keys)?;
     drop(span);
-    let _span = crate::timing::span("evidence.value");
-    // The object json! would build, with the stage parts moved rather than copied.
-    let mut stage = serde_json::Map::new();
-    stage.insert("enriched_rows".into(), Value::Array(enriched));
-    stage.insert("canonical_input".into(), canonical);
-    stage.insert("receipt_reconciliations".into(), reconciliations);
-    stage.insert(
-        "native_non_event_ids".into(),
-        Value::Array(non_events.into_iter().map(Value::String).collect()),
-    );
-    Ok(Value::Object(stage))
+    Ok(Evidence {
+        enriched,
+        canonical: std::sync::Arc::new(canonical),
+        reconciliations,
+        non_events,
+    })
+}
+
+pub fn compute(snapshot: &Snapshot) -> Result<Value, Error> {
+    stage(snapshot).map(|evidence| evidence.value(&snapshot.transactions))
 }
 
 #[cfg(test)]

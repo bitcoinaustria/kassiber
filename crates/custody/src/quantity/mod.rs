@@ -90,13 +90,13 @@ impl Domain {
             rail: v["event_key"]["chain"].clone(),
         }
     }
-    pub fn py(self) -> Result<kassiber_pyjson::Value, String> {
+    pub fn py(&self) -> Result<kassiber_pyjson::Value, String> {
         use kassiber_pyjson::Value as Py;
         Ok(py_dict([
             ("$type", Py::Str("QuantityDomain".into())),
-            ("exposure", Py::Str(self.exposure.into())),
-            ("network", Py::Str(self.network.into())),
-            ("rail", into_py(self.rail)?),
+            ("exposure", Py::Str(self.exposure.as_str().into())),
+            ("network", Py::Str(self.network.as_str().into())),
+            ("rail", borrowed_py(&self.rail)?),
             ("unit", Py::Str("msat".into())),
         ]))
     }

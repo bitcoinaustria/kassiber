@@ -47,14 +47,14 @@ fn rank(reason: &str) -> (usize, &str) {
 }
 
 pub(super) struct Quarantines<'a> {
-    input: &'a Value,
+    input: &'a super::composition::Input<'a>,
     rows: &'a dyn Rows,
     records: BTreeMap<Key, Py>,
     interpreter: BTreeSet<Key>,
 }
 impl<'a> Quarantines<'a> {
     pub(super) fn with_interpreter(
-        input: &'a Value,
+        input: &'a super::composition::Input<'a>,
         closure: &Value,
         diagnostics: &[Py],
         rows: &'a dyn Rows,
@@ -84,7 +84,8 @@ impl<'a> Quarantines<'a> {
                 result.interpreter.insert(key);
             }
         }
-        let explicit: BTreeSet<_> = array(&input["blocked_transaction_ids"])
+        let explicit: BTreeSet<_> = input
+            .blocked_transaction_ids
             .iter()
             .filter(|v| codec::truth(v))
             .map(string)
@@ -106,7 +107,7 @@ impl<'a> Quarantines<'a> {
     }
     fn insert(&mut self, id: &str, reason: &str, detail: Value, keep: bool) -> Result<(), String> {
         let key = (id.into(), reason.into());
-        let profile = &self.input["profile"];
+        let profile = &*self.input.profile;
         // Preserve Python's mandatory profile fields and json.dumps spacing.
         let workspace = profile.get("workspace_id").ok_or("KeyError")?;
         let profile_id = profile.get("id").ok_or("KeyError")?;
@@ -131,7 +132,7 @@ impl<'a> Quarantines<'a> {
         if self.rows.get(&id).is_none() {
             return Ok(());
         }
-        let implausible = array(&self.input["issues"]).iter().any(|issue| {
+        let implausible = self.input.issues.iter().any(|issue| {
             issue["issue_type"] != "custody_interpreter_blocked"
                 && issue["reason"] == "transfer_fee_implausible"
                 && array(&issue["transaction_ids"]).iter().any(|v| v == &id)
@@ -142,7 +143,7 @@ impl<'a> Quarantines<'a> {
             "custody_basis_barrier"
         };
         let own = super::composition::pool(source);
-        let roots = array(&self.input["pool_barrier_roots"])
+        let roots = array(&self.input.pool_barrier_roots)
             .iter()
             .find(|pair| pair[0] == own)
             .map(|pair| pair[1].clone())
@@ -171,7 +172,7 @@ impl<'a> Quarantines<'a> {
         observations: &BTreeMap<String, &Value>,
     ) -> Result<(), String> {
         let mut groups: BTreeMap<(String, String), Vec<&Value>> = BTreeMap::new();
-        for issue in array(&self.input["issues"]) {
+        for issue in self.input.issues.iter() {
             if issue["issue_type"] == "custody_interpreter_blocked" {
                 continue;
             }

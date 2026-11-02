@@ -1,5 +1,6 @@
 use super::{authority_facts, integer_or_zero, raw_py, Error, EventKey};
 use crate::codec::{self, text, truth};
+use crate::fields::Fields;
 use crate::python_text::PythonText;
 use kassiber_pyjson::{BigInt, Key, Options, Value as Py};
 use serde_json::{json, Value};
@@ -39,15 +40,15 @@ struct Quantity<'a> {
 }
 
 impl<'a> Quantity<'a> {
-    fn new(row: &'a Value, key: &'a EventKey) -> Result<Self, Error> {
+    fn new<F: Fields + ?Sized>(row: &'a F, key: &'a EventKey) -> Result<Self, Error> {
         Ok(Self {
             key,
-            wallet: string(&row["wallet_id"]),
-            direction: text(&row["direction"]).py_lower(),
-            asset: text(&row["asset"]).py_upper(),
-            amount: amount(&row["amount"])?,
-            fee: amount(&row["fee"])?,
-            included: truth(&row["amount_includes_fee"]),
+            wallet: string(row.at("wallet_id")),
+            direction: text(row.at("direction")).py_lower(),
+            asset: text(row.at("asset")).py_upper(),
+            amount: amount(row.at("amount"))?,
+            fee: amount(row.at("fee"))?,
+            included: truth(row.at("amount_includes_fee")),
         })
     }
 
@@ -89,27 +90,31 @@ pub(super) struct Commitment {
 }
 
 impl Commitment {
-    pub fn build(row: &Value, key: &EventKey, override_raw: Option<Py>) -> Result<Self, Error> {
+    pub fn build<F: Fields + ?Sized>(
+        row: &F,
+        key: &EventKey,
+        override_raw: Option<Py>,
+    ) -> Result<Self, Error> {
         let quantity = Quantity::new(row, key)?;
         Self::from_quantity(row, &quantity, override_raw)
     }
 
-    fn from_quantity(
-        row: &Value,
+    fn from_quantity<F: Fields + ?Sized>(
+        row: &F,
         quantity: &Quantity<'_>,
         override_raw: Option<Py>,
     ) -> Result<Self, Error> {
         let preimage = quantity.preimage();
         if quantity.amount.bits() >= 14200 || quantity.fee.bits() >= 14200 {
-            codec::hash(&super::quantity_payload(row, quantity.key)?, false)
+            codec::hash(&super::quantity_payload_of(row, quantity.key)?, false)
                 .map_err(Error::encoding)?;
         }
         let quantity_hash = codec::sha256(&preimage);
-        let vout = codec::from_json(&row["swap_refund_funding_vout"])?;
+        let vout = codec::from_json(row.at("swap_refund_funding_vout"))?;
         let raw = match override_raw {
             Some(raw) => raw,
-            None if row["raw_json"].is_null() => Py::Dict(vec![]),
-            None => raw_py(&row["raw_json"], "unparsed_text")?,
+            None if row.at("raw_json").is_null() => Py::Dict(vec![]),
+            None => raw_py(row.at("raw_json"), "unparsed_text")?,
         };
         let options = Options::new()
             .sort_keys(true)
@@ -134,20 +139,23 @@ impl Commitment {
             }
             quoted(field, &mut payload_json);
             payload_json.push(':');
-            quoted(&string(&row[field]), &mut payload_json);
+            quoted(&string(row.at(field)), &mut payload_json);
         }
         payload_json.push_str(",\"quantity\":");
         payload_json.push_str(&preimage);
         payload_json.push_str(",\"raw_json\":");
         let raw_result = kassiber_pyjson::dumps_into(&raw, &options, 1, &mut payload_json);
         payload_json.push_str(",\"schema_version\":1,\"swap_refund_funding_txid\":");
-        quoted(&string(&row["swap_refund_funding_txid"]), &mut payload_json);
+        quoted(
+            &string(row.at("swap_refund_funding_txid")),
+            &mut payload_json,
+        );
         payload_json.push_str(",\"swap_refund_funding_vout\":");
         let vout_result = kassiber_pyjson::dumps_into(&vout, &options, 1, &mut payload_json);
         payload_json.push('}');
         if raw_result.is_err() || vout_result.is_err() {
             let mut detail = codec::from_json(
-                &json!({"schema_version":1,"quantity":super::quantity_payload(row,quantity.key)?,"fingerprint":text(&row["fingerprint"]),"occurred_at":text(&row["occurred_at"]),"confirmed_at":text(&row["confirmed_at"]),"kind":text(&row["kind"]),"payment_hash":text(&row["payment_hash"]),"payment_hash_source":text(&row["payment_hash_source"]),"swap_refund_funding_txid":text(&row["swap_refund_funding_txid"]),"swap_refund_funding_vout":row["swap_refund_funding_vout"]}),
+                &json!({"schema_version":1,"quantity":super::quantity_payload_of(row,quantity.key)?,"fingerprint":text(row.at("fingerprint")),"occurred_at":text(row.at("occurred_at")),"confirmed_at":text(row.at("confirmed_at")),"kind":text(row.at("kind")),"payment_hash":text(row.at("payment_hash")),"payment_hash_source":text(row.at("payment_hash_source")),"swap_refund_funding_txid":text(row.at("swap_refund_funding_txid")),"swap_refund_funding_vout":row.at("swap_refund_funding_vout")}),
             )?;
             if let Py::Dict(values) = &mut detail {
                 values.push((Key::Str("raw_json".into()), raw));
@@ -179,30 +187,30 @@ pub(super) struct Observation<'a> {
 }
 
 impl<'a> Observation<'a> {
-    pub fn new(row: &'a Value, key: &'a EventKey) -> Result<Self, Error> {
+    pub fn new<F: Fields + ?Sized>(row: &'a F, key: &'a EventKey) -> Result<Self, Error> {
         let quantity = Quantity::new(row, key)?;
         let commitment = Commitment::from_quantity(row, &quantity, None)?;
-        let cached = &row["_kassiber_verified_chain_observation"];
+        let cached = row.at("_kassiber_verified_chain_observation");
         let (authoritative, authority_reason) = if truth(&cached["authoritative"]) {
             (true, text(&cached["reason"]))
         } else {
             let auth = authority_facts(row)?;
             (auth.authoritative, auth.reason.to_owned())
         };
-        let attr = text(&row["observation_fee_attribution"])
+        let attr = text(row.at("observation_fee_attribution"))
             .py_strip()
             .py_lower();
         let result = Self {
             quantity,
             commitment,
-            transaction_id: string(&row["id"]),
-            anchor_id: string(if truth(&row["journal_transaction_id"]) {
-                &row["journal_transaction_id"]
+            transaction_id: string(row.at("id")),
+            anchor_id: string(if truth(row.at("journal_transaction_id")) {
+                row.at("journal_transaction_id")
             } else {
-                &row["id"]
+                row.at("id")
             }),
-            profile_id: string(&row["profile_id"]),
-            occurred_at: string(&row["occurred_at"]),
+            profile_id: string(row.at("profile_id")),
+            occurred_at: string(row.at("occurred_at")),
             authoritative,
             authority_reason,
             fee_attribution: if authoritative

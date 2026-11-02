@@ -85,7 +85,7 @@ pub(crate) fn channel_non_event_ids(snapshot: &Snapshot) -> Result<Vec<String>, 
 pub(crate) fn gap_ignored_ids(
     snapshot: &Snapshot,
     components: &Value,
-    evidence: &Value,
+    evidence: &evidence::Evidence,
     interpretation: &kassiber_pyjson::Value,
 ) -> Result<(BTreeSet<String>, BTreeSet<String>), String> {
     use crate::graph::stored;
@@ -123,7 +123,7 @@ pub(crate) fn gap_ignored_ids(
             })
         })
         .collect();
-    let observations: BTreeMap<_, _> = array(&evidence["canonical_input"]["events"])
+    let observations: BTreeMap<_, _> = array(&evidence.canonical()["events"])
         .iter()
         .flat_map(|event| array(&event["legs"]))
         .filter(|leg| !needed.is_empty() && needed.contains(&text(&leg["quantity_hash"])))
@@ -229,7 +229,7 @@ pub(super) struct Context<'a> {
 impl Context<'_> {
     fn load(snapshot: &Snapshot) -> Result<Context<'static>, String> {
         let components = components::compute(snapshot).map_err(|e| e.code.to_owned())?;
-        let evidence = evidence::compute(snapshot)?;
+        let evidence = evidence::stage(snapshot)?;
         Ok(Context::from_stages(&components, &evidence).into_owned())
     }
     fn into_owned(self) -> Context<'static> {
@@ -245,11 +245,11 @@ impl Context<'_> {
     }
 }
 impl<'a> Context<'a> {
-    fn from_stages(components: &Value, evidence: &'a Value) -> Self {
+    fn from_stages(components: &Value, evidence: &'a evidence::Evidence) -> Self {
         let excluded = excluded(components);
         Self {
-            observations: observations(&evidence["canonical_input"]),
-            canonical: Cow::Borrowed(&evidence["canonical_input"]),
+            observations: observations(evidence.canonical()),
+            canonical: Cow::Borrowed(evidence.canonical()),
             excluded,
         }
     }
@@ -271,18 +271,18 @@ fn excluded(components: &Value) -> BTreeSet<String> {
 }
 
 /// Complete interpreter compilation over the already computed raw-fact stages.
-pub fn compute(snapshot: &Snapshot, components: &Value, evidence: &Value) -> Result<Value, String> {
+pub fn compute(
+    snapshot: &Snapshot,
+    components: &Value,
+    evidence: &evidence::Evidence,
+) -> Result<Value, String> {
     let context = Context::from_stages(components, evidence);
     let mut composition = safety::compose(snapshot, &context, array(&components["components"]))?;
     let mut non_events: BTreeSet<_> = array(&composition["non_event_transaction_ids"])
         .iter()
         .map(crate::codec::text)
         .collect();
-    non_events.extend(
-        array(&evidence["native_non_event_ids"])
-            .iter()
-            .map(crate::codec::text),
-    );
+    non_events.extend(evidence.non_event_ids().iter().cloned());
     Ok(
         json!({"$type":"CustodyInterpreterCompilation","claims":composition["claims"].take(),"native_audits":composition["native_audits"].take(),"non_event_transaction_ids":non_events,"blocked_transaction_ids":composition["blocked_transaction_ids"].take(),"quarantines":composition["quarantines"].take(),"native_component_reconciliations":composition.get("native_component_reconciliations").cloned().unwrap_or(json!([])),"transient_blocked_transaction_ids":composition["transient_blocked_transaction_ids"].take()}),
     )
@@ -293,7 +293,7 @@ pub fn compute(snapshot: &Snapshot, components: &Value, evidence: &Value) -> Res
 pub fn stage(
     snapshot: &Snapshot,
     components: &Value,
-    evidence: &Value,
+    evidence: &evidence::Evidence,
     migration: Vec<kassiber_pyjson::Value>,
 ) -> Result<kassiber_pyjson::Value, String> {
     use crate::graph::stored;
@@ -347,7 +347,7 @@ mod stage_tests {
         admit_channels(&snapshot)?;
         let components = components::compute(&snapshot).map_err(|e| e.code.to_owned())?;
         let migration = migration_quarantines(&snapshot)?;
-        let evidence = evidence::compute(&snapshot)?;
+        let evidence = evidence::stage(&snapshot)?;
         stage(&snapshot, &components, &evidence, migration)
     }
     #[test]

@@ -450,7 +450,7 @@ mod tests {
             let snapshot: crate::snapshot::Snapshot =
                 serde_json::from_value(v["input"].clone()).unwrap();
             let components = crate::components::compute(&snapshot).unwrap();
-            let evidence = crate::evidence::compute(&snapshot).unwrap();
+            let evidence = crate::evidence::stage(&snapshot).unwrap();
             assert_eq!(
                 super::super::compute(&snapshot, &components, &evidence).unwrap(),
                 v["expected"],

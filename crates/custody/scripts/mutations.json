@@ -2,8 +2,8 @@
   {
     "id": "A-duplicate-fee-keeper",
     "file": "crates/custody/src/evidence.rs",
-    "find": ".min_by_key(|i| text(&result[**i][\"id\"]))",
-    "replace": ".max_by_key(|i| text(&result[**i][\"id\"]))",
+    "find": ".min_by_key(|i| text(&field(&result, rows, **i, \"id\")))",
+    "replace": ".max_by_key(|i| text(&field(&result, rows, **i, \"id\")))",
     "expect_failing": [
       "duplicate_fee_keeper"
     ],
@@ -22,8 +22,8 @@
   {
     "id": "C-authority-hashes",
     "file": "crates/custody/src/evidence.rs",
-    "find": "    let q = observed_hash(row)?.0;\n    if text(&row[\"observation_quantity_hash\"])\n        .py_strip()\n        .py_lower()\n        != q\n    {\n        return Ok(Authority::new(\n            false,\n            \"quantity_hash_mismatch\",\n            Some(1),\n            None,\n            Some(q),\n        ));\n    }\n    let g = graph_hash(&row[\"raw_json\"])?.0;\n    if strip(&text(&row[\"observation_graph_hash\"])).py_lower() != g {\n        return Ok(Authority::new(\n            false,\n            \"graph_hash_mismatch\",\n            Some(1),\n            Some(g),\n            Some(q),\n        ));\n    }\n    if row[\"observation_graph_hash\"] != g || row[\"observation_quantity_hash\"] != q {\n        return Ok(Authority::new(\n            false,\n            \"authoritative_observation_invalid\",\n            Some(1),\n            Some(g),\n            Some(q),\n        ));\n    }\n",
-    "replace": "    let q = observed_hash(row)?.0;\n    let g = graph_hash(&row[\"raw_json\"])?.0;\n",
+    "find": "    let q = observed_hash_of(row)?.0;\n    if text(row.at(\"observation_quantity_hash\"))\n        .py_strip()\n        .py_lower()\n        != q\n    {\n        return Ok(Authority::new(\n            false,\n            \"quantity_hash_mismatch\",\n            Some(1),\n            None,\n            Some(q),\n        ));\n    }\n    let g = graph_hash(row.at(\"raw_json\"))?.0;\n    if strip(&text(row.at(\"observation_graph_hash\"))).py_lower() != g {\n        return Ok(Authority::new(\n            false,\n            \"graph_hash_mismatch\",\n            Some(1),\n            Some(g),\n            Some(q),\n        ));\n    }\n    if *row.at(\"observation_graph_hash\") != g || *row.at(\"observation_quantity_hash\") != q {\n        return Ok(Authority::new(\n            false,\n            \"authoritative_observation_invalid\",\n            Some(1),\n            Some(g),\n            Some(q),\n        ));\n    }\n",
+    "replace": "    let q = observed_hash_of(row)?.0;\n    let g = graph_hash(row.at(\"raw_json\"))?.0;\n",
     "expect_failing": [
       "tampered_graph",
       "tampered_quantity"
@@ -1013,8 +1013,8 @@
   {
     "id": "components-hash-detail-kind",
     "file": "crates/custody/src/evidence/observation.rs",
-    "find": "quoted(&string(&row[field]), &mut payload_json);",
-    "replace": "if field == \"kind\" { payload_json.push_str(\"null\"); } else { quoted(&string(&row[field]), &mut payload_json); }",
+    "find": "quoted(&string(row.at(field)), &mut payload_json);",
+    "replace": "if field == \"kind\" { payload_json.push_str(\"null\"); } else { quoted(&string(row.at(field)), &mut payload_json); }",
     "expect_failing": [
       "components_hash_kind"
     ],
@@ -1023,8 +1023,8 @@
   {
     "id": "components-hash-detail-payment",
     "file": "crates/custody/src/evidence/observation.rs",
-    "find": "quoted(&string(&row[field]), &mut payload_json);",
-    "replace": "if field == \"payment_hash\" { payload_json.push_str(\"null\"); } else { quoted(&string(&row[field]), &mut payload_json); }",
+    "find": "quoted(&string(row.at(field)), &mut payload_json);",
+    "replace": "if field == \"payment_hash\" { payload_json.push_str(\"null\"); } else { quoted(&string(row.at(field)), &mut payload_json); }",
     "expect_failing": [
       "components_hash_payment"
     ],
@@ -1033,8 +1033,8 @@
   {
     "id": "components-hash-detail-payment-source",
     "file": "crates/custody/src/evidence/observation.rs",
-    "find": "quoted(&string(&row[field]), &mut payload_json);",
-    "replace": "if field == \"payment_hash_source\" { payload_json.push_str(\"null\"); } else { quoted(&string(&row[field]), &mut payload_json); }",
+    "find": "quoted(&string(row.at(field)), &mut payload_json);",
+    "replace": "if field == \"payment_hash_source\" { payload_json.push_str(\"null\"); } else { quoted(&string(row.at(field)), &mut payload_json); }",
     "expect_failing": [
       "components_hash_payment_source"
     ],
@@ -1043,8 +1043,8 @@
   {
     "id": "components-hash-detail-refund-txid",
     "file": "crates/custody/src/evidence/observation.rs",
-    "find": "quoted(&string(&row[\"swap_refund_funding_txid\"]), &mut payload_json);",
-    "replace": "payload_json.push_str(\"null\");",
+    "find": "        quoted(\n            &string(row.at(\"swap_refund_funding_txid\")),\n            &mut payload_json,\n        );",
+    "replace": "        payload_json.push_str(\"null\");",
     "expect_failing": [
       "components_hash_refund_txid"
     ],
@@ -1433,8 +1433,8 @@
   {
     "id": "X01-asset-hash-cpython-upper",
     "file": "crates/custody/src/evidence/observation.rs",
-    "find": "asset: text(&row[\"asset\"]).py_upper(),",
-    "replace": "asset: text(&row[\"asset\"]).to_uppercase(),",
+    "find": "asset: text(row.at(\"asset\")).py_upper(),",
+    "replace": "asset: text(row.at(\"asset\")).to_uppercase(),",
     "expect_failing": [
       "components_asset_hash_upper"
     ],
@@ -11506,8 +11506,8 @@
   {
     "id": "REC-STAGE-04",
     "file": "crates/custody/src/interpretation/mod.rs",
-    "find": "array(&evidence[\"native_non_event_ids\"])",
-    "replace": "array(&json!([]))",
+    "find": "non_events.extend(evidence.non_event_ids().iter().cloned());",
+    "replace": "non_events.extend(std::iter::empty::<String>());",
     "rule": "Union native zero-delta non-events after compilation.",
     "expect_failing": [
       "interpretation_wrapper_vectors"
@@ -18996,8 +18996,8 @@
   {
     "id": "QRT-102",
     "file": "crates/custody/src/quantity/runtime.rs",
-    "find": "(\"canonical_input\", canonical),",
-    "replace": "(\"canonical_input\", Py::Null),",
+    "find": "(\"canonical_input\", canonical),\n            (\n                \"gap_candidate_transaction_ids\",\n                super::into_py(gaps[2].take())?,",
+    "replace": "(\"canonical_input\", Py::Null),\n            (\n                \"gap_candidate_transaction_ids\",\n                super::into_py(gaps[2].take())?,",
     "expect_failing": [
       "quantity_whole_state_vectors"
     ],
@@ -19006,8 +19006,8 @@
   {
     "id": "QRT-103",
     "file": "crates/custody/src/quantity/runtime.rs",
-    "find": "(\"projection\", self.projection),",
-    "replace": "(\"projection\", Py::Null),",
+    "find": "(\"issues\", super::into_py(self.issues)?),\n            (\"projection\", projection),",
+    "replace": "(\"issues\", super::into_py(self.issues)?),\n            (\"projection\", Py::Null),",
     "expect_failing": [
       "quantity_whole_state_vectors"
     ],
@@ -19026,8 +19026,8 @@
   {
     "id": "QRT-105",
     "file": "crates/custody/src/quantity/runtime.rs",
-    "find": "(\"tax_eligibility\", self.tax),",
-    "replace": "(\"tax_eligibility\", Py::Null),",
+    "find": "(\"reviewed_direct_payouts\", super::into_py(comp[3].take())?),\n            (\"tax_eligibility\", tax),",
+    "replace": "(\"reviewed_direct_payouts\", super::into_py(comp[3].take())?),\n            (\"tax_eligibility\", Py::Null),",
     "expect_failing": [
       "quantity_whole_state_vectors"
     ],
@@ -19386,8 +19386,8 @@
   {
     "id": "R2-review-audit-runtime-626",
     "file": "crates/custody/src/quantity/runtime.rs",
-    "find": ".filter(|r| !r[\"id\"].is_null() && r[\"id\"] != \"\")",
-    "replace": ".filter(|r| !r[\"id\"].is_null() && r[\"id\"] == \"\")",
+    "find": "if !id.is_null() && id != \"\" {",
+    "replace": "if !id.is_null() && id == \"\" {",
     "expect_failing": [
       "quantity_operator_audit_vectors"
     ],
@@ -22086,8 +22086,8 @@
   {
     "id": "projection6-eager-diagnostic",
     "file": "crates/custody/src/finalized_projection/quarantines.rs",
-    "find": "let profile = &self.input[\"profile\"];",
-    "replace": "if keep && self.records.contains_key(&key) { return Ok(()); }\n        let profile = &self.input[\"profile\"];",
+    "find": "let profile = &*self.input.profile;",
+    "replace": "if keep && self.records.contains_key(&key) { return Ok(()); }\n        let profile = &*self.input.profile;",
     "expect_failing": [
       "projection_quarantine_composition_vectors"
     ],
@@ -22096,8 +22096,8 @@
   {
     "id": "projection6-finalize-branch",
     "file": "crates/custody/src/finalized_projection/composition.rs",
-    "find": "let finalize = v[\"op\"] == \"finalize\";",
-    "replace": "let finalize = v[\"op\"] != \"finalize\";",
+    "find": "let finalize = v.op == \"finalize\";",
+    "replace": "let finalize = v.op != \"finalize\";",
     "expect_failing": [
       "projection_quarantine_composition_vectors"
     ],
@@ -22296,8 +22296,8 @@
   {
     "id": "projection8-channel-non-events",
     "file": "crates/custody/src/finalized_projection/runtime.rs",
-    "find": "interpretation::channel_non_event_ids(snapshot)?",
-    "replace": "Vec::<String>::new()",
+    "find": "    let (blocked_anchors, issues) = issue_operands(stored::list(stored::get(quantity, \"issues\")))?;\n    let mut non_events = exact(stored::get(interpreter, \"non_event_transaction_ids\"))?\n        .as_array()\n        .ok_or(\"TypeError\")?\n        .clone();\n    non_events.extend(\n        interpretation::channel_non_event_ids(snapshot)?",
+    "replace": "    let (blocked_anchors, issues) = issue_operands(stored::list(stored::get(quantity, \"issues\")))?;\n    let mut non_events = exact(stored::get(interpreter, \"non_event_transaction_ids\"))?\n        .as_array()\n        .ok_or(\"TypeError\")?\n        .clone();\n    non_events.extend(\n        Vec::<String>::new()",
     "expect_failing": [
       "projection_adapter_input_families"
     ],
@@ -23607,8 +23607,8 @@
   {
     "id": "projection-empty-barriers",
     "file": "crates/custody/src/finalized_projection/composition.rs",
-    "find": "if array(&v[\"pool_barriers\"]).is_empty() {\n        return false;\n    }",
-    "replace": "if array(&v[\"pool_barriers\"]).is_empty() {\n        return true;\n    }",
+    "find": "if array(&v.pool_barriers).is_empty() {\n        return false;\n    }",
+    "replace": "if array(&v.pool_barriers).is_empty() {\n        return true;\n    }",
     "expect_failing": [
       "projection_selected_composition_vectors"
     ],
@@ -23643,6 +23643,86 @@
       "projection_unused_event_fields_still_require_exact_admission"
     ],
     "rule": "Unused event operands still receive the original complete exact-value admission before field selection."
+  },
+  {
+    "id": "typed-quantity-canonical",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "(\"canonical_input\", canonical),\n            (\n                \"gap_candidate_transaction_ids\",\n                super::borrowed_py(&self.gap_candidate_transaction_ids)?,",
+    "replace": "(\"canonical_input\", Py::Null),\n            (\n                \"gap_candidate_transaction_ids\",\n                super::borrowed_py(&self.gap_candidate_transaction_ids)?,",
+    "expect_failing": [
+      "quantity_runtime_wrapper_vectors"
+    ],
+    "rule": "The typed quantity stage retains its canonical input in its Python value."
+  },
+  {
+    "id": "typed-quantity-projection",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "(\"issues\", Py::List(self.issues.clone())),\n            (\"projection\", projection),",
+    "replace": "(\"issues\", Py::List(self.issues.clone())),\n            (\"projection\", Py::Null),",
+    "expect_failing": [
+      "quantity_runtime_wrapper_vectors"
+    ],
+    "rule": "The typed quantity stage retains its projection in its Python value."
+  },
+  {
+    "id": "typed-quantity-unblocked-tax",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "        let tax = match &self.tax {\n            Some(tax) => tax.clone(),\n            None => unblocked_eligibility(&projection),\n        };",
+    "replace": "        let tax = match &self.tax {\n            Some(tax) => tax.clone(),\n            None => Py::Null,\n        };",
+    "expect_failing": [
+      "quantity_runtime_wrapper_vectors"
+    ],
+    "rule": "Unblocked quantity eligibility is derived from the typed decisions."
+  },
+  {
+    "id": "typed-quantity-located-leg",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "&array(&self.event(event as usize)[\"legs\"])[leg as usize]",
+    "replace": "&array(&self.event(event as usize)[\"legs\"])[0]",
+    "expect_failing": [
+      "quantity_runtime_wrapper_vectors"
+    ],
+    "rule": "Located projection observations resolve to their own canonical leg."
+  },
+  {
+    "id": "typed-quantity-journal-canonical",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "        let canonical = if canonical {",
+    "replace": "        let canonical = if !canonical {",
+    "expect_failing": [
+      "quantity_runtime_wrapper_vectors"
+    ],
+    "rule": "The journal JSON of the quantity stage includes the canonical input only on request."
+  },
+  {
+    "id": "typed-quantity-plain-float",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "                && digits.bytes().all(|b| b.is_ascii_digit())",
+    "replace": "                && true",
+    "expect_failing": [
+      "quantity_plain_json_is_exact"
+    ],
+    "rule": "Floats are converted, never cloned, into journal JSON."
+  },
+  {
+    "id": "typed-finalized-channel-non-events",
+    "file": "crates/custody/src/finalized_projection/runtime.rs",
+    "find": "    let mut non_events = exact(stored::get(interpreter, \"non_event_transaction_ids\"))?\n        .as_array()\n        .ok_or(\"TypeError\")?\n        .clone();\n    non_events.extend(\n        interpretation::channel_non_event_ids(snapshot)?\n            .into_iter()\n            .map(Value::String),\n    );\n    let observations: Vec<&Value> = quantity.observations().collect();",
+    "replace": "    let mut non_events = exact(stored::get(interpreter, \"non_event_transaction_ids\"))?\n        .as_array()\n        .ok_or(\"TypeError\")?\n        .clone();\n    non_events.extend(\n        Vec::<String>::new()\n            .into_iter()\n            .map(Value::String),\n    );\n    let observations: Vec<&Value> = quantity.observations().collect();",
+    "expect_failing": [
+      "typed_finalized_matches_python_value_adapter"
+    ],
+    "rule": "Typed finalization excludes channel lifecycle rows like the Python-value adapter."
+  },
+  {
+    "id": "typed-finalized-eligible-states",
+    "file": "crates/custody/src/finalized_projection/runtime.rs",
+    "find": "                        \"internal_verified\"\n                            | \"internal_reviewed\"\n                            | \"external_confirmed\"\n                            | \"external_presumed\"",
+    "replace": "                        \"internal_verified\"\n                            | \"internal_reviewed\"\n                            | \"external_confirmed\"",
+    "expect_failing": [
+      "typed_finalized_matches_python_value_adapter"
+    ],
+    "rule": "Typed finalization admits the unblocked eligible states exactly."
   },
   {
     "id": "R4-evidence-alias-slot-index",

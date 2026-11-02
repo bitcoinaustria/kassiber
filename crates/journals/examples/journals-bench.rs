@@ -41,6 +41,7 @@ fn once(request: &str, finalized: bool, oracle: bool) -> Run {
             let oracle = oracle.then(|| {
                 let _span = kassiber_custody::timing::span("oracle.response");
                 kassiber_custody::response(
+                    &computed.snapshot.transactions,
                     &computed.stages,
                     computed.snapshot.transactions.len() >= 256,
                 )

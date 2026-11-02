@@ -29,6 +29,7 @@ pub enum Fusion {
 
 /// One computed journal build.
 pub struct Computed {
+    /// The stage snapshot whose rows the stages index.
     pub snapshot: Snapshot,
     pub stages: Stages,
     pub fusion: Fusion,
@@ -42,8 +43,8 @@ pub fn compute(request: &str, finalized: bool) -> Result<Computed, Refusal> {
 }
 
 pub fn compute_snapshot(snapshot: BookSnapshot, finalized: bool) -> Result<Computed, Refusal> {
-    let stages = kassiber_custody::run(&snapshot, finalized)?;
-    finish(snapshot.stages(), stages)
+    let (rows, stages) = kassiber_custody::run_with_rows(&snapshot, finalized)?;
+    finish(rows, stages)
 }
 
 pub fn compute_loaded(snapshot: Snapshot, finalized: bool) -> Result<Computed, Refusal> {

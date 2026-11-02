@@ -71,7 +71,7 @@ pub fn journal_operands(
     let raw = snapshot;
     let exact = exact_operand;
     let interpretation = exact(&stages.interpretation)?;
-    let quantity = exact(&stages.quantity)?;
+    let quantity = stages.quantity.json_with(true, exact)?;
     let finalized = exact(
         stages
             .finalized_projection

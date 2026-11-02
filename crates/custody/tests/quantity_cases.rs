@@ -244,10 +244,29 @@ fn quantity_runtime_wrapper_vectors() {
             interpretation::admit_channels(&s)?;
             let comp = components::compute(&s).map_err(|e| e.code.to_owned())?;
             let migration = interpretation::migration_quarantines(&s)?;
-            let ev = evidence::compute(&s)?;
+            let ev = evidence::stage(&s)?;
             let i = interpretation::stage(&s, &comp, &ev, migration)?;
             let g = gaps::stage(&s, &comp, &ev, &i)?;
-            quantity::runtime::stage(&s, &comp, &ev, &i, &g)
+            let state = quantity::runtime::stage(&s, &comp, &ev, &i, &g)?;
+            let py = state.py()?;
+            // The typed stage's JSON is the JSON conversion of its Python value.
+            let mut expected = journal_json(&py);
+            assert_eq!(
+                state.json_with(true, journal_json),
+                expected,
+                "{:?}",
+                get(c, "case")
+            );
+            if let Ok(Value::Object(expected)) = &mut expected {
+                expected.remove("canonical_input");
+            }
+            assert_eq!(
+                state.json_with(false, journal_json),
+                expected,
+                "{:?}",
+                get(c, "case")
+            );
+            Ok(py)
         };
         let actual = run();
         if let Py::Str(e) = get(c, "error") {
@@ -266,6 +285,42 @@ fn quantity_runtime_wrapper_vectors() {
             );
         }
     }
+}
+
+/// The journal render input's conversion of a stage's Python value.
+fn journal_json(value: &kassiber_pyjson::Value) -> Result<Value, String> {
+    use kassiber_pyjson::Key;
+    use kassiber_pyjson::Value as Py;
+    Ok(match value {
+        Py::Null => Value::Null,
+        Py::Bool(v) => serde_json::json!(v),
+        Py::Int(v) => serde_json::from_str(&v.to_string()).map_err(|e| e.to_string())?,
+        Py::Float(v) if v.is_infinite() => serde_json::from_str(if v.is_sign_negative() {
+            "-1e999"
+        } else {
+            "1e999"
+        })
+        .unwrap(),
+        Py::Float(v) if v.is_nan() => return Err("NaN".into()),
+        Py::Float(v) => serde_json::json!(v),
+        Py::Decimal(v) => serde_json::json!({"$decimal":v.to_string()}),
+        Py::Bytes(_) => kassiber_custody::codec::to_json(value),
+        Py::Str(v) => serde_json::json!(v.as_str().ok_or("surrogate")?),
+        Py::List(v) => Value::Array(v.iter().map(journal_json).collect::<Result<_, _>>()?),
+        Py::Dict(v) => Value::Object(
+            v.iter()
+                .map(|(key, value)| {
+                    let Key::Str(key) = key else {
+                        return Err("key".to_owned());
+                    };
+                    Ok((
+                        key.as_str().ok_or("surrogate")?.to_owned(),
+                        journal_json(value)?,
+                    ))
+                })
+                .collect::<Result<_, String>>()?,
+        ),
+    })
 }
 
 #[test]

@@ -1,6 +1,9 @@
 //! CPython 3.11 / Unicode 14 isalnum ranges, generated from str.isalnum.
 //! Rust Alphabetic includes combining marks and follows a different Unicode release.
 pub fn isalnum(c: char) -> bool {
+    if c.is_ascii() {
+        return c.is_ascii_alphanumeric();
+    }
     in_ranges(c, ALNUM)
 }
 fn in_ranges(c: char, ranges: &[(u32, u32)]) -> bool {
@@ -21,6 +24,11 @@ pub trait PythonText {
 }
 impl PythonText for str {
     fn py_lower(&self) -> String {
+        // ASCII case mappings are exactly ASCII letters; no ASCII scalar is
+        // final sigma context.
+        if self.is_ascii() {
+            return self.to_ascii_lowercase();
+        }
         let mut result = String::new();
         let mut preceding_cased = false;
         for (at, c) in self.char_indices() {
@@ -44,6 +52,9 @@ impl PythonText for str {
         result
     }
     fn py_upper(&self) -> String {
+        if self.is_ascii() {
+            return self.to_ascii_uppercase();
+        }
         let mut result = String::new();
         for c in self.chars() {
             // Rust 1.99 includes case pairs added after Unicode 14. Keep

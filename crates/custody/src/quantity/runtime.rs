@@ -683,7 +683,7 @@ fn whole_issues_rejected(
 /// names; an unknown name is null, as in a JSON object.
 struct Operands<'a> {
     canonical: &'a Value,
-    rows: &'a Value,
+    rows: RowSource<'a>,
     components: &'a Value,
     evidence: &'a Value,
     claims: &'a Value,
@@ -697,7 +697,7 @@ impl<'a> Operands<'a> {
     fn of(v: &'a Value) -> Self {
         Self {
             canonical: &v["canonical"],
-            rows: &v["rows"],
+            rows: RowSource::Values(array(&v["rows"])),
             components: &v["components"],
             evidence: &v["evidence"],
             claims: &v["claims"],
@@ -715,7 +715,6 @@ impl std::ops::Index<&str> for Operands<'_> {
         static NULL: Value = Value::Null;
         match key {
             "canonical" => self.canonical,
-            "rows" => self.rows,
             "components" => self.components,
             "evidence" => self.evidence,
             "claims" => self.claims,
@@ -731,9 +730,10 @@ impl std::ops::Index<&str> for Operands<'_> {
 /// The computed parts of a `CanonicalQuantityState`.
 struct State<'a> {
     native: super::native::Compilation<'a>,
-    projection: kassiber_pyjson::Value,
+    projection: super::arbitration::ProjectionState,
     issues: Value,
-    tax: kassiber_pyjson::Value,
+    /// `None` when no issue blocks eligibility; see `unblocked_eligibility`.
+    tax: Option<kassiber_pyjson::Value>,
     gaps: Value,
     comp: Value,
 }
@@ -742,6 +742,14 @@ impl State<'_> {
     /// the JSON object holds its keys in sorted order.
     fn py(self) -> Result<kassiber_pyjson::Value, String> {
         use kassiber_pyjson::{Key, Value as Py};
+        let events = &self.native.events;
+        let projection = self
+            .projection
+            .py(|(e, l)| &array(&events[e as usize]["legs"])[l as usize])?;
+        let tax = match self.tax {
+            Some(tax) => tax,
+            None => unblocked_eligibility(&projection),
+        };
         let canonical = Py::Dict(vec![
             (
                 Key::Str("$type".into()),
@@ -776,10 +784,10 @@ impl State<'_> {
             ),
             ("gap_holds", super::into_py(gaps[3].take())?),
             ("issues", super::into_py(self.issues)?),
-            ("projection", self.projection),
+            ("projection", projection),
             ("reviewed_conversion_pairs", super::into_py(comp[2].take())?),
             ("reviewed_direct_payouts", super::into_py(comp[3].take())?),
-            ("tax_eligibility", self.tax),
+            ("tax_eligibility", tax),
         ];
         Ok(Py::Dict(
             parts
@@ -870,8 +878,9 @@ fn compose<'a>(v: &Operands<'a>) -> Result<State<'a>, String> {
     let _span = crate::timing::span("quantity.issues");
     // Rows by id, as the JSON object of copies would hold them.
     let rows = IndexedRows {
-        rows: array(&v["rows"]),
+        rows: v.rows,
         index: std::cell::OnceCell::new(),
+        values: std::cell::OnceCell::new(),
     };
     let issues = whole_issues_rejected(
         native.rejected,
@@ -892,8 +901,15 @@ fn compose<'a>(v: &Operands<'a>) -> Result<State<'a>, String> {
             &rows,
         )?)?)
     };
-    let projection = projection.py()?;
-    let tax = tax.unwrap_or_else(|| unblocked_eligibility(&projection));
+    // Locate each observation by its event slot and leg, so the result
+    // owns no borrow of the events it reads.
+    let mut located = HashMap::new();
+    for (slot, event) in native.events.iter().enumerate() {
+        for (leg, observation) in array(&event["legs"]).iter().enumerate() {
+            located.insert(observation as *const Value, (slot as u32, leg as u32));
+        }
+    }
+    let projection = projection.located(|o| located[&(o as *const Value)]);
     Ok(State {
         native,
         projection,
@@ -907,10 +923,10 @@ fn compose<'a>(v: &Operands<'a>) -> Result<State<'a>, String> {
 pub fn stage(
     snapshot: &crate::snapshot::Snapshot,
     components: &Value,
-    evidence: &Value,
+    evidence: &crate::evidence::Evidence,
     interpretation: &kassiber_pyjson::Value,
     gaps: &Value,
-) -> Result<kassiber_pyjson::Value, String> {
+) -> Result<QuantityState, String> {
     use crate::graph::stored;
     use kassiber_pyjson::Value as Py;
     let (_, ignored) =
@@ -1050,8 +1066,8 @@ pub fn stage(
     let ignored = Value::Array(ignored.into_iter().map(Value::String).collect());
     let dismissed = crate::gaps::dismissed_fingerprints(&reviews);
     let state = compose(&Operands {
-        canonical: &evidence["canonical_input"],
-        rows: &evidence["enriched_rows"],
+        canonical: evidence.canonical(),
+        rows: RowSource::Enriched(evidence.enriched(), &snapshot.transactions),
         components: &components,
         evidence: &snapshots,
         claims: &converted["claims"],
@@ -1061,10 +1077,34 @@ pub fn stage(
         ignored: &ignored,
         dismissed: &dismissed,
     })?;
-    let span = crate::timing::span("quantity.py");
-    let mut value = state.py()?;
+    let span = crate::timing::span("quantity.state");
+    let State {
+        native,
+        projection,
+        issues,
+        tax,
+        mut gaps,
+        mut comp,
+    } = state;
+    let canonical = evidence.canonical_arc();
+    let shared: HashMap<*const Value, usize> = array(&canonical["events"])
+        .iter()
+        .enumerate()
+        .map(|(i, event)| (event as *const Value, i))
+        .collect();
+    let events = native
+        .events
+        .into_iter()
+        .map(|event| match event {
+            std::borrow::Cow::Borrowed(event) => Slot::Shared(shared[&(event as *const Value)]),
+            std::borrow::Cow::Owned(event) => Slot::Owned(event),
+        })
+        .collect();
+    let mut issues = match super::into_py(issues)? {
+        Py::List(issues) => issues,
+        _ => unreachable!("issue list"),
+    };
     drop(span);
-    let mut issues = stored::list(stored::get(&value, "issues")).to_vec();
     for (safe_hash, exact_hash, id, reason, detail) in originals {
         let q = issues
             .iter_mut()
@@ -1089,8 +1129,273 @@ pub fn stage(
         };
         (field("occurred_at"), field("issue_id"))
     });
-    stored::put(&mut value, "issues", Py::List(issues));
-    Ok(value)
+    Ok(QuantityState {
+        canonical,
+        events,
+        projection,
+        gap_candidate_transaction_ids: gaps[2].take(),
+        gap_holds: gaps[3].take(),
+        issues,
+        reviewed_conversion_pairs: comp[2].take(),
+        reviewed_direct_payouts: comp[3].take(),
+        tax,
+    })
+}
+
+/// A JSON object of moved parts; `json!` would copy each part again.
+fn object<const N: usize>(parts: [(&str, Value); N]) -> Value {
+    Value::Object(parts.into_iter().map(|(k, v)| (k.to_owned(), v)).collect())
+}
+
+/// Whether `value` converts to Python and back to exactly itself: no float
+/// and only canonically spelled integers.
+fn plain(value: &Value) -> bool {
+    match value {
+        Value::Null | Value::Bool(_) | Value::String(_) => true,
+        Value::Number(n) => {
+            if n.as_i64().is_some() {
+                return true;
+            }
+            let s = n.to_string();
+            let digits = s.strip_prefix('-').unwrap_or(&s);
+            !digits.is_empty()
+                && digits.bytes().all(|b| b.is_ascii_digit())
+                && !digits.starts_with('0')
+        }
+        Value::Array(items) => items.iter().all(plain),
+        Value::Object(items) => items.values().all(plain),
+    }
+}
+
+/// A quantity event: a canonical event shared with evidence, or one native
+/// augmentation rewrote.
+enum Slot {
+    Shared(usize),
+    Owned(Value),
+}
+
+/// The quantity stage. Observations stay in their canonical events; its
+/// Python value is built only on request.
+pub struct QuantityState {
+    canonical: std::sync::Arc<Value>,
+    events: Vec<Slot>,
+    projection: super::arbitration::ProjectionState,
+    gap_candidate_transaction_ids: Value,
+    gap_holds: Value,
+    issues: Vec<kassiber_pyjson::Value>,
+    reviewed_conversion_pairs: Value,
+    reviewed_direct_payouts: Value,
+    /// `None` when no issue blocks eligibility; see `unblocked_eligibility`.
+    tax: Option<kassiber_pyjson::Value>,
+}
+impl QuantityState {
+    pub(crate) fn event(&self, slot: usize) -> &Value {
+        match &self.events[slot] {
+            Slot::Shared(at) => &array(&self.canonical["events"])[*at],
+            Slot::Owned(event) => event,
+        }
+    }
+    pub(crate) fn events(&self) -> impl Iterator<Item = &Value> {
+        (0..self.events.len()).map(|slot| self.event(slot))
+    }
+    fn located(&self, (event, leg): super::arbitration::Located) -> &Value {
+        &array(&self.event(event as usize)["legs"])[leg as usize]
+    }
+    /// Projection observations, in quantity-hash order.
+    pub(crate) fn observations(&self) -> impl Iterator<Item = &Value> {
+        self.projection
+            .observations
+            .iter()
+            .map(|at| self.located(*at))
+    }
+    /// Arbitrated decisions as their complete JSON objects.
+    pub(crate) fn decisions(&self) -> impl Iterator<Item = &Value> {
+        self.projection.decisions.iter().map(|d| d.value())
+    }
+    pub(crate) fn issues(&self) -> &[kassiber_pyjson::Value] {
+        &self.issues
+    }
+    pub(crate) fn reviewed_conversion_pairs(&self) -> &Value {
+        &self.reviewed_conversion_pairs
+    }
+    pub(crate) fn reviewed_direct_payouts(&self) -> &Value {
+        &self.reviewed_direct_payouts
+    }
+    /// The blocked tax eligibility, or `None` when every decision in an
+    /// eligible state is eligible.
+    pub(crate) fn blocked_eligibility(&self) -> Option<&kassiber_pyjson::Value> {
+        self.tax.as_ref()
+    }
+    /// `convert(&self.py()?)` for a converter that maps every Python value to
+    /// its JSON equivalent: plain JSON parts are cloned, every other part is
+    /// converted, in the order `convert` would traverse the whole value.
+    /// Without `canonical`, the canonical input, which no journal reads and
+    /// whose conversion cannot fail, is left out.
+    pub fn json_with<E: From<String>>(
+        &self,
+        canonical: bool,
+        convert: impl Fn(&kassiber_pyjson::Value) -> Result<Value, E>,
+    ) -> Result<Value, E> {
+        let exact = |v: &Value| -> Result<Value, E> {
+            if plain(v) {
+                Ok(v.clone())
+            } else {
+                convert(&super::borrowed_py(v)?)
+            }
+        };
+        let canonical = if canonical {
+            let events = self.events().map(exact).collect::<Result<Vec<_>, E>>()?;
+            Some(object([
+                ("$type", json!("CanonicalQuantityInput")),
+                ("events", Value::Array(events)),
+                (
+                    "rejected_events",
+                    exact(&self.canonical["rejected_events"])?,
+                ),
+            ]))
+        } else {
+            None
+        };
+        let gap_candidates = exact(&self.gap_candidate_transaction_ids)?;
+        let gap_holds = exact(&self.gap_holds)?;
+        let issues = self
+            .issues
+            .iter()
+            .map(&convert)
+            .collect::<Result<Vec<_>, E>>()?;
+        let errors = exact(&Value::Array(self.projection.errors.clone()))?;
+        let decisions = self
+            .projection
+            .decisions
+            .iter()
+            .map(|d| exact(d.value()))
+            .collect::<Result<Vec<_>, E>>()?;
+        let tax = match &self.tax {
+            Some(_) => None,
+            None => {
+                let mut eligible = Vec::new();
+                let mut ineligible = Vec::new();
+                for d in &decisions {
+                    if matches!(
+                        d["state"].as_str(),
+                        Some(
+                            "internal_verified"
+                                | "internal_reviewed"
+                                | "external_confirmed"
+                                | "external_presumed"
+                        )
+                    ) {
+                        eligible.push(d.clone());
+                    } else {
+                        ineligible.push(d["source"].clone());
+                    }
+                }
+                Some(object([
+                    ("$type", json!("QuantityTaxEligibility")),
+                    ("barrier_event_key", Value::Null),
+                    ("blocked_from", Value::Null),
+                    ("eligible_decisions", Value::Array(eligible)),
+                    ("ineligible_slices", Value::Array(ineligible)),
+                    ("pool_barrier_roots", json!([])),
+                    ("pool_barriers", json!([])),
+                ]))
+            }
+        };
+        let observations = self
+            .observations()
+            .map(exact)
+            .collect::<Result<Vec<_>, E>>()?;
+        let postings = self
+            .projection
+            .postings_json(|at| self.located(at), &exact)?;
+        let projection = object([
+            ("$type", json!("QuantityProjection")),
+            ("claim_errors", errors),
+            ("decisions", Value::Array(decisions)),
+            ("observations", Value::Array(observations)),
+            ("postings", Value::Array(postings)),
+        ]);
+        let pairs = exact(&self.reviewed_conversion_pairs)?;
+        let payouts = exact(&self.reviewed_direct_payouts)?;
+        let tax = match (&self.tax, tax) {
+            (Some(tax), _) => convert(tax)?,
+            (None, tax) => tax.expect("unblocked eligibility"),
+        };
+        let mut state = object([("$type", json!("CanonicalQuantityState"))]);
+        if let Some(canonical) = canonical {
+            state["canonical_input"] = canonical;
+        }
+        let Value::Object(state) = &mut state else {
+            unreachable!("object")
+        };
+        state.extend(
+            [
+                ("gap_candidate_transaction_ids", gap_candidates),
+                ("gap_holds", gap_holds),
+                ("issues", Value::Array(issues)),
+                ("projection", projection),
+                ("reviewed_conversion_pairs", pairs),
+                ("reviewed_direct_payouts", payouts),
+                ("tax_eligibility", tax),
+            ]
+            .map(|(k, v)| (k.to_owned(), v)),
+        );
+        Ok(Value::Object(std::mem::take(state)))
+    }
+
+    /// The stage's Python value, as Python's composition returns it.
+    pub fn py(&self) -> Result<kassiber_pyjson::Value, String> {
+        use kassiber_pyjson::{Key, Value as Py};
+        let projection = self.projection.py(|at| self.located(at))?;
+        let tax = match &self.tax {
+            Some(tax) => tax.clone(),
+            None => unblocked_eligibility(&projection),
+        };
+        let canonical = Py::Dict(vec![
+            (
+                Key::Str("$type".into()),
+                Py::Str("CanonicalQuantityInput".into()),
+            ),
+            (
+                Key::Str("events".into()),
+                Py::List(
+                    self.events()
+                        .map(super::borrowed_py)
+                        .collect::<Result<_, _>>()?,
+                ),
+            ),
+            (
+                Key::Str("rejected_events".into()),
+                super::borrowed_py(&self.canonical["rejected_events"])?,
+            ),
+        ]);
+        let parts = [
+            ("$type", Py::Str("CanonicalQuantityState".into())),
+            ("canonical_input", canonical),
+            (
+                "gap_candidate_transaction_ids",
+                super::borrowed_py(&self.gap_candidate_transaction_ids)?,
+            ),
+            ("gap_holds", super::borrowed_py(&self.gap_holds)?),
+            ("issues", Py::List(self.issues.clone())),
+            ("projection", projection),
+            (
+                "reviewed_conversion_pairs",
+                super::borrowed_py(&self.reviewed_conversion_pairs)?,
+            ),
+            (
+                "reviewed_direct_payouts",
+                super::borrowed_py(&self.reviewed_direct_payouts)?,
+            ),
+            ("tax_eligibility", tax),
+        ];
+        Ok(Py::Dict(
+            parts
+                .into_iter()
+                .map(|(key, value)| (Key::Str(key.into()), value))
+                .collect(),
+        ))
+    }
 }
 
 fn unblocked_eligibility(projection: &kassiber_pyjson::Value) -> kassiber_pyjson::Value {
@@ -1118,28 +1423,86 @@ fn unblocked_eligibility(projection: &kassiber_pyjson::Value) -> kassiber_pyjson
     ])
 }
 
+/// Enriched rows, as JSON values or as typed evidence over snapshot rows.
+#[derive(Clone, Copy)]
+enum RowSource<'a> {
+    Values(&'a [Value]),
+    Enriched(
+        &'a [crate::evidence::Enriched],
+        &'a [crate::snapshot::Record],
+    ),
+}
+
 struct IndexedRows<'a> {
-    rows: &'a [Value],
-    index: std::cell::OnceCell<BTreeMap<String, &'a Value>>,
+    rows: RowSource<'a>,
+    index: std::cell::OnceCell<BTreeMap<String, usize>>,
+    /// Typed rows' JSON objects, built when an issue reads them.
+    values: std::cell::OnceCell<Vec<std::cell::OnceCell<Value>>>,
 }
 impl Rows for IndexedRows<'_> {
     fn get(&self, id: String) -> Option<&Value> {
-        self.index
-            .get_or_init(|| {
-                self.rows
+        use crate::fields::Fields;
+        let index = self.index.get_or_init(|| {
+            let mut index = BTreeMap::new();
+            let mut add = |at: usize, id: &Value| {
+                if !id.is_null() && id != "" {
+                    index.insert(text(id), at);
+                }
+            };
+            match self.rows {
+                RowSource::Values(rows) => {
+                    rows.iter().enumerate().for_each(|(i, r)| add(i, &r["id"]))
+                }
+                RowSource::Enriched(rows, records) => rows
                     .iter()
-                    .filter(|r| !r["id"].is_null() && r["id"] != "")
-                    .map(|r| (text(&r["id"]), r))
+                    .enumerate()
+                    .for_each(|(i, r)| add(i, r.view(records).at("id"))),
+            }
+            index
+        });
+        let at = *index.get(&id)?;
+        Some(match self.rows {
+            RowSource::Values(rows) => &rows[at],
+            RowSource::Enriched(rows, records) => self.values.get_or_init(|| {
+                (0..rows.len())
+                    .map(|_| std::cell::OnceCell::new())
                     .collect()
-            })
-            .get(&id)
-            .copied()
+            })[at]
+                .get_or_init(|| rows[at].view(records).value()),
+        })
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn quantity_plain_json_is_exact() {
+        for text in [
+            "0",
+            "-0",
+            "1",
+            "-12",
+            "1.5",
+            "1e5",
+            "100000.0",
+            "18446744073709551616",
+            "-18446744073709551617",
+            "[1,{\"a\":-0}]",
+            "{\"a\":[null,true,\"x\"]}",
+        ] {
+            let value: Value = serde_json::from_str(text).unwrap();
+            let converted = codec::to_json(&super::super::borrowed_py(&value).unwrap());
+            // Plain values are cloned, so they must convert to themselves.
+            if plain(&value) {
+                assert_eq!(converted.to_string(), value.to_string(), "{text}");
+            }
+        }
+        for text in ["1e5", "1.5", "-0.0", "[1,{\"a\":1e5}]"] {
+            assert!(!plain(&serde_json::from_str(text).unwrap()), "{text}");
+        }
+    }
 
     #[test]
     fn quantity_unused_alias_validation() {

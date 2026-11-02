@@ -447,13 +447,17 @@ fn render_inputs(
     stages: &Stages,
     wallets: &[Value],
 ) -> Result<RenderContext, Refusal> {
-    let quantity = stage_value(&stages.quantity)?;
+    let span = kassiber_custody::timing::span("render.quantity");
+    let quantity = stages.quantity.json_with(false, stage_value)?;
+    drop(span);
     let projection = stages
         .finalized_projection
         .as_ref()
         .ok_or_else(|| Refusal::new("RuntimeError", "journal processing requires finalization"))?;
+    let span = kassiber_custody::timing::span("render.context");
     let (roles, ignored, accounting) =
         kassiber_custody::interpretation::journal_context(snapshot, stages)?;
+    drop(span);
     let refs = Value::Object(
         wallets
             .iter()

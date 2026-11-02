@@ -722,6 +722,9 @@ pub fn truth(v: &Value) -> bool {
     match v {
         Value::Null => false,
         Value::Bool(b) => *b,
+        // Plain integers are zero exactly when their value is.
+        Value::Number(n) if n.as_i64().is_some() => n.as_i64() != Some(0),
+        Value::Number(n) if n.as_u64().is_some() => true,
         Value::Number(n) => n
             .to_string()
             .parse::<f64>()

@@ -3,6 +3,7 @@ pub mod codec;
 pub mod components;
 pub mod confirmation;
 pub mod evidence;
+mod fields;
 pub mod finalized_projection;
 pub mod gaps;
 mod gates;
@@ -88,10 +89,10 @@ impl Refusal {
 /// Every computed stage of one custody operation, in its stage model.
 pub struct Stages {
     pub components: serde_json::Value,
-    pub evidence: serde_json::Value,
+    pub evidence: evidence::Evidence,
     pub interpretation: kassiber_pyjson::Value,
     pub gaps: serde_json::Value,
-    pub quantity: kassiber_pyjson::Value,
+    pub quantity: quantity::runtime::QuantityState,
     /// `None` for a decision-only operation, which skips finalization.
     pub finalized_projection: Option<kassiber_pyjson::Value>,
 }
@@ -108,18 +109,18 @@ pub fn custody_with_finalized(request: &str, finalized: bool) -> String {
         Ok(snapshot) => snapshot,
         Err(refusal) => return refusal.document(),
     };
-    let stages = match run(&snapshot, finalized) {
-        Ok(stages) => stages,
+    let (rows, stages) = match run_with_rows(&snapshot, finalized) {
+        Ok(result) => result,
         Err(refusal) => return refusal.document(),
     };
     let _span = timing::span("response");
     let large = snapshot.transactions.len() >= 256;
-    let text = response(&stages, large);
+    let text = response(&rows.transactions, &stages, large);
     // Freeing a large book's values takes a noticeable share of the
     // operation and changes no output; release them off the caller's path
     // when a thread is available.
     if large {
-        let values = (snapshot, stages);
+        let values = (snapshot, rows, stages);
         let _ = std::thread::Builder::new().spawn(move || drop(values));
     }
     text
@@ -152,6 +153,14 @@ pub fn receipt_source_error_precedence(snapshot: &snapshot::Snapshot) -> Result<
 /// Admission and every stage, in Python's order. The first refusal ends the
 /// operation; decision-only operations skip finalization.
 pub fn run(snapshot: &snapshot::BookSnapshot, finalized: bool) -> Result<Stages, Refusal> {
+    run_with_rows(snapshot, finalized).map(|(_, stages)| stages)
+}
+
+/// `run`, also returning the stage snapshot whose rows the stages index.
+pub fn run_with_rows(
+    snapshot: &snapshot::BookSnapshot,
+    finalized: bool,
+) -> Result<(snapshot::Snapshot, Stages), Refusal> {
     struct Memos;
     impl Drop for Memos {
         fn drop(&mut self) {
@@ -180,9 +189,9 @@ pub fn run(snapshot: &snapshot::BookSnapshot, finalized: bool) -> Result<Stages,
     drop(admission);
     let boundary = timing::span("boundary");
     let snapshot = snapshot.stages();
-    let snapshot = &snapshot;
     drop(boundary);
-    run_admitted(snapshot, finalized, projection_rows)
+    let stages = run_admitted(&snapshot, finalized, projection_rows)?;
+    Ok((snapshot, stages))
 }
 
 /// Native loader admission preserves legacy scalars until their consumer.
@@ -228,7 +237,7 @@ fn run_admitted(
         .map_err(|code| Refusal::code("components", code))?;
     drop(span);
     let span = timing::span("evidence");
-    let evidence = evidence::compute(snapshot)
+    let evidence = evidence::stage(snapshot)
         .map_err(|error| Refusal::new("evidence", error.code, error.message))?;
     drop(span);
     let span = timing::span("interpretation");
@@ -247,7 +256,7 @@ fn run_admitted(
     let span = timing::span("finalized_projection");
     let finalized_projection = if finalized {
         Some(
-            finalized_projection::runtime::stage_with_confirmations(
+            finalized_projection::runtime::stage_from_state(
                 snapshot,
                 projection_rows,
                 &quantity,
@@ -271,15 +280,17 @@ fn run_admitted(
 
 /// The successful response document. `concurrent` encodes the stages on
 /// separate threads, which large books use.
-pub fn response(stages: &Stages, concurrent: bool) -> String {
+pub fn response(rows: &[snapshot::Record], stages: &Stages, concurrent: bool) -> String {
     let projection = stages.finalized_projection.as_ref();
+    let evidence = stages.evidence.value(rows);
+    let quantity = stages.quantity.py().expect("computed quantity stage");
     if let Some(text) = response_text(
         concurrent,
         &stages.components,
-        &stages.evidence,
+        &evidence,
         &stages.gaps,
         &stages.interpretation,
-        &stages.quantity,
+        &quantity,
         projection,
     ) {
         return text;
@@ -287,7 +298,7 @@ pub fn response(stages: &Stages, concurrent: bool) -> String {
     let response = serde_json::json!({
         "schema_version":1,
         "engine_version":ENGINE_VERSION,
-        "stages":{"components":stages.components,"evidence":stages.evidence,"gaps":stages.gaps},
+        "stages":{"components":stages.components,"evidence":evidence,"gaps":stages.gaps},
         "skipped_stages":if projection.is_some() { vec!["fusion"] } else { vec!["finalized_projection", "fusion"] }
     });
     let mut response = codec::from_json(&response).expect("computed custody response");
@@ -297,7 +308,7 @@ pub fn response(stages: &Stages, concurrent: bool) -> String {
         "interpretation",
         stages.interpretation.clone(),
     );
-    graph::stored::put(&mut stages_value, "quantity", stages.quantity.clone());
+    graph::stored::put(&mut stages_value, "quantity", quantity);
     if let Some(projection) = projection {
         graph::stored::put(
             &mut stages_value,
