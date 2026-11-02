@@ -157,7 +157,13 @@ function AustrianRow({
   const empty =
     row.transactionCount === 0 && Math.abs(row.amount ?? 0) < 0.005;
   return (
-    <TableRow className={cn((empty || !reported) && "text-muted-foreground")}>
+    <TableRow
+      className={cn(
+        row.attention && !empty
+          ? "text-amber-700 dark:text-amber-400"
+          : (empty || !reported) && "text-muted-foreground",
+      )}
+    >
       <TableCell className="pl-3 font-medium tabular-nums whitespace-nowrap sm:pl-4">
         {row.code ?? ""}
       </TableCell>

@@ -70,6 +70,8 @@ function listWithOr(items: readonly string[]) {
 export function ReportFilesPanel({
   year,
   region,
+  e1kv = true,
+  rowsBeforeFields = 0,
   activeExport,
   successfulExport,
   exportStatus,
@@ -90,6 +92,10 @@ export function ReportFilesPanel({
 }: {
   year: number;
   region: ReportRegion;
+  /** `false` for an Austrian year before 2022, which has no crypto Kennzahlen. */
+  e1kv?: boolean;
+  /** Rows dated before 1 March 2022 in a 2022 book; the core refuses its E 1kv. */
+  rowsBeforeFields?: number;
   activeExport: ReportExportFormatId | null;
   successfulExport: ReportExportFormatId | null;
   exportStatus: ReportExportStatus | null;
@@ -113,6 +119,7 @@ export function ReportFilesPanel({
     null,
   );
   const busy = activeExport !== null;
+  const e1kvRefused = region === "AT" && (!e1kv || rowsBeforeFields > 0);
   const showWalletPicker = wallets.length > 1;
   const selectedWallets = showWalletPicker
     ? selectedWalletIds.length
@@ -167,14 +174,20 @@ export function ReportFilesPanel({
         <FileRow
           title="Tax report"
           detail={
-            region === "AT"
-              ? `E 1kv ${year} with every row`
-              : "Every year in the book"
+            region !== "AT"
+              ? "Every year in the book"
+              : !e1kv
+                ? "No crypto Kennzahlen before 2022 · the bookkeeping handoff lists every row"
+                : rowsBeforeFields > 0
+                  ? `No E 1kv ${year}: rows before 1 March · the bookkeeping handoff lists every row`
+                  : `E 1kv ${year} with every row`
           }
           formats={[
-            format("pdf", "PDF", "Tax report"),
-            format("xlsx", "XLSX", "Tax report"),
-            format("csv", "CSV", "Tax report"),
+            // The core refuses an E 1kv for a year without crypto Kennzahlen
+            // or with rows dated before them.
+            format("pdf", "PDF", "Tax report", e1kvRefused),
+            format("xlsx", "XLSX", "Tax report", e1kvRefused),
+            format("csv", "CSV", "Tax report", e1kvRefused),
           ]}
         />
         <FileRow

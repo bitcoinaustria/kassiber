@@ -5140,6 +5140,12 @@ class ReviewRegressionTest(unittest.TestCase):
             e1kv["sections"]["1.1"]["totals"]["gain_loss_eur_cents"],
             -68_141,
         )
+        # No E 1kv before 2022: the report refuses rather than state fields
+        # that did not exist that year.
+        with self.assertRaises(AppError) as raised:
+            report_austrian_e1kv(conn, "ws-neutral-swap", "pf-neutral-swap", hooks, tax_year=2021)
+        self.assertEqual(raised.exception.code, "validation")
+        self.assertEqual(raised.exception.details["first_tax_year"], 2022)
 
     def _bootstrap_runtime_state(self, *, env_file=None, persist_bootstrap=False):
         args = Namespace(

@@ -116,18 +116,35 @@ export const AUSTRIAN_FIELD_COPY: Record<
   },
 };
 
+/** First tax year with the crypto Kennzahlen; the core decides, this names it. */
+export const E1KV_FIRST_TAX_YEAR = 2022;
+
+/** Whether the report's year has the crypto Kennzahlen (Austrian books only). */
+export function reportE1kvApplies(report: CapitalGainsReport): boolean {
+  return reportRegion(report.jurisdictionCode) === "AT" && report.e1kvApplies !== false;
+}
+
+/** Rows the report states in no field, which need a look before filing. */
+export function reportUnassignedRows(report: CapitalGainsReport): number {
+  return report.breakdown?.find((bucket) => bucket.key === "unassigned")?.rowCount ?? 0;
+}
+
 /** The book's filing fields, or the Austrian ones awaiting figures. */
 export function reportTaxFieldRows(report: CapitalGainsReport): KennzahlRow[] {
   if (report.kennzahlRows?.length) return report.kennzahlRows;
   if (reportRegion(report.jurisdictionCode) !== "AT") return [];
-  return Object.entries(AUSTRIAN_FIELD_COPY).map(([code, copy]) => ({
-    code,
-    label: copy.label,
-    form: copy.form,
-    amount: null,
-    rowCount: 0,
-    source: "pending",
-  }));
+  const e1kv = reportE1kvApplies(report);
+  return Object.entries(AUSTRIAN_FIELD_COPY)
+    // Before 2022 only the E 1's KZ 801 is a crypto-related field.
+    .filter(([, copy]) => e1kv || copy.form !== "E 1kv")
+    .map(([code, copy]) => ({
+      code,
+      label: copy.label,
+      form: copy.form,
+      amount: null,
+      rowCount: 0,
+      source: "pending",
+    }));
 }
 
 /**
@@ -153,6 +170,8 @@ export interface ReportBreakdownRow {
   exact: boolean;
   /** The field's amount, the gain, or `null` where none applies. */
   amount: number | null;
+  /** Off the return but possibly taxable, so shown as needing a look. */
+  attention?: boolean;
   proceeds: number;
   cost: number;
   income: number;
@@ -197,7 +216,7 @@ const AUSTRIAN_EXTRA_ROWS: Array<{ key: string; label: string; note: string }> =
   {
     key: "unassigned",
     label: "Without a field",
-    note: "Rows the tax engine did not assign to a field",
+    note: "Rows in no field: those before 1 March 2022, which followed the old rules, and any the tax engine could not assign. Check them before filing: they may be taxable.",
   },
 ];
 
@@ -269,6 +288,8 @@ export function reportBreakdown(report: CapitalGainsReport): ReportBreakdownGrou
         // that stays off the return.
         amount: key === "swaps" ? null : bucket.gainLossEur,
         ...amounts(bucket),
+        // Unlike the other rows here, these may belong on the return.
+        attention: key === "unassigned",
       },
     ];
   });

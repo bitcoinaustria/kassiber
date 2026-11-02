@@ -61,6 +61,17 @@ export interface CapitalGainsReport {
   };
   breakdown?: ReportBreakdownBucket[];
   kennzahlRows?: KennzahlRow[];
+  /**
+   * `false` for an Austrian year before 2022, which has no crypto Kennzahlen
+   * (KZ 172, 174, 176): none of them and no estimate. Missing from an older
+   * daemon means they apply.
+   */
+  e1kvApplies?: boolean;
+  /**
+   * Rows classified for a crypto Kennzahl but dated before 1 March 2022 (a
+   * 2022 book's January and February): the E 1kv export refuses the year.
+   */
+  rowsBeforeCryptoKennzahlen?: number;
   /** The core's indicative Austrian tax (EUR books only), blockers ignored. */
   indicativeTax?: {
     estimatedTaxEurCents: number | null;

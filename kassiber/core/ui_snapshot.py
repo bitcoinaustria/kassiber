@@ -6080,7 +6080,18 @@ def _austrian_kennzahl_snapshot_rows(
     ]
 
 
+def _austrian_old_rule_rows(
+    conn: sqlite3.Connection,
+    profile: sqlite3.Row,
+    tax_year: int,
+) -> int:
+    """Book-wide rows of the year dated before the crypto Kennzahlen."""
+
+    return report_builders.austrian_rows_before_crypto_kennzahlen(conn, profile, tax_year)
+
+
 def _capital_gains_indicative_tax(
+    conn: sqlite3.Connection,
     profile: sqlite3.Row,
     tax_year: int,
     kennzahl_rows: list[dict[str, Any]],
@@ -6103,7 +6114,12 @@ def _capital_gains_indicative_tax(
             {"kennzahl": row["code"], "amount_eur_cents": row["amountEurCents"]}
             for row in kennzahl_rows
         ],
+        # Book-wide like the Kennzahl rows: January-February 2022 rows withhold it.
+        rows_before_crypto_kennzahlen=_austrian_old_rule_rows(conn, profile, tax_year),
     )
+    if estimate["status"] == "not_applicable":
+        # Before the E 1kv there is no 27.5 % figure to show.
+        return None
     return {
         "estimatedTaxEurCents": estimate["estimated_tax_eur_cents"],
         "rate": estimate["rate"],
@@ -6256,14 +6272,17 @@ def _capital_gains_breakdown(
     tax-neutral swaps beside them; generic rows by holding period and income.
     Each group names its transactions while they fit an exact link.
     """
-    from .austrian import kennzahl_for_disposal_category
+    from .austrian import kennzahl_for_event
 
     def bucket_key(row: sqlite3.Row) -> str:
         if use_vienna_year:
             category = row["at_category"] or ""
             if category == "alt_taxfree":
                 return "tax_free"
-            kennzahl = kennzahl_for_disposal_category(category) if category else None
+            # A crypto Kennzahl before 1 March 2022 is no field: unassigned.
+            kennzahl = (
+                kennzahl_for_event(category, str(row["occurred_at"])) if category else None
+            )
             return str(kennzahl) if kennzahl else "unassigned"
         if row["entry_type"] == "income":
             return "income"
@@ -6480,7 +6499,7 @@ def build_capital_gains_snapshot(
         rows, neutral_swaps, use_vienna_year=use_vienna_year
     )
     rows = rows[:200]
-    from .austrian import kennzahl_for_disposal_category
+    from .austrian import e1kv_applies, kennzahl_for_event
     from .report_explanation import result_reference
     lots = [
         {
@@ -6510,7 +6529,7 @@ def build_capital_gains_snapshot(
             "gainLossEur": float(row["gain_loss"] or 0),
             "atCategory": row["at_category"] or None,
             "kennzahl": (
-                kennzahl_for_disposal_category(row["at_category"])
+                kennzahl_for_event(row["at_category"], str(row["occurred_at"]))
                 if use_vienna_year and row["at_category"]
                 else None
             ),
@@ -6535,8 +6554,18 @@ def build_capital_gains_snapshot(
         "breakdown": breakdown,
         "neutralSwapLots": neutral_swaps,
         "kennzahlRows": kennzahl_rows,
+        # An Austrian year before the crypto Kennzahlen: none, no estimate.
+        "e1kvApplies": bool(use_vienna_year and e1kv_applies(latest_year)),
         "indicativeTax": _capital_gains_indicative_tax(
-            profile, latest_year, kennzahl_rows
+            conn, profile, latest_year, kennzahl_rows
+        ),
+        # Rows the E 1kv export refuses: classified for a crypto Kennzahl but
+        # dated before 1 March 2022.
+        "rowsBeforeCryptoKennzahlen": (
+            _austrian_old_rule_rows(conn, profile, latest_year)
+            if use_vienna_year and str(profile["fiat_currency"] or "").upper() == "EUR"
+            and e1kv_applies(latest_year)
+            else 0
         ),
         "status": {
             "needsJournals": needs_journals,

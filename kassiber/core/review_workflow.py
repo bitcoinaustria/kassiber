@@ -529,6 +529,9 @@ def _tax_effects(conn, profile, state) -> dict[str, Any]:
                 rows = reports.build_austrian_kennzahl_summary(conn, stored, year)
                 estimate = tax_estimate.austrian_indicative_tax(
                     tax_year=year, kennzahl_rows=rows, blocker_ids=blocker_ids,
+                    rows_before_crypto_kennzahlen=reports.austrian_rows_before_crypto_kennzahlen(
+                        conn, stored, year,
+                    ),
                 )
                 item["kennzahlen"] = {str(row["kennzahl"]): int(row["amount_eur_cents"])
                                       for row in rows if int(row["amount_eur_cents"] or 0)}

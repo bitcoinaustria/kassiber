@@ -21,6 +21,7 @@ export function ReportRules({
   method,
   longTermDays,
   taxRate,
+  e1kv = true,
 }: {
   region: ReportRegion;
   method: string;
@@ -28,6 +29,8 @@ export function ReportRules({
   longTermDays: number | null;
   /** The core's rate for the indicative tax, when it gives one. */
   taxRate?: string;
+  /** `false` for an Austrian year before the crypto Kennzahlen. */
+  e1kv?: boolean;
 }) {
   const rate = formatTaxRate(taxRate);
   const facts: Array<[string, string]> =
@@ -36,7 +39,12 @@ export function ReportRules({
           ["Region", "Austria"],
           ["Method", methodLabel(method)],
           // The rate is the core's; without one (a non-EUR book) none is shown.
-          ["Tax", `E 1kv${rate ? ` ${rate}` : ""} · KZ 801 income-tax rate`],
+          [
+            "Tax",
+            e1kv
+              ? `E 1kv${rate ? ` ${rate}` : ""} · KZ 801 income-tax rate`
+              : "KZ 801 income-tax rate · no crypto Kennzahlen before 2022",
+          ],
           ["Altbestand", "Bought before 1 Mar 2021 · tax-free after a year"],
           ["Tax year", "Calendar year, Vienna time"],
         ]

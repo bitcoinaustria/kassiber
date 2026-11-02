@@ -131,6 +131,12 @@ describe("reportTaxFieldRows", () => {
     ).toEqual(["172", "174", "176", "801"]);
     expect(reportTaxFieldRows(report())).toEqual([]);
   });
+
+  it("awaits only the E 1's field for a year before the E 1kv", () => {
+    expect(
+      reportTaxFieldRows(report({ jurisdictionCode: "AT", e1kvApplies: false })).map((row) => row.code),
+    ).toEqual(["801"]);
+  });
 });
 
 describe("transactionsHref", () => {

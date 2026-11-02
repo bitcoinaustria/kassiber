@@ -28,10 +28,13 @@ import { ReportRules } from "@/components/reports/ReportRules";
 import {
   formatReportPeriod,
   formatTaxRate,
+  E1KV_FIRST_TAX_YEAR,
   reportBreakdown,
+  reportE1kvApplies,
   reportRegion,
   reportTaxEstimate,
   reportTotals,
+  reportUnassignedRows,
   signedFiat,
   type AuditPackageOptions,
   type ReportExportFormatId,
@@ -358,6 +361,11 @@ function ReportsView({
   const totals = reportTotals(report);
   const taxEstimate = reportTaxEstimate(report);
   const breakdown = reportBreakdown(report);
+  // While another year loads, the report still describes the previous one.
+  const e1kv =
+    report.year === effectiveYear
+      ? reportE1kvApplies(report)
+      : effectiveYear >= E1KV_FIRST_TAX_YEAR;
   const readiness = buildReportReadiness(
     report,
     totals.rowCount,
@@ -604,12 +612,17 @@ function ReportsView({
             method={report.method}
             longTermDays={report.longTermDays ?? null}
             taxRate={report.indicativeTax?.rate}
+            e1kv={e1kv}
           />
         </div>
         <div className="min-w-0">
           <ReportFilesPanel
             year={effectiveYear}
             region={region}
+            e1kv={e1kv}
+            rowsBeforeFields={
+              report.year === effectiveYear ? (report.rowsBeforeCryptoKennzahlen ?? 0) : 0
+            }
             activeExport={activeExport}
             successfulExport={
               successfulExport?.year === effectiveYear
@@ -890,6 +903,8 @@ function reportFiguresProvisional(
   return (
     Boolean(report.status?.needsJournals) ||
     (report.status?.quarantines ?? 0) > 0 ||
+    // Rows in no field may still belong on the return.
+    reportUnassignedRows(report) > 0 ||
     // Unknown completeness (older daemon, failed read) is never final; a
     // read still loading is not unknown yet.
     (!completenessPending && !completeness?.costBasisComplete)
@@ -970,6 +985,41 @@ function buildReportReadiness(
       tone: "warning",
       icon: AlertTriangle,
       action: { label: "Open ledger", href: "/journals" },
+    };
+  }
+
+  const austrian = reportRegion(report.jurisdictionCode) === "AT";
+  const unassigned = reportUnassignedRows(report);
+  if (austrian && !reportE1kvApplies(report)) {
+    return {
+      title: `No crypto fields before ${E1KV_FIRST_TAX_YEAR}`,
+      // The notice shows only the detail, so it names the rule itself.
+      detail: `Austria's crypto Kennzahlen (KZ 172, 174, 176) start on 1 March ${E1KV_FIRST_TAX_YEAR}, so ${year} states only KZ 801 and no 27.5 % estimate.${
+        unassigned > 0
+          ? ` ${formatCount(unassigned)} row${unassigned === 1 ? " has" : "s have"} no field that year; have a Steuerberater state ${unassigned === 1 ? "it" : "them"}.`
+          : ""
+      }`,
+      tone: "warning",
+      icon: AlertTriangle,
+    };
+  }
+
+  const beforeFields = report.rowsBeforeCryptoKennzahlen ?? 0;
+  if (austrian && beforeFields > 0) {
+    return {
+      title: "Rows before 1 March 2022",
+      detail: `${formatCount(beforeFields)} row${beforeFields === 1 ? "" : "s"} from January or February ${year} followed the old rules unless you opted for the new ones. ${beforeFields === 1 ? "It has" : "They have"} no field, so there is no E 1kv or estimate for ${year}; have a Steuerberater state ${beforeFields === 1 ? "it" : "them"}.`,
+      tone: "warning",
+      icon: AlertTriangle,
+    };
+  }
+
+  if (unassigned > 0) {
+    return {
+      title: "Rows without a field",
+      detail: `${formatCount(unassigned)} row${unassigned === 1 ? " is" : "s are"} in no field of the return; check ${unassigned === 1 ? "it" : "them"} before filing.`,
+      tone: "warning",
+      icon: AlertTriangle,
     };
   }
 

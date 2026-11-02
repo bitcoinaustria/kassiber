@@ -190,6 +190,69 @@ describe("Reports", () => {
     expect(html).not.toContain("27.5 %");
   });
 
+  it("states no crypto Kennzahlen and no estimate for a year before 2022", () => {
+    state.report = {
+      jurisdictionCode: "AT",
+      fiatCurrency: "EUR",
+      year: 2021,
+      method: "moving_average_at",
+      totals,
+      e1kvApplies: false,
+      breakdown: [
+        { ...breakdown[0], key: "801", rowCount: 1 },
+        { ...breakdown[0], key: "unassigned", rowCount: 2, transactionIds: ["tx-neu"] },
+      ],
+      kennzahlRows: [{ code: "801", label: "", form: "E 1", amount: 20, rowCount: 1 }],
+      indicativeTax: null,
+    };
+    const html = render();
+
+    expect(html).toContain("crypto Kennzahlen (KZ 172, 174, 176) start on 1 March 2022, so 2021 states only KZ 801");
+    expect(html).toContain("2 rows have no field that year");
+    expect(html).not.toContain("KZ 174");
+    expect(html).not.toContain("Indicative tax");
+    expect(html).toContain("KZ 801 income-tax rate · no crypto Kennzahlen before 2022");
+    expect(html).toContain("No crypto Kennzahlen before 2022 · the bookkeeping handoff lists every row");
+    expect(html).not.toContain("E 1kv 2021 with every row");
+    // The rows in no field may still be taxable.
+    expect(html).toContain("text-amber-700");
+    expect(html).toContain(">Provisional<");
+  });
+
+  it("says up front that a 2022 with rows before March gets no E 1kv", () => {
+    state.report = {
+      jurisdictionCode: "AT",
+      fiatCurrency: "EUR",
+      year: 2022,
+      method: "moving_average_at",
+      totals,
+      rowsBeforeCryptoKennzahlen: 2,
+      breakdown: [{ ...breakdown[0], key: "unassigned", rowCount: 2 }],
+      indicativeTax: null,
+    };
+    const html = render();
+
+    expect(html).toContain("2 rows from January or February 2022 followed the old rules");
+    expect(html).toContain("No E 1kv 2022: rows before 1 March");
+    expect(html).not.toContain("E 1kv 2022 with every row");
+  });
+
+  it("asks for a look at rows in no field before filing", () => {
+    state.report = {
+      jurisdictionCode: "AT",
+      fiatCurrency: "EUR",
+      year: 2025,
+      method: "moving_average_at",
+      totals,
+      breakdown: [{ ...breakdown[0], key: "unassigned", rowCount: 1 }],
+      indicativeTax: null,
+    };
+    const html = render();
+
+    expect(html).toContain("1 row is in no field of the return; check it before filing.");
+    expect(html).not.toContain("Ready for export");
+  });
+
   it("names what blocks the figures and marks them provisional", () => {
     state.costBasisComplete = false;
     state.report = {

@@ -284,7 +284,8 @@ Every artifact's `before` and `after` carry `tax`: per tax year (latest 10;
 profile currency as exact cent strings, read from the stored journal the way
 the tax summary reads it. Austrian EUR books add non-zero Kennzahlen in EUR
 cents and the indicative tax from `core/tax_estimate.py`. That figure follows
-the reports' rule: any report blocker of the previewed book withholds it, and
+the reports' rule: any report blocker of the previewed book withholds it, a
+year before 2022 has none (`not_applicable`, no crypto Kennzahlen yet), and
 previewing a book that is not the active one withholds it with
 `report_scope_not_active`. `delta` lists the years that change, after minus
 before; its `estimated_tax_eur_cents` is null when either side is withheld.

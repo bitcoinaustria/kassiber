@@ -5941,6 +5941,9 @@ def _indicative_tax_for_ai(
             for item in blockers
             if isinstance(item, dict)
         ],
+        rows_before_crypto_kennzahlen=core_reports.austrian_rows_before_crypto_kennzahlen(
+            conn, profile, year
+        ),
     )
 
 

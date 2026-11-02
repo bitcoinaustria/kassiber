@@ -453,7 +453,12 @@ the income and the tax-free Altbestand gain (from the breakdown's `tax_free`
 group) it includes. For an Austrian EUR book the payload carries the core's
 indicative tax (`indicativeTax`: 27.5 % of KZ 172 + 174 − 176, with KZ 801
 listed and never estimated) and the screen shows it with the core's caveats
-behind the tile's info icon. Generic books get no estimate, and a region the
+behind the tile's info icon. A year before 2022 has no crypto Kennzahlen
+(`e1kvApplies: false`): the screen states only KZ 801, shows no estimate,
+says so in the readiness notice and Rules, and offers no E 1kv tax report.
+Rows dated before 1 March 2022 have no crypto field in any year; a 2022 with
+such rows (`rowsBeforeCryptoKennzahlen`) says so before export, withholds the
+estimate and offers no E 1kv tax report. Generic books get no estimate, and a region the
 screen does not recognise reads as generic, never as Austrian. While the
 completeness read is still loading, the readiness pill says so and nothing is
 marked Provisional; a failed read or one without completeness stays
@@ -463,7 +468,8 @@ pill is hidden rather than repeating it.
 The breakdown card states the result the way the report does. An Austrian book
 lists its E 1kv fields and KZ 801 on the E 1 with the core's amounts, then what
 stays off the return: tax-free Altbestand, tax-neutral swaps, and rows without
-a field. A generic book lists short-term gains, long-term gains, and income.
+a field. Rows without a field may still be taxable, so they show in amber, mark
+the figures Provisional and keep the year from "Ready for export". A generic book lists short-term gains, long-term gains, and income.
 Each row's transaction count links to Transactions filtered to exactly those
 transactions (`txids`, from the payload's `breakdown`); a group of more than 128
 opens the whole year instead, since the Transactions filter takes no more. How

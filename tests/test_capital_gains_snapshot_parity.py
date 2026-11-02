@@ -284,6 +284,10 @@ class CapitalGainsSnapshotParityTests(unittest.TestCase):
             return_value={"needs_processing": False},
         ), patch.object(
             ui_snapshot,
+            "_austrian_old_rule_rows",
+            return_value=0,
+        ), patch.object(
+            ui_snapshot,
             "_austrian_kennzahl_snapshot_rows",
             return_value=[],
         ):
@@ -376,6 +380,10 @@ class CapitalGainsSnapshotParityTests(unittest.TestCase):
             return_value={"needs_processing": False},
         ), patch.object(
             ui_snapshot,
+            "_austrian_old_rule_rows",
+            return_value=0,
+        ), patch.object(
+            ui_snapshot,
             "_austrian_kennzahl_snapshot_rows",
             return_value=[],
         ):
@@ -422,6 +430,8 @@ class CapitalGainsSnapshotParityTests(unittest.TestCase):
         with patch.object(
             ui_snapshot, "_journal_freshness", return_value={"needs_processing": False}
         ), patch.object(
+            ui_snapshot, "_austrian_old_rule_rows", return_value=0
+        ), patch.object(
             ui_snapshot, "_austrian_kennzahl_snapshot_rows", return_value=[]
         ):
             snapshot = ui_snapshot.build_capital_gains_snapshot(conn, tax_year=2025)
@@ -440,6 +450,54 @@ class CapitalGainsSnapshotParityTests(unittest.TestCase):
         # The year's total still sums every row; the desktop states the
         # tax-free part from its group.
         self.assertEqual(snapshot["totals"]["gainLossEur"], 357.5)
+
+    def test_a_year_before_the_e1kv_states_no_e1kv_field_or_estimate(self):
+        conn = self._conn(tax_country="at", gains_algorithm="moving_average_at")
+        conn.execute("INSERT INTO wallets VALUES ('w1', 'p1', 'Hot')")
+        cases = (
+            ("j-neu", "neu_gain", 174, 40.0, 90.0, 50.0),
+            ("j-spek", "alt_spekulation", 801, 10.0, 30.0, 20.0),
+        )
+        for entry_id, category, kennzahl, cost, proceeds, gain in cases:
+            occurred_at = "2021-06-01T10:00:00Z"
+            conn.execute(
+                "INSERT INTO transactions VALUES (?,?,?,?,?,?,?,?)",
+                (f"t-{entry_id}", "p1", "w1", 0, 1, occurred_at, "BTC", 1_000_000_000),
+            )
+            conn.execute(
+                "INSERT INTO journal_entries (id, profile_id, transaction_id, entry_type, "
+                "occurred_at, quantity, cost_basis, proceeds, gain_loss, at_category, "
+                "at_kennzahl, capital_gains_type, created_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (entry_id, "p1", f"t-{entry_id}", "disposal", occurred_at,
+                 -1_000_000_000, cost, proceeds, gain, category, kennzahl, "short",
+                 occurred_at),
+            )
+        kennzahl_rows = [
+            {"code": "801", "label": "KZ 801", "form": "E 1", "formSection": "",
+             "amount": 20.0, "amountEurCents": 2000, "rowCount": 1, "source": "daemon"},
+        ]
+
+        with patch.object(
+            ui_snapshot, "_journal_freshness", return_value={"needs_processing": False}
+        ), patch.object(
+            ui_snapshot, "_austrian_old_rule_rows", return_value=0
+        ), patch.object(
+            ui_snapshot, "_austrian_kennzahl_snapshot_rows", return_value=kennzahl_rows
+        ):
+            snapshot = ui_snapshot.build_capital_gains_snapshot(conn, tax_year=2021)
+
+        self.assertFalse(snapshot["e1kvApplies"])
+        self.assertIsNone(snapshot["indicativeTax"])
+        # The E 1kv field did not exist in 2021: that row has no field; KZ 801
+        # is an E 1 field and stays.
+        self.assertEqual(
+            [(bucket["key"], bucket["transactionIds"]) for bucket in snapshot["breakdown"]],
+            [("801", ["t-j-spek"]), ("unassigned", ["t-j-neu"])],
+        )
+        self.assertEqual(
+            sorted(lot["kennzahl"] for lot in snapshot["lots"] if lot["kennzahl"]), [801]
+        )
 
     def test_swap_breakdown_counts_a_split_swap_once_and_scopes_by_entry_asset(self):
         conn = self._conn(tax_country="at", gains_algorithm="moving_average_at")
@@ -487,6 +545,10 @@ class CapitalGainsSnapshotParityTests(unittest.TestCase):
             ui_snapshot,
             "_journal_freshness",
             return_value={"needs_processing": False},
+        ), patch.object(
+            ui_snapshot,
+            "_austrian_old_rule_rows",
+            return_value=0,
         ), patch.object(
             ui_snapshot,
             "_austrian_kennzahl_snapshot_rows",
