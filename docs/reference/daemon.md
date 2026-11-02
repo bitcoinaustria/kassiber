@@ -956,8 +956,11 @@ journals were requested, including `disabled` when the policy skips them.
 `ui.journals.process` runs the same step (always rebuilding); its only
 argument, `auto_pair: false`, skips automatic pairing. The Review screen
 passes it after the owner's own decisions, so a recalculation never pairs
-what the owner did not choose. A run without automatic pairing still recounts
-the open transfer candidates for `ui.review.badges`.
+what the owner did not choose. A run without automatic pairing, and a run
+whose automatic pairing paired something, recount the open transfer
+candidates for `ui.review.badges` on the rebuilt journals; so do a review
+apply that pairs, unpairs or dismisses a move (from the assistant or `review
+apply`) and the CLI's `journals process`.
 `kassiber journals process --auto-pair` is the CLI equivalent. The assistant's
 `ui.wallets.sync` and `ui.journals.process` tools rebuild without automatic
 pairing, because their consent does not cover authoring transfer pairs.

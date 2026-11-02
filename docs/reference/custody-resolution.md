@@ -166,7 +166,8 @@ summary always covers the whole book and reports `attention_count`,
 same `scope` and `offset`. `ui.review.badges` reports `quarantine_attention`
 beside the row count, split exactly like the `attention` scope, so the
 Review count (`review`: `quarantine_attention` plus transfer candidates)
-counts what needs the user.
+counts what needs the user. An ownership-graph candidate is proposed for a
+held transaction that already counts as a root, so it counts once, there.
 
 A `reviewed_residual_suspense` hold most often comes from a pair whose legs
 are not one movement: a pair review splits whatever the source sent beyond

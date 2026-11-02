@@ -460,7 +460,8 @@ Once the owner stops deciding, the journals recalculate. That is local and
 makes no network request. Until it finishes, the list keeps its earlier
 reading less what was decided, because a read of stale journals lists more
 candidates than are open. One number counts what is left: `ui.review.badges`
-`review`, which is `quarantine_attention` plus the cached transfer candidates.
+`review`, which is `quarantine_attention` plus the cached transfer candidates
+(an ownership-graph move counts once, under its held transaction).
 The sidebar's Review badge, the bell, and Overview's Review row all show it,
 in red while a quarantine holds rows back from the reports. Stale journals
 with nothing else open show a dot. `/quarantine` and `kassiber://quarantine`

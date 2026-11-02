@@ -332,6 +332,7 @@ from .daemon_freshness import (
     _journals_process_payload,
     _journals_refresh_payload,
     journal_step_summary,
+    recount_transfer_candidates,
     run_local_journal_refresh,
     _maintenance_configure_payload,
     _maintenance_run_payload,
@@ -8138,9 +8139,13 @@ def _review_workflow_payload(
                 hint="Its private fields cannot be sent unchanged to an AI provider.",
             )
         return payload
-    return core_review_workflow.apply_review(
+    receipt = core_review_workflow.apply_review(
         conn, profile, hooks=hooks, authored_source=authored_source, **args,
     )
+    if core_review_workflow.changes_transfer_candidates(args["artifact"]):
+        # The shared review count caches open moves; keep it with the book.
+        recount_transfer_candidates(conn, str(profile["id"]))
+    return receipt
 
 
 def _ai_review_consent_preview(
