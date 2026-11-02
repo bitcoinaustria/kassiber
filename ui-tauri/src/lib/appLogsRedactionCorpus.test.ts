@@ -3,6 +3,8 @@ import corpus from "../../../tests/fixtures/operational_redaction_cases.json";
 import stress from "../../../tests/fixtures/secret_redaction_stress_cases.json";
 import fixes5f from "../../../tests/fixtures/secret_redaction_5f_cases.json";
 import fixes5g from "../../../tests/fixtures/secret_redaction_5g_cases.json";
+import fixes5h from "../../../tests/fixtures/secret_redaction_5h_cases.json";
+import scaling from "../../../tests/fixtures/secret_redaction_scaling_cases.json";
 import failClosed from "../../../tests/fixtures/secret_redaction_5e_cases.json";
 import secrets from "../../../tests/fixtures/secret_redaction_cases.json";
 
@@ -67,7 +69,29 @@ it("scales adversarial secret shapes linearly to 400k characters", () => {
   expect(total(400_000)).toBeLessThan(25 * small + 1_000);
 }, 120_000);
 
-it.each([...failClosed, ...fixes5f, ...fixes5g])("fails closed for review regression $id", (testCase) => {
+it.each(scaling)("scales shape $name linearly to 400k characters", (testCase) => {
+  // Each shape on its own: quadratic growth costs ~100x for ten times the input.
+  const cost = (size: number) => {
+    const text = testCase.prefix + testCase.repeat.repeat(Math.floor(size / testCase.repeat.length) + 1) + testCase.suffix;
+    const start = performance.now();
+    logs.emitAppLog({ level: "info", module: "test", file: "test", line: 1, msg: text, fields: {} });
+    logs.clearAppLogRecords();
+    return performance.now() - start;
+  };
+  cost(4_000);
+  const small = cost(40_000);
+  expect(small).toBeLessThan(500);
+  expect(cost(400_000)).toBeLessThan(25 * small + 50);
+}, 60_000);
+
+it("masks oversized records whole, counting code points like Python", () => {
+  const emit = (msg: string) => logs.emitAppLog({ level: "info", module: "test", file: "test", line: 1, msg, fields: {} })!.msg;
+  expect(emit("😀".repeat(600_000))).toBe("😀".repeat(600_000));
+  expect(emit("password=Pw9Leak " + "x".repeat(1_000_000))).toBe("[redacted-oversized]");
+  logs.clearAppLogRecords();
+});
+
+it.each([...failClosed, ...fixes5f, ...fixes5g, ...fixes5h])("fails closed for review regression $id", (testCase) => {
   const output = logs.emitAppLog({ level: "info", module: "test", file: "test", line: 1, msg: testCase.input, fields: {} })!.msg;
   if ("expected" in testCase) expect(output).toBe(testCase.expected);
   if (testCase.sentinel) {
