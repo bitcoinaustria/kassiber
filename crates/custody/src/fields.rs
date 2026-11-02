@@ -71,6 +71,53 @@ impl Row for Record {
     }
 }
 
+/// A row a pass kept from its input, or a JSON object that replaces it.
+#[derive(Debug)]
+pub(crate) enum Layered<'a, R> {
+    Row(&'a R),
+    Value(&'a Value),
+}
+
+impl<R> Clone for Layered<'_, R> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<R> Copy for Layered<'_, R> {}
+
+impl<R: Fields> Fields for Layered<'_, R> {
+    fn get(&self, key: &str) -> Option<&Value> {
+        match self {
+            Self::Row(row) => row.get(key),
+            Self::Value(row) => Fields::get(*row, key),
+        }
+    }
+
+    fn loaded_raw(&self) -> Option<&Result<kassiber_pyjson::Value, ()>> {
+        match self {
+            Self::Row(row) => row.loaded_raw(),
+            Self::Value(_) => None,
+        }
+    }
+}
+
+impl<R: Row> Row for Layered<'_, R> {
+    fn onchain_scope(&self) -> crate::graph::Scope {
+        match self {
+            Self::Row(row) => row.onchain_scope(),
+            Self::Value(row) => crate::graph::onchain_scope(row),
+        }
+    }
+
+    fn json(&self) -> Cow<'_, Value> {
+        match self {
+            Self::Row(row) => row.json(),
+            Self::Value(row) => Cow::Borrowed(row),
+        }
+    }
+}
+
 impl<T: Row + ?Sized> Row for &T {
     fn onchain_scope(&self) -> crate::graph::Scope {
         (**self).onchain_scope()

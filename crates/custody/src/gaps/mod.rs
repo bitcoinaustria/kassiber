@@ -251,7 +251,7 @@ fn compute_rows<T: Sync>(
         result.promotion_eligible_count = accounting.promotion_eligible_count;
         result.blocking_source_ids = accounting.blocking_source_ids;
     }
-    Ok(result.value())
+    Ok(result.into_value())
 }
 
 /// Preserve Python stringification for raw containers as well as scalar facts.

@@ -1,5 +1,5 @@
 //! OwnedIndex lookup precedence and graph scope recovery, from raw index facts.
-use super::{onchain_scope, parse, strict_txid};
+use super::{parse, strict_txid};
 use crate::{
     codec::{self, object, text, truth},
     python_text::PythonText,
@@ -193,12 +193,12 @@ impl Index<'_> {
     }
 }
 
-pub(crate) fn parsed_scope(
+pub(crate) fn parsed_scope<R: crate::fields::Row + ?Sized>(
     graph: &Value,
     index: Index<'_>,
-    row: &Value,
+    row: &R,
 ) -> Result<Option<PhysicalScope>, String> {
-    let wallet = text(&row["wallet_id"]);
+    let wallet = text(row.at("wallet_id"));
     let mut inferred = index.source_scope(array(&graph["inputs"]), &wallet)?;
     if inferred.is_none() {
         let mut scopes = BTreeSet::new();
@@ -213,10 +213,10 @@ pub(crate) fn parsed_scope(
             inferred = scopes.into_iter().next();
         }
     }
-    let config = object(if truth(&row["config_json"]) {
-        &row["config_json"]
+    let config = object(if truth(row.at("config_json")) {
+        row.at("config_json")
     } else {
-        &row["wallet_config_json"]
+        row.at("wallet_config_json")
     });
     let mut chains = BTreeSet::new();
     for v in [&graph["chain"], &config["chain"]] {
@@ -236,7 +236,7 @@ pub(crate) fn parsed_scope(
         .or_else(|| inferred.as_ref().map(|s| s.0.clone()))
         .unwrap_or_else(|| {
             if matches!(
-                text(&row["asset"]).py_strip().py_upper().as_str(),
+                text(row.at("asset")).py_strip().py_upper().as_str(),
                 "LBTC" | "L-BTC"
             ) {
                 "liquid"
@@ -277,8 +277,8 @@ pub(crate) fn parsed_scope(
     Ok(None)
 }
 
-pub(crate) fn scope(
-    row: &Value,
+pub(crate) fn scope<R: crate::fields::Row + ?Sized>(
+    row: &R,
     graph: Option<&Value>,
     index: Index<'_>,
 ) -> Result<Option<TransferScope>, String> {
@@ -287,10 +287,10 @@ pub(crate) fn scope(
     let graph = if graph.is_some_and(truth) {
         graph
     } else {
-        parsed = parse(&row["raw_json"])?;
+        parsed = parse(row.at("raw_json"))?;
         parsed.as_ref()
     };
-    if let Some(scope) = onchain_scope(row) {
+    if let Some(scope) = row.onchain_scope() {
         return Ok(Some(scope));
     }
     let Some(graph) = graph.filter(|_| index.0.is_some()) else {
@@ -301,7 +301,7 @@ pub(crate) fn scope(
     if !raw_id.is_empty() && parsed_id.is_none() {
         return Ok(None);
     }
-    let external = strict_txid(&row["external_id"]);
+    let external = strict_txid(row.at("external_id"));
     if parsed_id.is_some() && external.is_some() && parsed_id != external {
         return Ok(None);
     }
@@ -314,7 +314,7 @@ pub(crate) fn scope(
     let display = if truth(&graph["component"]["asset"]) {
         text(&graph["component"]["asset"])
     } else {
-        text(&row["asset"])
+        text(row.at("asset"))
     };
     let display = display.py_strip().py_upper().replace("L-BTC", "LBTC");
     if display == "BTC" && c != "bitcoin" || display == "LBTC" && c != "liquid" {
@@ -331,8 +331,8 @@ pub(crate) fn scope(
     Ok(Some((c, n, txid, identity)))
 }
 
-pub(crate) fn profile_parsed_typed(
-    rows: &[Value],
+pub(crate) fn profile_parsed_typed<R: crate::fields::Row>(
+    rows: &[R],
     index: Index<'_>,
 ) -> Result<BTreeMap<String, kassiber_pyjson::Value>, String> {
     let mut parsed_rows = Vec::new();
@@ -340,7 +340,7 @@ pub(crate) fn profile_parsed_typed(
     let mut groups: BTreeMap<(String, String, String), Vec<kassiber_pyjson::Value>> =
         BTreeMap::new();
     for row in rows {
-        let Some(mut raw_graph) = super::stored::parse(&row["raw_json"])? else {
+        let Some(mut raw_graph) = super::stored::parse(row.at("raw_json"))? else {
             continue;
         };
         let graph = super::stored::project(&raw_graph);
@@ -354,7 +354,7 @@ pub(crate) fn profile_parsed_typed(
             .entry(key.clone())
             .or_default()
             .push(raw_graph.clone());
-        let id = codec::pystr(&row["id"]);
+        let id = codec::pystr(row.at("id"));
         // A repeated id replaces its first entry in place.
         if let Some(&at) = parsed_positions.get(&id) {
             let (_, old_graph, old_key) = &mut parsed_rows[at];

@@ -793,8 +793,8 @@
   {
     "id": "components-blocker-precedence",
     "file": "crates/custody/src/components/mod.rs",
-    "find": "validation[\"issues\"] = json!(issues);",
-    "replace": "issues.reverse();\n    validation[\"issues\"] = json!(issues);",
+    "find": "    validation[\"issues\"] = Value::Array(issues);",
+    "replace": "    issues.reverse();\n    validation[\"issues\"] = Value::Array(issues);",
     "expect_failing": [
       "components_no_legs"
     ],
@@ -2073,8 +2073,8 @@
   {
     "id": "J-recorded-zero-placeholder",
     "file": "crates/custody/src/interpretation/recorded.rs",
-    "find": ".filter(|r| r[\"direction\"] == \"inbound\")\n            .map(|r| Ok(positive(r)?.then_some(r)))",
-    "replace": ".filter(|r| r[\"direction\"] == \"inbound\")\n            .map(|r| Ok::<_, String>(Some(r)))",
+    "find": ".filter(|r| r.at(\"direction\") == \"inbound\")\n            .map(|r| Ok(positive(r)?.then_some(r)))",
+    "replace": ".filter(|r| r.at(\"direction\") == \"inbound\")\n            .map(|r| Ok::<_, String>(Some(r)))",
     "expect_failing": [
       "interpretation_recorded_nonpositive_placeholder"
     ],
@@ -2083,7 +2083,7 @@
   {
     "id": "J-recorded-same-wallet",
     "file": "crates/custody/src/interpretation/recorded.rs",
-    "find": "if out[\"wallet_id\"] == incoming[\"wallet_id\"] {",
+    "find": "if out.at(\"wallet_id\") == incoming.at(\"wallet_id\") {",
     "replace": "if false {",
     "expect_failing": [
       "interpretation_recorded_same_wallet"
@@ -2093,7 +2093,7 @@
   {
     "id": "J-recorded-ln-principal",
     "file": "crates/custody/src/interpretation/recorded.rs",
-    "find": "super::integer_or_zero(&out[\"amount\"])?\n            != super::integer_or_zero(&incoming[\"amount\"])?",
+    "find": "super::integer_or_zero(out.at(\"amount\"))?\n            != super::integer_or_zero(incoming.at(\"amount\"))?",
     "replace": "false",
     "expect_failing": [
       "interpretation_recorded_lightning_shortfall"
@@ -2113,7 +2113,7 @@
   {
     "id": "J-recorded-ln-asset",
     "file": "crates/custody/src/interpretation/recorded.rs",
-    "find": "let key = (hash, row[\"asset\"].clone(), domain);",
+    "find": "let key = (hash, row.at(\"asset\").clone(), domain);",
     "replace": "let key = (hash, Value::Null, domain);",
     "expect_failing": [
       "interpretation_recorded_lightning_asset_case"
@@ -2123,8 +2123,8 @@
   {
     "id": "J-recorded-ln-network",
     "file": "crates/custody/src/interpretation/recorded.rs",
-    "find": "(canonical_hash(&row[\"payment_hash\"]), network_domain(row))",
-    "replace": "(canonical_hash(&row[\"payment_hash\"]), network_domain(row).or_else(||Some(\"main\".into())))",
+    "find": "(canonical_hash(row.at(\"payment_hash\")), network_domain(row))",
+    "replace": "(canonical_hash(row.at(\"payment_hash\")), network_domain(row).or_else(||Some(\"main\".into())))",
     "expect_failing": [
       "interpretation_recorded_lightning_no_network"
     ],
@@ -2563,8 +2563,8 @@
   {
     "id": "J-fanout-fallible-raw-integers",
     "file": "crates/custody/src/interpretation/fanout.rs",
-    "find": "super::integer_or_zero(&row[field])?",
-    "replace": "super::integer_or_zero(&row[field]).unwrap_or(json!(0))",
+    "find": "super::integer_or_zero(row.at(field))?",
+    "replace": "super::integer_or_zero(row.at(field)).unwrap_or(json!(0))",
     "expect_failing": [
       "fanout_boundary_bad_source",
       "fanout_boundary_bad_target",
@@ -2596,8 +2596,8 @@
   {
     "id": "J-fanout-group-scope",
     "file": "crates/custody/src/interpretation/fanout.rs",
-    "find": "if let Some(scope) = graph::onchain_scope(row) {",
-    "replace": "if let Some(scope) = graph::onchain_scope(row).filter(|s|s.0 != \"liquid\") {",
+    "find": "if let Some(scope) = row.onchain_scope() {",
+    "replace": "if let Some(scope) = row.onchain_scope().filter(|s|s.0 != \"liquid\") {",
     "expect_failing": [
       "interpretation_fanout_liquid_graph"
     ],
@@ -2606,8 +2606,8 @@
   {
     "id": "J-fanout-positive-source",
     "file": "crates/custody/src/interpretation/fanout.rs",
-    "find": "row[\"direction\"] == \"outbound\" && amount(row, \"amount\")? > BigInt::from(0)",
-    "replace": "row[\"direction\"] == \"outbound\" && amount(row, \"amount\")? >= BigInt::from(0)",
+    "find": "row.at(\"direction\") == \"outbound\" && amount(row, \"amount\")? > BigInt::from(0)",
+    "replace": "row.at(\"direction\") == \"outbound\" && amount(row, \"amount\")? >= BigInt::from(0)",
     "expect_failing": [
       "fanout_boundary_zero_other_source"
     ],
@@ -2616,8 +2616,8 @@
   {
     "id": "J-fanout-source-direction",
     "file": "crates/custody/src/interpretation/fanout.rs",
-    "find": "row[\"direction\"] == \"outbound\" && amount(row, \"amount\")? > BigInt::from(0)",
-    "replace": "row[\"direction\"] == \"inbound\" && amount(row, \"amount\")? > BigInt::from(0)",
+    "find": "row.at(\"direction\") == \"outbound\" && amount(row, \"amount\")? > BigInt::from(0)",
+    "replace": "row.at(\"direction\") == \"inbound\" && amount(row, \"amount\")? > BigInt::from(0)",
     "expect_failing": [
       "interpretation_fanout_bitcoin"
     ],
@@ -2656,8 +2656,8 @@
   {
     "id": "J-fanout-handled-target",
     "file": "crates/custody/src/interpretation/fanout.rs",
-    "find": "&& !handled.contains(&codec::pystr(&row[\"id\"]))",
-    "replace": "&& (true || !handled.contains(&codec::pystr(&row[\"id\"])))",
+    "find": "&& !handled.contains(&codec::pystr(row.at(\"id\")))",
+    "replace": "&& (true || !handled.contains(&codec::pystr(row.at(\"id\"))))",
     "expect_failing": [
       "fanout_boundary_handled_target"
     ],
@@ -2666,8 +2666,8 @@
   {
     "id": "J-fanout-target-direction",
     "file": "crates/custody/src/interpretation/fanout.rs",
-    "find": "row[\"direction\"] == \"inbound\"",
-    "replace": "row[\"direction\"] != \"outbound\"",
+    "find": "row.at(\"direction\") == \"inbound\"",
+    "replace": "row.at(\"direction\") != \"outbound\"",
     "expect_failing": [
       "interpretation_fanout_unknown_direction"
     ],
@@ -2676,8 +2676,8 @@
   {
     "id": "J-fanout-target-wallet",
     "file": "crates/custody/src/interpretation/fanout.rs",
-    "find": "&& codec::pystr(&row[\"wallet_id\"]) != source_wallet",
-    "replace": "&& (true || codec::pystr(&row[\"wallet_id\"]) != source_wallet)",
+    "find": "&& codec::pystr(row.at(\"wallet_id\")) != source_wallet",
+    "replace": "&& (true || codec::pystr(row.at(\"wallet_id\")) != source_wallet)",
     "expect_failing": [
       "interpretation_fanout_same_wallet"
     ],
@@ -2816,8 +2816,8 @@
   {
     "id": "J-fanout-preserve-rate",
     "file": "crates/custody/src/interpretation/fanout.rs",
-    "find": "if absent(&row[\"fiat_rate_exact\"]) && absent(&row[\"fiat_rate\"]) && full > BigInt::from(0) {",
-    "replace": "if absent(&row[\"fiat_rate_exact\"]) && full > BigInt::from(0) {",
+    "find": "if absent(row.at(\"fiat_rate_exact\")) && absent(row.at(\"fiat_rate\")) && full > BigInt::from(0) {",
+    "replace": "if absent(row.at(\"fiat_rate_exact\")) && full > BigInt::from(0) {",
     "expect_failing": [
       "interpretation_fanout_existing_rate"
     ],
@@ -2826,8 +2826,8 @@
   {
     "id": "J-fanout-preserve-exact-rate",
     "file": "crates/custody/src/interpretation/fanout.rs",
-    "find": "if absent(&row[\"fiat_rate_exact\"]) && absent(&row[\"fiat_rate\"]) && full > BigInt::from(0) {",
-    "replace": "if absent(&row[\"fiat_rate\"]) && full > BigInt::from(0) {",
+    "find": "if absent(row.at(\"fiat_rate_exact\")) && absent(row.at(\"fiat_rate\")) && full > BigInt::from(0) {",
+    "replace": "if absent(row.at(\"fiat_rate\")) && full > BigInt::from(0) {",
     "expect_failing": [
       "interpretation_fanout_existing_exact_rate"
     ],
@@ -2846,8 +2846,8 @@
   {
     "id": "J-fanout-exact-value-precedence",
     "file": "crates/custody/src/interpretation/fanout.rs",
-    "find": "if codec::truth(&row[\"fiat_value_exact\"]) {",
-    "replace": "if false && codec::truth(&row[\"fiat_value_exact\"]) {",
+    "find": "if codec::truth(row.at(\"fiat_value_exact\")) {",
+    "replace": "if false && codec::truth(row.at(\"fiat_value_exact\")) {",
     "expect_failing": [
       "interpretation_fanout_exact_value_pricing"
     ],
@@ -2856,8 +2856,8 @@
   {
     "id": "J-fanout-falsy-value-fallback",
     "file": "crates/custody/src/interpretation/fanout.rs",
-    "find": "if codec::truth(&row[\"fiat_value_exact\"]) {",
-    "replace": "if !row[\"fiat_value_exact\"].is_null() {",
+    "find": "if codec::truth(row.at(\"fiat_value_exact\")) {",
+    "replace": "if !row.at(\"fiat_value_exact\").is_null() {",
     "expect_failing": [
       "interpretation_fanout_zero_exact_value_fallback"
     ],
@@ -3056,7 +3056,7 @@
   {
     "id": "J-fanout-anchor-id",
     "file": "crates/custody/src/interpretation/fanout.rs",
-    "find": "base[\"journal_transaction_id\"] = json!(codec::pystr(&row[\"id\"]));",
+    "find": "base[\"journal_transaction_id\"] = json!(codec::pystr(row.at(\"id\")));",
     "replace": "base[\"journal_transaction_id\"] = json!(id);",
     "expect_failing": [
       "interpretation_fanout_bitcoin"
@@ -3738,7 +3738,7 @@
   {
     "id": "R2c-scope-config-fallback",
     "file": "crates/custody/src/graph/ownership.rs",
-    "find": "&row[\"wallet_config_json\"]",
+    "find": "row.at(\"wallet_config_json\")",
     "replace": "&Value::Null",
     "expect_failing": [
       "graph_scope_recovery"
@@ -4416,7 +4416,7 @@
   {
     "id": "R2c-ownership-asset-row-fallback",
     "file": "crates/custody/src/interpretation/ownership.rs",
-    "find": "codec::text(&row[\"asset\"])\n    };",
+    "find": "codec::text(row.at(\"asset\"))\n    };",
     "replace": "String::new()\n    };",
     "expect_failing": [
       "ownership_helper_vectors"
@@ -4646,7 +4646,7 @@
   {
     "id": "R2c-ownership-graphless-other-wallet",
     "file": "crates/custody/src/interpretation/ownership.rs",
-    "find": "codec::pystr(&candidate[\"wallet_id\"]) != codec::pystr(&row[\"wallet_id\"])",
+    "find": "codec::pystr(candidate.at(\"wallet_id\")) != codec::pystr(row.at(\"wallet_id\"))",
     "replace": "true",
     "expect_failing": [
       "ownership_production_vectors"
@@ -4656,7 +4656,7 @@
   {
     "id": "R2c-ownership-graphless-asset",
     "file": "crates/custody/src/interpretation/ownership.rs",
-    "find": "codec::text(&candidate[\"asset\"]).py_upper()\n                    == codec::text(&row[\"asset\"]).py_upper()",
+    "find": "codec::text(candidate.at(\"asset\")).py_upper()\n                    == codec::text(row.at(\"asset\")).py_upper()",
     "replace": "true",
     "expect_failing": [
       "ownership_production_vectors"
@@ -4666,7 +4666,7 @@
   {
     "id": "R2c-ownership-graphless-scope",
     "file": "crates/custody/src/interpretation/ownership.rs",
-    "find": "graph::onchain_scope(candidate).as_ref() == Some(&scope)",
+    "find": "candidate.onchain_scope().as_ref() == Some(&scope)",
     "replace": "true",
     "expect_failing": [
       "ownership_production_vectors"
@@ -4736,8 +4736,8 @@
   {
     "id": "R2c-ownership-source-fallback-count",
     "file": "crates/custody/src/interpretation/ownership.rs",
-    "find": "if inputs.len() != 1\n        || row[\"direction\"]",
-    "replace": "if inputs.is_empty()\n        || row[\"direction\"]",
+    "find": "if inputs.len() != 1\n        || row.at(\"direction\")",
+    "replace": "if inputs.is_empty()\n        || row.at(\"direction\")",
     "expect_failing": [
       "ownership_production_vectors"
     ],
@@ -4786,7 +4786,7 @@
   {
     "id": "R2c-ownership-destination-asset",
     "file": "crates/custody/src/interpretation/ownership.rs",
-    "find": "&& codec::text(&row[\"asset\"]).py_upper() == codec::text(asset).py_upper()",
+    "find": "&& codec::text(row.at(\"asset\")).py_upper() == codec::text(asset).py_upper()",
     "replace": "&& true",
     "expect_failing": [
       "ownership_production_vectors"
@@ -4806,8 +4806,8 @@
   {
     "id": "R2c-ownership-destination-exact",
     "file": "crates/custody/src/interpretation/ownership.rs",
-    "find": "if amount(row, \"amount\")? == *leg && graph::onchain_scope(row).as_ref() == Some(scope) {",
-    "replace": "if graph::onchain_scope(row).as_ref() == Some(scope) {",
+    "find": "if amount(row, \"amount\")? == *leg && row.onchain_scope().as_ref() == Some(scope) {",
+    "replace": "if row.onchain_scope().as_ref() == Some(scope) {",
     "expect_failing": [
       "ownership_production_vectors"
     ],
@@ -4816,7 +4816,7 @@
   {
     "id": "R2c-ownership-destination-scope",
     "file": "crates/custody/src/interpretation/ownership.rs",
-    "find": "&& graph::onchain_scope(row).as_ref() == Some(scope)",
+    "find": "&& row.onchain_scope().as_ref() == Some(scope)",
     "replace": "&& true",
     "expect_failing": [
       "ownership_production_vectors"
@@ -4946,7 +4946,7 @@
   {
     "id": "R2c-ownership-no-index-handled",
     "file": "crates/custody/src/interpretation/ownership.rs",
-    "find": "|| handled.contains(&codec::pystr(&row[\"id\"]))\n            {",
+    "find": "|| handled.contains(&codec::pystr(row.at(\"id\")))\n            {",
     "replace": "|| false\n            {",
     "expect_failing": [
       "ownership_production_vectors"
@@ -4956,8 +4956,8 @@
   {
     "id": "R2c-ownership-missing-recorded-sources",
     "file": "crates/custody/src/interpretation/ownership.rs",
-    "find": "if row[\"direction\"] == \"outbound\" {\n                sources",
-    "replace": "if row[\"direction\"] == \"inbound\" {\n                sources",
+    "find": "if row.at(\"direction\") == \"outbound\" {\n                sources",
+    "replace": "if row.at(\"direction\") == \"inbound\" {\n                sources",
     "expect_failing": [
       "ownership_production_vectors"
     ],
@@ -4966,7 +4966,7 @@
   {
     "id": "R2c-ownership-missing-handled",
     "file": "crates/custody/src/interpretation/ownership.rs",
-    "find": "|| handled.contains(&codec::pystr(&row[\"id\"]))\n            || !evidence",
+    "find": "|| handled.contains(&codec::pystr(row.at(\"id\")))\n            || !evidence",
     "replace": "|| false\n            || !evidence",
     "expect_failing": [
       "ownership_production_vectors"
@@ -4976,8 +4976,8 @@
   {
     "id": "R2c-ownership-missing-authority",
     "file": "crates/custody/src/interpretation/ownership.rs",
-    "find": "|| !evidence::current_observation(row)",
-    "replace": "|| false && !evidence::current_observation(row)",
+    "find": "|| !evidence::current_observation_of(row)",
+    "replace": "|| false && !evidence::current_observation_of(row)",
     "expect_failing": [
       "ownership_production_vectors"
     ],
@@ -4986,7 +4986,7 @@
   {
     "id": "R2c-ownership-missing-source-self",
     "file": "crates/custody/src/interpretation/ownership.rs",
-    "find": "missing.remove(&codec::pystr(&row[\"wallet_id\"]));",
+    "find": "missing.remove(&codec::pystr(row.at(\"wallet_id\")));",
     "replace": "missing.clear();",
     "expect_failing": [
       "ownership_production_vectors"
@@ -5016,8 +5016,8 @@
   {
     "id": "R2c-ownership-synthetic-inbound",
     "file": "crates/custody/src/interpretation/ownership.rs",
-    "find": "if row[\"direction\"] == \"inbound\" && !synthetic(row) {",
-    "replace": "if row[\"direction\"] == \"inbound\" {",
+    "find": "if row.at(\"direction\") == \"inbound\" && !synthetic(row) {",
+    "replace": "if row.at(\"direction\") == \"inbound\" {",
     "expect_failing": [
       "ownership_production_vectors"
     ],
@@ -5466,8 +5466,8 @@
   {
     "id": "R2c-ownership-block-wallet-label",
     "file": "crates/custody/src/interpretation/ownership.rs",
-    "find": "if truth(&row[\"wallet_label\"]) {&row[\"wallet_label\"]}",
-    "replace": "if false {&row[\"wallet_label\"]}",
+    "find": "if truth(row.at(\"wallet_label\")) {row.at(\"wallet_label\")}",
+    "replace": "if false {row.at(\"wallet_label\")}",
     "rule": "Blocker diagnostics prefer a present wallet label.",
     "expect_failing": [
       "ownership_production_vectors"
@@ -5476,8 +5476,8 @@
   {
     "id": "R2c-ownership-block-wallet-fallback",
     "file": "crates/custody/src/interpretation/ownership.rs",
-    "find": "if truth(&row[\"wallet_label\"]) {&row[\"wallet_label\"]}",
-    "replace": "if true {&row[\"wallet_label\"]}",
+    "find": "if truth(row.at(\"wallet_label\")) {row.at(\"wallet_label\")}",
+    "replace": "if true {row.at(\"wallet_label\")}",
     "rule": "Blocker diagnostics fall back to the wallet id when the label is empty.",
     "expect_failing": [
       "ownership_production_vectors"
@@ -5616,8 +5616,8 @@
   {
     "id": "R2c-consolidation-source-direction",
     "file": "crates/custody/src/interpretation/consolidation.rs",
-    "find": "if row[\"direction\"] == \"outbound\"",
-    "replace": "if row[\"direction\"] == \"inbound\"",
+    "find": "if row.at(\"direction\") == \"outbound\"",
+    "replace": "if row.at(\"direction\") == \"inbound\"",
     "expect_failing": [
       "consolidation_production_vectors"
     ],
@@ -5636,7 +5636,7 @@
   {
     "id": "R2c-consolidation-source-fee-only",
     "file": "crates/custody/src/interpretation/consolidation.rs",
-    "find": "truth(&row[\"custody_native_fee_normalized\"])\n                        && amount(row, \"fee\")? > zero()",
+    "find": "truth(row.at(\"custody_native_fee_normalized\"))\n                        && amount(row, \"fee\")? > zero()",
     "replace": "false",
     "expect_failing": [
       "consolidation_production_vectors"
@@ -5656,7 +5656,7 @@
   {
     "id": "R2c-consolidation-handled",
     "file": "crates/custody/src/interpretation/consolidation.rs",
-    "find": "handled.contains(&codec::pystr(&r[\"id\"]))",
+    "find": "handled.contains(&codec::pystr(r.at(\"id\")))",
     "replace": "false",
     "expect_failing": [
       "consolidation_production_vectors"
@@ -5696,8 +5696,8 @@
   {
     "id": "R2c-consolidation-normalized-all",
     "file": "crates/custody/src/interpretation/consolidation.rs",
-    "find": ".all(|r| truth(&r[\"custody_native_fee_normalized\"]))",
-    "replace": ".any(|r| truth(&r[\"custody_native_fee_normalized\"]))",
+    "find": ".all(|r| truth(r.at(\"custody_native_fee_normalized\")))",
+    "replace": ".any(|r| truth(r.at(\"custody_native_fee_normalized\")))",
     "expect_failing": [
       "consolidation_production_vectors"
     ],
@@ -5906,8 +5906,8 @@
   {
     "id": "R2c-consolidation-offgroup-direction",
     "file": "crates/custody/src/interpretation/consolidation.rs",
-    "find": "if row[\"direction\"] == \"inbound\"\n                    && amount",
-    "replace": "if row[\"direction\"] == \"outbound\"\n                    && amount",
+    "find": "if row.at(\"direction\") == \"inbound\"\n                    && amount",
+    "replace": "if row.at(\"direction\") == \"outbound\"\n                    && amount",
     "expect_failing": [
       "consolidation_production_vectors"
     ],
@@ -5916,7 +5916,7 @@
   {
     "id": "R2c-consolidation-offgroup-wallet",
     "file": "crates/custody/src/interpretation/consolidation.rs",
-    "find": "&& codec::pystr(&row[\"wallet_id\"]) == *wallet\n                    && codec::text",
+    "find": "&& codec::pystr(row.at(\"wallet_id\")) == *wallet\n                    && codec::text",
     "replace": "&& true\n                    && codec::text",
     "expect_failing": [
       "consolidation_production_vectors"
@@ -5926,7 +5926,7 @@
   {
     "id": "R2c-consolidation-offgroup-asset",
     "file": "crates/custody/src/interpretation/consolidation.rs",
-    "find": "&& codec::text(&row[\"asset\"]).py_upper() == asset.py_upper()",
+    "find": "&& codec::text(row.at(\"asset\")).py_upper() == asset.py_upper()",
     "replace": "&& true",
     "expect_failing": [
       "consolidation_production_vectors"
@@ -5936,7 +5936,7 @@
   {
     "id": "R2c-consolidation-offgroup-member",
     "file": "crates/custody/src/interpretation/consolidation.rs",
-    "find": "&& !group_ids.contains(&codec::pystr(&row[\"id\"]))",
+    "find": "&& !group_ids.contains(&codec::pystr(row.at(\"id\")))",
     "replace": "&& true",
     "expect_failing": [
       "consolidation_production_vectors"
@@ -5946,7 +5946,7 @@
   {
     "id": "R2c-consolidation-offgroup-handled",
     "file": "crates/custody/src/interpretation/consolidation.rs",
-    "find": "&& !handled.contains(&codec::pystr(&row[\"id\"]))",
+    "find": "&& !handled.contains(&codec::pystr(row.at(\"id\")))",
     "replace": "&& true",
     "expect_failing": [
       "consolidation_production_vectors"
@@ -5956,7 +5956,7 @@
   {
     "id": "R2c-consolidation-offgroup-identity",
     "file": "crates/custody/src/interpretation/consolidation.rs",
-    "find": "&& !graph::onchain_scope(row).is_some_and(|s| s.2 != txid)",
+    "find": "&& !row.onchain_scope().is_some_and(|s| s.2 != txid)",
     "replace": "&& true",
     "expect_failing": [
       "consolidation_production_vectors"
@@ -5986,8 +5986,8 @@
   {
     "id": "R2c-consolidation-sender-order",
     "file": "crates/custody/src/interpretation/consolidation.rs",
-    "find": "senders.sort_by_key(|r| codec::pystr(&r[\"id\"]));",
-    "replace": "senders.sort_by_key(|r| std::cmp::Reverse(codec::pystr(&r[\"id\"])));",
+    "find": "senders.sort_by_key(|r| codec::pystr(r.at(\"id\")));",
+    "replace": "senders.sort_by_key(|r| std::cmp::Reverse(codec::pystr(r.at(\"id\"))));",
     "expect_failing": [
       "consolidation_production_vectors"
     ],
@@ -6076,7 +6076,7 @@
   {
     "id": "R2c-consolidation-receipt-anchor",
     "file": "crates/custody/src/interpretation/consolidation.rs",
-    "find": ".map(|r| codec::pystr(&r[\"id\"]))\n                    .unwrap_or_else",
+    "find": ".map(|r| codec::pystr(r.at(\"id\")))\n                    .unwrap_or_else",
     "replace": ".map(|_| source.clone())\n                    .unwrap_or_else",
     "expect_failing": [
       "consolidation_production_vectors"
@@ -6116,7 +6116,7 @@
   {
     "id": "R2c-consolidation-drop-out",
     "file": "crates/custody/src/interpretation/consolidation.rs",
-    "find": ".extend(senders.iter().map(|r| codec::pystr(&r[\"id\"])));",
+    "find": ".extend(senders.iter().map(|r| codec::pystr(r.at(\"id\"))));",
     "replace": ".extend(std::iter::empty::<String>());",
     "expect_failing": [
       "consolidation_production_vectors"
@@ -6126,7 +6126,7 @@
   {
     "id": "R2c-consolidation-drop-in",
     "file": "crates/custody/src/interpretation/consolidation.rs",
-    "find": ".extend(receipts.values().map(|r| codec::pystr(&r[\"id\"])));",
+    "find": ".extend(receipts.values().map(|r| codec::pystr(r.at(\"id\"))));",
     "replace": ".extend(std::iter::empty::<String>());",
     "expect_failing": [
       "consolidation_production_vectors"
@@ -6146,8 +6146,8 @@
   {
     "id": "R2c-consolidation-current-graph",
     "file": "crates/custody/src/interpretation/consolidation.rs",
-    "find": "codec::text(&row[\"observation_graph_hash\"]) == evidence::graph_hash(&row[\"raw_json\"])?.0",
-    "replace": "true",
+    "find": "        codec::text(row.at(\"observation_graph_hash\"))\n            == evidence::graph_hash(row.at(\"raw_json\"))?.0",
+    "replace": "        true",
     "expect_failing": [
       "consolidation_collaborative_vectors"
     ],
@@ -6156,8 +6156,8 @@
   {
     "id": "R2c-consolidation-current-quantity",
     "file": "crates/custody/src/interpretation/consolidation.rs",
-    "find": "&& codec::text(&row[\"observation_quantity_hash\"]) == evidence::observed_hash(row)?.0",
-    "replace": "&& true",
+    "find": "            && codec::text(row.at(\"observation_quantity_hash\"))\n                == evidence::observed_hash(&row.json())?.0,",
+    "replace": "            && true,",
     "expect_failing": [
       "consolidation_collaborative_vectors"
     ],
@@ -6256,7 +6256,7 @@
   {
     "id": "R2c-consolidation-collab-direction",
     "file": "crates/custody/src/interpretation/consolidation.rs",
-    "find": "row[\"direction\"] != direction",
+    "find": "row.at(\"direction\") != direction",
     "replace": "false",
     "expect_failing": [
       "consolidation_collaborative_vectors"
@@ -6296,8 +6296,8 @@
   {
     "id": "R2c-consolidation-graph-selection",
     "file": "crates/custody/src/interpretation/consolidation.rs",
-    "find": ".find_map(|r| parsed.get(&codec::pystr(&r[\"id\"])))",
-    "replace": ".find_map(|r| parsed.get(&codec::pystr(&r[\"id\"]))).filter(|_| false)",
+    "find": ".find_map(|r| parsed.get(&codec::pystr(r.at(\"id\"))))",
+    "replace": ".find_map(|r| parsed.get(&codec::pystr(r.at(\"id\")))).filter(|_| false)",
     "expect_failing": [
       "consolidation_production_vectors"
     ],
@@ -6456,8 +6456,8 @@
   {
     "id": "R2c-pipeline-override",
     "file": "crates/custody/src/interpretation/pipeline.rs",
-    "find": "result.out_row_overrides.get(&id).unwrap_or(row).clone()",
-    "replace": "row.clone()",
+    "find": "            Some(match result.out_row_overrides.get(&id) {\n                Some(row) => Layered::Value(row),\n                None => Layered::Row(row),\n            })",
+    "replace": "            Some(Layered::Row(row))",
     "expect_failing": [
       "pipeline_helper_vectors"
     ],
@@ -6466,8 +6466,8 @@
   {
     "id": "R2c-pipeline-append-synthetic",
     "file": "crates/custody/src/interpretation/pipeline.rs",
-    "find": "next.extend(result.synthetic_rows.iter().cloned());",
-    "replace": "next.extend(std::iter::empty::<Value>());",
+    "find": "    next.extend(result.synthetic_rows.iter().map(Layered::Value));",
+    "replace": "    next.extend(std::iter::empty::<Layered<'_, R>>());",
     "expect_failing": [
       "pipeline_helper_vectors"
     ],
@@ -6756,7 +6756,7 @@
   {
     "id": "R2c-pipeline-normalization-source",
     "file": "crates/custody/src/interpretation/pipeline.rs",
-    "find": "row[\"observation_fee_attribution\"] == \"implicit_wallet_delta\"",
+    "find": "*row.at(\"observation_fee_attribution\") == \"implicit_wallet_delta\"",
     "replace": "true",
     "expect_failing": [
       "interpretation_pipeline_projection"
@@ -6766,8 +6766,8 @@
   {
     "id": "R2c-pipeline-normalization-proof",
     "file": "crates/custody/src/interpretation/pipeline.rs",
-    "find": "&& observation[\"fee_attribution\"] == \"exact\"",
-    "replace": "&& true",
+    "find": ".is_some_and(|observation| observation[\"fee_attribution\"] == \"exact\")",
+    "replace": ".is_some_and(|_| true)",
     "expect_failing": [
       "interpretation_pipeline_projection"
     ],
@@ -24023,6 +24023,36 @@
       "production_run_matches_separate_stages"
     ],
     "rule": "A registered record reads its own scope slot."
+  },
+  {
+    "id": "layered-json-value",
+    "file": "crates/custody/src/fields.rs",
+    "find": "            Self::Value(row) => Cow::Borrowed(row),\n        }\n    }\n}\n\nimpl<T: Row + ?Sized> Row for &T {",
+    "replace": "            Self::Value(_) => Cow::Owned(Value::Null),\n        }\n    }\n}\n\nimpl<T: Row + ?Sized> Row for &T {",
+    "expect_failing": [
+      "pipeline_helper_vectors"
+    ],
+    "rule": "A replacing row reads as its own JSON object."
+  },
+  {
+    "id": "overlay-layered-changed",
+    "file": "crates/custody/src/interpretation/pipeline.rs",
+    "find": "                    .map(|(at, row)| match changed.get(&at) {\n                        Some(row) => Layered::Value(row),",
+    "replace": "                    .map(|(at, row)| match changed.get(&at) {\n                        Some(_) => Layered::Row(row),",
+    "expect_failing": [
+      "interpretation_pipeline_projection"
+    ],
+    "rule": "Normalized rows replace their snapshot rows in derivation."
+  },
+  {
+    "id": "gap-search-into-value-accounting",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "                self.accounting_candidates\n                    .into_iter()\n                    .map(|v| v.value)",
+    "replace": "                self.accounting_candidates\n                    .into_iter()\n                    .map(|v| v.value)\n                    .take(0)",
+    "expect_failing": [
+      "gap_beam_unique_and_duplicate_id_python_hashes"
+    ],
+    "rule": "The moved search result keeps its accounting candidates."
   },
   {
     "id": "R4-evidence-alias-slot-index",

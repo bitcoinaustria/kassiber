@@ -54,6 +54,37 @@ pub struct SearchResult {
     pub message: Option<String>,
 }
 impl SearchResult {
+    /// `value`, moving the candidates' objects.
+    pub fn into_value(self) -> Value {
+        let mut result = serde_json::Map::new();
+        result.insert("$type".into(), json!("CustodyGapSearchResult"));
+        result.insert(
+            "candidates".into(),
+            Value::Array(self.candidates.into_iter().map(|v| v.value).collect()),
+        );
+        result.insert(
+            "accounting_candidates".into(),
+            Value::Array(
+                self.accounting_candidates
+                    .into_iter()
+                    .map(|v| v.value)
+                    .collect(),
+            ),
+        );
+        result.insert("search_complete".into(), json!(self.search_complete));
+        result.insert("limit_kind".into(), json!(self.limit_kind));
+        result.insert("candidate_count".into(), json!(self.candidate_count));
+        result.insert(
+            "promotion_eligible_count".into(),
+            json!(self.promotion_eligible_count),
+        );
+        result.insert(
+            "blocking_source_ids".into(),
+            json!(self.blocking_source_ids),
+        );
+        result.insert("message".into(), json!(self.message));
+        Value::Object(result)
+    }
     pub fn value(&self) -> Value {
         json!({"$type":"CustodyGapSearchResult","candidates":self.candidates.iter().map(|v|&v.value).collect::<Vec<_>>(),
             "accounting_candidates":self.accounting_candidates.iter().map(|v|&v.value).collect::<Vec<_>>(),
@@ -595,8 +626,9 @@ mod amount_tests {
                     ..Limits::default()
                 },
             )
-            .unwrap()
-            .value();
+            .unwrap();
+            assert_eq!(result.clone().into_value(), result.value());
+            let result = result.value();
             assert_eq!(crate::codec::sha256(&result.to_string()), expected);
         }
 

@@ -4,6 +4,7 @@ use super::{
     fanout::{amount, clone_base, number},
     pairs, Context,
 };
+use crate::fields::{Fields, Row};
 use crate::{
     codec::{self, truth},
     evidence,
@@ -27,10 +28,10 @@ const SYNTHETIC: &[&str] = &[
     "direct-payout:",
     "multi-consol:",
 ];
-pub(super) fn synthetic(row: &Value) -> bool {
+pub(super) fn synthetic<R: Row + ?Sized>(row: &R) -> bool {
     SYNTHETIC
         .iter()
-        .any(|prefix| codec::pystr(&row["id"]).starts_with(prefix))
+        .any(|prefix| codec::pystr(row.at("id")).starts_with(prefix))
 }
 pub(super) fn abs(value: BigInt) -> BigInt {
     if value < BigInt::from(0) {
@@ -52,8 +53,8 @@ pub(super) fn value(leg: &Py) -> Option<BigInt> {
         None
     }
 }
-pub(super) fn scope(
-    row: &Value,
+pub(super) fn scope<R: Row + ?Sized>(
+    row: &R,
     graph: Option<&Py>,
     index: Index<'_>,
 ) -> Result<Option<TransferScope>, String> {
@@ -87,23 +88,23 @@ pub(super) struct Derivation {
     pub(super) blocked_sources: Vec<Value>,
 }
 impl Derivation {
-    fn block(&mut self, row: &Value, reason: &str, detail: Value, complete: bool) {
-        let mut payload = json!({"required_for":if complete {"complete_transfer_component"} else {"ownership_transfer_review"}, "wallet":if truth(&row["wallet_label"]) {&row["wallet_label"]} else {&row["wallet_id"]}, "asset":row["asset"], "external_id":row["external_id"]});
+    fn block<R: Row + ?Sized>(&mut self, row: &R, reason: &str, detail: Value, complete: bool) {
+        let mut payload = json!({"required_for":if complete {"complete_transfer_component"} else {"ownership_transfer_review"}, "wallet":if truth(row.at("wallet_label")) {row.at("wallet_label")} else {row.at("wallet_id")}, "asset":row.at("asset"), "external_id":row.at("external_id")});
         if let Some(detail) = detail.as_object() {
             payload.as_object_mut().unwrap().extend(detail.clone());
         }
         self.blocked_sources
-            .push(json!({"row":row,"reason":reason,"detail":payload}));
+            .push(json!({"row":row.json(),"reason":reason,"detail":payload}));
     }
 }
 
-fn component_asset(graph: &Py, row: &Value) -> (String, String) {
+fn component_asset<R: Row + ?Sized>(graph: &Py, row: &R) -> (String, String) {
     let component = py::get(graph, "component");
     let id = field(component, "asset_id").py_strip().py_lower();
     let asset = if py::truth(py::get(component, "asset")) {
         field(component, "asset")
     } else {
-        codec::text(&row["asset"])
+        codec::text(row.at("asset"))
     };
     (id, asset.py_strip().py_upper())
 }
@@ -113,7 +114,7 @@ pub(super) enum Relation {
     Different,
     Unknown,
 }
-pub(super) fn relation(leg: &Py, graph: &Py, row: &Value) -> Relation {
+pub(super) fn relation<R: Row + ?Sized>(leg: &Py, graph: &Py, row: &R) -> Relation {
     if field(graph, "chain").py_lower() != "liquid" {
         return Relation::Same;
     }
@@ -139,7 +140,7 @@ pub(super) fn relation(leg: &Py, graph: &Py, row: &Value) -> Relation {
     }
     Relation::Unknown
 }
-pub(super) fn component_inputs<'a>(graph: &'a Py, row: &Value) -> (Vec<&'a Py>, bool) {
+pub(super) fn component_inputs<'a, R: Row + ?Sized>(graph: &'a Py, row: &R) -> (Vec<&'a Py>, bool) {
     let inputs = py::list(py::get(graph, "inputs"));
     if field(graph, "chain").py_lower() != "liquid" {
         return (inputs.iter().collect(), true);
@@ -156,9 +157,9 @@ pub(super) fn component_inputs<'a>(graph: &'a Py, row: &Value) -> (Vec<&'a Py>, 
     complete &= !selected.is_empty();
     (selected, complete)
 }
-fn conserves(
+fn conserves<R: Row + ?Sized>(
     graph: &Py,
-    row: &Value,
+    row: &R,
     index: Index<'_>,
     wallet: &str,
     inputs: &[&Py],
@@ -191,7 +192,7 @@ fn conserves(
         json!({"input_sats":number(&input_sats),"change_sats":number(&change),"expected_outflow_msat":number(&expected),"row_total_outflow_msat":number(total)}),
     ))
 }
-fn exact_fee(graph: &Py, row: &Value) -> Option<BigInt> {
+fn exact_fee<R: Row + ?Sized>(graph: &Py, row: &R) -> Option<BigInt> {
     if py::truth(py::get(graph, "evidence_conflicts")) {
         return None;
     }
@@ -237,27 +238,27 @@ fn exact_fee(graph: &Py, row: &Value) -> Option<BigInt> {
         _ => None,
     }
 }
-fn row_liquid(row: &Value) -> bool {
-    let raw = py::object(&row["raw_json"]);
+fn row_liquid<R: Row + ?Sized>(row: &R) -> bool {
+    let raw = py::object(row.at("raw_json"));
     field(&raw, "chain").py_strip().py_lower() == "liquid"
         || py::truth(py::get(py::get(&raw, "component"), "asset_id"))
         || matches!(
-            codec::text(&row["asset"]).py_strip().py_upper().as_str(),
+            codec::text(row.at("asset")).py_strip().py_upper().as_str(),
             "LBTC" | "L-BTC"
         )
 }
-fn graphless(result: &mut Derivation, row: &Value, rows: &[Value]) -> Result<(), String> {
-    let Some(scope) = graph::onchain_scope(row) else {
+fn graphless<R: Row>(result: &mut Derivation, row: &R, rows: &[R]) -> Result<(), String> {
+    let Some(scope) = row.onchain_scope() else {
         return Ok(());
     };
     let ins: Vec<_> = rows
         .iter()
         .filter(|candidate| {
-            candidate["direction"] == "inbound"
-                && codec::pystr(&candidate["wallet_id"]) != codec::pystr(&row["wallet_id"])
-                && codec::text(&candidate["asset"]).py_upper()
-                    == codec::text(&row["asset"]).py_upper()
-                && graph::onchain_scope(candidate).as_ref() == Some(&scope)
+            candidate.at("direction") == "inbound"
+                && codec::pystr(candidate.at("wallet_id")) != codec::pystr(row.at("wallet_id"))
+                && codec::text(candidate.at("asset")).py_upper()
+                    == codec::text(row.at("asset")).py_upper()
+                && candidate.onchain_scope().as_ref() == Some(&scope)
         })
         .collect();
     let total: BigInt = ins
@@ -315,11 +316,11 @@ fn contradicts(
         .iter()
         .any(|(w, _)| w == wallet))
 }
-fn single_source(
+fn single_source<R: Row + ?Sized>(
     inputs: &[&Py],
     index: Index<'_>,
     wallet: &str,
-    row: &Value,
+    row: &R,
     scope: &PhysicalScope,
 ) -> Result<bool, String> {
     let expected = BTreeSet::from([wallet.to_owned()]);
@@ -334,9 +335,9 @@ fn single_source(
         return Ok(true);
     }
     if inputs.len() != 1
-        || row["direction"] != "outbound"
+        || row.at("direction") != "outbound"
         || amount(row, "amount")? <= zero()
-        || codec::pystr(&row["wallet_id"]) != wallet
+        || codec::pystr(row.at("wallet_id")) != wallet
     {
         return Ok(false);
     }
@@ -358,21 +359,21 @@ fn single_source(
         .collect::<BTreeSet<_>>()
         == expected)
 }
-fn destination<'a>(
-    candidates: &[&'a Value],
+fn destination<'a, R: Row>(
+    candidates: &[&'a R],
     leg: &BigInt,
     txid: &str,
     consumed: &BTreeSet<String>,
     handled: &BTreeSet<String>,
     asset: &Value,
     scope: &TransferScope,
-) -> Result<Result<Option<&'a Value>, ()>, String> {
+) -> Result<Result<Option<&'a R>, ()>, String> {
     let mut available = Vec::new();
     for row in candidates {
-        let id = codec::pystr(&row["id"]);
+        let id = codec::pystr(row.at("id"));
         if !consumed.contains(&id)
             && !handled.contains(&id)
-            && codec::text(&row["asset"]).py_upper() == codec::text(asset).py_upper()
+            && codec::text(row.at("asset")).py_upper() == codec::text(asset).py_upper()
             && amount(row, "amount")? > zero()
         {
             available.push(*row);
@@ -380,7 +381,7 @@ fn destination<'a>(
     }
     let mut same = Vec::new();
     for row in &available {
-        if amount(row, "amount")? == *leg && graph::onchain_scope(row).as_ref() == Some(scope) {
+        if amount(row, "amount")? == *leg && row.onchain_scope().as_ref() == Some(scope) {
             same.push(*row);
         }
     }
@@ -394,15 +395,15 @@ fn destination<'a>(
     // Python evaluates the complete blocking comprehension (including errors).
     let mut blocked = false;
     for row in available {
-        let different = graph::onchain_scope(row).is_some_and(|scope| scope.2 != txid);
+        let different = row.onchain_scope().is_some_and(|scope| scope.2 != txid);
         if !different && abs(amount(row, "amount")? - leg) <= tolerance {
             blocked = true;
         }
     }
     Ok(if blocked { Err(()) } else { Ok(None) })
 }
-pub(super) fn clone_leg(
-    row: &Value,
+pub(super) fn clone_leg<R: Row + ?Sized>(
+    row: &R,
     amount: &BigInt,
     fee: &BigInt,
     id: &str,
@@ -433,8 +434,8 @@ pub(super) fn clone_leg(
     Ok(leg)
 }
 
-pub(super) fn derive(
-    rows: &[Value],
+pub(super) fn derive<R: Row>(
+    rows: &[R],
     snapshot: &Snapshot,
     handled: &BTreeSet<String>,
 ) -> Result<Derivation, String> {
@@ -442,9 +443,9 @@ pub(super) fn derive(
     let index = Index(snapshot.owned_index.as_ref());
     if index.0.is_none() {
         for row in rows {
-            if row["direction"] != "outbound"
+            if row.at("direction") != "outbound"
                 || !row_liquid(row)
-                || handled.contains(&codec::pystr(&row["id"]))
+                || handled.contains(&codec::pystr(row.at("id")))
             {
                 continue;
             }
@@ -454,19 +455,19 @@ pub(super) fn derive(
     }
     let mut sources: BTreeMap<TransferScope, BTreeSet<String>> = BTreeMap::new();
     for row in rows {
-        if let Some(scope) = graph::onchain_scope(row) {
-            if row["direction"] == "outbound" {
+        if let Some(scope) = row.onchain_scope() {
+            if row.at("direction") == "outbound" {
                 sources
                     .entry(scope)
                     .or_default()
-                    .insert(codec::pystr(&row["wallet_id"]));
+                    .insert(codec::pystr(row.at("wallet_id")));
             }
         }
     }
     for row in rows {
-        if row["direction"] != "inbound"
-            || handled.contains(&codec::pystr(&row["id"]))
-            || !evidence::current_observation(row).map_err(|error| {
+        if row.at("direction") != "inbound"
+            || handled.contains(&codec::pystr(row.at("id")))
+            || !evidence::current_observation_of(row).map_err(|error| {
                 // Quantity hashing uses Python int(); preserve the offending
                 // field's family after the hash predicate reaches it.
                 if error.message == "invalid integer quantity" {
@@ -481,7 +482,7 @@ pub(super) fn derive(
         {
             continue;
         }
-        let parsed = py::parse(&row["raw_json"])?;
+        let parsed = py::parse(row.at("raw_json"))?;
         let scope = scope(row, parsed.as_ref(), index)?;
         let (Some(parsed), Some(scope)) = (parsed, scope) else {
             continue;
@@ -494,10 +495,10 @@ pub(super) fn derive(
         if let Some(recorded) = sources.get(&scope) {
             missing.retain(|w| !recorded.contains(w));
         }
-        missing.remove(&codec::pystr(&row["wallet_id"]));
+        missing.remove(&codec::pystr(row.at("wallet_id")));
         let mut active = BTreeSet::new();
         for wallet in missing {
-            if graph::native_wallet_delta_msat(row, snapshot, &wallet)?
+            if graph::native_wallet_delta_msat(&row.json(), snapshot, &wallet)?
                 .is_none_or(|delta| delta > zero())
             {
                 active.insert(wallet);
@@ -512,24 +513,24 @@ pub(super) fn derive(
             );
         }
     }
-    let mut inbound: BTreeMap<String, Vec<&Value>> = BTreeMap::new();
+    let mut inbound: BTreeMap<String, Vec<&R>> = BTreeMap::new();
     for row in rows {
-        if row["direction"] == "inbound" && !synthetic(row) {
+        if row.at("direction") == "inbound" && !synthetic(row) {
             inbound
-                .entry(codec::pystr(&row["wallet_id"]))
+                .entry(codec::pystr(row.at("wallet_id")))
                 .or_default()
                 .push(row);
         }
     }
     let parsed = index::profile_parsed_typed(rows, index)?;
     let mut out_graphs = BTreeMap::new();
-    let mut groups: Vec<(TransferScope, Vec<&Value>)> = Vec::new();
+    let mut groups: Vec<(TransferScope, Vec<&R>)> = Vec::new();
     let mut group_positions = BTreeMap::new();
     for row in rows {
-        if row["direction"] != "outbound" || synthetic(row) || amount(row, "amount")? <= zero() {
+        if row.at("direction") != "outbound" || synthetic(row) || amount(row, "amount")? <= zero() {
             continue;
         }
-        let id = codec::pystr(&row["id"]);
+        let id = codec::pystr(row.at("id"));
         let graph = parsed.get(&id);
         out_graphs.insert(id, graph);
         let scope = scope(row, graph, index)?;
@@ -544,27 +545,27 @@ pub(super) fn derive(
     }
     let mut duplicates = BTreeMap::new();
     for (_, group) in &groups {
-        let mut economic: BTreeMap<(BigInt, BigInt, bool), Vec<&Value>> = BTreeMap::new();
+        let mut economic: BTreeMap<(BigInt, BigInt, bool), Vec<&R>> = BTreeMap::new();
         for row in group {
             economic
                 .entry((
                     amount(row, "amount")?,
                     amount(row, "fee")?,
-                    truth(&row["amount_includes_fee"]),
+                    truth(row.at("amount_includes_fee")),
                 ))
                 .or_default()
                 .push(*row);
         }
         for repeated in economic.values().filter(|g| g.len() > 1) {
             for row in repeated {
-                duplicates.insert(codec::pystr(&row["id"]), repeated.clone());
+                duplicates.insert(codec::pystr(row.at("id")), repeated.clone());
             }
         }
     }
     let mut consumed = BTreeSet::new();
     for row in rows {
-        let source_id = codec::pystr(&row["id"]);
-        if row["direction"] != "outbound"
+        let source_id = codec::pystr(row.at("id"));
+        if row.at("direction") != "outbound"
             || handled.contains(&source_id)
             || synthetic(row)
             || amount(row, "amount")? <= zero()
@@ -581,7 +582,7 @@ pub(super) fn derive(
             continue;
         };
         let scope = physical(&group);
-        let wallet = codec::pystr(&row["wallet_id"]);
+        let wallet = codec::pystr(row.at("wallet_id"));
         let (inputs, complete) = component_inputs(graph, row);
         if py::truth(py::get(graph, "evidence_conflicts")) || !complete {
             result.block(
@@ -662,7 +663,7 @@ pub(super) fn derive(
             continue;
         }
         if let Some(duplicate) = duplicates.get(&source_id) {
-            let mut ids: Vec<_> = duplicate.iter().map(|r| codec::pystr(&r["id"])).collect();
+            let mut ids: Vec<_> = duplicate.iter().map(|r| codec::pystr(r.at("id"))).collect();
             ids.sort();
             result.block(
                 row,
@@ -679,10 +680,10 @@ pub(super) fn derive(
         let source_amount = amount(row, "amount")?;
         let mut fee = amount(row, "fee")?;
         let mut total = source_amount.clone();
-        let inclusive = truth(&row["amount_includes_fee"]);
+        let inclusive = truth(row.at("amount_includes_fee"));
         let implicit = inclusive
-            && (if truth(&row["observation_fee_attribution"]) {
-                codec::pystr(&row["observation_fee_attribution"])
+            && (if truth(row.at("observation_fee_attribution")) {
+                codec::pystr(row.at("observation_fee_attribution"))
             } else {
                 "unknown".into()
             })
@@ -765,7 +766,7 @@ pub(super) fn derive(
                 txid,
                 &consumed,
                 handled,
-                &row["asset"],
+                row.at("asset"),
                 &group,
             )?;
             let incoming = match decision {
@@ -778,8 +779,8 @@ pub(super) fn derive(
                     break;
                 }
                 Ok(Some(row)) => {
-                    consumed.insert(codec::pystr(&row["id"]));
-                    row.clone()
+                    consumed.insert(codec::pystr(row.at("id")));
+                    row.json().into_owned()
                 }
                 Ok(None) => {
                     let Some(reference) = snapshot

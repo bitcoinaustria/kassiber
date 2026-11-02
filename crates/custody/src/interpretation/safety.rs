@@ -67,7 +67,10 @@ fn compose_impl(
                 .is_some_and(|hash| !hash.is_null() && hash != "")
         });
         let auto = if has_chain || has_hashes {
-            recorded::detect(rows.values())?.0
+            match rows.records() {
+                Some(records) => recorded::detect(records)?.0,
+                None => recorded::detect(rows.values())?.0,
+            }
         } else {
             Vec::new()
         };
@@ -189,7 +192,10 @@ fn compose_impl(
         }
         let holds = match (rows.records(), prepared.normalized.records()) {
             (Some(rows), Some(derivation)) => holds!(rows, derivation),
-            (Some(rows), None) => holds!(rows, prepared.normalized.values()),
+            (Some(records), None) => match prepared.normalized.layered() {
+                Some(derivation) => holds!(records, &derivation[..]),
+                None => holds!(records, prepared.normalized.values()),
+            },
             (None, Some(derivation)) => holds!(rows.values(), derivation),
             (None, None) => holds!(rows.values(), prepared.normalized.values()),
         };

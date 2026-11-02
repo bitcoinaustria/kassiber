@@ -471,7 +471,17 @@ pub(super) fn validate(legs: &[Value], allocs: &[Value], h: &Value) -> Result<Va
     let allocation = allocations(legs, allocs, &mode);
     issues.extend(array(&allocation["issues"]).iter().cloned());
     issues.extend(connectivity(legs, allocs, &mode));
-    Ok(
-        json!({"conservation_mode":mode,"activatable":issues.is_empty(),"issues":issues,"suspense_msat":number(&suspense_total),"source_msat":number(&source_total),"owned_destination_msat":number(&owned_total),"by_asset":by_asset,"by_conservation_unit":by_unit,"by_valuation_unit":by_valuation,"allocations":allocation}),
-    )
+    // The parts move into the result; `json!` would copy each one.
+    let mut result = serde_json::Map::new();
+    result.insert("conservation_mode".into(), json!(mode));
+    result.insert("activatable".into(), json!(issues.is_empty()));
+    result.insert("issues".into(), Value::Array(issues));
+    result.insert("suspense_msat".into(), number(&suspense_total));
+    result.insert("source_msat".into(), number(&source_total));
+    result.insert("owned_destination_msat".into(), number(&owned_total));
+    result.insert("by_asset".into(), Value::Array(by_asset));
+    result.insert("by_conservation_unit".into(), Value::Array(by_unit));
+    result.insert("by_valuation_unit".into(), Value::Array(by_valuation));
+    result.insert("allocations".into(), allocation);
+    Ok(Value::Object(result))
 }

@@ -7,6 +7,7 @@ use super::{
     },
     pairs, Context,
 };
+use crate::fields::{Fields, Row};
 use crate::{
     codec::{self, truth},
     evidence,
@@ -18,18 +19,20 @@ use kassiber_pyjson::{BigInt, Value as Py};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
-fn current(row: &Value) -> Result<bool, String> {
-    if super::integer_or_zero(&row["observation_authority_version"]).ok() != Some(json!(1)) {
+fn current<R: Row + ?Sized>(row: &R) -> Result<bool, String> {
+    if super::integer_or_zero(row.at("observation_authority_version")).ok() != Some(json!(1)) {
         return Ok(false);
     }
     Ok(
-        codec::text(&row["observation_graph_hash"]) == evidence::graph_hash(&row["raw_json"])?.0
-            && codec::text(&row["observation_quantity_hash"]) == evidence::observed_hash(row)?.0,
+        codec::text(row.at("observation_graph_hash"))
+            == evidence::graph_hash(row.at("raw_json"))?.0
+            && codec::text(row.at("observation_quantity_hash"))
+                == evidence::observed_hash(&row.json())?.0,
     )
 }
 
-fn collaborative(
-    group: &[&Value],
+fn collaborative<R: Row>(
+    group: &[&R],
     graph: &Py,
     index: Index<'_>,
     physical: &(String, String),
@@ -50,7 +53,7 @@ fn collaborative(
     }
     let by_wallet: BTreeMap<_, _> = relevant
         .iter()
-        .map(|row| (codec::pystr(&row["wallet_id"]), *row))
+        .map(|row| (codec::pystr(row.at("wallet_id")), *row))
         .collect();
     if by_wallet.len() != relevant.len() {
         return Ok(None);
@@ -85,7 +88,7 @@ fn collaborative(
         } else {
             "inbound"
         };
-        if row["direction"] != direction || amount(row, "amount")? != abs(delta.clone()) * 1000 {
+        if row.at("direction") != direction || amount(row, "amount")? != abs(delta.clone()) * 1000 {
             return Ok(None);
         }
     }
@@ -97,8 +100,8 @@ fn collaborative(
     ))
 }
 
-pub(super) fn derive(
-    rows: &[Value],
+pub(super) fn derive<R: Row>(
+    rows: &[R],
     snapshot: &Snapshot,
     handled: &BTreeSet<String>,
 ) -> Result<Derivation, String> {
@@ -108,10 +111,10 @@ pub(super) fn derive(
         return Ok(result);
     }
     let parsed = graph::ownership::profile_parsed_typed(rows, index)?;
-    let mut groups: Vec<(_, Vec<&Value>)> = Vec::new();
+    let mut groups: Vec<(_, Vec<&R>)> = Vec::new();
     let mut positions = BTreeMap::new();
     for row in rows {
-        let graph = parsed.get(&codec::pystr(&row["id"]));
+        let graph = parsed.get(&codec::pystr(row.at("id")));
         let Some(scope) = scope(row, graph, index)? else {
             continue;
         };
@@ -134,9 +137,9 @@ pub(super) fn derive(
         let physical = (chain.clone(), network);
         let mut senders = Vec::new();
         for row in &group {
-            if row["direction"] == "outbound"
+            if row.at("direction") == "outbound"
                 && (amount(row, "amount")? > zero()
-                    || (truth(&row["custody_native_fee_normalized"])
+                    || (truth(row.at("custody_native_fee_normalized"))
                         && amount(row, "fee")? > zero()))
             {
                 senders.push(*row);
@@ -145,20 +148,20 @@ pub(super) fn derive(
         if senders.len() < 2
             || group
                 .iter()
-                .any(|r| handled.contains(&codec::pystr(&r["id"])))
+                .any(|r| handled.contains(&codec::pystr(r.at("id"))))
         {
             continue;
         }
         let sender_wallets: BTreeSet<_> = senders
             .iter()
-            .map(|r| codec::pystr(&r["wallet_id"]))
+            .map(|r| codec::pystr(r.at("wallet_id")))
             .collect();
         if sender_wallets.len() != senders.len() {
             continue;
         }
         let Some(graph) = senders
             .iter()
-            .find_map(|r| parsed.get(&codec::pystr(&r["id"])))
+            .find_map(|r| parsed.get(&codec::pystr(r.at("id"))))
         else {
             continue;
         };
@@ -168,7 +171,7 @@ pub(super) fn derive(
         }
         let normalized = senders
             .iter()
-            .all(|r| truth(&r["custody_native_fee_normalized"]));
+            .all(|r| truth(r.at("custody_native_fee_normalized")));
         let fees = senders
             .iter()
             .map(|r| amount(r, "fee"))
@@ -265,7 +268,7 @@ pub(super) fn derive(
         {
             continue;
         }
-        let group_ids: BTreeSet<_> = group.iter().map(|r| codec::pystr(&r["id"])).collect();
+        let group_ids: BTreeSet<_> = group.iter().map(|r| codec::pystr(r.at("id"))).collect();
         let txid = graph::strict_txid(&json!(field(graph, "txid"))).unwrap_or(txid_key);
         let mut receipts = BTreeMap::new();
         let mut valid = true;
@@ -276,8 +279,8 @@ pub(super) fn derive(
             }
             let mut candidates = Vec::new();
             for row in &group {
-                if row["direction"] == "inbound"
-                    && codec::pystr(&row["wallet_id"]) == *wallet
+                if row.at("direction") == "inbound"
+                    && codec::pystr(row.at("wallet_id")) == *wallet
                     && amount(row, "amount")? > zero()
                 {
                     candidates.push(*row);
@@ -291,13 +294,13 @@ pub(super) fn derive(
                 break;
             }
             for row in rows {
-                if row["direction"] == "inbound"
+                if row.at("direction") == "inbound"
                     && amount(row, "amount")? > zero()
-                    && codec::pystr(&row["wallet_id"]) == *wallet
-                    && codec::text(&row["asset"]).py_upper() == asset.py_upper()
-                    && !group_ids.contains(&codec::pystr(&row["id"]))
-                    && !handled.contains(&codec::pystr(&row["id"]))
-                    && !graph::onchain_scope(row).is_some_and(|s| s.2 != txid)
+                    && codec::pystr(row.at("wallet_id")) == *wallet
+                    && codec::text(row.at("asset")).py_upper() == asset.py_upper()
+                    && !group_ids.contains(&codec::pystr(row.at("id")))
+                    && !handled.contains(&codec::pystr(row.at("id")))
+                    && !row.onchain_scope().is_some_and(|s| s.2 != txid)
                     && abs(amount(row, "amount")? - &msat)
                         <= (abs(msat.clone()) / 100i64).max(BigInt::from(2_500_000))
                 {
@@ -315,15 +318,15 @@ pub(super) fn derive(
         if !valid || (!receipts.is_empty() && receipts.len() < destinations.len()) {
             continue;
         }
-        senders.sort_by_key(|r| codec::pystr(&r["id"]));
-        let bearer = codec::pystr(&senders[0]["id"]);
+        senders.sort_by_key(|r| codec::pystr(r.at("id")));
+        let bearer = codec::pystr(senders[0].at("id"));
         let block_rows: Vec<_> = receipts.values().copied().collect();
         let mut sinks = destinations.iter();
         let (mut sink, mut remaining) = sinks.next().map(|(id, n)| (id, n * 1000i64)).unwrap();
         let mut capacities = Vec::new();
         let mut source_ids = BTreeSet::new();
         for row in &senders {
-            let source = codec::pystr(&row["id"]);
+            let source = codec::pystr(row.at("id"));
             let capacity = amount(row, "amount")?
                 + if normalized || source == bearer {
                     zero()
@@ -340,8 +343,8 @@ pub(super) fn derive(
             return Err("CustodyAllocationError".into());
         }
         for (row, capacity) in senders.iter().zip(capacities) {
-            let source = codec::pystr(&row["id"]);
-            let wallet = codec::pystr(&row["wallet_id"]);
+            let source = codec::pystr(row.at("id"));
+            let wallet = codec::pystr(row.at("wallet_id"));
             let mut available = capacity;
             let mut start = zero();
             while available > zero() {
@@ -372,7 +375,7 @@ pub(super) fn derive(
                 )?;
                 let journal = receipts
                     .get(sink)
-                    .map(|r| codec::pystr(&r["id"]))
+                    .map(|r| codec::pystr(r.at("id")))
                     .unwrap_or_else(|| source.clone());
                 let incoming = clone_leg(
                     row,
@@ -382,7 +385,7 @@ pub(super) fn derive(
                     &journal,
                     Some((sink, &wallets[sink])),
                 )?;
-                result.derived_pairs.push(json!({"out":out,"in":incoming,"out_amount_msat":super::fanout::number(&cell),"source":"multi_source_consolidation","group_id":format!("multi-consol:{txid}"),"group_block_rows":block_rows}));
+                result.derived_pairs.push(json!({"out":out,"in":incoming,"out_amount_msat":super::fanout::number(&cell),"source":"multi_source_consolidation","group_id":format!("multi-consol:{txid}"),"group_block_rows":block_rows.iter().map(|row| row.json()).collect::<Vec<_>>()}));
                 result.synthetic_rows.extend([out, incoming]);
                 available -= &cell;
                 remaining -= &cell;
@@ -399,10 +402,10 @@ pub(super) fn derive(
         }
         result
             .dropped_out_ids
-            .extend(senders.iter().map(|r| codec::pystr(&r["id"])));
+            .extend(senders.iter().map(|r| codec::pystr(r.at("id"))));
         result
             .dropped_in_ids
-            .extend(receipts.values().map(|r| codec::pystr(&r["id"])));
+            .extend(receipts.values().map(|r| codec::pystr(r.at("id"))));
     }
     Ok(result)
 }

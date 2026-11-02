@@ -509,7 +509,7 @@ fn materialize(
     }
     let effective = if issues.is_empty() { "active" } else { "draft" };
     validation["activatable"] = json!(issues.is_empty());
-    validation["issues"] = json!(issues);
+    validation["issues"] = Value::Array(issues);
     for k in [
         "revision",
         "expected_leg_count",
@@ -534,18 +534,21 @@ fn materialize(
     );
     result.insert("evidence_status".into(), evidence);
     result.insert("native_support_status".into(), native);
+    // The parts move into the result; `json!` would copy each one.
     result.insert(
         "legs".into(),
-        json!(stored
-            .into_iter()
-            .map(|mut l| {
-                l.as_object_mut().unwrap().remove("location_ref");
-                l
-            })
-            .collect::<Vec<_>>()),
+        Value::Array(
+            stored
+                .into_iter()
+                .map(|mut l| {
+                    l.as_object_mut().unwrap().remove("location_ref");
+                    l
+                })
+                .collect(),
+        ),
     );
-    result.insert("allocations".into(), json!(allocs));
-    result.insert("economic_terms".into(), json!(terms));
+    result.insert("allocations".into(), Value::Array(allocs));
+    result.insert("economic_terms".into(), Value::Array(terms));
     result.insert("validation".into(), validation);
     Ok(Value::Object(result))
 }
@@ -682,7 +685,10 @@ pub fn compute_with(
         let codes:BTreeSet<_>=array(&c["validation"]["issues"]).iter().map(|i|if truth(&i["code"]) {text(&i["code"])} else {"unknown".into()}).collect();
         json!({"component_id":c["id"],"lineage_id":c["lineage_id"],"revision":c["revision"],"issue_codes":codes})
     }).collect();
-    Ok(json!({"components":components,"blockers":blockers}))
+    let mut result = Map::new();
+    result.insert("blockers".into(), Value::Array(blockers));
+    result.insert("components".into(), Value::Array(components));
+    Ok(Value::Object(result))
 }
 
 #[cfg(test)]

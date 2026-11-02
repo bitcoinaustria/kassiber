@@ -1,6 +1,7 @@
 //! Recorded candidates preserve Python dict insertion order. Labels identify a
 //! candidate's origin; the claim compiler independently revalidates its proof.
 use super::{anchor, pairs, Context};
+use crate::fields::{Fields, Row};
 use crate::{
     codec::{text, truth},
     evidence, graph,
@@ -25,13 +26,13 @@ fn wallet_kind(value: &Value) -> String {
         _ => kind,
     }
 }
-pub(super) fn lightning_row(row: &Value) -> bool {
-    let source = normalized(&row["payment_hash_source"]);
+pub(super) fn lightning_row<R: Row + ?Sized>(row: &R) -> bool {
+    let source = normalized(row.at("payment_hash_source"));
     if !matches!(source.as_str(), "lnd" | "core_lightning") {
         return false;
     }
-    let kind = normalized(&row["kind"]);
-    let raw = graph::transfer_object(&row["raw_json"]);
+    let kind = normalized(row.at("kind"));
+    let raw = graph::transfer_object(row.at("raw_json"));
     let import = normalized(&raw["_kassiber_provenance"]["import_source"]);
     match source.as_str() {
         "lnd" => import == "lnd" && matches!(kind.as_str(), "lnd_invoice" | "lnd_pay"),
@@ -68,15 +69,15 @@ pub(super) fn domain_name(network: &str) -> &str {
         _ => network,
     }
 }
-pub(super) fn network_domain(row: &Value) -> Option<String> {
-    if let Some((_, network, _, _)) = graph::onchain_scope(row) {
+pub(super) fn network_domain<R: Row + ?Sized>(row: &R) -> Option<String> {
+    if let Some((_, network, _, _)) = row.onchain_scope() {
         return Some(domain_name(&network).to_owned());
     }
-    let raw = graph::transfer_object(&row["raw_json"]);
-    let config = graph::transfer_object(if truth(&row["config_json"]) {
-        &row["config_json"]
+    let raw = graph::transfer_object(row.at("raw_json"));
+    let config = graph::transfer_object(if truth(row.at("config_json")) {
+        row.at("config_json")
     } else {
-        &row["wallet_config_json"]
+        row.at("wallet_config_json")
     });
     let mut families = BTreeSet::new();
     let mut domains = BTreeSet::new();
@@ -101,7 +102,7 @@ pub(super) fn network_domain(row: &Value) -> Option<String> {
             domains.insert(domain_name(&n).to_owned());
         }
     }
-    let asset = text(&row["asset"])
+    let asset = text(row.at("asset"))
         .py_strip()
         .py_upper()
         .replace("L-BTC", "LBTC");
@@ -114,15 +115,15 @@ pub(super) fn network_domain(row: &Value) -> Option<String> {
     }
     domains.into_iter().next()
 }
-fn append_groups(
-    groups: Vec<Vec<&Value>>,
+fn append_groups<R: Row>(
+    groups: Vec<Vec<&R>>,
     source: &str,
     pairs: &mut Vec<Value>,
     matched: &mut BTreeSet<String>,
 ) -> Result<(), String> {
     // Python compares the raw value with zero before its later int() call.
-    let positive = |row: &&Value| -> Result<bool, String> {
-        let value = &row["amount"];
+    let positive = |row: &&R| -> Result<bool, String> {
+        let value = row.at("amount");
         if !truth(value) {
             return Ok(false);
         }
@@ -146,7 +147,7 @@ fn append_groups(
     for group in groups {
         let outs: Vec<_> = group
             .iter()
-            .filter(|r| r["direction"] == "outbound")
+            .filter(|r| r.at("direction") == "outbound")
             .map(|r| Ok(positive(r)?.then_some(r)))
             .collect::<Result<Vec<_>, String>>()?
             .into_iter()
@@ -154,7 +155,7 @@ fn append_groups(
             .collect();
         let ins: Vec<_> = group
             .iter()
-            .filter(|r| r["direction"] == "inbound")
+            .filter(|r| r.at("direction") == "inbound")
             .map(|r| Ok(positive(r)?.then_some(r)))
             .collect::<Result<Vec<_>, String>>()?
             .into_iter()
@@ -165,29 +166,33 @@ fn append_groups(
         }
         let (out, incoming) = (*outs[0], *ins[0]);
         if source == "row_matched" {
-            if out["wallet_id"] == incoming["wallet_id"] {
+            if out.at("wallet_id") == incoming.at("wallet_id") {
                 continue;
             }
-        } else if super::integer_or_zero(&out["amount"])?
-            != super::integer_or_zero(&incoming["amount"])?
+        } else if super::integer_or_zero(out.at("amount"))?
+            != super::integer_or_zero(incoming.at("amount"))?
         {
             continue;
         }
-        pairs.push(json!({"out":out,"in":incoming,"source":source}));
-        matched.extend([text(&out["id"]), text(&incoming["id"])]);
+        let mut pair = serde_json::Map::new();
+        pair.insert("out".into(), out.json().into_owned());
+        pair.insert("in".into(), incoming.json().into_owned());
+        pair.insert("source".into(), json!(source));
+        pairs.push(Value::Object(pair));
+        matched.extend([text(out.at("id")), text(incoming.at("id"))]);
     }
     Ok(())
 }
-type Groups<'a, K> = Vec<(K, Vec<&'a Value>)>;
+type Groups<'a, K, R> = Vec<(K, Vec<&'a R>)>;
 
-pub(super) fn detect(rows: &[Value]) -> Result<(Vec<Value>, BTreeSet<String>), String> {
-    let mut chain_groups: Groups<(String, String, String, String)> = Vec::new();
+pub(super) fn detect<R: Row>(rows: &[R]) -> Result<(Vec<Value>, BTreeSet<String>), String> {
+    let mut chain_groups: Groups<(String, String, String, String), R> = Vec::new();
     let mut index = std::collections::HashMap::new();
     for row in rows {
         if super::holds::invalid_transfer_identity(row) {
             continue;
         }
-        if let Some(scope) = graph::onchain_scope(row) {
+        if let Some(scope) = row.onchain_scope() {
             crate::codec::push_grouped(&mut chain_groups, &mut index, scope, row);
         }
     }
@@ -199,20 +204,20 @@ pub(super) fn detect(rows: &[Value]) -> Result<(Vec<Value>, BTreeSet<String>), S
         &mut pairs,
         &mut matched,
     )?;
-    let mut hash_groups: Groups<(String, Value, String)> = Vec::new();
+    let mut hash_groups: Groups<(String, Value, String), R> = Vec::new();
     // Asset values are keyed by their encoding, which is injective.
     let mut hash_index: std::collections::HashMap<(String, String, String), usize> =
         std::collections::HashMap::new();
     for row in rows {
-        if matched.contains(&text(&row["id"])) || !lightning_row(row) {
+        if matched.contains(&text(row.at("id"))) || !lightning_row(row) {
             continue;
         }
         let (Some(hash), Some(domain)) =
-            (canonical_hash(&row["payment_hash"]), network_domain(row))
+            (canonical_hash(row.at("payment_hash")), network_domain(row))
         else {
             continue;
         };
-        let key = (hash, row["asset"].clone(), domain);
+        let key = (hash, row.at("asset").clone(), domain);
         let encoded = (key.0.clone(), key.1.to_string(), key.2.clone());
         if let Some(&at) = hash_index.get(&encoded) {
             hash_groups[at].1.push(row);

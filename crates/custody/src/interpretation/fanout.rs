@@ -1,15 +1,16 @@
 //! Recorded 1:N derivation. Raw rows establish candidates; the shared claim
 //! compiler independently revalidates the entire group's native observations.
 use super::{pairs, Context};
+use crate::fields::{Fields, Row};
 use crate::python_text::PythonText;
-use crate::{codec, graph, snapshot::Snapshot};
+use crate::{codec, snapshot::Snapshot};
 use kassiber_pydecimal::{Context as DecimalContext, Decimal, DecimalError};
 use kassiber_pyjson::BigInt;
 use serde_json::{json, Value};
 use std::{collections::BTreeSet, str::FromStr};
 
-pub(super) fn amount(row: &Value, field: &str) -> Result<BigInt, String> {
-    BigInt::from_str(&super::integer_or_zero(&row[field])?.to_string()).map_err(|e| e.to_string())
+pub(super) fn amount<R: Row + ?Sized>(row: &R, field: &str) -> Result<BigInt, String> {
+    BigInt::from_str(&super::integer_or_zero(row.at(field))?.to_string()).map_err(|e| e.to_string())
 }
 pub(super) fn number(value: &BigInt) -> Value {
     serde_json::from_str(&value.to_string()).expect("converted integer")
@@ -69,15 +70,19 @@ fn unit_rate(value: &Value, full: &BigInt) -> Result<String, String> {
 }
 
 /// Shared pricing and quantity portion of Python's `_clone_row`.
-pub(super) fn clone_base(row: &Value, amount_msat: &BigInt, fee: &BigInt) -> Result<Value, String> {
-    let mut base = row.clone();
+pub(super) fn clone_base<R: Row + ?Sized>(
+    row: &R,
+    amount_msat: &BigInt,
+    fee: &BigInt,
+) -> Result<Value, String> {
+    let mut base = row.json().into_owned();
     let full = amount(row, "amount")?;
     let absent = |v: &Value| v.is_null() || v == "";
-    if absent(&row["fiat_rate_exact"]) && absent(&row["fiat_rate"]) && full > BigInt::from(0) {
-        let value = if codec::truth(&row["fiat_value_exact"]) {
-            &row["fiat_value_exact"]
+    if absent(row.at("fiat_rate_exact")) && absent(row.at("fiat_rate")) && full > BigInt::from(0) {
+        let value = if codec::truth(row.at("fiat_value_exact")) {
+            row.at("fiat_value_exact")
         } else {
-            &row["fiat_value"]
+            row.at("fiat_value")
         };
         if !absent(value) {
             let rate = unit_rate(value, &full)?;
@@ -92,21 +97,26 @@ pub(super) fn clone_base(row: &Value, amount_msat: &BigInt, fee: &BigInt) -> Res
     Ok(base)
 }
 
-fn clone_out(row: &Value, amount_msat: &BigInt, fee: &BigInt, id: &str) -> Result<Value, String> {
+fn clone_out<R: Row + ?Sized>(
+    row: &R,
+    amount_msat: &BigInt,
+    fee: &BigInt,
+    id: &str,
+) -> Result<Value, String> {
     let mut base = clone_base(row, amount_msat, fee)?;
     base["id"] = json!(id);
     base["external_id"] = json!(id);
     base["kind"] = json!("self_transfer_out");
-    base["journal_transaction_id"] = json!(codec::pystr(&row["id"]));
+    base["journal_transaction_id"] = json!(codec::pystr(row.at("id")));
     Ok(base)
 }
 
-pub(super) fn derive(rows: &[Value], handled: &BTreeSet<String>) -> Result<Value, String> {
+pub(super) fn derive<R: Row>(rows: &[R], handled: &BTreeSet<String>) -> Result<Value, String> {
     // A Vec retains Python's first-seen scope order, including interleaved groups.
-    let mut groups: Vec<(_, Vec<&Value>)> = Vec::new();
+    let mut groups: Vec<(_, Vec<&R>)> = Vec::new();
     let mut index = std::collections::HashMap::new();
     for row in rows {
-        if let Some(scope) = graph::onchain_scope(row) {
+        if let Some(scope) = row.onchain_scope() {
             crate::codec::push_grouped(&mut groups, &mut index, scope, row);
         }
     }
@@ -117,7 +127,7 @@ pub(super) fn derive(rows: &[Value], handled: &BTreeSet<String>) -> Result<Value
         // Count every positive source before applying handled reservations.
         let mut outs = Vec::new();
         for row in &group {
-            if row["direction"] == "outbound" && amount(row, "amount")? > BigInt::from(0) {
+            if row.at("direction") == "outbound" && amount(row, "amount")? > BigInt::from(0) {
                 outs.push(*row);
             }
         }
@@ -125,17 +135,17 @@ pub(super) fn derive(rows: &[Value], handled: &BTreeSet<String>) -> Result<Value
             continue;
         }
         let out = outs[0];
-        let source_id = codec::pystr(&out["id"]);
+        let source_id = codec::pystr(out.at("id"));
         if handled.contains(&source_id) {
             continue;
         }
-        let source_wallet = codec::pystr(&out["wallet_id"]);
+        let source_wallet = codec::pystr(out.at("wallet_id"));
         let ins: Vec<_> = group
             .into_iter()
             .filter(|row| {
-                row["direction"] == "inbound"
-                    && !handled.contains(&codec::pystr(&row["id"]))
-                    && codec::pystr(&row["wallet_id"]) != source_wallet
+                row.at("direction") == "inbound"
+                    && !handled.contains(&codec::pystr(row.at("id")))
+                    && codec::pystr(row.at("wallet_id")) != source_wallet
             })
             .collect();
         if ins.len() < 2 {
@@ -143,14 +153,14 @@ pub(super) fn derive(rows: &[Value], handled: &BTreeSet<String>) -> Result<Value
         }
         let wallets: BTreeSet<_> = ins
             .iter()
-            .map(|row| codec::pystr(&row["wallet_id"]))
+            .map(|row| codec::pystr(row.at("wallet_id")))
             .collect();
         if wallets.len() != ins.len() {
             continue;
         }
         let mut legs = ins
             .into_iter()
-            .map(|row| Ok((amount(row, "amount")?, codec::pystr(&row["id"]), row)))
+            .map(|row| Ok((amount(row, "amount")?, codec::pystr(row.at("id")), row)))
             .collect::<Result<Vec<_>, String>>()?;
         let total: BigInt = legs.iter().map(|(amount, _, _)| amount).sum();
         if total != amount(out, "amount")? {
@@ -175,7 +185,7 @@ pub(super) fn derive(rows: &[Value], handled: &BTreeSet<String>) -> Result<Value
                 },
                 &id,
             )?;
-            leg_pairs.push(json!({"out":leg,"in":incoming,"source":"recorded_fanout","group_id":format!("recorded-fanout:{txid}")}));
+            leg_pairs.push(json!({"out":leg,"in":incoming.json(),"source":"recorded_fanout","group_id":format!("recorded-fanout:{txid}")}));
             leg_rows.push(leg);
         }
         // Sorted amounts put any nonpositive leg first, so no partial split leaks.

@@ -2,6 +2,7 @@
 //! interpreter: safety composes channel/native reservations, privacy and holds;
 //! native component reconciliation remains pending.
 use super::{anchor, array, consolidation, fanout, ownership, pairs, recorded, samourai, Context};
+use crate::fields::{Fields, Layered, Row};
 use crate::{
     codec::{self, truth},
     snapshot::Snapshot,
@@ -9,6 +10,7 @@ use crate::{
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::borrow::Cow;
+use std::cell::OnceCell;
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Default, Serialize, serde::Deserialize)]
@@ -18,31 +20,39 @@ pub(super) struct Profile {
     fanout: ownership::Derivation,
 }
 
-fn rows_after<'a>(rows: &'a [Value], result: &ownership::Derivation) -> Cow<'a, [Value]> {
+fn rows_after<'a, R: Row>(rows: &'a [R], result: &'a ownership::Derivation) -> Vec<Layered<'a, R>> {
     if result.dropped_out_ids.is_empty()
         && result.dropped_in_ids.is_empty()
         && result.out_row_overrides.is_empty()
         && result.synthetic_rows.is_empty()
     {
-        return Cow::Borrowed(rows);
+        return rows.iter().map(Layered::Row).collect();
     }
     let mut next: Vec<_> = rows
         .iter()
         .filter_map(|row| {
-            let id = codec::pystr(&row["id"]);
+            let id = codec::pystr(row.at("id"));
             if result.dropped_out_ids.contains(&id) || result.dropped_in_ids.contains(&id) {
                 return None;
             }
-            Some(result.out_row_overrides.get(&id).unwrap_or(row).clone())
+            Some(match result.out_row_overrides.get(&id) {
+                Some(row) => Layered::Value(row),
+                None => Layered::Row(row),
+            })
         })
         .collect();
-    next.extend(result.synthetic_rows.iter().cloned());
+    next.extend(result.synthetic_rows.iter().map(Layered::Value));
     // The journal calls derive_profile_transfers with sort_key=None.
-    Cow::Owned(next)
+    next
 }
 
-pub(super) fn derive(
-    rows: &[Value],
+/// The rows' JSON objects.
+fn values<R: Row>(rows: &[R]) -> Vec<Value> {
+    rows.iter().map(|row| row.json().into_owned()).collect()
+}
+
+pub(super) fn derive<R: Row>(
+    rows: &[R],
     snapshot: &Snapshot,
     initial: &BTreeSet<String>,
 ) -> Result<Profile, String> {
@@ -171,14 +181,13 @@ fn quarantines(profile: &Profile, rows: &Rows, context: &Context) -> Result<Vec<
     Ok(result.into_values().collect())
 }
 
-/// Rows are borrowed from the snapshot unless a caller or the fee
-/// normalization owns a changed copy.
 /// Transaction rows for the interpretation passes: the snapshot's rows, read
-/// from its records until a pass needs their JSON objects, or rows a pass
-/// changed.
+/// from its records until a pass needs their JSON objects; the snapshot's
+/// rows with some replaced; or rows a caller owns.
 #[derive(Clone)]
 pub(super) enum Rows<'a> {
     Snapshot(&'a Snapshot),
+    Overlay(&'a Snapshot, BTreeMap<usize, Value>, OnceCell<Vec<Value>>),
     Values(Cow<'a, [Value]>),
 }
 
@@ -187,6 +196,17 @@ impl Rows<'_> {
     pub fn values(&self) -> &[Value] {
         match self {
             Self::Snapshot(snapshot) => snapshot.rows(),
+            Self::Overlay(snapshot, changed, values) => values.get_or_init(|| {
+                snapshot
+                    .transactions
+                    .iter()
+                    .enumerate()
+                    .map(|(at, row)| match changed.get(&at) {
+                        Some(row) => row.clone(),
+                        None => row.json().into_owned(),
+                    })
+                    .collect()
+            }),
             Self::Values(rows) => rows,
         }
     }
@@ -195,17 +215,29 @@ impl Rows<'_> {
     pub fn records(&self) -> Option<&[crate::snapshot::Record]> {
         match self {
             Self::Snapshot(snapshot) => Some(&snapshot.transactions),
-            Self::Values(_) => None,
+            Self::Overlay(..) | Self::Values(_) => None,
         }
     }
 
-    fn to_mut(&mut self) -> &mut Vec<Value> {
-        if let Self::Snapshot(snapshot) = self {
-            *self = Self::Values(Cow::Borrowed(snapshot.rows()));
-        }
+    /// The snapshot records with the replaced rows, when these are based on
+    /// the snapshot's rows.
+    pub fn layered(&self) -> Option<Vec<Layered<'_, crate::snapshot::Record>>> {
         match self {
-            Self::Values(rows) => rows.to_mut(),
-            Self::Snapshot(_) => unreachable!("converted above"),
+            Self::Snapshot(snapshot) => {
+                Some(snapshot.transactions.iter().map(Layered::Row).collect())
+            }
+            Self::Overlay(snapshot, changed, _) => Some(
+                snapshot
+                    .transactions
+                    .iter()
+                    .enumerate()
+                    .map(|(at, row)| match changed.get(&at) {
+                        Some(row) => Layered::Value(row),
+                        None => Layered::Row(row),
+                    })
+                    .collect(),
+            ),
+            Self::Values(_) => None,
         }
     }
 }
@@ -270,22 +302,63 @@ pub(super) fn prepare_with_samourai<'a>(
             .any(|event| event.key()["native_namespace"] == "chain");
     let mut normalized = rows.clone();
     if eligible {
-        for (index, row) in rows.values().iter().enumerate() {
-            if let Some(observation) = context.observations.get(&anchor(row)) {
-                if row["observation_fee_attribution"] == "implicit_wallet_delta"
-                    && observation["fee_attribution"] == "exact"
-                {
-                    let row = &mut normalized.to_mut()[index];
-                    row["amount"] = observation["amount_msat"].clone();
-                    row["fee"] = observation["fee_msat"].clone();
-                    row["observation_fee_attribution"] = json!("exact");
-                    row["custody_native_fee_normalized"] = json!(true);
+        fn normalize(row: &mut Value, observation: &super::Observed) {
+            row["amount"] = observation["amount_msat"].clone();
+            row["fee"] = observation["fee_msat"].clone();
+            row["observation_fee_attribution"] = json!("exact");
+            row["custody_native_fee_normalized"] = json!(true);
+        }
+        // Rows whose implicit fee an exact observation replaces; only they
+        // need their JSON objects changed.
+        fn implicit<R: crate::fields::Row>(rows: &[R], context: &Context) -> Vec<usize> {
+            rows.iter()
+                .enumerate()
+                .filter(|(_, row)| {
+                    *row.at("observation_fee_attribution") == "implicit_wallet_delta"
+                        && context
+                            .observations
+                            .get(&anchor(*row))
+                            .is_some_and(|observation| observation["fee_attribution"] == "exact")
+                })
+                .map(|(index, _)| index)
+                .collect()
+        }
+        let changed = match rows.records() {
+            Some(records) => implicit(records, context),
+            None => implicit(rows.values(), context),
+        };
+        if !changed.is_empty() {
+            normalized = match &rows {
+                // Only the replaced rows are copied.
+                Rows::Snapshot(snapshot) => Rows::Overlay(
+                    snapshot,
+                    changed
+                        .into_iter()
+                        .map(|index| {
+                            let record = &snapshot.transactions[index];
+                            let mut row = record.json().into_owned();
+                            normalize(&mut row, &context.observations[&anchor(record)]);
+                            (index, row)
+                        })
+                        .collect(),
+                    OnceCell::new(),
+                ),
+                rows => {
+                    let mut values = rows.values().to_vec();
+                    for index in changed {
+                        let observation = &context.observations[&anchor(&values[index])];
+                        normalize(&mut values[index], observation);
+                    }
+                    Rows::Values(Cow::Owned(values))
                 }
-            }
+            };
         }
     }
     let profile = if eligible {
-        derive(normalized.values(), snapshot, &handled)?
+        match normalized.layered() {
+            Some(rows) => derive(&rows, snapshot, &handled)?,
+            None => derive(normalized.values(), snapshot, &handled)?,
+        }
     } else {
         Profile::default()
     };
@@ -314,7 +387,7 @@ pub(super) fn compile(snapshot: &Snapshot, context: &Context) -> Result<Value, S
         } = prepare(snapshot, context)?;
         let compiled = pairs::compile(&candidates, context, snapshot)?;
         Ok::<_, String>(
-            json!({"derivation":profile,"handled_ids":handled,"derivation_rows":normalized.values(),"rows_after_consolidation":rows_after(normalized.values(),&profile.consolidation),"rows_after_fanout":rows_after(&rows_after(normalized.values(),&profile.consolidation),&profile.fanout),"derived_pairs":candidates,"claims":compiled["claims"],"blocked_transaction_ids":compiled["blocked_transaction_ids"],"quarantines":compiled["quarantines"],"derivation_quarantines":quarantines(&profile,&rows,context)?,"native_audits":pairs::native_audits(&candidates,context)?}),
+            json!({"derivation":profile,"handled_ids":handled,"derivation_rows":normalized.values(),"rows_after_consolidation":values(&rows_after(normalized.values(),&profile.consolidation)),"rows_after_fanout":values(&rows_after(&rows_after(normalized.values(),&profile.consolidation),&profile.fanout)),"derived_pairs":candidates,"claims":compiled["claims"],"blocked_transaction_ids":compiled["blocked_transaction_ids"],"quarantines":compiled["quarantines"],"derivation_quarantines":quarantines(&profile,&rows,context)?,"native_audits":pairs::native_audits(&candidates,context)?}),
         )
     };
     Ok(run().unwrap_or_else(|error| json!({"error":error})))
@@ -331,10 +404,10 @@ mod tests {
         .unwrap();
         for vector in vectors {
             let actual = match vector["op"].as_str().unwrap() {
-                "rows" => json!(rows_after(
+                "rows" => json!(values(&rows_after(
                     array(&vector["rows"]),
                     &serde_json::from_value(vector["derivation"].clone()).unwrap()
-                )),
+                ))),
                 "annotate" => json!(annotate(
                     &serde_json::from_value(vector["profile"].clone()).unwrap()
                 )),
