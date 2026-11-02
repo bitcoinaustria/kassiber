@@ -294,6 +294,55 @@ update checker treats these packages as manual installs and shows the GitHub
 release link; see [Linux packaging](linux-packaging.md) for why no `apt`/`dnf`
 command is offered.
 
+### Local Apple Silicon build with the Rust backend
+
+While [plan 21](../plan/21-rust-backend.md) moves the backend to Rust, a local
+app with the Rust binary as its sidecar can be tested beside the Python one:
+
+```bash
+./scripts/build-macos-arm64-rust-app.sh
+# also build the Python-backed app from the same commit:
+./scripts/build-macos-arm64-rust-app.sh --with-python-app
+```
+
+The helper builds the production `kassiber` binary (no `test-harness`
+feature) for `aarch64-apple-darwin`, refuses it unless it is an arm64 Mach-O
+that links only macOS system libraries and reports
+`Kassiber <version> (dev, commit <12 hex>)`, and runs the same offline daemon
+smoke as the Python build. It places the binary where the Python sidecar goes,
+`binaries/kassiber-cli/kassiber-cli-aarch64-apple-darwin`, so the supervisor,
+the bundled CLI launcher and the Touch ID helper's identity check find it
+unchanged. The app is named **Kassiber Rust Dev**
+(`at.bitcoinaustria.kassiber.rust-dev`) and shows the build label `dev-rust`.
+Finished apps and DMGs are copied to `dist/macos-arm64/`.
+
+Both apps use the same books. The data location does not depend on the bundle
+identifier, and ownership locks let only one desktop app hold a book at a
+time; the other reports that another desktop app owns the project. A newer
+build may upgrade a book, which an older build then refuses, so switch back
+and forth only between apps built from the same commit (`--with-python-app`).
+The helper warns when an installed Kassiber Dev or Kassiber app reports
+another commit. Requests the Rust backend does not serve yet return
+`not_implemented`.
+
+Before finishing, the helper snapshots every local book with
+`scripts/macos-kassiber-data.sh snapshot --if-changed`, unless `--no-backup` is
+given. A snapshot copies both state roots
+(`~/Library/Application Support/at.bitcoinaustria.kassiber` and a legacy
+`~/.kassiber`) and every project directory their catalogs point to, into
+`~/Library/Application Support/at.bitcoinaustria.kassiber-snapshots/`. The
+copy is private to the account and skips live lock and socket files. Snapshots
+need every Kassiber app and CLI closed, so the files are consistent; encrypted
+books stay encrypted. Keychain items are not included. To roll back:
+
+```bash
+./scripts/macos-kassiber-data.sh list
+./scripts/macos-kassiber-data.sh restore "<snapshot directory>"
+```
+
+Restore renames the current data to `<path>.before-restore-<timestamp>` and
+never deletes it.
+
 ## Commit Identity
 
 Every packaged CLI embeds `BUILD_INFO.json`, and every CLI-only archive includes
