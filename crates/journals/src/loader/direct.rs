@@ -24,6 +24,12 @@ impl LoadedSnapshot {
         kassiber_custody::run_loaded(&self.snapshot, true)
     }
 
+    /// The loaded custody snapshot whose rows the projected stages name.
+    #[cfg(any(test, feature = "test-harness"))]
+    pub fn custody(&self) -> &Snapshot {
+        &self.snapshot
+    }
+
     pub fn into_custody(self) -> Result<Snapshot> {
         self.snapshot.validate_loaded().map_err(Error::Invalid)?;
         Ok(self.snapshot)

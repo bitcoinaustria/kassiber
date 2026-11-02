@@ -863,7 +863,13 @@ fn native_loader_blob_projection_retains_byte_identity() {
             &text(get(case, "as_of")),
         )
         .unwrap();
-        let projection = snapshot.project().unwrap().finalized_projection.unwrap();
+        let projection = snapshot
+            .project()
+            .unwrap()
+            .finalized_projection
+            .unwrap()
+            .py(snapshot.custody().rows())
+            .unwrap();
         let Value::List(rows) = get(&projection, "rows") else {
             panic!("projection rows")
         };

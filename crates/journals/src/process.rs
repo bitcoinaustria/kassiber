@@ -479,7 +479,9 @@ fn render_inputs(
         .map(stage_value)
         .transpose()?
         .unwrap_or(Value::Null);
-    let projection = stage_value(projection)?;
+    let span = kassiber_custody::timing::span("render.projection");
+    let projection = projection.json_with(snapshot.rows(), stage_value)?;
+    drop(span);
     Ok(RenderContext {
         quantity,
         projection,

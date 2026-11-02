@@ -1149,7 +1149,7 @@ fn object<const N: usize>(parts: [(&str, Value); N]) -> Value {
 
 /// Whether `value` converts to Python and back to exactly itself: no float
 /// and only canonically spelled integers.
-fn plain(value: &Value) -> bool {
+pub(crate) fn plain(value: &Value) -> bool {
     match value {
         Value::Null | Value::Bool(_) | Value::String(_) => true,
         Value::Number(n) => {

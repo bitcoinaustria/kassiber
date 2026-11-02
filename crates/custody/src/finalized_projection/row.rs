@@ -39,6 +39,11 @@ impl<'a> FinalizedRow<'a> {
         }
     }
 
+    /// Replace a field without first copying its source value.
+    pub(super) fn set(&mut self, key: &'static str, value: Value) {
+        self.overrides.insert(key, value);
+    }
+
     pub(super) fn into_json(self) -> Value {
         let mut result = self.source.into_owned();
         for (key, value) in self.overrides {
@@ -79,6 +84,108 @@ impl<'a> FinalizedRow<'a> {
             ));
         }
         Ok(Py::Dict(fields))
+    }
+}
+
+/// A finalized row's source, independent of the borrow it was built from.
+#[derive(Clone, Debug)]
+enum Source {
+    Row(usize),
+    Owned(Value),
+}
+
+/// A finalized row that names its source row by index in the snapshot rows.
+#[derive(Clone, Debug)]
+pub struct Detached {
+    source: Source,
+    overrides: BTreeMap<&'static str, Value>,
+}
+
+impl FinalizedRow<'_> {
+    /// Detach from `rows`: a source borrowed from them becomes its index.
+    pub(super) fn detach(self, rows: &[Value]) -> Detached {
+        let source = match self.source {
+            Cow::Borrowed(source) => {
+                let at = (source as *const Value as usize).wrapping_sub(rows.as_ptr() as usize)
+                    / std::mem::size_of::<Value>();
+                if at < rows.len() && std::ptr::eq(&rows[at], source) {
+                    Source::Row(at)
+                } else {
+                    Source::Owned(source.clone())
+                }
+            }
+            Cow::Owned(source) => Source::Owned(source),
+        };
+        Detached {
+            source,
+            overrides: self.overrides,
+        }
+    }
+}
+
+impl Detached {
+    fn source<'a>(&'a self, rows: &'a [Value]) -> &'a Value {
+        match &self.source {
+            Source::Row(at) => &rows[*at],
+            Source::Owned(value) => value,
+        }
+    }
+
+    /// The merged fields in key order: source fields, replaced or joined by
+    /// the generated ones.
+    fn fields<'a>(&'a self, rows: &'a [Value]) -> Vec<(&'a str, &'a Value)> {
+        let source = self.source(rows).as_object();
+        let mut fields = Vec::with_capacity(source.map_or(0, |s| s.len()) + self.overrides.len());
+        let mut overrides = self.overrides.iter().peekable();
+        for (key, value) in source.into_iter().flatten() {
+            while overrides
+                .peek()
+                .is_some_and(|(name, _)| **name < key.as_str())
+            {
+                let (name, value) = overrides.next().unwrap();
+                fields.push((*name, value));
+            }
+            if overrides
+                .peek()
+                .is_some_and(|(name, _)| **name == key.as_str())
+            {
+                let (name, value) = overrides.next().unwrap();
+                fields.push((*name, value));
+            } else {
+                fields.push((key.as_str(), value));
+            }
+        }
+        fields.extend(overrides.map(|(name, value)| (*name, value)));
+        fields
+    }
+
+    /// `FinalizedRow::into_python` of the row this was detached from.
+    pub fn py(&self, rows: &[Value]) -> Result<Py, String> {
+        Ok(Py::Dict(
+            self.fields(rows)
+                .into_iter()
+                .map(|(key, value)| {
+                    Ok((
+                        kassiber_pyjson::Key::Str(key.into()),
+                        codec::from_json(value)?,
+                    ))
+                })
+                .collect::<Result<_, String>>()?,
+        ))
+    }
+
+    /// The row's JSON object, each field cloned when `exact` keeps it.
+    pub fn json_with<E>(
+        &self,
+        rows: &[Value],
+        exact: &impl Fn(&Value) -> Result<Value, E>,
+    ) -> Result<Value, E> {
+        Ok(Value::Object(
+            self.fields(rows)
+                .into_iter()
+                .map(|(key, value)| Ok((key.to_owned(), exact(value)?)))
+                .collect::<Result<_, E>>()?,
+        ))
     }
 }
 

@@ -94,7 +94,7 @@ pub struct Stages {
     pub gaps: serde_json::Value,
     pub quantity: quantity::runtime::QuantityState,
     /// `None` for a decision-only operation, which skips finalization.
-    pub finalized_projection: Option<kassiber_pyjson::Value>,
+    pub finalized_projection: Option<finalized_projection::FinalizedProjection>,
 }
 
 /// Versioned JSON operation; missing stages are explicit and never fabricated.
@@ -115,7 +115,7 @@ pub fn custody_with_finalized(request: &str, finalized: bool) -> String {
     };
     let _span = timing::span("response");
     let large = snapshot.transactions.len() >= 256;
-    let text = response(&rows.transactions, &stages, large);
+    let text = response(&rows, &stages, large);
     // Freeing a large book's values takes a noticeable share of the
     // operation and changes no output; release them off the caller's path
     // when a thread is available.
@@ -280,9 +280,14 @@ fn run_admitted(
 
 /// The successful response document. `concurrent` encodes the stages on
 /// separate threads, which large books use.
-pub fn response(rows: &[snapshot::Record], stages: &Stages, concurrent: bool) -> String {
-    let projection = stages.finalized_projection.as_ref();
-    let evidence = stages.evidence.value(rows);
+pub fn response(snapshot: &snapshot::Snapshot, stages: &Stages, concurrent: bool) -> String {
+    let projection = stages.finalized_projection.as_ref().map(|projection| {
+        projection
+            .py(snapshot.rows())
+            .expect("computed finalized projection")
+    });
+    let projection = projection.as_ref();
+    let evidence = stages.evidence.value(&snapshot.transactions);
     let quantity = stages.quantity.py().expect("computed quantity stage");
     if let Some(text) = response_text(
         concurrent,

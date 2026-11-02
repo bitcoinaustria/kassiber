@@ -231,12 +231,44 @@ pub fn stage_from_state(
     captured: Vec<Value>,
     quantity: &crate::quantity::runtime::QuantityState,
     interpreter: &Py,
-) -> Result<Py, super::Error> {
+) -> Result<super::FinalizedProjection, super::Error> {
     let span = crate::timing::span("finalized.input");
     let rows = confirmed_rows(snapshot, captured);
     let input = state_input(snapshot, quantity, interpreter)?;
     drop(span);
-    compose(&input, interpreter, &rows)
+    let _span = crate::timing::span("finalized.compose");
+    let parts = super::composition::evaluate_parts(
+        &input,
+        stored::list(stored::get(interpreter, "quarantines")),
+        &rows,
+    )
+    .map_err(validation)?;
+    let super::composition::Composition::Finalized(parts) = parts else {
+        unreachable!("finalize composes a finalized projection")
+    };
+    let source = snapshot.rows();
+    Ok(super::FinalizedProjection {
+        rows: parts
+            .rows
+            .into_iter()
+            .map(|row| row.detach(source))
+            .collect(),
+        cross: parts.cross,
+        intra: parts.intra,
+        moves: parts.moves,
+        quarantines: parts.quarantines,
+    })
+}
+
+fn validation(error: super::Error) -> super::Error {
+    if error.code == "AppError" {
+        super::Error {
+            code: "validation".into(),
+            message: error.message,
+        }
+    } else {
+        error
+    }
 }
 
 /// Assemble Python compiler operands from previously computed Rust stages.
@@ -277,16 +309,7 @@ fn compose(
         stored::list(stored::get(interpreter, "quarantines")),
         rows,
     )
-    .map_err(|error| {
-        if error.code == "AppError" {
-            super::Error {
-                code: "validation".into(),
-                message: error.message,
-            }
-        } else {
-            error
-        }
-    })
+    .map_err(validation)
 }
 
 /// Issue-derived operands: blocked anchors and the compiler's issues.

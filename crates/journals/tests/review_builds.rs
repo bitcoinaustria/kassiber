@@ -19,9 +19,9 @@ fn review_builds_match_complete_python_states() {
         loaded.escape_wire_tags();
         let native = kassiber_custody::run_loaded(&loaded, true).unwrap();
         assert_eq!(
-            kassiber_custody::response(&loaded.transactions, &native, false),
+            kassiber_custody::response(&loaded, &native, false),
             kassiber_custody::response(
-                &prepared.computed.snapshot.transactions,
+                &prepared.computed.snapshot,
                 &prepared.computed.stages,
                 false,
             ),

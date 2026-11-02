@@ -112,7 +112,10 @@ fn run(input: &Value) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
         conn.execute_batch("ROLLBACK")?;
         let projection = match projection {
             Ok(stages) => {
-                let projection = stages.finalized_projection.expect("requested projection");
+                let projection = stages
+                    .finalized_projection
+                    .expect("requested projection")
+                    .py(snapshot.custody().rows())?;
                 let text = kassiber_pyjson::dumps(
                     &projection_diagnostics(&projection),
                     &kassiber_pyjson::Options::new().ensure_ascii(true),

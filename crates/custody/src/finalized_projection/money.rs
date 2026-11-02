@@ -41,6 +41,37 @@ mod tests {
     }
 
     #[test]
+    fn finalized_plain_prices_are_admitted() {
+        for raw in [
+            "\"47454\"",
+            "\"-0\"",
+            "\"0.0000000000001\"",
+            "\"958.09436184\"",
+            "12",
+            "-3",
+            "\"00012.5\"",
+        ] {
+            let value: Value = serde_json::from_str(raw).unwrap();
+            assert!(plain_finite(&value), "{raw}");
+            assert!(Money::finite_field(&value, "field").is_ok(), "{raw}");
+        }
+        for raw in [
+            "\"0.00000000000001\"",
+            "\"1e5\"",
+            "\" 1\"",
+            "\"1.\"",
+            "\".5\"",
+            "\"1_0\"",
+            "1.5",
+            "\"\"",
+            "true",
+            "\"\\u0661\"",
+        ] {
+            assert!(!plain_finite(&serde_json::from_str(raw).unwrap()), "{raw}");
+        }
+    }
+
+    #[test]
     fn finalized_prices_keep_exact_precision_floor() {
         for accepted in ["1e-13", "-1e-13", "0", "-0"] {
             assert!(Money::finite(&json!(accepted)).is_ok(), "{accepted}");
@@ -70,6 +101,32 @@ fn error(e: DecimalError) -> String {
 
 pub(super) fn empty(v: &Value) -> bool {
     v.is_null() || v == ""
+}
+
+/// Whether `Money::finite_field` admits `v` without parsing it: a plain
+/// decimal spelling with at most 300 integer digits and 13 fraction digits
+/// is finite, a finite float, and zero or within the supported range.
+pub(super) fn plain_finite(v: &Value) -> bool {
+    let spelling = match v {
+        Value::String(s) => s.as_str(),
+        Value::Number(n) => {
+            // str() of an integer is its digits; floats take the full path.
+            if n.as_i64().is_none() {
+                return false;
+            }
+            return true;
+        }
+        _ => return false,
+    };
+    let unsigned = spelling.strip_prefix('-').unwrap_or(spelling);
+    let (whole, fraction) = unsigned.split_once('.').unwrap_or((unsigned, ""));
+    !whole.is_empty()
+        && whole.len() <= 300
+        && whole.bytes().all(|b| b.is_ascii_digit())
+        && (fraction.is_empty() && !unsigned.ends_with('.')
+            || !fraction.is_empty()
+                && fraction.len() <= 13
+                && fraction.bytes().all(|b| b.is_ascii_digit()))
 }
 
 #[derive(Clone)]

@@ -17,6 +17,115 @@ pub mod runtime;
 pub use fees::FeeAllocation;
 pub use principal::slice_row;
 
+/// The finalized projection stage. Its rows name their snapshot source rows,
+/// so its Python value and JSON are built only on request.
+#[derive(Clone, Debug)]
+pub struct FinalizedProjection {
+    rows: Vec<row::Detached>,
+    cross: Vec<Value>,
+    intra: Vec<Value>,
+    moves: Vec<Value>,
+    quarantines: Vec<Py>,
+}
+impl FinalizedProjection {
+    /// The stage's Python value, given the snapshot rows its rows name.
+    pub fn py(&self, rows: &[Value]) -> Result<Py, String> {
+        let mut result = Py::Dict(vec![
+            (
+                kassiber_pyjson::Key::Str("$type".into()),
+                Py::Str("FinalizedTaxProjection".into()),
+            ),
+            (
+                kassiber_pyjson::Key::Str("cross_asset_pairs".into()),
+                Py::List(
+                    self.cross
+                        .iter()
+                        .map(codec::from_json)
+                        .collect::<Result<_, _>>()?,
+                ),
+            ),
+            (
+                kassiber_pyjson::Key::Str("intra_pairs".into()),
+                Py::List(
+                    self.intra
+                        .iter()
+                        .map(codec::from_json)
+                        .collect::<Result<_, _>>()?,
+                ),
+            ),
+            (
+                kassiber_pyjson::Key::Str("rows".into()),
+                Py::List(
+                    self.rows
+                        .iter()
+                        .map(|row| row.py(rows))
+                        .collect::<Result<_, _>>()?,
+                ),
+            ),
+            (
+                kassiber_pyjson::Key::Str("selected_move_ids".into()),
+                Py::List(
+                    self.moves
+                        .iter()
+                        .map(codec::from_json)
+                        .collect::<Result<_, _>>()?,
+                ),
+            ),
+        ]);
+        graph::stored::put(
+            &mut result,
+            "quarantines",
+            Py::List(self.quarantines.clone()),
+        );
+        Ok(result)
+    }
+
+    /// `convert(&self.py(rows)?)` for a converter that maps every Python
+    /// value to its JSON equivalent; JSON that converts to itself is cloned.
+    pub fn json_with<E: From<String>>(
+        &self,
+        rows: &[Value],
+        convert: impl Fn(&Py) -> Result<Value, E>,
+    ) -> Result<Value, E> {
+        let exact = |v: &Value| -> Result<Value, E> {
+            if crate::quantity::runtime::plain(v) {
+                Ok(v.clone())
+            } else {
+                convert(&codec::from_json(v)?)
+            }
+        };
+        let list = |items: &[Value]| -> Result<Value, E> {
+            Ok(Value::Array(
+                items.iter().map(&exact).collect::<Result<_, E>>()?,
+            ))
+        };
+        let mut result = serde_json::Map::new();
+        result.insert("$type".into(), json!("FinalizedTaxProjection"));
+        result.insert("cross_asset_pairs".into(), list(&self.cross)?);
+        result.insert("intra_pairs".into(), list(&self.intra)?);
+        result.insert(
+            "rows".into(),
+            Value::Array(
+                self.rows
+                    .iter()
+                    .map(|row| row.json_with(rows, &exact))
+                    .collect::<Result<_, E>>()?,
+            ),
+        );
+        result.insert("selected_move_ids".into(), list(&self.moves)?);
+        result.insert(
+            "quarantines".into(),
+            Value::Array(
+                self.quarantines
+                    .iter()
+                    .map(&convert)
+                    .collect::<Result<_, E>>()?,
+            ),
+        );
+        Ok(Value::Object(result))
+    }
+}
+
 /// A downstream refusal retains its public code and rendered message.
 #[derive(Debug)]
 pub struct Error {
@@ -127,7 +236,10 @@ fn observed_hash(row: &Value) -> Result<(String, String), String> {
 
 /// Capture closed authority on the original row, before its id/amount changes.
 fn chain_order(row: &Value) -> Result<Value, String> {
-    if codec::integer(&row["observation_authority_version"]).ok() != Some(json!(1)) {
+    // int(None) fails, so rows without closed authority have no chain order.
+    if row["observation_authority_version"].is_null()
+        || codec::integer(&row["observation_authority_version"]).ok() != Some(json!(1))
+    {
         return Ok(Value::Null);
     }
     if text(&row["observation_graph_hash"])
@@ -213,7 +325,7 @@ fn base_row_with_rows<'a>(
         "fiat_rate",
         "fiat_rate_exact",
     ] {
-        if !money::empty(&result[field]) {
+        if !money::empty(&result[field]) && !money::plain_finite(&result[field]) {
             let label = format!(
                 "transaction {}: {field}",
                 string(&observation["anchor_transaction_id"])
@@ -221,17 +333,20 @@ fn base_row_with_rows<'a>(
             money::Money::finite_field(&result[field], &label)?;
         }
     }
-    result["custody_chain_order"] = chain_order(rows.row(&id))?;
+    result.set("custody_chain_order", chain_order(rows.row(&id))?);
     for key in ["wallet_id", "asset", "direction", "occurred_at"] {
-        result[key] = observation[key].clone();
+        result.set(key, observation[key].clone());
     }
     if !codec::truth(&result["external_id"]) {
-        result["external_id"] = observation["event_key"]["native_event_id"].clone();
+        result.set(
+            "external_id",
+            observation["event_key"]["native_event_id"].clone(),
+        );
     }
     if !codec::truth(&result["raw_json"]) {
-        result["raw_json"] = json!({});
+        result.set("raw_json", json!({}));
     }
-    result["amount_includes_fee"] = json!(false);
+    result.set("amount_includes_fee", json!(false));
     Ok(result)
 }
 
@@ -254,23 +369,32 @@ fn fee_row_with_rows<'a>(
     if codec::truth(&observation["authoritative_chain_observation"])
         && observation["fee_attribution"] == "exact"
     {
-        base["privacy_boundary"] = Value::Null;
+        base.set("privacy_boundary", Value::Null);
     }
-    base["id"] = json!(fee_row_id(
-        &string(&observation["quantity_hash"]),
-        side,
-        amount
-    ));
-    base["journal_transaction_id"] = observation["anchor_transaction_id"].clone();
-    base["amount"] = json!(0);
-    base["fee"] = number(amount);
-    base["fiat_value"] = Value::Null;
-    base["fiat_value_exact"] = Value::Null;
-    base["amount_includes_fee"] = json!(false);
-    base["custody_finalized_tax_projection"] = json!(true);
-    base["custody_quantity_hash"] = observation["quantity_hash"].clone();
-    base["custody_slice_start_msat"] = json!(0);
-    base["custody_slice_end_msat"] = json!(0);
+    base.set(
+        "id",
+        json!(fee_row_id(
+            &string(&observation["quantity_hash"]),
+            side,
+            amount
+        )),
+    );
+    base.set(
+        "journal_transaction_id",
+        observation["anchor_transaction_id"].clone(),
+    );
+    base.set("amount", json!(0));
+    base.set("fee", number(amount));
+    base.set("fiat_value", Value::Null);
+    base.set("fiat_value_exact", Value::Null);
+    base.set("amount_includes_fee", json!(false));
+    base.set("custody_finalized_tax_projection", json!(true));
+    base.set(
+        "custody_quantity_hash",
+        observation["quantity_hash"].clone(),
+    );
+    base.set("custody_slice_start_msat", json!(0));
+    base.set("custody_slice_end_msat", json!(0));
     Ok(base)
 }
 

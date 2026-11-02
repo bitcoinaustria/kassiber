@@ -190,11 +190,67 @@ pub(super) fn evaluate_lossless(v: &Value, diagnostics: &[Py]) -> Result<Py, Err
     evaluate_with_rows(&Input::from_json(v), diagnostics, &v["rows"])
 }
 
+/// A finalized composition's parts, before they become a Python value.
+pub(super) struct Finalized<'r> {
+    pub rows: Vec<row::FinalizedRow<'r>>,
+    pub cross: Vec<Value>,
+    pub intra: Vec<Value>,
+    pub moves: Vec<Value>,
+    pub quarantines: Vec<Py>,
+}
+impl Finalized<'_> {
+    pub fn py(self) -> Result<Py, String> {
+        let _span = crate::timing::span("finalized.emit");
+        let rows = self
+            .rows
+            .into_iter()
+            .map(row::FinalizedRow::into_python)
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut result = Py::Dict(vec![
+            (
+                kassiber_pyjson::Key::Str("$type".into()),
+                Py::Str("FinalizedTaxProjection".into()),
+            ),
+            (
+                kassiber_pyjson::Key::Str("cross_asset_pairs".into()),
+                into_python(Value::Array(self.cross))?,
+            ),
+            (
+                kassiber_pyjson::Key::Str("intra_pairs".into()),
+                into_python(Value::Array(self.intra))?,
+            ),
+            (kassiber_pyjson::Key::Str("rows".into()), Py::List(rows)),
+            (
+                kassiber_pyjson::Key::Str("selected_move_ids".into()),
+                into_python(Value::Array(self.moves))?,
+            ),
+        ]);
+        crate::graph::stored::put(&mut result, "quarantines", Py::List(self.quarantines));
+        Ok(result)
+    }
+}
+
+pub(super) enum Composition<'r> {
+    Finalized(Finalized<'r>),
+    Other(Py),
+}
+
 pub(super) fn evaluate_with_rows(
     v: &Input,
     diagnostics: &[Py],
     rows: &dyn Rows,
 ) -> Result<Py, Error> {
+    match evaluate_parts(v, diagnostics, rows)? {
+        Composition::Finalized(finalized) => Ok(finalized.py()?),
+        Composition::Other(value) => Ok(value),
+    }
+}
+
+pub(super) fn evaluate_parts<'r>(
+    v: &Input,
+    diagnostics: &[Py],
+    rows: &'r dyn Rows,
+) -> Result<Composition<'r>, Error> {
     use super::fee_row_with_rows as fee_row;
     use super::principal::slice_row_with_rows as slice_row;
     let selection_span = crate::timing::span("finalized.select");
@@ -224,7 +280,9 @@ pub(super) fn evaluate_with_rows(
     let explicit = strings(&v.blocked_transaction_ids);
     let closure = connected(&decisions, &observations, &explicit)?;
     if v.op == "connected" {
-        return Ok(codec::from_json(&json!({"blocked":closure["blocked"]}))?);
+        return Ok(Composition::Other(codec::from_json(
+            &json!({"blocked":closure["blocked"]}),
+        )?));
     }
     let blocked = strings(array(&closure["blocked"]));
     let non_events = strings(&v.non_event_transaction_ids);
@@ -247,11 +305,11 @@ pub(super) fn evaluate_with_rows(
         orders(&v.events)
     };
     if v.op == "basis" {
-        return Ok(codec::from_json(&json!(v
+        return Ok(Composition::Other(codec::from_json(&json!(v
             .observations
             .iter()
             .map(|o| held(o, v, &order))
-            .collect::<Vec<_>>()))?);
+            .collect::<Vec<_>>()))?));
     }
     let eligible: BTreeSet<_> = v.eligible.iter().map(slice_key).collect::<Result<_, _>>()?;
     let mut projected = Vec::new();
@@ -470,37 +528,18 @@ pub(super) fn evaluate_with_rows(
         cross = super::conversions::evaluate_rows(&projected, cross, &v.reviewed)?;
         let quarantines = quarantines.sorted()?;
         validate_rows(&projected, &intra).map_err(|(family, _)| family.to_owned())?;
-        let _span = crate::timing::span("finalized.emit");
-        let rows = projected
-            .into_iter()
-            .map(row::FinalizedRow::into_python)
-            .collect::<Result<Vec<_>, _>>()?;
-        let mut result = Py::Dict(vec![
-            (
-                kassiber_pyjson::Key::Str("$type".into()),
-                Py::Str("FinalizedTaxProjection".into()),
-            ),
-            (
-                kassiber_pyjson::Key::Str("cross_asset_pairs".into()),
-                into_python(Value::Array(cross))?,
-            ),
-            (
-                kassiber_pyjson::Key::Str("intra_pairs".into()),
-                into_python(Value::Array(intra))?,
-            ),
-            (kassiber_pyjson::Key::Str("rows".into()), Py::List(rows)),
-            (
-                kassiber_pyjson::Key::Str("selected_move_ids".into()),
-                into_python(Value::Array(moves))?,
-            ),
-        ]);
-        crate::graph::stored::put(&mut result, "quarantines", Py::List(quarantines));
-        return Ok(result);
+        return Ok(Composition::Finalized(Finalized {
+            rows: projected,
+            cross,
+            intra,
+            moves,
+            quarantines,
+        }));
     }
     validate_rows(&projected, &intra).map_err(|(family, _)| family.to_owned())?;
-    Ok(codec::from_json(
+    Ok(Composition::Other(codec::from_json(
         &json!({"rows":projected,"intra_pairs":intra,"cross_asset_pairs":cross,"selected_move_ids":moves,"barrier_held_receipts":barrier_receipts,"blocked_transaction_ids":closure["blocked"]}),
-    )?)
+    )?))
 }
 
 // The compiler owns its completed JSON tree. Move its strings and container

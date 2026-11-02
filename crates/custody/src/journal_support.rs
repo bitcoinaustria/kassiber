@@ -72,12 +72,11 @@ pub fn journal_operands(
     let exact = exact_operand;
     let interpretation = exact(&stages.interpretation)?;
     let quantity = stages.quantity.json_with(true, exact)?;
-    let finalized = exact(
-        stages
-            .finalized_projection
-            .as_ref()
-            .ok_or("journal build requires finalized custody projection")?,
-    )?;
+    let finalized = stages
+        .finalized_projection
+        .as_ref()
+        .ok_or("journal build requires finalized custody projection")?
+        .json_with(raw.rows(), exact)?;
     let (ignored, accounting_ignored) = interpretation::gap_ignored_ids(
         raw,
         &stages.components,

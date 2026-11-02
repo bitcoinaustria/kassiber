@@ -63,7 +63,11 @@ fn projection_loaded_rows_keep_bytes_until_serialization() {
         }
         let snapshot: Snapshot = serde_json::from_value(input).unwrap();
         let stages = kassiber_custody::run_loaded(&snapshot, true).unwrap();
-        let projection = stages.finalized_projection.unwrap();
+        let projection = stages
+            .finalized_projection
+            .unwrap()
+            .py(snapshot.rows())
+            .unwrap();
         let Py::List(rows) = get(&projection, "rows") else {
             panic!("projection rows")
         };
@@ -95,8 +99,12 @@ fn projection_json_rows_keep_literal_private_tag_maps() {
             row["note"] = note.clone();
         }
         let snapshot = kassiber_custody::parse(&input.to_string()).unwrap();
-        let stages = kassiber_custody::run(&snapshot, true).unwrap();
-        let projection = stages.finalized_projection.unwrap();
+        let (rows, stages) = kassiber_custody::run_with_rows(&snapshot, true).unwrap();
+        let projection = stages
+            .finalized_projection
+            .unwrap()
+            .py(rows.rows())
+            .unwrap();
         let Py::List(rows) = get(&projection, "rows") else {
             panic!("projection rows")
         };
@@ -384,21 +392,60 @@ fn typed_finalized_matches_python_value_adapter() {
                 .map(|v| codec::dumps(&v, true).unwrap())
                 .map_err(|e| (e.code, e.message))
         };
+        let typed = runtime::stage_from_state(&snapshot, captured.clone(), &state, &interpreter);
+        let python = runtime::stage_with_confirmations(
+            &snapshot,
+            captured,
+            &state.py().unwrap(),
+            &interpreter,
+        );
+        if let (Ok(typed), Ok(python)) = (&typed, &python) {
+            // The journal JSON is the JSON conversion of the Python value.
+            assert_eq!(
+                typed.json_with(snapshot.rows(), journal_json),
+                journal_json(python)
+            );
+        }
         assert_eq!(
-            encode(runtime::stage_from_state(
-                &snapshot,
-                captured.clone(),
-                &state,
-                &interpreter
-            )),
-            encode(runtime::stage_with_confirmations(
-                &snapshot,
-                captured,
-                &state.py().unwrap(),
-                &interpreter
-            ))
+            encode(typed.map(|t| t.py(snapshot.rows()).unwrap())),
+            encode(python)
         );
         compared += 1;
     }
     assert!(compared > 50, "{compared}");
+}
+
+/// The journal render input's conversion of a stage's Python value.
+fn journal_json(value: &Py) -> Result<serde_json::Value, String> {
+    use serde_json::{json, Value};
+    Ok(match value {
+        Py::Null => Value::Null,
+        Py::Bool(v) => json!(v),
+        Py::Int(v) => serde_json::from_str(&v.to_string()).map_err(|e| e.to_string())?,
+        Py::Float(v) if v.is_infinite() => serde_json::from_str(if v.is_sign_negative() {
+            "-1e999"
+        } else {
+            "1e999"
+        })
+        .unwrap(),
+        Py::Float(v) if v.is_nan() => return Err("NaN".into()),
+        Py::Float(v) => json!(v),
+        Py::Decimal(v) => json!({"$decimal":v.to_string()}),
+        Py::Bytes(_) => codec::to_json(value),
+        Py::Str(v) => json!(v.as_str().ok_or("surrogate")?),
+        Py::List(v) => Value::Array(v.iter().map(journal_json).collect::<Result<_, _>>()?),
+        Py::Dict(v) => Value::Object(
+            v.iter()
+                .map(|(key, value)| {
+                    let Key::Str(key) = key else {
+                        return Err("key".to_owned());
+                    };
+                    Ok((
+                        key.as_str().ok_or("surrogate")?.to_owned(),
+                        journal_json(value)?,
+                    ))
+                })
+                .collect::<Result<_, String>>()?,
+        ),
+    })
 }

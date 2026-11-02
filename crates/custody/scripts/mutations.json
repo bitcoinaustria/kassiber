@@ -20466,8 +20466,8 @@
   {
     "id": "projection-base-order",
     "file": "crates/custody/src/finalized_projection.rs",
-    "find": "result[\"custody_chain_order\"] = chain_order(rows.row(&id))?;",
-    "replace": "result[\"custody_chain_order\"] = Value::Null;",
+    "find": "result.set(\"custody_chain_order\", chain_order(rows.row(&id))?);",
+    "replace": "result.set(\"custody_chain_order\", Value::Null);",
     "expect_failing": [
       "projection_fee_row_vectors"
     ],
@@ -20486,8 +20486,8 @@
   {
     "id": "projection-base-identity",
     "file": "crates/custody/src/finalized_projection.rs",
-    "find": "result[key] = observation[key].clone();",
-    "replace": "result[key] = Value::Null;",
+    "find": "result.set(key, observation[key].clone());",
+    "replace": "result.set(key, Value::Null);",
     "expect_failing": [
       "projection_base_row_vectors"
     ],
@@ -20536,8 +20536,8 @@
   {
     "id": "projection-privacy-clear",
     "file": "crates/custody/src/finalized_projection.rs",
-    "find": "base[\"privacy_boundary\"] = Value::Null;",
-    "replace": "base[\"privacy_boundary\"] = json!(\"unresolved\");",
+    "find": "base.set(\"privacy_boundary\", Value::Null);",
+    "replace": "base.set(\"privacy_boundary\", json!(\"unresolved\"));",
     "expect_failing": [
       "projection_fee_row_vectors"
     ],
@@ -20546,8 +20546,8 @@
   {
     "id": "projection-fee-anchor",
     "file": "crates/custody/src/finalized_projection.rs",
-    "find": "base[\"journal_transaction_id\"] = observation[\"anchor_transaction_id\"].clone();",
-    "replace": "base[\"journal_transaction_id\"] = observation[\"transaction_id\"].clone();",
+    "find": "base.set(\n        \"journal_transaction_id\",\n        observation[\"anchor_transaction_id\"].clone(),\n    );",
+    "replace": "base.set(\n        \"journal_transaction_id\",\n        observation[\"transaction_id\"].clone(),\n    );",
     "expect_failing": [
       "projection_fee_row_vectors"
     ],
@@ -20556,8 +20556,8 @@
   {
     "id": "projection-fee-principal",
     "file": "crates/custody/src/finalized_projection.rs",
-    "find": "base[\"amount\"] = json!(0);",
-    "replace": "base[\"amount\"] = json!(1);",
+    "find": "base.set(\"amount\", json!(0));",
+    "replace": "base.set(\"amount\", json!(1));",
     "expect_failing": [
       "projection_fee_row_vectors"
     ],
@@ -20566,8 +20566,8 @@
   {
     "id": "projection-fee-amount",
     "file": "crates/custody/src/finalized_projection.rs",
-    "find": "base[\"fee\"] = number(amount);",
-    "replace": "base[\"fee\"] = json!(1);",
+    "find": "base.set(\"fee\", number(amount));",
+    "replace": "base.set(\"fee\", json!(1));",
     "expect_failing": [
       "projection_fee_row_vectors"
     ],
@@ -20576,8 +20576,8 @@
   {
     "id": "projection-fee-fiat",
     "file": "crates/custody/src/finalized_projection.rs",
-    "find": "base[\"fiat_value\"] = Value::Null;",
-    "replace": "base[\"fiat_value\"] = json!(0);",
+    "find": "base.set(\"fiat_value\", Value::Null);",
+    "replace": "base.set(\"fiat_value\", json!(0));",
     "expect_failing": [
       "projection_fee_row_vectors"
     ],
@@ -20586,8 +20586,8 @@
   {
     "id": "projection-fee-fiat-exact",
     "file": "crates/custody/src/finalized_projection.rs",
-    "find": "base[\"fiat_value_exact\"] = Value::Null;",
-    "replace": "base[\"fiat_value_exact\"] = json!(\"0\");",
+    "find": "base.set(\"fiat_value_exact\", Value::Null);",
+    "replace": "base.set(\"fiat_value_exact\", json!(\"0\"));",
     "expect_failing": [
       "projection_fee_row_vectors"
     ],
@@ -20596,8 +20596,8 @@
   {
     "id": "projection-fee-marker",
     "file": "crates/custody/src/finalized_projection.rs",
-    "find": "base[\"custody_finalized_tax_projection\"] = json!(true);",
-    "replace": "base[\"custody_finalized_tax_projection\"] = json!(false);",
+    "find": "base.set(\"custody_finalized_tax_projection\", json!(true));",
+    "replace": "base.set(\"custody_finalized_tax_projection\", json!(false));",
     "expect_failing": [
       "projection_fee_row_vectors"
     ],
@@ -20606,8 +20606,8 @@
   {
     "id": "projection-fee-hash",
     "file": "crates/custody/src/finalized_projection.rs",
-    "find": "base[\"custody_quantity_hash\"] = observation[\"quantity_hash\"].clone();",
-    "replace": "base[\"custody_quantity_hash\"] = Value::Null;",
+    "find": "base.set(\n        \"custody_quantity_hash\",\n        observation[\"quantity_hash\"].clone(),\n    );",
+    "replace": "base.set(\n        \"custody_quantity_hash\",\n        Value::Null,\n    );",
     "expect_failing": [
       "projection_fee_row_vectors"
     ],
@@ -20616,8 +20616,8 @@
   {
     "id": "projection-fee-start",
     "file": "crates/custody/src/finalized_projection.rs",
-    "find": "base[\"custody_slice_start_msat\"] = json!(0);",
-    "replace": "base[\"custody_slice_start_msat\"] = json!(1);",
+    "find": "base.set(\"custody_slice_start_msat\", json!(0));",
+    "replace": "base.set(\"custody_slice_start_msat\", json!(1));",
     "expect_failing": [
       "projection_fee_row_vectors"
     ],
@@ -20626,8 +20626,8 @@
   {
     "id": "projection-fee-end",
     "file": "crates/custody/src/finalized_projection.rs",
-    "find": "base[\"custody_slice_end_msat\"] = json!(0);",
-    "replace": "base[\"custody_slice_end_msat\"] = json!(1);",
+    "find": "base.set(\"custody_slice_end_msat\", json!(0));",
+    "replace": "base.set(\"custody_slice_end_msat\", json!(1));",
     "expect_failing": [
       "projection_fee_row_vectors"
     ],
@@ -20656,8 +20656,8 @@
   {
     "id": "projection-hash-admission-order",
     "file": "crates/custody/src/finalized_projection.rs",
-    "find": "    if codec::integer(&row[\"observation_authority_version\"]).ok() != Some(json!(1)) {",
-    "replace": "    let _ = observed_hash(row)?;\n    if codec::integer(&row[\"observation_authority_version\"]).ok() != Some(json!(1)) {",
+    "find": "    // int(None) fails, so rows without closed authority have no chain order.\n    if row[\"observation_authority_version\"].is_null()",
+    "replace": "    let _ = observed_hash(row)?;\n    if row[\"observation_authority_version\"].is_null()",
     "expect_failing": [
       "projection_fee_row_vectors"
     ],
@@ -20706,8 +20706,8 @@
   {
     "id": "projection2-rate-float",
     "file": "crates/custody/src/finalized_projection/principal.rs",
-    "find": "base[\"fiat_rate\"] = rate.float()?;",
-    "replace": "base[\"fiat_rate\"] = json!(0);",
+    "find": "base.set(\"fiat_rate\", rate.float()?);",
+    "replace": "base.set(\"fiat_rate\", json!(0));",
     "expect_failing": [
       "projection_slice_pricing_vectors"
     ],
@@ -20716,8 +20716,8 @@
   {
     "id": "projection2-rate-exact",
     "file": "crates/custody/src/finalized_projection/principal.rs",
-    "find": "base[\"fiat_rate_exact\"] = json!(rate.fixed()?);",
-    "replace": "base[\"fiat_rate_exact\"] = json!(\"0\");",
+    "find": "base.set(\"fiat_rate_exact\", json!(rate.fixed()?));",
+    "replace": "base.set(\"fiat_rate_exact\", json!(\"0\"));",
     "expect_failing": [
       "projection_slice_pricing_vectors"
     ],
@@ -20746,8 +20746,8 @@
   {
     "id": "projection2-slice-fee",
     "file": "crates/custody/src/finalized_projection/principal.rs",
-    "find": "base[\"fee\"] = number(fee);",
-    "replace": "base[\"fee\"] = json!(0);",
+    "find": "base.set(\"fee\", number(fee));",
+    "replace": "base.set(\"fee\", json!(0));",
     "expect_failing": [
       "projection_slice_pricing_vectors"
     ],
@@ -21056,8 +21056,8 @@
   {
     "id": "projection2-slice-anchor",
     "file": "crates/custody/src/finalized_projection/principal.rs",
-    "find": "    base[\"journal_transaction_id\"] = observation[\"anchor_transaction_id\"].clone();",
-    "replace": "    base[\"journal_transaction_id\"] = json!(\"bad\");",
+    "find": "base.set(\n        \"journal_transaction_id\",\n        observation[\"anchor_transaction_id\"].clone(),\n    );",
+    "replace": "base.set(\n        \"journal_transaction_id\",\n        json!(\"bad\"),\n    );",
     "expect_failing": [
       "projection_slice_pricing_vectors"
     ],
@@ -21066,8 +21066,8 @@
   {
     "id": "projection2-slice-clear-fiat",
     "file": "crates/custody/src/finalized_projection/principal.rs",
-    "find": "    base[\"fiat_value\"] = Value::Null;",
-    "replace": "    base[\"fiat_value\"] = json!(99);",
+    "find": "    base.set(\"fiat_value\", Value::Null);",
+    "replace": "    base.set(\"fiat_value\", json!(99));",
     "expect_failing": [
       "projection_slice_pricing_vectors"
     ],
@@ -21076,8 +21076,8 @@
   {
     "id": "projection2-slice-clear-exact",
     "file": "crates/custody/src/finalized_projection/principal.rs",
-    "find": "    base[\"fiat_value_exact\"] = Value::Null;",
-    "replace": "    base[\"fiat_value_exact\"] = json!(\"99\");",
+    "find": "    base.set(\"fiat_value_exact\", Value::Null);",
+    "replace": "    base.set(\"fiat_value_exact\", json!(\"99\"));",
     "expect_failing": [
       "projection_slice_pricing_vectors"
     ],
@@ -21086,8 +21086,8 @@
   {
     "id": "projection2-slice-marker",
     "file": "crates/custody/src/finalized_projection/principal.rs",
-    "find": "    base[\"custody_finalized_tax_projection\"] = json!(true);",
-    "replace": "    base[\"custody_finalized_tax_projection\"] = json!(false);",
+    "find": "    base.set(\"custody_finalized_tax_projection\", json!(true));",
+    "replace": "    base.set(\"custody_finalized_tax_projection\", json!(false));",
     "expect_failing": [
       "projection_slice_pricing_vectors"
     ],
@@ -21096,8 +21096,8 @@
   {
     "id": "projection2-slice-quantity-hash",
     "file": "crates/custody/src/finalized_projection/principal.rs",
-    "find": "    base[\"custody_quantity_hash\"] = observation[\"quantity_hash\"].clone();",
-    "replace": "    base[\"custody_quantity_hash\"] = json!(\"bad\");",
+    "find": "base.set(\n        \"custody_quantity_hash\",\n        observation[\"quantity_hash\"].clone(),\n    );",
+    "replace": "base.set(\n        \"custody_quantity_hash\",\n        json!(\"bad\"),\n    );",
     "expect_failing": [
       "projection_slice_pricing_vectors"
     ],
@@ -21106,8 +21106,8 @@
   {
     "id": "projection2-slice-start",
     "file": "crates/custody/src/finalized_projection/principal.rs",
-    "find": "    base[\"custody_slice_start_msat\"] = number(&start);",
-    "replace": "    base[\"custody_slice_start_msat\"] = json!(0);",
+    "find": "    base.set(\"custody_slice_start_msat\", number(&start));",
+    "replace": "    base.set(\"custody_slice_start_msat\", json!(0));",
     "expect_failing": [
       "projection_slice_pricing_vectors"
     ],
@@ -21116,8 +21116,8 @@
   {
     "id": "projection2-slice-end",
     "file": "crates/custody/src/finalized_projection/principal.rs",
-    "find": "    base[\"custody_slice_end_msat\"] = number(&end);",
-    "replace": "    base[\"custody_slice_end_msat\"] = json!(0);",
+    "find": "    base.set(\"custody_slice_end_msat\", number(&end));",
+    "replace": "    base.set(\"custody_slice_end_msat\", json!(0));",
     "expect_failing": [
       "projection_slice_pricing_vectors"
     ],
@@ -22166,8 +22166,8 @@
   {
     "id": "projection8-raw-rows",
     "file": "crates/custody/src/finalized_projection/runtime.rs",
-    "find": "        rows,\n    )\n    .map_err(|error| {",
-    "replace": "        &json!({}),\n    )\n    .map_err(|error| {",
+    "find": "        rows,\n    )\n    .map_err(validation)",
+    "replace": "        &json!({}),\n    )\n    .map_err(validation)",
     "expect_failing": [
       "projection_adapter_input_families"
     ],
@@ -22306,8 +22306,8 @@
   {
     "id": "projection8-diagnostics",
     "file": "crates/custody/src/finalized_projection/runtime.rs",
-    "find": "stored::list(stored::get(interpreter, \"quarantines\")),",
-    "replace": "&[],",
+    "find": "        input,\n        stored::list(stored::get(interpreter, \"quarantines\")),",
+    "replace": "        input,\n        &[],",
     "expect_failing": [
       "projection_adapter_input_families"
     ],
@@ -22356,8 +22356,8 @@
   {
     "id": "projection8-lossless-adapter-seam",
     "file": "crates/custody/src/finalized_projection/runtime.rs",
-    "find": "stored::list(stored::get(interpreter, \"quarantines\")),",
-    "replace": "stored::list(&codec::from_json(&codec::to_json(stored::get(interpreter, \"quarantines\")))?),",
+    "find": "        input,\n        stored::list(stored::get(interpreter, \"quarantines\")),",
+    "replace": "        input,\n        stored::list(&codec::from_json(&codec::to_json(stored::get(interpreter, \"quarantines\")))?),",
     "expect_failing": [
       "projection_adapter_lossless_diagnostics"
     ],
@@ -23567,8 +23567,8 @@
   {
     "id": "projection-row-overlay-new",
     "file": "crates/custody/src/finalized_projection/row.rs",
-    "find": "let (name, value) = overrides.next().unwrap();",
-    "replace": "let (name, _) = overrides.next().unwrap(); let value = Value::Null;",
+    "find": "                let (name, value) = overrides.next().unwrap();\n                fields.push((\n                    kassiber_pyjson::Key::Str(name.into()),",
+    "replace": "                let (name, _) = overrides.next().unwrap(); let value = Value::Null;\n                fields.push((\n                    kassiber_pyjson::Key::Str(name.into()),",
     "expect_failing": [
       "finalized_borrowed_rows_preserve_overrides_and_source_bytes"
     ],
@@ -23723,6 +23723,56 @@
       "typed_finalized_matches_python_value_adapter"
     ],
     "rule": "Typed finalization admits the unblocked eligible states exactly."
+  },
+  {
+    "id": "typed-finalized-diagnostics",
+    "file": "crates/custody/src/finalized_projection/runtime.rs",
+    "find": "        &input,\n        stored::list(stored::get(interpreter, \"quarantines\")),",
+    "replace": "        &input,\n        &[],",
+    "expect_failing": [
+      "typed_finalized_matches_python_value_adapter"
+    ],
+    "rule": "Typed finalization keeps the interpreter diagnostics as quarantines."
+  },
+  {
+    "id": "typed-finalized-detach-index",
+    "file": "crates/custody/src/finalized_projection/row.rs",
+    "find": "                if at < rows.len() && std::ptr::eq(&rows[at], source) {\n                    Source::Row(at)",
+    "replace": "                if at < rows.len() && std::ptr::eq(&rows[at], source) {\n                    Source::Row(0)",
+    "expect_failing": [
+      "typed_finalized_matches_python_value_adapter"
+    ],
+    "rule": "Detached finalized rows keep their own snapshot source row."
+  },
+  {
+    "id": "typed-finalized-overlay-order",
+    "file": "crates/custody/src/finalized_projection/row.rs",
+    "find": "                .is_some_and(|(name, _)| **name < key.as_str())",
+    "replace": "                .is_some_and(|(name, _)| **name > key.as_str())",
+    "expect_failing": [
+      "typed_finalized_matches_python_value_adapter"
+    ],
+    "rule": "Detached rows merge generated fields into source key order."
+  },
+  {
+    "id": "typed-finalized-plain-price",
+    "file": "crates/custody/src/finalized_projection/money.rs",
+    "find": "                && fraction.len() <= 13",
+    "replace": "                && fraction.len() <= 14",
+    "expect_failing": [
+      "finalized_plain_prices_are_admitted"
+    ],
+    "rule": "Plain prices skip admission only within the supported precision floor."
+  },
+  {
+    "id": "typed-finalized-chain-null",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "    if row[\"observation_authority_version\"].is_null()\n        ||",
+    "replace": "    if !row[\"observation_authority_version\"].is_null()\n        ||",
+    "expect_failing": [
+      "projection_fee_row_vectors"
+    ],
+    "rule": "Only rows with closed authority carry chain order evidence."
   },
   {
     "id": "R4-evidence-alias-slot-index",
