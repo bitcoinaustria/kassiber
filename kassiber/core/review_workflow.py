@@ -177,6 +177,8 @@ def _inspect_cases(conn, profile, *, limit, cursor):
     return {
         "schema_version": 1, "workspace_id": profile["workspace_id"],
         "profile_id": profile["id"], "input_version": version,
+        # What price_override's fiat_rate and fiat_value are stated in.
+        "fiat_currency": str(profile["fiat_currency"] or "").strip().upper(),
         "freshness": custody_journal.projection_freshness(conn, profile),
         "cases": cases, "next_cursor": next_cursor, "waiting_count": len(waits_on),
         "recent_receipts": _recent_receipts(conn, profile) if cursor is None else [],

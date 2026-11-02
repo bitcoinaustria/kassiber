@@ -265,7 +265,7 @@ them. Supported operations:
 
 | Type | Fields | Core service |
 | --- | --- | --- |
-| `price_override`, `exclude` | `transaction_id`, a price (exactly one of `fiat_rate`/`fiat_value`) for the former, `reason` | quarantine resolution, current cases only |
+| `price_override`, `exclude` | `transaction_id`, a price (exactly one of `fiat_rate`/`fiat_value`, in the book's fiat currency, which `review cases` reports as `fiat_currency`) for the former, `reason` | quarantine resolution, current cases only |
 | `unpair` | `pair_id`, `expected_fingerprint`, `reason` | pair-review removal (below) |
 | `pair` | `out_transaction_id`, `in_transaction_id`, optional `pair_kind`, `policy`, `out_amount_msat`, `reason` (stored as the pair's note) | `transfers pair` |
 | `dismiss_pair` | both legs, `reason`, `expires_in_days` 1 to 3650 (default 90) | `transfers dismiss`; journals are invalidated because dismissals also stop native transitions |
