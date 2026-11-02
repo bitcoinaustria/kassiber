@@ -193,9 +193,22 @@ class _FakeLndRestClient:
     def __init_subclass__(cls, **kw):
         super().__init_subclass__(**kw)
 
+    _PAGED = {
+        "/v1/payments": ("payments", "last_index_offset"),
+        "/v1/invoices": ("invoices", "last_index_offset"),
+        "/v1/switch": ("forwarding_events", "last_offset_index"),
+    }
+
     def _record(self, method: str, path: str, payload: Any) -> dict[str, Any]:
         self.requests.append((method, path, payload))
-        return dict(self.responses.get((method, path), {}))
+        response = dict(self.responses.get((method, path), {}))
+        rows_key, cursor_key = self._PAGED.get(path, (None, None))
+        offset = int((payload or {}).get("index_offset") or 0)
+        # Like LND, a canned page lies before its cursor: reading past it is empty.
+        if rows_key in response and offset and offset >= int(response.get(cursor_key) or 0):
+            response[rows_key] = []
+            response[cursor_key] = str(offset)
+        return response
 
     def get(
         self, path: str, *, params: Mapping[str, Any] | None = None
@@ -1113,7 +1126,9 @@ class LndTransactionImportTest(unittest.TestCase):
 
     def test_same_second_forwards_with_distinct_amounts_are_not_deduplicated(self) -> None:
         class Client:
-            def post(self, _path, _payload):
+            def post(self, _path, payload):
+                if int(payload["index_offset"]):
+                    return {"forwarding_events": [], "last_offset_index": payload["index_offset"]}
                 return {
                     "forwarding_events": [
                         {

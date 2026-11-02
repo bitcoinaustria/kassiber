@@ -1122,9 +1122,9 @@ def _fetch_lnd_forwarding_history(
         if not page:
             break
         if next_offset <= offset:
-            if len(page) >= LND_MAX_PAGE_SIZE:
-                raise AppError("LND forwarding history cursor did not advance", code="lightning_history_incomplete")
-            break
+            # A proxy may cap pages below the request, so a short page is no
+            # proof of the end either; only an empty page ends the history.
+            raise AppError("LND forwarding history cursor did not advance", code="lightning_history_incomplete")
         offset = next_offset
     return rows
 
@@ -1191,9 +1191,7 @@ def _fetch_lnd_indexed_history(
         if not page:
             break
         if next_offset <= offset:
-            if len(page) >= LND_MAX_PAGE_SIZE:
-                raise AppError("LND history cursor did not advance", code="lightning_history_incomplete")
-            break
+            raise AppError("LND history cursor did not advance", code="lightning_history_incomplete")
         offset = next_offset
     return rows
 
