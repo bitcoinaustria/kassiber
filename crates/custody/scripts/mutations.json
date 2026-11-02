@@ -7286,7 +7286,7 @@
   {
     "id": "R2c-safety-holds-covered-pairs",
     "file": "crates/custody/src/interpretation/holds.rs",
-    "find": "covered.extend(input.pairs.iter().flat_map(anchors));",
+    "find": "covered.extend(input.pairs.iter().flat_map(|pair| anchors(pair)));",
     "replace": "covered.extend(std::iter::empty::<String>());",
     "expect_failing": [
       "raw_observation_hold_vectors"
@@ -7766,8 +7766,8 @@
   {
     "id": "R2c-safety-composition-samourai-pairs",
     "file": "crates/custody/src/interpretation/safety.rs",
-    "find": "candidates.extend(array(&samourai[\"pairs\"]).iter().cloned());",
-    "replace": "candidates.extend(std::iter::empty::<Value>());",
+    "find": "candidates.extend(array(&samourai[\"pairs\"]));",
+    "replace": "candidates.extend(std::iter::empty::<&Value>());",
     "expect_failing": [
       "interpretation_safety_projection"
     ],
@@ -7776,8 +7776,8 @@
   {
     "id": "R2c-safety-composition-derived-pairs",
     "file": "crates/custody/src/interpretation/safety.rs",
-    "find": "candidates.extend(derived.iter().cloned());",
-    "replace": "candidates.extend(std::iter::empty::<Value>());",
+    "find": "candidates.extend(derived.iter());",
+    "replace": "candidates.extend(std::iter::empty::<&Value>());",
     "expect_failing": [
       "interpretation_safety_projection"
     ],
@@ -7806,8 +7806,8 @@
   {
     "id": "R2c-safety-composition-kept-derived",
     "file": "crates/custody/src/interpretation/safety.rs",
-    "find": "let derived = holds::without_held(derived, &holds.blocked_ids);",
-    "replace": "let derived = derived.to_vec();",
+    "find": "let derived = holds::without_held(&derived.iter().collect::<Vec<_>>(), &holds.blocked_ids);",
+    "replace": "let derived = derived.iter().collect::<Vec<_>>();",
     "expect_failing": [
       "interpretation_safety_projection"
     ],
@@ -10136,8 +10136,8 @@
   {
     "id": "native11-native-pairs",
     "file": "crates/custody/src/interpretation/safety.rs",
-    "find": "candidates.extend(native.pairs.iter().cloned());",
-    "replace": "candidates.extend(std::iter::empty::<Value>());",
+    "find": "candidates.extend(native.pairs.iter());",
+    "replace": "candidates.extend(std::iter::empty::<&Value>());",
     "expect_failing": [
       "interpretation_native_projection"
     ],
@@ -18606,7 +18606,7 @@
   {
     "id": "QRT-063",
     "file": "crates/custody/src/quantity/runtime.rs",
-    "find": "conversions.extend(array(&v[\"reviewed_conversion_pairs\"]).iter().cloned());",
+    "find": "conversions.extend(take(\"reviewed_conversion_pairs\"));",
     "replace": "conversions.extend(std::iter::empty::<Value>());",
     "expect_failing": [
       "quantity_whole_state_vectors"
@@ -18616,7 +18616,7 @@
   {
     "id": "QRT-064",
     "file": "crates/custody/src/quantity/runtime.rs",
-    "find": "payouts.extend(array(&v[\"reviewed_direct_payouts\"]).iter().cloned());",
+    "find": "payouts.extend(take(\"reviewed_direct_payouts\"));",
     "replace": "payouts.extend(std::iter::empty::<Value>());",
     "expect_failing": [
       "quantity_whole_state_vectors"
@@ -23477,7 +23477,7 @@
   {
     "id": "native-support-direction",
     "file": "crates/custody/src/components/commitments.rs",
-    "find": "&& matches!(direction.as_str(), \"inbound\" | \"outbound\")",
+    "find": "&& matches!(&*direction, \"inbound\" | \"outbound\")",
     "replace": "&& true",
     "expect_failing": [
       "native_support_preserves_observation_admission_and_hashes"
@@ -23777,7 +23777,7 @@
   {
     "id": "native-shared-enrichment-order",
     "file": "crates/custody/src/components/commitments.rs",
-    "find": "        rows.sort_by_cached_key(|at| order(&records[*at]));",
+    "find": "        rows.sort_by_cached_key(|at| order_ref(&records[*at]));",
     "replace": "        rows.reverse();",
     "expect_failing": [
       "native_support_shares_evidence_enrichment"
@@ -24083,6 +24083,36 @@
       "quantity_arbitration_vectors"
     ],
     "rule": "Domain totals sum every posting."
+  },
+  {
+    "id": "gap-return-groups-limit",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "    ranked.truncate(maximum);\n    ranked.sort_unstable_by(|a, b| a.0.cmp(&b.0));",
+    "replace": "    ranked.sort_unstable_by(|a, b| a.0.cmp(&b.0));",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ],
+    "rule": "Each source keeps at most its limit of return groups."
+  },
+  {
+    "id": "network-config-cache-hit",
+    "file": "crates/custody/src/gates/network.rs",
+    "find": "    if let Some(payload) = configs.get(&**text) {\n        return payload.clone();\n    }",
+    "replace": "    if let Some(_) = configs.get(&**text) {\n        return Payload::default();\n    }",
+    "expect_failing": [
+      "network_config_cache_reads_as_parse"
+    ],
+    "rule": "A cached configuration reads as its parse."
+  },
+  {
+    "id": "borrowed-lower-uppercase",
+    "file": "crates/custody/src/python_text.rs",
+    "find": "    if text.is_ascii() && !text.bytes().any(|b| b.is_ascii_uppercase()) {",
+    "replace": "    if text.is_ascii() {",
+    "expect_failing": [
+      "borrowed_case_mappings_match_python"
+    ],
+    "rule": "Only text without uppercase letters lowercases to itself."
   },
   {
     "id": "R4-evidence-alias-slot-index",

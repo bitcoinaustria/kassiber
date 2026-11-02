@@ -79,13 +79,13 @@ fn integer(value: &Value) -> Result<i128, String> {
     }))
 }
 fn exact_fanout(
-    pairs: &[Value],
+    pairs: &[&Value],
     context: &Context,
     scopes: &BTreeMap<String, (String, String, String, String)>,
 ) -> Result<BTreeSet<String>, String> {
     let mut groups: Vec<(String, Vec<&Value>)> = Vec::new();
     let mut index = std::collections::HashMap::new();
-    for pair in pairs {
+    for &pair in pairs {
         let group = text(&pair["group_id"]);
         if !group.is_empty() {
             crate::codec::push_grouped(&mut groups, &mut index, group, pair);
@@ -219,10 +219,11 @@ pub(super) fn compile(
     context: &Context,
     snapshot: &Snapshot,
 ) -> Result<Value, String> {
-    compile_with_proofs(pairs, context, snapshot, &BTreeMap::new())
+    let pairs: Vec<&Value> = pairs.iter().collect();
+    compile_with_proofs(&pairs, context, snapshot, &BTreeMap::new())
 }
 pub(super) fn compile_with_proofs(
-    pairs: &[Value],
+    pairs: &[&Value],
     context: &Context,
     snapshot: &Snapshot,
     proofs: &BTreeMap<(String, String), NativeTransitionProof>,
@@ -254,7 +255,7 @@ pub(super) fn compile_with_proofs(
     )
 }
 pub(super) fn compile_with_scopes(
-    pairs: &[Value],
+    pairs: &[&Value],
     context: &Context,
     wallets: &BTreeMap<String, Value>,
     scopes: &BTreeMap<String, (String, String, String, String)>,
@@ -262,7 +263,7 @@ pub(super) fn compile_with_scopes(
 ) -> Result<Value, String> {
     let _span = crate::timing::span("interpretation.pairs");
     let fanout = exact_fanout(pairs, context, scopes)?;
-    let mut ordered: Vec<_> = pairs.iter().collect();
+    let mut ordered: Vec<&Value> = pairs.to_vec();
     ordered.sort_by_key(|p| {
         (
             text(&p["out"]["occurred_at"]),
@@ -514,9 +515,13 @@ fn sum(a: &Value, b: &Value) -> Value {
     let b: BigInt = b.to_string().parse().expect("converted integer");
     serde_json::from_str(&(a + b).to_string()).expect("integer sum")
 }
-pub(super) fn native_audits(pairs: &[Value], context: &Context) -> Result<Vec<Value>, String> {
+pub(super) fn native_audits<P: std::borrow::Borrow<Value>>(
+    pairs: &[P],
+    context: &Context,
+) -> Result<Vec<Value>, String> {
     let mut audits = Vec::new();
     for pair in pairs {
+        let pair = pair.borrow();
         let name = source_name(pair);
         if !matches!(
             name.as_str(),
@@ -618,6 +623,7 @@ mod tests {
                 )
             })
             .collect();
+        let pairs: &[&Value] = &pairs.iter().collect::<Vec<_>>();
         let compiled = compile_with_scopes(pairs, &context, &wallets, &scopes, &proofs)
             .unwrap_or_else(|code| json!({"error_code":code}));
         assert_eq!(compiled, vector["expected"], "{case}");

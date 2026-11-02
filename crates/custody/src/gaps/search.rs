@@ -547,7 +547,7 @@ fn return_groups<N: Amount>(
             let at = next_key.partition_point(|old| *old <= rank);
             next_key.insert(at, rank);
             if next_total >= minimum {
-                qualifying.insert(next_key.clone(), next.clone());
+                qualifying.insert(next_key.clone(), (next.clone(), next_total.clone()));
             }
             states.push((next, next_total, next_key));
         }
@@ -582,14 +582,19 @@ fn return_groups<N: Amount>(
         }
         states.truncate(limits.beam_width);
     }
-    let mut groups: Vec<_> = qualifying.into_values().collect();
-    rank_groups(
-        &mut groups,
-        legs,
-        target,
-        limits.max_return_groups_per_source,
-    );
-    groups
+    // A qualifying group's key and total are its `group_key` parts, and keys
+    // are unique; select the best groups, then order them.
+    let mut ranked: Vec<_> = qualifying
+        .into_iter()
+        .map(|(key, (group, total))| ((distance(target, &total), group.len(), key), group))
+        .collect();
+    let maximum = limits.max_return_groups_per_source;
+    if ranked.len() > maximum && maximum > 0 {
+        ranked.select_nth_unstable_by(maximum - 1, |a, b| a.0.cmp(&b.0));
+    }
+    ranked.truncate(maximum);
+    ranked.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+    ranked.into_iter().map(|(_, group)| group).collect()
 }
 
 #[cfg(test)]

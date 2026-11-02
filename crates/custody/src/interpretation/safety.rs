@@ -135,15 +135,15 @@ fn compose_impl(
         let derivation_blocked = blocked(&prepared.derivation_quarantines);
         let mut touched = derivation_blocked.clone();
         touched.extend(derived.iter().flat_map(holds::anchors));
-        let mut candidates: Vec<_> = prepared
+        // Pairs are borrowed from their producers; each holds its rows.
+        let mut candidates: Vec<&Value> = prepared
             .recorded
             .iter()
             .filter(|pair| holds::anchors(pair).is_disjoint(&touched))
-            .cloned()
             .collect();
-        candidates.extend(array(&samourai["pairs"]).iter().cloned());
-        candidates.extend(derived.iter().cloned());
-        candidates.extend(native.pairs.iter().cloned());
+        candidates.extend(array(&samourai["pairs"]));
+        candidates.extend(derived.iter());
+        candidates.extend(native.pairs.iter());
         let mut other_blocked = derivation_blocked;
         other_blocked.extend(channel_blocked);
         other_blocked.extend(native_blocked);
@@ -200,7 +200,7 @@ fn compose_impl(
             (None, None) => holds!(rows.values(), prepared.normalized.values()),
         };
         let kept = holds::without_held(&candidates, &holds.blocked_ids);
-        let derived = holds::without_held(derived, &holds.blocked_ids);
+        let derived = holds::without_held(&derived.iter().collect::<Vec<_>>(), &holds.blocked_ids);
         let mut released_context = None;
         let mut native_reconciliations = Vec::new();
         if components.iter().any(|c| {

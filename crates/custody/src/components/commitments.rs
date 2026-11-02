@@ -30,6 +30,20 @@ fn order(row: &impl evidence::RowRecord) -> (String, String, String) {
         pystr(row.field("id").expect("no entry found for key")),
     )
 }
+/// `order`, borrowing the row's strings.
+fn order_ref(
+    row: &crate::snapshot::Record,
+) -> (
+    std::borrow::Cow<'_, str>,
+    std::borrow::Cow<'_, str>,
+    std::borrow::Cow<'_, str>,
+) {
+    let field = |key: &str| match row.get(key).expect("no entry found for key") {
+        Value::String(text) => std::borrow::Cow::Borrowed(text.as_str()),
+        value => std::borrow::Cow::Owned(pystr(value)),
+    };
+    (field("occurred_at"), field("created_at"), field("id"))
+}
 fn anchors(legs: &[Value]) -> BTreeSet<String> {
     legs.iter()
         .filter(|l| !absent(&l["anchor_transaction_id"]) || !absent(&l["transaction_id"]))
@@ -206,8 +220,8 @@ struct Pool {
     events: BTreeSet<Rc<evidence::EventKey>>,
 }
 impl Pool {
-    fn string(&mut self, value: String) -> Rc<str> {
-        if let Some(value) = self.strings.get(value.as_str()) {
+    fn string(&mut self, value: &str) -> Rc<str> {
+        if let Some(value) = self.strings.get(value) {
             return value.clone();
         }
         let value: Rc<str> = value.into();
@@ -301,15 +315,18 @@ fn build<F: crate::fields::Fields + ?Sized>(
     key: evidence::EventKey,
     pool: &mut Pool,
 ) -> Result<Observation, Error> {
-    let transaction = text(row.at("id"));
+    // Borrowed where the row spells them; the pool keeps one copy each.
+    let transaction = codec::text_ref(row.at("id"));
     let anchor = if truth(row.at("journal_transaction_id")) {
-        text(row.at("journal_transaction_id"))
+        codec::text_ref(row.at("journal_transaction_id"))
     } else {
         transaction.clone()
     };
-    let wallet = text(row.at("wallet_id"));
-    let asset = text(row.at("asset")).py_upper();
-    let direction = text(row.at("direction")).py_lower();
+    let wallet = codec::text_ref(row.at("wallet_id"));
+    let asset = codec::text_ref(row.at("asset"));
+    let asset = crate::python_text::upper(&asset);
+    let direction = codec::text_ref(row.at("direction"));
+    let direction = crate::python_text::lower(&direction);
     let includes_fee = truth(row.at("amount_includes_fee"));
     let small = |v: &Value| if v.is_null() { Some(0) } else { v.as_i64() };
     let fast = small(row.at("amount"))
@@ -320,7 +337,7 @@ fn build<F: crate::fields::Fields + ?Sized>(
                 && !anchor.is_empty()
                 && !wallet.is_empty()
                 && !asset.is_empty()
-                && matches!(direction.as_str(), "inbound" | "outbound")
+                && matches!(&*direction, "inbound" | "outbound")
                 && *amount >= 0
                 && *fee >= 0
                 && !(direction == "inbound" && includes_fee)
@@ -348,10 +365,10 @@ fn build<F: crate::fields::Fields + ?Sized>(
         amount.clone()
     };
     Ok(Observation {
-        transaction: pool.string(transaction),
+        transaction: pool.string(&transaction),
         event: pool.event(key),
-        wallet: pool.string(wallet),
-        asset: pool.string(asset),
+        wallet: pool.string(&wallet),
+        asset: pool.string(&asset),
         direction,
         amount,
         fee,
@@ -462,7 +479,7 @@ pub(super) fn native_context(
     if let Some(prepared) = shared_enrichment(snapshot, &profile, prepared) {
         let records = &snapshot.transactions;
         let mut rows: Vec<usize> = (0..records.len()).collect();
-        rows.sort_by_cached_key(|at| order(&records[*at]));
+        rows.sort_by_cached_key(|at| order_ref(&records[*at]));
         let _span = crate::timing::span("components.native.observations");
         for at in rows {
             let row = prepared.row(at, records);

@@ -1,5 +1,5 @@
 //! Port of custody_evidence's canonical identities, commitments and quantities.
-use crate::codec::{self, int, integer, text, truth, wide};
+use crate::codec::{self, int, integer, text, text_ref, truth, wide};
 use crate::components::Error;
 use crate::fields::Fields;
 use crate::python_text::PythonText;
@@ -95,8 +95,11 @@ pub(crate) fn scope_fields<'a>(row: impl Fn(&str) -> &'a Value) -> Result<(Strin
     } else {
         row("wallet_config_json")
     });
-    let kind = strip(&text(row("wallet_kind"))).py_lower();
-    let asset = strip(&text(row("asset"))).py_upper();
+    // Borrowed where no case changes; the readers below only compare them.
+    let kind = text_ref(row("wallet_kind"));
+    let kind = crate::python_text::lower(strip(&kind));
+    let asset = text_ref(row("asset"));
+    let asset = crate::python_text::upper(strip(&asset));
     let raw_chain = raw.field("chain");
     let selected = if !raw_chain.is_null() && *raw_chain != "" {
         text(&raw_chain)

@@ -79,6 +79,22 @@ impl PythonText for str {
         strip(self)
     }
 }
+/// `py_lower`, borrowed when it changes nothing.
+pub fn lower(text: &str) -> std::borrow::Cow<'_, str> {
+    if text.is_ascii() && !text.bytes().any(|b| b.is_ascii_uppercase()) {
+        std::borrow::Cow::Borrowed(text)
+    } else {
+        std::borrow::Cow::Owned(text.py_lower())
+    }
+}
+/// `py_upper`, borrowed when it changes nothing.
+pub fn upper(text: &str) -> std::borrow::Cow<'_, str> {
+    if text.is_ascii() && !text.bytes().any(|b| b.is_ascii_lowercase()) {
+        std::borrow::Cow::Borrowed(text)
+    } else {
+        std::borrow::Cow::Owned(text.py_upper())
+    }
+}
 /// CPython 3.11 Unicode 14 decimal digits accepted by int(str).
 pub fn decimal_digit(c: char) -> Option<u8> {
     let point = u32::from(c);
@@ -1553,3 +1569,20 @@ const DIGIT: &[(u32, u32)] = &[
     (0x1f100, 0x1f10a),
     (0x1fbf0, 0x1fbf9),
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn borrowed_case_mappings_match_python() {
+        for text in [
+            "", "main", "Main", "MAIN", "lbtc", "LBTC", "core-LN", "\u{130}x", "\u{3a3}a", "ß",
+        ] {
+            assert_eq!(lower(text), text.py_lower(), "{text:?}");
+            assert_eq!(upper(text), text.py_upper(), "{text:?}");
+        }
+        assert!(matches!(lower("main"), std::borrow::Cow::Borrowed(_)));
+        assert!(matches!(upper("LBTC"), std::borrow::Cow::Borrowed(_)));
+    }
+}

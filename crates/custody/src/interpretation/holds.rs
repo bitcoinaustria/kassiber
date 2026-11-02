@@ -625,9 +625,9 @@ pub(super) fn anchors(pair: &Value) -> Ids {
         .filter(|id| !id.is_empty())
         .collect()
 }
-pub(super) fn without_held<'a>(pairs: &'a [Value], held: &Ids) -> std::borrow::Cow<'a, [Value]> {
+pub(super) fn without_held<'a>(pairs: &[&'a Value], held: &Ids) -> Vec<&'a Value> {
     if held.is_empty() {
-        return std::borrow::Cow::Borrowed(pairs);
+        return pairs.to_vec();
     }
     let groups: Ids = pairs
         .iter()
@@ -638,15 +638,13 @@ pub(super) fn without_held<'a>(pairs: &'a [Value], held: &Ids) -> std::borrow::C
         })
         .map(|pair| codec::pystr(&pair["group_id"]))
         .collect();
-    std::borrow::Cow::Owned(
-        pairs
-            .iter()
-            .filter(|pair| {
-                anchors(pair).is_disjoint(held) && !groups.contains(&codec::text(&pair["group_id"]))
-            })
-            .cloned()
-            .collect(),
-    )
+    pairs
+        .iter()
+        .filter(|pair| {
+            anchors(pair).is_disjoint(held) && !groups.contains(&codec::text(&pair["group_id"]))
+        })
+        .copied()
+        .collect()
 }
 
 #[derive(Serialize)]
@@ -659,7 +657,7 @@ pub(super) struct Holds {
 pub(super) struct Inputs<'a, R: Row, D: Row> {
     pub rows: &'a [R],
     pub derivation_rows: &'a [D],
-    pub pairs: &'a [Value],
+    pub pairs: &'a [&'a Value],
     pub wallets: &'a BTreeMap<String, Value>,
     pub has_chain_events: bool,
     pub excluded: &'a Ids,
@@ -698,7 +696,7 @@ pub(super) fn compute<R: Row, D: Row>(input: Inputs<'_, R, D>) -> Result<Holds, 
         .chain(&pending_ids)
         .cloned()
         .collect();
-    covered.extend(input.pairs.iter().flat_map(anchors));
+    covered.extend(input.pairs.iter().flat_map(|pair| anchors(pair)));
     let fanout_ids = if input.has_chain_events {
         fanout_with_facts(
             input.derivation_rows,
@@ -897,8 +895,8 @@ mod tests {
                     }
                     "outpoint" => json!(canonical_outpoint(&codec::from_json(&vector["value"]).unwrap())),
                     "detectors" => json!({"conflicts":conflicts(rows, &facts(rows))?,"pending":pending(rows, &facts(rows))?,"fanout":fanout(rows,&ids("covered"))?,"unscoped":unscoped(rows)?}),
-                    "filter" => json!(without_held(array(&vector["pairs"]), &ids("held"))),
-                    "holds" => json!(compute(Inputs { rows, derivation_rows: array(&vector["derivation_rows"]), pairs: array(&vector["pairs"]), wallets: &serde_json::from_value(vector["wallets"].clone()).unwrap(), has_chain_events: vector["has_chain_events"].as_bool().unwrap(), excluded: &ids("excluded"), blocked: &ids("blocked"), resolved: &ids("resolved") })?),
+                    "filter" => json!(without_held(&array(&vector["pairs"]).iter().collect::<Vec<_>>(), &ids("held"))),
+                    "holds" => json!(compute(Inputs { rows, derivation_rows: array(&vector["derivation_rows"]), pairs: &array(&vector["pairs"]).iter().collect::<Vec<_>>(), wallets: &serde_json::from_value(vector["wallets"].clone()).unwrap(), has_chain_events: vector["has_chain_events"].as_bool().unwrap(), excluded: &ids("excluded"), blocked: &ids("blocked"), resolved: &ids("resolved") })?),
                     _ => unreachable!(),
                 })
             })().unwrap_or_else(|error| json!({"error":error}));

@@ -9,7 +9,7 @@ use serde_json::json;
 use std::collections::BTreeSet;
 
 type Evidence = (Option<String>, Option<String>, bool);
-#[derive(Default, Deserialize)]
+#[derive(Clone, Default, Deserialize)]
 #[serde(default)]
 struct Payload {
     chain: SqlValue,
@@ -89,18 +89,43 @@ fn domains(raw: &Payload, config: &Payload, asset: &SqlValue) -> (Option<String>
     }
     (domains.first().map(|s| (*s).to_owned()), true)
 }
+/// Parsed configuration texts; a book repeats each wallet's on every row.
+type Configs = crate::fxhash::HashMap<String, Payload>;
+
+fn parse_config(value: &SqlValue, configs: &mut Configs) -> Payload {
+    let SqlValue::Text(text) = value else {
+        return Payload::parse(value);
+    };
+    if let Some(payload) = configs.get(&**text) {
+        return payload.clone();
+    }
+    let payload = Payload::parse(value);
+    configs.insert(text.to_string(), payload.clone());
+    payload
+}
+
 pub(super) fn evidence(row: &NetworkRow) -> Evidence {
+    evidence_with(row, &mut Configs::default())
+}
+
+fn evidence_with(row: &NetworkRow, configs: &mut Configs) -> Evidence {
     let mut raw = Payload::parse(row.raw_json.value());
-    let config = Payload::parse(if row.config_json.truth() {
-        row.config_json.value()
-    } else {
-        row.wallet_config_json.value()
-    });
-    let instance_config = Payload::parse(if row.wallet_config_json.truth() {
-        row.wallet_config_json.value()
-    } else {
-        row.config_json.value()
-    });
+    let config = parse_config(
+        if row.config_json.truth() {
+            row.config_json.value()
+        } else {
+            row.wallet_config_json.value()
+        },
+        configs,
+    );
+    let instance_config = parse_config(
+        if row.wallet_config_json.truth() {
+            row.wallet_config_json.value()
+        } else {
+            row.config_json.value()
+        },
+        configs,
+    );
     if raw.source.as_str() == Some("bullbitcoin_wallet_csv")
         && ["bitcoin", "liquid", "lightning"].contains(&text(&raw.network).py_lower().as_str())
         || row.wallet_kind.value().as_str() == Some("coinbase")
@@ -195,6 +220,7 @@ pub(super) fn require(
             }
         }
     };
+    let mut configs = Configs::default();
     for wallet in wallets {
         let wallet_id = wallet.id.json();
         // Text identifiers compare as the strings their JSON holds.
@@ -214,7 +240,7 @@ pub(super) fn require(
             };
             if same(&row.wallet_id) {
                 found = true;
-                add(evidence(row), false);
+                add(evidence_with(row, &mut configs), false);
             }
         }
         if !found {
@@ -274,13 +300,37 @@ fn review_refusal(message: &str, details: serde_json::Value) -> crate::Refusal {
 mod tests {
     use super::*;
     #[test]
+    fn network_config_cache_reads_as_parse() {
+        let row: NetworkRow = serde_json::from_value(json!({
+            "wallet_id": "w",
+            "config_json": "{\"chain\":\"bitcoin\",\"network\":\"regtest\"}",
+        }))
+        .unwrap();
+        let expected = evidence(&row);
+        assert_ne!(expected, evidence(&NetworkRow::default()));
+        let mut configs = Configs::default();
+        for _ in 0..2 {
+            assert_eq!(evidence_with(&row, &mut configs), expected);
+        }
+    }
+    #[test]
     fn typed_network_evidence_matches_historical_semantics() {
         let vectors: Vec<serde_json::Value> = serde_json::from_str(include_str!(
             "../../../../tests/fixtures/custody_semantics.json"
         ))
         .unwrap();
+        // One configuration cache serves every row, as the gate shares it.
+        let mut configs = Configs::default();
         for case in vectors.iter().filter(|v| v.get("network_row").is_some()) {
             let row = serde_json::from_value(case["network_row"].clone()).unwrap();
+            for _ in 0..2 {
+                assert_eq!(
+                    json!(evidence_with(&row, &mut configs)),
+                    case["network_evidence"],
+                    "{}",
+                    case["case"]
+                );
+            }
             assert_eq!(
                 json!(evidence(&row)),
                 case["network_evidence"],

@@ -139,7 +139,7 @@ fn infer(c: &Value) -> Result<Vec<Value>, Error> {
 type Token = (String, BigInt, Vec<String>);
 fn flatten(
     id: &str,
-    legs: &BTreeMap<String, Value>,
+    legs: &BTreeMap<String, &Value>,
     allocations: Vec<Value>,
     conversion: bool,
     retained: &BTreeSet<String>,
@@ -345,7 +345,7 @@ pub fn compile_observed(c: &Value, observations: Option<&Observations>) -> Resul
     let mut legs = BTreeMap::new();
     for l in array(&c["legs"]) {
         let key = l.get("id").ok_or_else(|| family("KeyError"))?;
-        legs.insert(s(key), l.clone());
+        legs.insert(s(key), l);
     }
     let mut leg_order = Vec::new();
     for l in array(&c["legs"]) {
@@ -710,7 +710,7 @@ pub fn compile_observed(c: &Value, observations: Option<&Observations>) -> Resul
         let source_txs: BTreeSet<String> = legs
             .values()
             .filter(|l| l["role"] == "source")
-            .map(tx)
+            .map(|l| tx(l))
             .collect();
         // Only pairs keyed by a source transaction can pass; visit those in order.
         let mut source_positions: Vec<usize> = source_txs

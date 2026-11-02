@@ -409,10 +409,15 @@ fn component_claims_observed(
         }
         if error.is_none() {
             match super::reviewed::compile_observed(c, Some(&observed)) {
-                Ok(v) => {
-                    claims.extend(array(&v["claims"]).iter().cloned());
-                    conversions.extend(array(&v["reviewed_conversion_pairs"]).iter().cloned());
-                    payouts.extend(array(&v["reviewed_direct_payouts"]).iter().cloned());
+                Ok(mut v) => {
+                    // The compilation is this caller's; move its lists out.
+                    let mut take = |key: &str| match v[key].take() {
+                        Value::Array(items) => items,
+                        _ => Vec::new(),
+                    };
+                    claims.extend(take("claims"));
+                    conversions.extend(take("reviewed_conversion_pairs"));
+                    payouts.extend(take("reviewed_direct_payouts"));
                     continue;
                 }
                 Err(e) => {

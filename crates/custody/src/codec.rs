@@ -754,6 +754,13 @@ pub fn pystr(v: &Value) -> String {
         _ => v.to_string(),
     }
 }
+/// `text`, borrowed when the value is a string.
+pub(crate) fn text_ref(v: &Value) -> std::borrow::Cow<'_, str> {
+    match v {
+        Value::String(text) => std::borrow::Cow::Borrowed(text),
+        v => std::borrow::Cow::Owned(text(v)),
+    }
+}
 pub fn text(v: &Value) -> String {
     if truth(v) {
         pystr(v)
