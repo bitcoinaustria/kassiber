@@ -796,6 +796,14 @@ fn issue<F: Fields>(
         .collect();
     json!({"$type":"CanonicalEventIssue","event_key":key.value(),"code":code,"message":message,"transaction_ids":ids,"details":details})
 }
+/// `canonical_input` of `rows`' enriched rows, typed and without the
+/// enriched rows' JSON objects.
+pub(crate) fn canonical_of_rows<R: RowRecord>(rows: &[R]) -> Result<canonical::Canonical, Error> {
+    let (enriched, keys) = enrich_with_keys(rows)?;
+    let views: Vec<_> = enriched.iter().map(|e| e.view(rows)).collect();
+    canonical_with_keys(&views, &json!({}), &BTreeSet::new(), keys)
+}
+
 pub fn canonical_input(
     rows: &[Value],
     reconciliations: &Value,
@@ -815,7 +823,7 @@ fn canonical_with_keys<F: Fields + Sync>(
     let mut rejected = Vec::new();
     let mut events = Vec::new();
     for (ordinal, row) in rows.iter().enumerate() {
-        if non_events.contains(&codec::pystr(row.at("id"))) {
+        if !non_events.is_empty() && non_events.contains(&codec::pystr(row.at("id"))) {
             continue;
         }
         let key = prepared
@@ -1048,6 +1056,8 @@ impl Evidence {
 pub struct Prepared {
     enriched: Vec<Enriched>,
     keys: Vec<Option<EventKey>>,
+    /// Keys a reader computed for the other rows; only successes are kept.
+    computed: Vec<std::sync::OnceLock<EventKey>>,
 }
 impl Prepared {
     pub(crate) fn row<'a>(&'a self, at: usize, rows: &'a [Record]) -> EnrichedRow<'a, Record> {
@@ -1055,10 +1065,11 @@ impl Prepared {
     }
     /// The row's event key, as `event_key_of` of its enriched row.
     pub(crate) fn key(&self, at: usize, rows: &[Record]) -> Result<EventKey, Error> {
-        match &self.keys[at] {
-            Some(key) => Ok(key.clone()),
-            None => event_key_of(&self.row(at, rows)),
+        if let Some(key) = self.keys[at].as_ref().or_else(|| self.computed[at].get()) {
+            return Ok(key.clone());
         }
+        let key = event_key_of(&self.row(at, rows))?;
+        Ok(self.computed[at].get_or_init(|| key).clone())
     }
 }
 
@@ -1066,7 +1077,14 @@ impl Prepared {
 pub fn prepare(snapshot: &Snapshot) -> Result<Prepared, Error> {
     let _span = crate::timing::span("evidence.enriched");
     let (enriched, keys) = enrich_with_keys(&snapshot.transactions)?;
-    Ok(Prepared { enriched, keys })
+    let computed = (0..keys.len())
+        .map(|_| std::sync::OnceLock::new())
+        .collect();
+    Ok(Prepared {
+        enriched,
+        keys,
+        computed,
+    })
 }
 
 pub fn stage(snapshot: &Snapshot) -> Result<Evidence, Error> {
@@ -1086,7 +1104,17 @@ pub fn stage_prepared(
     let non_events = crate::graph::native_zero_delta_ids(rows, snapshot)?;
     drop(span);
     let records = &snapshot.transactions;
-    let Prepared { enriched, keys } = prepared?;
+    let Prepared {
+        enriched,
+        keys,
+        computed,
+    } = prepared?;
+    // Keys the components stage computed are the keys this stage would.
+    let keys = keys
+        .into_iter()
+        .zip(computed)
+        .map(|(key, computed)| key.or_else(|| computed.into_inner()))
+        .collect();
     let span = crate::timing::span("evidence.receipts");
     let reconciliations = crate::graph::reconcile_receipts(rows, snapshot)?;
     drop(span);

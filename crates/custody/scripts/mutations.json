@@ -21346,8 +21346,8 @@
   {
     "id": "projection3-missing-order",
     "file": "crates/custody/src/finalized_projection/composition.rs",
-    "find": "let Some(order) = orders.get(&string(&o[\"quantity_hash\"])) else {\n        return true;",
-    "replace": "let Some(order) = orders.get(&string(&o[\"quantity_hash\"])) else {\n        return false;",
+    "find": "let Some(order) = orders.get(&*string_ref(&o[\"quantity_hash\"])) else {\n        return true;",
+    "replace": "let Some(order) = orders.get(&*string_ref(&o[\"quantity_hash\"])) else {\n        return false;",
     "expect_failing": [
       "projection_scoped_basis_vectors"
     ],
@@ -21436,8 +21436,8 @@
   {
     "id": "projection3-non-event",
     "file": "crates/custody/src/finalized_projection/composition.rs",
-    "find": "if non_events.contains(&string(&source[\"anchor_transaction_id\"]))",
-    "replace": "if !non_events.contains(&string(&source[\"anchor_transaction_id\"]))",
+    "find": "if non_events.contains(&*string_ref(&source[\"anchor_transaction_id\"]))",
+    "replace": "if !non_events.contains(&*string_ref(&source[\"anchor_transaction_id\"]))",
     "expect_failing": [
       "projection_selected_composition_vectors"
     ],
@@ -22376,7 +22376,7 @@
   {
     "id": "projection-review-M2",
     "file": "crates/custody/src/finalized_projection/composition.rs",
-    "find": "|| target.is_some_and(|t| blocked.contains(&string(&t[\"anchor_transaction_id\"])))",
+    "find": "|| target.is_some_and(|t| blocked.contains(&*string_ref(&t[\"anchor_transaction_id\"])))",
     "replace": "|| false",
     "expect_failing": [
       "projection_target_blocked"
@@ -22436,7 +22436,7 @@
   {
     "id": "projection-review-sweep-M1",
     "file": "crates/custody/src/finalized_projection/composition.rs",
-    "find": "if blocked.contains(&string(&source[\"anchor_transaction_id\"]))\n            || target.is_some_and(|t| blocked.contains(&string(&t[\"anchor_transaction_id\"])))",
+    "find": "if blocked.contains(&*string_ref(&source[\"anchor_transaction_id\"]))\n            || target.is_some_and(|t| blocked.contains(&*string_ref(&t[\"anchor_transaction_id\"])))",
     "replace": "if false",
     "expect_failing": [
       "projection_review_operator_sweep"
@@ -22456,7 +22456,7 @@
   {
     "id": "projection-review-sweep-M5",
     "file": "crates/custody/src/finalized_projection/composition.rs",
-    "find": "&& !blocked.contains(&string(&o[\"anchor_transaction_id\"]))",
+    "find": "&& !blocked.contains(&*string_ref(&o[\"anchor_transaction_id\"]))",
     "replace": "",
     "expect_failing": [
       "projection_review_operator_sweep"
@@ -22466,7 +22466,7 @@
   {
     "id": "projection-review-sweep-M6",
     "file": "crates/custody/src/finalized_projection/composition.rs",
-    "find": "&& !non_events.contains(&string(&o[\"anchor_transaction_id\"]))",
+    "find": "&& !non_events.contains(&*string_ref(&o[\"anchor_transaction_id\"]))",
     "replace": "",
     "expect_failing": [
       "projection_adapter_input_families"
@@ -22566,7 +22566,7 @@
   {
     "id": "projection-review-sweep-M18",
     "file": "crates/custody/src/finalized_projection/composition.rs",
-    "find": "&& !hashes.contains(&string(&o[\"quantity_hash\"]))",
+    "find": "&& !hashes.contains(&*string_ref(&o[\"quantity_hash\"]))",
     "replace": "",
     "expect_failing": [
       "projection_review_operator_sweep"
@@ -23797,8 +23797,8 @@
   {
     "id": "native-shared-enrichment-key",
     "file": "crates/custody/src/evidence.rs",
-    "find": "            Some(key) => Ok(key.clone()),\n            None => event_key_of(&self.row(at, rows)),",
-    "replace": "            Some(key) => Ok(key.clone()),\n            None => Err(\"canonical events require chain, network, namespace, and id\".into()),",
+    "find": "        let key = event_key_of(&self.row(at, rows))?;\n",
+    "replace": "        let key: EventKey = Err::<EventKey, Error>(\"canonical events require chain, network, namespace, and id\".into())?;\n",
     "expect_failing": [
       "native_support_shares_evidence_enrichment"
     ],
@@ -23853,6 +23853,106 @@
       "quantity_runtime_wrapper_vectors"
     ],
     "rule": "Typed observations carry their commitment payload."
+  },
+  {
+    "id": "graph-row-scopes-slot",
+    "file": "crates/custody/src/graph.rs",
+    "find": "        return table.scopes[at].get_or_init(|| physical_scope(row)).clone();",
+    "replace": "        return table.scopes[0].get_or_init(|| physical_scope(row)).clone();",
+    "expect_failing": [
+      "production_run_matches_separate_stages"
+    ],
+    "rule": "A registered row reads its own scope slot."
+  },
+  {
+    "id": "graph-row-scopes-bounds",
+    "file": "crates/custody/src/graph.rs",
+    "find": "(offset % std::mem::size_of::<Value>() == 0 && at < table.len)",
+    "replace": "(offset % std::mem::size_of::<Value>() == 0)",
+    "expect_failing": [
+      "production_run_matches_separate_stages"
+    ],
+    "rule": "Only rows inside the registered snapshot use its scope table."
+  },
+  {
+    "id": "composition-string-ref",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "        Value::String(text) => Cow::Borrowed(text),\n        value => Cow::Owned(string(value)),",
+    "replace": "        Value::String(_) => Cow::Borrowed(\"\"),\n        value => Cow::Owned(string(value)),",
+    "expect_failing": [
+      "production_run_matches_separate_stages"
+    ],
+    "rule": "Borrowed string lookups keep the exact text."
+  },
+  {
+    "id": "network-same-text",
+    "file": "crates/custody/src/gates/network.rs",
+    "find": "            (Some(a), Some(b)) => a == b,",
+    "replace": "            (Some(a), Some(b)) => a != b,",
+    "expect_failing": [
+      "typed_network_inventory_admission"
+    ],
+    "rule": "A wallet matches network observations naming its id."
+  },
+  {
+    "id": "network-same-nontext",
+    "file": "crates/custody/src/gates/network.rs",
+    "find": "            _ => column.json() == wallet_id,",
+    "replace": "            _ => false,",
+    "expect_failing": [
+      "typed_network_inventory_admission"
+    ],
+    "rule": "Non-text wallet ids compare by their JSON."
+  },
+  {
+    "id": "evidence-computed-key-slot",
+    "file": "crates/custody/src/evidence.rs",
+    "find": "        Ok(self.computed[at].get_or_init(|| key).clone())",
+    "replace": "        Ok(self.computed[0].get_or_init(|| key).clone())",
+    "expect_failing": [
+      "native_support_shares_evidence_enrichment"
+    ],
+    "rule": "A computed event key is cached for its own row."
+  },
+  {
+    "id": "holds-txid-fast-path",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "        let external = if external.is_ascii() && external.len() != 64 {",
+    "replace": "        let external = if external.is_ascii() {",
+    "expect_failing": [
+      "unscoped_groups_read_row_text_and_strict_txids"
+    ],
+    "rule": "64-character external ids still normalize as strict txids."
+  },
+  {
+    "id": "holds-text-borrow",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "            Value::String(text) => std::borrow::Cow::Borrowed(text),\n            value => std::borrow::Cow::Owned(codec::text(value)),",
+    "replace": "            Value::String(text) => std::borrow::Cow::Owned(text.trim_start_matches('c').to_owned()),\n            value => std::borrow::Cow::Owned(codec::text(value)),",
+    "expect_failing": [
+      "unscoped_groups_read_row_text_and_strict_txids"
+    ],
+    "rule": "Borrowed row text is the row text."
+  },
+  {
+    "id": "commitments-typed-aliases",
+    "file": "crates/custody/src/components/commitments.rs",
+    "find": "                .map(|a| (pystr(&a[0]), pystr(&a[1])))",
+    "replace": "                .map(|a| (pystr(&a[1]), pystr(&a[0])))",
+    "expect_failing": [
+      "components_commitment_hash"
+    ],
+    "rule": "Native commitments map each alias transaction to its quantity hash."
+  },
+  {
+    "id": "commitments-typed-snapshots",
+    "file": "crates/custody/src/components/commitments.rs",
+    "find": "        for s in evidence::canonical::EventRef::Typed(e).snapshots() {",
+    "replace": "        for s in evidence::canonical::EventRef::Typed(e).snapshots().iter().take(0) {",
+    "expect_failing": [
+      "components_commitment_hash"
+    ],
+    "rule": "Native commitments read each event snapshot."
   },
   {
     "id": "R4-evidence-alias-slot-index",

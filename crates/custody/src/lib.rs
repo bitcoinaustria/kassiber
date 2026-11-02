@@ -230,6 +230,7 @@ fn run_admitted(
     finalized: bool,
     projection_rows: Vec<serde_json::Value>,
 ) -> Result<Stages, Refusal> {
+    let _rows = graph::register_rows(snapshot.rows());
     // Evidence enrichment is pure; compute it first so components can share
     // it, and report its refusal only at the evidence stage.
     let prepared = evidence::prepare(snapshot);

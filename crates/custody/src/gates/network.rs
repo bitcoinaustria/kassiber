@@ -197,6 +197,14 @@ pub(super) fn require(
     };
     for wallet in wallets {
         let wallet_id = wallet.id.json();
+        // Text identifiers compare as the strings their JSON holds.
+        let same = |column: &crate::snapshot::Column| match (
+            column.value().as_str(),
+            wallet_id.as_str(),
+        ) {
+            (Some(a), Some(b)) => a == b,
+            _ => column.json() == wallet_id,
+        };
         let mut found = false;
         let empty_row = NetworkRow::default();
         for observation in observations {
@@ -204,7 +212,7 @@ pub(super) fn require(
                 NetworkObject::Object(row) => row,
                 NetworkObject::Other(_) => &empty_row,
             };
-            if row.wallet_id.json() == wallet_id {
+            if same(&row.wallet_id) {
                 found = true;
                 add(evidence(row), false);
             }
@@ -379,6 +387,18 @@ mod inventory_tests {
             present["references"][0][key] = json!(true);
             assert!(require(&snapshot(present)).is_err());
         }
+        // Wallet ids match observations by their JSON value.
+        let regtest = json!({"wallet_id":7,"raw_json":{"chain":"bitcoin","network":"regtest"}});
+        let mut numeric = clean.clone();
+        numeric["observations"] =
+            json!([{"wallet_id":7,"raw_json":{"chain":"bitcoin","network":"main"}}, regtest]);
+        let mut input = snapshot(numeric.clone());
+        input.wallets[0].id.0 = Some(SqlValue::Int(7));
+        assert!(require(&input).is_err());
+        numeric["observations"][1]["wallet_id"] = json!("7");
+        let mut input = snapshot(numeric);
+        input.wallets[0].id.0 = Some(SqlValue::Int(7));
+        assert!(require(&input).is_ok());
         let mut unobserved = clean.clone();
         unobserved["observations"] = json!([]);
         unobserved["binding"] = json!({"environment":"main"});

@@ -449,3 +449,62 @@ fn journal_json(value: &Py) -> Result<serde_json::Value, String> {
         ),
     })
 }
+
+/// The production run, which shares evidence enrichment with components and
+/// reads scopes from its registered rows, matches the stages run one by one.
+#[test]
+fn production_run_matches_separate_stages() {
+    use kassiber_custody::{components, evidence, gaps, interpretation, quantity};
+    let mut inputs = Vec::new();
+    for fixture in [
+        include_str!("../../../tests/fixtures/custody_interpretation_cases.json"),
+        include_str!("../../../tests/fixtures/custody_projection_stage.json"),
+        include_str!("../../../tests/fixtures/custody_projection_adapter.json"),
+        include_str!("../../../tests/fixtures/custody_gap_stages.json"),
+    ] {
+        let cases: Vec<serde_json::Value> = serde_json::from_str(fixture).unwrap();
+        inputs.extend(cases.into_iter().map(|case| case["input"].clone()));
+    }
+    let mut compared = 0;
+    for input in inputs {
+        let Ok(snapshot) = serde_json::from_value::<Snapshot>(input) else {
+            continue;
+        };
+        if snapshot.profile.get("id").is_none() || snapshot.validate().is_err() {
+            continue;
+        }
+        let separate = || -> Result<_, String> {
+            interpretation::admit_channels(&snapshot)?;
+            let comp = components::compute(&snapshot).map_err(|e| e.code.to_owned())?;
+            let migration = interpretation::migration_quarantines(&snapshot)?;
+            let ev = evidence::stage(&snapshot).map_err(|e| e.code.to_owned())?;
+            let i = interpretation::stage(&snapshot, &comp, &ev, migration)?;
+            let g = gaps::stage(&snapshot, &comp, &ev, &i)?;
+            let q = quantity::runtime::stage(&snapshot, &comp, &ev, &i, &g)?;
+            let captured = runtime::loaded_confirmations(&snapshot)?;
+            let f = runtime::stage_from_state(&snapshot, captured, &q, &i)
+                .map_err(|e| e.code.to_owned())?;
+            Ok((comp, ev, i, g, q, f))
+        };
+        let (Ok(stages), Ok((comp, ev, i, g, q, f))) =
+            (kassiber_custody::run_loaded(&snapshot, true), separate())
+        else {
+            continue;
+        };
+        let rows = snapshot.rows();
+        assert_eq!(stages.components, comp);
+        assert_eq!(
+            stages.evidence.value(&snapshot.transactions),
+            ev.value(&snapshot.transactions)
+        );
+        assert_eq!(stages.interpretation, i);
+        assert_eq!(stages.gaps, g);
+        assert_eq!(stages.quantity.py().unwrap(), q.py().unwrap());
+        assert_eq!(
+            stages.finalized_projection.unwrap().py(rows).unwrap(),
+            f.py(rows).unwrap()
+        );
+        compared += 1;
+    }
+    assert!(compared > 50, "{compared}");
+}

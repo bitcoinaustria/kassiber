@@ -52,9 +52,9 @@ pub(super) fn current(shared: &Shared, h: &Value, legs: &[Value]) -> Result<Vec<
         .map(WithoutProvenance)
         .collect();
     rows.sort_by_cached_key(|row| order(row.0));
-    let enriched = evidence::enriched_rows(&rows)?;
-    let canonical = evidence::canonical_input(&enriched, &json!({}), &BTreeSet::new())?;
-    let rejected: BTreeSet<_> = array(&canonical["rejected_events"])
+    let canonical = evidence::canonical_of_rows(&rows)?;
+    let rejected: BTreeSet<_> = canonical
+        .rejected()
         .iter()
         .flat_map(|i| array(&i["transaction_ids"]).iter().map(pystr))
         .collect();
@@ -65,10 +65,12 @@ pub(super) fn current(shared: &Shared, h: &Value, legs: &[Value]) -> Result<Vec<
         )
         .into());
     }
-    let aliases: BTreeMap<_, _> = array(&canonical["events"])
+    let aliases: BTreeMap<_, _> = canonical
+        .events()
         .iter()
         .flat_map(|e| {
-            array(&e["observation_aliases"])
+            evidence::canonical::EventRef::Typed(e)
+                .aliases()
                 .iter()
                 .map(|a| (pystr(&a[0]), pystr(&a[1])))
         })
@@ -87,8 +89,8 @@ pub(super) fn current(shared: &Shared, h: &Value, legs: &[Value]) -> Result<Vec<
     }
     let relevant: BTreeSet<_> = ids.iter().map(|id| aliases[id].clone()).collect();
     let mut snapshots = BTreeMap::new();
-    for e in array(&canonical["events"]) {
-        for s in array(&e["evidence_snapshots"]) {
+    for e in canonical.events() {
+        for s in evidence::canonical::EventRef::Typed(e).snapshots() {
             if relevant.contains(&pystr(&s["quantity_hash"])) {
                 snapshots.insert(pystr(&s["detail_hash"]), s.clone());
             }

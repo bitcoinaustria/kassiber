@@ -183,6 +183,44 @@ thread_local! {
         std::cell::RefCell::new(std::collections::HashMap::new());
 }
 
+/// Scopes of the operation's snapshot rows by position. The rows cannot
+/// change while an operation holds its snapshot, so a row found by address
+/// needs no field comparison.
+struct RowScopes {
+    start: usize,
+    len: usize,
+    scopes: Vec<std::cell::OnceCell<Scope>>,
+}
+thread_local! {
+    static ROW_SCOPES: std::cell::RefCell<Option<std::rc::Rc<RowScopes>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Registers the snapshot rows for one operation; dropping it ends that.
+pub(crate) struct RowScopesGuard(Option<std::rc::Rc<RowScopes>>);
+pub(crate) fn register_rows(rows: &[Value]) -> RowScopesGuard {
+    let table = std::rc::Rc::new(RowScopes {
+        start: rows.as_ptr() as usize,
+        len: rows.len(),
+        scopes: (0..rows.len())
+            .map(|_| std::cell::OnceCell::new())
+            .collect(),
+    });
+    RowScopesGuard(ROW_SCOPES.with(|r| r.replace(Some(table))))
+}
+impl Drop for RowScopesGuard {
+    fn drop(&mut self) {
+        let previous = self.0.take();
+        ROW_SCOPES.with(|r| *r.borrow_mut() = previous);
+    }
+}
+fn registered(row: &Value) -> Option<(std::rc::Rc<RowScopes>, usize)> {
+    let table = ROW_SCOPES.with(|r| r.borrow().clone())?;
+    let offset = (row as *const Value as usize).checked_sub(table.start)?;
+    let at = offset / std::mem::size_of::<Value>();
+    (offset % std::mem::size_of::<Value>() == 0 && at < table.len).then_some((table, at))
+}
+
 /// Releases memoized scopes at the end of an operation.
 pub(crate) fn clear_scopes() {
     SCOPES.with(|m| m.borrow_mut().clear());
@@ -192,6 +230,9 @@ pub(crate) fn clear_scopes() {
 /// Physical Bitcoin-family grouping; contradictory graph/configuration facts refuse it.
 /// The scope reads only these row fields, so it is memoized by their exact JSON.
 pub fn onchain_scope(row: &Value) -> Scope {
+    if let Some((table, at)) = registered(row) {
+        return table.scopes[at].get_or_init(|| physical_scope(row)).clone();
+    }
     // The same row is probed many times; its address finds its fields without
     // encoding them, and a hit requires every field to be equal.
     let address = row as *const Value as usize;
@@ -221,6 +262,9 @@ pub fn onchain_scope(row: &Value) -> Scope {
 /// `onchain_scope` of every row, in order. Misses are computed concurrently
 /// and memoized on the calling thread.
 pub(crate) fn onchain_scopes(rows: &[Value]) -> Vec<Scope> {
+    if rows.first().is_some_and(|row| registered(row).is_some()) {
+        return rows.iter().map(onchain_scope).collect();
+    }
     let computed = crate::par::map(rows, |row| {
         let key = scope_key(row);
         let hit = SCOPES.with(|m| m.borrow().get(&key).cloned());
@@ -816,11 +860,11 @@ pub fn reconcile_receipts(rows: &[Value], snapshot: &Snapshot) -> Result<Value, 
     if receiving.len() <= 1 {
         return Ok(Value::Object(serde_json::Map::new()));
     }
-    let mut grouped: Vec<(ChainScope, Vec<Value>)> = Vec::new();
+    let mut grouped: Vec<(ChainScope, Vec<&Value>)> = Vec::new();
     let mut index = std::collections::HashMap::new();
     for (row, scope) in rows.iter().zip(onchain_scopes(rows)) {
         if let Some(scope) = scope {
-            codec::push_grouped(&mut grouped, &mut index, scope, row.clone());
+            codec::push_grouped(&mut grouped, &mut index, scope, row);
         }
     }
     let mut result = serde_json::Map::new();

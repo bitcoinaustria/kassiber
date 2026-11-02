@@ -5,6 +5,13 @@ use crate::evidence::canonical::{EventRef, LegRef};
 use crate::python_text::PythonText;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
+/// `string` of a value, borrowed when the value is a string.
+fn string_ref(value: &Value) -> Cow<'_, str> {
+    match value {
+        Value::String(text) => Cow::Borrowed(text),
+        value => Cow::Owned(string(value)),
+    }
+}
 fn array(v: &Value) -> &[Value] {
     v.as_array().map(Vec::as_slice).unwrap_or(&[])
 }
@@ -69,7 +76,7 @@ fn observation<'a>(
     slice: &Value,
 ) -> Result<LegRef<'a>, String> {
     observations
-        .get(&string(&slice["observation_hash"]))
+        .get(&*string_ref(&slice["observation_hash"]))
         .copied()
         .ok_or_else(|| "KeyError".into())
 }
@@ -163,7 +170,7 @@ fn held(o: LegRef<'_>, v: &Input, orders: &BTreeMap<String, Vec<String>>) -> boo
     let Some(b) = barrier(o, v) else {
         return false;
     };
-    let Some(order) = orders.get(&string(&o["quantity_hash"])) else {
+    let Some(order) = orders.get(&*string_ref(&o["quantity_hash"])) else {
         return true;
     };
     let b: Vec<String> = array(&b).iter().map(string).collect();
@@ -328,8 +335,8 @@ pub(super) fn evaluate_parts<'r>(
         } else {
             Some(observation(&observations, &d["target"])?)
         };
-        if blocked.contains(&string(&source["anchor_transaction_id"]))
-            || target.is_some_and(|t| blocked.contains(&string(&t["anchor_transaction_id"])))
+        if blocked.contains(&*string_ref(&source["anchor_transaction_id"]))
+            || target.is_some_and(|t| blocked.contains(&*string_ref(&t["anchor_transaction_id"])))
         {
             continue;
         }
@@ -375,7 +382,7 @@ pub(super) fn evaluate_parts<'r>(
             projected.extend([out, input]);
             continue;
         }
-        if non_events.contains(&string(&source["anchor_transaction_id"])) {
+        if non_events.contains(&*string_ref(&source["anchor_transaction_id"])) {
             let fee = fees.raw(source)?;
             if fee != BigInt::from(0) {
                 projected.push(fee_row(source, &fee, rows, "non-event-fee")?);
@@ -473,7 +480,7 @@ pub(super) fn evaluate_parts<'r>(
     let mut ordered: Vec<LegRef> = v.observations.clone();
     ordered.sort_by_cached_key(|o| (string(&o["occurred_at"]), string(&o["quantity_hash"])));
     for o in ordered {
-        if o["direction"] != "inbound" || rows.get(&string(&o["transaction_id"])).is_none() {
+        if o["direction"] != "inbound" || rows.get(&string_ref(&o["transaction_id"])).is_none() {
             continue;
         }
         let anchor = string(&o["anchor_transaction_id"]);
@@ -488,7 +495,7 @@ pub(super) fn evaluate_parts<'r>(
             continue;
         }
         let mut targets = targets_by_observation
-            .get(&string(&o["quantity_hash"]))
+            .get(&*string_ref(&o["quantity_hash"]))
             .cloned()
             .unwrap_or_default();
         targets.sort();
@@ -513,9 +520,9 @@ pub(super) fn evaluate_parts<'r>(
     for o in v.observations.iter().copied() {
         if o["direction"] == "outbound"
             && integer_big(&o["fee_msat"])? > BigInt::from(0)
-            && !hashes.contains(&string(&o["quantity_hash"]))
-            && !blocked.contains(&string(&o["anchor_transaction_id"]))
-            && !non_events.contains(&string(&o["anchor_transaction_id"]))
+            && !hashes.contains(&*string_ref(&o["quantity_hash"]))
+            && !blocked.contains(&*string_ref(&o["anchor_transaction_id"]))
+            && !non_events.contains(&*string_ref(&o["anchor_transaction_id"]))
             && !held(o, v, &order)
         {
             projected.push(fee_row(o, &integer_big(&o["fee_msat"])?, rows, "fee-only")?);

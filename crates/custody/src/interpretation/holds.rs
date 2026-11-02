@@ -553,8 +553,15 @@ fn unscoped_with_facts(rows: &[Value], facts: Option<&[Facts]>) -> Result<Ids, S
     let mut groups: Vec<((String, String), Vec<&Value>)> = Vec::new();
     let mut positions: std::collections::HashMap<(String, String), usize> =
         std::collections::HashMap::new();
+    // `codec::text` of a string is the string itself.
+    fn text(value: &Value) -> std::borrow::Cow<'_, str> {
+        match value {
+            Value::String(text) => std::borrow::Cow::Borrowed(text),
+            value => std::borrow::Cow::Owned(codec::text(value)),
+        }
+    }
     for (index, row) in rows.iter().enumerate() {
-        let id = codec::text(&row["id"]);
+        let id = text(&row["id"]);
         if id.starts_with("custody-tax:")
             || SYNTHETIC.iter().any(|p| id.starts_with(p))
             || match facts {
@@ -564,12 +571,18 @@ fn unscoped_with_facts(rows: &[Value], facts: Option<&[Facts]>) -> Result<Ids, S
         {
             continue;
         }
-        let external = codec::text(&row["external_id"]);
+        let external = text(&row["external_id"]);
         let external = external.py_strip();
         if external.is_empty() {
             continue;
         }
-        let external = graph::strict_txid(&json!(external)).unwrap_or_else(|| external.to_owned());
+        // Only 64 hexadecimal digits are a strict txid; lowercasing keeps an
+        // ASCII spelling's length.
+        let external = if external.is_ascii() && external.len() != 64 {
+            external.to_owned()
+        } else {
+            graph::strict_txid(&json!(external)).unwrap_or_else(|| external.to_owned())
+        };
         let key = (external, codec::text(&row["asset"]).py_strip().py_upper());
         // Groups keep first-occurrence order, as a linear search kept them.
         if let Some(&at) = positions.get(&key) {
@@ -879,6 +892,24 @@ mod tests {
             assert_eq!(actual, vector["expected"], "{}", vector["case"]);
         }
         assert!(count > 0);
+    }
+    #[test]
+    fn unscoped_groups_read_row_text_and_strict_txids() {
+        let row = |id: &str, direction: &str, wallet: &str, external: Value| json!({"id":id,"direction":direction,"wallet_id":wallet,"external_id":external,"asset":"BTC","amount":1000,"raw_json":"{}"});
+        let rows = [
+            row("a", "outbound", "wallet-a", json!("AB".repeat(32))),
+            row("b", "inbound", "wallet-b", json!("ab".repeat(32))),
+            row("custody-tax:c", "outbound", "wallet-a", json!("q")),
+            row("d", "inbound", "wallet-b", json!("q")),
+            row("e", "outbound", "wallet-a", json!(" \u{dc}n\u{ef} ")),
+            row("f", "inbound", "wallet-b", json!("\u{dc}n\u{ef}")),
+            row("g", "outbound", "wallet-a", json!("G".repeat(64))),
+            row("h", "inbound", "wallet-b", json!("g".repeat(64))),
+            row("i", "outbound", "wallet-a", json!(7)),
+            row("j", "inbound", "wallet-b", json!("7")),
+        ];
+        let held: Vec<_> = unscoped(&rows).unwrap().into_iter().collect();
+        assert_eq!(held, ["a", "b", "e", "f", "i", "j"]);
     }
     #[test]
     fn raw_observation_scope_vectors() {
