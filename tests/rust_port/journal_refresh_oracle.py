@@ -101,6 +101,8 @@ def vectors():
                     conn.execute("UPDATE profiles SET last_processed_at=?,last_processed_tx_count="
                                  "(SELECT COUNT(*) FROM transactions WHERE profile_id='p' AND excluded=0),"
                                  "last_processed_input_version=journal_input_version WHERE id='p'", (CLOCK,))
+                    # Python resets the semantics stamp whenever markers move.
+                    conn.execute("UPDATE profiles SET journal_semantics_version=2 WHERE id='p'")
                 else:
                     conn.execute("UPDATE profiles SET last_processed_at=NULL WHERE id='p'")
                 conn.commit()
@@ -124,6 +126,7 @@ def vectors():
             conn = book('exact')
             try:
                 conn.execute("UPDATE profiles SET last_processed_at=?,last_processed_tx_count=2,last_processed_input_version=journal_input_version WHERE id='p'", (CLOCK if current else None,))
+                conn.execute("UPDATE profiles SET journal_semantics_version=2 WHERE id='p'")
                 conn.execute(trigger)
                 conn.commit()
                 cases.append(run(conn, f'{failure}-current{int(current)}', schema_sql=(trigger,)))
@@ -138,6 +141,7 @@ def vectors():
             conn.execute("UPDATE profiles SET last_processed_at=?,last_processed_tx_count=?,"
                          "journal_input_version=?,last_processed_input_version=? WHERE id='p'",
                          (CLOCK, count, version, version))
+            conn.execute("UPDATE profiles SET journal_semantics_version=2 WHERE id='p'")
             conn.commit()
             cases.append(run(conn, name, auto_pair=False, skip=True))
         finally:
@@ -146,16 +150,24 @@ def vectors():
     try:
         conn.execute("UPDATE profiles SET last_processed_at=?,last_processed_tx_count=2,"
                      "last_processed_input_version=journal_input_version WHERE id='p'", (CLOCK,))
+        conn.execute("UPDATE profiles SET journal_semantics_version=2 WHERE id='p'")
         trigger = (
             "CREATE TRIGGER keep_refresh_current AFTER UPDATE OF last_processed_at,journal_input_version ON profiles "
             "BEGIN UPDATE profiles SET last_processed_at='" + CLOCK + "',last_processed_tx_count="
             "(SELECT COUNT(*) FROM transactions WHERE profile_id=NEW.id AND excluded=0),"
             "last_processed_input_version=journal_input_version WHERE id=NEW.id; END"
         )
+        # The schema's unstamping trigger fires after this one; restamp after it.
+        stamp = (
+            "CREATE TRIGGER keep_refresh_semantics AFTER UPDATE OF journal_semantics_version ON profiles "
+            "WHEN NEW.journal_semantics_version=0 "
+            "BEGIN UPDATE profiles SET journal_semantics_version=2 WHERE id=NEW.id; END"
+        )
         conn.execute(trigger)
+        conn.execute(stamp)
         conn.commit()
         cases.append(run(conn, 'applied-pair-keeps-current-markers', skip=True,
-                         schema_sql=(trigger,), current_before_rebuild=True))
+                         schema_sql=(trigger, stamp), current_before_rebuild=True))
     finally:
         conn.close()
     return cases

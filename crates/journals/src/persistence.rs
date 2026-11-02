@@ -494,6 +494,10 @@ fn store<O: storage::WriteObserver>(
     writer.conn.prepare("UPDATE profiles SET last_processed_at=?,last_processed_tx_count=?,last_processed_input_version=journal_input_version,ownership_review_counts_json=? WHERE id=?")?
         .execute(params![processed_at,count,pyjson(&state.ownership_review_counts,false)?,pid])?;
     writer.observer.wrote("profiles")?;
+    let semantics = kassiber_store::semantics::JOURNAL_CALCULATION_SEMANTICS_VERSION;
+    writer.conn.prepare("UPDATE profiles SET journal_semantics_version=?,required_journal_semantics_version=MAX(required_journal_semantics_version,?) WHERE id=?")?
+        .execute(params![semantics, semantics, pid])?;
+    writer.observer.wrote("profiles")?;
     writer.observer.phase("filed");
     let filed_report_impacts_resolved = if !truth(state.custody_component_blockers)
         && quarantines.is_empty()

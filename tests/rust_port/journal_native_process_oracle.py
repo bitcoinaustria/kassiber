@@ -14,7 +14,9 @@ from unittest.mock import patch
 from kassiber.cli import handlers
 from kassiber.core import custody_authored_migration, custody_journal
 from tests.rust_port.journal_pipeline_oracle import PATH as PREBUILD, restore
-from tests.rust_port.journal_prebuild_oracle import CLOCK, ROOT, refusal
+from tests.rust_port.journal_prebuild_oracle import CLOCK, ROOT
+# Whole-process refusals keep engine error classes and invariants.
+from tests.rust_port.journal_render_oracle import refusal
 from tests.rust_port.journal_persistence_oracle import dump
 
 PATH = ROOT / "crates/journals/tests/data/process-native.json"

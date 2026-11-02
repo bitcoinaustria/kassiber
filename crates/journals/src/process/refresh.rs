@@ -265,11 +265,11 @@ fn skipped(error: &Refusal) -> kassiber_pyjson::Value {
 fn is_current(conn: &Connection, profile_id: &str) -> Result<bool, Refusal> {
     use kassiber_store::rusqlite::{types::Value as Sql, OptionalExtension};
     let row = conn.query_row(
-        "SELECT last_processed_at,last_processed_tx_count,journal_input_version,last_processed_input_version,(SELECT COUNT(*) FROM transactions WHERE profile_id=p.id AND excluded=0) FROM profiles p WHERE id=?",
+        "SELECT last_processed_at,last_processed_tx_count,journal_input_version,last_processed_input_version,(SELECT COUNT(*) FROM transactions WHERE profile_id=p.id AND excluded=0),required_journal_semantics_version,journal_semantics_version FROM profiles p WHERE id=?",
         [profile_id],
-        |row| Ok((row.get::<_, Sql>(0)?,row.get::<_, Sql>(1)?,row.get::<_, Sql>(2)?,row.get::<_, Sql>(3)?,row.get::<_, i64>(4)?)),
+        |row| Ok((row.get::<_, Sql>(0)?,row.get::<_, Sql>(1)?,row.get::<_, Sql>(2)?,row.get::<_, Sql>(3)?,row.get::<_, i64>(4)?,row.get::<_, Sql>(5)?,row.get::<_, Sql>(6)?)),
     ).optional()?;
-    let Some((at, count, input, processed, active)) = row else {
+    let Some((at, count, input, processed, active, required, built)) = row else {
         return Ok(false);
     };
     let scalar = |value: Sql| match value {
@@ -283,7 +283,22 @@ fn is_current(conn: &Connection, profile_id: &str) -> Result<bool, Refusal> {
     let count = crate::integer::integer_or_zero(&scalar(count))?;
     let input = crate::integer::integer_or_zero(&scalar(input))?;
     let processed = crate::integer::integer_or_zero(&scalar(processed))?;
-    Ok(crate::truth(&scalar(at)) && count == json!(active) && input == processed)
+    // Python compares unbounded integers: zero requires nothing, otherwise
+    // the built version must be the current one and reach the requirement.
+    let required = crate::integer::integer_or_zero(&scalar(required))?;
+    let built = crate::integer::integer_or_zero(&scalar(built))?;
+    let version = kassiber_store::semantics::JOURNAL_CALCULATION_SEMANTICS_VERSION;
+    let current_semantics = required == json!(0)
+        || (built == json!(version)
+            && required
+                .as_i64()
+                .map_or(required.to_string().starts_with('-'), |required| {
+                    required <= version
+                }));
+    Ok(crate::truth(&scalar(at))
+        && count == json!(active)
+        && input == processed
+        && current_semantics)
 }
 
 #[cfg(test)]
