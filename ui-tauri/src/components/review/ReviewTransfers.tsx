@@ -395,7 +395,7 @@ export function ReviewTransfers({
           </span>
         ) : undo ? (
           <>
-            <span>{undo.label}</span>
+            <span className={hideSensitive ? "sensitive" : undefined}>{undo.label}</span>
             <Button type="button" variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => void runUndo()}>
               {t("inbox.transfers.undo")}
             </Button>

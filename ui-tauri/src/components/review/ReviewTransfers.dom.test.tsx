@@ -9,6 +9,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import "@/i18n";
 
 import type { TransferCandidate } from "./transferModel";
+import { useUiStore } from "@/store/ui";
+
+vi.hoisted(() => {
+  const storage = new Map<string, string>();
+  vi.stubGlobal("localStorage", {
+    getItem: (key: string) => storage.get(key) ?? null,
+    setItem: (key: string, value: string) => void storage.set(key, value),
+    removeItem: (key: string) => void storage.delete(key),
+  });
+});
 
 const daemon = vi.hoisted(() => ({
   candidates: [] as unknown[],
@@ -127,6 +137,7 @@ function mount(props: { refreshing?: boolean; onDecided?: () => void } = {}) {
 const rows = () => screen.queryAllByRole("listitem");
 
 beforeEach(() => {
+  useUiStore.setState({ hideSensitive: false });
   daemon.candidates = [candidate("a"), candidate("b")];
   daemon.failUnpair = new Set();
   daemon.failPair = false;
@@ -138,6 +149,20 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("review transfers", () => {
+  it.each([
+    ["Pair Hot a to Cold a", "Paired Hot a to Cold a."],
+    ["Not a transfer: Hot a to Cold a", "Set aside Hot a to Cold a."],
+  ])("masks the wallet names in the status after %s", async (action, message) => {
+    mount();
+    await waitFor(() => expect(rows()).toHaveLength(2));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: action })));
+    const label = screen.getByText(message);
+    expect(label.closest(".sensitive")).toBeNull();
+    act(() => useUiStore.getState().setHideSensitive(true));
+    expect(label.closest(".sensitive")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Undo" }).closest(".sensitive")).toBeNull();
+  });
+
   it("pairs one candidate as the owner chose it, hides it, and undoes it", async () => {
     const { onDecided } = mount();
     await waitFor(() => expect(rows()).toHaveLength(2));

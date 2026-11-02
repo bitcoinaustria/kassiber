@@ -261,7 +261,9 @@ One batch carries every write that changes journal meaning, so a single
 approval covers a whole repair and applies atomically. Each operation runs
 against the book as the previous ones left it, including expansion and validation
 of coarse-price acceptance targets after an earlier repair; any failure rolls back all of
-them. Supported operations:
+them. Applying a pair, unpair, dismissal or undismissal through the CLI,
+desktop or AI also refreshes the shared transfer-candidate count used by Review.
+Supported operations:
 
 | Type | Fields | Core service |
 | --- | --- | --- |

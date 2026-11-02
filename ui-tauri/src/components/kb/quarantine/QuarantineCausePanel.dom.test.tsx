@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 //
 // Mounted: a pair-made suspense is unpaired as the owner picks, previewed by the daemon.
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.hoisted(() => {
@@ -460,6 +460,32 @@ describe("entering prices on a cause's rows", () => {
   };
   // The label names what is typed: a total value unless switched to a rate.
   const inputs = () => screen.queryAllByRole("textbox", { name: /^Total value for .*, in EUR$/ });
+
+  it("labels mixed-asset rate inputs and their confirmation with each row's asset", async () => {
+    mount(priceSnapshot([priceRow("btc"), { ...priceRow("usdt"), asset: "USDT" }]));
+    fireEvent.click(screen.getByRole("button", { name: "Enter prices" }));
+    fireEvent.keyDown(screen.getByRole("combobox", { name: "What you enter" }), { key: "Enter" });
+    fireEvent.click(await screen.findByRole("option", { name: "Price per unit" }));
+    const btc = screen.getByRole("textbox", { name: /^Price per BTC for .*btc, in EUR$/ });
+    const usdt = screen.getByRole("textbox", { name: /^Price per USDT for .*usdt, in EUR$/ });
+    expect(within(btc.closest("li")!).getByText("Price per BTC")).toBeTruthy();
+    expect(within(usdt.closest("li")!).getByText("Price per USDT")).toBeTruthy();
+    fireEvent.change(btc, { target: { value: "31,234.50" } });
+    fireEvent.change(usdt, { target: { value: "0.92" } });
+    fireEvent.click(screen.getByRole("button", { name: "Check 2 prices" }));
+    await screen.findByText("In quarantine: 11 → 0");
+    const preview = screen.getByTestId("entered-prices");
+    expect(preview.textContent).toContain("31,234.50 EUR per BTC");
+    expect(preview.textContent).toContain("0.92 EUR per USDT");
+    expect(planned().operations).toEqual([
+      expect.objectContaining({ transaction_id: "btc", fiat_rate: "31234.50" }),
+      expect.objectContaining({ transaction_id: "usdt", fiat_rate: "0.92" }),
+    ]);
+    expect(daemon.apply).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Save 2 prices" }));
+    await waitFor(() => expect(daemon.apply).toHaveBeenCalledOnce());
+    expect(daemon.apply.mock.calls[0][0]).toMatchObject({ artifact: { operations: planned().operations } });
+  });
 
   it("saves exactly the prices typed on the rows, through one preview", async () => {
     mount(priceSnapshot([priceRow("p-1"), priceRow("p-2")]));

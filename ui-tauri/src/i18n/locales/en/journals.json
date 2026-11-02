@@ -608,6 +608,7 @@
       "unitLabel": "What you enter",
       "unitValue": "Total value",
       "unitRate": "Price per {{asset}}",
+      "unitRateGeneric": "Price per unit",
       "inputLabel": "{{unit}} for {{row}}, in {{currency}}",
       "preview_one": "Check {{count}} price",
       "preview_other": "Check {{count}} prices",

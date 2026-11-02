@@ -2473,12 +2473,14 @@ class FreshnessTest(unittest.TestCase):
     def test_review_applies_that_pair_or_dismiss_change_the_open_moves(self):
         from kassiber.core import review_workflow
 
-        def artifact(*kinds):
-            return {"operations": [{"kind": kind} for kind in kinds]}
+        def artifact(*types):
+            return {"operations": [{"type": operation_type} for operation_type in types]}
 
-        for kind in ("pair", "unpair", "dismiss_pair", "undismiss_pair"):
-            self.assertTrue(review_workflow.changes_transfer_candidates(artifact("price_override", kind)))
+        for operation_type in ("pair", "unpair", "dismiss_pair", "undismiss_pair"):
+            with self.subTest(operation_type=operation_type):
+                self.assertTrue(review_workflow.changes_transfer_candidates(artifact("price_override", operation_type)))
         self.assertFalse(review_workflow.changes_transfer_candidates(artifact("price_override")))
+        self.assertFalse(review_workflow.changes_transfer_candidates({"operations": [{"type": "kind_override", "kind": "pair"}]}))
         self.assertFalse(review_workflow.changes_transfer_candidates({}))
 
     def test_workspace_freshness_run_honors_each_book_market_rate_policy(self):

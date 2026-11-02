@@ -486,7 +486,9 @@ prices**: a field per row for the receipt's total value or the price per
 unit, in the book currency (`summary.fiat_currency` of
 `ui.journals.quarantine`). Input is read in the owner's number format; a
 leading zero always starts a decimal, and the preview lists each price as it
-was read. Up to 50 typed prices go through one previewed step as
+was read. Rate fields and their confirmation name each transaction's own
+asset, including when a cause holds several assets. Up to 50 typed prices go
+through one previewed step as
 `price_override` operations, each saved as exact and revertible from the
 transaction's history. **Moves between your wallets** lists the transfer
 and swap candidates from `ui.transfers.suggest` as table rows with the same
@@ -500,6 +502,7 @@ The rows size themselves by the list's width, not the window's, so a docked
 assistant gets the narrow layout: two lines, with the route and amount above
 the date, kind and buttons. A long wallet name is cut short with the full name
 on hover.
+The decision status masks wallet names while sensitive details are hidden.
 Each has Pair, which pairs it with its default kind and policy, and two icon
 buttons: Not a transfer, which dismisses it, and Details, which opens it in
 Transfers & Custody. Exact candidates with carrying-value policy, no competing

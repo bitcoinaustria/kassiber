@@ -518,17 +518,19 @@ function QuarantineCauseCard({
   const previewPrices = () => {
     setChecked(true);
     if (!entry.ok || !priceScope) return;
-    const labels = new Map(priceRows.map((item) => [item.transaction_id, quarantineRowMeta(item)]));
+    const labels = new Map(priceRows.map((item) => [item.transaction_id, {
+      label: quarantineRowMeta(item), asset: item.asset,
+    }]));
     setPricing({
       request: { scope: priceScope, operations: entry.operations },
       lines: entry.operations.map((operation) => ({
         transactionId: String(operation.transaction_id),
-        label: labels.get(String(operation.transaction_id)) ?? "",
+        label: labels.get(String(operation.transaction_id))?.label ?? "",
+        asset: labels.get(String(operation.transaction_id))?.asset ?? "",
         value: String(operation.fiat_value ?? operation.fiat_rate),
       })),
       unit,
       currency,
-      asset: group.root_asset || "BTC",
     });
   };
   // Typing a price replaces opening the first row's pricing tab.
@@ -630,7 +632,6 @@ function QuarantineCauseCard({
                   invalid: checked && !entry.ok ? new Set(entry.invalid) : new Set(),
                   currency,
                   unit,
-                  asset: group.root_asset || "BTC",
                   onUnitChange: setUnit,
                   onChange: (transactionId, value) =>
                     setEntries((current) => ({ ...current, [transactionId]: value })),
@@ -802,10 +803,9 @@ function decimalSeparatorFor(language: string): "." | "," {
 interface EnteredPrices {
   request: ReviewProposalRequest;
   /** Each row's label and the exact decimal read from what was typed. */
-  lines: Array<{ transactionId: string; label: string; value: string }>;
+  lines: Array<{ transactionId: string; label: string; value: string; asset: string }>;
   unit: PriceEntryUnit;
   currency: string | null;
-  asset: string;
 }
 
 /**
@@ -836,7 +836,7 @@ function EnteredPricesDialog({
             {t(prices.unit === "rate" ? "quarantine.price.lineRate" : "quarantine.price.lineValue", {
               value: formatExactDecimal(line.value, locale),
               currency: prices.currency ?? "",
-              asset: prices.asset,
+              asset: line.asset,
             }).trim()}
           </span>
         </li>
@@ -871,7 +871,6 @@ interface PriceEntryProps {
   invalid: Set<string>;
   currency: string | null;
   unit: PriceEntryUnit;
-  asset: string;
   onUnitChange: (unit: PriceEntryUnit) => void;
   onChange: (transactionId: string, value: string) => void;
 }
@@ -910,9 +909,13 @@ function CauseTransactionList({
         (item, index) => index < SHOWN_ROWS || Boolean(priceEntry?.entries[item.transaction_id]?.trim()),
       );
   const currency = priceEntry?.currency ?? "";
-  const priceUnitLabel =
+  const assets = new Set(items.filter((item) => priceEntry?.rows.has(item.transaction_id)).map((item) => item.asset));
+  const rateUnitLabel = assets.size === 1
+    ? t("quarantine.price.unitRate", { asset: [...assets][0] })
+    : t("quarantine.price.unitRateGeneric");
+  const priceUnitLabel = (asset: string) =>
     priceEntry?.unit === "rate"
-      ? t("quarantine.price.unitRate", { asset: priceEntry.asset })
+      ? t("quarantine.price.unitRate", { asset })
       : t("quarantine.price.unitValue");
   return (
     <div className="mt-3 border-t pt-2" data-testid="quarantine-cause-transactions">
@@ -927,7 +930,7 @@ function CauseTransactionList({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="value">{t("quarantine.price.unitValue")}</SelectItem>
-              <SelectItem value="rate">{t("quarantine.price.unitRate", { asset: priceEntry.asset })}</SelectItem>
+              <SelectItem value="rate">{rateUnitLabel}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -966,28 +969,33 @@ function CauseTransactionList({
               <ArrowRight className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
             </button>
             {priceEntry?.rows.has(item.transaction_id) ? (
-              <Input
-                inputMode="decimal"
-                autoComplete="off"
-                className={cn("h-8 w-36 shrink-0 text-right tabular-nums", sensitiveClass(hideSensitive))}
-                placeholder={currency}
-                aria-label={
-                  // Names what is typed: a total or a price per unit.
-                  currency
-                    ? t("quarantine.price.inputLabel", {
-                        unit: priceUnitLabel,
-                        row: quarantineRowMeta(item),
-                        currency,
-                      })
-                    : t("quarantine.price.inputLabelNoCurrency", {
-                        unit: priceUnitLabel,
-                        row: quarantineRowMeta(item),
-                      })
-                }
-                aria-invalid={priceEntry.invalid.has(item.transaction_id) || undefined}
-                value={priceEntry.entries[item.transaction_id] ?? ""}
-                onChange={(event) => priceEntry.onChange(item.transaction_id, event.target.value)}
-              />
+              <div className="flex shrink-0 flex-col items-end gap-0.5 py-1">
+                <Input
+                  inputMode="decimal"
+                  autoComplete="off"
+                  className={cn("h-8 w-36 shrink-0 text-right tabular-nums", sensitiveClass(hideSensitive))}
+                  placeholder={currency}
+                  aria-label={
+                    // Names what is typed: a total or a price per unit.
+                    currency
+                      ? t("quarantine.price.inputLabel", {
+                          unit: priceUnitLabel(item.asset),
+                          row: quarantineRowMeta(item),
+                          currency,
+                        })
+                      : t("quarantine.price.inputLabelNoCurrency", {
+                          unit: priceUnitLabel(item.asset),
+                          row: quarantineRowMeta(item),
+                        })
+                  }
+                  aria-invalid={priceEntry.invalid.has(item.transaction_id) || undefined}
+                  value={priceEntry.entries[item.transaction_id] ?? ""}
+                  onChange={(event) => priceEntry.onChange(item.transaction_id, event.target.value)}
+                />
+                {priceEntry.unit === "rate" ? (
+                  <span className="text-2xs text-muted-foreground">{priceUnitLabel(item.asset)}</span>
+                ) : null}
+              </div>
             ) : null}
           </li>
         ))}

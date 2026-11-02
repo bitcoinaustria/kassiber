@@ -30,14 +30,14 @@ from . import (
 
 MAX_OPERATIONS = 50
 # Operations that change which transfer candidates are open.
-PAIRING_OPERATION_KINDS = frozenset({"pair", "unpair", "dismiss_pair", "undismiss_pair"})
+PAIRING_OPERATION_TYPES = frozenset({"pair", "unpair", "dismiss_pair", "undismiss_pair"})
 
 
 def changes_transfer_candidates(artifact: Mapping[str, Any]) -> bool:
     """Whether an applied review artifact paired, unpaired or dismissed a move."""
     operations = artifact.get("operations") if isinstance(artifact, Mapping) else None
     return any(
-        isinstance(operation, Mapping) and operation.get("kind") in PAIRING_OPERATION_KINDS
+        isinstance(operation, Mapping) and operation.get("type") in PAIRING_OPERATION_TYPES
         for operation in operations or ()
     )
 MAX_ARTIFACT_BYTES = 1_000_000
