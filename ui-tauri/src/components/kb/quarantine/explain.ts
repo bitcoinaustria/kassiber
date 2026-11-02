@@ -42,6 +42,8 @@ export type CauseKey =
   | "nativeTransitionAmountMismatch"
   | "nativeTransitionFeeTiming"
   | "migrationIncomplete"
+  | "importDuplicate"
+  | "legacyPairFee"
   | "gapHold"
   | "implicitDelta"
   | "unclaimedResidual"
@@ -94,6 +96,7 @@ const REASON_CAUSES: Record<string, CauseKey> = {
   native_transition_amount_mismatch: "nativeTransitionAmountMismatch",
   native_transition_fee_timing_unresolved: "nativeTransitionFeeTiming",
   custody_authored_migration_incomplete: "migrationIncomplete",
+  synthetic_import_duplicate_review_required: "importDuplicate",
   custody_basis_barrier: "basisBarrier",
   transfer_pair_dependency_blocked: "pairDependency",
   basis_provenance_incomplete: "provenanceIncomplete",
@@ -138,6 +141,7 @@ export const CAUSE_KEYS = Array.from(
     "componentProblem",
     "quantityOther",
     "reviewedSuspensePair",
+    "legacyPairFee",
   ]),
 );
 
@@ -182,6 +186,8 @@ const CAUSE_CATEGORIES: Record<CauseKey, QuarantineCategory> = {
   nativeTransitionAmbiguous: "needs_decision",
   nativeTransitionAmountMismatch: "needs_decision",
   migrationIncomplete: "needs_decision",
+  importDuplicate: "needs_decision",
+  legacyPairFee: "needs_decision",
   unclaimedResidual: "needs_decision",
   sourceOverlap: "needs_decision",
   searchCapacity: "needs_decision",
@@ -208,6 +214,10 @@ export function causeKeyFor(
     // A suspense left by a pair reads as the pair, which is what to check.
     if (blocker === "reviewed_residual_suspense" && evidence?.pair_id) {
       return "reviewedSuspensePair";
+    }
+    // An older pair whose fee allocation needs a corrected revision.
+    if (evidence?.review_codes?.includes("legacy_pair_fee_allocation_review_required")) {
+      return "legacyPairFee";
     }
     if (blocker && BLOCKER_CAUSES[blocker]) return BLOCKER_CAUSES[blocker];
     if (blocker.startsWith("custody_component_")) return "componentProblem";
@@ -328,6 +338,7 @@ export function sheetTabForCause(
   if (category === "missing_acquisition_history") return "tax";
   if (
     key === "reviewedSuspensePair" ||
+    key === "legacyPairFee" ||
     key === "ownershipSourceAmbiguous" ||
     key === "ownershipDestinationAmbiguous" ||
     key === "nativeTransitionAmbiguous" ||
@@ -354,6 +365,7 @@ const EXCLUSION_DECISIONS = new Set<CauseKey>([
   "unclassifiedIncome",
   "nonSaleDisposal",
   "ownershipDuplicateOutbound",
+  "importDuplicate",
 ]);
 
 /** Exclusion is offered for prices and a few explicit classification questions. */

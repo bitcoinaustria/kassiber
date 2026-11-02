@@ -222,6 +222,37 @@ describe("quarantine cause panel", () => {
     }, PAIR_GROUP.key);
   });
 
+  it("opens a legacy pair whose review action names only the pair, and explains it", () => {
+    const evidence = {
+      blocker_code: "custody_component_authored_active_invalid",
+      review_codes: ["legacy_pair_fee_allocation_review_required"],
+    };
+    // As older daemons send it: the repair carries the pair id, no transaction.
+    const actions = [{ kind: "review_pair", pair_id: "pair-1" }];
+    const group = { ...GAP_GROUP, key: "custody_quantity_unresolved:legacy", category: "needs_decision" as const, evidence, actions };
+    const onOpenTransaction = vi.fn();
+    const html = render(
+      snapshot({ groups: [group] }, [{ ...ROOT, evidence, category: "needs_decision", actions }]),
+      { onOpenTransaction },
+    );
+    expect(html).toContain("An older transfer pair needs its fee reviewed");
+    expect(html).toContain("Excluding a leg does not answer this.");
+    buttons.find((button) => button.label === "Review the pair")?.onClick?.();
+    expect(onOpenTransaction).toHaveBeenCalledWith("out", "linked", expect.objectContaining({ evidence }), group.key);
+  });
+
+  it("explains a held duplicate import and both of its resolutions", () => {
+    const reason = "synthetic_import_duplicate_review_required";
+    const group = {
+      ...GAP_GROUP, key: `${reason}::`, reason, category: "needs_decision" as const, evidence: {}, actions: [],
+    };
+    const html = render(snapshot({ groups: [group] }, [{ ...ROOT, reason, evidence: {}, category: "needs_decision", actions: [] }]));
+    expect(html).toContain("An imported transaction may be stored twice");
+    expect(html).toContain("Kassiber holds every copy and picks none for you.");
+    expect(html).toContain("Exclude each row that copies another transaction.");
+    expect(html).toContain("confirm_distinct_import_rows");
+  });
+
   it("keeps the custody-gap editor behind developer tools", () => {
     render(snapshot());
     buttons.find((button) => button.label === "Review custody gap")?.onClick?.();

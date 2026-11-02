@@ -579,16 +579,16 @@ def _effects(state, conn, profile, operations=()) -> dict[str, Any]:
     ], key=_json)
     quantity = state.get("custody_quantity")
     blocked = bool(state.get("custody_component_blockers") or (quantity and quantity.report_blocked))
-    acquisition = {}
+    extra = {}
     if any(op["type"] == "kind_override" for op in operations):
         from .acquisition_review import acquisition_effects
-        acquisition = acquisition_effects(state, conn, profile)
+        extra = acquisition_effects(state, conn, profile)
     pair_ids = sorted({op["pair_id"] for op in operations if op["type"] == "repair_legacy_pair"})
     if pair_ids:
         # A legacy repair revises authored amounts: show them, not just a digest.
-        acquisition["legacy_pairs"] = [_pair_terms(conn, profile, pair_id) for pair_id in pair_ids]
+        extra["legacy_pairs"] = [_pair_terms(conn, profile, pair_id) for pair_id in pair_ids]
     return {
-        **acquisition,
+        **extra,
         "entries_count": len(entries), "quarantine_count": len(quarantines),
         "quarantines": [{"transaction_id": tx, "reason": reason} for tx, reason in quarantines[:100]],
         "wallet_holdings": holdings[:100], "report_ready": not quarantines and not blocked,

@@ -264,6 +264,16 @@
         "why": "Ein in einer älteren Version geprüftes Transfer-Paar oder eine Auszahlung ließ sich nicht ins aktuelle Format übernehmen.",
         "provide": "Öffne die Transaktion und prüfe die Zuordnung erneut."
       },
+      "importDuplicate": {
+        "title": "Eine importierte Transaktion ist möglicherweise doppelt gespeichert",
+        "why": "Zeilen aus getrennten Importen dieses Börsen- oder Wallet-Exports sehen gleich aus und sind mehr, als ein einzelner Export enthielt. Ältere Versionen haben Zeilen ohne eigene ID nach ihrer Position in der Datei nummeriert, daher konnte ein späterer, längerer Export dieselbe Transaktion noch einmal speichern. Kassiber hält jede Kopie zurück und wählt keine für dich aus.",
+        "provide": "Vergleiche die Exporte des Anbieters. Schließe jede Zeile aus, die eine andere Transaktion kopiert. Ist jede Zeile eine eigene Transaktion, bestätige das stattdessen mit der Prüfung confirm_distinct_import_rows (kassiber review plan, dann review apply); dabei wird nichts ausgeschlossen."
+      },
+      "legacyPairFee": {
+        "title": "Bei einem älteren Transfer-Paar muss die Gebühr geprüft werden",
+        "why": "Eine ältere Version hat die Netzwerkgebühr dieses Paars als übertragenen Betrag gezählt, sie aber nicht in die volle Belastung der sendenden Seite aufgenommen. Das Paar bleibt gespeichert und wirkt erst, wenn eine korrigierte Revision geprüft ist.",
+        "provide": "Prüfe das Paar. Zeige die korrigierte Revision mit kassiber review an und übernimm sie, aktualisiere es mit transfers update oder trenne es und kopple die geprüften Seiten neu. Eine Seite auszuschließen löst das nicht."
+      },
       "gapHold": {
         "title": "Eine Zwischen-Wallet fehlt",
         "why": "Coins haben {{wallet}} verlassen und ein ähnlicher Betrag kam später zurück, aber die Wallet dazwischen ist nicht verbunden.",

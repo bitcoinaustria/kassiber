@@ -105,12 +105,24 @@ describe("quarantine cause copy", () => {
     expect(sheetTabForCause("missing_spot_price", "missing_price")).toBe("pricing");
     expect(sheetTabForCause("insufficient_lots", "missing_acquisition_history")).toBe("tax");
     expect(sheetTabForCause("ownership_transfer_destination_ambiguous", "needs_decision")).toBe("linked");
+    expect(
+      sheetTabForCause("custody_quantity_unresolved", "needs_decision", {
+        blocker_code: "custody_component_authored_active_invalid",
+        review_codes: ["legacy_pair_fee_allocation_review_required"],
+      }),
+    ).toBe("linked");
   });
 
   it("offers exclusion only where it can answer the question", () => {
     expect(exclusionFitsReason("missing_spot_price", "missing_price")).toBe(true);
     expect(exclusionFitsReason("non_sale_disposal_kind", "needs_decision")).toBe(true);
     expect(exclusionFitsReason("ownership_transfer_duplicate_outbound", "needs_decision")).toBe(true);
+    expect(exclusionFitsReason("synthetic_import_duplicate_review_required", "needs_decision")).toBe(true);
+    expect(
+      exclusionFitsReason("custody_quantity_unresolved", "needs_decision", {
+        review_codes: ["legacy_pair_fee_allocation_review_required"],
+      }),
+    ).toBe(false);
     // Custody decisions and umbrella holds without their blocker never qualify.
     for (const reason of [
       "custody_quantity_unresolved",

@@ -77,6 +77,8 @@ export interface QuarantineEvidence {
     out_amount_msat: number;
     in_amount_msat: number;
   };
+  /** Validation codes of the pair this row is a leg of. */
+  review_codes?: string[];
 }
 
 export interface QuarantinePairLeg {

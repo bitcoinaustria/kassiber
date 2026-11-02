@@ -139,6 +139,7 @@ def test_legacy_pair_lists_the_specific_review_code_and_concrete_repair(tmp_path
             assert ISSUE in item["evidence"]["review_codes"]
             assert item["evidence"]["repair"] == pair["repair"]
             assert any(action["kind"] == "review_pair" and action["pair_id"] == pair["id"]
+                       and action["transaction_id"] == item["transaction_id"]
                        for action in item["actions"])
     finally:
         conn.close()
