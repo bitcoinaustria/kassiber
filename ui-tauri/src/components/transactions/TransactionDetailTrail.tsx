@@ -72,6 +72,9 @@ export const TransactionTrailContext = React.createContext<TransactionTrail | nu
  */
 export const TransactionDetailHostedContext = React.createContext(false);
 
+/** A fresh scope on hide/reopen prevents retained details from repeating a public lookup. */
+export const TransactionDetailLookupScopeContext = React.createContext<object>({});
+
 /**
  * The panel's own transaction tab a detail renders for, if any: a detail the
  * panel keeps (`PanelTransactionDetail`) rather than a page's preview.

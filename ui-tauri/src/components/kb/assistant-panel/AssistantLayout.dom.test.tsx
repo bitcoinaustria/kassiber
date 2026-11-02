@@ -13,7 +13,7 @@ import {
   renderHook,
   screen,
 } from "@testing-library/react";
-import type * as React from "react";
+import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const session = vi.hoisted(() => ({
@@ -159,6 +159,7 @@ vi.mock("@/components/transactions/dashboard/model", async (importOriginal) => (
 import { clearAppLogRecords, emitAppLog } from "@/lib/appLogs";
 import { useAssistantDraftStore } from "@/store/assistantDraft";
 import { useRightPanelStore } from "@/store/rightPanel";
+import { TransactionDetailSheetFrame } from "@/components/transactions/TransactionDetailSheetFrame";
 import {
   ASSISTANT_PANEL_DEFAULT_WIDTH,
   ASSISTANT_PANEL_MAX_WIDTH,
@@ -302,6 +303,11 @@ async function flushMicrotasks() {
   await act(async () => {
     await Promise.resolve();
   });
+}
+
+function DetailDraft() {
+  const [note, setNote] = React.useState("");
+  return <input aria-label="Transaction note" value={note} onChange={(event) => setNote(event.target.value)} />;
 }
 
 describe("AssistantLayout", () => {
@@ -670,16 +676,31 @@ describe("AssistantLayout", () => {
     expect(useUiStore.getState().rightPanelOpen).toBe(false);
   });
 
-  it("closes an open detail when the panel hides, keeping the assistant", () => {
+  it.each([false, true])("keeps an open detail when the panel hides (sheet: %s)", (sheet) => {
+    useSheet(sheet);
     const closeDetail = vi.fn();
     useUiStore.setState(ASSISTANT_OPEN);
-    mount();
-    act(() => {
-      useRightPanelStore.getState().showDetail({ label: "Details", close: closeDetail, transactionId: null, owner: null });
+    render(layout(true, (
+      <TransactionDetailSheetFrame open onOpenChange={closeDetail}>
+        <DetailDraft />
+      </TransactionDetailSheetFrame>
+    )));
+    const activeTab = panel()!.dataset.activeTab;
+    fireEvent.change(screen.getByRole("textbox", { name: "Transaction note" }), {
+      target: { value: "Unsaved transaction note" },
     });
     act(() => useUiStore.getState().toggleRightPanel());
-    expect(closeDetail).toHaveBeenCalledOnce();
+    expect(closeDetail).not.toHaveBeenCalled();
     expect(useUiStore.getState().assistantPanelOpen).toBe(true);
+    expect(useRightPanelStore.getState().details).toHaveLength(1);
+    act(() => useUiStore.getState().toggleRightPanel());
+    expect(panel()!.dataset.activeTab).toBe(activeTab);
+    expect(screen.getByRole("tab", { name: "Details" }).getAttribute("aria-selected")).toBe("true");
+    expect((screen.getByRole("textbox", { name: "Transaction note" }) as HTMLInputElement).value)
+      .toBe("Unsaved transaction note");
+    // Hiding preserves the tab; its own close control still closes it.
+    fireEvent.click(screen.getByRole("button", { name: "Close Details" }));
+    expect(closeDetail).toHaveBeenCalledWith(false);
   });
 
   it("reads nothing until the review queue opens, then opens a cause in a tab of its own", () => {
@@ -720,6 +741,15 @@ describe("AssistantLayout", () => {
     ]);
     expect(screen.getByTestId("kept-detail").textContent).toBe("tx-root at pricing");
     expect(screen.getByRole("tab", { name: "Bitstamp" }).querySelector(".italic")).toBeNull();
+    const activeTab = panel()!.dataset.activeTab;
+    act(() => useUiStore.getState().toggleRightPanel());
+    expect(panel()).toBeNull();
+    expect(useRightPanelStore.getState().transactions.map((entry) => entry.transactionId)).toEqual([
+      "tx-root",
+    ]);
+    act(() => useUiStore.getState().toggleRightPanel());
+    expect(panel()!.dataset.activeTab).toBe(activeTab);
+    expect(screen.getByTestId("kept-detail").textContent).toBe("tx-root at pricing");
     fireEvent.click(screen.getByRole("button", { name: "Close Bitstamp" }));
     expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Review queue"]);
     expect(panel()!.dataset.activeTab).toBe("review");

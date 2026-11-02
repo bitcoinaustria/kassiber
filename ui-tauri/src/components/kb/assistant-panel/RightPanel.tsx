@@ -198,7 +198,6 @@ export function RightPanel({
   const openSurface = useRightPanelStore((s) => s.openSurface);
   const closeSurface = useRightPanelStore((s) => s.closeSurface);
   const pinDetail = useRightPanelStore((s) => s.pinDetail);
-  const panelOpen = useUiStore((s) => s.rightPanelOpen);
   const setPanelOpen = useUiStore((s) => s.setRightPanelOpen);
   const setAssistantOpen = useUiStore((s) => s.setAssistantPanelOpen);
   const openAssistantPanel = useUiStore((s) => s.openAssistantPanel);
@@ -215,13 +214,6 @@ export function RightPanel({
     seenRevealRef.current = revealRequest;
     setActiveTab("assistant");
   }, [revealRequest, setActiveTab]);
-
-  // A detail lives only while it is in view: hiding the panel closes it,
-  // where the assistant's and the surfaces' tabs stay for the next time.
-  React.useEffect(() => {
-    if (panelOpen) return;
-    for (const detail of details) detail.close();
-  }, [panelOpen, details]);
 
   // Turning developer tools off takes their surfaces with it, as it locks
   // their pages.

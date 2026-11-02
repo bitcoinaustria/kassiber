@@ -44,8 +44,10 @@ closed shows a launcher of them instead. Each launcher row answers to a
 single key (A for the assistant, Q for the review queue, H for Changes, L for
 Logs, D for the latest detail) while no field, dialog or menu has the
 keyboard; a row that cannot open says why. The title-bar toggle shows and
-hides the panel and keeps its tabs, except details, which close with it; a
-detail that opened the panel closes it again. Mod+I shows the panel with the
+hides the panel and keeps all its tabs, including transaction details and
+their unsaved edits, for when it reopens; explicitly closing a detail that
+opened the panel closes it again. Reopening does not repeat a public graph
+lookup: it needs another explicit ask. Mod+I shows the panel with the
 assistant in front, brings it forward from another tab, or hides the panel
 while the assistant is in view. The tab bar's maximize button gives the
 panel the whole page column; the page stays mounted underneath. Details

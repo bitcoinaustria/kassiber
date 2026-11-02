@@ -1,14 +1,14 @@
 // @vitest-environment happy-dom
 //
-// "Ask about this" from the transaction detail sheet: the sheet closes and
-// the panel opens with focus in its composer. The modal sheet must not hand
-// focus back to the row that opened it once it has finished unmounting.
+// Transaction details keep their draft and selected tab when the panel hides
+// or brings the assistant forward. Reopening never repeats a public lookup.
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { TabsContent } from "@/components/ui/tabs";
 
-const mocks = vi.hoisted(() => ({ ask: vi.fn() }));
+const mocks = vi.hoisted(() => ({ ask: vi.fn(), graphInvoke: vi.fn() }));
 
 vi.hoisted(() => {
   const makeStorage = () => {
@@ -28,15 +28,32 @@ vi.hoisted(() => {
   } as unknown as typeof ResizeObserver;
 });
 
-vi.mock("@/daemon/client", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/daemon/client")>()),
-  useDaemon: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }),
-  useDaemonMutation: () => ({
-    error: null,
-    isPending: false,
-    mutateAsync: vi.fn(),
-    reset: vi.fn(),
-  }),
+vi.mock("@/daemon/transport", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/daemon/transport")>()),
+  getTransport: () => ({ invoke: mocks.graphInvoke }),
+}));
+vi.mock("@/daemon/client", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/daemon/client")>();
+  return {
+    ...original,
+    useDaemon: (kind: string, args?: Record<string, unknown>, options?: Parameters<typeof original.useDaemon>[2]) => kind === "ui.transactions.graph"
+      ? original.useDaemon(kind, args, { ...options, retry: false, staleTime: 0 })
+      : { data: undefined, isLoading: false, refetch: vi.fn() },
+    useDaemonMutation: () => ({
+      error: null,
+      isPending: false,
+      mutateAsync: vi.fn(),
+      reset: vi.fn(),
+    }),
+  };
+});
+vi.mock("../TransactionClassifyTab", () => ({
+  TransactionClassifyTab: ({ ctx }: { ctx: import("../TransactionDetailTabContext").TransactionDetailTabContext }) => (
+    <TabsContent value="classify">
+      <input aria-label="Transaction note" value={ctx.localDraft.note} onChange={(event) => ctx.updateDraft("note", event.target.value)} />
+      <button onClick={ctx.enablePublicGraphLookup}>Lookup graph</button>
+    </TabsContent>
+  ),
 }));
 vi.mock("@/hooks/useJournalProcessingAction", () => ({
   useJournalProcessingAction: () => ({
@@ -120,6 +137,7 @@ import { TransactionsTable } from "./TransactionsTable";
 const TXN: Transaction = {
   id: "tx-1",
   txnId: "a".repeat(64),
+  explorerId: "a".repeat(64),
   amount: 50,
   amountBtc: 0.001,
   counterparty: "Exchange",
@@ -185,6 +203,7 @@ describe("TransactionDetailSheet Ask about this", () => {
       }),
     });
     mocks.ask.mockReset();
+    mocks.graphInvoke.mockReset().mockResolvedValue({ kind: "ui.transactions.graph", data: undefined });
     // What the real session does: open the panel and ask for the composer.
     mocks.ask.mockImplementation(() =>
       useUiStore.getState().openAssistantPanel({ focusComposer: true }),
@@ -196,6 +215,40 @@ describe("TransactionDetailSheet Ask about this", () => {
     });
   });
   afterEach(cleanup);
+
+  it("keeps edits and the selected tab on reopen without repeating a failed public lookup", async () => {
+    mocks.graphInvoke.mockImplementation(async ({ args }: { args: Record<string, unknown> }) => {
+      if (args.allowPublicLookup) throw new Error("Lookup failed");
+      return { kind: "ui.transactions.graph", data: undefined };
+    });
+    mount();
+    fireEvent.click(screen.getAllByRole("row").find((row) => row.textContent?.includes("Exchange"))!);
+    await settle();
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Classify" }), { button: 0, ctrlKey: false });
+    fireEvent.change(screen.getByRole("textbox", { name: "Transaction note" }), {
+      target: { value: "Unsaved note" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Lookup graph" }));
+    await waitFor(() => expect(mocks.graphInvoke).toHaveBeenCalledWith({
+      kind: "ui.transactions.graph", args: { transaction: "tx-1", allowPublicLookup: true },
+    }));
+    await settle();
+    act(() => useUiStore.getState().toggleRightPanel());
+    await settle();
+    mocks.graphInvoke.mockClear();
+    act(() => useUiStore.getState().toggleRightPanel());
+    await settle();
+    expect(screen.getByRole("tab", { name: /^Classify/ }).getAttribute("aria-selected")).toBe("true");
+    expect((screen.getByRole("textbox", { name: "Transaction note" }) as HTMLInputElement).value).toBe("Unsaved note");
+    expect(mocks.graphInvoke).not.toHaveBeenCalledWith({
+      kind: "ui.transactions.graph", args: { transaction: "tx-1", allowPublicLookup: true },
+    });
+    // Another explicit ask can retry the failed lookup.
+    fireEvent.click(screen.getByRole("button", { name: "Lookup graph" }));
+    await waitFor(() => expect(mocks.graphInvoke).toHaveBeenCalledWith({
+      kind: "ui.transactions.graph", args: { transaction: "tx-1", allowPublicLookup: true },
+    }));
+  });
 
   it("keeps the detail as a tab and leaves focus in the assistant composer", async () => {
     mount();

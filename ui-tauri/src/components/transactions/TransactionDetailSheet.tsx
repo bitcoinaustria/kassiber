@@ -84,7 +84,7 @@ import {
 } from "@/components/kb/quarantine/explain";
 
 import { TransactionDetailHeader } from "./TransactionDetailHeader";
-import { TransactionDetailHostedContext } from "./TransactionDetailTrail";
+import { TransactionDetailHostedContext, TransactionDetailLookupScopeContext } from "./TransactionDetailTrail";
 import { TransactionDetailRightRail } from "./TransactionDetailRightRail";
 import {
   TransactionClassifyTab,
@@ -258,20 +258,28 @@ function TransactionDetailBody({
   // Opening a transaction is a local read. Enriching its graph sends the txid
   // to a configured backend, so it waits for an explicit ask and resets for
   // every row -- otherwise one lookup would silently enable the next.
-  const [publicGraphLookupTransactionId, setPublicGraphLookupTransactionId] =
-    React.useState<string | null>(null);
-  const publicGraphLookup = isPublicGraphLookupApproved(
-    publicGraphLookupTransactionId,
-    transaction,
-  );
+  const lookupScope = React.useContext(TransactionDetailLookupScopeContext);
+  const [publicGraphLookupApproval, setPublicGraphLookupApproval] =
+    React.useState<{ transactionId: string | null; scope: object } | null>(null);
+  const publicGraphLookup = publicGraphLookupApproval?.scope === lookupScope &&
+    isPublicGraphLookupApproved(publicGraphLookupApproval.transactionId, transaction);
   const graphQuery = useDaemon<TransactionGraphPayload>(
     "ui.transactions.graph",
     transactionGraphLookupArgs(transaction, publicGraphLookup),
-    { enabled: Boolean(transaction) },
+    // Resuming a retained detail must not retry the prior public request
+    // while React Query reconnects its observer to the local-only query.
+    {
+      enabled: Boolean(transaction),
+      refetchOnMount: !publicGraphLookup,
+      retryOnMount: !publicGraphLookup,
+    },
   );
+  const receivedInitialTab = React.useRef(visibleInitialTab);
   React.useEffect(() => {
+    if (receivedInitialTab.current === visibleInitialTab) return;
+    receivedInitialTab.current = visibleInitialTab;
     setActiveTab(visibleInitialTab);
-  }, [visibleInitialTab, transaction?.id]);
+  }, [visibleInitialTab]);
 
   const receivedDraft = React.useRef(draft);
   React.useEffect(() => {
@@ -287,7 +295,10 @@ function TransactionDetailBody({
     setOriginalDraft(draft);
     setTagInput("");
   }, [draft]);
+  const receivedCurrency = React.useRef(currency);
   React.useEffect(() => {
+    if (receivedCurrency.current === currency) return;
+    receivedCurrency.current = currency;
     setBalanceCurrency(currency);
   }, [currency]);
 
@@ -963,7 +974,7 @@ function TransactionDetailBody({
     publicGraphLookup,
     canPublicGraphLookup: hasPublicGraphLookupReference(transaction),
     enablePublicGraphLookup: () =>
-      setPublicGraphLookupTransactionId(transaction?.id ?? null),
+      setPublicGraphLookupApproval({ transactionId: transaction?.id ?? null, scope: lookupScope }),
     graphLoading: graphQuery.isLoading || (graphQuery.isFetching && !graphData),
     graphError:
       graphQuery.error instanceof Error

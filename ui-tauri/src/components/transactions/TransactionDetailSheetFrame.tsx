@@ -13,6 +13,7 @@ import type { Transaction } from "./model";
 import {
   RightPanelDetailOwnerContext,
   TransactionDetailHostedContext,
+  TransactionDetailLookupScopeContext,
   TransactionTrailContext,
   useTransactionTrail,
 } from "./TransactionDetailTrail";
@@ -103,6 +104,20 @@ function HostedDetail({
   const owner = React.useContext(RightPanelDetailOwnerContext);
   const [key, setKey] = React.useState<number | null>(null);
   const slot = useRightPanelStore((state) => (key === null ? null : state.detailSlots[key] ?? null));
+  const panelOpen = useUiStore((state) => state.rightPanelOpen);
+  const lookupScope = React.useMemo(() => ({ slot, panelOpen }), [slot, panelOpen]);
+  // Keep one portal target across panel hides and docked/sheet changes.
+  // Moving it into the current slot preserves the detail's draft and tabs.
+  const [target] = React.useState(() => {
+    const node = document.createElement("div");
+    node.className = "flex min-h-0 flex-1 flex-col overflow-hidden";
+    return node;
+  });
+  React.useLayoutEffect(() => {
+    if (!slot) return;
+    slot.appendChild(target);
+    return () => target.remove();
+  }, [slot, target]);
   const closeRef = React.useRef(onClose);
   React.useLayoutEffect(() => {
     closeRef.current = onClose;
@@ -122,11 +137,14 @@ function HostedDetail({
     if (key === null) return;
     useRightPanelStore.getState().updateDetail(key, { label, close, transactionId, owner });
   }, [key, label, close, transactionId, owner]);
-  if (!slot) return null;
   return createPortal(
-    <SheetPrimitive.Root open modal={false}>
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</div>
-    </SheetPrimitive.Root>,
-    slot,
+    <TransactionDetailLookupScopeContext.Provider value={lookupScope}>
+      <React.Activity mode={slot && panelOpen ? "visible" : "hidden"}>
+        <SheetPrimitive.Root open modal={false}>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</div>
+        </SheetPrimitive.Root>
+      </React.Activity>
+    </TransactionDetailLookupScopeContext.Provider>,
+    target,
   );
 }
