@@ -46,12 +46,33 @@ class ProjectCatalogTests(unittest.TestCase):
             for table in WORKSPACE_SPLIT_POLICY[key]
         }
         self.assertEqual(sorted((set(AUTHORED_SCOPES) | set(EXTRA_SCOPES)) - declared), [])
-        tables = WORKSPACE_SPLIT_POLICY["workspace_profile_scoped_tables"]
-        self.assertIn("import_batches", tables)
-        self.assertIn(
-            "import_batch_transactions",
-            WORKSPACE_SPLIT_POLICY["relationship_tables_following_parent_rows"],
-        )
+        categories = {}
+        for key in (
+            "workspace_profile_scoped_tables",
+            "relationship_tables_following_parent_rows",
+            "project_shared_tables_copied_to_each_split_project",
+        ):
+            for table in WORKSPACE_SPLIT_POLICY[key]:
+                self.assertNotIn(table, categories, f"{table} is listed twice")
+                categories[table] = key
+        # A partition scopes each table by its own profile_id or by a parent
+        # row's; nothing it carries is shared project-wide.
+        with tempfile.TemporaryDirectory() as root:
+            conn = open_db(root)
+            try:
+                for table in sorted(set(AUTHORED_SCOPES) | set(EXTRA_SCOPES)):
+                    columns = {row["name"] for row in conn.execute(f'PRAGMA table_info("{table}")')}
+                    expected = (
+                        "workspace_profile_scoped_tables"
+                        if "profile_id" in columns or table in {"workspaces", "profiles"}
+                        else "relationship_tables_following_parent_rows"
+                    )
+                    self.assertEqual(categories[table], expected, table)
+            finally:
+                conn.close()
+        self.assertEqual(categories["import_batches"], "workspace_profile_scoped_tables")
+        self.assertEqual(categories["import_batch_transactions"], "relationship_tables_following_parent_rows")
+        self.assertEqual(categories["source_funds_snapshots"], "relationship_tables_following_parent_rows")
 
     def test_catalog_stores_only_non_secret_project_metadata(self):
         with tempfile.TemporaryDirectory() as root:

@@ -56,8 +56,9 @@ longer needed.
 The partition retains original immutable row IDs. Authored relationships must be
 closed within the selected connections: a custody component or other linked
 record crossing the boundary blocks export. Import batches travel with the rows
-they created, so a held duplicate import stays held and a confirmation stays bound
-to its group; a batch whose rows span the boundary blocks export. Attachments are
+they created, with their stored import sequence, so a held duplicate import stays
+held and a confirmation stays bound to its group; a batch whose rows span the
+boundary blocks export. Attachments are
 checked against their stored hashes. The target excludes unrelated profiles, backend and AI secrets,
 derived journals, observer SDK caches and previously saved/filed reports. Native
 observation provenance and selected wallet policy history remain evidence, not a

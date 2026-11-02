@@ -58,24 +58,31 @@ that export. Explicit provider and chain IDs keep their original identity.
 Import recomputes the economic hash of recognizable stored synthetic rows from
 their `raw_json`, separately per wallet. A stored current ID holds exactly the
 occurrence number in its suffix. Old positional rows, ordered unbatched first,
-then by import-batch time and old numeric row index, fill only the lowest
+then by import order and old numeric row index, fill only the lowest
 occurrence numbers no current row holds. Incoming occurrence *n* is already
-present when a stored row, including an excluded one, holds *n*. The exception
-is an excluded cross-batch copy: when a group holds more rows than its largest
-single-import count, that many excluded rows (latest import first) hold no
-number, so a reviewed copy cannot stand in for a later genuine repeat. A
-rolled-back
+present when a stored row, including an excluded one, holds *n*. A rolled-back
 first import therefore leaves its occurrence free for the next re-import
-instead of letting a later occurrence stand in for it. The compatibility match
-changes no stored IDs, fingerprints, raw observations, batch memberships, or
-reviews. Overlapping exports can add
-new rows and genuinely repeated occurrences without reopening reviewed gaps.
+instead of letting a later occurrence stand in for it. The exception is an
+excluded cross-batch copy, old or current: when a group holds more rows than its
+largest single-import count, that many excluded rows (latest import first) hold
+no number, so a reviewed copy cannot stand in for a later genuine repeat. The
+compatibility match changes no stored IDs, fingerprints, raw observations, batch
+memberships, or reviews. Overlapping exports can add new rows and genuinely
+repeated occurrences without reopening reviewed gaps.
 Missing or malformed source payloads and explicit provider IDs are not guessed
 into this compatibility mapping. An old ID qualifies when its stored raw row has
 no provider ID, it starts with the old prefix and raw date, and it ends in a
 positive row index; earlier amount spellings do not matter. Old Binance
 dividend IDs (`binance:<index>`) also need text-only CSV cells, because the API
 importer writes `binance:<epoch>` for an ID-less dividend with numeric cells.
+
+Import order is `import_batches.import_sequence`, not `imported_at`, which has
+one-second resolution, nor the random batch ID. An insert trigger numbers every
+new batch, including one an older binary writes. Opening an existing book
+numbers its batches once by `(imported_at, rowid)`, the best insertion evidence
+it holds; batches already in the same second keep their rowid order. Partitions
+and SQLCipher exports copy the stored number, so later rowid changes do not
+reorder imports. The msat rebuild does not touch import batches.
 
 Journal calculation semantics version 4 detects existing excess copies by
 wallet and economic hash. Rows without an import batch predate batch recording
@@ -85,13 +92,25 @@ such imports and exceed the largest single-import count, every active member
 gets the report-blocking `synthetic_import_duplicate_review_required` review
 item. Excluded members still establish the original single-export count. A
 current occurrence suffix also establishes that count when its batch inserted
-only the new remainder of an overlapping export. Unbatched rows alone cannot
-establish two distinct imports. One export's genuine identical repeats remain
-valid. Version 3 ignored unbatched copies, so a duplicate whose first copy
-predated batches escaped the hold. Version 5 also holds a group when an active
-current row took an occurrence number that, among earlier imports, only an
-excluded copy had occupied: the exclusion does not say whether that copy was
-the same trade, so the owner excludes the new row or confirms distinct trades.
+only the new remainder of an overlapping export. One export's genuine identical
+repeats remain valid. Version 3 ignored unbatched copies, so a duplicate whose
+first copy predated batches escaped the hold.
+
+Version 5 also holds a group when an active current row took an occurrence
+number that, among earlier imports, only an excluded copy had held: the
+exclusion does not say whether that copy was the same trade, so the owner
+excludes the new row or confirms distinct trades, which counts the excluded
+trade again through the new row. Version 6 checks this even when every earlier
+copy is excluded, orders imports by sequence, and compares each earlier copy's
+number at its own import, so an old row renumbered around a later current ID
+does not cause a hold. Version 6 also fails closed when every active row
+predates batches: such rows count as one export only when stored in the same
+`created_at` second, and the group is held when its active rows exceed the
+largest such count. One old import that crossed a second boundary is the known
+false hold; confirming distinct trades clears it and nothing is merged. The
+quarantine detail and review case list `hold_reasons` (`cross_import_excess`,
+`refilled_excluded_copy`, `pre_batch_excess`) and
+`refilled_excluded_transaction_ids`.
 
 The detector excludes and deletes nothing and chooses no survivor. Review the
 exports, use `metadata exclude --transaction <id>` for the copies the user
@@ -106,15 +125,17 @@ their exclusion state, then invalidates journals; it changes no transaction.
 A stale fingerprint returns `review_case_changed`, a replayed plan fails its
 input-version check, and any later change to the group (another copy, a removed
 or re-included row) re-opens the hold. The AI boundary refuses the operation
-with `interaction_required`. Earlier version-2 through version-4 journals
+with `interaction_required`. Earlier version-2 through version-5 journals
 require a current rebuild before report use; retained journals, authored reviews and saved/filed
 snapshots are unchanged until their normal explicit processing/review steps.
 
 Coverage: `tests/test_import_csv_upgrade_compatibility.py` restores exact rows
 written by the pre-change parsers/storage writer and checks all five families,
 overlapping exports, genuine repeats, reviewed gap evidence, cross-batch review,
-copies that predate batches, rolled-back imports, either choice of excluded
-copy, a genuine repeat after an excluded copy, the confirmed-distinct review
+copies that predate batches (including the per-second fail-closed rule),
+rolled-back imports, either choice of excluded copy, a genuine repeat after an
+excluded copy, refills when every earlier copy is excluded, imports in the same
+second, the batch sequence migration and encryption, the confirmed-distinct review
 and its binding to exclusion state, and a network partition that must carry
 import batches with their rows so a held group stays held.
 

@@ -1736,7 +1736,14 @@ Old positional IDs are recognized from their stored raw rows without rewriting
 them, including excluded/reviewed evidence. Existing excess copies across import
 batches block reports as `synthetic_import_duplicate_review_required` until the
 user reviews the exports and either excludes the duplicate rows or confirms
-through the review workflow that every row is a distinct trade. See
+through the review workflow that every row is a distinct trade. The same hold
+applies when a newer import's row takes the place of a copy the user excluded
+(confirming distinct trades then counts that excluded trade again through the
+new row), and when identical rows that all predate import batches were stored in
+different seconds. Only rows stored in the same second count as one pre-batch
+export, so one old import that crossed a second boundary is also held; that known
+false hold costs one confirmation and never merges rows. Imports are ordered by
+a stored insertion sequence, not their one-second timestamp. See
 [identity compatibility](database-compatibility.md#id-less-csv-identity-compatibility).
 
 ```bash

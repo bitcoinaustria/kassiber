@@ -122,6 +122,7 @@ WORKSPACE_SPLIT_POLICY: dict[str, Any] = {
         "source_funds_source_attachments",
         "wallet_policy_sources",
         "wallet_policy_coverage_witnesses",
+        "source_funds_snapshots",
     ],
     "project_shared_tables_copied_to_each_split_project": [
         "settings",
@@ -131,7 +132,6 @@ WORKSPACE_SPLIT_POLICY: dict[str, Any] = {
         "rates_cache",
         "rates_checked_minutes",
         "transaction_graph_cache",
-        "source_funds_snapshots",
     ],
     "filesystem_policy": {
         "attachments": (
