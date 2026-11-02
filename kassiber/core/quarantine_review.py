@@ -355,6 +355,11 @@ def _evidence(
         evidence["counterpart_transaction_ids"] = sorted(set(counterparts))
     if detail.get("blocked_by_reason"):
         evidence["blocked_by_reason"] = str(detail["blocked_by_reason"])
+    if reason == "synthetic_import_duplicate_review_required":
+        # Why the import group is held, and any excluded copy a newer row refilled.
+        for key in ("hold_reasons", "refilled_excluded_transaction_ids"):
+            if isinstance(detail.get(key), list):
+                evidence[f"import_{key}"] = [str(item) for item in detail[key]]
     for key in ("row_amount_msat", "owned_receipts_msat", "owned_outputs_msat"):
         if isinstance(detail.get(key), int):
             evidence[key] = int(detail[key])

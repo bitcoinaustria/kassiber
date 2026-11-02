@@ -22,20 +22,36 @@ RESOLUTION = (
     "the confirm_distinct_import_rows review with this group_fingerprint. Then rebuild journals. "
     "No survivor is selected automatically."
 )
+# Why a group is held; one group can carry several.
+CROSS_IMPORT_EXCESS = "cross_import_excess"
+PRE_BATCH_EXCESS = "pre_batch_excess"
+REFILLED_EXCLUDED_COPY = "refilled_excluded_copy"
+HOLD_NOTES = {
+    REFILLED_EXCLUDED_COPY: (
+        "A later import added a row in the place of a copy that was excluded earlier "
+        "(refilled_excluded_transaction_ids). If that excluded row was the same trade, exclude the new "
+        "row; confirming distinct trades counts the excluded trade again through the new row."
+    ),
+    PRE_BATCH_EXCESS: (
+        "Every row predates import batches, so Kassiber counts only rows stored in the same second as one "
+        "export. One import that crossed a second boundary is also held; confirm it as distinct trades."
+    ),
+}
 
 
 def stored_synthetic_occurrences(conn, *, profile_id, wallet_id=None):
-    """Group stored occurrences by import time, then the old numeric row index.
+    """Group stored occurrences by import order, then the old numeric row index.
 
     Rows without a batch predate batch recording, so they sort before every
-    batched row. Excluded rows still consume an occurrence: re-import cannot
+    batched row, by creation time. Batches sort by their insertion sequence:
+    `imported_at` has one-second resolution and batch ids are random. Excluded rows still consume an occurrence: re-import cannot
     reopen a review. No ID, raw row, fingerprint, review, or batch membership
     is rewritten.
     """
     rows = conn.execute("""
         SELECT t.id, t.wallet_id, t.external_id, t.raw_json, t.excluded,
                t.workspace_id, t.profile_id, t.created_at,
-               b.id AS batch_id, b.imported_at
+               b.id AS batch_id, b.imported_at, b.import_sequence
         FROM transactions t
         LEFT JOIN import_batch_transactions bt ON bt.transaction_id = t.id
         LEFT JOIN import_batches b ON b.id = bt.batch_id
@@ -46,7 +62,7 @@ def stored_synthetic_occurrences(conn, *, profile_id, wallet_id=None):
             OR t.external_id LIKE 'pocketbitcoin:pocketbitcoin:%'
             OR t.external_id LIKE 'binance-supplemental:%'
             OR t.external_id LIKE 'binance:%')
-        ORDER BY b.id IS NOT NULL, COALESCE(b.imported_at, t.created_at), b.id, t.id
+        ORDER BY b.id IS NOT NULL, b.import_sequence, t.created_at, t.id
     """, (profile_id, wallet_id, wallet_id)).fetchall()
     groups = defaultdict(list)
     seen = set()
@@ -62,28 +78,36 @@ def stored_synthetic_occurrences(conn, *, profile_id, wallet_id=None):
             **dict(row), "ordinal": ordinal, "legacy": legacy,
         })
     for members in groups.values():
-        members.sort(key=lambda row: (row["batch_id"] is not None,
-                                      row["imported_at"] or row["created_at"],
-                                      row["ordinal"], row["id"]))
+        members.sort(key=lambda row: (*_import_order(row), row["created_at"], row["ordinal"], row["id"]))
     return dict(groups)
 
 
-def largest_export_count(members):
+def _import_order(row):
+    """Unbatched rows form one import before every recorded batch."""
+    return (0, 0) if row["batch_id"] is None else (1, row["import_sequence"])
+
+
+def largest_export_count(members, *, split_unbatched=False):
     """The most occurrences any one import proves, excluded rows included.
 
-    Unbatched rows count together as one import. A current occurrence suffix
-    proves that many rows appeared in its source export, even when the batch
-    created only the new remainder.
+    Unbatched rows count together as one import unless `split_unbatched`
+    counts them per `created_at` second. A current occurrence suffix proves
+    that many rows appeared in its source export, even when the batch created
+    only the new remainder.
     """
-    counts = Counter(row["batch_id"] for row in members)
+    def source(row):
+        if row["batch_id"] is None and split_unbatched:
+            return ("unbatched", str(row["created_at"] or "")[:19])
+        return row["batch_id"]
+    counts = Counter(source(row) for row in members)
     for row in members:
         if not row["legacy"]:
-            counts[row["batch_id"]] = max(counts[row["batch_id"]], row["ordinal"])
+            counts[source(row)] = max(counts[source(row)], row["ordinal"])
     return max(counts.values(), default=0)
 
 
 def _excluded_excess(members):
-    """Excluded rows beyond the largest single-export count, latest first.
+    """Excluded rows beyond the largest single-export count, latest import first.
 
     Such a row is a reviewed cross-batch copy, not an occurrence of its own,
     so it must not stand in for a later genuine repeat.
@@ -118,22 +142,39 @@ def occurrence_slots(members):
     return _assign_slots(members, _excluded_excess(members))
 
 
-def _refills_excluded_copy(members):
-    """Whether an active current row took a number only an excluded copy freed.
+def _historical_numbers(members):
+    """The occurrence number each row held when its own import was stored.
 
-    The owner's exclusion does not say whether that copy was the same trade as
-    the new row, so the group needs review rather than a guess.
+    A later current row can push an old positional row onto another free
+    number; the number it held at its own import stays its history.
     """
-    def imported(row):
-        return (row["batch_id"] is not None, row["imported_at"] or row["created_at"], row["batch_id"] or "")
+    numbers = {}
+    for order in sorted({_import_order(row) for row in members}):
+        stored = [row for row in members if _import_order(row) <= order]
+        for number, row in _assign_slots(stored).items():
+            numbers.setdefault(row["id"], number)
+    return numbers
+
+
+def _refilled_copies(members):
+    """Excluded copies whose number a later active current row took.
+
+    Returns whether such a row exists and the excluded copies that hold no
+    number before it. The owner's exclusion does not say whether that copy was
+    the same trade as the new row, so the group needs review, not a guess.
+    """
+    numbers = _historical_numbers(members)
+    refilled, copies = False, set()
     for row in members:
         if row["legacy"] or row["excluded"]:
             continue
-        prior = [other for other in members if imported(other) < imported(row)]
-        if (row["ordinal"] in _assign_slots(prior)
-                and row["ordinal"] not in _assign_slots(prior, _excluded_excess(prior))):
-            return True
-    return False
+        prior = [other for other in members if _import_order(other) < _import_order(row)]
+        freed = _excluded_excess(prior)
+        if (row["ordinal"] not in _assign_slots(prior, freed)
+                and any(numbers.get(other["id"]) == row["ordinal"] for other in prior)):
+            refilled = True
+            copies |= freed
+    return refilled, copies
 
 
 def group_fingerprint(wallet_id, economic, members):
@@ -146,7 +187,7 @@ def group_fingerprint(wallet_id, economic, members):
 
 
 def held_duplicate_groups(conn, profile_id):
-    """Every cross-batch excess no owner has confirmed as distinct trades."""
+    """Every held excess or refill no owner has confirmed as distinct trades."""
     confirmed = {(row["wallet_id"], row["economic_hash"], row["group_fingerprint"]) for row in conn.execute(
         "SELECT wallet_id, economic_hash, group_fingerprint FROM synthetic_import_duplicate_reviews "
         "WHERE profile_id = ?", (profile_id,),
@@ -157,10 +198,21 @@ def held_duplicate_groups(conn, profile_id):
         # Unbatched rows came from imports before batch recording began; they
         # count together as one more import beside any batched copy.
         batches = {row["batch_id"] for row in active}
-        if len(batches) < 2:
-            continue
         largest = largest_export_count(members)
-        if len(active) <= largest and not _refills_excluded_copy(members):
+        reasons = []
+        if len(batches) >= 2 and len(active) > largest:
+            reasons.append(CROSS_IMPORT_EXCESS)
+        if batches == {None}:
+            # Nothing proves how many imports wrote rows that all predate
+            # batches. Fail closed: only rows stored in one second count as
+            # one export, so one import straddling a second needs confirming.
+            largest = largest_export_count(members, split_unbatched=True)
+            if len(active) > largest:
+                reasons.append(PRE_BATCH_EXCESS)
+        refilled, copies = _refilled_copies(members)
+        if refilled:
+            reasons.append(REFILLED_EXCLUDED_COPY)
+        if not reasons:
             continue
         fingerprint = group_fingerprint(wallet_id, economic, members)
         if (wallet_id, economic, fingerprint) in confirmed:
@@ -168,21 +220,26 @@ def held_duplicate_groups(conn, profile_id):
         groups.append({
             "wallet_id": wallet_id, "economic_hash": economic, "group_fingerprint": fingerprint,
             "active": active, "largest": largest, "import_count": len(batches),
+            "hold_reasons": reasons, "refilled_excluded_ids": sorted(copies),
         })
     return groups
 
 
 def duplicate_review_quarantines(conn, profile_id):
-    """Hold every active member of a cross-batch excess; choose no survivor."""
+    """Hold every active member of a held group; choose no survivor."""
     quarantines = []
     for group in held_duplicate_groups(conn, profile_id):
         active = group["active"]
+        resolution = " ".join([RESOLUTION, *(HOLD_NOTES[reason] for reason in group["hold_reasons"]
+                                             if reason in HOLD_NOTES)])
         detail = json.dumps({
             "economic_hash": group["economic_hash"], "group_fingerprint": group["group_fingerprint"],
             "transaction_ids": sorted(row["id"] for row in active),
             "active_count": len(active), "largest_single_batch_count": group["largest"],
             "import_batch_count": group["import_count"],
-            "resolution": RESOLUTION,
+            "hold_reasons": group["hold_reasons"],
+            "refilled_excluded_transaction_ids": group["refilled_excluded_ids"],
+            "resolution": resolution,
         }, sort_keys=True)
         quarantines.extend({
             "transaction_id": row["id"], "workspace_id": row["workspace_id"],

@@ -976,7 +976,7 @@ def _migrate_stored_error_credentials(conn) -> int:
 
 
 PARTIAL_PAYOUT_SEMANTICS_MIGRATION = "custody-partial-payout-pricing-v1"
-JOURNAL_CALCULATION_SEMANTICS_VERSION = 6
+JOURNAL_CALCULATION_SEMANTICS_VERSION = 7
 JOURNAL_SEMANTICS_ADOPTION_MIGRATION = "journal-calculation-semantics-adoption-v1"
 
 
@@ -1476,6 +1476,9 @@ CREATE TABLE IF NOT EXISTS import_batches (
     source_filename TEXT,
     column_map_json TEXT,
     imported_at TEXT NOT NULL,
+    -- Insertion order; `imported_at` has one-second resolution. Filled by
+    -- trg_import_batches_sequence and carried verbatim by copies.
+    import_sequence INTEGER,
     rows_inserted INTEGER NOT NULL DEFAULT 0,
     rows_updated INTEGER NOT NULL DEFAULT 0,
     rows_skipped INTEGER NOT NULL DEFAULT 0
@@ -3929,6 +3932,36 @@ def get_setting(conn, key):
     return row["value"] if row else None
 
 
+def _migrate_import_batch_sequence(conn) -> bool:
+    """Number import batches in insertion order, once, and for every later insert.
+
+    Duplicate-import review orders imports by this sequence: two imports in the
+    same second share `imported_at`, and batch ids are random. Existing rows are
+    numbered by `(imported_at, rowid)`, the best insertion evidence a book holds.
+    The trigger also numbers batches an older binary writes. Partitions and
+    SQLCipher exports copy the stored value, so later rowid changes do not
+    reorder imports.
+    """
+    changed = _ensure_column_no_commit(conn, "import_batches", "import_sequence", "INTEGER")
+    pending = [row[0] for row in conn.execute(
+        "SELECT id FROM import_batches WHERE import_sequence IS NULL ORDER BY imported_at, rowid"
+    )]
+    if pending:
+        base = conn.execute("SELECT COALESCE(MAX(import_sequence), 0) FROM import_batches").fetchone()[0]
+        conn.executemany("UPDATE import_batches SET import_sequence = ? WHERE id = ?",
+                         [(base + offset, batch_id) for offset, batch_id in enumerate(pending, start=1)])
+        changed = True
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_import_batches_sequence ON import_batches(import_sequence)")
+    conn.execute("""CREATE TRIGGER IF NOT EXISTS trg_import_batches_sequence
+        AFTER INSERT ON import_batches WHEN NEW.import_sequence IS NULL
+        BEGIN
+            UPDATE import_batches
+            SET import_sequence = (SELECT COALESCE(MAX(import_sequence), 0) + 1 FROM import_batches)
+            WHERE id = NEW.id;
+        END""")
+    return changed
+
+
 def _ensure_column_no_commit(conn, table_name, column_name, definition):
     """Idempotent `ALTER TABLE ... ADD COLUMN` — no-op when the column exists."""
     columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()}
@@ -5592,6 +5625,8 @@ def ensure_schema_compat(conn):
     if _migrate_tax_engine_semantics(conn):
         conn.commit()
     if _migrate_at_outflow_regime_semantics(conn):
+        conn.commit()
+    if _migrate_import_batch_sequence(conn):
         conn.commit()
     ensure_column(conn, "backends", "batch_size", "INTEGER")
     ensure_column(conn, "backends", "config_json", "TEXT NOT NULL DEFAULT '{}'")

@@ -364,7 +364,7 @@ def _false_positive(tmp_path, case_index):
     first, second = conn.execute("SELECT * FROM transactions ORDER BY external_id").fetchall()
     batch = "repeat-batch"
     _insert(conn, "import_batches", {**dict(conn.execute("SELECT * FROM import_batches").fetchone()),
-                                     "id": batch, "imported_at": "2025-04-01T00:00:00Z", "rows_inserted": 1})
+                                     "id": batch, "imported_at": "2025-04-01T00:00:00Z", "rows_inserted": 1, "import_sequence": None})
     conn.execute("UPDATE import_batch_transactions SET batch_id=? WHERE transaction_id=?", (batch, second["id"]))
     conn.execute("UPDATE transactions SET excluded=0, fiat_rate=50000, fiat_rate_exact='50000'")
     conn.commit()
@@ -456,7 +456,7 @@ def _held_after_old_cumulative_export(tmp_path, case_index):
     batch, = _batch_ids(conn)
     later = "cumulative-batch"
     _insert(conn, "import_batches", {**dict(conn.execute("SELECT * FROM import_batches").fetchone()),
-                                     "id": later, "imported_at": "2025-04-01T00:00:00Z", "rows_inserted": 2})
+                                     "id": later, "imported_at": "2025-04-01T00:00:00Z", "rows_inserted": 2, "import_sequence": None})
     conn.execute("UPDATE import_batch_transactions SET batch_id=? WHERE transaction_id=?", (later, second["id"]))
     february = _shift_month(first, "02")
     _insert(conn, "transactions", february)
@@ -663,5 +663,269 @@ def test_confirmation_is_bound_to_exclusion_state_and_invalidates_journals(tmp_p
         conn.commit()
         group, = held_duplicate_groups(conn, profile["id"])
         assert sorted(row["id"] for row in group["active"]) == sorted([first["id"], second["id"], "third"])
+    finally:
+        conn.close()
+
+
+def _import_reviewed(conn, profile, wallet, path, fmt, rows):
+    """Import, keeping only the owner's reviewed exclusions.
+
+    Coinfinity and Pocket exclude rows no wallet observation matches; only the
+    owner's reviewed exclusion matters to the duplicate review.
+    """
+    result = _import(conn, profile, wallet, path, fmt, rows)
+    conn.execute("UPDATE transactions SET excluded=0 WHERE id NOT IN (SELECT transaction_id FROM transaction_edit_events)")
+    conn.commit()
+    return result
+
+
+def _exclude(conn, transaction_id, reason="Reviewed duplicated import occurrence"):
+    metadata.update_transaction_metadata(conn, "ws", "profile", transaction_id, handlers._metadata_hooks(),
+                                         excluded=True, reason=reason)
+    conn.commit()
+
+
+def _januaries(conn, *known):
+    rows = conn.execute("SELECT id FROM transactions WHERE occurred_at LIKE '2025-01-01%' ORDER BY rowid")
+    return [row[0] for row in rows if row[0] not in known]
+
+
+@pytest.mark.parametrize("case_index", range(len(CASES)))
+def test_refill_is_held_when_every_earlier_copy_is_excluded(tmp_path, case_index):
+    conn, profile, wallet, first, second, _ = _held_after_old_cumulative_export(tmp_path, case_index)
+    fmt, january, date_column = CASES[case_index]
+    try:
+        _exclude(conn, first["id"])
+        _exclude(conn, second["id"])
+        assert _held(conn, profile)[0] == []
+        march, february = _months(january, date_column, "03", "02")
+        result = _import_reviewed(conn, profile, wallet, tmp_path / "export.csv", fmt,
+                                  [march, february, january, january])
+        assert result["imported"] == 2
+        repeat, = _januaries(conn, first["id"], second["id"])
+        # The only active January row took the number of the later excluded copy.
+        held, state = _held(conn, profile)
+        assert held == [repeat]
+        assert state["custody_quantity"].report_blocked
+        detail = json.loads(next(q["detail_json"] for q in state["quarantines"] if q["reason"] == ISSUE))
+        assert detail["hold_reasons"] == ["refilled_excluded_copy"]
+        assert detail["refilled_excluded_transaction_ids"] == [second["id"]]
+        assert "counts the excluded trade again" in detail["resolution"]
+        custody_journal.store_ledger_state(conn, profile, state)
+        conn.commit()
+        case = next(case for case in review_workflow.inspect_cases(conn, profile)["cases"] if case["reason"] == ISSUE)
+        assert case["import_duplicate"]["hold_reasons"] == ["refilled_excluded_copy"]
+        assert case["import_duplicate"]["refilled_excluded_transaction_ids"] == [second["id"]]
+        item, = [item for item in quarantine_review.review_quarantine(conn, profile, limit=20)["items"]
+                 if item["reason"] == ISSUE]
+        assert item["evidence"]["import_hold_reasons"] == ["refilled_excluded_copy"]
+        assert item["evidence"]["import_refilled_excluded_transaction_ids"] == [second["id"]]
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("case_index", range(len(CASES)))
+def test_imports_in_the_same_second_keep_their_insertion_order(tmp_path, case_index):
+    conn, profile, wallet, first, second, _ = _held_after_old_cumulative_export(tmp_path, case_index)
+    fmt, january, _ = CASES[case_index]
+    path = tmp_path / "export.csv"
+    try:
+        _exclude(conn, second["id"])
+        assert _import_reviewed(conn, profile, wallet, path, fmt, [january, january])["imported"] == 1
+        refill = conn.execute("SELECT id FROM import_batches ORDER BY import_sequence DESC").fetchone()[0]
+        assert _import_reviewed(conn, profile, wallet, path, fmt, [january] * 4)["imported"] == 2
+        later = conn.execute("SELECT id FROM import_batches ORDER BY import_sequence DESC").fetchone()[0]
+        held = _held(conn, profile)[0]
+        assert len(held) == 4
+        # Same second, and the later batch's random id sorts first.
+        conn.execute("PRAGMA foreign_keys=OFF")
+        for old, new in ((refill, "ffffffff-refill"), (later, "00000000-later")):
+            conn.execute("UPDATE import_batches SET id=?, imported_at='2025-06-01T00:00:00Z' WHERE id=?", (new, old))
+            conn.execute("UPDATE import_batch_transactions SET batch_id=? WHERE batch_id=?", (new, old))
+        conn.commit()
+        conn.execute("PRAGMA foreign_keys=ON")
+        assert _held(conn, profile)[0] == held
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("case_index", range(len(CASES)))
+def test_genuine_third_trade_after_excluding_the_refilled_repeat_is_not_held(tmp_path, case_index):
+    conn, profile, wallet, first, second, _ = _held_after_old_cumulative_export(tmp_path, case_index)
+    fmt, january, _ = CASES[case_index]
+    path = tmp_path / "export.csv"
+    try:
+        _exclude(conn, second["id"])
+        assert _import_reviewed(conn, profile, wallet, path, fmt, [january, january])["imported"] == 1
+        repeat, = set(_held(conn, profile)[0]) - {first["id"]}
+        _exclude(conn, repeat, "Same trade as the excluded copy")
+        assert _held(conn, profile)[0] == []
+        # Neither excluded copy ever held occurrence 3, so nothing is refilled.
+        result = _import_reviewed(conn, profile, wallet, path, fmt, [january] * 3)
+        assert result["imported"] == 1
+        assert _held(conn, profile)[0] == []
+        assert _import_reviewed(conn, profile, wallet, path, fmt, [january] * 3)["imported"] == 0
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("case_index", range(len(CASES)))
+def test_excluded_current_id_copy_holds_no_number(tmp_path, case_index):
+    conn, profile, wallet = _restore(tmp_path, case_index)
+    fmt, january, _ = CASES[case_index]
+    try:
+        # One old row and an 8b re-import's current-ID copy of it.
+        first, second = conn.execute("SELECT * FROM transactions ORDER BY external_id").fetchall()
+        conn.execute("DELETE FROM transactions WHERE id=?", (second["id"],))
+        _write(tmp_path / "one.csv", [january])
+        current, = importers.load_import_records(tmp_path / "one.csv", fmt)
+        _insert(conn, "transactions", {**dict(first), "id": "post-upgrade", "external_id": current["txid"],
+                                       "fingerprint": "post-upgrade", "created_at": "2025-04-01T00:00:00Z"})
+        batch = import_batches.record_batch(conn, profile, wallet_id="btc", source_format=fmt,
+            source_filename="e.csv", column_map=None, outcome={"inserted_records": [{"transaction_id": "post-upgrade"}]})
+        conn.execute("UPDATE import_batches SET imported_at='2025-04-01T00:00:00Z' WHERE id=?", (batch,))
+        conn.execute("UPDATE transactions SET excluded=0")
+        conn.commit()
+        assert len(_held(conn, profile)[0]) == 2
+        _exclude(conn, "post-upgrade", "Copy of the old row")
+        assert _held(conn, profile)[0] == []
+        result = _import_reviewed(conn, profile, wallet, tmp_path / "export.csv", fmt, [january, january])
+        assert result["imported"] == 1
+        # The copy was occurrence 1 like the old row; occurrence 2 is new.
+        assert _held(conn, profile)[0] == []
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("case_index", range(len(CASES)))
+def test_refill_hold_counts_neither_same_nor_later_imports_as_earlier(tmp_path, case_index):
+    conn, profile, wallet, first, second, _ = _held_after_old_cumulative_export(tmp_path, case_index)
+    fmt, january, _ = CASES[case_index]
+    path = tmp_path / "export.csv"
+    try:
+        _exclude(conn, second["id"])
+        # The refill and a further genuine repeat arrive in one import: the
+        # batch's own count does not answer whether the copy was the refill.
+        assert _import_reviewed(conn, profile, wallet, path, fmt, [january] * 3)["imported"] == 2
+        held, state = _held(conn, profile)
+        assert held == sorted([first["id"], *_januaries(conn, first["id"], second["id"])])
+        detail = json.loads(next(q["detail_json"] for q in state["quarantines"] if q["reason"] == ISSUE))
+        assert detail["hold_reasons"] == ["refilled_excluded_copy"]
+        # A later, longer export does not answer it either.
+        assert _import_reviewed(conn, profile, wallet, path, fmt, [january] * 4)["imported"] == 1
+        assert len(_held(conn, profile)[0]) == 4
+    finally:
+        conn.close()
+
+
+def test_stamped_version_four_and_five_journals_are_stale(tmp_path):
+    conn, profile, *_ = _held_after_old_cumulative_export(tmp_path, 4)
+    try:
+        custody_journal.store_ledger_state(conn, profile, review_workflow._build(conn, profile))
+        conn.commit()
+        assert custody_journal.projection_freshness(conn, profile["id"])["is_current"]
+        for version in (4, 5):
+            conn.execute("UPDATE profiles SET journal_semantics_version=?", (version,))
+            conn.commit()
+            assert not custody_journal.projection_freshness(conn, profile["id"])["is_current"]
+    finally:
+        conn.close()
+
+
+def _unbatched(tmp_path, case_index, seconds):
+    conn, profile, wallet = _restore(tmp_path, case_index)
+    conn.execute("DELETE FROM import_batch_transactions")
+    rows = conn.execute("SELECT id FROM transactions ORDER BY external_id").fetchall()
+    for row, second in zip(rows, seconds):
+        conn.execute("UPDATE transactions SET created_at=? WHERE id=?", (f"2024-06-01T00:00:{second:02d}Z", row[0]))
+    conn.execute("UPDATE transactions SET excluded=0, fiat_rate=50000, fiat_rate_exact='50000'")
+    conn.commit()
+    return conn, profile, [row[0] for row in rows]
+
+
+@pytest.mark.parametrize("case_index", range(len(CASES)))
+def test_rows_that_all_predate_batches_fail_closed_beyond_one_second(tmp_path, case_index):
+    from kassiber.core.import_identity import confirm_distinct, held_duplicate_groups
+    # Old code imported [jan], then the cumulative [feb, jan], before batches.
+    conn, profile, rows = _unbatched(tmp_path, case_index, (0, 7))
+    try:
+        held, state = _held(conn, profile)
+        assert held == sorted(rows)
+        assert state["custody_quantity"].report_blocked
+        detail = json.loads(next(q["detail_json"] for q in state["quarantines"] if q["reason"] == ISSUE))
+        assert detail["hold_reasons"] == ["pre_batch_excess"]
+        assert detail["largest_single_batch_count"] == 1
+        assert "crossed a second boundary" in detail["resolution"]
+        _exclude(conn, rows[1])
+        assert _held(conn, profile)[0] == []
+        # The known false positive, one import straddling a second, is
+        # answered by confirming distinct trades.
+        conn.execute("UPDATE transactions SET excluded=0")
+        conn.execute("DELETE FROM transaction_edit_events")
+        conn.commit()
+        group, = held_duplicate_groups(conn, profile["id"])
+        confirm_distinct(conn, profile, transaction_id=rows[0], expected_fingerprint=group["group_fingerprint"],
+                         reason="One export written across a second", authored_source="user")
+        conn.commit()
+        assert _held(conn, profile)[0] == []
+    finally:
+        conn.close()
+
+
+def test_unbatched_rows_stored_in_one_second_are_one_export(tmp_path):
+    conn, profile, _ = _unbatched(tmp_path, 4, (3, 3))
+    try:
+        assert _held(conn, profile)[0] == []
+    finally:
+        conn.close()
+
+
+def test_existing_batches_are_sequenced_by_time_then_insertion(tmp_path):
+    conn, profile, wallet = _fresh(tmp_path)
+    try:
+        for name, imported_at in (("b", "2025-01-01T00:00:01Z"), ("a", "2025-01-01T00:00:01Z"),
+                                  ("c", "2025-01-01T00:00:00Z")):
+            conn.execute("""INSERT INTO import_batches(id, workspace_id, profile_id, wallet_id, source_format,
+                imported_at) VALUES(?, 'ws', 'profile', 'btc', 'ledgerlive_csv', ?)""", (name, imported_at))
+        # A book from before the sequence: drop it and let reopening number it.
+        conn.execute("DROP TRIGGER trg_import_batches_sequence")
+        conn.execute("DROP INDEX idx_import_batches_sequence")
+        conn.execute("ALTER TABLE import_batches DROP COLUMN import_sequence")
+        conn.commit()
+        conn.close()
+        conn = open_db(tmp_path / "book")
+        assert [tuple(row) for row in conn.execute(
+            "SELECT id, import_sequence FROM import_batches ORDER BY import_sequence")] == \
+            [("c", 1), ("b", 2), ("a", 3)]
+        # An older writer inserts without the column; the trigger numbers it.
+        conn.execute("""INSERT INTO import_batches(id, workspace_id, profile_id, wallet_id, source_format,
+            imported_at) VALUES('old-writer', 'ws', 'profile', 'btc', 'ledgerlive_csv', '2024-01-01T00:00:00Z')""")
+        assert conn.execute("SELECT import_sequence FROM import_batches WHERE id='old-writer'").fetchone()[0] == 4
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def test_batch_sequence_survives_encrypting_the_book(tmp_path):
+    from kassiber.secrets.migration import migrate_plaintext_to_encrypted
+    from kassiber.secrets.sqlcipher import sqlcipher_available
+    if not sqlcipher_available():
+        pytest.skip("SQLCipher driver is not installed")
+    conn, profile, wallet = _fresh(tmp_path)
+    fmt, january, _ = CASES[4]
+    try:
+        for count in (1, 2, 3):
+            _import(conn, profile, wallet, tmp_path / "export.csv", fmt, [january] * count)
+        # Insertion order no longer matches rowid order.
+        conn.execute("UPDATE import_batches SET import_sequence = 10 - import_sequence")
+        conn.commit()
+        before = [tuple(row) for row in conn.execute("SELECT id, import_sequence FROM import_batches ORDER BY id")]
+    finally:
+        conn.close()
+    migrate_plaintext_to_encrypted(tmp_path / "book" / "kassiber.sqlite3", "sequence-pass-12345")
+    conn = open_db(tmp_path / "book", passphrase="sequence-pass-12345")
+    try:
+        assert [tuple(row) for row in conn.execute(
+            "SELECT id, import_sequence FROM import_batches ORDER BY id")] == before
     finally:
         conn.close()

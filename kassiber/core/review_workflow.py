@@ -173,7 +173,8 @@ def _inspect_cases(conn, profile, *, limit, cursor):
         if reasons[transaction_id] == import_identity.DUPLICATE_REVIEW:
             detail = details[transaction_id]
             case["import_duplicate"] = {key: detail.get(key) for key in (
-                "group_fingerprint", "transaction_ids", "active_count", "largest_single_batch_count")}
+                "group_fingerprint", "transaction_ids", "active_count", "largest_single_batch_count",
+                "hold_reasons", "refilled_excluded_transaction_ids")}
             case["supported_operations"] = ["exclude", import_identity.CONFIRM_DISTINCT]
         if transaction_id in pairs:
             guidance = custody_review_terms.pair_review_guidance(conn, pairs[transaction_id])
