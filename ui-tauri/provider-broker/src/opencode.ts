@@ -240,6 +240,18 @@ export async function sensitiveOpenCodeEnvironment(executable: string, cwd: stri
   return env;
 }
 
+function checkIncognitoPlatform(platform: NodeJS.Platform): void {
+  // Keeping OpenCode's always-on log file off disk needs a file symlink to the
+  // null device, which a normal Windows account cannot create (no elevation
+  // or Developer Mode), and OpenCode has no option to turn the file off. Say
+  // so before anything starts rather than fail obscurely or write the log.
+  if (platform === "win32") {
+    throw new Error(
+      "Incognito isn't available for OpenCode on Windows; turn Incognito off or choose another provider.",
+    );
+  }
+}
+
 /**
  * An Incognito turn: the session lives in an in-memory database and the
  * turn's directory, so OpenCode keeps nothing once the turn ends. Tools and
@@ -250,15 +262,7 @@ export async function statelessOpenCodeEnvironment(
   cwd: string,
   platform: NodeJS.Platform = process.platform,
 ) {
-  // Keeping OpenCode's always-on log file off disk needs a file symlink to the
-  // null device, which a normal Windows account cannot create (no elevation
-  // or Developer Mode), and OpenCode has no option to turn the file off. Say
-  // so before anything starts rather than fail obscurely or write the log.
-  if (platform === "win32") {
-    throw new Error(
-      "Incognito isn't available for OpenCode on Windows; turn Incognito off or choose another provider.",
-    );
-  }
+  checkIncognitoPlatform(platform);
   const env = providerEnvironment("opencode");
   await isolateOpenCodeStorage(env, cwd);
   if (await probeEnvironment(executable, ["db", "path"], cwd, env) !== ":memory:") {
@@ -396,6 +400,22 @@ export function parseOpenCodeModels(
   return rows;
 }
 
+async function checkOpenCodeVersion(executable: string, cwd: string): Promise<string | undefined> {
+  // Version checks carry no prompt. On POSIX discard the CLI's automatic log
+  // before even this first invocation; Windows retains the legacy v1 path.
+  const env = process.platform === "win32" ? providerEnvironment("opencode")
+    : await (await import("./opencode2.js")).openCodeDiscardEnvironment(join(cwd, "version"));
+  const result = await runProvider("opencode", executable, ["--version"], { cwd, env });
+  const match = /^(?:opencode\s+v?)?(\d+)\.\d+\.\d+(?:[-+][\w.+-]+)?$/.exec(result.stdout.trim());
+  if (match && Number(match[1]) >= 3) {
+    throw new Error("This OpenCode major version is not supported by this build.");
+  }
+  if (match && Number(match[1]) === 2 && /[-+]/.test(match[0])) {
+    throw new Error("OpenCode 2 prerelease builds are not supported. Use a stable OpenCode 2 release.");
+  }
+  return result.code === 0 && match ? match[0] : undefined;
+}
+
 export async function openCodeStatus(cwd: string): Promise<ProviderStatus> {
   const executable = await resolveExecutable("opencode");
   if (!executable) {
@@ -405,20 +425,23 @@ export async function openCodeStatus(cwd: string): Promise<ProviderStatus> {
     });
   }
   try {
-    // Sequential: three concurrent opencode invocations are what makes the
-    // config read flaky, and a lost read silently mislabels local models.
-    const endpoints = await loadProviderEndpoints(executable, cwd);
-    const [modelsResult, versionResult] = await Promise.all([
-      runProvider("opencode", executable, ["models", "--verbose"], { cwd }),
-      runProvider("opencode", executable, ["--version"], { cwd }),
-    ]);
-    const models =
-      modelsResult.code === 0
-        ? parseOpenCodeModels(modelsResult.stdout, endpoints)
-        : [];
+    // Check compatibility before commands whose flags changed in v2. Keep
+    // the probes sequential: a lost config read mislabels local models.
+    const version = await checkOpenCodeVersion(executable, cwd);
+    let models: BrokerModel[];
+    if (version && /^(?:opencode\s+v?)?2\./.test(version)) {
+      models = await (await import("./opencode2.js")).openCode2Models(executable, cwd);
+    } else {
+      const endpoints = await loadProviderEndpoints(executable, cwd);
+      const modelsResult = await runProvider("opencode", executable, ["models", "--verbose"], { cwd });
+      if (modelsResult.code !== 0) {
+        throw new Error("OpenCode could not list models. Check its CLI version and configuration outside Kassiber.");
+      }
+      models = parseOpenCodeModels(modelsResult.stdout, endpoints);
+    }
     return providerStatus("opencode", "OpenCode", {
       executable,
-      version: versionResult.stdout.trim().slice(0, 80) || undefined,
+      version,
       state: models.length ? "ready" : "authentication_required",
       message: models.length
         ? "Ready using the existing OpenCode configuration."
@@ -439,10 +462,15 @@ export async function openCodeChat(
   cwd: string,
   toolBridge?: NativeToolBridge,
 ): Promise<void> {
-  const executable = await resolveExecutable("opencode");
-  if (!executable) throw new Error("OpenCode is not installed.");
   const sensitive = sensitiveContext(request);
   const stateless = statelessSession(request);
+  if (stateless && !sensitive) checkIncognitoPlatform(process.platform);
+  const executable = await resolveExecutable("opencode");
+  if (!executable) throw new Error("OpenCode is not installed.");
+  const version = await checkOpenCodeVersion(executable, cwd);
+  if (version && /^(?:opencode\s+v?)?2\./.test(version)) {
+    return (await import("./opencode2.js")).openCode2Chat(executable, request, cwd, toolBridge);
+  }
   const env = sensitive
     ? await sensitiveOpenCodeEnvironment(executable, cwd, request.model)
     : stateless
