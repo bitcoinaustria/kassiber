@@ -881,8 +881,7 @@ the model takes no effort, and moves there when it is open. Opening the picker o
 any of its sections reads only the provider list and cached check results; it
 never contacts a provider.
 
-The **All / Local** control filters the inventory by the posture Kassiber can
-prove. Model rows show both their source namespace and privacy posture.
+Model rows show both their source namespace and privacy posture.
 OpenCode model IDs identify their source provider (`omlx/...`, `ollama/...`,
 `opencode/...`). OpenCode's model list carries no endpoint — `api.url` is empty
 for locally served models — so the route is judged by that source provider's

@@ -75,7 +75,6 @@ import {
   canonicalModelFavorites,
   dedupedProviderAliases,
   dedupeProviderRows,
-  filterModelsByPrivacy,
   httpModelRunsAssistant,
   modelPrivacyPosture,
   storedModelFavoritesFor,
@@ -134,7 +133,6 @@ export function ProviderModelPicker({
   );
   const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false);
   const open = controlledOpen ?? uncontrolledOpen;
-  const [localOnly, setLocalOnly] = React.useState(false);
   const [showAllModels, setShowAllModels] = React.useState(false);
   const searchInputRef = React.useRef<HTMLInputElement>(null);
   const triggerRef = React.useRef<HTMLButtonElement>(null);
@@ -355,7 +353,7 @@ export function ProviderModelPicker({
       ),
     [shownFavorites],
   );
-  const usableGroups = React.useMemo(
+  const visibleGroups = React.useMemo(
     () =>
       groupedRows.map(({ provider, models: providerModels }) => {
         if (isCliProvider(provider)) {
@@ -377,19 +375,6 @@ export function ProviderModelPicker({
       }),
     [groupedRows, keptModelKeys, showAllModels, value],
   );
-  const visibleGroups = React.useMemo(() => {
-    if (!localOnly) return usableGroups;
-    return usableGroups
-      .map(({ provider, models: providerModels, hiddenCount }) => ({
-        provider,
-        models: filterModelsByPrivacy(provider, providerModels, true),
-        hiddenCount,
-      }))
-      .filter(
-        ({ provider, models: providerModels }) =>
-          provider.kind === "local" || providerModels.length > 0,
-      );
-  }, [usableGroups, localOnly]);
 
   const selectedModelRow = value
     ? groupedRows
@@ -718,8 +703,6 @@ export function ProviderModelPicker({
                 groups={visibleGroups}
                 value={value}
                 favorites={shownFavorites}
-                localOnly={localOnly}
-                onLocalOnlyChange={setLocalOnly}
                 showAllModels={showAllModels}
                 onShowAllModelsChange={setShowAllModels}
                 discoveryByProvider={discoveryByProvider}

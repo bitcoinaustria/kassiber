@@ -96,8 +96,6 @@ export function ModelPickerContent({
   groups,
   value,
   favorites,
-  localOnly,
-  onLocalOnlyChange,
   showAllModels,
   onShowAllModelsChange,
   discoveryByProvider,
@@ -111,12 +109,10 @@ export function ModelPickerContent({
   docked = false,
   onFocusEffort,
 }: {
-  /** Providers and their known models, already narrowed by the Local filter. */
+  /** Enabled providers and their known models. */
   groups: ModelPickerProviderGroup[];
   value: AssistantModelSelection;
   favorites: NonNullable<AssistantModelSelection>[];
-  localOnly: boolean;
-  onLocalOnlyChange: (localOnly: boolean) => void;
   /** List models that cannot run the assistant too. */
   showAllModels: boolean;
   onShowAllModelsChange: (showAll: boolean) => void;
@@ -166,8 +162,8 @@ export function ModelPickerContent({
     [groups],
   );
 
-  // A provider hidden by the Local filter (or removed in Settings) cannot stay
-  // the active view; fall back to the first remaining provider.
+  // A provider removed in Settings cannot stay the active view; fall back
+  // to the first remaining provider.
   const activeView = React.useMemo<ModelPickerView>(
     () =>
       view === null
@@ -221,14 +217,11 @@ export function ModelPickerContent({
         const model =
           group.models.find((row) => row.id === favorite.model) ?? { id: favorite.model };
         const item = toItem(group.provider, model);
-        // An unverified favorite falls back to the provider's posture, so the
-        // Local filter can only keep it when that posture is local too.
-        if (localOnly && item.posture !== "local") continue;
         items.push(item);
       }
     }
     return items;
-  }, [favorites, groups, localOnly, toItem]);
+  }, [favorites, groups, toItem]);
 
   const items = React.useMemo<PickerItem[]>(() => {
     if (isSearching) {
@@ -552,27 +545,6 @@ export function ModelPickerContent({
               onKeyDown={handleSearchKeyDown}
               className="h-6.5 w-full bg-transparent ps-6 text-sm leading-6.5 text-foreground outline-none placeholder:text-muted-foreground/60"
             />
-          </div>
-          <div
-            className="inline-flex shrink-0 rounded-md bg-muted p-0.5 text-2xs"
-            role="group"
-            aria-label={t("modelPicker.privacyFilter")}
-          >
-            {([false, true] as const).map((local) => (
-              <button
-                key={String(local)}
-                type="button"
-                aria-pressed={localOnly === local}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => onLocalOnlyChange(local)}
-                className={cn(
-                  "rounded-sm px-1.5 py-0.5 text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
-                  localOnly === local && "bg-background text-foreground shadow-xs",
-                )}
-              >
-                {local ? t("modelPicker.localModels") : t("modelPicker.allModels")}
-              </button>
-            ))}
           </div>
         </div>
 

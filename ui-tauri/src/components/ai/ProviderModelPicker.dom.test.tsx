@@ -320,19 +320,6 @@ describe("ProviderModelPicker (mounted)", () => {
     expect(mocks.invoke).not.toHaveBeenCalled();
   });
 
-  it("filters to proven-local models", () => {
-    const { search } = mount();
-    fireEvent.click(screen.getByRole("button", { name: "Local" }));
-    // Remote providers leave the rail; only Ollama is left beside Favorites.
-    expect(
-      screen.getAllByRole("button", { name: /· (remote|local)$/ }).map(
-        (button) => button.getAttribute("aria-label"),
-      ),
-    ).toEqual(["Ollama · local"]);
-    fireEvent.change(search, { target: { value: "gpt" } });
-    expect(screen.getByText("No matching models")).toBeTruthy();
-  });
-
   it("checks only the active provider after the explicit click", async () => {
     mocks.invoke.mockResolvedValue({
       kind: "ai.list_models",
