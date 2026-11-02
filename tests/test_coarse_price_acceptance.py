@@ -206,5 +206,18 @@ class CoarsePriceAcceptanceTest(unittest.TestCase):
         self.assertFalse(_pricing_needs_review({"pricing_quality": "exact"}))
 
 
+class ReviewedPriceComparisonTest(unittest.TestCase):
+    def test_trailing_zeros_name_the_same_price(self):
+        self.assertTrue(pricing.same_reviewed_price("rate:3197.6", "rate:3197.60"))
+        self.assertTrue(pricing.same_reviewed_price("value:3200", "value:3200.00"))
+
+    def test_a_different_price_or_field_is_reviewed_again(self):
+        self.assertFalse(pricing.same_reviewed_price("rate:3197.6", "rate:3197.61"))
+        self.assertFalse(pricing.same_reviewed_price("rate:3197.6", "value:3197.6"))
+        self.assertFalse(pricing.same_reviewed_price("rate:x", "rate:3197.6"))
+        self.assertFalse(pricing.same_reviewed_price(None, "rate:1"))
+        self.assertFalse(pricing.same_reviewed_price("rate:1", None))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -7,7 +7,7 @@ accounting values and review decisions should use these typed provenance
 fields wherever possible.
 """
 
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any, Mapping
 
 from ..msat import dec
@@ -79,6 +79,26 @@ def reviewed_price(row: Mapping[str, Any]) -> str | None:
     if value is not None and value > 0:
         return f"value:{format(value, 'f')}"
     return None
+
+
+def same_reviewed_price(accepted: str | None, reviewed: str | None) -> bool:
+    """Whether an accepted review still names the price, digit for digit.
+
+    ``rate:3197.6`` and ``rate:3197.60`` are one price; a stored or rebuilt
+    decimal may carry trailing zeros, which must not hold the row again.
+    """
+    if not accepted or not reviewed:
+        return False
+    if accepted == reviewed:
+        return True
+    accepted_kind, _, accepted_amount = accepted.partition(":")
+    reviewed_kind, _, reviewed_amount = reviewed.partition(":")
+    if accepted_kind != reviewed_kind:
+        return False
+    try:
+        return Decimal(accepted_amount) == Decimal(reviewed_amount)
+    except (InvalidOperation, ValueError):
+        return False
 
 
 def legacy_source_for(source_kind: str | None) -> str | None:

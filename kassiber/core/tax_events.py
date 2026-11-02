@@ -431,7 +431,7 @@ def _pricing_needs_review(row: Mapping[str, Any]) -> bool:
         if hasattr(row, "keys") and "pricing_review_price" in row.keys()
         else pricing.reviewed_price(row)
     )
-    return accepted != reviewed
+    return not pricing.same_reviewed_price(accepted, reviewed)
 
 
 def _profile_requires_coarse_review(profile: Mapping[str, Any]) -> bool:

@@ -315,8 +315,10 @@ can be reverted on its own. Without `transaction_ids`, the plan names every
 current `pricing_review_required` case, so the artifact and receipt list each
 one. Naming a transaction that no longer waits on that review fails with
 `review_case_changed`. A chat plan holds about 1000 ids; the CLI takes up to
-5000 per operation. Cases with that reason list `accept_coarse_prices`
-first in `supported_operations`. In the desktop, the cause's card offers it
+5000 per operation. Cases with that reason whose transaction has a coarse
+price of its own list `accept_coarse_prices` first in `supported_operations`;
+a leg that clears with it does not. The accepted price is compared by value,
+so a rebuild that writes `3197.60` for `3197.6` does not hold it again. In the desktop, the cause's card offers it
 as **Accept these prices**, previewed and confirmed once.
 
 Acquisition review is available in the desktop Tax tab, the CLI and chat. It
