@@ -13206,8 +13206,8 @@
   {
     "id": "quantity-admission-network-liquidv1",
     "file": "crates/custody/src/quantity/mod.rs",
-    "find": "\"liquidv1\" => \"main\"",
-    "replace": "\"liquidv1\" => \"changed\"",
+    "find": "\"liquidv1\" => Some(\"main\")",
+    "replace": "\"liquidv1\" => Some(\"changed\")",
     "expect_failing": [
       "quantity_arbitration_vectors"
     ],
@@ -13216,8 +13216,8 @@
   {
     "id": "quantity-admission-network-liquidtestnet",
     "file": "crates/custody/src/quantity/mod.rs",
-    "find": "\"liquidtestnet\" => \"test\"",
-    "replace": "\"liquidtestnet\" => \"changed\"",
+    "find": "\"liquidtestnet\" => Some(\"test\")",
+    "replace": "\"liquidtestnet\" => Some(\"changed\")",
     "expect_failing": [
       "quantity_arbitration_vectors"
     ],
@@ -13226,8 +13226,8 @@
   {
     "id": "quantity-admission-network-elementsregtest",
     "file": "crates/custody/src/quantity/mod.rs",
-    "find": "\"elementsregtest\" => \"regtest\"",
-    "replace": "\"elementsregtest\" => \"changed\"",
+    "find": "\"elementsregtest\" => Some(\"regtest\")",
+    "replace": "\"elementsregtest\" => Some(\"changed\")",
     "expect_failing": [
       "quantity_arbitration_vectors"
     ],
@@ -20657,7 +20657,7 @@
     "id": "projection-hash-admission-order",
     "file": "crates/custody/src/finalized_projection.rs",
     "find": "    // int(None) fails, so rows without closed authority have no chain order.\n    if row[\"observation_authority_version\"].is_null()",
-    "replace": "    let _ = observed_hash(row)?;\n    if row[\"observation_authority_version\"].is_null()",
+    "replace": "    let _ = observed_hash(&row.value())?;\n    if row[\"observation_authority_version\"].is_null()",
     "expect_failing": [
       "projection_fee_row_vectors"
     ],
@@ -20736,8 +20736,8 @@
   {
     "id": "projection2-slice-quantity",
     "file": "crates/custody/src/finalized_projection/principal.rs",
-    "find": "number(&(&end - &start))",
-    "replace": "number(&end)",
+    "find": "        base.set(\"amount\", Value::from(amount));",
+    "replace": "        base.set(\"amount\", Value::from(end));",
     "expect_failing": [
       "projection_slice_pricing_vectors"
     ],
@@ -21106,8 +21106,8 @@
   {
     "id": "projection2-slice-start",
     "file": "crates/custody/src/finalized_projection/principal.rs",
-    "find": "    base.set(\"custody_slice_start_msat\", number(&start));",
-    "replace": "    base.set(\"custody_slice_start_msat\", json!(0));",
+    "find": "        base.set(\"custody_slice_start_msat\", Value::from(start));",
+    "replace": "        base.set(\"custody_slice_start_msat\", json!(0));",
     "expect_failing": [
       "projection_slice_pricing_vectors"
     ],
@@ -21116,8 +21116,8 @@
   {
     "id": "projection2-slice-end",
     "file": "crates/custody/src/finalized_projection/principal.rs",
-    "find": "    base.set(\"custody_slice_end_msat\", number(&end));",
-    "replace": "    base.set(\"custody_slice_end_msat\", json!(0));",
+    "find": "        base.set(\"custody_slice_end_msat\", Value::from(end));",
+    "replace": "        base.set(\"custody_slice_end_msat\", json!(0));",
     "expect_failing": [
       "projection_slice_pricing_vectors"
     ],
@@ -24013,16 +24013,6 @@
       "txid_names_match_python_normalization"
     ],
     "rule": "Names longer than every txid name never match."
-  },
-  {
-    "id": "domain-liquid-network",
-    "file": "crates/custody/src/quantity/mod.rs",
-    "find": "            Cow::Borrowed(\"liquidv1\") => Cow::Borrowed(\"main\"),",
-    "replace": "            Cow::Borrowed(\"liquidv1\") => Cow::Borrowed(\"liquidv1\"),",
-    "expect_failing": [
-      "quantity_arbitration_vectors"
-    ],
-    "rule": "Liquid mainnet postings belong to the main network domain."
   },
   {
     "id": "record-scope-slot",

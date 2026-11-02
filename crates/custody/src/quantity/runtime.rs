@@ -367,7 +367,7 @@ fn component_claims_observed(
         .flat_map(|e| e.snapshots())
         .map(|s| text(&s["quantity_hash"]))
         .collect();
-    let mut components = components.to_vec();
+    let mut components: Vec<&Value> = components.iter().collect();
     components.sort_by_cached_key(|c| text(&c["id"]));
     let mut claims = Vec::new();
     let mut issues = Vec::new();

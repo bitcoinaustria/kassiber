@@ -11,8 +11,8 @@ pub(super) fn validate(
 ) -> Result<Value, Error> {
     let mut issues = Vec::new();
     let mut warnings = Vec::new();
-    let mut by_transaction: BTreeMap<String, Vec<Value>> = BTreeMap::new();
-    let mut rows: BTreeMap<String, Value> = BTreeMap::new();
+    let mut by_transaction: BTreeMap<String, Vec<&Value>> = BTreeMap::new();
+    let mut rows: BTreeMap<String, &Value> = BTreeMap::new();
     let mut excluded = BTreeSet::new();
     for l in legs {
         let tx = &l["transaction_id"];
@@ -50,15 +50,12 @@ pub(super) fn validate(
         if !anchor.is_null() && pystr(anchor) != id {
             issues.push(json!({"code":"anchor_transaction_identity_mismatch","leg_id":l["id"],"transaction_id":id,"anchor_transaction_id":pystr(anchor)}));
         }
-        by_transaction
-            .entry(id.clone())
-            .or_default()
-            .push(l.clone());
+        by_transaction.entry(id.clone()).or_default().push(l);
         let Some(row) = snapshot.anchors.get(&id).filter(|r| !r.is_null()) else {
             issues.push(json!({"code":"anchor_transaction_missing","transaction_id":id}));
             continue;
         };
-        rows.insert(id.clone(), row.clone());
+        rows.insert(id.clone(), row);
         issues.extend(anchor_scope_issues(l, row));
         if truth(&row["excluded"]) && excluded.insert(id.clone()) {
             issues.push(json!({"code":"anchor_transaction_excluded","message":"an imported transaction anchor is excluded from journals; supersede the component or include the evidence again","transaction_id":id}));

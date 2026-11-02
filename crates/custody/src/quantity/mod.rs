@@ -128,21 +128,14 @@ impl Domain {
     /// The domain's network and exposure, borrowed where the observation
     /// spells them.
     pub fn key<O: Obs + ?Sized>(v: &O) -> (Cow<'_, str>, Cow<'_, str>) {
-        let network = match text_key(&v["event_key"]["network"]) {
-            Cow::Borrowed("liquidv1") => Cow::Borrowed("main"),
-            Cow::Borrowed("liquidtestnet") => Cow::Borrowed("test"),
-            Cow::Borrowed("elementsregtest") => Cow::Borrowed("regtest"),
-            Cow::Owned(network) => Cow::Owned(
-                match network.as_str() {
-                    "liquidv1" => "main",
-                    "liquidtestnet" => "test",
-                    "elementsregtest" => "regtest",
-                    other => other,
-                }
-                .to_owned(),
-            ),
-            network => network,
+        let network = text_key(&v["event_key"]["network"]);
+        let mapped = match network.as_ref() {
+            "liquidv1" => Some("main"),
+            "liquidtestnet" => Some("test"),
+            "elementsregtest" => Some("regtest"),
+            _ => None,
         };
+        let network = mapped.map_or(network, Cow::Borrowed);
         let asset = text_key(&v["asset"]);
         let exposure = if matches!(asset.as_ref(), "BTC" | "LBTC") {
             Cow::Borrowed("bitcoin")

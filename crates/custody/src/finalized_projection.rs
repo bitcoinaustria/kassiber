@@ -197,7 +197,8 @@ fn validate_rows<R: row::Fields>(
     rows: &[R],
     pairs: &[Value],
 ) -> Result<(), (&'static str, &'static str)> {
-    let mut ids = crate::fxhash::HashSet::with_capacity_and_hasher(rows.len(), Default::default());
+    let mut ids: crate::fxhash::HashSet<std::borrow::Cow<'_, str>> =
+        crate::fxhash::HashSet::with_capacity_and_hasher(rows.len(), Default::default());
     for row in rows {
         if !codec::truth(row.field("custody_finalized_tax_projection")) {
             return Err((
