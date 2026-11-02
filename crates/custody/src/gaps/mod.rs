@@ -172,7 +172,7 @@ pub fn stage(
     drop(span);
     compute_rows(
         &snapshot.gap_worklist.rows,
-        |row| normalize::leg(&Value::Object(row.clone().into_map()), &BTreeSet::new()),
+        |row| normalize::leg(row, &BTreeSet::new()),
         snapshot.gap_worklist.large_book,
         &ignored,
         &accounting,

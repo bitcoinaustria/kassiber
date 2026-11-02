@@ -230,14 +230,17 @@ fn run_admitted(
     finalized: bool,
     projection_rows: Vec<serde_json::Value>,
 ) -> Result<Stages, Refusal> {
+    // Evidence enrichment is pure; compute it first so components can share
+    // it, and report its refusal only at the evidence stage.
+    let prepared = evidence::prepare(snapshot);
     let span = timing::span("components+migration");
-    let components = components::compute(snapshot)
+    let components = components::compute_with(snapshot, prepared.as_ref().ok())
         .map_err(|error| Refusal::new("components", error.code, error.message))?;
     let migration = interpretation::migration_quarantines(snapshot)
         .map_err(|code| Refusal::code("components", code))?;
     drop(span);
     let span = timing::span("evidence");
-    let evidence = evidence::stage(snapshot)
+    let evidence = evidence::stage_prepared(snapshot, prepared)
         .map_err(|error| Refusal::new("evidence", error.code, error.message))?;
     drop(span);
     let span = timing::span("interpretation");

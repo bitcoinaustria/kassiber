@@ -111,10 +111,20 @@ impl Commitment {
         }
         let quantity_hash = codec::sha256(&preimage);
         let vout = codec::from_json(row.at("swap_refund_funding_vout"))?;
-        let raw = match override_raw {
-            Some(raw) => raw,
-            None if row.at("raw_json").is_null() => Py::Dict(vec![]),
-            None => raw_py(row.at("raw_json"), "unparsed_text")?,
+        let raw: Cow<'_, Py> = match (override_raw, row.at("raw_json"), row.loaded_raw()) {
+            (Some(raw), _, _) => Cow::Owned(raw),
+            (None, Value::Null, _) => Cow::Owned(Py::Dict(vec![])),
+            // raw_py of a cached string: empty is an empty object, and
+            // unparsable text is kept opaque.
+            (None, Value::String(s), Some(loaded)) => match loaded {
+                _ if s.is_empty() => Cow::Owned(Py::Dict(vec![])),
+                Ok(raw) => Cow::Borrowed(raw),
+                Err(()) => Cow::Owned(Py::Dict(vec![(
+                    Key::Str("unparsed_text".into()),
+                    Py::Str(s.as_str().into()),
+                )])),
+            },
+            (None, raw, _) => Cow::Owned(raw_py(raw, "unparsed_text")?),
         };
         let options = Options::new()
             .sort_keys(true)
@@ -144,7 +154,7 @@ impl Commitment {
         payload_json.push_str(",\"quantity\":");
         payload_json.push_str(&preimage);
         payload_json.push_str(",\"raw_json\":");
-        let raw_result = kassiber_pyjson::dumps_into(&raw, &options, 1, &mut payload_json);
+        let raw_result = kassiber_pyjson::dumps_into(raw.as_ref(), &options, 1, &mut payload_json);
         payload_json.push_str(",\"schema_version\":1,\"swap_refund_funding_txid\":");
         quoted(
             &string(row.at("swap_refund_funding_txid")),
@@ -158,7 +168,7 @@ impl Commitment {
                 &json!({"schema_version":1,"quantity":super::quantity_payload_of(row,quantity.key)?,"fingerprint":text(row.at("fingerprint")),"occurred_at":text(row.at("occurred_at")),"confirmed_at":text(row.at("confirmed_at")),"kind":text(row.at("kind")),"payment_hash":text(row.at("payment_hash")),"payment_hash_source":text(row.at("payment_hash_source")),"swap_refund_funding_txid":text(row.at("swap_refund_funding_txid")),"swap_refund_funding_vout":row.at("swap_refund_funding_vout")}),
             )?;
             if let Py::Dict(values) = &mut detail {
-                values.push((Key::Str("raw_json".into()), raw));
+                values.push((Key::Str("raw_json".into()), raw.into_owned()));
             }
             payload_json = codec::dumps(&detail, false).map_err(Error::encoding)?;
         }

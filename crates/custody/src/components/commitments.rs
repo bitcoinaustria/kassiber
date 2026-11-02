@@ -277,8 +277,8 @@ impl Observation {
     }
 }
 
-fn simple_detail(row: &Value) -> bool {
-    let raw = &row["raw_json"];
+fn simple_detail<F: crate::fields::Fields + ?Sized>(row: &F) -> bool {
+    let raw = row.at("raw_json");
     let safe_raw = raw.is_null()
         || raw.as_str().is_some_and(|s| {
             s.len() <= 4096
@@ -290,24 +290,28 @@ fn simple_detail(row: &Value) -> bool {
                     < 64
         });
     safe_raw
-        && (row["swap_refund_funding_vout"].is_null()
-            || row["swap_refund_funding_vout"].as_i64().is_some())
+        && (row.at("swap_refund_funding_vout").is_null()
+            || row.at("swap_refund_funding_vout").as_i64().is_some())
 }
 
-fn build(row: &Value, key: evidence::EventKey, pool: &mut Pool) -> Result<Observation, Error> {
-    let transaction = text(&row["id"]);
-    let anchor = if truth(&row["journal_transaction_id"]) {
-        text(&row["journal_transaction_id"])
+fn build<F: crate::fields::Fields + ?Sized>(
+    row: &F,
+    key: evidence::EventKey,
+    pool: &mut Pool,
+) -> Result<Observation, Error> {
+    let transaction = text(row.at("id"));
+    let anchor = if truth(row.at("journal_transaction_id")) {
+        text(row.at("journal_transaction_id"))
     } else {
         transaction.clone()
     };
-    let wallet = text(&row["wallet_id"]);
-    let asset = text(&row["asset"]).py_upper();
-    let direction = text(&row["direction"]).py_lower();
-    let includes_fee = truth(&row["amount_includes_fee"]);
+    let wallet = text(row.at("wallet_id"));
+    let asset = text(row.at("asset")).py_upper();
+    let direction = text(row.at("direction")).py_lower();
+    let includes_fee = truth(row.at("amount_includes_fee"));
     let small = |v: &Value| if v.is_null() { Some(0) } else { v.as_i64() };
-    let fast = small(&row["amount"])
-        .zip(small(&row["fee"]))
+    let fast = small(row.at("amount"))
+        .zip(small(row.at("fee")))
         .filter(|(amount, fee)| {
             simple_detail(row)
                 && !transaction.is_empty()
@@ -401,12 +405,76 @@ impl Native {
     }
 }
 
-pub(super) fn native_context(snapshot: &Snapshot) -> Result<Vec<Observation>, Error> {
+/// The rows the authoring view enriches: active rows of the profile.
+fn authored(r: &crate::snapshot::Record, profile: &Value) -> bool {
+    r.get("profile_id") == Some(profile) && !truth(&r["excluded"])
+}
+
+/// Evidence's enrichment is this authoring view's enrichment when every row
+/// is authored and has no closed provenance: both enrich the same rows, and
+/// only provenance distinguishes them.
+fn shared_enrichment<'a>(
+    snapshot: &Snapshot,
+    profile: &Value,
+    prepared: Option<&'a evidence::Prepared>,
+) -> Option<&'a evidence::Prepared> {
+    prepared.filter(|_| {
+        snapshot.transactions.iter().all(|r| {
+            authored(r, profile)
+                && r.get("observation_authority_version")
+                    .is_none_or(Value::is_null)
+        })
+    })
+}
+
+/// Keep one built observation: a later valid observation of a transaction
+/// replaces it in place; recoverable failures skip the row.
+fn keep(
+    observations: &mut Vec<Observation>,
+    positions: &mut HashMap<Rc<str>, usize>,
+    built: Result<Observation, Error>,
+) -> Result<(), Error> {
+    match built {
+        Ok(o) => {
+            if let Some(&at) = positions.get(&o.transaction) {
+                observations[at] = o;
+            } else {
+                positions.insert(o.transaction.clone(), observations.len());
+                observations.push(o);
+            }
+        }
+        Err(e) if e.is_value_or_type() => {}
+        Err(e) => return Err(e),
+    }
+    Ok(())
+}
+
+pub(super) fn native_context(
+    snapshot: &Snapshot,
+    prepared: Option<&evidence::Prepared>,
+) -> Result<Vec<Observation>, Error> {
     let profile = json!(pystr(&snapshot.profile["id"]));
+    let mut observations = Vec::new();
+    let mut positions: HashMap<Rc<str>, usize> = HashMap::new();
+    let mut pool = Pool::default();
+    if let Some(prepared) = shared_enrichment(snapshot, &profile, prepared) {
+        let records = &snapshot.transactions;
+        let mut rows: Vec<usize> = (0..records.len()).collect();
+        rows.sort_by_cached_key(|at| order(&records[*at]));
+        let _span = crate::timing::span("components.native.observations");
+        for at in rows {
+            let row = prepared.row(at, records);
+            let built = prepared
+                .key(at, records)
+                .and_then(|key| build(&row, key, &mut pool));
+            keep(&mut observations, &mut positions, built)?;
+        }
+        return Ok(observations);
+    }
     let mut rows: Vec<_> = snapshot
         .transactions
         .iter()
-        .filter(|r| r.get("profile_id") == Some(&profile) && !truth(&r["excluded"]))
+        .filter(|r| authored(r, &profile))
         .map(WithoutProvenance)
         .collect();
     rows.sort_by_cached_key(|row| order(row.0));
@@ -414,22 +482,9 @@ pub(super) fn native_context(snapshot: &Snapshot) -> Result<Vec<Observation>, Er
     let rows = evidence::enriched_rows(&rows)?;
     drop(span);
     let _span = crate::timing::span("components.native.observations");
-    let mut observations = Vec::new();
-    let mut positions: HashMap<Rc<str>, usize> = HashMap::new();
-    let mut pool = Pool::default();
     for row in &rows {
-        match evidence::event_key(row).and_then(|key| build(row, key, &mut pool)) {
-            Ok(o) => {
-                if let Some(&at) = positions.get(&o.transaction) {
-                    observations[at] = o;
-                } else {
-                    positions.insert(o.transaction.clone(), observations.len());
-                    observations.push(o);
-                }
-            }
-            Err(e) if e.is_value_or_type() => continue,
-            Err(e) => return Err(e),
-        }
+        let built = evidence::event_key(row).and_then(|key| build(row, key, &mut pool));
+        keep(&mut observations, &mut positions, built)?;
     }
     Ok(observations)
 }
@@ -652,6 +707,60 @@ mod tests {
     }
 
     #[test]
+    fn native_support_shares_evidence_enrichment() {
+        let mut shared_books = 0;
+        for fixture in [
+            include_str!("../../../../tests/fixtures/custody_evidence_cases.json"),
+            include_str!("../../../../tests/fixtures/custody_graph_cases.json"),
+            include_str!("../../../../tests/fixtures/custody_component_cases.json"),
+            include_str!("../../../../tests/fixtures/custody_interpretation_cases.json"),
+        ] {
+            let cases: Vec<Value> = serde_json::from_str(fixture).unwrap();
+            for case in cases {
+                let Ok(snapshot) = serde_json::from_value::<Snapshot>(case["input"].clone()) else {
+                    continue;
+                };
+                if snapshot.profile.get("id").is_none()
+                    || snapshot.transactions.iter().any(|r| {
+                        ["occurred_at", "created_at", "id", "excluded"]
+                            .iter()
+                            .any(|k| r.get(k).is_none())
+                    })
+                {
+                    continue;
+                }
+                let Ok(prepared) = crate::evidence::prepare(&snapshot) else {
+                    continue;
+                };
+                let facts = |o: &Observation| {
+                    (
+                        o.transaction.to_string(),
+                        (*o.event).clone(),
+                        o.amount.clone(),
+                        o.fee.clone(),
+                        o.hash().to_owned(),
+                    )
+                };
+                let outcome = |result: Result<Vec<Observation>, Error>| {
+                    result
+                        .map(|o| o.iter().map(facts).collect::<Vec<_>>())
+                        .map_err(|e| (e.code, e.message))
+                };
+                let profile = json!(pystr(&snapshot.profile["id"]));
+                shared_books +=
+                    usize::from(shared_enrichment(&snapshot, &profile, Some(&prepared)).is_some());
+                assert_eq!(
+                    outcome(native_context(&snapshot, Some(&prepared))),
+                    outcome(native_context(&snapshot, None)),
+                    "{}",
+                    case["case"]
+                );
+            }
+        }
+        assert!(shared_books > 20, "{shared_books}");
+    }
+
+    #[test]
     fn native_support_keeps_replacement_slots_and_refusal_order() {
         let mut snapshot = Snapshot {
             profile: serde_json::from_value(json!({"id":"profile"})).unwrap(),
@@ -672,7 +781,23 @@ mod tests {
                 .transactions
                 .push(serde_json::from_value(r).unwrap());
         }
-        let observations = native_context(&snapshot).unwrap();
+        let observations = native_context(&snapshot, None).unwrap();
+        // Evidence's enrichment yields the same authoring observations.
+        let prepared = crate::evidence::prepare(&snapshot).unwrap();
+        let shared = native_context(&snapshot, Some(&prepared)).unwrap();
+        let facts = |o: &Observation| {
+            (
+                o.transaction.to_string(),
+                (*o.event).clone(),
+                o.amount.clone(),
+                o.fee.clone(),
+                o.hash().to_owned(),
+            )
+        };
+        assert_eq!(
+            observations.iter().map(facts).collect::<Vec<_>>(),
+            shared.iter().map(facts).collect::<Vec<_>>()
+        );
         assert_eq!(observations.len(), 2);
         assert_eq!(observations[0].transaction.as_ref(), "a");
         assert_eq!(observations[0].event.native_event_id, "new");
@@ -684,7 +809,7 @@ mod tests {
             .transactions
             .push(serde_json::from_value(r).unwrap());
         assert_eq!(
-            native_context(&snapshot).err().unwrap().code,
+            native_context(&snapshot, None).err().unwrap().code,
             "OverflowError"
         );
     }

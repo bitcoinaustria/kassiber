@@ -12,6 +12,12 @@ use std::{collections::BTreeSet, str::FromStr};
 pub(super) enum Row<'a> {
     Value(&'a Value),
     Fields(&'a serde_json::Map<String, Value>),
+    Record(&'a crate::snapshot::Record),
+}
+impl<'a> From<&'a crate::snapshot::Record> for Row<'a> {
+    fn from(row: &'a crate::snapshot::Record) -> Self {
+        Self::Record(row)
+    }
 }
 impl<'a> From<&'a Value> for Row<'a> {
     fn from(row: &'a Value) -> Self {
@@ -28,6 +34,7 @@ impl Row<'_> {
         match self {
             Self::Value(row) => row.get(key),
             Self::Fields(row) => row.get(key),
+            Self::Record(row) => row.get(key),
         }
     }
     fn scope(&self) -> Result<(String, String), crate::components::Error> {

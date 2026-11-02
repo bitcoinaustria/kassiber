@@ -149,10 +149,18 @@ pub fn event_key(row: &Value) -> Result<EventKey, Error> {
 pub(crate) fn event_key_of<F: Fields + ?Sized>(row: &F) -> Result<EventKey, Error> {
     let raw = crate::graph::transfer_object_ref(row.at("raw_json"));
     let (chain, network) = scope_of(row)?;
-    let raw_ordered = if let Some(s) = row.at("raw_json").as_str() {
-        codec::loads(s).unwrap_or(Py::Null)
-    } else {
-        codec::from_json(row.at("raw_json"))?
+    let null = Py::Null;
+    let parsed;
+    let raw_ordered = match (row.at("raw_json").as_str(), row.loaded_raw()) {
+        (Some(_), Some(loaded)) => loaded.as_ref().unwrap_or(&null),
+        (Some(s), None) => {
+            parsed = codec::loads(s).unwrap_or(Py::Null);
+            &parsed
+        }
+        (None, _) => {
+            parsed = codec::from_json(row.at("raw_json"))?;
+            &parsed
+        }
     };
     fn member<'a>(value: &'a Py, name: &str) -> Option<&'a Py> {
         if let Py::Dict(items) = value {
@@ -166,9 +174,9 @@ pub(crate) fn event_key_of<F: Fields + ?Sized>(row: &F) -> Result<EventKey, Erro
     }
     let mut candidates = Vec::new();
     for payload in [
-        Some(&raw_ordered),
-        member(&raw_ordered, "tx"),
-        member(&raw_ordered, "ownership_graph"),
+        Some(raw_ordered),
+        member(raw_ordered, "tx"),
+        member(raw_ordered, "ownership_graph"),
     ]
     .into_iter()
     .flatten()
@@ -532,6 +540,8 @@ pub struct Enriched {
     attribution: Option<Value>,
     native_normalized: Option<Value>,
     duplicate_normalized: Option<Value>,
+    /// `codec::loads` of a string `raw_json`, parsed once for every reader.
+    raw: Option<Result<Py, ()>>,
 }
 impl Enriched {
     pub fn row(&self) -> usize {
@@ -609,6 +619,10 @@ impl<R: RowRecord> Fields for EnrichedRow<'_, R> {
             _ => None,
         }
     }
+
+    fn loaded_raw(&self) -> Option<&Result<Py, ()>> {
+        self.facts.raw.as_ref()
+    }
 }
 
 pub fn enriched_rows<R: RowRecord>(rows: &[R]) -> Result<Vec<Value>, Error> {
@@ -625,7 +639,10 @@ fn enrich_with_keys<R: RowRecord>(
         let original = |key: &str| row.field(key).unwrap_or(&Value::Null);
         let auth = authority_facts(&Retained(row))?;
         let config = crate::graph::transfer_object_ref(original("config_json"));
-        let raw = crate::graph::transfer_object_ref(original("raw_json"));
+        let loaded = original("raw_json")
+            .as_str()
+            .map(|s| codec::loads(s).map_err(|_| ()));
+        let raw = crate::graph::transfer_object_ref_loaded(original("raw_json"), loaded.as_ref());
         let mut chain = if truth(&raw["chain"]) {
             raw["chain"].clone()
         } else {
@@ -650,6 +667,7 @@ fn enrich_with_keys<R: RowRecord>(
             attribution: None,
             native_normalized: None,
             duplicate_normalized: None,
+            raw: loaded,
         })
     };
     let mut result = Vec::with_capacity(rows.len());
@@ -737,7 +755,7 @@ fn enrich_with_keys<R: RowRecord>(
     Ok((result, keys))
 }
 
-pub(crate) fn observation(row: &Value, key: &EventKey) -> Result<Value, Error> {
+pub(crate) fn observation<F: Fields + ?Sized>(row: &F, key: &EventKey) -> Result<Value, Error> {
     observation::Observation::new(row, key).map(|observation| observation.value())
 }
 
@@ -1014,17 +1032,50 @@ impl Evidence {
     }
 }
 
+/// Enriched snapshot rows and the outbound rows' event keys, computed once
+/// for evidence and for the components' native observations.
+pub struct Prepared {
+    enriched: Vec<Enriched>,
+    keys: Vec<Option<EventKey>>,
+}
+impl Prepared {
+    pub(crate) fn row<'a>(&'a self, at: usize, rows: &'a [Record]) -> EnrichedRow<'a, Record> {
+        self.enriched[at].view(rows)
+    }
+    /// The row's event key, as `event_key_of` of its enriched row.
+    pub(crate) fn key(&self, at: usize, rows: &[Record]) -> Result<EventKey, Error> {
+        match &self.keys[at] {
+            Some(key) => Ok(key.clone()),
+            None => event_key_of(&self.row(at, rows)),
+        }
+    }
+}
+
+/// Enrich the snapshot rows; `stage_prepared` reports the outcome in order.
+pub fn prepare(snapshot: &Snapshot) -> Result<Prepared, Error> {
+    let _span = crate::timing::span("evidence.enriched");
+    let (enriched, keys) = enrich_with_keys(&snapshot.transactions)?;
+    Ok(Prepared { enriched, keys })
+}
+
 pub fn stage(snapshot: &Snapshot) -> Result<Evidence, Error> {
+    stage_prepared(snapshot, prepare(snapshot))
+}
+
+/// The evidence stage over an earlier enrichment, whose refusal still
+/// follows the zero-delta refusal.
+pub fn stage_prepared(
+    snapshot: &Snapshot,
+    prepared: Result<Prepared, Error>,
+) -> Result<Evidence, Error> {
     let span = crate::timing::span("evidence.rows");
     let rows = snapshot.rows();
     drop(span);
     let span = crate::timing::span("evidence.zero_delta");
     let non_events = crate::graph::native_zero_delta_ids(rows, snapshot)?;
     drop(span);
-    let span = crate::timing::span("evidence.enriched");
     let records = &snapshot.transactions;
-    let (enriched, keys) = enrich_with_keys(records)?;
-    drop(span);
+    let Prepared { enriched, keys } = prepared?;
     let span = crate::timing::span("evidence.receipts");
     let reconciliations = crate::graph::reconcile_receipts(rows, snapshot)?;
     drop(span);

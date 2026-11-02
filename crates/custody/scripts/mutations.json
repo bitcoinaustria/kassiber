@@ -11556,8 +11556,8 @@
   {
     "id": "REC-OPERATION-04",
     "file": "crates/custody/src/lib.rs",
-    "find": "    let components = components::compute(snapshot)\n        .map_err(|error| Refusal::new(\"components\", error.code, error.message))?;\n    let migration = interpretation::migration_quarantines(snapshot)\n        .map_err(|code| Refusal::code(\"components\", code))?;\n",
-    "replace": "    let migration = interpretation::migration_quarantines(snapshot)\n        .map_err(|code| Refusal::code(\"components\", code))?;\n    let components = components::compute(snapshot)\n        .map_err(|error| Refusal::new(\"components\", error.code, error.message))?;\n",
+    "find": "    let components = components::compute_with(snapshot, prepared.as_ref().ok())\n        .map_err(|error| Refusal::new(\"components\", error.code, error.message))?;\n    let migration = interpretation::migration_quarantines(snapshot)\n        .map_err(|code| Refusal::code(\"components\", code))?;\n",
+    "replace": "    let migration = interpretation::migration_quarantines(snapshot)\n        .map_err(|code| Refusal::code(\"components\", code))?;\n    let components = components::compute_with(snapshot, prepared.as_ref().ok())\n        .map_err(|error| Refusal::new(\"components\", error.code, error.message))?;\n",
     "rule": "Materialize components before migration quarantine admission.",
     "expect_failing": [
       "interpretation_operation_vectors"
@@ -12976,8 +12976,8 @@
   {
     "id": "GAP-120",
     "file": "crates/custody/src/gaps/mod.rs",
-    "find": "|row| normalize::leg(&Value::Object(row.clone().into_map()), &BTreeSet::new()),\n        snapshot.gap_worklist.large_book,",
-    "replace": "|row| normalize::leg(&Value::Object(row.clone().into_map()), &ignored.intersection(&accounting).cloned().collect()),\n        snapshot.gap_worklist.large_book,",
+    "find": "|row| normalize::leg(row, &BTreeSet::new()),\n        snapshot.gap_worklist.large_book,",
+    "replace": "|row| normalize::leg(row, &ignored.intersection(&accounting).cloned().collect()),\n        snapshot.gap_worklist.large_book,",
     "rule": "Normalize all raw worklist rows before applying ignored ids.",
     "expect_failing": [
       "gaps_operation_vectors"
@@ -23447,7 +23447,7 @@
   {
     "id": "native-support-value-refusal",
     "file": "crates/custody/src/components/commitments.rs",
-    "find": "Err(e) if e.is_value_or_type() => continue,",
+    "find": "Err(e) if e.is_value_or_type() => {}",
     "replace": "Err(e) if e.is_value_or_type() => return Err(e),",
     "expect_failing": [
       "native_support_keeps_replacement_slots_and_refusal_order"
@@ -23773,6 +23773,36 @@
       "projection_fee_row_vectors"
     ],
     "rule": "Only rows with closed authority carry chain order evidence."
+  },
+  {
+    "id": "native-shared-enrichment-provenance",
+    "file": "crates/custody/src/components/commitments.rs",
+    "find": "                && r.get(\"observation_authority_version\").is_none_or(Value::is_null)",
+    "replace": "                && true",
+    "expect_failing": [
+      "native_support_shares_evidence_enrichment"
+    ],
+    "rule": "Evidence enrichment is shared only by rows without closed provenance."
+  },
+  {
+    "id": "native-shared-enrichment-order",
+    "file": "crates/custody/src/components/commitments.rs",
+    "find": "        rows.sort_by_cached_key(|at| order(&records[*at]));",
+    "replace": "        rows.reverse();",
+    "expect_failing": [
+      "native_support_shares_evidence_enrichment"
+    ],
+    "rule": "Shared native observations keep the authoring row order and replacement slots."
+  },
+  {
+    "id": "native-shared-enrichment-key",
+    "file": "crates/custody/src/evidence.rs",
+    "find": "            Some(key) => Ok(key.clone()),\n            None => event_key_of(&self.row(at, rows)),",
+    "replace": "            Some(key) => Ok(key.clone()),\n            None => Err(\"canonical events require chain, network, namespace, and id\".into()),",
+    "expect_failing": [
+      "native_support_shares_evidence_enrichment"
+    ],
+    "rule": "Shared native observations key inbound rows from their enriched rows."
   },
   {
     "id": "R4-evidence-alias-slot-index",

@@ -593,6 +593,14 @@ fn header_order(a: &Component, b: &Component) -> Result<std::cmp::Ordering, Erro
 }
 
 pub fn compute(snapshot: &Snapshot) -> Result<Value, Error> {
+    compute_with(snapshot, None)
+}
+
+/// `compute`, reusing evidence's enrichment where it is this stage's own.
+pub fn compute_with(
+    snapshot: &Snapshot,
+    prepared: Option<&crate::evidence::Prepared>,
+) -> Result<Value, Error> {
     let profile = pystr(&snapshot.profile["id"]);
     let mut components: Vec<_> = snapshot
         .components
@@ -660,7 +668,7 @@ pub fn compute(snapshot: &Snapshot) -> Result<Value, Error> {
     let native = if components.is_empty() {
         Vec::new()
     } else {
-        commitments::native_context(snapshot)?
+        commitments::native_context(snapshot, prepared)?
     };
     let native = commitments::Native::new(native);
     drop(span);

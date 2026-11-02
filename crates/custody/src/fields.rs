@@ -12,6 +12,11 @@ pub(crate) trait Fields {
     fn at(&self, key: &str) -> &Value {
         self.get(key).unwrap_or(&NULL)
     }
+
+    /// `codec::loads` of this row's string `raw_json`, when the row caches it.
+    fn loaded_raw(&self) -> Option<&Result<kassiber_pyjson::Value, ()>> {
+        None
+    }
 }
 
 impl Fields for Value {
@@ -39,5 +44,9 @@ impl<T: Fields + ?Sized> Fields for &T {
     #[inline]
     fn get(&self, key: &str) -> Option<&Value> {
         (**self).get(key)
+    }
+
+    fn loaded_raw(&self) -> Option<&Result<kassiber_pyjson::Value, ()>> {
+        (**self).loaded_raw()
     }
 }

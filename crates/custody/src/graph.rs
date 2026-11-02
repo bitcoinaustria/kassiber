@@ -98,6 +98,14 @@ impl Deref for TransferValue<'_> {
 }
 
 fn transfer_value(value: &Value) -> TransferValue<'_> {
+    transfer_value_loaded(value, None)
+}
+
+/// `transfer_value`, reusing the caller's `codec::loads` of a string value.
+fn transfer_value_loaded<'v>(
+    value: &'v Value,
+    loaded: Option<&Result<kassiber_pyjson::Value, ()>>,
+) -> TransferValue<'v> {
     fn decoded(value: &kassiber_pyjson::Value) -> Value {
         use kassiber_pyjson::Value as Py;
         match value {
@@ -120,11 +128,15 @@ fn transfer_value(value: &Value) -> TransferValue<'_> {
     }
     match value.as_str() {
         Some(s) => TransferValue::Shared(codec::memo_shared(codec::Memo::Transfer, s, || {
-            codec::loads(s)
-                .ok()
-                .as_ref()
-                .map(decoded)
-                .unwrap_or_else(|| value.clone())
+            let parsed;
+            let loaded = match loaded {
+                Some(loaded) => loaded.as_ref().ok(),
+                None => {
+                    parsed = codec::loads(s).ok();
+                    parsed.as_ref()
+                }
+            };
+            loaded.map(decoded).unwrap_or_else(|| value.clone())
         })),
         None => TransferValue::Borrowed(value),
     }
@@ -134,7 +146,15 @@ pub fn transfer_object(value: &Value) -> Value {
 }
 
 pub(crate) fn transfer_object_ref(value: &Value) -> TransferValue<'_> {
-    let value = transfer_value(value);
+    transfer_object_ref_loaded(value, None)
+}
+
+/// `transfer_object_ref`, reusing the caller's `codec::loads` of a string value.
+pub(crate) fn transfer_object_ref_loaded<'v>(
+    value: &'v Value,
+    loaded: Option<&Result<kassiber_pyjson::Value, ()>>,
+) -> TransferValue<'v> {
+    let value = transfer_value_loaded(value, loaded);
     if value.is_object() {
         value
     } else {
@@ -784,6 +804,18 @@ pub fn normalize_owned_fees(rows: &mut [Value]) -> Result<(), String> {
 type ChainScope = (String, String, String, String);
 
 pub fn reconcile_receipts(rows: &[Value], snapshot: &Snapshot) -> Result<Value, String> {
+    // A group reconciles only receipts of two or more wallets; with at most
+    // one receiving wallet in the book no group can, and scopes are pure.
+    let mut receiving = BTreeSet::new();
+    for row in rows.iter().filter(|r| r["direction"] == "inbound") {
+        receiving.insert(text(&row["wallet_id"]));
+        if receiving.len() > 1 {
+            break;
+        }
+    }
+    if receiving.len() <= 1 {
+        return Ok(Value::Object(serde_json::Map::new()));
+    }
     let mut grouped: Vec<(ChainScope, Vec<Value>)> = Vec::new();
     let mut index = std::collections::HashMap::new();
     for (row, scope) in rows.iter().zip(onchain_scopes(rows)) {

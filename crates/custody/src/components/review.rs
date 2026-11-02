@@ -416,7 +416,7 @@ pub fn materialize_component(snapshot: &Snapshot, component: &Component) -> Resu
         }
     }
     let native = if h["state"] == "active" {
-        commitments::native_context(snapshot)?
+        commitments::native_context(snapshot, None)?
     } else {
         Vec::new()
     };
