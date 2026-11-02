@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from heapq import merge
 
 
 _IDENTIFIER = re.compile(r"[A-Za-z0-9_.-]+")
@@ -15,16 +16,21 @@ secretkey privatekey privkey seed seedphrase seedwords silentpayment silentpayme
 silentpaymentdescriptor silentpaymentsdescriptor silentpaymentkey silentpaymentskey
 silentpaymentmaterial silentpaymentsmaterial silentpaymentscan silentpaymentscan
 silentpaymentscankey silentpaymentsscankey spdescriptor spscan spspend token xprv
-accesstoken refreshtoken apitoken authtoken clientsecret dbpassword apisecret walletpassphrase wif rpcpass pass passwd pwd credentials auth user""".split())
-_PROSE = frozenset("""to instead flag option when requires expected missing with
-without is are was were has have the a an and or for from of in on set use words
-value values argument arguments deprecated reset rotated invalid expired none""".split())
-_RECOVERY = frozenset(("mnemonic", "recoveryphrase", "seed", "seedphrase", "seedwords"))
-_SCHEME = re.compile(r"(?<![A-Za-z0-9+.-])[A-Za-z0-9+.-]+://|(?<![^ \t\r\n\v\f=({\[<>])//")
+accesstoken refreshtoken apitoken authtoken clientsecret dbpassword apisecret walletpassphrase wif rpcpass pass passwd pwd credentials auth user
+credential sessionid sessionkey masterkey encryptionkey signingkey bearer pw pin otp""".split())
+# The delimiter establishes a URL context; spelling the scheme cannot exempt
+# userinfo. The first alternative only preserves the readable scheme prefix.
+_SCHEME = re.compile(r"(?<![A-Za-z0-9+.-])[A-Za-z0-9+.-]+://|://|//")
 _SPACE = " \t\r\n\v\f\u0085\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"
 _LINES = "\r\n\u0085\u2028\u2029"
 _WEAK_NAMES = frozenset(("pass", "user", "auth"))
+# Short names count only as a whole identifier part (`user_id`, not `author`);
+# the shortest only as the final part (`db_pw`, not `spinner` or `pw_hash`).
+_PART_NAMES = frozenset(("user", "auth"))
+_LAST_PART_NAMES = frozenset(("pw", "pin", "otp"))
 _COMMAND_LINE = re.compile(r"(?:^|(?<=[\r\n\u0085\u2028\u2029]))[ \t]*(?:[$>][ \t]+)?(?:cmd|kassiber|bitcoind|bitcoin-cli|electrs|lncli|lightning-cli|curl|python|node|env|sudo|docker)(?=[ \t]|$)", re.ASCII)
+_Span = tuple[int, int, str]
+_ORDERED_NAMES = sorted(_NAMES, key=lambda name: (-len(name), name))
 
 
 def _secret_name(token: str) -> str:
@@ -32,12 +38,11 @@ def _secret_name(token: str) -> str:
     parts = [part.lower().strip("0123456789") for part in _KEY_PARTS.split(token)]
     if parts[-1] in ("hint", "statistics", "file", "stdin", "fd"):
         return ""
-    for end in range(len(parts), 0, -1):
-        for count in range(min(4, end), 0, -1):
-            name = "".join(parts[end - count:end])
-            if name in _NAMES:
-                return name
-    return ""
+    # Identifier composition is not a security boundary (PGPASSWORD, jwtsecret).
+    compact = "".join(parts)
+    return next((name for name in _ORDERED_NAMES if name in compact
+                 and (name not in _PART_NAMES or name in parts)
+                 and (name not in _LAST_PART_NAMES or name == parts[-1])), "")
 
 
 def _quote_at(text: str, pos: int) -> tuple[str, int]:
@@ -63,7 +68,7 @@ def _quoted_end(text: str, pos: int, delimiter: str, limit: int | None = None) -
             return pos + 1, True
         slashes = slashes + 1 if ch == "\\" else 0
         pos += 1
-    return (first_newline if first_newline >= 0 else pos), False
+    return _yaml_end(text, first_newline if first_newline >= 0 else pos), False
 
 
 def _value_boundary(text: str, pos: int) -> bool:
@@ -175,20 +180,22 @@ def _line_end(text: str, pos: int) -> int:
     return pos
 
 
-def _redact_keyed_plain(text: str, original: str | None = None, offsets: list[int] | range | None = None) -> str:
-    source = text if original is None else original
+def _keyed_spans(text: str, offsets: list[int] | range | None = None) -> list[_Span]:
     offsets = range(len(text) + 1) if offsets is None else offsets
-    pieces: list[str] = []
+    spans: list[_Span] = []
     cursor = 0
     commands = iter(_COMMAND_LINE.finditer(text))
     command = next(commands, None)
     command_end = _line_end(text, command.end()) if command else -1
     heads = iter(_url_heads(text))
     head_start, head_end, credential_context = next(heads, (-1, -1, False))
+    previous = None
+    line_start = scanned = 0
     for match in _IDENTIFIER.finditer(text):
         if match.start() < cursor:
             continue
         key = match.group()
+        before, previous = previous, match
         while command and command_end < match.start():
             command = next(commands, None)
             command_end = _line_end(text, command.end()) if command else -1
@@ -196,8 +203,17 @@ def _redact_keyed_plain(text: str, original: str | None = None, offsets: list[in
         name = _secret_name(key)
         if key in ("-u", "-b") or (in_command and key in ("--user", "--cookie")):
             name = "cookie" if key in ("-b", "--cookie") else "credentials"
+        if not name and before is not None and text[before.end():match.start()] in (" ", "\t"):
+            # Spaced names (`api key:`, `"Secret Key":`) still name a secret
+            # when the second word changes what the first one means.
+            name = _secret_name(before.group() + "_" + key)
+            name = "" if name == _secret_name(before.group()) else name
         if not name:
             continue
+        while scanned < match.start():
+            if text[scanned] in _LINES:
+                line_start = scanned + 1
+            scanned += 1
         while head_end < match.start() and head_end >= 0:
             head_start, head_end, credential_context = next(heads, (-1, -1, False))
         in_url = head_start <= match.start() < head_end
@@ -241,12 +257,11 @@ def _redact_keyed_plain(text: str, original: str | None = None, offsets: list[in
                 delimiter *= 3
                 body = pos + len(delimiter)
                 close = text.find(delimiter, body)
-                end, closed = (close + len(delimiter), True) if close >= 0 else (_line_end(text, body), False)
+                end, closed = (close + len(delimiter), True) if close >= 0 else (_yaml_end(text, body), False)
             else:
                 end, closed = _quoted_end(text, body, delimiter)
             if closed and end < len(text) and (not _value_boundary(text, end) or _ambiguous_tail(text, end)):
-                while end < len(text) and text[end] not in _LINES:
-                    end += 1
+                end = _yaml_end(text, end)
             replacement = delimiter + "[redacted]" + (delimiter if closed else "") if start == pos else "[redacted]"
         else:
             end = pos
@@ -254,63 +269,56 @@ def _redact_keyed_plain(text: str, original: str | None = None, offsets: list[in
             while end < len(text) and text[end] not in value_end:
                 end += 1
             token = text[pos:end]
-            if name in _WEAK_NAMES and separator == ":" and not key_quote and pos > 0 and text[pos - 1] in _SPACE and not _ambiguous_tail(text, end) and (_alias_prose(name, token) or (name == "pass" and re.fullmatch(r"[0-9]+", token) and re.search(r"(?:^|[^A-Za-z])tests[ \t]+$", text[max(0, match.start() - 64):match.start()]))):
+            # A plain value owns lines indented deeper than its key (a YAML
+            # continuation), so neither exceptions nor masks stop at the first.
+            line_end = _continued_end(text, pos, match.start() - line_start)
+            whole = text[pos:line_end].strip(" \t")
+            # Exceptions describe the entire value. A familiar first word never
+            # licenses the rest of an otherwise unquoted credential.
+            if separator == ":" and not key_quote and (
+                whole.lower() in ("none", "expired", "(not set)")
+                or (name in _WEAK_NAMES and _alias_prose(name, whole))
+                or (name == "pass" and re.fullmatch(r"[0-9]+", whole)
+                    and re.search(r"(?:^|[^A-Za-z])tests[ \t]+$", text[max(0, match.start() - 64):match.start()]))
+            ):
                 continue
-            if separator == ":" and (token.lower() in ("none", "expired") or text.startswith("(not set)", pos)):
+            if flag and ((not in_command and _help_value(whole))
+                         or (name == "seedwords" and whole in ("12", "15", "18", "21", "24"))):
                 continue
-            if flag and ((not in_command and (end == len(text) or text[end] in _SPACE) and (token.lower() in _PROSE or re.fullmatch(r"[a-z]+[.,;!?:]", token)))
-                         or (name == "seedwords" and token in ("12", "15", "18", "21", "24"))):
-                continue
-            if text[pos:pos + 1] in ("{", "[") or text.startswith("$(", pos):
+            if text[pos:pos + 1] in ("{", "[", "(") or text.startswith(("$(", "${"), pos):
                 end = _balanced_end(text, pos)
-                if end < len(text) and text[end] not in _SPACE:
+                if text[end:_line_end(text, end)].strip(" \t"):
                     end = _line_end(text, end)
-            elif token in ("|", "|-", "|+", ">", ">-", ">+"):
+            elif token in ("|", "|-", "|+", ">", ">-", ">+") or text[pos] in "`<":
                 end = _yaml_end(text, pos)
+            else:
+                # Without a value opener, quotes and words are credential data,
+                # including a stray quote followed by a multi-word passphrase.
+                end = line_end
             header = name == "authorization" or (name in ("cookie", "cookies") and not key_quote and not key.startswith("-"))
-            if header or name in _RECOVERY:
-                while end < len(text) and text[end] not in ((_LINES + ("\"'" if name != "authorization" and separator == "=" else "")) if header else ",;}{&|" + _LINES + "\"'"):
-                    next_key = _IDENTIFIER.match(text, end) if not header else None
-                    if next_key:
-                        tail = next_key.end()
-                        while tail < len(text) and text[tail] in " \t":
-                            tail += 1
-                        if tail < len(text) and text[tail] in ":=":
-                            break
-                        end = next_key.end()
-                    else:
-                        end += 1
-                if header:
-                    # RFC obs-fold: each indented physical line belongs to the header.
-                    while end < len(text):
-                        fold = end
-                        if text.startswith("\r\n", fold):
-                            fold += 2
-                        elif text[fold] in _LINES:
-                            fold += 1
-                        else:
-                            break
-                        if fold == len(text) or text[fold] not in " \t":
-                            break
-                        end = _line_end(text, fold)
-                while end > pos and text[end - 1] in " \t":
-                    end -= 1
-            if _ambiguous_tail(text, end):
-                end = _line_end(text, end)
+            if header:
+                end = _yaml_end(text, pos)
+            while end > pos and text[end - 1] in " \t":
+                end -= 1
             replacement = "[redacted]"
-            if end + 1 < len(text) and text[end] in "\"'" and not _value_boundary(text, end + 1):
-                while end < len(text) and text[end] not in _LINES:
-                    end += 1
         if end <= start:
             continue
-        if in_url and start <= head_end:
-            # Retain a synthetic userinfo terminator: removing a keyed value
-            # must not hide the surrounding username from the URL floor.
-            replacement += "@"
-        pieces.extend((source[offsets[cursor]:offsets[start]], replacement))
+        spans.append((offsets[start], offsets[end], replacement))
         cursor = end
-    pieces.append(source[offsets[cursor]:])
-    return "".join(pieces)
+    return spans
+
+
+def _continued_end(text: str, pos: int, column: int) -> int:
+    end = _line_end(text, pos)
+    while end < len(text):
+        line = end + (2 if text.startswith("\r\n", end) else 1)
+        indent = line
+        while indent < len(text) and text[indent] in " \t":
+            indent += 1
+        if indent - line <= column or indent == len(text) or text[indent] in _LINES:
+            break
+        end = _line_end(text, indent)
+    return end
 
 
 def _flag_value_gap(text: str, key_start: int, after_key: int, pos: int) -> bool:
@@ -335,10 +343,17 @@ def _ambiguous_tail(text: str, end: int) -> bool:
     return not re.fullmatch(r"[a-z]+[.,!?]?|-{1,2}[a-z][a-z-]*|[a-z0-9_.-]+[:=].*", token)
 
 
+def _help_value(value: str) -> bool:
+    return bool(re.fullmatch(
+        r"(?:to set a value\.|instead\.|(?:flag|option) is (?:deprecated|available)\.|"
+        r"(?:to|instead|flag|option|none|missing|the))", value, re.IGNORECASE | re.ASCII,
+    ))
+
+
 def _alias_prose(name: str, value: str) -> bool:
     # A single lowercase password is still a password. Only known status/user
     # prose can exempt a weak alias, and only after a spaced colon / XML tag.
-    return value in ({"alice", "bob", "root", "anonymous"} if name == "user" else
+    return value in ({"alice", "bob", "root", "anonymous", "alice logged in"} if name == "user" else
                      {"ok", "required", "enabled", "disabled", "none", "expired"} if name == "auth" else
                      set())
 
@@ -389,35 +404,73 @@ def _yaml_end(text: str, start: int) -> int:
     return end
 
 
+_VOID_TAGS = frozenset("area base br col embed hr img input link meta param source track wbr".split())
 _TAG = re.compile(r"<(/?)([A-Za-z][A-Za-z0-9_.:-]*)(?![A-Za-z0-9_.:-])([^<>]*)>")
-_ATTR = re.compile(r"(?<![A-Za-z0-9_.:-])([A-Za-z_:][A-Za-z0-9_.:-]*)\s*=\s*([\"'])(.*?)\2", re.ASCII | re.DOTALL)
+_ATTR = re.compile(r"(?<![A-Za-z0-9_.:-])([A-Za-z_:][A-Za-z0-9_.:-]*)[ \t\r\n\v\f]*=[ \t\r\n\v\f]*(?:\"([^\"]*)\"|'([^']*)'|([^ \t\r\n\v\f>]+))", re.ASCII)
+_PAIR = re.compile(r"(?<![A-Za-z0-9_.-])[\"']?(?:name|key)[\"']?[ \t]*[:=][ \t]*[\"']?([A-Za-z0-9_.:-]+)[\"']?[, \t\r\n\v\f]*[\"']?value[\"']?[ \t]*[:=][ \t]*", re.IGNORECASE | re.ASCII)
 
 
-def _redact_xml(text: str) -> str:
-    pieces = []
+def _named_pair_spans(text: str, offsets: list[int] | range | None = None) -> list[_Span]:
+    offsets = range(len(text) + 1) if offsets is None else offsets
+    spans: list[_Span] = []
     cursor = 0
+    for pair in _PAIR.finditer(text):
+        if pair.start() < cursor or not _secret_name(pair[1]):
+            continue
+        start = pair.end()
+        delimiter, body = _quote_at(text, start)
+        if delimiter:
+            end, closed = _quoted_end(text, body, delimiter)
+            replacement = delimiter + "[redacted]" + (delimiter if closed else "")
+        else:
+            end = _yaml_end(text, start)
+            replacement = "[redacted]"
+        spans.append((offsets[start], offsets[end], replacement))
+        cursor = end
+    return spans
+
+
+def _xml_spans(text: str, offsets: list[int] | range | None = None) -> list[_Span]:
+    offsets = range(len(text) + 1) if offsets is None else offsets
+    spans: list[_Span] = []
+    cursor = 0
+    plist_secret = False
     for tag in _TAG.finditer(text):
         if tag.start() < cursor or tag[1]:
             continue
         key = tag[2]
-        if tag[3].lstrip().startswith(("=", ":", "-")):
+        if tag[3].lstrip().startswith((":", "-")):
             continue
         name = _secret_name(key.split(":")[-1])
-        attrs = list(_ATTR.finditer(tag[3]))
-        keyed = any(a[1].lower() in ("key", "name") and _secret_name(a[3]) for a in attrs)
+        attrs = []
+        for attr in _ATTR.finditer(tag[3]):
+            group = next(i for i in (2, 3, 4) if attr[i] is not None)
+            attrs.append((attr[1].split(":")[-1].lower(), attr[group], attr.start(group), attr.end(group)))
+        keyed = any(k in ("key", "name", "type") and _secret_name(v) for k, v, _, _ in attrs)
+        # Even malformed XML like <entrykey="password"value="..."> declares
+        # a secret context; spacing mistakes cannot exempt the value.
+        if tag[3].startswith("="):
+            selector = re.match(r"=[\"']([^\"']+)[\"']", tag[3])
+            keyed = keyed or bool(selector and _secret_name(selector[1]))
         if keyed or name:
-            for value in attrs:
-                if value[1].lower() != "value" or (not keyed and name in _WEAK_NAMES and _alias_prose(name, value[3])):
+            for attr_key, value, value_start, value_end in attrs:
+                if attr_key not in ("value", "content") or (not keyed and name in _WEAK_NAMES and _alias_prose(name, value)):
                     continue
-                start = tag.start(3) + value.start(3)
-                end = tag.start(3) + value.end(3)
-                pieces.extend((text[cursor:start], "[redacted]"))
+                start = tag.start(3) + value_start
+                end = tag.start(3) + value_end
+                spans.append((offsets[start], offsets[end], "[redacted]"))
                 cursor = end
+        closing = "</" + key
+        if key == "key":
+            end = text.find(closing, tag.end())
+            plist_secret = end >= 0 and bool(_secret_name(text[tag.end():end].strip()))
+            continue
+        name = name or ("secret" if plist_secret else "")
+        plist_secret = False
         if not name and not keyed:
             continue
         if tag[3].rstrip().endswith("/"):
             continue
-        closing = "</" + key
         end = text.find(closing, tag.end())
         while end >= 0:
             tail = end + len(closing)
@@ -427,23 +480,37 @@ def _redact_xml(text: str) -> str:
                 break
             end = text.find(closing, tail)
         if end < 0:
-            end = len(text)
+            # HTML void elements such as <input> and <meta> have no body.
+            if key.lower() in _VOID_TAGS:
+                continue
+            end = _yaml_end(text, tag.end())
         value = text[tag.end():end]
         if not keyed and name in _WEAK_NAMES and _alias_prose(name, value.strip()):
             continue
-        pieces.extend((text[cursor:tag.end()], "[redacted]"))
+        spans.append((offsets[tag.end()], offsets[end], "[redacted]"))
         cursor = end
-    pieces.append(text[cursor:])
-    return "".join(pieces)
+    return spans
 
 
-def redact_keyed_secrets(text: str) -> str:
-    text = _redact_xml(text)
-    text = _redact_keyed_plain(text)
-    view, offsets = _url_view(text)
-    if view != text:
-        text = _redact_keyed_plain(view, text, offsets)
-    return text
+def _cli_spans(text: str, offsets: list[int] | range | None = None) -> list[_Span]:
+    offsets = range(len(text) + 1) if offsets is None else offsets
+    spans: list[_Span] = []
+    cursor = 0
+    for match in re.finditer(r"(?<![A-Za-z0-9_])(?:curl[ \t]+-u[ \t]*|sshpass[ \t]+-p[ \t]*|mysql[ \t]+-u[ \t]+[^ \t\r\n]+[ \t]+-p)", text):
+        if match.start() < cursor:
+            continue
+        start = match.end()
+        delimiter, body = _quote_at(text, start)
+        if delimiter:
+            end, closed = _quoted_end(text, body, delimiter)
+            replacement = delimiter + "[redacted]" + (delimiter if closed else "")
+        else:
+            end = _line_end(text, start)
+            replacement = "[redacted]"
+        spans.append((offsets[start], offsets[end], replacement))
+        cursor = end
+    return spans
+
 
 
 def _url_view(text: str) -> tuple[str, list[int] | range]:
@@ -452,7 +519,7 @@ def _url_view(text: str) -> tuple[str, list[int] | range]:
     Three percent layers are a fixed linear envelope. JSON slash escape runs
     need no depth cap: each run is consumed once, without decoding whole JSON.
     """
-    if not any(ch in text for ch in "%\\&ſ：ｈｔｐ") and not any("\uff01" <= ch <= "\uff5e" for ch in text):
+    if not any(ch in text for ch in "%\\&ſ﹫：ｈｔｐ") and not any("\uff01" <= ch <= "\uff5e" for ch in text):
         return text, range(len(text) + 1)
     offsets = list(range(len(text) + 1))
     for _ in range(3):
@@ -461,10 +528,10 @@ def _url_view(text: str) -> tuple[str, list[int] | range]:
         pos = 0
         while pos < len(text):
             positions.append(offsets[pos])
-            entity = re.match(r"&#([xX][0-9a-fA-F]{1,6}|[0-9]{1,7});|&(colon|sol|commat);", text[pos:pos + 14]) if text[pos] == "&" else None
+            entity = re.match(r"&#([xX][0-9a-fA-F]{1,6}|[0-9]{1,7});|&(colon|sol|commat|quot|apos|lt|gt|amp|equals|Tab|NewLine);", text[pos:pos + 14]) if text[pos] == "&" else None
             if entity:
                 number = entity[1]
-                code = int(number[1:], 16) if number and number[0] in "xX" else int(number) if number else {"colon": 58, "sol": 47, "commat": 64}[entity[2]]
+                code = int(number[1:], 16) if number and number[0] in "xX" else int(number) if number else {"colon": 58, "sol": 47, "commat": 64, "quot": 34, "apos": 39, "lt": 60, "gt": 62, "amp": 38, "equals": 61, "Tab": 9, "NewLine": 10}[entity[2]]
                 chars.append(chr(code) if code <= 0x10ffff else "\ufffd")
                 pos += entity.end()
             elif text[pos] == "%" and pos + 2 < len(text) and all(c in "0123456789abcdefABCDEF" for c in text[pos + 1:pos + 3]):
@@ -477,16 +544,17 @@ def _url_view(text: str) -> tuple[str, list[int] | range]:
                 if end < len(text) and text[end] == "/":
                     chars.append("/")
                     pos = end + 1
-                elif end + 5 <= len(text) and text[end] == "u" and all(ch in "0123456789abcdefABCDEF" for ch in text[end + 1:end + 5]):
-                    chars.append(chr(int(text[end + 1:end + 5], 16)))
-                    pos = end + 5
+                elif end < len(text) and text[end] in "ux" and end + (5 if text[end] == "u" else 3) <= len(text) and all(ch in "0123456789abcdefABCDEF" for ch in text[end + 1:end + (5 if text[end] == "u" else 3)]):
+                    escape_end = end + (5 if text[end] == "u" else 3)
+                    chars.append(chr(int(text[end + 1:escape_end], 16)))
+                    pos = escape_end
                 else:
                     chars.extend(text[pos:end])
                     positions.extend(offsets[pos + 1:end])
                     pos = end
             else:
                 ch = text[pos]
-                chars.append(chr(ord(ch) - 0xfee0) if "\uff01" <= ch <= "\uff5e" else "s" if ch == "ſ" else ch)
+                chars.append(chr(ord(ch) - 0xfee0) if "\uff01" <= ch <= "\uff5e" else "s" if ch == "ſ" else "@" if ch == "﹫" else ch)
                 pos += 1
         positions.append(offsets[-1])
         decoded = "".join(chars)
@@ -501,6 +569,17 @@ def _opaque_token(text: str) -> bool:
         return True
     return any(re.search(r"[A-Za-z]", part) and re.search(r"[0-9]", part)
                for part in re.findall(r"[A-Za-z0-9_]{6,}", text))
+
+
+_INVALID_USERINFO = re.compile("[" + re.escape(_SPACE + '/[]{}"<>|') + "]")
+_QUERY_VALUE = re.compile(r"([?&;][A-Za-z_][A-Za-z0-9_.-]*=)[^&;#]*")
+
+
+def _strong_opaque(text: str) -> bool:
+    # Long lowercase words are ordinary paths; capitals and mixed runs are not.
+    return bool(re.search(r"[A-Z]{4,}", text)) or any(
+        re.search(r"[A-Za-z]", part) and re.search(r"[0-9]", part)
+        for part in re.findall(r"[A-Za-z0-9_]{6,}", text))
 
 
 def _clear_host(authority: str) -> bool:
@@ -522,13 +601,24 @@ def _public_url_prefix(prefix: str, original: str, offsets: list[int] | range, s
     if not boundary or not _clear_host(prefix[:boundary.start()]):
         return False
     authority = prefix[:boundary.start()]
-    if ":" in authority and not (authority.startswith("[") or "." in authority or authority.split(":", 1)[0] == "localhost"):
-        return False
     tail = prefix[boundary.start():]
+    # A literal gap following a complete public URL ends that URL, regardless
+    # of the length of its path words. Encoded gaps remain credential data.
+    # Opaque path words and the words before the later @ stay ambiguous; named
+    # query values are left to the keyed scanner.
+    gap = re.search(r"[ \t\v\f" + _LINES + r"]", tail)
+    pos = start + boundary.start() + (gap.start() if gap else 0)
+    if gap and tail[0] in "/?#" and original[offsets[pos]:offsets[pos + 1]] == gap[0]:
+        path, after = tail[:gap.start()], tail[gap.start():]
+        words = _QUERY_VALUE.sub(r"\1", path)
+        return not (":" in path or any(ch in path for ch in "\\{}[]\"'<>|")
+                    or _strong_opaque(words) or _strong_opaque(after))
     if tail[0] in " \t\v\f" + _LINES:
         pos = start + boundary.start()
         if original[offsets[pos]:offsets[pos + 1]] != tail[0]:
             return False
+    if ":" in authority and not authority.startswith("[") and not (tail[0] in "?#" and ("." in authority or authority.split(":", 1)[0] == "localhost")) and not (tail[0] in _LINES and not _opaque_token(tail) and ":" not in tail):
+        return False
     return not (":" in tail or _opaque_token(tail)
                 or any(ch in tail for ch in "\\{}[]\"'<>|"))
 
@@ -537,26 +627,47 @@ def _url_candidate_end(view: str, original: str, offsets: list[int] | range, sta
     first_at = view.find("@", start, end)
     if first_at < 0:
         return end
+    last_at = first_at
+    checked_at = -1
     gap = first_at + 1
     while gap < end:
-        if view[gap] in " \t\v\f" + _LINES and original[offsets[gap]:offsets[gap + 1]] == view[gap]:
-            tail = re.split(r"[/?#]", view[first_at + 1:gap], maxsplit=1)[0]
-            return gap if _clear_host(tail) else end
+        if view[gap] == "@":
+            last_at = gap
+        elif last_at != checked_at and view[gap] in " \t\v\f" + _LINES and original[offsets[gap]:offsets[gap + 1]] == view[gap]:
+            checked_at = last_at
+            tail = re.split(r"[/?#]", view[last_at + 1:gap], maxsplit=1)[0]
+            # An encoded @ before a bare word (`%40q (ZK…@h`) may be userinfo
+            # data, unless a dotted/port host or ordinary words follow.
+            literal = original[offsets[last_at]:offsets[last_at + 1]] == "@"
+            following = view.find("@", gap, end)
+            if _clear_host(tail) and (literal or tail.startswith("[") or any(ch in tail for ch in ".:")
+                                      or not _strong_opaque(view[gap:following if following >= 0 else end])):
+                return gap
         gap += 1
     return end
 
 
-def _redact_url_credentials(text: str) -> str:
+def _url_spans(text: str) -> list[_Span]:
     view, offsets = _url_view(text)
     matches = list(_SCHEME.finditer(view))
-    pieces: list[str] = []
+    spans: list[_Span] = []
     cursor = 0
     pending = -1
+    quotes = iter(re.finditer(r"[\"']", view))
+    quote = next(quotes, None)
+    previous_quote = checked_quote = -1
+    record = False
     for index, match in enumerate(matches):
+        while quote is not None and quote.start() < match.start():
+            previous_quote, quote = quote.start(), next(quotes, None)
+        if previous_quote != checked_quote:
+            record = _record_opener(view, text, offsets, previous_quote)
+            checked_quote = previous_quote
         start = match.end()
         if offsets[start] < cursor:
             continue
         end = matches[index + 1].start() if index + 1 < len(matches) else len(view)
+        end = _url_record_end(view, text, offsets, start, end, record)
         end = _url_candidate_end(view, text, offsets, start, end)
         first_at = view.find("@", start, end)
         if first_at < 0:
@@ -566,25 +677,34 @@ def _redact_url_credentials(text: str) -> str:
         last_at = view.rfind("@", start, end)
         if _public_url_prefix(view[start:last_at], text, offsets, start):
             pending = -1
+            # A public @handle path cannot license a `handle:password` pair.
+            handle = re.match(r"[^/?#" + _SPACE + r"]*", view[last_at + 1:end])[0]
+            if ":" in handle and not re.fullmatch(r"[^:]*:[0-9]*|sha(?:1|256|384|512):[0-9A-Fa-f]+", handle):
+                spans.append((offsets[last_at + 1], offsets[last_at + 1 + len(handle)], "[redacted-credentials]"))
+                cursor = offsets[last_at + 1 + len(handle)]
             continue
         start = pending if pending >= 0 else start
-        userinfo = view[start:last_at]
         host_tail = re.split(r"[/?#]", view[last_at + 1:end], maxsplit=1)[0]
-        invalid = any(ch in _SPACE + '/[]{}"<>|' for ch in userinfo) or _opaque_token(host_tail.split(".")[0])
+        invalid = bool(_INVALID_USERINFO.search(view, start, last_at)) or _opaque_token(host_tail.split(".")[0])
         finish = last_at + 1
         if invalid:
             while finish < end and view[finish] not in _SPACE + '/"\'<>':
                 finish += 1
-        pieces.extend((text[cursor:offsets[start]], "[redacted-credentials]" + ("" if invalid else "@")))
+        spans.append((offsets[start], offsets[finish], "[redacted-credentials]" + ("" if invalid else "@")))
         cursor = offsets[finish]
         pending = -1
-    pieces.append(text[cursor:])
-    return "".join(pieces)
+        # A delimiter glued to an unfinished authority (`a@b:#x//@h`) is more
+        # userinfo, not a new URL: the next @ extends this span.
+        rest = view[finish:end]
+        if index + 1 < len(matches) and end == matches[index + 1].start() and not _clear_host(rest.rstrip(",;|&")) \
+                and not any(view[gap] in _SPACE and text[offsets[gap]:offsets[gap + 1]] == view[gap] for gap in range(finish, end)):
+            pending = start
+    return spans
 
 
-def _redact_bare_userinfo(text: str) -> str:
+def _bare_userinfo_spans(text: str) -> list[_Span]:
     view, offsets = _url_view(text)
-    pieces = []
+    spans: list[_Span] = []
     cursor = 0
     start = 0
     while start < len(view):
@@ -592,18 +712,48 @@ def _redact_bare_userinfo(text: str) -> str:
         while end < len(view) and not (view[end] in " \t\v\f" + _LINES and text[offsets[end]:offsets[end + 1]] == view[end]):
             end += 1
         token = view[start:end]
-        if "://" not in token and "@" in token:
-            head = re.match(r"[A-Za-z0-9+.-]+:[/\\]+", token)
-            body = head.end() if head else 0
+        # Userinfo before a later scheme is still `token:token@host`.
+        scheme = _SCHEME.search(token)
+        token = token[:scheme.start()] if scheme else token
+        if "@" in token:
             at = token.rfind("@")
-            colon = token.find(":", body)
-            if (head or body < colon < at) and not any(ch in token[body:at] for ch in "/?#="):
-                pieces.extend((text[cursor:offsets[start + body]], "[redacted-credentials]@"))
+            pair = re.search(r"[^:=<>\"'({\[\]@]+:", token)
+            if pair and pair.end() - 1 < at and not _secret_name(pair[0][:-1]) \
+                    and not (pair[0].lower() in ("mailto:", "xmpp:", "sip:", "sips:") and ":" not in token[pair.end():at]):
+                body = pair.start()
+                spans.append((offsets[start + body], offsets[start + at + 1], "[redacted-credentials]@"))
                 cursor = offsets[start + at + 1]
         start = end + 1
+    return spans
+
+
+def redact_credentials(text: str) -> str:
+    """Union secret contexts before masking; one detector cannot erase another.
+
+    Each forward scanner produces ordered original-coordinate spans. Merging a
+    fixed number of streams is linear, including overlaps between decoded and
+    literal syntax. Ambiguous overlaps own their whole union.
+    """
+    view, offsets = _url_view(text)
+    streams = [_url_spans(text), _bare_userinfo_spans(text)]
+    for scan in (_xml_spans, _named_pair_spans, _cli_spans, _keyed_spans):
+        streams.append(scan(text))
+        if view != text:
+            streams.append(scan(view, offsets))
+    pieces = []
+    cursor = 0
+    pending: _Span | None = None
+    for start, end, replacement in merge(*streams, key=lambda span: (span[0], -span[1])):
+        if pending is not None and start < pending[1]:
+            if end > pending[1]:
+                pending = (pending[0], end, "[redacted]")
+            continue
+        if pending is not None:
+            pieces.extend((text[cursor:pending[0]], pending[2]))
+            cursor = pending[1]
+        pending = start, end, replacement
+    if pending is not None:
+        pieces.extend((text[cursor:pending[0]], pending[2]))
+        cursor = pending[1]
     pieces.append(text[cursor:])
     return "".join(pieces)
-
-
-def redact_url_credentials(text: str) -> str:
-    return _redact_bare_userinfo(_redact_url_credentials(text))

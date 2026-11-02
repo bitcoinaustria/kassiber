@@ -88,14 +88,14 @@ The Python and webview floors also scrub `rpcpassword`, `rpcauth`, `password`,
 `macaroon`, `cookie`, `secret_key` and `private_key` assignments. Their shared
 scanners handle key-based secrets before URL userinfo, including escaped and
 truncated diagnostics. Exact examples live in
-`tests/fixtures/secret_redaction_cases.json`; three seeded generators
+`tests/fixtures/secret_redaction_cases.json`; four seeded generators
 each add 100,000 compositions with secret-fragment and non-secret preservation
 checks. Nostr `nsec` private keys also pass through the key-material backstop.
 See [the scanner design and limits](#free-text-credential-scanner-and-limits)
 for encoding support, ambiguous URL text and prose-safe flag handling.
 
 The native Rust floor still uses its legacy token scanner. It must adopt the
-same scanners, aliases, exact corpora and all three generators during Rust
+same scanners, aliases, exact corpora and all four generators during Rust
 integration; native-only stderr does not yet have Python/webview parity.
 
 **Operational redaction — applied at render/export time.** Amounts,
@@ -233,18 +233,26 @@ the exception, so help text remains readable. Producers must use typed secret
 fields rather than rely on inference from arbitrary text.
 
 Python and the shipped webview run mirrored forward scanners before the remaining
-key/descriptor backstops. Key assignments, JSON keys, XML secret elements,
-authorization/cookie headers and command flags run first. URL scanning therefore
-cannot swallow a later secret key and expose the part of its value after `@`.
+key/descriptor backstops. Each scanner (URL userinfo, schemeless userinfo, XML,
+name/value pairs, command flags and key assignments) reports spans in the
+original text, over both the raw text and the decoded view. Their union is
+masked; overlapping spans merge into one `[redacted]`. One detector therefore
+cannot erase the context another needs, and a URL scan cannot swallow a later
+secret key and expose the part of its value after `@`.
 The keyed pass also retains URL credential context across malformed slashes and
 whitespace, so masking a keyed value cannot erase the terminator and expose its
 surrounding username. Complete endpoints and clear quoted record boundaries with
 literal delimiters end that context; numeric URL ports remain readable. Encoded
 quotes and record-like text inside malformed userinfo cannot establish a boundary.
 Secret names split on camelCase, dots, dashes, underscores and digit-to-letter
-boundaries before matching credential parts, including prefixed names such as
-`sessionToken`,
-`secretAccessKey` and `privateKeyHex`; `passwd` is also a secret alias. Metadata
+boundaries, then match secret words anywhere in the joined identifier:
+composition is not a boundary, so `sessionToken`, `secretAccessKey`,
+`PGPASSWORD`, `jwtsecret` and `SESSIONTOKEN` are all secret. `passwd`,
+`sessionid`, `sessionKey`, `masterKey`, `credential` and `bearer` are aliases.
+`user` and `auth` must be a whole identifier part, and `pw`, `pin` and `otp`
+the final part (`db_pw`, not `spinner`). A spaced name such as `api key:` or
+`"Secret Key":` is secret when the second word changes the first word's
+meaning; `user name:` and `token count:` are not. Metadata
 suffixes such as `-file`, `-fd`, `_hint` and `_statistics` do not become inline
 secret values. Assignments accept `=`, `:`, `=>`, `:=`, `->` and repeated/spaced
 `=` operators. Unquoted `&` and `|` remain part of an ambiguous value, including
@@ -259,19 +267,32 @@ Only a spaced colon followed by recognized ordinary user/status prose is exempt
 (for example `user: alice logged in`, `auth: ok`, or `tests pass: 12`). A lowercase
 password such as `pass: correcthorse` remains secret. The XML equivalents
 `<user>alice</user>` and `<auth>required</auth>` require the whole value to match
-the prose exception. A familiar first word also cannot exempt a credential-shaped
-following token in a plain alias value such as `user: alice Pw9Leak`.
-`credentials` remains a secret alias. Colon status literals `none`, `expired`
-and `(not set)` remain readable; `=` assignments are secret-bearing.
+the prose exception. Every exception applies only when it is the entire value,
+including indented continuation lines: `user: alice Pw9Leak`,
+`password: none Pw9Leak`, `--password the Pw9Leak` and `--seed-words 24 Pw9Leak`
+are masked. `credentials` remains a secret alias. Colon status literals `none`,
+`expired` and `(not set)` remain readable on their own; `=` assignments are
+secret-bearing.
+
+An unquoted value after a secret key is masked through the end of its line and
+any following lines indented deeper than the key (a YAML continuation), so
+multi-word passphrases and a stray quote inside the value (`password=x" Pw9Leak`)
+cannot expose later words. Only a value clearly delimited by quotes ends earlier.
+Losing the rest of a line, such as a following `--verbose` flag or `other=public`
+pair, is the deliberate cost.
 
 XML scanning covers namespaces, opening-tag attributes, key/value attributes
-such as `<add key="Password" value="…"/>`, and named parameter contents. Only a
+such as `<add key="Password" value="…"/>`, unquoted attributes,
+`<input type=password value=…>`, `<meta name="csrf-token" content="…">`, plist
+`<key>password</key><string>…</string>` pairs and named parameter contents.
+Name/value records such as Kubernetes `name: X_PASSWORD` / `value: …` and JSON
+`{"name":"password","value":"…"}` mask their value. Only a
 complete matching closing tag ends an element value; a longer tag name sharing
 the same prefix cannot expose the remaining value. A secret key/name attribute
 also overrides an outer element's ordinary alias prose exception.
-Structured `{…}`, `[…]` and `$(…)` values consume their contents, including
-ambiguous glued tails. Incomplete structures retain their indented continuation
-scope. YAML `|`/`>-` blocks, triple quotes and adjacent quoted values are masked
+Structured `{…}`, `[…]`, `(…)`, `$(…)` and `${…}` values consume their
+contents, including ambiguous glued tails. Unclosed openers (`"`, `'`, `"""`,
+`(`, backtick, `<`) fail closed through their indented continuation. YAML `|`/`>-` blocks, triple quotes and adjacent quoted values are masked
 through the extended value rather than only the first token.
 
 Quoted values use escape-run counting rather than a backtracking expression.
@@ -298,17 +319,22 @@ help/count metadata. Both runtimes treat CR, LF, U+0085, U+2028 and U+2029 as
 line starts and use ASCII identifier/scheme boundaries, including next to
 non-ASCII prose.
 
-The URL scanner recognizes ASCII schemes, including a scheme preceded by
-punctuation or digits, and scheme-relative `//user:password@host`. It normalizes
-fullwidth ASCII and the long-s lookalike in its scanning view. Malformed
-one-slash/backslash scheme spellings and schemeless username/password pairs are
-also masked. Every scheme occurrence gets a bounded candidate, including URLs
+The `://` and `//` delimiters establish URL context whatever precedes them, so a
+lookalike, zero-width or punctuation character in the scheme (`httpѕ://`,
+`http\u200b://`, `http_://`) cannot exempt userinfo, and quoted or glued
+scheme-relative `"//user:password@host"` is covered. The scanning view
+normalizes fullwidth ASCII, the long-s and small-commercial-at lookalikes.
+Schemeless `token:token@host` userinfo is masked with or without a key
+(`https_proxy=`, `DATABASE_URL=`, `dsn=`), including before a later scheme in
+the same token; `mailto:`, `xmpp:` and `sip:` addresses remain readable. Every scheme occurrence gets a bounded candidate, including URLs
 inside paths, query values, archives and comma/semicolon/pipe lists. Ambiguous
 prefixes survive nested-scheme
 detection so a credential cannot hide by containing `://` itself.
 
 All RFC 3986 userinfo characters, percent escapes and repeated `@` are covered;
-masking reaches the last ambiguous userinfo terminator. A decoded space or line
+masking reaches the last ambiguous userinfo terminator. A nested delimiter glued
+to an unfinished authority (`a%40b:#x%2F%2F@host`) continues that userinfo
+rather than starting a new URL. A decoded space or line
 break remains credential data: only whitespace present literally in the original
 text can establish a token boundary. Malformed or ambiguous credentials can
 extend across literal slashes, whitespace and line breaks and may remove host
@@ -322,10 +348,19 @@ host/path before `@` cannot acquire userinfo from that later `@`. Opaque runs,
 malformed authority prefixes, ambiguous ports and credential-shaped path text
 remain conservatively masked. For example, `HTTP://~/opaqueCredential@host`
 is not treated as an ordinary public path. A complete credential endpoint also
-ends at original whitespace, preserving an unrelated following line.
+ends at original whitespace, preserving an unrelated following line; an encoded
+`@` ends it only before a dotted, bracketed or port host or ordinary words, since
+`%40q (TOKEN@host` may be one malformed userinfo. A dotted user with a numeric
+password (`https://alice.smith:12/34@host`) is userinfo, not a host and port.
+A complete public URL followed by literal whitespace and a later email, handle
+or path (`https://example.com/documentation please email a@b.c`) stays readable,
+however long its path words, unless those words or the text before the later
+`@` contain capital runs or mixed letter/digit runs; named query values are left
+to the keyed scanner. A public `@handle` path cannot license `handle:password`.
 
 The offset-preserving view recognizes JSON escaped slash runs and Unicode
-escapes, numeric HTML entities (and `&colon;`, `&sol;`, `&commat;`) and up to three
+escapes, numeric HTML entities (and `&colon;`, `&sol;`, `&commat;`, `&quot;`,
+`&apos;`, `&lt;`, `&gt;`, `&amp;`, `&equals;`, `&Tab;`, `&NewLine;`) and up to three
 percent-encoding
 layers, including fully encoded nested URLs and keyed parameters. Both raw and
 decoded views undergo keyed detection. Output retains original spelling outside
@@ -335,15 +370,16 @@ the assumption that this backstop can recover their schema.
 
 Candidate segments and structured scopes advance once; suffixes are not repeatedly
 rescanned. Escape-run counting and the fixed percent-decoding passes are linear
-in input length. Three seeded generators each run 100,000 compositions
-in Python and through the webview insert path. The second and third retain the
-reviewers' independently authored distributions and Python RNG. All three assert
+in input length, checked to 400,000 characters. Four seeded generators each run
+100,000 compositions in Python and through the webview insert path. The second,
+third and fourth retain the reviewers' independently authored distributions and
+Python RNG; the fourth also runs four further seeds. All four assert
 that no four-character planted secret fragment survives, that planted identifiers,
 hostnames, prose and help remain readable, and that complete output streams have
 the same SHA-256 digest. The webview bare-mnemonic heuristic retains its three
 known corpus differences from Python.
 
 The native Rust secret floor and supervisor need the same scanners, aliases,
-exact corpora and all three generators before claiming this free-text contract.
+exact corpora and all four generators before claiming this free-text contract.
 Forwarding already-redacted Python records does not cover arbitrary native
 stderr. See the implementation verification report for the required Rust mirror.

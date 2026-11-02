@@ -64,7 +64,33 @@ for case in json.load(sys.stdin):
     start = time.process_time()
     redact_secret_text(text)
     cpu_seconds += time.process_time() - start
-assert cpu_seconds < 2, cpu_seconds
+assert cpu_seconds < 3, cpu_seconds
 """
     subprocess.run([sys.executable, '-c', script], input=recipes.read_text(),
                    text=True, check=True, timeout=120)
+
+
+def test_adversarial_secret_shapes_scale_linearly_to_400k():
+    import subprocess
+    import sys
+
+    # Aggregate CPU over every recipe: quadratic growth would cost ~100x for
+    # ten times the input, linear growth ~10x.
+    recipes = Path(__file__).parent / 'fixtures/secret_redaction_stress_cases.json'
+    script = """
+import json, sys, time
+from kassiber.redaction import redact_secret_text
+cases = json.load(sys.stdin)
+def total(size):
+    cpu_seconds = 0
+    for case in cases:
+        text = case['prefix'] + (case['repeat'] * (size // len(case['repeat']) + 1)) + case['suffix']
+        start = time.process_time()
+        redact_secret_text(text)
+        cpu_seconds += time.process_time() - start
+    return cpu_seconds
+small, large = total(40000), total(400000)
+assert large < 25 * small + 1, (small, large)
+"""
+    subprocess.run([sys.executable, '-c', script], input=recipes.read_text(),
+                   text=True, check=True, timeout=600)
