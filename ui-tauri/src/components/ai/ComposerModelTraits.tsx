@@ -38,6 +38,7 @@ const COLUMN_ROW =
 
 function EffortRow(props: {
   label: string;
+  /** Shown in a tooltip and read as the row's description. */
   description?: string;
   selected: boolean;
   /** The column's one tab stop: the selected level, else the first. */
@@ -47,17 +48,17 @@ function EffortRow(props: {
   onPick: () => void;
 }) {
   const { t } = useTranslation("assistant");
-  return (
+  const descriptionId = React.useId();
+  const row = (
     <button
       type="button"
       role="radio"
       aria-checked={props.selected}
+      aria-describedby={props.description ? descriptionId : undefined}
       disabled={props.disabled}
-      // Up and Down move between rows; focus lands on a level after a model pick.
-      data-effort-row
+      // The arrow keys move between rows; focus lands on a level after a model pick.
       data-effort-level
       tabIndex={props.tabStop ? 0 : -1}
-      title={props.description}
       className={COLUMN_ROW}
       onClick={props.onPick}
     >
@@ -76,46 +77,74 @@ function EffortRow(props: {
       ) : null}
     </button>
   );
+  if (!props.description) return row;
+  return (
+    <>
+      <Tooltip>
+        <TooltipTrigger asChild>{row}</TooltipTrigger>
+        <TooltipContent side="right" sideOffset={6}>
+          {props.description}
+        </TooltipContent>
+      </Tooltip>
+      {/* Hidden text still names the description for screen readers. */}
+      <span id={descriptionId} hidden>
+        {props.description}
+      </span>
+    </>
+  );
 }
 
+/**
+ * Up/Down, Home and End move between levels and choose the one they land
+ * on: a radio group's selection follows focus.
+ */
 function moveBetweenRows(event: React.KeyboardEvent<HTMLElement>) {
-  if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+  if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
   if (event.altKey || event.ctrlKey || event.metaKey) return;
   const rows = Array.from(
     event.currentTarget.querySelectorAll<HTMLButtonElement>(
-      "[data-effort-row]:not(:disabled)",
+      "[data-effort-level]:not(:disabled)",
     ),
   );
   const index = rows.findIndex((row) => row === document.activeElement);
   const next =
-    rows[
-      Math.min(
-        rows.length - 1,
-        Math.max(0, index + (event.key === "ArrowDown" ? 1 : -1)),
-      )
-    ];
+    event.key === "Home"
+      ? rows[0]
+      : event.key === "End"
+        ? rows[rows.length - 1]
+        : rows[
+            Math.min(
+              rows.length - 1,
+              Math.max(0, index + (event.key === "ArrowDown" ? 1 : -1)),
+            )
+          ];
   if (!next) return;
   event.preventDefault();
   event.stopPropagation();
   next.focus();
   next.scrollIntoView?.({ block: "nearest" });
+  next.click();
 }
 
 /**
  * The reasoning column: the selected model's name over its levels. Auto
  * (send no level) always leads as the default. `levels` is what the model
  * advertises; when it advertises none yet, only Auto and a stored choice are
- * listed, with a hint that Check models names the rest.
+ * listed, with a hint that Check models names the rest unless the model was
+ * already checked (`levelsKnown`).
  */
 export function ModelPickerEffortColumn({
   modelLabel,
   levels,
+  levelsKnown,
   value,
   onChange,
   onFocusSearch,
 }: {
   modelLabel: string;
   levels: readonly AssistantThinkingEffort[];
+  /** Whether a Check models result lists this model. */
+  levelsKnown: boolean;
   value: AssistantThinkingEffort;
   /** Omitted while a reply streams: the column shows the level, locked. */
   onChange?: (effort: AssistantThinkingEffort) => void;
@@ -178,7 +207,7 @@ export function ModelPickerEffortColumn({
             }}
           />
         ))}
-        {levels.length === 0 ? (
+        {levels.length === 0 && !levelsKnown ? (
           <p className="px-2 pt-1 text-2xs text-muted-foreground/80">
             {t("composer.effortLevelsUnknown")}
           </p>
@@ -191,7 +220,12 @@ export function ModelPickerEffortColumn({
 const FOOTER_SEGMENT =
   "flex h-6 cursor-pointer items-center justify-center gap-1 px-2 text-xs text-muted-foreground outline-none first:rounded-l-md last:rounded-r-md hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60 data-[checked]:bg-background data-[checked]:text-foreground data-[checked]:shadow-xs focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
 
-/** Standard | Fast, one click away in the footer. */
+const SPEED_KEYS = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"];
+
+/**
+ * Standard | Fast, one click away in the footer. One tab stop; the arrow keys
+ * switch between the two. The billing note stays visible while Fast is on.
+ */
 function SpeedControl({
   fastMode,
   hint,
@@ -202,32 +236,55 @@ function SpeedControl({
   onChange?: (on: boolean) => void;
 }) {
   const { t } = useTranslation("assistant");
+  const hintId = React.useId();
   return (
-    <div
-      role="radiogroup"
-      aria-label={t("composer.fastMode.speed")}
-      data-fast-mode-toggle
-      className="flex rounded-lg bg-muted p-0.5"
-    >
-      {([false, true] as const).map((fast) => (
-        <button
-          key={String(fast)}
-          type="button"
-          role="radio"
-          aria-checked={fastMode === fast}
-          data-checked={fastMode === fast || undefined}
-          disabled={!onChange}
-          title={fast ? hint : undefined}
-          className={FOOTER_SEGMENT}
-          onClick={() => {
-            if (fastMode !== fast) onChange?.(fast);
-          }}
-        >
-          {fast ? <Zap aria-hidden="true" className="size-3 fill-current" /> : null}
-          {fast ? t("composer.fastMode.fast") : t("composer.fastMode.standard")}
-        </button>
-      ))}
-    </div>
+    <>
+      <div
+        role="radiogroup"
+        aria-label={t("composer.fastMode.speed")}
+        data-fast-mode-toggle
+        className="flex rounded-lg bg-muted p-0.5"
+        onKeyDown={(event) => {
+          if (!onChange || !SPEED_KEYS.includes(event.key)) return;
+          if (event.altKey || event.ctrlKey || event.metaKey) return;
+          event.preventDefault();
+          event.stopPropagation();
+          event.currentTarget
+            .querySelector<HTMLButtonElement>('[role="radio"][aria-checked="false"]')
+            ?.focus();
+          onChange(!fastMode);
+        }}
+      >
+        {([false, true] as const).map((fast) => (
+          <button
+            key={String(fast)}
+            type="button"
+            role="radio"
+            aria-checked={fastMode === fast}
+            aria-describedby={fast ? hintId : undefined}
+            data-checked={fastMode === fast || undefined}
+            disabled={!onChange}
+            tabIndex={fastMode === fast ? 0 : -1}
+            title={fast && !fastMode ? hint : undefined}
+            className={FOOTER_SEGMENT}
+            onClick={() => {
+              if (fastMode !== fast) onChange?.(fast);
+            }}
+          >
+            {fast ? <Zap aria-hidden="true" className="size-3 fill-current" /> : null}
+            {fast ? t("composer.fastMode.fast") : t("composer.fastMode.standard")}
+          </button>
+        ))}
+      </div>
+      <p
+        id={hintId}
+        data-fast-mode-hint
+        hidden={!fastMode}
+        className="min-w-0 text-2xs text-muted-foreground"
+      >
+        {hint}
+      </p>
+    </>
   );
 }
 
@@ -261,7 +318,6 @@ export function PermissionModeMenu({
               type="button"
               aria-label={`${title}: ${t(current.labelKey)}`}
               data-composer-option="permission-mode"
-              data-composer-permissions-trigger
               data-value={current.value}
               className={cn(
                 "ms-auto flex h-7 cursor-pointer items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground outline-none hover:bg-foreground/[0.09] hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring data-[state=open]:bg-foreground/[0.09] data-[state=open]:text-foreground",
@@ -282,7 +338,6 @@ export function PermissionModeMenu({
         side="top"
         align="end"
         className="w-72"
-        data-composer-permissions
       >
         <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
           {title}

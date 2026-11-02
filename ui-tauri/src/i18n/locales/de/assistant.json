@@ -84,10 +84,9 @@
     },
     "effortDefault": "Standard",
     "effortAutoHint": "Das Modell entscheidet",
-    "effortLevelsUnknown": "Prüfe die Modelle, um die Stufen dieses Modells zu sehen.",
+    "effortLevelsUnknown": "Mit „Modelle prüfen“ siehst du die Stufen dieses Modells.",
     "newLine": "Neue Zeile",
     "fastMode": {
-      "label": "Schnellmodus",
       "fast": "Schnell",
       "standard": "Standard",
       "speed": "Tempo",

@@ -40,7 +40,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import type { AssistantThinkingEffort } from "./assistantSession";
+import { KNOWN_EFFORTS, type AssistantThinkingEffort } from "./assistantSession";
 import type { AiPermissionMode } from "@/daemon/stream";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import {
@@ -62,7 +62,6 @@ import {
   type ModelPickerDiscoveryState,
 } from "./ModelPickerContent";
 import {
-  KNOWN_EFFORTS,
   MODEL_PICKER_EFFORT_SHORTCUT,
   MODEL_PICKER_SHORTCUT,
   modelPickerModelKey,
@@ -434,6 +433,10 @@ export function ProviderModelPicker({
     () => KNOWN_EFFORTS.filter((effort) => advertisedEfforts.includes(effort)),
     [advertisedEfforts],
   );
+  // A Check models result lists the model, so what it advertises is all there is.
+  const effortLevelsKnown = Boolean(
+    value && models.some((model) => model.id === value.model),
+  );
 
   const fastSupport = selectedModelFastMode({ selection: value, providers, models });
   const showEffortControl = showThinkingEffort;
@@ -473,10 +476,17 @@ export function ProviderModelPicker({
     return next;
   }, [modelQueries, modelSnapshotsByProvider, providers]);
 
+  // A docked pick waiting for the host to commit the picked model.
+  const pendingPickRef = React.useRef<{ provider: string; model: string } | null>(
+    null,
+  );
   const setPickerOpen = (next: boolean) => {
     onOpenChange?.(next);
     if (controlledOpen === undefined) setUncontrolledOpen(next);
-    if (!next) acknowledgeProvider.reset();
+    if (!next) {
+      pendingPickRef.current = null;
+      acknowledgeProvider.reset();
+    }
   };
 
   const ensureAcknowledged = async (
@@ -514,20 +524,39 @@ export function ProviderModelPicker({
     searchInputRef.current?.focus({ preventScroll: true });
   };
 
+  // A docked pick moves to the new model's levels once the host commits it;
+  // a model without levels has nothing left to choose here, so the pick
+  // closes the picker.
+  const settlePick = () => {
+    pendingPickRef.current = null;
+    if (!focusEffort()) setPickerOpen(false);
+  };
+  const settlePickRef = React.useRef(settlePick);
+  settlePickRef.current = settlePick;
+  React.useLayoutEffect(() => {
+    const pending = pendingPickRef.current;
+    if (
+      pending &&
+      value?.provider === pending.provider &&
+      value.model === pending.model
+    ) {
+      settlePickRef.current();
+    }
+  }, [value, showEffortControl, effortOptions]);
+
   const selectModel = async (provider: AiProviderRow, model: string) => {
     if (!(await ensureAcknowledged(provider, "modelPicker.remoteConfirm"))) {
       return;
     }
+    const unchanged = value?.provider === provider.name && value.model === model;
+    pendingPickRef.current = docked ? { provider: provider.name, model } : null;
     onChange({ provider: provider.name, model });
     if (!docked) {
       setPickerOpen(false);
       return;
     }
-    // The column renders the new model's levels on commit; a model without
-    // levels has nothing left to choose here, so the pick closes the picker.
-    window.requestAnimationFrame(() => {
-      if (!focusEffort()) setPickerOpen(false);
-    });
+    // The current model's column is already rendered; no commit will follow.
+    if (unchanged) settlePick();
   };
 
   const checkModels = async (provider: AiProviderRow) => {
@@ -630,12 +659,18 @@ export function ProviderModelPicker({
                 ) : null}
                 {fullAccess ? (
                   // The mode moved into the picker; Full access, which also
-                  // runs network actions without asking, stays in sight.
-                  <FullAccessIcon
-                    className="size-3.5 text-amber-600 dark:text-amber-400"
+                  // runs network actions without asking, stays in sight, named
+                  // where the toolbar has room.
+                  <span
+                    className="flex shrink-0 items-center gap-1"
                     aria-hidden="true"
                     data-full-access-indicator
-                  />
+                  >
+                    <FullAccessIcon className="size-3.5 text-amber-600 dark:text-amber-400" />
+                    <span className="hidden text-xs text-amber-700 @sm/composer-toolbar:inline dark:text-amber-400">
+                      {t("composer.permission.full_access.label")}
+                    </span>
+                  </span>
                 ) : null}
                 <ComposerControlChevron />
               </ComposerControl>
@@ -704,6 +739,7 @@ export function ProviderModelPicker({
                 <ModelPickerEffortColumn
                   modelLabel={modelLabel}
                   levels={effortOptions}
+                  levelsKnown={effortLevelsKnown}
                   value={thinkingEffort}
                   onChange={onThinkingEffortChange}
                   onFocusSearch={focusSearch}

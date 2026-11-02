@@ -371,8 +371,11 @@ export function selectedModelSupportsReasoningEffort({
 }): boolean {
   if (!selection) return false;
   const provider = providers.find((row) => row.name === selection.provider);
-  if (providerSupportsReasoningEffort(provider)) return true;
   const model = models.find((row) => row.id === selection.model);
+  // A checked row that says the model takes no effort outranks the CLI
+  // provider's flag, which only says the agent can take one.
+  if (model?.supports_reasoning_effort === false) return false;
+  if (providerSupportsReasoningEffort(provider)) return true;
   if (provider && !nativeAiProviderRuntime(provider.base_url)) {
     // The daemon reads an HTTP listing (OpenRouter's `reasoning`, a
     // `reasoning_effort` parameter) into this flag; a model it says nothing

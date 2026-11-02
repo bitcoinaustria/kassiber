@@ -139,6 +139,16 @@ export type AssistantThinkingEffort =
   | "max"
   | "ultra";
 
+/** Every level Kassiber can label and send, lowest first. */
+export const KNOWN_EFFORTS: readonly AssistantThinkingEffort[] = [
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+  "ultra",
+];
+
 export interface AssistantAttachment {
   /** Opaque daemon staging grant; expires with the daemon's staging TTL. */
   token: string;

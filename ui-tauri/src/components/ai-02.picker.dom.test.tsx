@@ -160,6 +160,10 @@ describe("Ai02 with the real model picker", () => {
     expect(document.activeElement).toBe(screen.getByRole("combobox"));
 
     fireEvent.click(screen.getByRole("button", { name: "LM Studio · local" }));
+    // The rail switch hands focus back to the search field on the next frame.
+    await act(async () => {
+      await new Promise((resolve) => window.requestAnimationFrame(() => resolve(null)));
+    });
     const row = screen
       .getAllByRole("option")
       .find((option) => option.textContent?.includes("gemma-3-12b"));

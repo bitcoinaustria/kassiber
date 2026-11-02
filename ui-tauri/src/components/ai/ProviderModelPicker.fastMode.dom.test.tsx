@@ -145,6 +145,33 @@ describe("Fast mode toggle", () => {
     expect(mocks.invoke).not.toHaveBeenCalled();
   });
 
+  it("keeps the billing note in sight while Fast is on", () => {
+    mount({ provider: "codex", model: "gpt-5.4" });
+    const note = document.querySelector<HTMLElement>("[data-fast-mode-hint]")!;
+    expect(note.hidden).toBe(true);
+    const fast = within(speedToggle()!).getByRole("radio", { name: "Fast" });
+    expect(fast.getAttribute("aria-describedby")).toBe(note.id);
+    cleanup();
+
+    mount({ provider: "codex", model: "gpt-5.4" }, { fastMode: true });
+    const shown = document.querySelector<HTMLElement>("[data-fast-mode-hint]")!;
+    expect(shown.hidden).toBe(false);
+    expect(shown.textContent).toBe("2x speed, increased usage");
+  });
+
+  it("is one tab stop whose arrow keys switch the speed", () => {
+    const { onFastModeChange } = mount({ provider: "codex", model: "gpt-5.4" });
+    const toggle = speedToggle()!;
+    const standard = within(toggle).getByRole("radio", { name: "Standard" });
+    const fast = within(toggle).getByRole("radio", { name: "Fast" });
+    expect(standard.tabIndex).toBe(0);
+    expect(fast.tabIndex).toBe(-1);
+    standard.focus();
+    fireEvent.keyDown(standard, { key: "ArrowRight" });
+    expect(onFastModeChange).toHaveBeenCalledWith(true);
+    expect(document.activeElement).toBe(fast);
+  });
+
   it("marks the trigger when fast mode is on", () => {
     mount({ provider: "codex", model: "gpt-5.4" }, { fastMode: true, open: false });
     expect(trigger().getAttribute("aria-label")).toMatch(/Models: Codex · gpt-5\.4.*, Fast$/);

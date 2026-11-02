@@ -84,10 +84,9 @@
     },
     "effortDefault": "Default",
     "effortAutoHint": "Let the model decide",
-    "effortLevelsUnknown": "Check models to list this model's levels.",
+    "effortLevelsUnknown": "Use Check models to see this model's levels.",
     "newLine": "New line",
     "fastMode": {
-      "label": "Fast mode",
       "fast": "Fast",
       "standard": "Standard",
       "speed": "Speed",

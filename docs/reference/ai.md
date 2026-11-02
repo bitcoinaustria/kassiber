@@ -856,23 +856,28 @@ composer toolbar.
 - **Reasoning column.** Beside the list, under the selected model's name:
   **Auto** (the default, which sends no level) and only the levels the
   model advertises in its capability data (Kassiber's known levels low through
-  ultra, nothing made up). A model that takes no effort has no column. A
-  native agent whose model is not checked yet lists only Auto and a stored
-  choice, with a hint that Check models names the rest; Claude and Copilot
-  list their published fixed levels. While an answer streams the column is
-  shown locked.
+  ultra, nothing made up). A model that takes no effort has no column,
+  including a native agent's model whose checked row says so, and a stored
+  level drops back to Auto. A native agent whose model is not checked yet
+  lists only Auto and a stored choice, with a hint that Check models names
+  the rest; Claude and Copilot list their published fixed levels. While an
+  answer streams the column is shown locked.
 - **Footer.** A **Standard | Fast** toggle, only for a model whose checked
-  row offers fast mode, and the chat's permission mode as a menu of the
+  row offers fast mode, with the higher-rate billing note shown beside it
+  while Fast is on, and the chat's permission mode as a menu of the
   three modes with their descriptions. Changing the mode there behaves as
   described under [Permission modes](#permission-modes).
 
 Picking a model with reasoning levels keeps the picker open and moves focus to
 those levels; picking one without levels closes it. Escape or a click outside
-closes it too. ArrowRight at the end of the search text moves to the levels of
-the selected model; a different highlighted model is picked with Enter, never
-by an arrow key. The arrow keys move between levels, and ArrowLeft goes back
-to the search field. Mod+Shift+K opens
-the picker on the levels, or moves there when it is open. Opening the picker or
+closes it too. ArrowRight at the end of the search text picks a model the
+arrow keys highlighted and moves to its levels; when the highlight was left by
+the pointer or a provider switch, ArrowRight moves to the selected model's
+levels instead and Enter picks the highlighted one. In the column the arrow
+keys, Home and End move between levels and choose the one they land on, and
+ArrowLeft goes back to the search field; the arrow keys also switch the speed
+toggle. Mod+Shift+K opens the picker on the levels, or the search field when
+the model takes no effort, and moves there when it is open. Opening the picker or
 any of its sections reads only the provider list and cached check results; it
 never contacts a provider.
 

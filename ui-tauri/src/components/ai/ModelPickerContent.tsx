@@ -414,10 +414,16 @@ export function ModelPickerContent({
       // The column shows the selected model's levels, so a model the arrow
       // keys highlighted is picked first; the picker then moves to its
       // levels. A highlight the mouse or a rail switch left behind is not
-      // picked by an arrow key; Enter picks it.
+      // picked by an arrow key (Enter picks it): ArrowRight moves to the
+      // selected model's levels instead.
       const item = items[highlightedIndex];
-      if (item && item.key !== selectedKey) {
-        if (!keyboardHighlight.current || highlightedKey === null || selectDisabled) return;
+      if (
+        item &&
+        item.key !== selectedKey &&
+        keyboardHighlight.current &&
+        highlightedKey !== null &&
+        !selectDisabled
+      ) {
         event.preventDefault();
         pick(item);
         return;

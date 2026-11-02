@@ -7,8 +7,6 @@
  * provider `a` and model `b:c` — model ids routinely contain `:` and `/`.
  */
 
-import type { AssistantThinkingEffort } from "./assistantSession";
-
 const MODEL_KEY_PREFIX = "model:";
 
 export function modelPickerModelKey(provider: string, model: string): string {
@@ -84,16 +82,6 @@ export const MODEL_PICKER_FAVORITE_SHORTCUT = ["mod", "d"] as const;
  * native menu already gives to Reports & Export.
  */
 export const MODEL_PICKER_EFFORT_SHORTCUT = ["mod", "shift", "k"] as const;
-
-/** Every level Kassiber can label and send, lowest first. */
-export const KNOWN_EFFORTS: readonly AssistantThinkingEffort[] = [
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-  "ultra",
-];
 
 /**
  * Composer shortcuts mark the picker trigger before opening it, so the open
