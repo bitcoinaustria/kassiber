@@ -107,7 +107,8 @@ Coverage: `tests/test_import_csv_upgrade_compatibility.py` restores exact rows
 written by the pre-change parsers/storage writer and checks all five families,
 overlapping exports, genuine repeats, reviewed gap evidence, cross-batch review,
 copies that predate batches, rolled-back imports, either choice of excluded
-copy, and the confirmed-distinct review.
+copy, the confirmed-distinct review, and a network partition that must carry
+import batches with their rows so a held group stays held.
 
 ## Dependency-origin correction
 

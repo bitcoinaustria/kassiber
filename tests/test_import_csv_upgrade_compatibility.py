@@ -447,3 +447,103 @@ def test_confirmation_covers_only_the_group_it_reviewed(tmp_path, case_index):
         assert held == sorted([first["id"], second["id"], "third"])
     finally:
         conn.close()
+
+
+def _held_after_old_cumulative_export(tmp_path, case_index):
+    """Old code imported [jan], then the cumulative [feb, jan] as a new batch."""
+    conn, profile, wallet = _restore(tmp_path, case_index)
+    first, second = conn.execute("SELECT * FROM transactions ORDER BY external_id").fetchall()
+    batch, = _batch_ids(conn)
+    later = "cumulative-batch"
+    _insert(conn, "import_batches", {**dict(conn.execute("SELECT * FROM import_batches").fetchone()),
+                                     "id": later, "imported_at": "2025-04-01T00:00:00Z", "rows_inserted": 2})
+    conn.execute("UPDATE import_batch_transactions SET batch_id=? WHERE transaction_id=?", (later, second["id"]))
+    february = _shift_month(first, "02")
+    _insert(conn, "transactions", february)
+    _insert(conn, "import_batch_transactions", {"batch_id": later, "transaction_id": february["id"]})
+    conn.execute("UPDATE transactions SET excluded=0, fiat_rate=50000, fiat_rate_exact='50000'")
+    conn.commit()
+    return conn, profile, wallet, first, second, february
+
+
+def _export_partition(conn, folder):
+    import sqlite3
+    import tarfile
+    from unittest.mock import patch
+    from kassiber.core.book_network_migration import export_network_partition, plan_network_partition
+    args = {"environment": "main", "wallet_ids": ["btc"], "declared_wallet_ids": ["btc"]}
+    plan = plan_network_partition(conn, "profile", args)
+    assert plan["can_apply"], plan["blockers"]
+    output = folder / "partition.age"
+    with patch("kassiber.core.book_network_migration.encrypt_age_stream",
+               side_effect=lambda source, out, **kwargs: out.write(source.read())):
+        export_network_partition(conn, "profile", {**args, "plan_id": plan["plan_id"]}, data_root=folder / "data",
+                                 output_path=output, recipient="age1test")
+    with tarfile.open(output) as archive:
+        payload = archive.extractfile("kassiber.sqlite3").read()
+    (folder / "partition").mkdir()
+    (folder / "partition" / "kassiber.sqlite3").write_bytes(payload)
+    return open_db(folder / "partition")
+
+
+def _held(conn, profile):
+    state = review_workflow._build(conn, profile)
+    return sorted(q["transaction_id"] for q in state["quarantines"] if q["reason"] == ISSUE), state
+
+
+@pytest.mark.parametrize("case_index", range(len(CASES)))
+def test_network_partition_keeps_a_held_duplicate_held(tmp_path, case_index):
+    conn, profile, _, first, second, _ = _held_after_old_cumulative_export(tmp_path, case_index)
+    try:
+        held, state = _held(conn, profile)
+        assert held == sorted([first["id"], second["id"]])
+        assert state["custody_quantity"].report_blocked
+        target = _export_partition(conn, tmp_path)
+        try:
+            copied = target.execute("SELECT * FROM profiles").fetchone()
+            assert [tuple(row) for row in target.execute("SELECT * FROM import_batches ORDER BY id")] == \
+                [tuple(row) for row in conn.execute("SELECT * FROM import_batches ORDER BY id")]
+            assert [tuple(row) for row in target.execute("SELECT * FROM import_batch_transactions ORDER BY 1, 2")] == \
+                [tuple(row) for row in conn.execute("SELECT * FROM import_batch_transactions ORDER BY 1, 2")]
+            moved, moved_state = _held(target, copied)
+            assert moved == held
+            assert moved_state["custody_quantity"].report_blocked
+        finally:
+            target.close()
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("case_index", [0, 4])
+def test_network_partition_carries_the_owner_confirmation_with_its_batches(tmp_path, case_index):
+    from kassiber.core.import_identity import confirm_distinct, held_duplicate_groups
+    conn, profile, _, first, _, _ = _held_after_old_cumulative_export(tmp_path, case_index)
+    try:
+        group, = held_duplicate_groups(conn, profile["id"])
+        confirm_distinct(conn, profile, transaction_id=first["id"], expected_fingerprint=group["group_fingerprint"],
+                         reason="Separate purchases", authored_source="user")
+        conn.commit()
+        assert _held(conn, profile)[0] == []
+        target = _export_partition(conn, tmp_path)
+        try:
+            assert [tuple(row) for row in target.execute("SELECT * FROM synthetic_import_duplicate_reviews")] == \
+                [tuple(row) for row in conn.execute("SELECT * FROM synthetic_import_duplicate_reviews")]
+            assert _held(target, target.execute("SELECT * FROM profiles").fetchone())[0] == []
+        finally:
+            target.close()
+    finally:
+        conn.close()
+
+
+def test_network_partition_blocks_a_batch_that_spans_partitions(tmp_path):
+    from kassiber.core.book_network_migration import plan_network_partition
+    conn, _, _, _, _, february = _held_after_old_cumulative_export(tmp_path, 4)
+    try:
+        conn.execute("UPDATE transactions SET wallet_id='btc2' WHERE id=?", (february["id"],))
+        conn.commit()
+        plan = plan_network_partition(conn, "profile", {"environment": "main", "wallet_ids": ["btc"],
+                                                        "declared_wallet_ids": ["btc"]})
+        assert not plan["can_apply"]
+        assert {"code": "relation_crosses_partition", "wallet_ids": ["btc", "btc2"]} in plan["blockers"]
+    finally:
+        conn.close()

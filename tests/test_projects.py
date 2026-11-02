@@ -33,6 +33,26 @@ class ProjectCatalogTests(unittest.TestCase):
             tables.index("custody_gap_review_transactions"),
         )
 
+    def test_workspace_split_policy_covers_every_table_a_partition_carries(self):
+        from kassiber.core.book_network_migration import AUTHORED_SCOPES, EXTRA_SCOPES
+
+        declared = {
+            table
+            for key in (
+                "workspace_profile_scoped_tables",
+                "relationship_tables_following_parent_rows",
+                "project_shared_tables_copied_to_each_split_project",
+            )
+            for table in WORKSPACE_SPLIT_POLICY[key]
+        }
+        self.assertEqual(sorted((set(AUTHORED_SCOPES) | set(EXTRA_SCOPES)) - declared), [])
+        tables = WORKSPACE_SPLIT_POLICY["workspace_profile_scoped_tables"]
+        self.assertIn("import_batches", tables)
+        self.assertIn(
+            "import_batch_transactions",
+            WORKSPACE_SPLIT_POLICY["relationship_tables_following_parent_rows"],
+        )
+
     def test_catalog_stores_only_non_secret_project_metadata(self):
         with tempfile.TemporaryDirectory() as root:
             entry = create_project("Family Treasury", state_root=root)
