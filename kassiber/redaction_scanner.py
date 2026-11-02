@@ -3,55 +3,167 @@
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 from heapq import merge
 
 
 _IDENTIFIER = re.compile(r"[A-Za-z0-9_.-]+")
-_KEY_PARTS = re.compile(r"[_.-]+|(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|(?<=[0-9])(?=[A-Za-z])")
+_SEPARATORS = re.compile(r"[^A-Za-z0-9]+")
+_KEY_PARTS = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|(?<=[0-9])(?=[A-Za-z])")
 _VERSION = re.compile(r"[_-]v[0-9]+_*$", re.IGNORECASE)
-_NAMES = frozenset("""apikey authheader authorization blinding blindingkey cookie cookies
-descriptor mnemonic passphrase password passwordhash rpcpassword rpcauth macaroon
-macaroonhex recoveryphrase rune scankey scanprivate scanprivatekey spendkey secret
-secretkey privatekey privkey seed seedphrase seedwords silentpayment silentpayments
-silentpaymentdescriptor silentpaymentsdescriptor silentpaymentkey silentpaymentskey
-silentpaymentmaterial silentpaymentsmaterial silentpaymentscan silentpaymentscan
-silentpaymentscankey silentpaymentsscankey spdescriptor spscan spspend token xprv
-accesstoken refreshtoken apitoken authtoken clientsecret dbpassword apisecret walletpassphrase wif rpcpass pass passwd pwd credentials auth user
-credential sessionid sessionkey masterkey encryptionkey signingkey bearer pw pin otp""".split())
+# Secret words match whole identifier words, never raw substrings, so `prune`,
+# `dnsseed`, `bypass`, `passed` and `tokenizer` remain ordinary vocabulary.
+_SECRET_WORDS = frozenset("""authorization bearer blinding cookie cookies credential credentials descriptor
+macaroon mnemonic otp pass passcode passphrase passwd password pin pw pwd rpcauth rune secret seed token
+totp wif xprv""".split())
+# Short names count only as a whole identifier part (`user_id`, not `author`
+# or `sighash`); the shortest only as the final word (`db_pw`, not `pw_hash`).
+_PART_NAMES = frozenset("auth jwt session sid sig signature user".split())
+_LAST_NAMES = frozenset("otp pin pw totp".split())
+_WEAK_NAMES = frozenset(("pass", "user", "auth"))
+# Adjacent words that name a secret together, spelled apart or concatenated.
+_COMPOUNDS = {(first, second): first + second for first, second in (
+    ("api", "key"), ("api", "secret"), ("api", "token"), ("auth", "code"), ("auth", "header"), ("blinding", "key"),
+    ("encryption", "key"), ("master", "key"), ("mfa", "code"), ("otp", "code"), ("pin", "code"), ("priv", "key"),
+    ("private", "key"), ("recovery", "phrase"), ("scan", "key"), ("scan", "private"), ("secret", "key"),
+    ("seed", "phrase"), ("seed", "words"), ("session", "id"), ("session", "key"), ("signing", "key"),
+    ("silent", "payment"), ("silent", "payments"), ("sp", "descriptor"), ("sp", "scan"), ("sp", "spend"),
+    ("spend", "key"), ("totp", "code"), ("twofa", "code"), ("verification", "code"))}
+_COMPOUND_WORDS = frozenset(_COMPOUNDS.values())
+_METADATA = frozenset("disabled enabled fd file hint path statistics stdin".split())
+_COUNT_WORDS = frozenset("count max min limit length len size ttl".split())
+# Qualifiers let concatenated identifiers segment into words: `rpcpassword`,
+# `dbprivkeyraw`, `masterseedwords`. Unknown pieces keep a part unsegmented.
+_QUALIFIERS = frozenset("""access account admin api app aws b base bitcoin client code data db default dev
+device electrum enc encoded encryption env github hash header hex id key keys lnd local login main master mfa
+my mysql new old payment payments pem pg phrase plain priv private prod raw recovery refresh remote root rpc
+scan server service signing silent sp spend str test text total twofa v value verification wallet web words
+x azure binance bitfinex bitpanda bitstamp blockstream btcpay cln coinbase core discord electrs fulcrum gcp
+gitlab google kassiber kraken lightning mempool mongo nostr postgres redis slack smtp strike stripe telegram
+umbrel""".split()) | _COUNT_WORDS | _METADATA
+_PLURALS = frozenset(word + "s" for word in _SECRET_WORDS | _PART_NAMES if not word.endswith("s"))
+_VOCAB = _SECRET_WORDS | _PART_NAMES | _QUALIFIERS | _COMPOUND_WORDS | _PLURALS
+_SIZES = sorted({len(word) for word in _VOCAB}, reverse=True)
+# An unknown prefix before a distinctive secret word still names it
+# (`krakenpassword`, `jsessionid`); an unknown suffix (`tokenizer`) does not.
+_STRONG = sorted({word for word in _SECRET_WORDS if len(word) >= 5} | {"pwd", "xprv"} | _COMPOUND_WORDS,
+                 key=lambda word: (-len(word), word))
+_TWOFA = re.compile(r"2fa", re.IGNORECASE | re.ASCII)
+_HINT = re.compile("|".join(sorted(_SECRET_WORDS | _PART_NAMES | {"2fa", "code", "key", "mfa", "phrase", "recovery", "scan", "silent", "spend", "twofa"})), re.IGNORECASE | re.ASCII)
+
+
+@lru_cache(maxsize=4096)
+def _segment(part: str) -> tuple[str, ...]:
+    if part in _VOCAB:
+        return (part,)
+    if len(part) > 40:
+        return _strong_segment(part)
+    # Fewest words; ties keep the longest leading word.
+    best: list[tuple[int, int] | None] = [None] * len(part) + [(0, len(part))]
+    for start in range(len(part) - 1, -1, -1):
+        for size in _SIZES:
+            end = start + size
+            following = best[end] if end <= len(part) else None
+            if following is not None and part[start:end] in _VOCAB and (best[start] is None or following[0] + 1 < best[start][0]):
+                best[start] = (following[0] + 1, end)
+    if best[0] is None:
+        return _strong_segment(part)
+    words = []
+    start = 0
+    while start < len(part):
+        end = best[start][1]
+        words.append(part[start:end])
+        start = end
+    return tuple(words)
+
+
+def _strong_segment(part: str) -> tuple[str, ...]:
+    for word in _STRONG:
+        start = part.rfind(word)
+        rest = part[start + len(word):]
+        if start <= 0 or len(rest) > 40:
+            continue
+        if rest == "s":
+            return (part[:start], word + "s")
+        tail = _segment(rest) if rest else ()
+        if all(piece in _VOCAB for piece in tail):
+            return (part[:start], word) + tail
+    return (part,)
+
+
+@lru_cache(maxsize=4096)
+def _key_readings(token: str) -> tuple[tuple[tuple[str, bool], ...], ...]:
+    """Lowercase words of an identifier, each marked when it is a whole part.
+
+    Case runs are hints, not boundaries: `rpcSECRETkeyOLD` and `newPWDb64`
+    split inside a word, so a chunk is also read concatenated when that
+    reading segments into known words. Either reading can name a secret.
+    """
+    token = _TWOFA.sub("twofa", _VERSION.sub("", token).strip("_.-"))
+    split: list[tuple[str, bool]] = []
+    joined: list[tuple[str, bool]] = []
+    for chunk in _SEPARATORS.split(token):
+        parts = [part for part in (raw.lower().strip("0123456789") for raw in _KEY_PARTS.split(chunk)) if part]
+        pieces = []
+        for part in parts:
+            segmented = _segment(part)
+            pieces.extend((piece, len(segmented) == 1) for piece in segmented)
+        split.extend(pieces)
+        segmented = _segment("".join(parts)) if len(parts) > 1 else ()
+        if segmented and all(piece in _VOCAB for piece in segmented):
+            joined.extend((piece, len(segmented) == 1) for piece in segmented)
+        else:
+            joined.extend(pieces)
+    return (tuple(split),) if joined == split else (tuple(split), tuple(joined))
+
+
+def _reading_names(words: tuple[tuple[str, bool], ...]) -> list[str]:
+    if not words or words[-1][0] in _METADATA:
+        return []
+    names = []
+    for index, (word, whole) in enumerate(words):
+        if index + 1 < len(words):
+            second = words[index + 1][0]
+            pair = _COMPOUNDS.get((word, second)) or (_COMPOUNDS.get((word, second[:-1])) if second.endswith("s") else None)
+            if pair:
+                names.append(pair)
+        if word in _COMPOUND_WORDS:
+            names.append(word)
+            continue
+        base = word[:-1] if word in _PLURALS and word not in _SECRET_WORDS else word
+        if base in ("user", "auth") and base != word:
+            continue
+        if base in _PART_NAMES and not whole:
+            continue
+        if base in _LAST_NAMES and index + 1 < len(words):
+            continue
+        if base in _SECRET_WORDS or base in _PART_NAMES:
+            names.append(base)
+    return names
+
+
+def _secret_name(token: str) -> str:
+    if not _HINT.search(token):
+        return ""
+    names = [name for words in _key_readings(token) for name in _reading_names(words)]
+    return min(names, key=lambda name: (-len(name), name)) if names else ""
+
+
+_COUNT_VALUE = re.compile(r"[0-9]{1,9}(?:\.[0-9]{1,9})?")
+_LITERAL = re.compile(r"-?[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?(?![A-Za-z0-9_.])|(?:null|true|false|None|True|False)(?![A-Za-z0-9_.])")
+
+
+def _count_name(key: str, name: str) -> bool:
+    return any(word in _COUNT_WORDS or (word == name + "s" and word not in _SECRET_WORDS) for words in _key_readings(key) for word, _ in words)
 # The delimiter establishes a URL context; spelling the scheme cannot exempt
 # userinfo. The first alternative only preserves the readable scheme prefix.
 _SCHEME = re.compile(r"(?<![A-Za-z0-9+.-])[A-Za-z0-9+.-]+://|://|//")
 _SPACE = " \t\r\n\v\f\u0085\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"
 _LINES = "\r\n\u0085\u2028\u2029"
-_WEAK_NAMES = frozenset(("pass", "user", "auth"))
-# Short names count only as a whole identifier part (`user_id`, not `author`);
-# the shortest only as the final part (`db_pw`, not `spinner` or `pw_hash`).
-_PART_NAMES = frozenset(("user", "auth"))
-_LAST_PART_NAMES = frozenset(("pw", "pin", "otp"))
+# XML and tag whitespace; both runtimes strip exactly these characters.
+_XML_SPACE = " \t\r\n\v\f"
 _COMMAND_LINE = re.compile(r"(?:^|(?<=[\r\n\u0085\u2028\u2029]))[ \t]*(?:[$>][ \t]+)?(?:cmd|kassiber|bitcoind|bitcoin-cli|electrs|lncli|lightning-cli|curl|python|node|env|sudo|docker)(?=[ \t]|$)", re.ASCII)
 _Span = tuple[int, int, str]
-_ORDERED_NAMES = sorted(_NAMES, key=lambda name: (-len(name), name))
-
-
-def _secret_name(token: str) -> str:
-    token = _VERSION.sub("", token).strip("_.-")
-    parts = [part.lower().strip("0123456789") for part in _KEY_PARTS.split(token)]
-    if parts[-1] in ("hint", "statistics", "file", "stdin", "fd"):
-        return ""
-    # Identifier composition is not a security boundary (PGPASSWORD, jwtsecret).
-    compact = "".join(parts)
-    return next((name for name in _ORDERED_NAMES if name in compact
-                 and (name not in _PART_NAMES or name in parts)
-                 and (name not in _LAST_PART_NAMES or name == parts[-1])), "")
-
-
-_COUNT_PARTS = frozenset("count num max min limit length len size ttl".split())
-_COUNT_VALUE = re.compile(r"[0-9]{1,9}(?![^ \t\r\n,;)\]}])")
-
-
-def _count_name(key: str, name: str) -> bool:
-    parts = [part.lower().strip("0123456789") for part in _KEY_PARTS.split(_VERSION.sub("", key).strip("_.-"))]
-    return any(part in _COUNT_PARTS or (part == name + "s" and part not in _NAMES) for part in parts)
 
 
 def _quote_at(text: str, pos: int) -> tuple[str, int]:
@@ -171,7 +283,7 @@ def _url_heads(text: str):
         start = match.end()
         segment_end = matches[index + 1].start() if index + 1 < len(matches) else len(view)
         limit = _url_record_end(view, text, offsets, start, segment_end, record)
-        limit = _url_candidate_end(view, text, offsets, start, limit)
+        limit = _url_candidate_end(view, text, offsets, start, _url_line_end(view, text, offsets, start, limit))
         at = view.rfind("@", start, limit)
         credentials = at >= 0 or (limit == segment_end and index + 1 < len(matches) and final_at >= limit)
         if credentials:
@@ -200,6 +312,19 @@ def _keyed_spans(text: str, offsets: list[int] | range | None = None) -> list[_S
     head_start, head_end, credential_context = next(heads, (-1, -1, False))
     previous = None
     line_start = scanned = 0
+    # Per-line facts, computed once however many keys share the line.
+    line_seen = -1
+    key_line_end = indent = continued = yaml = 0
+    yaml_seen = continued_seen = -1
+
+    def line_yaml_end(pos: int) -> int:
+        nonlocal yaml, yaml_seen
+        if pos > key_line_end:
+            return _yaml_end(text, pos)
+        if yaml_seen != line_start:
+            yaml, yaml_seen = _yaml_end(text, pos), line_start
+        return yaml
+
     for match in _IDENTIFIER.finditer(text):
         if match.start() < cursor:
             continue
@@ -212,6 +337,8 @@ def _keyed_spans(text: str, offsets: list[int] | range | None = None) -> list[_S
         name = _secret_name(key)
         if key in ("-u", "-b") or (in_command and key in ("--user", "--cookie")):
             name = "cookie" if key in ("-b", "--cookie") else "credentials"
+        if not name and key.lower() == "key" and match.start() > 0 and text[match.start() - 1] in "?&":
+            name = "apikey"
         if not name and before is not None and text[before.end():match.start()] in (" ", "\t"):
             # Spaced names (`api key:`, `"Secret Key":`) still name a secret
             # when the second word changes what the first one means.
@@ -223,6 +350,10 @@ def _keyed_spans(text: str, offsets: list[int] | range | None = None) -> list[_S
             if text[scanned] in _LINES:
                 line_start = scanned + 1
             scanned += 1
+        if line_seen != line_start:
+            line_seen = line_start
+            key_line_end = _line_end(text, match.end())
+            indent = _line_indent(text, line_start)
         while head_end < match.start() and head_end >= 0:
             head_start, head_end, credential_context = next(heads, (-1, -1, False))
         in_url = head_start <= match.start() < head_end
@@ -266,59 +397,155 @@ def _keyed_spans(text: str, offsets: list[int] | range | None = None) -> list[_S
                 delimiter *= 3
                 body = pos + len(delimiter)
                 close = text.find(delimiter, body)
-                end, closed = (close + len(delimiter), True) if close >= 0 else (_yaml_end(text, body), False)
+                end, closed = (close + len(delimiter), True) if close >= 0 else (line_yaml_end(body), False)
             else:
                 end, closed = _quoted_end(text, body, delimiter)
             if closed and end < len(text) and (not _value_boundary(text, end) or _ambiguous_tail(text, end)):
-                end = _yaml_end(text, end)
+                end = line_yaml_end(end)
             replacement = delimiter + "[redacted]" + (delimiter if closed else "") if start == pos else "[redacted]"
+            resume = end
         else:
+            literal = _LITERAL.match(text, pos)
+            if literal and _literal_end(text, literal.end(), indent):
+                # A bare count after a count-shaped name (`max_tokens: 16`,
+                # `token_ttl=3600`) and JSON null, booleans, sampling seeds and
+                # counts are metadata. A string value never is.
+                value = literal.group()
+                if (_COUNT_VALUE.fullmatch(value) and _count_name(key, name)) or (key_quote and (
+                        value in ("null", "true", "false", "None", "True", "False")
+                        or name == "seed" or _count_name(key, name))):
+                    cursor = literal.end()
+                    continue
+                if key_quote:
+                    # A JSON literal ends unambiguously; later fields stay readable.
+                    spans.append((offsets[start], offsets[literal.end()], "[redacted]"))
+                    cursor = literal.end()
+                    continue
+            if key_quote and text[pos] == "{" and _count_name(key, name) and _count_object(text, pos):
+                # `"prompt_tokens_details": {"cached_tokens": 0}`: each member
+                # is decided on its own key.
+                continue
             end = pos
             value_end = " \t\v\f\"'" + _LINES
             while end < len(text) and text[end] not in value_end:
                 end += 1
             token = text[pos:end]
-            # A plain value owns lines indented deeper than its key (a YAML
-            # continuation), so neither exceptions nor masks stop at the first.
-            line_end = _continued_end(text, pos, match.start() - line_start)
-            whole = text[pos:line_end].strip(" \t")
-            # A bare count after a count-shaped name (`max_tokens: 16`,
-            # `descriptors=3`, `token_ttl=3600`) is metadata, not a credential.
-            if _COUNT_VALUE.match(text, pos) and _count_name(key, name):
-                continue
+            token_end = end
+            # A plain value owns lines indented deeper than its line (a YAML or
+            # shell continuation), so neither exceptions nor masks stop at the first.
+            if pos > key_line_end:
+                line_end = _continued_end(text, pos, indent)
+            else:
+                if continued_seen != line_start:
+                    continued, continued_seen = _continued_end(text, pos, indent), line_start
+                line_end = continued
             # Exceptions describe the entire value. A familiar first word never
             # licenses the rest of an otherwise unquoted credential.
-            if separator == ":" and not key_quote and (
+            whole = text[pos:line_end].strip(" \t") if line_end - pos <= 256 else None
+            if whole is not None and separator == ":" and not key_quote and (
                 whole.lower() in ("none", "expired", "(not set)")
                 or (name in _WEAK_NAMES and _alias_prose(name, whole))
                 or (name == "pass" and re.fullmatch(r"[0-9]+", whole)
                     and re.search(r"(?:^|[^A-Za-z])tests[ \t]+$", text[max(0, match.start() - 64):match.start()]))
             ):
                 continue
-            if flag and ((not in_command and _help_value(whole))
-                         or (name == "seedwords" and whole in ("12", "15", "18", "21", "24"))):
+            if whole is not None and flag and ((not in_command and _help_value(whole))
+                                               or (name == "seedwords" and whole in ("12", "15", "18", "21", "24"))):
                 continue
+            resume = token_end
             if text[pos:pos + 1] in ("{", "[", "(") or text.startswith(("$(", "${"), pos):
-                end = _balanced_end(text, pos)
+                end = _balanced_end(text, pos, line_yaml_end)
                 if text[end:_line_end(text, end)].strip(" \t"):
                     end = _line_end(text, end)
+                resume = end
             elif token in ("|", "|-", "|+", ">", ">-", ">+") or text[pos] in "`<":
-                end = _yaml_end(text, pos)
+                end = line_yaml_end(pos)
+                resume = end
+            elif (key.startswith("-") or in_command) and _flag_value_end(text, token_end):
+                # Whitespace before a new `-flag` ends an argv value.
+                end = token_end
             else:
                 # Without a value opener, quotes and words are credential data,
                 # including a stray quote followed by a multi-word passphrase.
                 end = line_end
             header = name == "authorization" or (name in ("cookie", "cookies") and not key_quote and not key.startswith("-"))
             if header:
-                end = _yaml_end(text, pos)
+                end = line_yaml_end(pos)
             while end > pos and text[end - 1] in " \t":
                 end -= 1
             replacement = "[redacted]"
         if end <= start:
             continue
         spans.append((offsets[start], offsets[end], replacement))
-        cursor = end
+        # Later keys on a plain value's line still establish their own blocks.
+        cursor = resume
     return spans
+
+
+def _line_indent(text: str, start: int) -> int:
+    # The line's own indent, past YAML sequence markers (`- password: x`).
+    pos = start
+    while True:
+        while pos < len(text) and text[pos] in " \t":
+            pos += 1
+        if not (text.startswith("- ", pos) or text.startswith("-\t", pos)):
+            return pos - start
+        pos += 1
+
+
+def _literal_end(text: str, pos: int, indent: int) -> bool:
+    # The literal is the whole value: closers then a record boundary, or
+    # nothing but whitespace through its line and any continuation.
+    while pos < len(text) and text[pos] in ")]}":
+        pos += 1
+    if pos < len(text) and text[pos] in ",;":
+        return _value_boundary(text, pos)
+    while pos < len(text) and text[pos] in " \t":
+        pos += 1
+    return (pos == len(text) or text[pos] in _LINES) and _continued_end(text, pos, indent) == pos
+
+
+def _count_object(text: str, pos: int) -> bool:
+    """A flat object whose members are all numbers, null or booleans."""
+    pos += 1
+    while True:
+        while pos < len(text) and text[pos] in _SPACE:
+            pos += 1
+        if text.startswith("}", pos):
+            return True
+        delimiter, body = _quote_at(text, pos)
+        key = _IDENTIFIER.match(text, body) if delimiter else None
+        if not key or not text.startswith(delimiter, key.end()):
+            return False
+        pos = key.end() + len(delimiter)
+        while pos < len(text) and text[pos] in " \t":
+            pos += 1
+        if not text.startswith(":", pos):
+            return False
+        pos += 1
+        while pos < len(text) and text[pos] in " \t":
+            pos += 1
+        literal = _LITERAL.match(text, pos)
+        if not literal:
+            return False
+        pos = literal.end()
+        while pos < len(text) and text[pos] in _SPACE:
+            pos += 1
+        if text.startswith(",", pos):
+            pos += 1
+        elif not text.startswith("}", pos):
+            return False
+
+
+_NEXT_FLAG = re.compile(r"--?[A-Za-z][A-Za-z0-9_.-]*(?=[= \t\r\n\u0085\u2028\u2029]|$)")
+
+
+def _flag_value_end(text: str, end: int) -> bool:
+    if end >= len(text) or text[end] not in " \t" or text[end - 1] == "\\":
+        return False
+    while end < len(text) and text[end] in " \t":
+        end += 1
+    return bool(_NEXT_FLAG.match(text, end))
 
 
 def _continued_end(text: str, pos: int, column: int) -> int:
@@ -380,10 +607,10 @@ def _yaml_marker(text: str, pos: int) -> bool:
     return pos == len(text) or text[pos] in _LINES
 
 
-def _balanced_end(text: str, start: int) -> int:
+def _balanced_end(text: str, start: int, yaml_end=None) -> int:
     stack: list[str] = []
     # An incomplete opener owns its indented continuation, not later records.
-    limit = _yaml_end(text, start)
+    limit = (yaml_end or (lambda pos: _yaml_end(text, pos)))(start)
     following = limit + (2 if text.startswith("\r\n", limit) else 1)
     if following < len(text) and text[following] in "}])":
         limit = _line_end(text, following)
@@ -420,7 +647,7 @@ def _yaml_end(text: str, start: int) -> int:
 _VOID_TAGS = frozenset("area base br col embed hr img input link meta param source track wbr".split())
 _TAG = re.compile(r"<(/?)([A-Za-z][A-Za-z0-9_.:-]*)(?![A-Za-z0-9_.:-])([^<>]*)>")
 _ATTR = re.compile(r"(?<![A-Za-z0-9_.:-])([A-Za-z_:][A-Za-z0-9_.:-]*)[ \t\r\n\v\f]*=[ \t\r\n\v\f]*(?:\"([^\"]*)\"|'([^']*)'|([^ \t\r\n\v\f>]+))", re.ASCII)
-_PAIR = re.compile(r"(?<![A-Za-z0-9_.-])[\"']?(?:name|key)[\"']?[ \t]*[:=][ \t]*[\"']?([A-Za-z0-9_.:-]+)[\"']?[, \t\r\n\v\f]*[\"']?value[\"']?[ \t]*[:=][ \t]*", re.IGNORECASE | re.ASCII)
+_PAIR = re.compile(r"(?<![A-Za-z0-9_.-])[\"']?(?:name|key)[\"']?[ \t]*[:=][ \t]*[\"']?([A-Za-z0-9_.-]+(?::[A-Za-z0-9_.-]+)?)[\"']?[, \t\r\n\v\f\u0085\u2028\u2029]*[\"']?value[\"']?[ \t]*[:=][ \t]*", re.IGNORECASE | re.ASCII)
 
 
 def _named_pair_spans(text: str, offsets: list[int] | range | None = None) -> list[_Span]:
@@ -452,7 +679,7 @@ def _xml_spans(text: str, offsets: list[int] | range | None = None) -> list[_Spa
         if tag.start() < cursor or tag[1]:
             continue
         key = tag[2]
-        if tag[3].lstrip().startswith((":", "-")):
+        if tag[3].lstrip(_XML_SPACE).startswith((":", "-")):
             continue
         name = _secret_name(key.split(":")[-1])
         attrs = []
@@ -476,13 +703,13 @@ def _xml_spans(text: str, offsets: list[int] | range | None = None) -> list[_Spa
         closing = "</" + key
         if key == "key":
             end = text.find(closing, tag.end())
-            plist_secret = end >= 0 and bool(_secret_name(text[tag.end():end].strip()))
+            plist_secret = end >= 0 and bool(_secret_name(text[tag.end():end].strip(_XML_SPACE)))
             continue
         name = name or ("secret" if plist_secret else "")
         plist_secret = False
         if not name and not keyed:
             continue
-        if tag[3].rstrip().endswith("/"):
+        if tag[3].rstrip(_XML_SPACE).endswith("/"):
             continue
         end = text.find(closing, tag.end())
         while end >= 0:
@@ -498,7 +725,7 @@ def _xml_spans(text: str, offsets: list[int] | range | None = None) -> list[_Spa
                 continue
             end = _yaml_end(text, tag.end())
         value = text[tag.end():end]
-        if not keyed and name in _WEAK_NAMES and _alias_prose(name, value.strip()):
+        if not keyed and name in _WEAK_NAMES and _alias_prose(name, value.strip(_XML_SPACE)):
             continue
         spans.append((offsets[tag.end()], offsets[end], "[redacted]"))
         cursor = end
@@ -636,6 +863,30 @@ def _public_url_prefix(prefix: str, original: str, offsets: list[int] | range, s
                 or any(ch in tail for ch in "\\{}[]\"'<>|"))
 
 
+def _url_line_end(view: str, original: str, offsets: list[int] | range, start: int, end: int) -> int:
+    # A literal line break ends a URL after its path starts, unless the next
+    # line's first token continues the userinfo with an `@`.
+    pos = start
+    authority = True
+    while pos < end:
+        literal = original[offsets[pos]:offsets[pos + 1]] == view[pos]
+        if view[pos] in "/?#" and literal:
+            authority = False
+        elif view[pos] in _LINES and literal and not authority:
+            following = pos
+            while following < end and view[following] in _SPACE:
+                following += 1
+            token = following
+            while token < end and view[token] != "@" and not (view[token] in _SPACE and original[offsets[token]:offsets[token + 1]] == view[token]):
+                token += 1
+            if token == end or view[token] != "@":
+                return pos
+            pos = following
+            continue
+        pos += 1
+    return end
+
+
 def _url_candidate_end(view: str, original: str, offsets: list[int] | range, start: int, end: int) -> int:
     first_at = view.find("@", start, end)
     if first_at < 0:
@@ -680,11 +931,13 @@ def _url_spans(text: str) -> list[_Span]:
         if offsets[start] < cursor:
             continue
         end = matches[index + 1].start() if index + 1 < len(matches) else len(view)
-        end = _url_record_end(view, text, offsets, start, end, record)
-        end = _url_candidate_end(view, text, offsets, start, end)
+        record_end = _url_record_end(view, text, offsets, start, end, record)
+        line_end = _url_line_end(view, text, offsets, start, record_end)
+        end = _url_candidate_end(view, text, offsets, start, line_end)
         first_at = view.find("@", start, end)
         if first_at < 0:
-            if not _clear_host(view[start:end]) and pending < 0 and not _public_url_prefix(view[start:end], text, offsets, start):
+            # A URL ended by its line cannot merge with a later credential URL.
+            if line_end == record_end and not _clear_host(view[start:end]) and pending < 0 and not _public_url_prefix(view[start:end], text, offsets, start):
                 pending = start
             continue
         last_at = view.rfind("@", start, end)
@@ -715,10 +968,22 @@ def _url_spans(text: str) -> list[_Span]:
     return spans
 
 
+_PAIR_STOPS = re.compile(r"[:=<>\"'({\[\]@]")
+
+
+def _userinfo_pair(token: str, at: int) -> tuple[int, int] | None:
+    # The first `name:` before the last @, found by one forward scan.
+    run = 0
+    for stop in _PAIR_STOPS.finditer(token, 0, at):
+        if stop.group() == ":" and stop.start() > run:
+            return run, stop.end()
+        run = stop.end()
+    return None
+
+
 def _bare_userinfo_spans(text: str) -> list[_Span]:
     view, offsets = _url_view(text)
     spans: list[_Span] = []
-    cursor = 0
     start = 0
     while start < len(view):
         end = start
@@ -728,16 +993,38 @@ def _bare_userinfo_spans(text: str) -> list[_Span]:
         # Userinfo before a later scheme is still `token:token@host`.
         scheme = _SCHEME.search(token)
         token = token[:scheme.start()] if scheme else token
-        if "@" in token:
-            at = token.rfind("@")
-            pair = re.search(r"[^:=<>\"'({\[\]@]+:", token)
-            if pair and pair.end() - 1 < at and not _secret_name(pair[0][:-1]) \
-                    and not (pair[0].lower() in ("mailto:", "xmpp:", "sip:", "sips:") and ":" not in token[pair.end():at]):
-                body = pair.start()
-                spans.append((offsets[start + body], offsets[start + at + 1], "[redacted-credentials]@"))
-                cursor = offsets[start + at + 1]
+        at = token.rfind("@")
+        pair = _userinfo_pair(token, at) if at > 0 else None
+        if pair and not _secret_name(token[pair[0]:pair[1] - 1]) \
+                and not (token[pair[0]:pair[1]].lower() in ("mailto:", "xmpp:", "sip:", "sips:") and ":" not in token[pair[1]:at]):
+            spans.append((offsets[start + pair[0]], offsets[start + at + 1], "[redacted-credentials]@"))
         start = end + 1
     return spans
+
+
+# Bot and webhook tokens travel in URL paths. Their extent is ambiguous, so
+# the mask runs to the next literal whitespace.
+_PATH_TOKEN = re.compile(r"/bot(?=[0-9]{3,}:)|hooks\.slack\.com/services/[^/ \t\r\n\v\f]+/[^/ \t\r\n\v\f]+/|discord(?:app)?\.com/api/webhooks/[0-9]+/|(?<![A-Za-z0-9_])(?=xox[abposr]-)", re.IGNORECASE | re.ASCII)
+
+
+def _path_token_spans(text: str, offsets: list[int] | range | None = None) -> list[_Span]:
+    offsets = range(len(text) + 1) if offsets is None else offsets
+    spans: list[_Span] = []
+    cursor = 0
+    for match in _PATH_TOKEN.finditer(text):
+        if match.start() < cursor:
+            continue
+        end = match.end()
+        while end < len(text) and text[end] not in _SPACE:
+            end += 1
+        if end > match.end():
+            spans.append((offsets[match.end()], offsets[end], "[redacted]"))
+        cursor = end
+    return spans
+
+
+# Longer records are masked whole: no scanner runs on an unbounded input.
+REDACTION_LIMIT = 1_000_000
 
 
 def redact_credentials(text: str) -> str:
@@ -747,9 +1034,11 @@ def redact_credentials(text: str) -> str:
     fixed number of streams is linear, including overlaps between decoded and
     literal syntax. Ambiguous overlaps own their whole union.
     """
+    if len(text) > REDACTION_LIMIT:
+        return "[redacted-oversized]"
     view, offsets = _url_view(text)
     streams = [_url_spans(text), _bare_userinfo_spans(text)]
-    for scan in (_xml_spans, _named_pair_spans, _cli_spans, _keyed_spans):
+    for scan in (_xml_spans, _named_pair_spans, _cli_spans, _path_token_spans, _keyed_spans):
         streams.append(scan(text))
         if view != text:
             streams.append(scan(view, offsets))

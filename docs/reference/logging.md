@@ -88,14 +88,14 @@ The Python and webview floors also scrub `rpcpassword`, `rpcauth`, `password`,
 `macaroon`, `cookie`, `secret_key` and `private_key` assignments. Their shared
 scanners handle key-based secrets before URL userinfo, including escaped and
 truncated diagnostics. Exact examples live in
-`tests/fixtures/secret_redaction_cases.json`; four seeded generators
+`tests/fixtures/secret_redaction_cases.json`; five seeded generators
 each add 100,000 compositions with secret-fragment and non-secret preservation
 checks. Nostr `nsec` private keys also pass through the key-material backstop.
 See [the scanner design and limits](#free-text-credential-scanner-and-limits)
 for encoding support, ambiguous URL text and prose-safe flag handling.
 
 The native Rust floor still uses its legacy token scanner. It must adopt the
-same scanners, aliases, exact corpora and all four generators during Rust
+same scanners, aliases, exact corpora and all five generators during Rust
 integration; native-only stderr does not yet have Python/webview parity.
 
 **Operational redaction — applied at render/export time.** Amounts,
@@ -244,20 +244,41 @@ whitespace, so masking a keyed value cannot erase the terminator and expose its
 surrounding username. Complete endpoints and clear quoted record boundaries with
 literal delimiters end that context; numeric URL ports remain readable. Encoded
 quotes and record-like text inside malformed userinfo cannot establish a boundary.
-Secret names split on camelCase, dots, dashes, underscores and digit-to-letter
-boundaries, then match secret words anywhere in the joined identifier:
-composition is not a boundary, so `sessionToken`, `secretAccessKey`,
-`PGPASSWORD`, `jwtsecret` and `SESSIONTOKEN` are all secret. `passwd`,
-`sessionid`, `sessionKey`, `masterKey`, `credential` and `bearer` are aliases.
-`user` and `auth` must be a whole identifier part, and `pw`, `pin` and `otp`
-the final part (`db_pw`, not `spinner`). A spaced name such as `api key:` or
-`"Secret Key":` is secret when the second word changes the first word's
-meaning; `user name:` and `token count:` are not. Metadata
-suffixes such as `-file`, `-fd`, `_hint` and `_statistics` do not become inline
-secret values. A bare integer after a count-shaped name (a plural such as
+Secret names are matched word by word, never as raw substrings. Identifiers
+split on separators, camelCase and digit-to-letter boundaries; a concatenated
+part counts only when it segments entirely into known secret and qualifier
+words (`rpcpassword`, `PGPASSWORD`, `dbprivkeyraw`, `masterseedwords`,
+`BTCPAYPWD`), or when an unknown prefix precedes a distinctive secret word that
+ends the part (`krakenpassword`, `csrftoken`, `JSESSIONID`). Case runs are
+hints: `rpcSECRETkeyOLD` is also read concatenated. So `prune`, `dnsseed`,
+`seednode`, `passed`, `bypass_cache`, `passive`, `wifi`, `tokenizer` and
+`sighash` stay ordinary vocabulary. Adjacent words form the explicit compounds
+`api key`, `private key`, `secret key`, `seed words`, `recovery phrase`,
+`session id`, `pin code`, `otp code`, `totp code`, `mfa code`, `2fa code`,
+`verification code` and the Silent Payments names. `passwd`, `pwd`,
+`passcode`, `credential`, `bearer`, `jwt`, `session`, `sid`, `sig`,
+`signature` (`X-Amz-Signature`) and a `?key=`/`&key=` query parameter are
+aliases. `user`, `auth`, `jwt`, `session`, `sid`, `sig` and `signature` must be
+a whole identifier part, and `pw`, `pin`, `otp` and `totp` the final word
+(`db_pw`, not `spinner` or `pw_hash`). A spaced name such as `api key:`,
+`PIN code:` or `"Secret Key":` is secret when the second word changes the first
+word's meaning; `user name:`, `token count:` and `see details:` are not.
+Metadata suffixes `-file`, `-path`, `-fd`, `-stdin`, `_hint`, `_statistics`,
+`_enabled` and `_disabled` do not become inline secret values, including in
+concatenated forms such as `rpccookiefile` and `macaroonpath`.
+
+An integer or decimal count after a count-shaped name (a plural such as
 `max_tokens` or `descriptors`, or a `count`, `max`, `min`, `limit`, `length`,
-`size` or `ttl` part) is metadata and stays readable, so provider error bodies
-keep their structure. Assignments accept `=`, `:`, `=>`, `:=`, `->` and repeated/spaced
+`len`, `size` or `ttl` word) is metadata and stays readable when it is the
+whole value: only whitespace follows through the end of its line and any
+continuation, or closers and a record boundary (`,`/`;` before a quoted key,
+whitespace or prose). `tokens=5 remaining` and `token_ttl=3600 Pw9Leak` are
+masked, and `num` is not a count word. After a quoted JSON or `repr()` key,
+`null`, booleans (`None`, `True`, `False`), sampling `seed` numbers, numeric
+counts and a flat object of numeric members (`"prompt_tokens_details":
+{"cached_tokens": 0}`) stay readable, so redacted provider error bodies still
+parse; any other JSON literal is masked on its own (`{"pin":[redacted],…}`).
+A string value never stays readable. Assignments accept `=`, `:`, `=>`, `:=`, `->` and repeated/spaced
 `=` operators. Unquoted `&` and `|` remain part of an ambiguous value, including
 query tails. Cookie/cookies assignments, objects, headers and curl `-b` lose all
 cookie pairs; authorization and cookie headers include indented continuations.
@@ -278,18 +299,25 @@ are masked. `credentials` remains a secret alias. Colon status literals `none`,
 secret-bearing.
 
 An unquoted value after a secret key is masked through the end of its line and
-any following lines indented deeper than the key (a YAML continuation), so
-multi-word passphrases and a stray quote inside the value (`password=x" Pw9Leak`)
-cannot expose later words. Only a value clearly delimited by quotes ends earlier.
-Losing the rest of a line, such as a following `--verbose` flag or `other=public`
-pair, is the deliberate cost.
+any following lines indented deeper than that line's own indent (past YAML
+`- ` markers), so multi-word passphrases, shell `\` continuations and a stray
+quote inside the value (`password=x" Pw9Leak`) cannot expose later words. Every
+later secret key on the masked line still establishes its own block, quoted
+value or continuation (`rpcpassword=x macaroon: |`). A value ends earlier only
+when its end is unambiguous: a closing quote, a JSON literal after a quoted
+key, or, for a command flag or a key inside a recognized command line,
+whitespace followed by a new `-flag` (`-rpcpassword=x -prune=550` keeps
+`-prune=550`). Losing the rest of a line otherwise, such as a following
+`other=public` pair or a positional argument, is the deliberate cost.
 
 XML scanning covers namespaces, opening-tag attributes, key/value attributes
 such as `<add key="Password" value="…"/>`, unquoted attributes,
 `<input type=password value=…>`, `<meta name="csrf-token" content="…">`, plist
 `<key>password</key><string>…</string>` pairs and named parameter contents.
-Name/value records such as Kubernetes `name: X_PASSWORD` / `value: …` and JSON
-`{"name":"password","value":"…"}` mask their value. Only a
+Name/value records such as Kubernetes `name: X_PASSWORD` / `value: …` (separated
+by any line break, including U+0085 and U+2028) and JSON
+`{"name":"password","value":"…"}` mask their value. Tag and plist text is
+trimmed of space, tab, CR, LF, VT and FF only, identically in both runtimes. Only a
 complete matching closing tag ends an element value; a longer tag name sharing
 the same prefix cannot expose the remaining value. A secret key/name attribute
 also overrides an outer element's ordinary alias prose exception.
@@ -371,18 +399,32 @@ masked spans. Deeper percent encoding and other arbitrary encodings remain
 best-effort. Never emit raw secret-bearing argv, payloads or configuration on
 the assumption that this backstop can recover their schema.
 
+Telegram `/bot<id>:<token>` paths, Slack `hooks.slack.com/services/…/…/<token>`
+and Discord webhook tokens, and Slack `xox?-` tokens are masked through the next
+literal whitespace. Once a URL's path, query or fragment starts, a literal line
+break ends it unless the next line's first token continues the userinfo with an
+`@`; a non-public URL therefore cannot merge with a later email or credential
+URL on another line.
+
 Candidate segments and structured scopes advance once; suffixes are not repeatedly
-rescanned. Escape-run counting and the fixed percent-decoding passes are linear
-in input length, checked to 400,000 characters. Four seeded generators each run
-100,000 compositions in Python and through the webview insert path. The second,
-third and fourth retain the reviewers' independently authored distributions and
-Python RNG; the fourth also runs four further seeds. All four assert
-that no four-character planted secret fragment survives, that planted identifiers,
-hostnames, prose and help remain readable, and that complete output streams have
-the same SHA-256 digest. The webview bare-mnemonic heuristic retains its three
+rescanned. Per-line facts (continuation and block ends) are computed once per
+line, however many keys share it, and name/value, userinfo and count checks scan
+forward without backtracking. Escape-run counting and the fixed percent-decoding
+passes are linear in input length; each adversarial shape is checked on its own
+to 400,000 characters. A record longer than 1,000,000 code points is replaced
+whole by `[redacted-oversized]` before any scanner runs. Five seeded generators
+each run 100,000 compositions in Python and through the webview insert path. The
+second to fifth retain the reviewers' independently authored distributions and
+Python RNG; the fourth and fifth also run further seeds. The fifth checks
+planted secrets and numeric PIN/OTP codes inside the contract; zero-width noise
+inside a key, prose-only provider errors, bare `twofa` and count-shaped numeric
+names are outside it. All five assert
+that no four-character planted secret fragment survives and that complete output
+streams have the same SHA-256 digest in both runtimes; the first four also assert
+that planted identifiers, hostnames, prose and help remain readable. The webview bare-mnemonic heuristic retains its three
 known corpus differences from Python.
 
 The native Rust secret floor and supervisor need the same scanners, aliases,
-exact corpora and all four generators before claiming this free-text contract.
+exact corpora and all five generators before claiming this free-text contract.
 Forwarding already-redacted Python records does not cover arbitrary native
 stderr. See the implementation verification report for the required Rust mirror.
