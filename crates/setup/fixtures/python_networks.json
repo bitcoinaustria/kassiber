@@ -4,7 +4,7 @@
       "scenario": "unknown",
       "seed": [
         "INSERT INTO \"accounts\" VALUES('acct-1','ws-1','profile-1','treasury','Treasury','asset','BTC','2026-01-01T00:00:00Z');",
-        "INSERT INTO \"profiles\" VALUES('profile-1','ws-1','Default','EUR','generic',365,'FIFO',0,1,'global',0,0,NULL,0,NULL,'2026-01-01T00:00:00Z',NULL);",
+        "INSERT INTO \"profiles\" VALUES('profile-1','ws-1','Default','EUR','generic',365,'FIFO',0,1,'global',0,0,0,0,NULL,0,NULL,'2026-01-01T00:00:00Z',NULL);",
         "INSERT INTO \"wallets\" VALUES('wallet-a','ws-1','profile-1','acct-1','Cold','custom','{}','2026-01-01T00:00:00Z');",
         "INSERT INTO \"wallets\" VALUES('wallet-b','ws-1','profile-1','acct-1','Hot','custom','{}','2026-01-01T00:00:00Z');",
         "INSERT INTO \"wallets\" VALUES('wallet-c','ws-1','profile-1','acct-1','Vault','custom','{}','2026-01-01T00:00:00Z');",
@@ -742,9 +742,9 @@
               "wallet-a"
             ],
             "inventory_digest": "af69bbef1a6e4ff72965bfac4506833726fe3d7b443b2b97edd6a37a5cb6d466",
-            "authored_digest": "83461f5eac04a46c41d63f94bc1912f0d34f9088dba4804e247eb9648ea76169",
+            "authored_digest": "512b07713582d3ad82a0c0bfafc2e4abcef5050f70533788dee4d767376442eb",
             "legacy_ledger_rows": false,
-            "plan_id": "e01742b672c3bdb4a4182c9f6ad15c5b90fd598e4e448f17d212dae58b4d8626",
+            "plan_id": "68c5527901a18564b27e5da5e16f2e5ea21c7d8482bb42095d90d7034161dba0",
             "can_apply": true,
             "blockers": [],
             "counts": {
@@ -781,9 +781,9 @@
               "wallet-a"
             ],
             "inventory_digest": "af69bbef1a6e4ff72965bfac4506833726fe3d7b443b2b97edd6a37a5cb6d466",
-            "authored_digest": "83461f5eac04a46c41d63f94bc1912f0d34f9088dba4804e247eb9648ea76169",
+            "authored_digest": "512b07713582d3ad82a0c0bfafc2e4abcef5050f70533788dee4d767376442eb",
             "legacy_ledger_rows": false,
-            "plan_id": "5f7b166ea213f4ec13cdfd7cd8a592b1650a3b4ed3c668fc8cd0a0a9f3f244b0",
+            "plan_id": "896bc437a645c1e39cde468c118f287ac10e2a852c433b9281022711c18e8e46",
             "can_apply": false,
             "blockers": [
               {
@@ -841,7 +841,7 @@
       "scenario": "known",
       "seed": [
         "INSERT INTO \"accounts\" VALUES('acct-1','ws-1','profile-1','treasury','Treasury','asset','BTC','2026-01-01T00:00:00Z');",
-        "INSERT INTO \"profiles\" VALUES('profile-1','ws-1','Default','EUR','generic',365,'FIFO',0,1,'global',0,0,NULL,0,NULL,'2026-01-01T00:00:00Z',NULL);",
+        "INSERT INTO \"profiles\" VALUES('profile-1','ws-1','Default','EUR','generic',365,'FIFO',0,1,'global',0,0,0,0,NULL,0,NULL,'2026-01-01T00:00:00Z',NULL);",
         "INSERT INTO \"wallets\" VALUES('wallet-a','ws-1','profile-1','acct-1','Cold','custom','{\"chain\": \"bitcoin\", \"network\": \"main\"}','2026-01-01T00:00:00Z');",
         "INSERT INTO \"wallets\" VALUES('wallet-b','ws-1','profile-1','acct-1','Hot','custom','{\"chain\": \"bitcoin\", \"network\": \"main\"}','2026-01-01T00:00:00Z');",
         "INSERT INTO \"wallets\" VALUES('wallet-c','ws-1','profile-1','acct-1','Vault','custom','{\"chain\": \"bitcoin\", \"network\": \"main\"}','2026-01-01T00:00:00Z');",
@@ -1669,9 +1669,9 @@
               "wallet-a"
             ],
             "inventory_digest": "377e21b7f1b8341e274f1de793eddcf2d42cbfdc57c2104eadef7e65435f85ad",
-            "authored_digest": "4a3b8f23672c8a293be4c40ec1a068f4bac6ca66de8265a26420c5e5117f9246",
+            "authored_digest": "39914809465f046f8f659588bc2d4c84ac150c88581c7949222c7e657293b350",
             "legacy_ledger_rows": false,
-            "plan_id": "fd0897b3a07a6d6dbb7904adb3124c58958e945fc237cd0e033df5edeb53d0b9",
+            "plan_id": "75f3c566eddc65e2a82742293dac8cdd9cfd7ab26c10a6776fd7c5e2b38efb9d",
             "can_apply": true,
             "blockers": [],
             "counts": {
@@ -1708,9 +1708,9 @@
               "wallet-a"
             ],
             "inventory_digest": "377e21b7f1b8341e274f1de793eddcf2d42cbfdc57c2104eadef7e65435f85ad",
-            "authored_digest": "4a3b8f23672c8a293be4c40ec1a068f4bac6ca66de8265a26420c5e5117f9246",
+            "authored_digest": "39914809465f046f8f659588bc2d4c84ac150c88581c7949222c7e657293b350",
             "legacy_ledger_rows": false,
-            "plan_id": "96b72978645fee8bafad109bf13c65e8ce43fc2de8815491c0cae9d24880f072",
+            "plan_id": "2a5705ef0bd0ef6b926d66825d0273536ca282dbc27953c3ce976ce3ebfb79b4",
             "can_apply": true,
             "blockers": [],
             "counts": {
@@ -1763,7 +1763,7 @@
       "scenario": "mixed",
       "seed": [
         "INSERT INTO \"accounts\" VALUES('acct-1','ws-1','profile-1','treasury','Treasury','asset','BTC','2026-01-01T00:00:00Z');",
-        "INSERT INTO \"profiles\" VALUES('profile-1','ws-1','Default','EUR','generic',365,'FIFO',0,1,'global',0,0,NULL,0,NULL,'2026-01-01T00:00:00Z',NULL);",
+        "INSERT INTO \"profiles\" VALUES('profile-1','ws-1','Default','EUR','generic',365,'FIFO',0,1,'global',0,0,0,0,NULL,0,NULL,'2026-01-01T00:00:00Z',NULL);",
         "INSERT INTO \"transactions\" VALUES('main','ws-1','profile-1','wallet-a','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',NULL,'fp-main','2026-01-01T00:00:00Z',NULL,'inbound','BTC',1000000,0,0,'EUR',40000.0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'deposit',NULL,NULL,NULL,0,'{\"network\": \"main\"}',NULL,NULL,NULL,NULL,'2026-01-01T00:00:00Z');",
         "INSERT INTO \"transactions\" VALUES('other','ws-1','profile-1','wallet-b','bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',NULL,'fp-other','2026-01-01T00:00:00Z',NULL,'inbound','BTC',1000000,0,0,'EUR',40000.0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'deposit',NULL,NULL,NULL,0,'{\"network\": \"regtest\"}',NULL,NULL,NULL,NULL,'2026-01-01T00:00:00Z');",
         "INSERT INTO \"wallets\" VALUES('wallet-a','ws-1','profile-1','acct-1','Cold','custom','{}','2026-01-01T00:00:00Z');",
@@ -2595,9 +2595,9 @@
               "wallet-a"
             ],
             "inventory_digest": "32f8eabac666804f20f91a43d25ef479685fcb09a379ce68d5e59a89591df020",
-            "authored_digest": "9f7db1618f12282ec1d06a9aba7e70c2640b04017e75244730ef4178414187eb",
+            "authored_digest": "1312387af90261d7e28b71d02e9a44f1097a6d9b722208add2156e41932d15dc",
             "legacy_ledger_rows": false,
-            "plan_id": "a22e392a0c57ca9ccd167c52c240539a8d79586439b963b2a1a35d2317ae9e14",
+            "plan_id": "0f932f66d499ac2c21b42e73963d56e94b0b4ce8a3d2d0755c53321c84ddc6da",
             "can_apply": true,
             "blockers": [],
             "counts": {
@@ -2635,9 +2635,9 @@
               "wallet-a"
             ],
             "inventory_digest": "32f8eabac666804f20f91a43d25ef479685fcb09a379ce68d5e59a89591df020",
-            "authored_digest": "9f7db1618f12282ec1d06a9aba7e70c2640b04017e75244730ef4178414187eb",
+            "authored_digest": "1312387af90261d7e28b71d02e9a44f1097a6d9b722208add2156e41932d15dc",
             "legacy_ledger_rows": false,
-            "plan_id": "aaa93f8fde16d30b5e769b7cfbe493a11a4b910d2a5d81ca6f8e159c41dba32e",
+            "plan_id": "1b5d9ada3f16054cb80ffa084e76a44acb19891eb3670e3a2c02584594b421e3",
             "can_apply": false,
             "blockers": [
               {
@@ -2700,7 +2700,7 @@
       "scenario": "contradictory",
       "seed": [
         "INSERT INTO \"accounts\" VALUES('acct-1','ws-1','profile-1','treasury','Treasury','asset','BTC','2026-01-01T00:00:00Z');",
-        "INSERT INTO \"profiles\" VALUES('profile-1','ws-1','Default','EUR','generic',365,'FIFO',0,1,'global',0,0,NULL,0,NULL,'2026-01-01T00:00:00Z',NULL);",
+        "INSERT INTO \"profiles\" VALUES('profile-1','ws-1','Default','EUR','generic',365,'FIFO',0,1,'global',0,0,0,0,NULL,0,NULL,'2026-01-01T00:00:00Z',NULL);",
         "INSERT INTO \"transactions\" VALUES('main','ws-1','profile-1','wallet-a','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',NULL,'fp-main','2026-01-01T00:00:00Z',NULL,'inbound','BTC',1000000,0,0,'EUR',40000.0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'deposit',NULL,NULL,NULL,0,'{\"network\": \"main\"}',NULL,NULL,NULL,NULL,'2026-01-01T00:00:00Z');",
         "INSERT INTO \"transactions\" VALUES('other','ws-1','profile-1','wallet-b','bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',NULL,'fp-other','2026-01-01T00:00:00Z',NULL,'inbound','BTC',1000000,0,0,'EUR',40000.0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'deposit',NULL,NULL,NULL,0,'{\"network\": \"regtest\"}',NULL,NULL,NULL,NULL,'2026-01-01T00:00:00Z');",
         "INSERT INTO \"wallets\" VALUES('wallet-a','ws-1','profile-1','acct-1','Cold','custom','{}','2026-01-01T00:00:00Z');",
@@ -3516,9 +3516,9 @@
               "wallet-a"
             ],
             "inventory_digest": "0764e2fc11ed62ea96675e1949cf427a962d6c2b1a745a8141cd8a6d6911ebfb",
-            "authored_digest": "8c0624630f1a9695f96f83b2179729bd3909a1fb412acb797094f2852b8070f5",
+            "authored_digest": "623346e75d6a223ebb46d550acd6a79e8eb5a02da11eb45e90eaf0fcaa1a13ab",
             "legacy_ledger_rows": false,
-            "plan_id": "911f0940763065964bef8a0564eca73232102a9fd2e4ab7d1528578d4c0115e6",
+            "plan_id": "f3f848380c072f058903a778fa81d559ecb77f1b3c2d261c58c932c4826d38cc",
             "can_apply": false,
             "blockers": [
               {
@@ -3564,9 +3564,9 @@
               "wallet-a"
             ],
             "inventory_digest": "0764e2fc11ed62ea96675e1949cf427a962d6c2b1a745a8141cd8a6d6911ebfb",
-            "authored_digest": "8c0624630f1a9695f96f83b2179729bd3909a1fb412acb797094f2852b8070f5",
+            "authored_digest": "623346e75d6a223ebb46d550acd6a79e8eb5a02da11eb45e90eaf0fcaa1a13ab",
             "legacy_ledger_rows": false,
-            "plan_id": "6171976c46f64eac1cfa03b26922aeb3da375b14f838ab2ccecb59b48e663291",
+            "plan_id": "73dc08f0447e7a016c7cffa1a356603eb4d9ba59d87736cc7f97c4fc2070dc4a",
             "can_apply": false,
             "blockers": [
               {
@@ -3626,7 +3626,7 @@
       "seed": [
         "INSERT INTO \"accounts\" VALUES('acct-1','ws-1','profile-1','treasury','Treasury','asset','BTC','2026-01-01T00:00:00Z');",
         "INSERT INTO \"chain_analysis_observations\" VALUES('profile-1','bitcoin','regtest','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','{}','{}','local','2026-01-01');",
-        "INSERT INTO \"profiles\" VALUES('profile-1','ws-1','Default','EUR','generic',365,'FIFO',0,1,'global',0,0,NULL,0,NULL,'2026-01-01T00:00:00Z',NULL);",
+        "INSERT INTO \"profiles\" VALUES('profile-1','ws-1','Default','EUR','generic',365,'FIFO',0,1,'global',0,0,0,0,NULL,0,NULL,'2026-01-01T00:00:00Z',NULL);",
         "INSERT INTO \"wallets\" VALUES('wallet-a','ws-1','profile-1','acct-1','Cold','custom','{}','2026-01-01T00:00:00Z');",
         "INSERT INTO \"wallets\" VALUES('wallet-b','ws-1','profile-1','acct-1','Hot','custom','{}','2026-01-01T00:00:00Z');",
         "INSERT INTO \"wallets\" VALUES('wallet-c','ws-1','profile-1','acct-1','Vault','custom','{}','2026-01-01T00:00:00Z');",
@@ -4457,9 +4457,9 @@
               "wallet-a"
             ],
             "inventory_digest": "bff5a74e73d2758f593302dff3f5e267c39c992b7f32fb2349ab89710ec34ca4",
-            "authored_digest": "83461f5eac04a46c41d63f94bc1912f0d34f9088dba4804e247eb9648ea76169",
+            "authored_digest": "512b07713582d3ad82a0c0bfafc2e4abcef5050f70533788dee4d767376442eb",
             "legacy_ledger_rows": false,
-            "plan_id": "c8ed38a3f3ba5e77a0b8ddc2e11ceb70efb6077eb7c472b794284227fe065bbc",
+            "plan_id": "df6fdcd9eeea41461661c302f963ded44e4d49df659693e1c90264939a6a2b8c",
             "can_apply": true,
             "blockers": [],
             "counts": {
@@ -4496,9 +4496,9 @@
               "wallet-a"
             ],
             "inventory_digest": "bff5a74e73d2758f593302dff3f5e267c39c992b7f32fb2349ab89710ec34ca4",
-            "authored_digest": "83461f5eac04a46c41d63f94bc1912f0d34f9088dba4804e247eb9648ea76169",
+            "authored_digest": "512b07713582d3ad82a0c0bfafc2e4abcef5050f70533788dee4d767376442eb",
             "legacy_ledger_rows": false,
-            "plan_id": "3fde86fd60ef1a4535a149e2e9f3c2ad15c2dd845a4576e25ebc40b367d4eb93",
+            "plan_id": "48d8a0d7a19e61168c9ed89f76868f4a1a3a3f098bd59c8cd6ec827a3c4ace94",
             "can_apply": false,
             "blockers": [
               {
@@ -4556,7 +4556,7 @@
       "scenario": "partition",
       "seed": [
         "INSERT INTO \"accounts\" VALUES('acct-1','ws-1','profile-1','treasury','Treasury','asset','BTC','2026-01-01T00:00:00Z');",
-        "INSERT INTO \"profiles\" VALUES('profile-1','ws-1','Default','EUR','generic',365,'FIFO',0,1,'global',0,0,NULL,0,NULL,'2026-01-01T00:00:00Z',NULL);",
+        "INSERT INTO \"profiles\" VALUES('profile-1','ws-1','Default','EUR','generic',365,'FIFO',0,1,'global',0,0,0,0,NULL,0,NULL,'2026-01-01T00:00:00Z',NULL);",
         "INSERT INTO \"transactions\" VALUES('main','ws-1','profile-1','wallet-a','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',NULL,'fp-main','2026-01-01T00:00:00Z',NULL,'inbound','BTC',1000000,0,0,'EUR',40000.0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'deposit',NULL,NULL,NULL,0,'{\"network\": \"main\"}',NULL,NULL,NULL,NULL,'2026-01-01T00:00:00Z');",
         "INSERT INTO \"transactions\" VALUES('other','ws-1','profile-1','wallet-b','bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',NULL,'fp-other','2026-01-01T00:00:00Z',NULL,'inbound','BTC',1000000,0,0,'EUR',40000.0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'deposit',NULL,NULL,NULL,0,'{\"network\": \"regtest\"}',NULL,NULL,NULL,NULL,'2026-01-01T00:00:00Z');",
         "INSERT INTO \"wallets\" VALUES('wallet-a','ws-1','profile-1','acct-1','Cold','custom','{}','2026-01-01T00:00:00Z');",
@@ -5388,9 +5388,9 @@
               "wallet-a"
             ],
             "inventory_digest": "32f8eabac666804f20f91a43d25ef479685fcb09a379ce68d5e59a89591df020",
-            "authored_digest": "9f7db1618f12282ec1d06a9aba7e70c2640b04017e75244730ef4178414187eb",
+            "authored_digest": "1312387af90261d7e28b71d02e9a44f1097a6d9b722208add2156e41932d15dc",
             "legacy_ledger_rows": false,
-            "plan_id": "a22e392a0c57ca9ccd167c52c240539a8d79586439b963b2a1a35d2317ae9e14",
+            "plan_id": "0f932f66d499ac2c21b42e73963d56e94b0b4ce8a3d2d0755c53321c84ddc6da",
             "can_apply": true,
             "blockers": [],
             "counts": {
@@ -5428,9 +5428,9 @@
               "wallet-a"
             ],
             "inventory_digest": "32f8eabac666804f20f91a43d25ef479685fcb09a379ce68d5e59a89591df020",
-            "authored_digest": "9f7db1618f12282ec1d06a9aba7e70c2640b04017e75244730ef4178414187eb",
+            "authored_digest": "1312387af90261d7e28b71d02e9a44f1097a6d9b722208add2156e41932d15dc",
             "legacy_ledger_rows": false,
-            "plan_id": "aaa93f8fde16d30b5e769b7cfbe493a11a4b910d2a5d81ca6f8e159c41dba32e",
+            "plan_id": "1b5d9ada3f16054cb80ffa084e76a44acb19891eb3670e3a2c02584594b421e3",
             "can_apply": false,
             "blockers": [
               {
@@ -5495,7 +5495,7 @@
         "INSERT INTO \"accounts\" VALUES('acct-1','ws-1','profile-1','treasury','Treasury','asset','BTC','2026-01-01T00:00:00Z');",
         "CREATE TABLE gl_books(profile_id TEXT PRIMARY KEY,created_at TEXT);",
         "INSERT INTO \"gl_books\" VALUES('profile-1','2026-01-01');",
-        "INSERT INTO \"profiles\" VALUES('profile-1','ws-1','Default','EUR','generic',365,'FIFO',0,1,'global',0,0,NULL,0,NULL,'2026-01-01T00:00:00Z',NULL);",
+        "INSERT INTO \"profiles\" VALUES('profile-1','ws-1','Default','EUR','generic',365,'FIFO',0,1,'global',0,0,0,0,NULL,0,NULL,'2026-01-01T00:00:00Z',NULL);",
         "INSERT INTO \"transactions\" VALUES('main','ws-1','profile-1','wallet-a','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',NULL,'fp-main','2026-01-01T00:00:00Z',NULL,'inbound','BTC',1000000,0,0,'EUR',40000.0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'deposit',NULL,NULL,NULL,0,'{\"network\": \"main\"}',NULL,NULL,NULL,NULL,'2026-01-01T00:00:00Z');",
         "INSERT INTO \"transactions\" VALUES('other','ws-1','profile-1','wallet-b','bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',NULL,'fp-other','2026-01-01T00:00:00Z',NULL,'inbound','BTC',1000000,0,0,'EUR',40000.0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'deposit',NULL,NULL,NULL,0,'{\"network\": \"regtest\"}',NULL,NULL,NULL,NULL,'2026-01-01T00:00:00Z');",
         "INSERT INTO \"wallets\" VALUES('wallet-a','ws-1','profile-1','acct-1','Cold','custom','{}','2026-01-01T00:00:00Z');",
@@ -6327,9 +6327,9 @@
               "wallet-a"
             ],
             "inventory_digest": "32f8eabac666804f20f91a43d25ef479685fcb09a379ce68d5e59a89591df020",
-            "authored_digest": "9f7db1618f12282ec1d06a9aba7e70c2640b04017e75244730ef4178414187eb",
+            "authored_digest": "1312387af90261d7e28b71d02e9a44f1097a6d9b722208add2156e41932d15dc",
             "legacy_ledger_rows": true,
-            "plan_id": "398ad6575fe996019184ddf8a198061ce9d588a3e844d555a96c5c28a6d88a7c",
+            "plan_id": "7c38e10be607928b30fffd33ba7a805b6e2d87ea7ac3e87237ce9d53f6bbae1d",
             "can_apply": false,
             "blockers": [
               {
@@ -6371,9 +6371,9 @@
               "wallet-a"
             ],
             "inventory_digest": "32f8eabac666804f20f91a43d25ef479685fcb09a379ce68d5e59a89591df020",
-            "authored_digest": "9f7db1618f12282ec1d06a9aba7e70c2640b04017e75244730ef4178414187eb",
+            "authored_digest": "1312387af90261d7e28b71d02e9a44f1097a6d9b722208add2156e41932d15dc",
             "legacy_ledger_rows": true,
-            "plan_id": "66f8260dfaaa4255fe2bf734d06889f0a6e8accc9a4cbc1e8cf88a32b65c2bc1",
+            "plan_id": "9a3ee11ad1015f33aa7ab7a4745d8929a00c52c0ec08e97a49cda8381d2bf202",
             "can_apply": false,
             "blockers": [
               {
@@ -6440,7 +6440,7 @@
       "seed": [
         "INSERT INTO \"accounts\" VALUES('acct-1','ws-1','profile-1','treasury','Treasury','asset','BTC','2026-01-01T00:00:00Z');",
         "INSERT INTO \"book_network_bindings\" VALUES('profile-1','00000000-0000-0000-0000-000000000007','main',1,NULL,'[{\"chain\": \"bitcoin\", \"chain_instance_id\": null, \"domain_id\": \"dc4af63ca04d5f53ea8b61c51bb1a0b30ca3e5f090bca6cb2f15894ca38203db\", \"network\": \"main\"}, {\"chain\": \"liquid\", \"chain_instance_id\": null, \"domain_id\": \"40ca38be7df821a9083d3e7ee5155ab87a6afabfacc9914fae9552a006131b36\", \"network\": \"liquidv1\"}]','[]','377e21b7f1b8341e274f1de793eddcf2d42cbfdc57c2104eadef7e65435f85ad','2026-01-01T00:00:00Z');",
-        "INSERT INTO \"profiles\" VALUES('profile-1','ws-1','Default','EUR','generic',365,'FIFO',0,1,'global',1,0,NULL,0,NULL,'2026-01-01T00:00:00Z',NULL);",
+        "INSERT INTO \"profiles\" VALUES('profile-1','ws-1','Default','EUR','generic',365,'FIFO',0,1,'global',1,0,1,0,NULL,0,NULL,'2026-01-01T00:00:00Z',NULL);",
         "INSERT INTO \"wallets\" VALUES('wallet-a','ws-1','profile-1','acct-1','Cold','custom','{\"chain\": \"bitcoin\", \"network\": \"main\"}','2026-01-01T00:00:00Z');",
         "INSERT INTO \"wallets\" VALUES('wallet-b','ws-1','profile-1','acct-1','Hot','custom','{\"chain\": \"bitcoin\", \"network\": \"main\"}','2026-01-01T00:00:00Z');",
         "INSERT INTO \"wallets\" VALUES('wallet-c','ws-1','profile-1','acct-1','Vault','custom','{\"chain\": \"bitcoin\", \"network\": \"main\"}','2026-01-01T00:00:00Z');",
@@ -7291,9 +7291,9 @@
               "wallet-a"
             ],
             "inventory_digest": "55f886d481445a869dddab91ae53cd105b036470078c07908c61e0f9f1e3103a",
-            "authored_digest": "2000c6c1c0c6efb0121e73a535c888e13adf4f7c751d200a33cf6608f40092d2",
+            "authored_digest": "09465efa11f11bb4733c1a7d9f2768a4bfd7a67feef785cda4c03439a8d287f7",
             "legacy_ledger_rows": false,
-            "plan_id": "bca9116ed79bc6206fabf0de153a4298cdc39abe6e42aba4bf4fdf14c919f902",
+            "plan_id": "2dcb94bad875204cd2b348206809ea36e684390a0ace73bad33d8604a4f3eb52",
             "can_apply": true,
             "blockers": [],
             "counts": {
@@ -7330,9 +7330,9 @@
               "wallet-a"
             ],
             "inventory_digest": "55f886d481445a869dddab91ae53cd105b036470078c07908c61e0f9f1e3103a",
-            "authored_digest": "2000c6c1c0c6efb0121e73a535c888e13adf4f7c751d200a33cf6608f40092d2",
+            "authored_digest": "09465efa11f11bb4733c1a7d9f2768a4bfd7a67feef785cda4c03439a8d287f7",
             "legacy_ledger_rows": false,
-            "plan_id": "903db97e9fa1322fe7c0aecb8ef2a15458943a313e8eb9a5ad02ddb78594e742",
+            "plan_id": "138d3f4128931194e664ea0a2c49f81c251e5bce33d65370c081275601a470e5",
             "can_apply": true,
             "blockers": [],
             "counts": {
