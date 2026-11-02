@@ -118,6 +118,8 @@ class MsatMigrationTests(unittest.TestCase):
             # ensured before it, and the first session then runs against a
             # table the UI and tax-summary queries reference.
             self.assertIn("kind_override", row.keys())
+            self.assertIn("pricing_review_accepted_price", row.keys())
+            self.assertIsNone(row["pricing_review_accepted_price"])
             self.assertIsNotNone(
                 conn.execute(
                     """

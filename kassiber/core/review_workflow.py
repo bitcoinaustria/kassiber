@@ -704,7 +704,7 @@ def _holds_residual_suspense(state, pair) -> bool:
     )
 
 
-def _apply_operations(conn, profile, operations, hooks, authored_source, state):
+def _apply_operations(conn, profile, operations, hooks, authored_source, state, *, resolve_acceptance=False):
     results = []
     case_ids = _cases(state)
     # Each unpair is judged against a baseline: the book before the batch, or
@@ -738,7 +738,7 @@ def _apply_operations(conn, profile, operations, hooks, authored_source, state):
         if operation["type"] == "unpair" and operation["pair_id"] in baseline_pairs:
             confirmed(operation)
     changed = False
-    for operation in operations:
+    for index, operation in enumerate(operations):
         kind = operation["type"]
         if kind == "custody_component":
             result = custody_component_planner.apply_component_review(
@@ -773,6 +773,12 @@ def _apply_operations(conn, profile, operations, hooks, authored_source, state):
         elif kind in _TERM_OPERATION_FIELDS:
             result = _apply_term_operation(conn, profile, operation, authored_source)
         elif kind == "accept_coarse_prices":
+            # Earlier operations can expose or clear coarse-price holds. Both
+            # target expansion and validation use this position in the batch.
+            if index:
+                state = _build(conn, profile)
+            if resolve_acceptance:
+                operation.update(_with_accepted_cases(conn, profile, [operation], state)[0])
             if "transaction_ids" not in operation:
                 raise _error("accept_coarse_prices must name its transactions", "review_artifact_invalid")
             coarse = set(_coarse_price_cases(conn, profile, state))
@@ -851,9 +857,8 @@ def plan_review(conn, profile, *, operations, expected_input_version, hooks):
             expected_input_version=expected_input_version,
         )
         before_state = _build(clone, current)
-        operations = _with_accepted_cases(clone, current, operations, before_state)
         before = _effects(before_state, clone, current, operations)
-        _apply_operations(clone, current, operations, hooks, "user", before_state)
+        _apply_operations(clone, current, operations, hooks, "user", before_state, resolve_acceptance=True)
         after = _effects(_build(clone, current), clone, current, operations)
         artifact = {
             "schema_version": 1, "workspace_id": current["workspace_id"], "profile_id": current["id"],

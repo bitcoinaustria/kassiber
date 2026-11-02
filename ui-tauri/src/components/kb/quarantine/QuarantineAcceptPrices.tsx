@@ -59,10 +59,12 @@ function acceptedCount(artifact: ReviewArtifact) {
 export function AcceptCoarsePricesDialog({
   scope,
   onClose,
+  hideSensitive,
 }: {
   /** The book the cause was read in; null closes the dialog. */
   scope: QuarantineBookScope | null;
   onClose: () => void;
+  hideSensitive: boolean;
 }) {
   const { t } = useTranslation("journals");
   const cases = useDaemonMutation<{ input_version: number }>("ui.review.cases", { invalidateQueries: false });
@@ -151,7 +153,9 @@ export function AcceptCoarsePricesDialog({
                   {artifact.after.report_ready ? t("quarantine.fix.reportsReady") : t("quarantine.fix.reportsBlocked")}
                 </p>
               </div>
-              <ReviewTaxDeltaView artifact={artifact} />
+              <div className={hideSensitive ? "sensitive" : undefined}>
+                <ReviewTaxDeltaView artifact={artifact} />
+              </div>
             </>
           ) : phase.kind === "checking" ? (
             <p className="flex items-center gap-2 text-muted-foreground">

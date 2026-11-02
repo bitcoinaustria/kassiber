@@ -37,7 +37,7 @@ const ARTIFACT = {
   operations: [{ type: "accept_coarse_prices", reason: "r", transaction_ids: ["a", "b", "c"] }],
   before: effects(5),
   after: effects(0),
-  delta: { years: [] },
+  delta: { years: [{ year: 2025, realized_gain_loss: "123.00", income: "10.00" }] },
   digest: "a".repeat(64),
 };
 
@@ -69,11 +69,11 @@ import { AcceptCoarsePricesDialog } from "./QuarantineAcceptPrices";
 
 const SCOPE = { workspace_id: "ws", profile_id: "book" };
 
-function mount(onClose = vi.fn()) {
+function mount(onClose = vi.fn(), hideSensitive = false) {
   const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
-      <AcceptCoarsePricesDialog scope={SCOPE} onClose={onClose} />
+      <AcceptCoarsePricesDialog scope={SCOPE} onClose={onClose} hideSensitive={hideSensitive} />
     </QueryClientProvider>,
   );
   return onClose;
@@ -111,6 +111,12 @@ describe("accepting approximate prices", () => {
     expect(
       useUiStore.getState().notifications.some((entry) => entry.title === "3 approximate prices accepted"),
     ).toBe(true);
+  });
+
+  it("masks the tax changes when sensitive amounts are hidden", async () => {
+    mount(vi.fn(), true);
+    await screen.findByText("Accept 3 approximate prices?");
+    expect(screen.getByRole("region", { name: "Tax change by year" }).closest(".sensitive")).toBeTruthy();
   });
 
   it("asks for a fresh preview when the book changed before the confirmation", async () => {

@@ -415,7 +415,7 @@ export function QuarantineCausePanel({
           </NotLoadedYet>
         </div>
       ) : null}
-      <AcceptCoarsePricesDialog scope={accepting} onClose={() => setAccepting(null)} />
+      <AcceptCoarsePricesDialog hideSensitive={hideSensitive} scope={accepting} onClose={() => setAccepting(null)} />
       <QuarantineFixDialog
         request={fixing}
         onClose={() => setFixing(null)}

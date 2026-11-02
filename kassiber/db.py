@@ -5327,6 +5327,7 @@ def ensure_schema_compat(conn):
     _ensure_bip329_wallet_agnostic_schema(conn)
     _drop_legacy_source_funds_recipients_unique(conn)
     _migrate_msat_columns(conn)
+    ensure_column(conn, "transactions", "pricing_review_accepted_price", "TEXT")
     # Added after the msat rebuild, whose fixed column list would otherwise drop
     # it on a legacy REAL-typed database.
     ensure_column(conn, "transactions", "amount_includes_fee", "INTEGER NOT NULL DEFAULT 0")

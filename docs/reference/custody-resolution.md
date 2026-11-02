@@ -259,7 +259,8 @@ The shared `core/review_workflow.py` module exposes four operations:
 
 One batch carries every write that changes journal meaning, so a single
 approval covers a whole repair and applies atomically. Each operation runs
-against the book as the previous ones left it; any failure rolls back all of
+against the book as the previous ones left it, including expansion and validation
+of coarse-price acceptance targets after an earlier repair; any failure rolls back all of
 them. Supported operations:
 
 | Type | Fields | Core service |
