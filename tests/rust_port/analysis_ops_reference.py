@@ -20,6 +20,7 @@ def main():
     source = REFERENCE.Sources()
     source.counter = int(os.environ.get('KASSIBER_RUST_TEST_ANALYSIS_ID_OFFSET', '0'))
     with contextlib.ExitStack() as stack:
+        stack.enter_context(patch.object(REFERENCE.datasets,'uuid',SimpleNamespace(uuid4=source.label_uuid)))
         for module in [REFERENCE.cases, REFERENCE.datasets, REFERENCE.projection_store]:
             stack.enter_context(patch.object(module,'now_iso',return_value=REFERENCE.NOW))
         stack.enter_context(patch.object(REFERENCE.cases,'uuid',SimpleNamespace(uuid4=source.label_uuid)))
@@ -29,7 +30,8 @@ def main():
         for module in [watches, filed_report_chain]:
             stack.enter_context(patch.object(module,'now_iso',return_value=REFERENCE.NOW))
             stack.enter_context(patch.object(module,'uuid',SimpleNamespace(uuid4=source.label_uuid)))
-        from kassiber.core import chain_analysis_backfill as backfill
+        from kassiber.core import chain_analysis_backfill as backfill, chain_analysis_acquisition as acquisition
+        stack.enter_context(patch.object(acquisition,'now_iso',return_value=REFERENCE.NOW))
         stack.enter_context(patch.object(backfill,'now_iso',return_value=REFERENCE.NOW))
         stack.enter_context(patch.object(backfill,'uuid',SimpleNamespace(uuid4=source.uuid)))
         if os.environ.get('KASSIBER_RUST_TEST_ANALYSIS_EPOCH'):

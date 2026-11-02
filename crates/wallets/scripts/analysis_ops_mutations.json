@@ -318,5 +318,125 @@
       "analysis_acquisition_plans_match_python_bytes_and_all_112_tables"
     ],
     "rule": "Only observation-capable backends can be planned."
+  },
+  {
+    "id": "analysis-acquire-apply-plan-binding",
+    "file": "crates/wallets/src/analysis_ops/acquisition/apply.rs",
+    "find": "    if canonical(&expected)? != canonical(supplied)? {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "acquisition_apply_sends_nothing_for_a_changed_plan_or_offline"
+    ],
+    "rule": "Egress starts only after the recomputed plan equals the reviewed plan."
+  },
+  {
+    "id": "analysis-acquire-apply-offline",
+    "file": "crates/wallets/src/analysis_ops/acquisition/reader.rs",
+    "find": "        if runtime.offline() {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "acquisition_apply_sends_nothing_for_a_changed_plan_or_offline"
+    ],
+    "rule": "Offline mode refuses every acquisition request before connecting."
+  },
+  {
+    "id": "analysis-acquire-apply-depth",
+    "file": "crates/wallets/src/analysis_ops/acquisition/apply.rs",
+    "find": "            if depth >= depth_limit {",
+    "replace": "            if depth > depth_limit {",
+    "expect_failing": [
+      "acquisition_apply_stops_at_depth_and_transaction_limits"
+    ],
+    "rule": "Traversal stops at the reviewed depth."
+  },
+  {
+    "id": "analysis-acquire-apply-limit",
+    "file": "crates/wallets/src/analysis_ops/acquisition/apply.rs",
+    "find": "        if seen.len() as i64 >= maximum {",
+    "replace": "        if seen.len() as i64 > maximum {",
+    "expect_failing": [
+      "acquisition_apply_stops_at_depth_and_transaction_limits"
+    ],
+    "rule": "Traversal stops at the reviewed transaction budget."
+  },
+  {
+    "id": "analysis-acquire-apply-corroboration",
+    "file": "crates/wallets/src/analysis_ops/acquisition/apply.rs",
+    "find": "            if spent.contains(&(source.clone(), number.clone())) {\n                continue;\n            }",
+    "replace": "            if spent.contains(&(source.clone(), number.clone())) && false {\n                continue;\n            }",
+    "expect_failing": [
+      "acquisition_apply_flags_uncorroborated_spender_claims"
+    ],
+    "rule": "Only uncorroborated spender claims become a frontier."
+  },
+  {
+    "id": "analysis-acquire-apply-sequence",
+    "file": "crates/wallets/src/analysis_ops/acquisition/apply.rs",
+    "find": "                set(target, \"sequence\", Value::Int(sequence.clone()));",
+    "replace": "                let _ = sequence;",
+    "expect_failing": [
+      "acquisition_apply_backward_depth_discards_witnesses"
+    ],
+    "rule": "Public input sequence numbers are retained."
+  },
+  {
+    "id": "analysis-dataset-import-batch",
+    "file": "crates/wallets/src/analysis_ops/datasets.rs",
+    "find": "            if batch.len() >= 2000 {",
+    "replace": "            if batch.len() >= 1000 {",
+    "expect_failing": [
+      "analysis_dataset_imports_match_python_bytes_progress_and_all_112_tables"
+    ],
+    "rule": "Imports stage and report at most 2,000 claims per commit."
+  },
+  {
+    "id": "analysis-dataset-import-hash",
+    "file": "crates/wallets/src/analysis_ops/datasets.rs",
+    "find": "            .is_some_and(|e| e != &Value::Null && e != &s(content.as_str()))",
+    "replace": "            .is_some_and(|_| false)",
+    "expect_failing": [
+      "analysis_dataset_imports_match_python_bytes_progress_and_all_112_tables"
+    ],
+    "rule": "Activation requires the previewed source digest."
+  },
+  {
+    "id": "analysis-dataset-import-supersede",
+    "file": "crates/wallets/src/analysis_ops/datasets.rs",
+    "find": "            if truthy(previous) {",
+    "replace": "            if false {",
+    "expect_failing": [
+      "analysis_dataset_imports_match_python_bytes_progress_and_all_112_tables"
+    ],
+    "rule": "A replacement supersedes the active version atomically."
+  },
+  {
+    "id": "analysis-dataset-import-failed",
+    "file": "crates/wallets/src/analysis_ops/datasets.rs",
+    "find": "                conn.execute(\"UPDATE chain_analysis_datasets SET status='failed',updated_at=? WHERE id=? AND profile_id=? AND status='staging'\",",
+    "replace": "                conn.execute(\"UPDATE chain_analysis_datasets SET updated_at=? WHERE id=? AND profile_id=? AND status='staging'\",",
+    "expect_failing": [
+      "analysis_dataset_imports_match_python_bytes_progress_and_all_112_tables"
+    ],
+    "rule": "An interrupted or invalid import leaves an invisible failed pack."
+  },
+  {
+    "id": "analysis-dataset-import-claims-hash",
+    "file": "crates/wallets/src/analysis_ops/datasets.rs",
+    "find": "            claims.update(format!(\"{}\\n\", compact(&claim)?).as_bytes());",
+    "replace": "            claims.update(compact(&claim)?.as_bytes());",
+    "expect_failing": [
+      "analysis_dataset_imports_match_python_bytes_progress_and_all_112_tables"
+    ],
+    "rule": "The claims digest covers newline-delimited canonical claims."
+  },
+  {
+    "id": "analysis-dataset-discard-cancel",
+    "file": "crates/wallets/src/analysis_ops/datasets.rs",
+    "find": "        if cancelled() {\n            return Err(AppError::new(\n                \"chain_analysis_cancelled\",\n                \"Dataset cleanup cancelled\",",
+    "replace": "        if false {\n            return Err(AppError::new(\n                \"chain_analysis_cancelled\",\n                \"Dataset cleanup cancelled\",",
+    "expect_failing": [
+      "analysis_dataset_imports_match_python_bytes_progress_and_all_112_tables"
+    ],
+    "rule": "Cleanup observes cancellation between bounded batches."
   }
 ]

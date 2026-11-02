@@ -11,7 +11,7 @@ use kassiber_store::rusqlite::{params, types::Value as Sql, Connection};
 
 mod acquisition;
 mod cases;
-mod datasets;
+pub mod datasets;
 #[cfg(any(test, feature = "test-harness"))]
 pub mod fixture;
 mod labels;
@@ -27,10 +27,29 @@ pub struct Scope<'a> {
 /// Facts Python reads ambiently: wall-clock seconds, the offline preference
 /// and a caller's cancellation. None of them grants network authority.
 pub trait Runtime {
-    fn epoch(&mut self) -> i64;
+    fn epoch(&self) -> i64;
     fn offline(&self) -> bool;
     fn cancelled(&self) -> bool {
         false
+    }
+    /// `KASSIBER_NO_EGRESS`, read like `egress_policy._environment_blocks_egress`.
+    fn no_egress(&self) -> bool {
+        matches!(
+            std::env::var("KASSIBER_NO_EGRESS")
+                .unwrap_or_default()
+                .trim()
+                .to_ascii_lowercase()
+                .as_str(),
+            "1" | "true" | "yes" | "on"
+        )
+    }
+    /// The transport gate for an already reviewed explicit action. The
+    /// default reads no preference and therefore refuses every route.
+    fn gate(&self) -> kassiber_net::Gate {
+        kassiber_net::Gate::new(
+            || kassiber_net::Offline::Unavailable,
+            kassiber_net::Ledger::default(),
+        )
     }
 }
 
@@ -39,7 +58,7 @@ pub struct SystemRuntime {
     pub offline: bool,
 }
 impl Runtime for SystemRuntime {
-    fn epoch(&mut self) -> i64 {
+    fn epoch(&self) -> i64 {
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_or(0, |d| d.as_secs() as i64)
@@ -78,22 +97,7 @@ pub fn execute_with_sources(
         Value::Dict(_) => args.clone(),
         _ => return Err(invalid("Chain analysis arguments must be an object")),
     };
-    if let Some(expected) = get(&args, "expected_scope") {
-        if expected != &Value::Null
-            && !py_eq(
-                expected,
-                &dict([
-                    ("workspace_id", s(scope.workspace_id)),
-                    ("profile_id", s(scope.profile_id)),
-                ]),
-            )
-        {
-            return Err(AppError::new(
-                "scope_changed",
-                "The active book changed; reopen the investigation in its original book",
-            ));
-        }
-    }
+    check_scope(&args, scope)?;
     remove(&mut args, "expected_scope");
     match operation {
         "labels.upsert" => labels::upsert(conn, scope.profile_id, &args, sources),
@@ -114,6 +118,7 @@ pub fn execute_with_sources(
             watches::dispatch(conn, scope.profile_id, &operation[8..], &args, sources)
         }
         "acquire.plan" => acquisition::plan(conn, scope.profile_id, &args, sources),
+        "acquire.apply" => acquisition::apply(conn, scope.profile_id, &args, sources, runtime),
         "sources.plan" | "sources.authorize" | "sources.list" | "sources.revoke"
         | "sources.run" => {
             sources::dispatch(conn, scope.profile_id, operation, &args, sources, runtime)
@@ -123,6 +128,152 @@ pub fn execute_with_sources(
             "Unsupported chain analysis operation",
         )),
     }
+}
+
+/// `datasets.import` over a caller-opened local file (the CLI's `--file`).
+/// Read failures surface as the CLI's open failure; nothing egresses.
+pub fn import_dataset(
+    conn: &Connection,
+    scope: &Scope<'_>,
+    args: &Value,
+    file: Box<dyn std::io::BufRead + Send>,
+    sources: &mut dyn Sources,
+) -> Result<Value> {
+    let mut args = match args {
+        Value::Null => dict::<&str>([]),
+        Value::Dict(_) => args.clone(),
+        _ => return Err(invalid("Chain analysis arguments must be an object")),
+    };
+    check_scope(&args, scope)?;
+    remove(&mut args, "expected_scope");
+    arguments(
+        &args,
+        &[
+            "source_token",
+            "manifest",
+            "format",
+            "adapter",
+            "expected_sha256",
+        ],
+        &["manifest", "expected_sha256"],
+    )?;
+    let format = get(&args, "format").cloned().unwrap_or(s("csv"));
+    let adapter = get(&args, "adapter").cloned().unwrap_or(s("generic"));
+    let mut stream = crate::analysis_index::reads::preview::Stream(file);
+    datasets::import(
+        conn,
+        scope.profile_id,
+        &datasets::Import {
+            manifest: field(&args, "manifest"),
+            format: &format,
+            adapter: &adapter,
+            expected_sha256: get(&args, "expected_sha256"),
+            progress: &|_| {},
+            cancelled: &|| false,
+        },
+        &mut stream,
+        sources,
+    )
+}
+
+/// `daemon_chain_analysis_watches.has_pending_work`: enabled watches or
+/// active source grants. A plain read; it never contacts anything.
+pub fn has_pending_work(conn: &Connection) -> Result<bool> {
+    Ok(first(
+        conn,
+        "SELECT 1 FROM chain_analysis_watches WHERE enabled=1 UNION ALL SELECT 1 FROM chain_analysis_acquisition_grants WHERE status='active' LIMIT 1",
+        [],
+    )?
+    .is_some())
+}
+
+/// `worker_tick`: publish authorized source batches before evaluating the
+/// dependent watches. Offline mode pauses acquisition but not local watches.
+pub fn worker_tick(
+    conn: &Connection,
+    sources: &mut dyn Sources,
+    runtime: &dyn Runtime,
+) -> Result<()> {
+    if !has_pending_work(conn)? {
+        return Ok(());
+    }
+    let profiles = crate::publication::row::rows(
+        conn,
+        "SELECT profile_id FROM chain_analysis_watches WHERE enabled=1 UNION SELECT profile_id FROM chain_analysis_acquisition_grants WHERE status='active' ORDER BY profile_id",
+        [],
+    )?;
+    let acquire = !runtime.offline();
+    for row in profiles {
+        if runtime.cancelled() {
+            return Ok(());
+        }
+        let profile = routing::py_text(field(&row, "profile_id"));
+        if acquire {
+            acquisition::run_due(conn, &profile, sources, runtime)?;
+        }
+        if !runtime.cancelled()
+            && first(
+                conn,
+                "SELECT 1 FROM chain_analysis_watches WHERE profile_id=? AND enabled=1 LIMIT 1",
+                [profile.as_str()],
+            )?
+            .is_some()
+        {
+            watches::evaluate_due(conn, &profile, &|| runtime.cancelled(), sources)?;
+        }
+        if !conn.is_autocommit() {
+            conn.execute_batch("COMMIT").map_err(database_error)?;
+        }
+    }
+    Ok(())
+}
+
+/// Undelivered, unacknowledged inbox events for the generic wake-up event.
+pub fn pending_deliveries(conn: &Connection) -> Result<Vec<String>> {
+    Ok(crate::publication::row::rows(
+        conn,
+        "SELECT id FROM chain_analysis_watch_inbox WHERE delivered_at IS NULL AND acknowledged_at IS NULL LIMIT 100",
+        [],
+    )?
+    .iter()
+    .map(|row| routing::py_text(field(row, "id")))
+    .collect())
+}
+
+/// Receipt after the at-least-once `ui.chain_analysis.watches.changed` event.
+pub fn mark_delivered(conn: &Connection, ids: &[String], sources: &mut dyn Sources) -> Result<()> {
+    for id in ids {
+        conn.execute(
+            "UPDATE chain_analysis_watch_inbox SET delivered_at=? WHERE id=?",
+            params![sources.now(), id],
+        )
+        .map_err(database_error)?;
+    }
+    if !conn.is_autocommit() {
+        conn.execute_batch("COMMIT").map_err(database_error)?;
+    }
+    Ok(())
+}
+
+/// `expected_scope`: an operation stays bound to its original book.
+fn check_scope(args: &Value, scope: &Scope<'_>) -> Result<()> {
+    if let Some(expected) = get(args, "expected_scope") {
+        if expected != &Value::Null
+            && !py_eq(
+                expected,
+                &dict([
+                    ("workspace_id", s(scope.workspace_id)),
+                    ("profile_id", s(scope.profile_id)),
+                ]),
+            )
+        {
+            return Err(AppError::new(
+                "scope_changed",
+                "The active book changed; reopen the investigation in its original book",
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// Python's `WRITE_OPERATIONS`: only these commit the caller's connection.

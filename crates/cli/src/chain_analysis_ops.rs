@@ -25,6 +25,8 @@ pub const COMMANDS: &[&str] = &[
     "chain-analysis.sources.revoke",
     "chain-analysis.sources.run",
     "chain-analysis.acquire.plan",
+    "chain-analysis.acquire.apply",
+    "chain-analysis.datasets.import",
 ];
 
 fn document(raw: &str) -> Result<Value, AppError> {
@@ -57,7 +59,46 @@ fn document(raw: &str) -> Result<Value, AppError> {
     Ok(parsed)
 }
 
+/// `datasets import`: manifest first, then the local file, as in Python.
+fn import(book: &mut dyn Book, ns: &Namespace) -> Result<Value, AppError> {
+    let mut args = dict([("manifest", document(ns.text("manifest").unwrap_or(""))?)]);
+    for (key, name) in [
+        ("format", "source_format"),
+        ("adapter", "adapter"),
+        ("expected_sha256", "expected_sha256"),
+    ] {
+        if let Some(value) = ns.get(name) {
+            kassiber_envelope::set(&mut args, key, value.clone());
+        }
+    }
+    let unavailable = || {
+        AppError::new(
+            "chain_analysis_source_unavailable",
+            "Cannot read selected dataset file",
+        )
+    };
+    let path = crate::render::expand_user(
+        ns.text("file").unwrap_or(""),
+        std::env::var("HOME").ok().as_deref(),
+    )
+    .map_err(|_| unavailable())?;
+    // Python's open() refuses a directory before reading.
+    let file = std::fs::File::open(path)
+        .ok()
+        .filter(|file| file.metadata().is_ok_and(|m| !m.is_dir()))
+        .ok_or_else(unavailable)?;
+    book.chain_analysis_import(
+        ns.get("workspace"),
+        ns.get("profile"),
+        &args,
+        Box::new(std::io::BufReader::new(file)),
+    )
+}
+
 pub fn execute(book: &mut dyn Book, path: &str, ns: &Namespace) -> Result<Value, AppError> {
+    if path == "chain-analysis.datasets.import" {
+        return import(book, ns);
+    }
     // `cli.chain_analysis.dispatch`: the attributes each leaf forwards.
     let allowed: &[&str] = match path {
         "chain-analysis.watches.inbox" => &["limit", "before"],

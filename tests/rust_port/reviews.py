@@ -544,3 +544,13 @@ REVIEWS["tests/test_rust_analysis_acquisition.py"] = {"*": {
     "disposition": "oracle", "group": "chain-sync",
     "reason": "compares the native acquisition planner with unchanged Python bytes and all 112 tables across argument, genesis-pin, backend capability, domain, instance and subject-resolution cases, plus encrypted-book CLI/daemon parity with offline off/on; planning contacts no backend",
 }}
+
+REVIEWS["tests/test_rust_analysis_acquisition_apply.py"] = {"*": {
+    "disposition": "oracle", "group": "chain-sync",
+    "reason": "serves synthetic transactions from loopback Esplora/Core and Electrum fakes and compares native and unchanged-Python request sequences, CLI/daemon bytes and all 112 tables for acquisition apply, including offline, KASSIBER_NO_EGRESS, stale-plan, genesis and spender-index refusals that must send nothing or match; retains the truncated-Electrum Python reference repro",
+}}
+
+REVIEWS["tests/test_rust_analysis_dataset_import.py"] = {"*": {
+    "disposition": "oracle", "group": "chain-sync",
+    "reason": "compares native local attribution imports (CSV/JSONL/adapters, staging batches, replacement, failure marking, hash binding, progress and cancellation for the daemon job form, incomplete-pack cleanup) with unchanged Python bytes and all 112 tables, on SQLite/SQLCipher DELETE/WAL books and through the product CLI with offline mode off/on; nothing egresses",
+}}

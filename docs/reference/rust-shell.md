@@ -15288,5 +15288,48 @@ the credential-free routing identity. `generate_analysis_acquisition.py`
 records 52 plan cases with all 112 tables; `tests/test_rust_analysis_acquisition.py`
 replays them natively and compares five CLI invocations and three daemon
 requests per offline setting (10 and 6 in total) byte for byte. Four named
-mutations are killed. `acquire.apply`, which performs the reviewed egress,
-is the next slice.
+mutations are killed.
+
+`acquire.apply` (CLI 176 registrations, one more daemon kind) performs the
+reviewed egress; see the [acquisition egress record](rust-port-egress.md#chain-analysis-acquisition-apply-r5).
+Its acceptance compares native and Python against loopback fakes: ten CLI
+traversal cases, five refusal cases (offline, `KASSIBER_NO_EGRESS`, stale plan,
+genesis mismatch, missing spender index) and one daemon session with stale,
+successful and repeated applies (three requests), each with identical request
+sequences and all 112 tables. Python fallbacks: zero.
+
+## Chain-analysis dataset import (R5, partial)
+
+`chain-analysis datasets import` (CLI 177 registrations) streams a
+caller-opened local file through the read port's strict parser in
+`analysis_index::reads::preview`, where `stream_claims` sits beside `preview`
+on the same line, record and claim path. (R10 removed the operations branch's
+`dataset_stream` shim, which loaded that file a second time.)
+`analysis_ops::datasets::import` ports `import_dataset`: idle-connection and
+digest checks, replacement fencing, 2,000-claim staging commits, the
+newline-delimited claims digest, atomic supersede/activation and failed-pack
+marking on any error. `discard_with` ports `discard_dataset` with progress and
+cancellation between batches.
+
+`generate_analysis_dataset_import.py` records 41 unchanged-Python scenarios
+with all 112 tables and progress receipts: CSV/JSONL/maru92/BOM/CRLF/quoted
+inputs, 17 malformed inputs, argument and manifest refusals, digest changes,
+replacement, 2,001-row batches, cancellation during staging and before
+activation, cancelled and resumed cleanup, a busy caller and a missing book.
+`tests/test_rust_analysis_dataset_import.py` replays them natively with strict
+no-consent guards and offline off/on, on SQLite and SQLCipher in DELETE and
+WAL modes, and compares eight product CLI invocations per offline setting (16
+in total) byte for byte. Seven named mutations are killed.
+
+The daemon forms are not registered here. `datasets.import`,
+`datasets.import.start` and `datasets.discard.start` need the read branch's
+`analysis_index::runtime` (picker tokens via `internal.chain_analysis.stage`,
+`Runtime::start` receipts, `jobs.get`/`jobs.cancel`, lock and switch cleanup).
+At integration each `.start` handler validates arguments as Python's
+`job_starter` does, then calls `Runtime::start(conn, scope, request, compute)`
+with a compute that opens an identity-fenced worker connection, opens the
+token's `runtime::Source` as the `LineSource`, and calls `datasets::import` or
+`discard_with` with `Worker::progress` (prefixing `phase`) and
+`Worker::cancelled` plus the 1,800-second limit, mapping errors raised after
+cancellation to `{"status":"cancelled","reason":...}`. `jobs.cancel` is
+already served by that runtime.

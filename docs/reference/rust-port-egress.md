@@ -813,3 +813,32 @@ or persisted. The full operator report/CSV is not an AI or diagnostics projectio
 Node-snapshot and backend-test product routes and AI projections remain separately
 unported. The [service checkpoint](rust-shell.md#lightning-profitability-product-wiring-r5)
 records actual wire/CSV/database and served-by verification.
+
+## Chain-analysis acquisition apply (R5)
+
+`analysis_ops::acquisition::apply` ports `apply_acquisition` for Esplora,
+Bitcoin Core RPC and Electrum (Bitcoin and Liquid transaction bytes). The
+reviewed plan is recomputed from the saved backend row, book and local index;
+only an exact canonical match mints `Consent::explicit_trigger` for the
+backend's `kassiber_chain::Backend` request (TLS trust and explicit proxy only).
+A budget mirrors Python: `6 + 2 × max_transactions` requests, 45 seconds,
+8 MiB per response and 64 MiB in total, and checks `KASSIBER_NO_EGRESS` and the
+offline switch before every request and the Electrum handshake. HTTP sends no
+retries and refuses redirects; Core's typed 400/404/500 envelopes are read,
+other statuses become `history_unavailable` without server prose. Responses are
+sanitized to public legs (sequence kept; scripts, witnesses and preimages from
+inputs dropped), Bitcoin feature snapshots are extracted before discard, and the
+grant is revoked before the atomic local save, which revalidates the plan.
+
+`tests/test_rust_analysis_acquisition_apply.py` serves synthetic transactions
+from loopback Esplora/Core and Electrum fakes and compares native and Python
+request sequences, CLI/daemon bytes and all 112 tables across ten traversal
+cases, plus offline, `KASSIBER_NO_EGRESS`, stale-plan, genesis and spender-index
+refusals; refused, stale and offline actions send nothing. Rust unit tests with
+the `kassiber-net` loopback fake pin plan binding, offline refusal, depth and
+transaction limits, spender corroboration and witness discard; six named
+mutations are killed. Known divergence, retained as a Python reference repro in
+`tests/rust_port/repro_acquisition_electrum_truncated.py`: truncated Electrum
+transaction bytes raise a `RuntimeError` in embit, which escapes Python's
+frontier handling and aborts the whole acquisition; the native port records a
+`transaction_unavailable` frontier instead.

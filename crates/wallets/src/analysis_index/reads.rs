@@ -13,7 +13,7 @@ mod cursor;
 mod datasets;
 #[cfg(any(test, feature = "test-harness"))]
 pub mod fixture;
-mod preview;
+pub(crate) mod preview;
 mod psbt;
 #[cfg(test)]
 mod tests;

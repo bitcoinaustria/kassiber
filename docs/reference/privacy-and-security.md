@@ -1102,6 +1102,19 @@ Wallets using the active default retain that selection in their grant. The
 service re-resolves the current stored default before fetch and publication;
 changing it cannot redirect an already authorized sync to another backend.
 
+The native `chain-analysis acquire apply` route (CLI and
+`ui.chain_analysis.acquire.apply`) is the registered Rust form of the same
+explicit acquisition. It recomputes the reviewed plan and mints a request-local
+`kassiber-net` grant for that backend's exact route only after the recomputed
+plan equals the submitted one; planning, listing and all source-grant leaves
+send nothing. Every request first checks `KASSIBER_NO_EGRESS` and the offline
+switch, then the gate rechecks the route; the grant is revoked before the
+local save. Redirects are refused and environment proxies are never read.
+Loopback fakes prove that native and Python send the same request sequence and
+that refused, stale or offline actions send nothing. See the
+[acquisition egress record](rust-port-egress.md#chain-analysis-acquisition-apply-r5).
+The recurring source runner is not yet native.
+
 ## Native configuration privacy hygiene
 
 The native configuration privacy hygiene read (`reports privacy-hygiene` and

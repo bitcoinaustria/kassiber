@@ -4457,3 +4457,22 @@ credentials; authorization, revocation, expiry and the queueing refusal while
 offline match Python byte for byte. See the
 [acceptance record](../reference/rust-shell.md#chain-analysis-source-grants-r5-partial).
 The authorized runner that actually reads blocks remains open.
+
+### R5 chain analysis: acquisition plan and apply
+
+`acquire.plan` and `acquire.apply` and their daemon kinds now run natively (CLI
+inventory 176). Apply recomputes the reviewed plan before minting a
+request-local `kassiber-net` grant for exactly that backend route, mirrors
+Python's request, byte and deadline budget and offline/`KASSIBER_NO_EGRESS`
+checks, and saves sanitized observations atomically after revalidating the
+plan. Loopback fakes prove identical request sequences, bytes and tables, and
+that refused or stale actions send nothing; see the
+[egress record](../reference/rust-port-egress.md#chain-analysis-acquisition-apply-r5).
+
+### R5 chain analysis: dataset import (partial)
+
+The CLI's local attribution import runs natively (CLI inventory 177), sharing
+the read port's strict parser and matching Python's staging, activation,
+progress and cancellation byte for byte. The daemon import forms wait for the
+read branch's job and picker-token runtime; the integration steps are recorded
+in the [import checkpoint](../reference/rust-shell.md#chain-analysis-dataset-import-r5-partial).

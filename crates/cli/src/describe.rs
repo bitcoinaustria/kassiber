@@ -253,6 +253,8 @@ pub const IMPLEMENTED: &[&str] = &[
     "chain-analysis.sources.revoke",
     "chain-analysis.sources.run",
     "chain-analysis.acquire.plan",
+    "chain-analysis.acquire.apply",
+    "chain-analysis.datasets.import",
 ];
 
 /// `_NO_BOOTSTRAP_DATABASE_PREFIXES`.

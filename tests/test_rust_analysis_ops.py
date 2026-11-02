@@ -123,7 +123,7 @@ def test_analysis_operations_mutation_catalog_stays_applicable(tmp_path):
     entries=json.loads(catalog.read_text())
     result=subprocess.run([sys.executable,str(ROOT/'crates/wallets/scripts/record_mutation_check.py'),'--mutations',str(catalog),'--check'],env=child_env(tmp_path),capture_output=True,check=True,timeout=30)
     assert result.stdout==f'{len(entries)} entries apply\n'.encode()
-    source=(ROOT/'crates/wallets/src/analysis_ops/tests.rs').read_text()
+    source=''.join(path.read_text() for path in sorted((ROOT/'crates/wallets/src/analysis_ops').rglob('tests.rs')))
     assert len(entries)>=7
     assert all(f'fn {name}()' in source for entry in entries for name in entry['expect_failing'])
 

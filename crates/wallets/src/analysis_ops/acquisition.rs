@@ -1,11 +1,19 @@
 //! Explicit, bounded reference acquisition (`chain_analysis_acquisition`).
 //! Planning is local; applying recomputes the plan before any egress.
 use super::routing::{get_db_backend, lower, py_text, routing_identity};
-use super::sources::{is_txid, MAX_RESPONSE_BYTES};
+use super::sources::is_txid;
 use super::*;
 use crate::analysis_index::{durable, traversal::resolve_read, views, views::GraphRead};
 use crate::descriptors::normalize_network;
 use kassiber_setup::networks;
+
+mod apply;
+mod legs;
+mod reader;
+mod runner;
+pub(super) use super::sources::MAX_RESPONSE_BYTES;
+pub(super) use apply::apply;
+pub(super) use runner::run_due;
 
 pub(super) const MAX_TOTAL_BYTES: i64 = 64 * 1024 * 1024;
 
@@ -271,3 +279,6 @@ pub(super) fn plan(
 ) -> Result<Value> {
     Ok(prepare(conn, profile, args, sources)?.0)
 }
+
+#[cfg(test)]
+mod tests;

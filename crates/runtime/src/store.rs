@@ -220,6 +220,17 @@ pub trait Book: Send {
         Err(not_implemented("chain_analysis", operation))
     }
 
+    /// `chain-analysis datasets import` over a caller-opened local file.
+    fn chain_analysis_import(
+        &mut self,
+        _workspace: Option<&Value>,
+        _profile: Option<&Value>,
+        _args: &Value,
+        _file: Box<dyn std::io::BufRead + Send>,
+    ) -> Result<Value, AppError> {
+        Err(not_implemented("chain-analysis", "datasets.import"))
+    }
+
     fn chain_analysis_ops(
         &mut self,
         _workspace: Option<&Value>,

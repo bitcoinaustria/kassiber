@@ -36,7 +36,7 @@ pub(super) fn run_corpus(corpus: &str, group: &str) {
         };
         assert_eq!(actual.len(), expected.len());
         for (actual, expected) in actual.iter().zip(expected) {
-            for key in ["result", "in_transaction"] {
+            for key in ["result", "in_transaction", "progress"] {
                 assert_eq!(
                     canonical(field(actual, key)).unwrap(),
                     canonical(field(expected, key)).unwrap(),
@@ -116,6 +116,14 @@ fn analysis_acquisition_plans_match_python_bytes_and_all_112_tables() {
     run_corpus(
         include_str!("../../tests/data/analysis_acquisition.json"),
         "acquisition",
+    );
+}
+
+#[test]
+fn analysis_dataset_imports_match_python_bytes_progress_and_all_112_tables() {
+    run_corpus(
+        include_str!("../../tests/data/analysis_dataset_import.json"),
+        "dataset-import",
     );
 }
 

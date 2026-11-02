@@ -287,7 +287,7 @@ pub(super) fn authorize(
     grant(conn, profile, &s(id.as_str()))
 }
 
-fn row(conn: &Connection, profile: &str, id: &Value) -> Result<Value> {
+pub(super) fn row(conn: &Connection, profile: &str, id: &Value) -> Result<Value> {
     text_value(id, "id", 64)?;
     first(
         conn,
@@ -298,7 +298,7 @@ fn row(conn: &Connection, profile: &str, id: &Value) -> Result<Value> {
 }
 
 /// Never exposes endpoint fingerprints or internal lease identifiers.
-fn grant(conn: &Connection, profile: &str, id: &Value) -> Result<Value> {
+pub(super) fn grant(conn: &Connection, profile: &str, id: &Value) -> Result<Value> {
     let row = row(conn, profile, id)?;
     let mut value = dict(
         [
@@ -383,7 +383,7 @@ pub(super) fn validate(
     profile: &str,
     original: &Value,
     lease: Option<&str>,
-    runtime: &mut dyn Runtime,
+    runtime: &dyn Runtime,
 ) -> Result<(Value, Value)> {
     if runtime.cancelled() {
         return Err(AppError::new("cancelled", "Acquisition cancelled"));

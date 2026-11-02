@@ -843,3 +843,50 @@ pub(crate) fn preview(
         ("accounting_authority", Value::Bool(false)),
     ]))
 }
+
+/// `import_dataset`'s streaming pass: every validated claim with its record
+/// number and the bytes read so far, then the source digest and byte count.
+/// The chain-analysis operations branch appends this beside `preview`; keep
+/// both on the same `Lines`/`records`/`claim` path when integrating.
+pub(crate) fn stream_claims(
+    manifest: &Value,
+    source: &mut dyn LineSource,
+    format: &str,
+    adapter: &str,
+    cancelled: &dyn Fn() -> bool,
+    each: &mut dyn FnMut(Value, u64, u64) -> Result<()>,
+) -> Result<(String, u64)> {
+    let mut lines = Lines {
+        source,
+        byte_count: 0,
+        record_bytes: 0,
+        line_number: 0,
+        sha256: Sha256::new(),
+        cancelled,
+    };
+    let mut count = 0u64;
+    let mut visit = |row: Row, lines_bytes: u64| -> Result<()> {
+        count += 1;
+        if count > MAX_ROWS {
+            return Err(error(
+                "Dataset record limit exceeded",
+                "chain_analysis_dataset_limit",
+                None,
+            ));
+        }
+        let claim = claim(&row, manifest, adapter, count).map_err(|e| {
+            if e.details.is_none() {
+                e.with_details(dict([("record_number", Value::Int(count.into()))]))
+            } else {
+                e
+            }
+        })?;
+        each(claim, count, lines_bytes)
+    };
+    records(&mut lines, format, &mut visit)?;
+    let digest = lines.sha256.clone().finalize();
+    Ok((
+        digest.iter().map(|b| format!("{b:02x}")).collect(),
+        lines.byte_count,
+    ))
+}

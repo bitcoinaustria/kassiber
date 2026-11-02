@@ -820,7 +820,7 @@ impl kassiber_wallets::publication::wallet::Sources for AnalysisSources {
 /// The wall clock and a fresh, fail-closed read of the offline preference.
 struct AnalysisRuntime;
 impl kassiber_wallets::analysis_ops::Runtime for AnalysisRuntime {
-    fn epoch(&mut self) -> i64 {
+    fn epoch(&self) -> i64 {
         #[cfg(feature = "test-harness")]
         if let Some(epoch) = std::env::var("KASSIBER_RUST_TEST_ANALYSIS_EPOCH")
             .ok()
@@ -835,6 +835,21 @@ impl kassiber_wallets::analysis_ops::Runtime for AnalysisRuntime {
             .ok()
             .and_then(|ctx| kassiber_setup::offline::preference_path(&ctx).ok())
             .is_none_or(|path| kassiber_setup::offline::enabled(&path))
+    }
+    /// Re-reads the preference on every route check, failing closed.
+    fn gate(&self) -> kassiber_net::Gate {
+        use kassiber_net::{Gate, Ledger, Offline};
+        Gate::new(
+            || match Context::from_env()
+                .ok()
+                .and_then(|ctx| kassiber_setup::offline::preference_path(&ctx).ok())
+            {
+                Some(path) if kassiber_setup::offline::enabled(&path) => Offline::Offline,
+                Some(_) => Offline::Online,
+                None => Offline::Unavailable,
+            },
+            Ledger::default(),
+        )
     }
 }
 impl kassiber_setup::Sources for ReportSources {
@@ -1274,6 +1289,25 @@ impl Book for RealBook {
                 profile_id: &profile_id,
             },
             command,
+        )
+    }
+    fn chain_analysis_import(
+        &mut self,
+        workspace: Option<&Value>,
+        profile: Option<&Value>,
+        args: &Value,
+        file: Box<dyn std::io::BufRead + Send>,
+    ) -> Result<Value, AppError> {
+        let (workspace_id, profile_id) = self.resolve_scope(workspace, profile)?;
+        kassiber_wallets::analysis_ops::import_dataset(
+            self.conn()?,
+            &kassiber_wallets::analysis_ops::Scope {
+                workspace_id: &workspace_id,
+                profile_id: &profile_id,
+            },
+            args,
+            file,
+            &mut AnalysisSources::default(),
         )
     }
     fn chain_analysis_ops(
