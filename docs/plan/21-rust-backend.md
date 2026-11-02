@@ -240,7 +240,8 @@ reference while it still exists:
    define consent-bound `kassiber-net` routes and a feature-gated attempt observer;
    The HTTPS/HTTP foundation now layers rustls and HTTP/1.1 over that guarded
    connector; service slices remain disabled until their own consent and behavior
-   contracts are implemented. Rust offline mode also blocks local AI.
+   contracts are implemented. As in Python, Rust offline mode still permits an
+   explicitly local AI provider at a loopback address.
 7. **Storage durability:** beyond equal content, the storage stage proves
    schema objects and trigger behavior, migration audits and idempotency,
    foreign-key and integrity checks, busy and error semantics, the journal
@@ -320,6 +321,9 @@ stack.
 6. **AI, MCP, and operator orchestration complete:** chat, the provider broker
    client, tool consent, the MCP server, and the broker's queues and agent
    sessions.
+   Brought into scope on 2026-11-02; the
+   [R6 port design](../reference/r6-ai-operator-port.md) holds the census,
+   R5 dependencies, slices and owner decisions.
 7. **Retirement.** Synchronize with `main` one last time on an immutable
    baseline, pass the full cumulative gate and the integration suites against
    the packaged Rust binary, rehearse binary and data rollback, switch the

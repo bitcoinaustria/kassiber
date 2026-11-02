@@ -1202,6 +1202,27 @@ matcher/rules/bulk implementation and its oracle/mutation evidence. R4-15 now
 binds its atomic journal boundary for freshness; standalone desktop/scoped-AI
 journal registration remains on R4-13.
 
+## Rust backend R6
+
+The [R6 port design](docs/reference/r6-ai-operator-port.md) lists the
+census, slices, oracles and owner decisions. Nothing is native yet.
+
+- [ ] R6-1: local IPC and child-process primitives (`crates/ipc`), the operator
+  protocol and client, and the remaining ownership pieces.
+- [ ] R6-2: broker service, server, runner and broker-child mode.
+- [ ] R6-3: operator leaves, brokered routing, agent sessions and
+  `ui.agent_access.*`.
+- [ ] R6-4: Touch ID flow, including the signed hardware run on a Mac.
+- [ ] R6-5: AI tool catalog, executor, consent and projections; wire each tool
+  as its R5 service lands (81 tools wait on R5, chain analysis the largest).
+- [ ] R6-6: provider configuration, streaming HTTP, the provider broker client
+  and discovery.
+- [ ] R6-7: `ai.chat`, cancellation, consent, history, `chat` and `chats`.
+- [ ] R6-8: MCP server, direct books first, then brokered books.
+- [ ] Owner decisions in the design's risks section: registration timing,
+  shared broker endpoint, broker ledger rows, `unsafe` in `crates/ipc`, the
+  broker bundle location, and an owner for chain analysis.
+
 ## Accounting correctness and custody
 
 - [ ] Resolve the remaining custody-core code-volume stop criterion in
