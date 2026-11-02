@@ -352,6 +352,18 @@ Current Austrian status:
   and `reports export-austrian-e1kv-csv`; `reports austrian-tax-summary` and
   `reports export-austrian` are friendlier aliases for the same annual Austrian
   handoff, including outside-E-1kv rows such as KZ 801 when present
+- The E 1kv's crypto Kennzahlen 172, 174 and 176 and their 27.5 % rate cover
+  income and realisations from 1 March 2022, Vienna time
+  (`CRYPTO_KENNZAHLEN_FROM` in `core/austrian.py`). A classified row dated
+  earlier is stated in no field by Reports, the Kennzahl summary, the
+  exports, the year handoff and the exit tax; KZ 801 is unaffected. Audit
+  packages and the swap review show the journal's stored field as it is. The E 1kv export
+  refuses a year before 2022, and a 2022 with rows from January or February,
+  which followed the old rules unless the taxpayer opted otherwise. The
+  indicative tax is `not_applicable` before 2022, and withheld
+  (`crypto_rows_before_2022_03`) for a 2022 with such rows. Kassiber does not restate
+  those rows under the old rules (RP2 owns the classification); a
+  Steuerberater does
 - Austrian output should remain review-gated; Kassiber is not tax advice
 
 The E 1kv export is annual and review-oriented:

@@ -58,11 +58,11 @@ interface Explanation {
   custody_truncated: boolean;
 }
 
-export function CapitalGainExplanation({ reference, hideSensitive }: { reference: ResultReference; hideSensitive: boolean }) {
+export function CapitalGainExplanation({ reference, hideSensitive, triggerClassName, triggerAriaLabel }: { reference: ResultReference; hideSensitive: boolean; triggerClassName?: string; triggerAriaLabel?: string }) {
   const { t } = useTranslation("journals");
   const [open, setOpen] = useState(false);
   return <Dialog open={open} onOpenChange={setOpen}>
-    <DialogTrigger asChild><Button size="sm" variant="ghost">{t("explanation.open")}</Button></DialogTrigger>
+    <DialogTrigger asChild><Button size="sm" variant="ghost" className={triggerClassName} aria-label={triggerAriaLabel}>{t("explanation.open")}</Button></DialogTrigger>
     {open && <DialogContent className="max-w-3xl! overflow-y-auto overscroll-none">
       <DialogTitle>{t("explanation.title")}</DialogTitle>
       <DialogDescription>{t("explanation.description")}</DialogDescription>

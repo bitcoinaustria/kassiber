@@ -1418,16 +1418,30 @@ Tax figures come from the core, never from the model's recall of tax law:
   and the newest disposal and income rows. Each row carries its transaction id,
   asset, exact msat, Austrian category, and Kennzahl. The rows are journal
   entries, not acquisition lots: Austrian Neubestand uses one moving-average
-  pool, and the payload says so.
+  pool, and the payload says so. Its `breakdown` sums the year by Austrian
+  field (with tax-free Altbestand and tax-neutral swaps beside them) or, for a
+  generic book, by holding period and income; the desktop's transaction id
+  lists for those groups are dropped. With `asset`, the totals, breakdown and
+  rows cover that asset while the Kennzahl rows stay book-wide. Journal event
+  reads likewise drop the explanation references that open the desktop's
+  calculation view.
 - For an Austrian EUR book, `ui.reports.tax_summary` adds `indicative_tax` for
   the requested year, or the latest year. It is 27.5% of KZ 172 + KZ 174 −
   KZ 176 as reported, from `kassiber/core/tax_estimate.py`, and is zero when
   that base is negative. Any report blocker withholds the figure
-  (`status: "withheld"`, `estimated_tax_eur_cents: null`). KZ 801 Altbestand
+  (`status: "withheld"`, `estimated_tax_eur_cents: null`). A year before 2022
+  has no crypto Kennzahlen: `status: "not_applicable"` with no rate, basis or
+  base, and a note that a Steuerberater states that year. A 2022 with rows
+  from January or February is withheld (`crypto_rows_before_2022_03`), since
+  those rows have no field. KZ 801 Altbestand
   speculation is listed as an amount and never estimated, because it is taxed
   at the progressive rate. The notes say the figure covers this book only and
   does not deduct KESt an Austrian provider withheld. The desktop's own tax
-  summary read skips this check.
+  summary read skips this check. The Reports screen reads the same core figure
+  as `indicativeTax` from `ui.reports.capital_gains`, computed without the
+  blocker check. Reports marks it Provisional only for stale journals,
+  quarantines, custody gaps, missing prices, and rows in no field, fewer causes
+  than withhold it here, so the assistant's projection of that read drops it.
 
 The authoritative tool names, schemas, effects, and daemon mappings live in
 [TOOL_CATALOG and get_tool](../../kassiber/ai/tools.py), with capability selection

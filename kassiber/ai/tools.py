@@ -1159,10 +1159,12 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ToolEntry(
         name="ui.reports.capital_gains",
         description=(
-            "Read realized gains for one tax year: full-year totals, Austrian "
-            "Kennzahl rows, and the newest disposal/income rows with transaction "
-            "id, asset, msat, cost, proceeds, gain and Austrian category. Rows are "
-            "journal entries, not acquisition lots. Defaults to the latest year."
+            "Read realized gains for one tax year: full-year totals, a breakdown "
+            "by Austrian field or holding period, Austrian Kennzahl rows, and the "
+            "newest disposal/income rows with transaction id, asset, msat, cost, "
+            "proceeds, gain and Austrian category. Rows are journal entries, not "
+            "acquisition lots. With an asset, totals, breakdown and rows cover that "
+            "asset; Kennzahl rows stay book-wide. Defaults to the latest year."
         ),
         parameters={
             "type": "object",
@@ -1325,7 +1327,8 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
             "and income such as mining or staking), with proceeds, cost basis and "
             "gain/loss, provisional while report blockers exist. Austrian EUR "
             "books also get indicative_tax: the core's "
-            "27.5% estimate, withheld while report blockers exist. Quote it with "
+            "27.5% estimate, withheld while report blockers exist and "
+            "not_applicable (no rate) for years before 2022. Quote it with "
             "its notes; never apply a tax rate yourself."
         ),
         parameters={

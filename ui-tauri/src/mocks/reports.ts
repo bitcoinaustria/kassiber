@@ -1,9 +1,7 @@
 /**
- * Mock data for the Reports screen — capital-gains export flow.
- *
- * Lifted from claude-design/screens/tax.jsx. These shapes drive the UI
- * translation against realistic data; the Pydantic→JSON Schema pipeline
- * (Phase 1.2 §2.2) will replace these with schema-driven factories.
+ * The parts of `ui.reports.capital_gains` the Reports screen reads. The
+ * payload also carries the year's newest rows for the assistant; the screen
+ * shows the year's totals and their breakdown and leaves rows to Transactions.
  */
 
 export type CostBasisMethod =
@@ -13,106 +11,6 @@ export type CostBasisMethod =
   | "lofo"
   | "moving_average"
   | "moving_average_at";
-
-export interface Jurisdiction {
-  code: string;
-  name: string;
-  policy: string;
-  rate: number;
-  rateLabel: string;
-  defaultMethod: CostBasisMethod;
-  methodLocked?: boolean;
-  methodNote?: string;
-  internalsNonTaxable: boolean;
-  longTermDays: number;
-  ccy: string;
-  locale: string;
-}
-
-export const JURISDICTIONS: Record<string, Jurisdiction> = {
-  AT: {
-    code: "AT",
-    name: "Austria",
-    policy: "§27a/§27b EStG · KESt 27,5 %",
-    rate: 0.275,
-    rateLabel: "KESt 27,5 %",
-    defaultMethod: "moving_average_at",
-    methodLocked: true,
-    methodNote: "ATM - Austrian Tax Method (FIFO old stock & AVCO new stock)",
-    internalsNonTaxable: true,
-    longTermDays: 365,
-    ccy: "€",
-    locale: "de-AT",
-  },
-  DE: {
-    code: "DE",
-    name: "Germany",
-    policy: "§ 23 EStG · private sales",
-    rate: 0.26375,
-    rateLabel: "Est. 26,375 %",
-    defaultMethod: "fifo",
-    internalsNonTaxable: true,
-    longTermDays: 365,
-    ccy: "€",
-    locale: "de-DE",
-  },
-  CH: {
-    code: "CH",
-    name: "Switzerland",
-    policy: "Private wealth · tax-exempt",
-    rate: 0.0,
-    rateLabel: "Private · 0 %",
-    defaultMethod: "fifo",
-    internalsNonTaxable: true,
-    longTermDays: 0,
-    ccy: "CHF",
-    locale: "de-CH",
-  },
-  XX: {
-    code: "XX",
-    name: "Generic",
-    policy: "Generic capital-gains preset",
-    rate: 0.2,
-    rateLabel: "Est. 20 %",
-    defaultMethod: "fifo",
-    internalsNonTaxable: true,
-    longTermDays: 365,
-    ccy: "€",
-    locale: "en-GB",
-  },
-};
-
-export type LotType = "LT" | "ST";
-
-export interface DisposedLot {
-  explanationReference?: import("@/components/reports/CapitalGainExplanation").ResultReference;
-  acquired: string;
-  disposed: string;
-  sats: number;
-  costEur: number;
-  proceedsEur: number;
-  type: LotType;
-}
-
-export interface NeutralSwapLot {
-  date: string;
-  pairId?: string;
-  kind?: string;
-  policy?: string;
-  outWallet: string;
-  outAsset: string;
-  outSats: number;
-  inWallet: string;
-  inAsset: string;
-  inSats: number;
-  feeSats: number;
-  feeKind?: string;
-  costEur: number;
-  proceedsEur: number;
-  gainEur: number;
-  marketValueEur?: number;
-  marketDeltaEur?: number;
-}
 
 export interface KennzahlRow {
   code: string;
@@ -126,63 +24,64 @@ export interface KennzahlRow {
   note?: string;
 }
 
-export const MOCK_LOTS: DisposedLot[] = [
-  { acquired: "2022-03-18", disposed: "2025-11-04", sats: 12_000_000, costEur: 3_851.20, proceedsEur: 8_204.18, type: "LT" },
-  { acquired: "2023-07-02", disposed: "2025-11-04", sats: 8_000_000, costEur: 2_412.00, proceedsEur: 5_469.45, type: "LT" },
-  { acquired: "2024-11-14", disposed: "2025-12-01", sats: 3_500_000, costEur: 2_188.70, proceedsEur: 2_392.08, type: "ST" },
-  { acquired: "2025-02-09", disposed: "2025-12-20", sats: 1_800_000, costEur: 1_011.55, proceedsEur: 1_290.12, type: "ST" },
-  { acquired: "2025-04-22", disposed: "2026-01-08", sats: 900_000, costEur: 614.90, proceedsEur: 635.14, type: "ST" },
-];
+/**
+ * One group of the year's rows: an Austrian field (`172`, `174`, `176`,
+ * `801`), `tax_free` Altbestand, tax-neutral `swaps`, or `unassigned`; for a
+ * generic book `short_term`, `long_term`, or `income`.
+ */
+export interface ReportBreakdownBucket {
+  key: string;
+  rowCount: number;
+  transactionCount: number;
+  /** Its transactions, or `null` when too many for an exact link. */
+  transactionIds: string[] | null;
+  costEur: number;
+  proceedsEur: number;
+  incomeEur: number;
+  gainLossEur: number;
+}
 
 export interface CapitalGainsReport {
+  /** `AT` or `GENERIC`, from the book's tax country. */
   jurisdictionCode: string;
+  /** The book's fiat; every amount in the report is in it. */
+  fiatCurrency?: string;
+  /** Generic books' long-term holding period; `null` for Austria. */
+  longTermDays?: number | null;
   year: number;
   availableYears?: number[];
   method: CostBasisMethod;
-  lots: DisposedLot[];
-  neutralSwapLots?: NeutralSwapLot[];
+  /** Over every disposal and income row of the year. */
+  totals?: {
+    rowCount: number;
+    costEur: number;
+    proceedsEur: number;
+    incomeEur: number;
+    gainLossEur: number;
+  };
+  breakdown?: ReportBreakdownBucket[];
   kennzahlRows?: KennzahlRow[];
+  /**
+   * `false` for an Austrian year before 2022, which has no crypto Kennzahlen
+   * (KZ 172, 174, 176): none of them and no estimate. Missing from an older
+   * daemon means they apply.
+   */
+  e1kvApplies?: boolean;
+  /**
+   * Rows classified for a crypto Kennzahl but dated before 1 March 2022 (a
+   * 2022 book's January and February): the E 1kv export refuses the year.
+   */
+  rowsBeforeCryptoKennzahlen?: number;
+  /** The core's indicative Austrian tax (EUR books only), blockers ignored. */
+  indicativeTax?: {
+    estimatedTaxEurCents: number | null;
+    rate: string;
+    basis: string;
+    progressiveRateAmountsEurCents: Record<string, number>;
+    notes: string[];
+  } | null;
   status?: {
     needsJournals: boolean;
     quarantines: number;
   };
 }
-
-export const MOCK_CAPITAL_GAINS: CapitalGainsReport = {
-  jurisdictionCode: "AT",
-  year: 2025,
-  availableYears: [2026, 2025],
-  method: "moving_average_at",
-  lots: MOCK_LOTS,
-  kennzahlRows: [
-    {
-      code: "172",
-      label: "Foreign ongoing crypto income",
-      amount: 239.74,
-      rowCount: 2,
-      source: "mock",
-    },
-    {
-      code: "174",
-      label: "Foreign realized crypto gains",
-      amount: 3535.55,
-      rowCount: 3,
-      source: "mock",
-    },
-    {
-      code: "176",
-      label: "Foreign realized crypto losses",
-      amount: 0,
-      rowCount: 0,
-      source: "mock",
-    },
-    {
-      code: "801",
-      label: "Legacy holdings speculation gains",
-      amount: 7410.43,
-      rowCount: 2,
-      source: "mock",
-      note: "Outside E 1kv",
-    },
-  ],
-};

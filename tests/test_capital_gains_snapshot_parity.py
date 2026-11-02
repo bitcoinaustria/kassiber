@@ -184,6 +184,13 @@ class CapitalGainsSnapshotParityTests(unittest.TestCase):
         self.assertEqual(newest["entryType"], "income")
         self.assertEqual(newest["quantityMsat"], 5_000_000_000)
 
+        # A generic book states its own currency and holding period and gets
+        # no Austrian estimate.
+        self.assertEqual(snapshot["jurisdictionCode"], "GENERIC")
+        self.assertEqual(snapshot["fiatCurrency"], "EUR")
+        self.assertEqual(snapshot["longTermDays"], 365)
+        self.assertIsNone(snapshot["indicativeTax"])
+
         self.assertEqual(btc["asset"], "BTC")
         self.assertEqual([lot["transactionId"] for lot in btc["lots"]], ["t-j1", "t-j2"])
         self.assertEqual(btc["totals"]["rowCount"], 2)
@@ -195,8 +202,52 @@ class CapitalGainsSnapshotParityTests(unittest.TestCase):
         self.assertTrue(ai["rows_truncated"])
         self.assertEqual(ai["totals"]["rowCount"], 3)
         self.assertIn("not an acquisition lot", ai["row_note"])
+        self.assertNotIn("indicativeTax", ai)
         for key in ("explanationReference", "acquired", "sats"):
             self.assertNotIn(key, ai["rows"][0])
+
+    def test_breakdown_groups_by_holding_period_and_caps_its_links(self):
+        from kassiber import daemon
+
+        conn = self._conn()
+        conn.execute("INSERT INTO wallets VALUES ('w1', 'p1', 'Hot')")
+        self._insert_entry(conn, "j1", "BTC", "disposal", "2026-02-01T00:00:00Z",
+                           -10_000_000_000, 100.0, 150.0, 50.0)
+        self._insert_entry(conn, "j2", "BTC", "income", "2026-06-01T00:00:00Z",
+                           5_000_000_000, 0.0, 70.2, 70.2)
+        for index in range(ui_snapshot._BREAKDOWN_LINK_LIMIT + 1):
+            self._insert_entry(conn, f"l{index:03d}", "BTC", "disposal",
+                               "2026-03-01T00:00:00Z", -1_000_000, 1.0, 2.0, 1.0)
+        conn.execute(
+            "UPDATE journal_entries SET capital_gains_type = 'long' WHERE id LIKE 'l%'"
+        )
+
+        with patch.object(
+            ui_snapshot, "_journal_freshness", return_value={"needs_processing": False}
+        ):
+            snapshot = ui_snapshot.build_capital_gains_snapshot(conn, tax_year=2026)
+            ai = daemon._capital_gains_payload_for_ai(conn, {"tax_year": 2026})
+
+        # A fixed order, whatever order the rows arrive in.
+        self.assertEqual(
+            [bucket["key"] for bucket in snapshot["breakdown"]],
+            ["short_term", "long_term", "income"],
+        )
+        buckets = {bucket["key"]: bucket for bucket in snapshot["breakdown"]}
+        self.assertEqual(
+            buckets["short_term"],
+            {"key": "short_term", "rowCount": 1, "transactionCount": 1,
+             "transactionIds": ["t-j1"], "costEur": 100.0, "proceedsEur": 150.0,
+             "incomeEur": 0.0, "gainLossEur": 50.0},
+        )
+        self.assertEqual(buckets["income"]["incomeEur"], 70.2)
+        self.assertEqual(buckets["income"]["proceedsEur"], 0.0)
+        # Past the Transactions screen's id cap the group links to the year.
+        self.assertEqual(buckets["long_term"]["transactionCount"], 129)
+        self.assertIsNone(buckets["long_term"]["transactionIds"])
+        # The model gets the sums; the id lists only feed desktop links.
+        for bucket in ai["breakdown"]:
+            self.assertNotIn("transactionIds", bucket)
 
     def test_neu_swap_only_year_is_not_selected_as_default(self):
         conn = self._conn(tax_country="at", gains_algorithm="moving_average_at")
@@ -231,6 +282,10 @@ class CapitalGainsSnapshotParityTests(unittest.TestCase):
             ui_snapshot,
             "_journal_freshness",
             return_value={"needs_processing": False},
+        ), patch.object(
+            ui_snapshot,
+            "_austrian_old_rule_rows",
+            return_value=0,
         ), patch.object(
             ui_snapshot,
             "_austrian_kennzahl_snapshot_rows",
@@ -325,13 +380,194 @@ class CapitalGainsSnapshotParityTests(unittest.TestCase):
             return_value={"needs_processing": False},
         ), patch.object(
             ui_snapshot,
+            "_austrian_old_rule_rows",
+            return_value=0,
+        ), patch.object(
+            ui_snapshot,
             "_austrian_kennzahl_snapshot_rows",
             return_value=[],
         ):
             snapshot = ui_snapshot.build_capital_gains_snapshot(conn, tax_year=2025)
+            liquid = ui_snapshot.build_capital_gains_snapshot(
+                conn, tax_year=2025, asset="LBTC"
+            )
 
+        # An asset-scoped read keeps only the swaps that gave that asset up.
+        self.assertEqual(liquid["neutralSwapLots"], [])
+        self.assertNotIn("swaps", [bucket["key"] for bucket in liquid["breakdown"]])
         self.assertEqual(snapshot["lots"][0]["disposed"], "2025-01-01")
         self.assertEqual(snapshot["neutralSwapLots"][0]["date"], "2025-01-01")
+        # Austrian rows group by field, with tax-neutral swaps beside them.
+        self.assertEqual(
+            [(bucket["key"], bucket["transactionIds"]) for bucket in snapshot["breakdown"]],
+            [("174", ["t-sell"]), ("swaps", ["t-swap-out"])],
+        )
+
+    def test_austrian_breakdown_keeps_tax_free_and_unassigned_rows_apart(self):
+        conn = self._conn(tax_country="at", gains_algorithm="moving_average_at")
+        conn.execute("INSERT INTO wallets VALUES ('w1', 'p1', 'Hot')")
+        cases = (
+            ("j-neu", "neu_gain", 174, 40.0, 90.0, 50.0),
+            ("j-alt", "alt_taxfree", None, 10.0, 310.0, 300.0),
+            ("j-other", None, None, 5.0, 12.5, 7.5),
+        )
+        for entry_id, category, kennzahl, cost, proceeds, gain in cases:
+            occurred_at = "2025-06-01T10:00:00Z"
+            conn.execute(
+                "INSERT INTO transactions VALUES (?,?,?,?,?,?,?,?)",
+                (f"t-{entry_id}", "p1", "w1", 0, 1, occurred_at, "BTC", 1_000_000_000),
+            )
+            conn.execute(
+                "INSERT INTO journal_entries (id, profile_id, transaction_id, entry_type, "
+                "occurred_at, quantity, cost_basis, proceeds, gain_loss, at_category, "
+                "at_kennzahl, capital_gains_type, created_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (entry_id, "p1", f"t-{entry_id}", "disposal", occurred_at,
+                 -1_000_000_000, cost, proceeds, gain, category, kennzahl, "short",
+                 occurred_at),
+            )
+
+        with patch.object(
+            ui_snapshot, "_journal_freshness", return_value={"needs_processing": False}
+        ), patch.object(
+            ui_snapshot, "_austrian_old_rule_rows", return_value=0
+        ), patch.object(
+            ui_snapshot, "_austrian_kennzahl_snapshot_rows", return_value=[]
+        ):
+            snapshot = ui_snapshot.build_capital_gains_snapshot(conn, tax_year=2025)
+
+        # Tax-free Altbestand and rows without a field stay out of the field
+        # groups, in a fixed order after them.
+        self.assertEqual(
+            [(bucket["key"], bucket["transactionIds"], bucket["gainLossEur"])
+             for bucket in snapshot["breakdown"]],
+            [
+                ("174", ["t-j-neu"], 50.0),
+                ("tax_free", ["t-j-alt"], 300.0),
+                ("unassigned", ["t-j-other"], 7.5),
+            ],
+        )
+        # The year's total still sums every row; the desktop states the
+        # tax-free part from its group.
+        self.assertEqual(snapshot["totals"]["gainLossEur"], 357.5)
+
+    def test_a_year_before_the_e1kv_states_no_e1kv_field_or_estimate(self):
+        conn = self._conn(tax_country="at", gains_algorithm="moving_average_at")
+        conn.execute("INSERT INTO wallets VALUES ('w1', 'p1', 'Hot')")
+        cases = (
+            ("j-neu", "neu_gain", 174, 40.0, 90.0, 50.0),
+            ("j-spek", "alt_spekulation", 801, 10.0, 30.0, 20.0),
+        )
+        for entry_id, category, kennzahl, cost, proceeds, gain in cases:
+            occurred_at = "2021-06-01T10:00:00Z"
+            conn.execute(
+                "INSERT INTO transactions VALUES (?,?,?,?,?,?,?,?)",
+                (f"t-{entry_id}", "p1", "w1", 0, 1, occurred_at, "BTC", 1_000_000_000),
+            )
+            conn.execute(
+                "INSERT INTO journal_entries (id, profile_id, transaction_id, entry_type, "
+                "occurred_at, quantity, cost_basis, proceeds, gain_loss, at_category, "
+                "at_kennzahl, capital_gains_type, created_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (entry_id, "p1", f"t-{entry_id}", "disposal", occurred_at,
+                 -1_000_000_000, cost, proceeds, gain, category, kennzahl, "short",
+                 occurred_at),
+            )
+        kennzahl_rows = [
+            {"code": "801", "label": "KZ 801", "form": "E 1", "formSection": "",
+             "amount": 20.0, "amountEurCents": 2000, "rowCount": 1, "source": "daemon"},
+        ]
+
+        with patch.object(
+            ui_snapshot, "_journal_freshness", return_value={"needs_processing": False}
+        ), patch.object(
+            ui_snapshot, "_austrian_old_rule_rows", return_value=0
+        ), patch.object(
+            ui_snapshot, "_austrian_kennzahl_snapshot_rows", return_value=kennzahl_rows
+        ):
+            snapshot = ui_snapshot.build_capital_gains_snapshot(conn, tax_year=2021)
+
+        self.assertFalse(snapshot["e1kvApplies"])
+        self.assertIsNone(snapshot["indicativeTax"])
+        # The E 1kv field did not exist in 2021: that row has no field; KZ 801
+        # is an E 1 field and stays.
+        self.assertEqual(
+            [(bucket["key"], bucket["transactionIds"]) for bucket in snapshot["breakdown"]],
+            [("801", ["t-j-spek"]), ("unassigned", ["t-j-neu"])],
+        )
+        self.assertEqual(
+            sorted(lot["kennzahl"] for lot in snapshot["lots"] if lot["kennzahl"]), [801]
+        )
+
+    def test_swap_breakdown_counts_a_split_swap_once_and_scopes_by_entry_asset(self):
+        conn = self._conn(tax_country="at", gains_algorithm="moving_average_at")
+        conn.executemany(
+            "INSERT INTO wallets VALUES (?, 'p1', ?)",
+            [("w1", "Hot"), ("w2", "Cold")],
+        )
+        occurred_at = "2025-06-01T10:00:00Z"
+        conn.executemany(
+            "INSERT INTO transactions VALUES (?,?,?,?,?,?,?,?)",
+            [
+                ("t-swap-out", "p1", "w1", 0, 1, occurred_at, "BTC", 30_000_000_000),
+                ("t-in-a", "p1", "w2", 0, 1, occurred_at, "LBTC", 10_000_000_000),
+                ("t-in-b", "p1", "w2", 0, 1, occurred_at, "LBTC", 19_900_000_000),
+            ],
+        )
+        conn.execute(
+            "INSERT INTO journal_entries (id, profile_id, transaction_id, entry_type, "
+            "occurred_at, quantity, cost_basis, proceeds, gain_loss, at_category, "
+            "at_kennzahl, capital_gains_type, created_at, asset) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                "j-swap", "p1", "t-swap-out", "disposal", occurred_at,
+                -30_000_000_000, 24.0, 24.0, 0.0, "neu_swap", None, "short",
+                occurred_at, "BTC",
+            ),
+        )
+        # One swap split across two conversions; neither names its out asset.
+        conn.executemany(
+            "INSERT INTO journal_custody_projection_relations VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            [
+                (
+                    pair_id, "p1", "conversion", "t-swap-out", in_id, "peg-in",
+                    "carrying-value", 0, "network", None, None, "LBTC", amount,
+                    occurred_at,
+                )
+                for pair_id, in_id, amount in (
+                    ("pair-a", "t-in-a", 10_000_000_000),
+                    ("pair-b", "t-in-b", 19_900_000_000),
+                )
+            ],
+        )
+
+        with patch.object(
+            ui_snapshot,
+            "_journal_freshness",
+            return_value={"needs_processing": False},
+        ), patch.object(
+            ui_snapshot,
+            "_austrian_old_rule_rows",
+            return_value=0,
+        ), patch.object(
+            ui_snapshot,
+            "_austrian_kennzahl_snapshot_rows",
+            return_value=[],
+        ):
+            snapshot = ui_snapshot.build_capital_gains_snapshot(conn, tax_year=2025)
+            bitcoin = ui_snapshot.build_capital_gains_snapshot(
+                conn, tax_year=2025, asset="BTC"
+            )
+
+        self.assertEqual(len(snapshot["neutralSwapLots"]), 2)
+        swaps = next(b for b in snapshot["breakdown"] if b["key"] == "swaps")
+        self.assertEqual(
+            (swaps["rowCount"], swaps["transactionCount"], swaps["costEur"], swaps["proceedsEur"]),
+            (1, 1, 24.0, 24.0),
+        )
+        # The journal entry's own asset scopes the swap, not the relation's.
+        self.assertEqual(len(bitcoin["neutralSwapLots"]), 2)
+        self.assertIn("swaps", [bucket["key"] for bucket in bitcoin["breakdown"]])
 
 
 if __name__ == "__main__":

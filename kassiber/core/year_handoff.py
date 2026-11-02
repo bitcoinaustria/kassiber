@@ -35,7 +35,7 @@ from ..time_utils import UNKNOWN_OCCURRED_AT
 from . import freshness as core_freshness
 from . import rates as core_rates
 from .asset_presentation import AssetPresentation, describe_asset
-from .austrian import AT_TAX_TZ
+from .austrian import AT_TAX_TZ, stated_kennzahl
 from .custody_evidence import normalize_boundary_amounts
 from .journal_markers import strip_markers
 from .transaction_classification import (
@@ -790,6 +790,8 @@ def build_year_handoff(
                 details={"journal_entry_id": row["id"], "entry_type": entry_type},
                 retryable=False,
             )
+        # No crypto field before 1 March 2022, as Reports states it.
+        form_field = stated_kennzahl(row["at_kennzahl"], str(row["occurred_at"]))
         journal_rows.append(
             {
                 "occurred_at": row["occurred_at"],
@@ -806,7 +808,7 @@ def build_year_handoff(
                 "gain_loss": _money(amounts["gain_loss"]),
                 "in_capital_gains_report": int(row["in_capital_gains_report"]),
                 "tax_category": row["at_category"] or "",
-                "tax_form_field": row["at_kennzahl"] if row["at_kennzahl"] is not None else "",
+                "tax_form_field": "" if form_field is None else form_field,
                 "capital_gains_type": row["capital_gains_type"] or "",
                 "pricing_source": row["pricing_source"],
                 "pricing_quality": row["pricing_quality"],

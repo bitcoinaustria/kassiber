@@ -5941,6 +5941,9 @@ def _indicative_tax_for_ai(
             for item in blockers
             if isinstance(item, dict)
         ],
+        rows_before_crypto_kennzahlen=core_reports.austrian_rows_before_crypto_kennzahlen(
+            conn, profile, year
+        ),
     )
 
 
@@ -5974,6 +5977,12 @@ def _capital_gains_payload_for_ai(
             lot.pop(key, None)
         rows.append(lot)
     payload.pop("lots", None)
+    # The desktop's estimate ignores blockers; the model reads the withheld
+    # one from ui.reports.tax_summary.
+    payload.pop("indicativeTax", None)
+    # The breakdown's id lists only feed the desktop's Transactions links.
+    for bucket in payload.get("breakdown") or []:
+        bucket.pop("transactionIds", None)
     payload["rows"] = rows[-limit:]
     payload["rows_shown"] = len(payload["rows"])
     payload["rows_truncated"] = len(payload["rows"]) < int(
@@ -6673,6 +6682,13 @@ def _review_worklist_payload(
     }
 
 
+def _journal_events_for_ai(payload: dict[str, Any]) -> dict[str, Any]:
+    """Drop the explanation references that open the desktop's calculation view."""
+    for event in payload.get("events") or []:
+        event.pop("explanationReference", None)
+    return payload
+
+
 def _transaction_review_context_payload(
     conn: sqlite3.Connection,
     runtime: AiToolRuntime,
@@ -6746,9 +6762,11 @@ def _transaction_review_context_payload(
         )
     )
     journal = section(
-        lambda: build_journal_events_list_snapshot(
-            conn,
-            {"transaction": canonical_id, "limit": 25},
+        lambda: _journal_events_for_ai(
+            build_journal_events_list_snapshot(
+                conn,
+                {"transaction": canonical_id, "limit": 25},
+            )
         )
     )
     commercial = section(
@@ -7500,7 +7518,9 @@ def _execute_read_only_ai_tool(
             elif entry.daemon_kind == "ui.journals.snapshot":
                 payload = build_journals_snapshot(conn)
             elif entry.daemon_kind == "ui.journals.events.list":
-                payload = build_journal_events_list_snapshot(conn, call.arguments)
+                payload = _journal_events_for_ai(
+                    build_journal_events_list_snapshot(conn, call.arguments)
+                )
             elif entry.daemon_kind == "ui.journals.quarantine":
                 payload = build_journals_quarantine_snapshot(conn, call.arguments)
             elif entry.daemon_kind == "ui.journals.quarantine.groups":

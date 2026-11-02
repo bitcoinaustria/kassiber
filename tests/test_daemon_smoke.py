@@ -7209,7 +7209,10 @@ class DaemonSmokeTest(unittest.TestCase):
             ),
             mock.patch(
                 "kassiber.daemon.build_journal_events_list_snapshot",
-                return_value={"events": [], "summary": {"count": 0}},
+                return_value={
+                    "events": [{"id": "je-1", "explanationReference": {"entry_id": "je-1"}}],
+                    "summary": {"count": 1},
+                },
             ) as payload_mock,
         ):
             thread = threading.Thread(
@@ -7228,6 +7231,8 @@ class DaemonSmokeTest(unittest.TestCase):
         )
         self.assertTrue(results[0]["ok"])
         self.assertEqual(results[0]["envelope"]["kind"], "ui.journals.events.list")
+        # The calculation view's reference is a desktop affordance.
+        self.assertEqual(results[0]["envelope"]["data"]["events"], [{"id": "je-1"}])
 
     def test_transaction_graph_ai_tool_rejects_public_lookup_and_extra_arguments(self):
         runtime = AiToolRuntime(
@@ -7673,6 +7678,8 @@ class DaemonSmokeTest(unittest.TestCase):
                 )
                 self.assertTrue(data["safety"]["local_only_reads"])
                 self.assertFalse(data["safety"]["network_contacted"])
+                # The desktop's calculation references stay off the AI path.
+                self.assertNotIn("explanationReference", json.dumps(data))
 
                 _write_payload(
                     proc,
@@ -9057,6 +9064,8 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(journal_events["kind"], "ui.journals.events.list")
             self.assertEqual(journal_events["data"]["summary"]["count"], 1)
             self.assertEqual(journal_events["data"]["events"][0]["wallet"], "Cold")
+            # An acquisition has no gain to explain.
+            self.assertIsNone(journal_events["data"]["events"][0]["explanationReference"])
             self.assertEqual(
                 journal_events["data"]["events"][0]["quantityMsat"],
                 10_000_000_000,

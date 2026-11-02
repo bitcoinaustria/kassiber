@@ -18,7 +18,7 @@ export const MISSING_FIAT_LABEL = "Unpriced";
 /**
  * Number-formatting locale for each supported fiat. Austrian EUR groups with
  * dots and a comma decimal (`€ 1.234,56`); the others follow their home
- * convention. Keep in sync with the report locales in mocks/reports.ts.
+ * convention.
  */
 const FIAT_LOCALES: Record<string, string> = {
   EUR: "de-AT",
