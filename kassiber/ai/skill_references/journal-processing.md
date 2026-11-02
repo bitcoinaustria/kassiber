@@ -146,14 +146,21 @@ or unpair and pair the reviewed legs again. A simple pair can preview/apply
 `repair_legacy_pair` through the local CLI review workflow. AI cannot author
 that revision; never replace it with exclusion or automatic unpairing.
 
-`synthetic_import_duplicate_review_required` identifies excess ID-less CSV rows
-across import batches. Every active member is held; Kassiber selects no survivor.
+`synthetic_import_duplicate_review_required` identifies held ID-less CSV rows.
+Every active member is held; Kassiber selects no survivor. The case's
+`import_duplicate.hold_reasons` say why: `cross_import_excess` (rows across
+imports exceed any single export's count), `refilled_excluded_copy` (a newer
+import's row took the place of a copy the user excluded, listed in
+`refilled_excluded_transaction_ids`), or `pre_batch_excess` (every row predates
+import batches, and rows stored in different seconds count as separate imports;
+one import that crossed a second boundary is a known false hold).
 Compare the source exports with the user before using `metadata exclude` for
 the copies they identify. Genuine identical repeats in one export are retained.
 If the user confirms every held row is a separate trade, the case offers
 `confirm_distinct_import_rows` with its `group_fingerprint`; that confirmation is
-local CLI only and AI cannot author it. Never exclude a row the user has not
-identified as a copy.
+local CLI only and AI cannot author it. For a refill, tell the user first that
+confirming distinct trades counts the transaction they excluded again through
+the new row. Never exclude a row the user has not identified as a copy.
 
 In chat use `ui.review.cases`, inspect `ui.transactions.review_context` and
 `ui.transfers.review_context`, then `ui.review.plan`. Explain the returned

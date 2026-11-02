@@ -43,6 +43,8 @@ export type CauseKey =
   | "nativeTransitionFeeTiming"
   | "migrationIncomplete"
   | "importDuplicate"
+  | "importDuplicateRefill"
+  | "importDuplicatePreBatch"
   | "legacyPairFee"
   | "gapHold"
   | "implicitDelta"
@@ -142,6 +144,8 @@ export const CAUSE_KEYS = Array.from(
     "quantityOther",
     "reviewedSuspensePair",
     "legacyPairFee",
+    "importDuplicateRefill",
+    "importDuplicatePreBatch",
   ]),
 );
 
@@ -187,6 +191,8 @@ const CAUSE_CATEGORIES: Record<CauseKey, QuarantineCategory> = {
   nativeTransitionAmountMismatch: "needs_decision",
   migrationIncomplete: "needs_decision",
   importDuplicate: "needs_decision",
+  importDuplicateRefill: "needs_decision",
+  importDuplicatePreBatch: "needs_decision",
   legacyPairFee: "needs_decision",
   unclaimedResidual: "needs_decision",
   sourceOverlap: "needs_decision",
@@ -222,6 +228,12 @@ export function causeKeyFor(
     if (blocker && BLOCKER_CAUSES[blocker]) return BLOCKER_CAUSES[blocker];
     if (blocker.startsWith("custody_component_")) return "componentProblem";
     return "quantityOther";
+  }
+  if (reason === "synthetic_import_duplicate_review_required") {
+    // A refill can count a transaction the owner excluded; say so first.
+    const holds = evidence?.import_hold_reasons ?? [];
+    if (holds.includes("refilled_excluded_copy")) return "importDuplicateRefill";
+    if (holds.includes("pre_batch_excess")) return "importDuplicatePreBatch";
   }
   return REASON_CAUSES[reason] ?? null;
 }
@@ -366,6 +378,8 @@ const EXCLUSION_DECISIONS = new Set<CauseKey>([
   "nonSaleDisposal",
   "ownershipDuplicateOutbound",
   "importDuplicate",
+  "importDuplicateRefill",
+  "importDuplicatePreBatch",
 ]);
 
 /** Exclusion is offered for prices and a few explicit classification questions. */

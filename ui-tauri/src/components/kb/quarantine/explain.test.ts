@@ -92,6 +92,16 @@ describe("quarantine cause copy", () => {
     expect(lots.why).toBe("Hot sends 12,000,000 sats, but Kassiber only knows 1,000,000 sats of earlier receipts.");
   });
 
+  it("reads a duplicate import hold by why it is held", () => {
+    const reason = "synthetic_import_duplicate_review_required";
+    expect(causeKeyFor(reason, {})).toBe("importDuplicate");
+    expect(causeKeyFor(reason, { import_hold_reasons: ["cross_import_excess"] })).toBe("importDuplicate");
+    expect(causeKeyFor(reason, { import_hold_reasons: ["pre_batch_excess"] })).toBe("importDuplicatePreBatch");
+    expect(
+      causeKeyFor(reason, { import_hold_reasons: ["cross_import_excess", "refilled_excluded_copy"] }),
+    ).toBe("importDuplicateRefill");
+  });
+
   it("reads custody holds by their blocker, not as a pricing problem", () => {
     expect(causeKeyFor("custody_quantity_unresolved", { blocker_code: "custody_gap_review_required" })).toBe("gapHold");
     expect(categoryForReason("custody_quantity_unresolved", { blocker_code: "custody_gap_review_required" })).toBe(
@@ -118,6 +128,13 @@ describe("quarantine cause copy", () => {
     expect(exclusionFitsReason("non_sale_disposal_kind", "needs_decision")).toBe(true);
     expect(exclusionFitsReason("ownership_transfer_duplicate_outbound", "needs_decision")).toBe(true);
     expect(exclusionFitsReason("synthetic_import_duplicate_review_required", "needs_decision")).toBe(true);
+    for (const holds of [["refilled_excluded_copy"], ["pre_batch_excess"]]) {
+      expect(
+        exclusionFitsReason("synthetic_import_duplicate_review_required", "needs_decision", {
+          import_hold_reasons: holds,
+        }),
+      ).toBe(true);
+    }
     expect(
       exclusionFitsReason("custody_quantity_unresolved", "needs_decision", {
         review_codes: ["legacy_pair_fee_allocation_review_required"],

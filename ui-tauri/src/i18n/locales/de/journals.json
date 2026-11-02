@@ -269,6 +269,16 @@
         "why": "Zeilen aus getrennten Importen dieses Börsen- oder Wallet-Exports sehen gleich aus und sind mehr, als ein einzelner Export enthielt. Ältere Versionen haben Zeilen ohne eigene ID nach ihrer Position in der Datei nummeriert, daher konnte ein späterer, längerer Export dieselbe Transaktion noch einmal speichern. Kassiber hält jede Kopie zurück und wählt keine für dich aus.",
         "provide": "Vergleiche die Exporte des Anbieters. Schließe jede Zeile aus, die eine andere Transaktion kopiert. Ist jede Zeile eine eigene Transaktion, bestätige das stattdessen mit der Prüfung confirm_distinct_import_rows (kassiber review plan, dann review apply); dabei wird nichts ausgeschlossen."
       },
+      "importDuplicateRefill": {
+        "title": "Ein neuerer Import wiederholt möglicherweise eine ausgeschlossene Transaktion",
+        "why": "Du hast eine frühere Kopie dieser gleich aussehenden Zeilen ausgeschlossen. Ein späterer Export dieser Börse oder Wallet hat danach eine Zeile an der Stelle dieser Kopie hinzugefügt. Kassiber kann nicht erkennen, ob die neue Zeile die ausgeschlossene Transaktion oder eine eigene ist, hält die Zeilen daher zurück und wählt keine für dich aus.",
+        "provide": "Vergleiche die Exporte des Anbieters. Ist die neue Zeile die ausgeschlossene Transaktion, schließe sie ebenfalls aus. Nur wenn jede zurückgehaltene Zeile eine eigene Transaktion ist, bestätige das mit der Prüfung confirm_distinct_import_rows (kassiber review plan, dann review apply). Die Bestätigung zählt die ausgeschlossene Transaktion über die neue Zeile wieder mit."
+      },
+      "importDuplicatePreBatch": {
+        "title": "Ältere Importe haben eine Transaktion möglicherweise doppelt gespeichert",
+        "why": "Diese gleich aussehenden Zeilen wurden alle importiert, bevor Kassiber Importläufe aufgezeichnet hat. Daher ist unklar, ob sie aus einem oder mehreren Exporten stammen. Nur Zeilen, die in derselben Sekunde gespeichert wurden, zählen als ein Export, deshalb wird auch ein Import zurückgehalten, der über eine Sekundengrenze lief. Kassiber hält jede Kopie zurück und wählt keine für dich aus.",
+        "provide": "Vergleiche die Exporte des Anbieters. Schließe jede Zeile aus, die eine andere Transaktion kopiert. Ist jede Zeile eine eigene Transaktion, bestätige das stattdessen mit der Prüfung confirm_distinct_import_rows (kassiber review plan, dann review apply); dabei wird nichts ausgeschlossen."
+      },
       "legacyPairFee": {
         "title": "Bei einem älteren Transfer-Paar muss die Gebühr geprüft werden",
         "why": "Eine ältere Version hat die Netzwerkgebühr dieses Paars als übertragenen Betrag gezählt, sie aber nicht in die volle Belastung der sendenden Seite aufgenommen. Das Paar bleibt gespeichert und wirkt erst, wenn eine korrigierte Revision geprüft ist.",

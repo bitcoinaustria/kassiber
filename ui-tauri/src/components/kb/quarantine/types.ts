@@ -79,6 +79,10 @@ export interface QuarantineEvidence {
   };
   /** Validation codes of the pair this row is a leg of. */
   review_codes?: string[];
+  /** Why a duplicate import group is held (cross_import_excess, refilled_excluded_copy, pre_batch_excess). */
+  import_hold_reasons?: string[];
+  /** Excluded copies whose place a newer import's row took. */
+  import_refilled_excluded_transaction_ids?: string[];
 }
 
 export interface QuarantinePairLeg {

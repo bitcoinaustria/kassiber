@@ -253,6 +253,27 @@ describe("quarantine cause panel", () => {
     expect(html).toContain("confirm_distinct_import_rows");
   });
 
+  it("warns that confirming a refilled import counts an excluded transaction again", () => {
+    const reason = "synthetic_import_duplicate_review_required";
+    const evidence = {
+      import_hold_reasons: ["refilled_excluded_copy"],
+      import_refilled_excluded_transaction_ids: ["excluded-copy"],
+    };
+    const group = { ...GAP_GROUP, key: `${reason}::`, reason, category: "needs_decision" as const, evidence, actions: [] };
+    const html = render(snapshot({ groups: [group] }, [{ ...ROOT, reason, evidence, category: "needs_decision", actions: [] }]));
+    expect(html).toContain("A newer import may repeat a transaction you excluded");
+    expect(html).toContain("Confirming counts the transaction you excluded again, through the new row.");
+  });
+
+  it("explains that rows from before import runs count per second", () => {
+    const reason = "synthetic_import_duplicate_review_required";
+    const evidence = { import_hold_reasons: ["pre_batch_excess"] };
+    const group = { ...GAP_GROUP, key: `${reason}::`, reason, category: "needs_decision" as const, evidence, actions: [] };
+    const html = render(snapshot({ groups: [group] }, [{ ...ROOT, reason, evidence, category: "needs_decision", actions: [] }]));
+    expect(html).toContain("Older imports may have stored a transaction twice");
+    expect(html).toContain("ran across a second boundary");
+  });
+
   it("keeps the custody-gap editor behind developer tools", () => {
     render(snapshot());
     buttons.find((button) => button.label === "Review custody gap")?.onClick?.();
