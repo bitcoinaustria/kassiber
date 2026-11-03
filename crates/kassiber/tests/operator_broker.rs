@@ -1087,15 +1087,40 @@ fn desktop_agent_access_grants_pairs_and_ends_with_the_desktop_session() {
         &Value::Bool(true)
     );
 
+    // A terminal's lease is someone else's session: never replaced.
+    let client = broker.client();
+    unlock(&client, &data_root, PASSPHRASE);
+    let existing = daemon.data("ui.agent_access.unlock", "{}");
+    assert_eq!(
+        get(get(&existing, "session"), "existing_lease"),
+        &Value::Bool(true)
+    );
+    assert_eq!(
+        get(get(&existing, "session"), "active"),
+        &Value::Bool(false)
+    );
+    let terminal = client.status(Some(&data_root)).unwrap();
+    assert_eq!(text(&terminal, "capability"), "accounting_decisions");
+    assert_eq!(get(&terminal, "agent_scope"), &Value::Bool(false));
+    client.lock(&data_root, None, false).unwrap();
+    // The terminal grant bound the book to brokered; go back to manual so
+    // the desktop grant is the one that replaces it.
+    client
+        .set_mode(&data_root, "manual", PASSPHRASE.as_bytes())
+        .unwrap();
+
     let granted = daemon.data("ui.agent_access.unlock", "{}");
     let session = get(&granted, "session");
     assert_eq!(get(session, "active"), &Value::Bool(true));
     assert_eq!(get(session, "idle_timeout_seconds"), &Value::from(900));
-    let client = broker.client();
     let lease = client.status(Some(&data_root)).unwrap();
     assert_eq!(text(&lease, "capability"), "read");
     assert_eq!(get(&lease, "duration_seconds"), &Value::from(8 * 60 * 60));
     assert_eq!(get(&lease, "agent_scope"), &Value::Bool(true));
+    assert_eq!(
+        get(get(&lease, "agent"), "idle_timeout_seconds"),
+        &Value::from(15 * 60)
+    );
     let mode = cli(
         &broker,
         &["--data-root", &data_root, "--machine", "operator", "status"],

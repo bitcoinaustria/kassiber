@@ -8,8 +8,12 @@ janitor. The R6-2 entries break the broker service's admission order,
 capability and scope checks, replay fingerprint, retention, expiry, admin
 authorization, result states, lease-ending commands and argv pinning, the
 server's limits, detail filter and build check, the login guard, the backoff
-threshold and the runner's caller context. Each must make its named Rust
-tests fail. Set TMPDIR to a disposable directory
+threshold and the runner's caller context. The R6-3 entries break the
+agent-access file's parsing and reason precedence, the agent-session pid,
+token, denial memory, scope and heartbeat checks, the desktop lease's check
+and retry intervals and conditional lock, and the brokered CLI's broker
+choice, Ctrl-C exit, argument pinning and result mapping. Each must make its
+named Rust tests fail. Set TMPDIR to a disposable directory
 outside /tmp; the scratch tree and its build go there.
 """
 import importlib.util
@@ -22,7 +26,13 @@ spec = importlib.util.spec_from_file_location("tax_mutation_check", ROOT / "tax-
 checker = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = checker
 spec.loader.exec_module(checker)
-checker.ENGINE_PACKAGES = ("-p", "kassiber-operator", "-p", "kassiber-ipc", "-p", "kassiber-ownership")
+checker.ENGINE_PACKAGES = (
+    "-p", "kassiber-operator", "-p", "kassiber-ipc", "-p", "kassiber-ownership",
+    "-p", "kassiber-setup", "-p", "kassiber-daemon", "-p", "kassiber-cli",
+    # The binary's end-to-end broker tests; test-harness also enables the
+    # CLI probe its in-process tests need.
+    "-p", "kassiber", "--features", "kassiber/test-harness",
+)
 checker.MUTATIONS = Path(__file__).with_name("mutations.json")
 _run = checker._run
 

@@ -607,3 +607,11 @@ REVIEWS["tests/test_rust_operator.py"] = {
         "reason": "runs one broker scenario through the Python client against the Python broker fixture and the Rust --operator-broker-server on copies of one book; compares every reply, error, operation record and child envelope after declared id/time/build/path mappings",
     }
 }
+
+REVIEWS["tests/test_rust_operator_cli.py"] = {
+    "*": {
+        "disposition": "oracle",
+        "group": "ai-mcp-operator",
+        "reason": "runs one operator CLI scenario and one agent-access daemon scenario per language, each through its own broker on a copy of one book (Python CLI and fixture broker; hybrid Rust CLI, daemon and --operator-broker-server); compares exit codes, output bytes and daemon records after declared id/time/build/path mappings",
+    }
+}

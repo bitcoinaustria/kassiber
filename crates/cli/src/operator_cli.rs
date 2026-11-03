@@ -900,4 +900,173 @@ mod tests {
             "timed out"
         );
     }
+
+    /// A broker endpoint that answers from scripts and records requests.
+    #[derive(Default)]
+    struct Endpoint {
+        /// One entry per connection: its replies, or a refused connect.
+        connections: std::sync::Mutex<std::collections::VecDeque<Option<Vec<Value>>>>,
+        sent: std::sync::Arc<std::sync::Mutex<Vec<Value>>>,
+    }
+
+    struct Replies {
+        replies: std::collections::VecDeque<Value>,
+        sent: std::sync::Arc<std::sync::Mutex<Vec<Value>>>,
+    }
+
+    impl kassiber_operator::protocol::FrameChannel for Replies {
+        fn send_json(&mut self, payload: &Value) -> kassiber_operator::Result<()> {
+            self.sent.lock().unwrap().push(payload.clone());
+            Ok(())
+        }
+        fn receive_json(&mut self) -> kassiber_operator::Result<Value> {
+            self.replies
+                .pop_front()
+                .ok_or(kassiber_operator::Error::Eof("closed"))
+        }
+        fn send_secret(&mut self, _: &str, _: &[u8]) -> kassiber_operator::Result<()> {
+            panic!("no secret goes to this broker")
+        }
+        fn receive_secret(&mut self, _: &str) -> kassiber_operator::Result<Zeroizing<Vec<u8>>> {
+            unreachable!()
+        }
+        fn close(&mut self) {}
+    }
+
+    impl Host for Endpoint {
+        fn connect(
+            &self,
+            _: std::time::Duration,
+            _: Option<std::time::Duration>,
+        ) -> kassiber_operator::Result<Box<dyn kassiber_operator::protocol::FrameChannel>> {
+            match self.connections.lock().unwrap().pop_front() {
+                Some(Some(replies)) => Ok(Box::new(Replies {
+                    replies: replies.into(),
+                    sent: std::sync::Arc::clone(&self.sent),
+                })),
+                Some(None) | None => Err(kassiber_operator::Error::Io(std::io::Error::from(
+                    std::io::ErrorKind::ConnectionRefused,
+                ))),
+            }
+        }
+        fn launch_broker(&self) -> kassiber_operator::Result<()> {
+            panic!("an ordinary command must never start a broker")
+        }
+        fn startup_timeout(&self) -> std::time::Duration {
+            std::time::Duration::ZERO
+        }
+        fn build_identity(&self) -> Value {
+            kassiber_pytext::loads(r#"{"version": "1", "origin": "this"}"#).unwrap()
+        }
+        fn token_hex(&self, _: usize) -> kassiber_operator::Result<String> {
+            Ok("00".repeat(16))
+        }
+        fn current_dir(&self) -> std::io::Result<PyStr> {
+            Ok(PyStr::from("/caller"))
+        }
+        fn env_var(&self, _: &str) -> Option<String> {
+            None
+        }
+        fn now(&self) -> std::time::Instant {
+            std::time::Instant::now()
+        }
+        fn sleep(&self, _: std::time::Duration) {}
+        fn warn(&self, _: &str) {}
+    }
+
+    struct Never;
+    impl Waiting for Never {
+        fn interrupted(&self) -> bool {
+            false
+        }
+        fn sleep(&self, _: std::time::Duration) {}
+    }
+
+    struct Pressed;
+    impl Waiting for Pressed {
+        fn interrupted(&self) -> bool {
+            true
+        }
+        fn sleep(&self, _: std::time::Duration) {}
+    }
+
+    fn submit(endpoint: Endpoint) -> (Result<i32, AppError>, Vec<Value>, Vec<u8>) {
+        let sent = std::sync::Arc::clone(&endpoint.sent);
+        let client = BrokerClient::new(endpoint);
+        let (mut stdout, mut stderr) = (Vec::new(), Vec::new());
+        let result = submit_and_wait(
+            &client,
+            &|| Box::new(Never) as Box<dyn Waiting>,
+            "/book",
+            &PreparedArguments::new(argv(&["--data-root", "/book", "--machine", "status"])),
+            None,
+            &mut Output {
+                stdout: &mut stdout,
+                stderr: &mut stderr,
+                output: None,
+                home: None,
+                format: Format::Json,
+                machine: true,
+            },
+        );
+        let sent = sent.lock().unwrap().clone();
+        (result, sent, stderr)
+    }
+
+    #[test]
+    fn ordinary_commands_never_start_a_broker() {
+        let (result, sent, stderr) = submit(Endpoint::default());
+        let error = result.unwrap_err();
+        assert_eq!(error.code, "interaction_required");
+        assert_eq!(
+            error.details.as_ref().and_then(|d| get(d, "reason")),
+            Some(&s("operator_lease_required"))
+        );
+        assert!(sent.is_empty() && stderr.is_empty());
+    }
+
+    #[test]
+    fn brokered_work_goes_only_to_this_builds_broker() {
+        let ping = kassiber_pytext::loads(
+            r#"{"ok": true, "data": {"generation": "g", "build": {"version": "1", "origin": "other"}, "caller_context": true}}"#,
+        )
+        .unwrap();
+        let endpoint = Endpoint::default();
+        endpoint.connections.lock().unwrap().extend([
+            Some(vec![ping]),
+            Some(Vec::new()),
+            Some(Vec::new()),
+        ]);
+        let (result, sent, stderr) = submit(endpoint);
+        assert_eq!(result.unwrap_err().code, "operator_broker_build_mismatch");
+        // Only the ping reached the other build: no command line, no secret.
+        assert_eq!(sent.len(), 1);
+        assert_eq!(get(&sent[0], "action"), Some(&s("ping")));
+        assert!(stderr.is_empty());
+    }
+
+    #[test]
+    fn ctrl_c_while_waiting_stops_before_another_status_read() {
+        let client = BrokerClient::new(Endpoint::default());
+        assert_eq!(
+            wait(&client, &Pressed, &PyStr::from("g.client.x")).unwrap(),
+            None
+        );
+        let endpoint = Endpoint::default();
+        let done =
+            kassiber_pytext::loads(r#"{"ok": true, "data": {"state": "completed"}}"#).unwrap();
+        endpoint
+            .connections
+            .lock()
+            .unwrap()
+            .push_back(Some(vec![done]));
+        let client = BrokerClient::new(endpoint);
+        assert_eq!(
+            wait(&client, &Never, &PyStr::from("g.client.x"))
+                .unwrap()
+                .as_ref()
+                .and_then(|status| get(status, "state")),
+            Some(&s("completed"))
+        );
+    }
 }

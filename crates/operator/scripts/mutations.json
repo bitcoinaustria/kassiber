@@ -691,5 +691,297 @@
       "worker_child_gets_caller_directory_and_tightened_egress"
     ],
     "rule": "The caller's egress kill switch reaches the child."
+  },
+  {
+    "id": "agent-access-schema-exact",
+    "file": "crates/setup/src/agent_access.rs",
+    "find": "Some(Value::Int(v)) if *v == SCHEMA_VERSION.into())",
+    "replace": "Some(Value::Int(_) | Value::Bool(_)))",
+    "expect_failing": [
+      "agent_access_parsing_fails_closed"
+    ],
+    "rule": "agent-access.json counts only with schema_version exactly the integer 1."
+  },
+  {
+    "id": "agent-access-size-cap",
+    "file": "crates/setup/src/agent_access.rs",
+    "find": "read_small_regular_file(path, MAX_BYTES)",
+    "replace": "read_small_regular_file(path, MAX_BYTES + 1)",
+    "expect_failing": [
+      "agent_access_parsing_fails_closed"
+    ],
+    "rule": "agent-access.json over 1,024 bytes reads as off."
+  },
+  {
+    "id": "agent-access-literal-true",
+    "file": "crates/setup/src/agent_access.rs",
+    "find": "mcp_enabled: get(&payload, \"mcp_enabled\") == Some(&Value::Bool(true)),",
+    "replace": "mcp_enabled: get(&payload, \"mcp_enabled\").is_some_and(kassiber_envelope::truthy),",
+    "expect_failing": [
+      "agent_access_parsing_fails_closed"
+    ],
+    "rule": "Only a literal true turns external agents on."
+  },
+  {
+    "id": "agent-access-reason-precedence",
+    "file": "crates/setup/src/agent_access.rs",
+    "find": "if !self.mcp_enabled {",
+    "replace": "if !self.mcp_enabled && self.ai_features_enabled != Some(false) {",
+    "expect_failing": [
+      "agent_access_reason_precedence"
+    ],
+    "rule": "MCP off outranks AI off as the reason agents are refused."
+  },
+  {
+    "id": "agent-access-keeps-other-field",
+    "file": "crates/setup/src/agent_access.rs",
+    "find": "ai_features_enabled: ai_features_enabled.or(current.ai_features_enabled),",
+    "replace": "ai_features_enabled,",
+    "expect_failing": [
+      "agent_access_writes_sorted_keys_and_keeps_the_other_field"
+    ],
+    "rule": "Setting one agent-access field keeps the other."
+  },
+  {
+    "id": "agent-peer-pid",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "peer_pid.is_some_and(|pid| session.pid == pid)",
+    "replace": "peer_pid.is_some()",
+    "expect_failing": [
+      "test_an_allowed_process_reads_and_its_activity_is_counted"
+    ],
+    "rule": "An agent call must come from the process id the session was opened by."
+  },
+  {
+    "id": "agent-session-token",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "constant_time_eq(session.token.as_bytes(), token.as_bytes())",
+    "replace": "!token.is_empty()",
+    "expect_failing": [
+      "test_an_allowed_process_reads_and_its_activity_is_counted"
+    ],
+    "rule": "An agent call must present the token only its session's process received."
+  },
+  {
+    "id": "agent-denial-memory",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "state.agent_denials.push((identity, epoch, pid));",
+    "replace": "let _ = (identity, epoch, pid);",
+    "expect_failing": [
+      "test_denying_withdraws_and_cannot_be_undone_for_that_process"
+    ],
+    "rule": "A denied process stays refused for the rest of the grant."
+  },
+  {
+    "id": "agent-denial-cap",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "if denials >= self.inner.limits.max_remembered_agent_denials {",
+    "replace": "if denials > self.inner.limits.max_remembered_agent_denials {",
+    "expect_failing": [
+      "test_denials_are_never_forgotten_while_the_grant_lasts"
+    ],
+    "rule": "Rather than forget a denial, a full denial list refuses new agents."
+  },
+  {
+    "id": "agent-scope-mcp-only",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "if command_path != \"mcp.call\" {",
+    "replace": "if command_path.is_empty() {",
+    "expect_failing": [
+      "test_an_agent_lease_admits_only_mcp_tool_calls"
+    ],
+    "rule": "An agent lease admits only mcp call."
+  },
+  {
+    "id": "agent-heartbeat-only",
+    "file": "crates/operator/src/server.rs",
+    "find": "if get(&message, \"action\") == Some(&s(\"agent_session_heartbeat\")) => {}",
+    "replace": "if get(&message, \"action\").is_some() => {}",
+    "expect_failing": [
+      "test_a_session_ends_on_any_other_frame_or_when_its_lease_ends"
+    ],
+    "rule": "Any frame but a heartbeat ends an agent session."
+  },
+  {
+    "id": "agent-session-ends-with-lease",
+    "file": "crates/operator/src/server.rs",
+    "find": "while service.agent_session_alive(&ticket.id) {",
+    "replace": "while !ticket.id.is_empty() {",
+    "expect_failing": [
+      "test_a_session_ends_on_any_other_frame_or_when_its_lease_ends"
+    ],
+    "rule": "An agent session ends with its lease, before the next read."
+  },
+  {
+    "id": "desktop-check-interval",
+    "file": "crates/daemon/src/agent_access.rs",
+    "find": "next_check: granted_at + CHECK_INTERVAL,",
+    "replace": "next_check: granted_at,",
+    "expect_failing": [
+      "test_the_loop_checks_a_live_session_only_every_so_often",
+      "test_expire_leaves_a_live_lease_alone"
+    ],
+    "rule": "The request loop first asks the broker 30 s after the grant."
+  },
+  {
+    "id": "desktop-recheck-interval",
+    "file": "crates/daemon/src/agent_access.rs",
+    "find": "lease.next_check = now + CHECK_INTERVAL;",
+    "replace": "lease.next_check = now;",
+    "expect_failing": [
+      "test_a_live_check_waits_another_thirty_seconds"
+    ],
+    "rule": "After a check the loop waits another 30 s."
+  },
+  {
+    "id": "desktop-restore-manual",
+    "file": "crates/daemon/src/agent_access.rs",
+    "find": "restore_manual: get(&granted, \"previous_mode\") == Some(&s(\"manual\")),",
+    "replace": "restore_manual: true,",
+    "expect_failing": [
+      "test_only_a_book_the_broker_saw_as_manual_is_restored"
+    ],
+    "rule": "Only a book the broker saw as manual goes back to manual."
+  },
+  {
+    "id": "desktop-conditional-lock",
+    "file": "crates/daemon/src/agent_access.rs",
+    "find": "&kassiber_envelope::py_str(&lease.lease_id),",
+    "replace": "\"\",",
+    "expect_failing": [
+      "test_locking_names_the_lease_and_restores_manual_in_the_broker"
+    ],
+    "rule": "The desktop locks only the lease it granted, by its id."
+  },
+  {
+    "id": "desktop-lost-connection",
+    "file": "crates/daemon/src/agent_access.rs",
+    "find": "            Ok(_) => Err(kassiber_operator::Error::App(AppError::new(",
+    "replace": "            Ok(_) => Ok(()),\n            #[allow(unreachable_patterns)]\n            Ok(_) => Err(kassiber_operator::Error::App(AppError::new(",
+    "expect_failing": [
+      "test_a_lost_connection_is_not_taken_for_a_stopped_broker"
+    ],
+    "rule": "A stopped reply from a broker that still answers ping is not proof the lease ended."
+  },
+  {
+    "id": "desktop-retry-interval",
+    "file": "crates/daemon/src/agent_access.rs",
+    "find": "let retry_at = self.now() + RETRY_INTERVAL;",
+    "replace": "let retry_at = self.now();",
+    "expect_failing": [
+      "test_a_failed_lock_keeps_the_lease_visible_and_retries"
+    ],
+    "rule": "A failed lock is retried 5 s later, not at once."
+  },
+  {
+    "id": "desktop-status-memory",
+    "file": "crates/daemon/src/agent_access.rs",
+    "find": "if !refresh || lease.ending {",
+    "replace": "if lease.ending {",
+    "expect_failing": [
+      "test_unlock_grants_a_read_lease_only_if_none_exists",
+      "test_status_never_contacts_the_broker"
+    ],
+    "rule": "Without refresh, agent-access status reads memory only."
+  },
+  {
+    "id": "desktop-only-if-locked",
+    "file": "crates/daemon/src/agent_access.rs",
+    "find": "            // else's session: never replace it, which could narrow it.\n            true,",
+    "replace": "            // else's session: never replace it, which could narrow it.\n            false,",
+    "expect_failing": [
+      "desktop_agent_access_grants_pairs_and_ends_with_the_desktop_session"
+    ],
+    "rule": "The desktop grant never replaces an existing lease."
+  },
+  {
+    "id": "desktop-idle-timeout",
+    "file": "crates/daemon/src/agent_access.rs",
+    "find": "            Some(AGENT_IDLE_TIMEOUT_SECONDS),\n",
+    "replace": "            Some(AGENT_IDLE_TIMEOUT_SECONDS * 2),\n",
+    "expect_failing": [
+      "desktop_agent_access_grants_pairs_and_ends_with_the_desktop_session"
+    ],
+    "rule": "The desktop grant asks for a 15-minute idle timeout."
+  },
+  {
+    "id": "cli-never-start-broker",
+    "file": "crates/cli/src/operator_cli.rs",
+    "find": "                start_broker: false,",
+    "replace": "                start_broker: true,",
+    "expect_failing": [
+      "ordinary_commands_never_start_a_broker"
+    ],
+    "rule": "A brokered command never starts a broker."
+  },
+  {
+    "id": "cli-same-build",
+    "file": "crates/cli/src/operator_cli.rs",
+    "find": "                require_same_build: true,",
+    "replace": "                require_same_build: false,",
+    "expect_failing": [
+      "brokered_work_goes_only_to_this_builds_broker"
+    ],
+    "rule": "Brokered work goes only to this build's broker."
+  },
+  {
+    "id": "cli-ctrl-c-exit",
+    "file": "crates/cli/src/operator_cli.rs",
+    "find": "            return Ok(130);",
+    "replace": "            return Ok(1);",
+    "expect_failing": [
+      "ctrl_c_cancels_a_queued_brokered_command_with_exit_130"
+    ],
+    "rule": "Ctrl-C while waiting cancels the operation and exits 130."
+  },
+  {
+    "id": "cli-pin-admin-fd",
+    "file": "crates/cli/src/operator_cli.rs",
+    "find": "[\"--project\", \"--data-root\", \"--operator-auth-fd\"].contains(&token.as_str())",
+    "replace": "[\"--project\", \"--data-root\"].contains(&token.as_str())",
+    "expect_failing": [
+      "pinning_drops_locators_and_the_admin_fd"
+    ],
+    "rule": "The admin descriptor never reaches the broker's command line."
+  },
+  {
+    "id": "cli-interactive-check",
+    "file": "crates/cli/src/operator_cli.rs",
+    "find": "if !interaction.non_interactive && interaction.stdin_is_tty {",
+    "replace": "if !interaction.non_interactive {",
+    "expect_failing": [
+      "interactive_auth_is_refused_to_machines_and_pipes"
+    ],
+    "rule": "Piped callers are refused instead of prompted."
+  },
+  {
+    "id": "cli-cancelled-retryable",
+    "file": "crates/cli/src/operator_cli.rs",
+    "find": "                terminal == \"cancelled\",",
+    "replace": "                false,",
+    "expect_failing": [
+      "machine_cancelled_operation_writes_typed_envelope"
+    ],
+    "rule": "A cancelled operation is retryable; a failed one is not."
+  },
+  {
+    "id": "cli-unknown-keeps-child",
+    "file": "crates/cli/src/operator_cli.rs",
+    "find": "        if !child_wrote_stdout {",
+    "replace": "        if true {",
+    "expect_failing": [
+      "machine_unknown_result_keeps_the_childs_single_envelope"
+    ],
+    "rule": "An unknown result keeps the child's own envelope as the only stdout."
+  },
+  {
+    "id": "cli-signal-exit",
+    "file": "crates/cli/src/operator_cli.rs",
+    "find": "exit_code.filter(|code| *code > 0).map_or(1, exit_status)",
+    "replace": "exit_code.map_or(1, exit_status)",
+    "expect_failing": [
+      "machine_failed_operation_exits_with_a_positive_child_code"
+    ],
+    "rule": "A signal-killed child's negative code exits plainly as 1."
   }
 ]
