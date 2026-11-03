@@ -115,6 +115,8 @@ def seed_auto(root, cipher=False, scenario='exact', current=False, country='gene
             conn.execute("UPDATE profiles SET last_processed_at=?,last_processed_tx_count="
                          "(SELECT COUNT(*) FROM transactions WHERE profile_id='p' AND excluded=0),"
                          "last_processed_input_version=journal_input_version WHERE id='p'", (CLOCK,))
+            # Python's trigger clears the semantics stamp when the markers move.
+            conn.execute("UPDATE profiles SET journal_semantics_version=2 WHERE id='p'")
         else:
             conn.execute("UPDATE profiles SET last_processed_at=NULL WHERE id='p'")
         conn.commit()
