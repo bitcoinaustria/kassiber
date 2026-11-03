@@ -46,7 +46,7 @@ def install_from_environment():
         return
     binary = Path(os.environ[BINARY_ENV])
     destination = Path(os.environ[DIRECTORY_ENV])
-    if not destination.resolve().is_relative_to(ROOT / 'target'):
+    if not destination.resolve().is_relative_to((ROOT / 'target').resolve()):
         raise ValueError('pre-build recordings require a disposable worktree target directory')
     destination.mkdir(mode=0o700, parents=True, exist_ok=True)
     from kassiber.cli import handlers
