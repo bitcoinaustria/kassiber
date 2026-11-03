@@ -436,21 +436,28 @@ fn submit_and_wait<H: Host>(
     let _ = out.stderr.flush();
     let completed = match wait(client, waiting.as_ref(), &operation_id)? {
         Some(completed) => completed,
-        None => {
-            let cancelled = client.cancel(&operation_id).map_err(app_error)?;
-            let state = get(&cancelled, "state")
-                .map(kassiber_envelope::py_str)
-                .unwrap_or_else(|| "unknown".to_owned());
-            let _ = writeln!(
-                out.stderr,
-                "operator cancellation requested: {} ({state})",
-                text(&operation_id)
-            );
-            let _ = out.stderr.flush();
-            return Ok(130);
-        }
+        None => return interrupted(client, &operation_id, out),
     };
     Ok(deliver(&completed, &operation_id, out))
+}
+
+/// Ctrl-C while waiting: cancel the accepted work, say so, exit 130.
+fn interrupted<H: Host>(
+    client: &BrokerClient<H>,
+    operation_id: &PyStr,
+    out: &mut Output<'_>,
+) -> Result<i32, AppError> {
+    let cancelled = client.cancel(operation_id).map_err(app_error)?;
+    let state = get(&cancelled, "state")
+        .map(kassiber_envelope::py_str)
+        .unwrap_or_else(|| "unknown".to_owned());
+    let _ = writeln!(
+        out.stderr,
+        "operator cancellation requested: {} ({state})",
+        text(operation_id)
+    );
+    let _ = out.stderr.flush();
+    Ok(130)
 }
 
 /// `client.wait(operation_id)` that gives up when Ctrl-C arrives (`None`):
@@ -1068,5 +1075,42 @@ mod tests {
                 .and_then(|status| get(status, "state")),
             Some(&s("completed"))
         );
+    }
+
+    #[test]
+    fn ctrl_c_cancels_the_operation_and_exits_130() {
+        let endpoint = Endpoint::default();
+        let cancelled =
+            kassiber_pytext::loads(r#"{"ok": true, "data": {"state": "cancelled"}}"#).unwrap();
+        endpoint
+            .connections
+            .lock()
+            .unwrap()
+            .push_back(Some(vec![cancelled]));
+        let sent = std::sync::Arc::clone(&endpoint.sent);
+        let client = BrokerClient::new(endpoint);
+        let (mut stdout, mut stderr) = (Vec::new(), Vec::new());
+        let code = interrupted(
+            &client,
+            &PyStr::from("g.client.x"),
+            &mut Output {
+                stdout: &mut stdout,
+                stderr: &mut stderr,
+                output: None,
+                home: None,
+                format: Format::Json,
+                machine: true,
+            },
+        )
+        .unwrap();
+        assert_eq!(code, 130);
+        assert!(stdout.is_empty());
+        assert_eq!(
+            stderr,
+            b"operator cancellation requested: g.client.x (cancelled)\n"
+        );
+        let sent = sent.lock().unwrap();
+        assert_eq!(get(&sent[0], "action"), Some(&s("operation_cancel")));
+        assert_eq!(get(&sent[0], "operation_id"), Some(&s("g.client.x")));
     }
 }

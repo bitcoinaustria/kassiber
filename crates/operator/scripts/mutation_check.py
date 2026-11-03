@@ -29,10 +29,11 @@ spec.loader.exec_module(checker)
 checker.ENGINE_PACKAGES = (
     "-p", "kassiber-operator", "-p", "kassiber-ipc", "-p", "kassiber-ownership",
     "-p", "kassiber-setup", "-p", "kassiber-daemon", "-p", "kassiber-cli",
-    # The binary's end-to-end broker tests; test-harness also enables the
-    # CLI probe its in-process tests need.
-    "-p", "kassiber", "--features", "kassiber/test-harness",
+    # The CLI's in-process run tests need its probe.
+    "--features", "kassiber-cli/test-probe",
 )
+# The first build of a scratch tree compiles these packages from nothing.
+checker.TEST_TIMEOUT_SECONDS = 3 * 60 * 60
 checker.MUTATIONS = Path(__file__).with_name("mutations.json")
 _run = checker._run
 

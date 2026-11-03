@@ -839,3 +839,96 @@ fn test_ending_the_desktop_session_ends_the_agent_lease() {
     assert_eq!(fixture.broker.names(), ["unlock", "lock"]);
     assert!(daemon.agent_access.lease.is_none());
 }
+
+/// A broker endpoint that answers one ping with this build, then records the
+/// grant request and closes.
+struct Grant {
+    connections: Mutex<Vec<Vec<Value>>>,
+    sent: Arc<Mutex<Vec<Value>>>,
+}
+
+struct Recorded {
+    replies: Vec<Value>,
+    sent: Arc<Mutex<Vec<Value>>>,
+}
+
+impl kassiber_operator::protocol::FrameChannel for Recorded {
+    fn send_json(&mut self, payload: &Value) -> kassiber_operator::Result<()> {
+        self.sent.lock().unwrap().push(payload.clone());
+        Ok(())
+    }
+    fn receive_json(&mut self) -> kassiber_operator::Result<Value> {
+        if self.replies.is_empty() {
+            return Err(kassiber_operator::Error::Eof("closed"));
+        }
+        Ok(self.replies.remove(0))
+    }
+    fn send_secret(&mut self, _: &str, _: &[u8]) -> kassiber_operator::Result<()> {
+        unreachable!("the grant stops before its secrets")
+    }
+    fn receive_secret(&mut self, _: &str) -> kassiber_operator::Result<Zeroizing<Vec<u8>>> {
+        unreachable!()
+    }
+    fn close(&mut self) {}
+}
+
+impl kassiber_operator::client::Host for Grant {
+    fn connect(
+        &self,
+        _: Duration,
+        _: Option<Duration>,
+    ) -> kassiber_operator::Result<Box<dyn kassiber_operator::protocol::FrameChannel>> {
+        let mut connections = self.connections.lock().unwrap();
+        let replies = if connections.is_empty() {
+            Vec::new()
+        } else {
+            connections.remove(0)
+        };
+        Ok(Box::new(Recorded {
+            replies,
+            sent: Arc::clone(&self.sent),
+        }))
+    }
+    fn launch_broker(&self) -> kassiber_operator::Result<()> {
+        panic!("a broker answers")
+    }
+    fn startup_timeout(&self) -> Duration {
+        Duration::ZERO
+    }
+    fn build_identity(&self) -> Value {
+        json(r#"{"version": "1"}"#)
+    }
+    fn token_hex(&self, _: usize) -> kassiber_operator::Result<String> {
+        Ok("00".repeat(16))
+    }
+    fn current_dir(&self) -> std::io::Result<PyStr> {
+        Ok(PyStr::from("/"))
+    }
+    fn env_var(&self, _: &str) -> Option<String> {
+        None
+    }
+    fn now(&self) -> Instant {
+        Instant::now()
+    }
+    fn sleep(&self, _: Duration) {}
+    fn warn(&self, _: &str) {}
+}
+
+#[test]
+fn test_the_desktop_grant_asks_for_an_agent_only_read_lease() {
+    let sent = Arc::new(Mutex::new(Vec::new()));
+    let client = BrokerClient::new(Grant {
+        connections: Mutex::new(vec![vec![json(
+            r#"{"ok": true, "data": {"generation": "g", "build": {"version": "1"}}}"#,
+        )]]),
+        sent: Arc::clone(&sent),
+    });
+    let refused = AgentBroker::unlock(&client, "/book", b"pw", &CONTROL);
+    assert!(refused.unwrap_err().is_connection());
+    let sent = sent.lock().unwrap();
+    assert_eq!(field(&sent[0], "action"), &s("ping"));
+    assert_eq!(
+        kassiber_envelope::daemon_line(&sent[1]).unwrap(),
+        "{\"version\":3,\"action\":\"unlock\",\"data_root\":\"/book\",\"duration_seconds\":28800,\"capability\":\"read\",\"authentication_method\":\"password\",\"only_if_locked\":true,\"agent_scope\":true,\"idle_timeout_seconds\":900}\n"
+    );
+}

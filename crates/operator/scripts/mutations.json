@@ -890,7 +890,7 @@
     "find": "            // else's session: never replace it, which could narrow it.\n            true,",
     "replace": "            // else's session: never replace it, which could narrow it.\n            false,",
     "expect_failing": [
-      "desktop_agent_access_grants_pairs_and_ends_with_the_desktop_session"
+      "test_the_desktop_grant_asks_for_an_agent_only_read_lease"
     ],
     "rule": "The desktop grant never replaces an existing lease."
   },
@@ -900,7 +900,7 @@
     "find": "            Some(AGENT_IDLE_TIMEOUT_SECONDS),\n",
     "replace": "            Some(AGENT_IDLE_TIMEOUT_SECONDS * 2),\n",
     "expect_failing": [
-      "desktop_agent_access_grants_pairs_and_ends_with_the_desktop_session"
+      "test_the_desktop_grant_asks_for_an_agent_only_read_lease"
     ],
     "rule": "The desktop grant asks for a 15-minute idle timeout."
   },
@@ -927,10 +927,10 @@
   {
     "id": "cli-ctrl-c-exit",
     "file": "crates/cli/src/operator_cli.rs",
-    "find": "            return Ok(130);",
-    "replace": "            return Ok(1);",
+    "find": "    Ok(130)\n}",
+    "replace": "    Ok(1)\n}",
     "expect_failing": [
-      "ctrl_c_cancels_a_queued_brokered_command_with_exit_130"
+      "ctrl_c_cancels_the_operation_and_exits_130"
     ],
     "rule": "Ctrl-C while waiting cancels the operation and exits 130."
   },
