@@ -134,14 +134,14 @@ pub fn execute(context: &Context, command: &str, args: &Value) -> Result<Value> 
             write(context, &catalog)?;
             Ok(payload(&entry))
         }
-        "projects.create" => create(context, args),
+        "projects.create" => create(context, args).map(|entry| payload(&entry)),
         _ => Err(AppError::new(
             "not_implemented",
             "project operation is not implemented",
         )),
     }
 }
-fn create(context: &Context, args: &Value) -> Result<Value> {
+fn create(context: &Context, args: &Value) -> Result<ProjectEntry> {
     let name = text(args, "name");
     let requested_id = optional(args, "project_id")
         .filter(|v| truthy(v))
@@ -208,7 +208,7 @@ fn create(context: &Context, args: &Value) -> Result<Value> {
     }
     catalog.projects.push(entry.clone());
     write(context, &catalog)?;
-    Ok(payload(&entry))
+    Ok(entry)
 }
 pub(crate) fn io_error(error: std::io::Error, path: &Path) -> AppError {
     let message = if let Some(number) = error.raw_os_error() {
@@ -247,4 +247,79 @@ fn directory(path: &Path) -> Result<()> {
         Err(_) if path.is_dir() => Ok(()),
         Err(error) => Err(io_error(error, path)),
     }
+}
+/// `list_projects()`: every entry, with encryption refreshed and persisted.
+pub fn list(context: &Context) -> Result<Vec<ProjectEntry>> {
+    Ok(refresh(context)?.projects)
+}
+/// `_upsert_project(entry, select)`: replace in place or append.
+fn upsert(context: &Context, entry: &ProjectEntry, select: bool) -> Result<ProjectEntry> {
+    let mut catalog = read(context)?;
+    match catalog.projects.iter_mut().find(|p| p.id == entry.id) {
+        Some(saved) => *saved = entry.clone(),
+        None => catalog.projects.push(entry.clone()),
+    }
+    if select || catalog.selected_project_id.is_none() {
+        catalog.selected_project_id = Some(entry.id.clone());
+    }
+    write(context, &catalog)?;
+    Ok(entry.clone())
+}
+/// `refresh_project_metadata(id, data_root=...)` and, with a timestamp,
+/// `mark_project_opened`: encryption is read at `data_root`, not the entry.
+pub fn record_opened(
+    context: &Context,
+    reference: &str,
+    data_root: &Path,
+    last_opened_at: Option<&str>,
+    select: bool,
+) -> Result<ProjectEntry> {
+    let mut entry = get_project(context, reference)?;
+    let data_root = context.expand_user(data_root).map_err(storage_error)?;
+    let database = kassiber_paths::resolve_database_path(&data_root);
+    entry.encrypted = database.exists()
+        && std::fs::metadata(&database)
+            .map_err(|e| io_error(e, &database))?
+            .len()
+            > 0
+        && !kassiber_paths::looks_like_plaintext(&database).map_err(storage_error)?;
+    if let Some(now) = last_opened_at {
+        entry.last_opened_at = Some(now.into());
+    }
+    upsert(context, &entry, select)
+}
+/// `set_selected_project(id, last_opened_at)`.
+pub fn set_selected(
+    context: &Context,
+    reference: &str,
+    last_opened_at: Option<&str>,
+) -> Result<ProjectEntry> {
+    let mut entry = get_project(context, reference)?;
+    let mut catalog = read(context)?;
+    catalog.selected_project_id = Some(entry.id.clone());
+    for saved in &mut catalog.projects {
+        if saved.id == entry.id {
+            saved.encrypted = encrypted(saved)?;
+            if let Some(now) = last_opened_at {
+                saved.last_opened_at = Some(now.into());
+            }
+            entry = saved.clone();
+        }
+    }
+    write(context, &catalog)?;
+    Ok(entry)
+}
+/// The daemon's `create_project(..., replace_existing=False,
+/// allow_existing_database=False)` at the default location.
+pub fn create_for_desktop(
+    context: &Context,
+    name: &str,
+    project_id: Option<&str>,
+    select: bool,
+) -> Result<ProjectEntry> {
+    let mut args = vec![("name", s(name)), ("no_select", Value::Bool(!select))];
+    if let Some(id) = project_id {
+        args.push(("project_id", s(id)));
+    }
+    create(context, &dict(args))
 }

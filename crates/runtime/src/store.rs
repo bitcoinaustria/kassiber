@@ -123,6 +123,33 @@ pub enum Unlock<'a> {
     },
 }
 
+/// Desktop project catalog operations (`kassiber.projects`). None opens a
+/// book; each answers the affected entry's `_project_payload`, or a list.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ProjectCatalog<'a> {
+    /// `list_projects()`, refreshing and persisting encryption metadata.
+    List,
+    /// `get_project(id)`.
+    Get(&'a str),
+    /// `create_project(name, project_id=..., select=...,
+    /// replace_existing=False, allow_existing_database=False)`.
+    Create {
+        name: &'a str,
+        project_id: Option<&'a str>,
+        select: bool,
+    },
+    /// `mark_project_opened(id, data_root, select)` when `stamp`, otherwise
+    /// `refresh_project_metadata(id, data_root)`.
+    Opened {
+        project_id: &'a str,
+        data_root: &'a str,
+        stamp: bool,
+        select: bool,
+    },
+    /// `set_selected_project(id, last_opened_at=now_iso())`.
+    Select(&'a str),
+}
+
 /// `current_context_snapshot(conn)`: the active workspace and profile,
 /// each an empty string when none is selected (as Python returns them).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -594,6 +621,19 @@ pub trait BookStore: Send + Sync {
     /// Local configuration services that do not open a database.
     fn local_service(&self, operation: &str, _args: &Value) -> Result<Value, AppError> {
         Err(not_implemented("service", operation))
+    }
+    /// The desktop daemon's project catalog seam.
+    fn project_catalog(&self, _operation: ProjectCatalog<'_>) -> Result<Value, AppError> {
+        Err(not_implemented("store", "the project catalog"))
+    }
+    /// `create_empty_encrypted_database(database, passphrase)`.
+    fn create_encrypted_database(&self, _database: &str, _: &Secret) -> Result<(), AppError> {
+        Err(not_implemented("store", "encrypted database creation"))
+    }
+    /// `load_runtime_config(resolve_effective_env_file(None, data_root))`,
+    /// without creating the layout.
+    fn runtime_config_for(&self, _data_root: &str) -> Result<RuntimeConfig, AppError> {
+        Err(not_implemented("store", "runtime configuration"))
     }
     /// `migrate_hidden_home_state_root_if_needed()`. The shell calls it
     /// where `_maybe_migrate_default_state_root` does: before broker routing

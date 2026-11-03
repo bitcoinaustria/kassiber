@@ -1,0 +1,92 @@
+[
+  {
+    "id": "wire-project-select-default",
+    "file": "crates/daemon/src/projects.rs",
+    "find": "let select = get(args, \"select\") != Some(&Value::Bool(false));",
+    "replace": "let select = get(args, \"select\").map_or(true, truthy);",
+    "expect_failing": [
+      "tests/test_rust_project_desktop.py::test_project_catalog_creation_and_switching_match_python"
+    ],
+    "rule": "Only a literal false declines selection after creation; other falsy values still select."
+  },
+  {
+    "id": "wire-project-list-daemon-selection",
+    "file": "crates/daemon/src/projects.rs",
+    "find": "let selected = daemon.project_id.as_deref() == Some(field(&entry, \"id\").as_str());",
+    "replace": "let selected = daemon.project_id.as_deref() != Some(field(&entry, \"id\").as_str());",
+    "expect_failing": [
+      "tests/test_rust_project_desktop.py::test_project_catalog_creation_and_switching_match_python"
+    ],
+    "rule": "The list marks the daemon's open project as selected."
+  },
+  {
+    "id": "wire-project-passphrase-minimum",
+    "file": "crates/daemon/src/projects.rs",
+    "find": "if text.code_points().count() < MIN_PASSPHRASE_CHARS {",
+    "replace": "if text.code_points().count() <= MIN_PASSPHRASE_CHARS {",
+    "expect_failing": [
+      "tests/test_rust_project_desktop.py::test_explicit_root_switches_to_encrypted_project_and_reunlocks"
+    ],
+    "rule": "A new database passphrase of exactly twelve characters is accepted."
+  },
+  {
+    "id": "wire-project-encrypted-stamp",
+    "file": "crates/daemon/src/projects.rs",
+    "find": "            stamp: select,\n",
+    "replace": "            stamp: true,\n",
+    "expect_failing": [
+      "tests/test_rust_project_desktop.py::test_project_catalog_creation_and_switching_match_python"
+    ],
+    "rule": "An unselected encrypted project refreshes its metadata without a last-opened stamp."
+  },
+  {
+    "id": "wire-project-verify-target-root",
+    "file": "crates/daemon/src/projects.rs",
+    "find": "let root = if switching {",
+    "replace": "let root = if !switching {",
+    "expect_failing": [
+      "tests/test_rust_project_desktop.py::test_project_catalog_creation_and_switching_match_python"
+    ],
+    "rule": "A switch verifies the passphrase against the target project's database."
+  },
+  {
+    "id": "wire-project-status-layout",
+    "file": "crates/kassiber/src/real_store.rs",
+    "find": "        let p = context()?\n            .resolve_for_bootstrap(&ResolveOptions {\n                data_root: Some(PathBuf::from(&self.data_root)),",
+    "replace": "        let p = context()?\n            .resolve(&ResolveOptions {\n                data_root: Some(PathBuf::from(&self.data_root)),",
+    "expect_failing": [
+      "tests/test_rust_project_desktop.py::test_project_catalog_creation_and_switching_match_python"
+    ],
+    "rule": "Status reads paths without requiring the layout a new desktop project does not have yet."
+  },
+  {
+    "id": "wire-store-require-existing-missing",
+    "file": "crates/store/src/lib.rs",
+    "find": "            if require_existing_schema {\n                return Err(invalid_project_database(",
+    "replace": "            if false {\n                return Err(invalid_project_database(",
+    "expect_failing": [
+      "tests/test_rust_project_desktop.py::test_project_creation_refuses_existing_databases_and_unlocked_lock_cycle"
+    ],
+    "rule": "Requiring an existing project refuses a missing database with Python's typed error."
+  },
+  {
+    "id": "wire-store-require-existing-core-schema",
+    "file": "crates/store/src/lib.rs",
+    "find": "if require_existing_schema && !has_core_schema(&connection)? {",
+    "replace": "if false && !has_core_schema(&connection)? {",
+    "expect_failing": [
+      "tests/test_rust_project_desktop.py::test_require_existing_refuses_unrelated_sqlite_without_migrating_it"
+    ],
+    "rule": "Requiring an existing project refuses an unrelated SQLite file instead of migrating it."
+  },
+  {
+    "id": "project-clock-format",
+    "file": "crates/kassiber/src/real_store.rs",
+    "find": "        .query_row(\"SELECT strftime('%Y-%m-%dT%H:%M:%SZ','now')\", [], |r| {",
+    "replace": "        .query_row(\"SELECT strftime('%Y-%m-%dT%H:%M:%f','now') || '000+00:00'\", [], |r| {",
+    "expect_failing": [
+      "project_clock_matches_python_now_iso"
+    ],
+    "rule": "Project catalog and layout stamps use Python's whole-second Z format."
+  }
+]

@@ -151,15 +151,19 @@ fn project(p: &kassiber_ownership::CanonicalProject) -> ProjectRef {
         data_root: path(p.database.parent().expect("database parent")),
     }
 }
+/// `kassiber.projects.now_iso()` for the catalog and layout markers. Only
+/// test builds accept a fixed project clock.
 fn timestamp() -> Result<String, AppError> {
+    #[cfg(feature = "test-harness")]
+    if let Ok(value) = std::env::var("KASSIBER_RUST_TEST_PROJECT_TIMESTAMP") {
+        return Ok(value);
+    }
     Connection::open_in_memory()
         .map_err(map_sqlite_error)
         .map_err(error)?
-        .query_row(
-            "SELECT strftime('%Y-%m-%dT%H:%M:%f','now') || '000+00:00'",
-            [],
-            |r| r.get(0),
-        )
+        .query_row("SELECT strftime('%Y-%m-%dT%H:%M:%SZ','now')", [], |r| {
+            r.get(0)
+        })
         .map_err(map_sqlite_error)
         .map_err(error)
 }
@@ -359,12 +363,7 @@ impl BookStore for RealStore {
                 &context,
                 &field("id"),
                 !kassiber_envelope::get(args, "no_select").is_some_and(kassiber_envelope::truthy),
-                &kassiber_setup::Sources::now(
-                    &kassiber_setup::SystemSources,
-                    &Connection::open_in_memory()
-                        .map_err(map_sqlite_error)
-                        .map_err(error)?,
-                )?,
+                &timestamp()?,
             );
         }
         Ok(result)
@@ -715,23 +714,67 @@ impl BookStore for RealStore {
         Ok(verified)
     }
     fn mark_project_opened(&self, id: &str, root: &str, select: bool) -> Result<(), AppError> {
+        kassiber_setup::projects::record_opened(
+            &context()?,
+            id,
+            Path::new(root),
+            Some(&timestamp()?),
+            select,
+        )
+        .map(|_| ())
+    }
+    fn project_catalog(&self, operation: ProjectCatalog<'_>) -> Result<Value, AppError> {
+        use kassiber_setup::projects as catalog;
         let context = context()?;
-        let file = context
-            .default_state_root()
-            .map_err(error)?
-            .join("config/projects.json");
-        let mut catalog = kassiber_paths::load_catalog(&file, &context).map_err(error)?;
-        let entry = catalog
-            .projects
-            .iter_mut()
-            .find(|p| p.id == id)
-            .ok_or_else(|| AppError::new("project_not_found", "project is not registered"))?;
-        entry.last_opened_at = Some(timestamp()?);
-        entry.encrypted = self.database_is_encrypted(root)?;
-        if select {
-            catalog.selected_project_id = Some(id.to_owned());
-        }
-        kassiber_store::layout::write_catalog(&file, &catalog).map_err(error)
+        let entry = match operation {
+            ProjectCatalog::List => {
+                return Ok(Value::List(
+                    catalog::list(&context)?
+                        .iter()
+                        .map(catalog::payload)
+                        .collect(),
+                ))
+            }
+            ProjectCatalog::Get(id) => catalog::get_project(&context, id)?,
+            ProjectCatalog::Create {
+                name,
+                project_id,
+                select,
+            } => catalog::create_for_desktop(&context, name, project_id, select)?,
+            ProjectCatalog::Opened {
+                project_id,
+                data_root,
+                stamp,
+                select,
+            } => catalog::record_opened(
+                &context,
+                project_id,
+                Path::new(data_root),
+                stamp.then(timestamp).transpose()?.as_deref(),
+                select,
+            )?,
+            ProjectCatalog::Select(id) => {
+                catalog::set_selected(&context, id, Some(&timestamp()?))?
+            }
+        };
+        Ok(catalog::payload(&entry))
+    }
+    fn create_encrypted_database(&self, database: &str, passphrase: &Secret) -> Result<(), AppError> {
+        kassiber_store::encryption::create_empty_database(Path::new(database), passphrase.expose())
+            .map_err(error)
+    }
+    fn runtime_config_for(&self, data_root: &str) -> Result<RuntimeConfig, AppError> {
+        let resolved = context()?
+            .resolve_for_bootstrap(&ResolveOptions {
+                data_root: Some(PathBuf::from(data_root)),
+                ..Default::default()
+            })
+            .map_err(error)?;
+        let config = backends::Config::load(&resolved.env_file)?;
+        Ok(RuntimeConfig {
+            default_backend: Some(config.default_backend),
+            env_file: path(&resolved.env_file),
+        })
     }
 }
 fn write_auth(
@@ -2052,8 +2095,10 @@ impl Book for RealBook {
         Ok(result)
     }
     fn status_facts(&self) -> Result<StatusFacts, AppError> {
+        // `resolve_runtime_paths` never requires the layout: a project the
+        // desktop just created has no settings file yet.
         let p = context()?
-            .resolve(&ResolveOptions {
+            .resolve_for_bootstrap(&ResolveOptions {
                 data_root: Some(PathBuf::from(&self.data_root)),
                 ..Default::default()
             })
@@ -2126,5 +2171,33 @@ impl Book for RealBook {
         }
         self.db_passphrase = None;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod project_clock_tests {
+    /// `now_iso()` writes whole seconds with a `Z` suffix into the catalog and
+    /// migration markers, never SQLite's fractional `+00:00` spelling.
+    #[test]
+    fn project_clock_matches_python_now_iso() {
+        if std::env::var_os("KASSIBER_RUST_TEST_PROJECT_TIMESTAMP").is_some() {
+            return;
+        }
+        let stamp = super::timestamp().unwrap();
+        let bytes = stamp.as_bytes();
+        assert_eq!(bytes.len(), 20, "{stamp}");
+        for (index, byte) in bytes.iter().enumerate() {
+            let expected = match index {
+                4 | 7 => Some(b'-'),
+                10 => Some(b'T'),
+                13 | 16 => Some(b':'),
+                19 => Some(b'Z'),
+                _ => None,
+            };
+            match expected {
+                Some(expected) => assert_eq!(*byte, expected, "{stamp}"),
+                None => assert!(byte.is_ascii_digit(), "{stamp}"),
+            }
+        }
     }
 }

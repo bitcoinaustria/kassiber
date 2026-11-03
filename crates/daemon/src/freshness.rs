@@ -357,7 +357,12 @@ impl Daemon {
         self.reap_freshness(false)?;
         if matches!(
             kind,
-            "daemon.lock" | "daemon.shutdown" | "ui.profiles.switch" | "ui.backup.apply"
+            "daemon.lock"
+                | "daemon.shutdown"
+                | "ui.profiles.switch"
+                | "ui.backup.apply"
+                | "ui.projects.create"
+                | "ui.projects.select"
         ) {
             return self.reap_freshness(true);
         }

@@ -172,6 +172,7 @@ pub fn supported_kinds() -> Vec<&'static str> {
         services::kinds()
             .filter(|k| profiles::KINDS.contains(k) && ["ui.profiles.reset_data"].contains(k)),
     );
+    kinds.extend(projects::KINDS);
     kinds.extend(backup::KINDS);
     kinds.extend(secrets::KINDS);
     kinds.extend(
@@ -761,6 +762,9 @@ impl Daemon {
         if backup::KINDS.contains(&kind_text.as_str()) {
             return backup::handle(self, &kind_text, args.as_ref(), &request_id);
         }
+        if projects::KINDS.contains(&kind_text.as_str()) {
+            return projects::handle(self, &kind_text, args.as_ref(), &request_id);
+        }
         if documents::KINDS.contains(&kind_text.as_str()) {
             if let Some(locked) = self.open_lazily(&request_id)? {
                 return Ok((Some(locked), false));
@@ -1297,6 +1301,22 @@ impl Daemon {
         Ok(())
     }
 
+    /// `_close_current_project_for_switch(ctx)`: stop workers, close the
+    /// book, release ownership and forget the passphrase. Staged backup
+    /// sessions survive, as in Python.
+    fn close_project_for_switch(&mut self) -> Result<(), AppError> {
+        self.reap_freshness(true)?;
+        if let Some(mut book) = self.book.take() {
+            if let Err(error) = book.close() {
+                self.book = Some(book);
+                return Err(error);
+            }
+        }
+        self.release_owner()?;
+        self.unlocked_passphrase = None;
+        Ok(())
+    }
+
     /// `daemon.lock`: close the book, release ownership, forget the
     /// passphrase.
     fn lock(&mut self) -> Result<(), AppError> {
@@ -1426,6 +1446,7 @@ mod context;
 mod networks;
 mod offline;
 mod profiles;
+mod projects;
 mod services;
 mod views;
 mod watches;

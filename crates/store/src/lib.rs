@@ -388,6 +388,12 @@ impl Book {
                     &mut |_| Ok(()),
                 );
             }
+            if require_existing_schema {
+                return Err(invalid_project_database(
+                    &resolve_database_path(&effective),
+                    "Choose an existing Kassiber project database, not an empty or missing database file.",
+                ));
+            }
             return Err(Error::new(
                 ErrorKind::NotInitialized,
                 "an existing initialized book is required",
@@ -439,6 +445,18 @@ impl Book {
                         .retryable(true)
                     }
                 })?;
+        }
+        // `database_has_core_schema` precedes the identity checks, as in
+        // Python's `open_db`.
+        if require_existing_schema && !has_core_schema(&connection)? {
+            return Err(invalid_project_database(
+                &resolve_database_path(&effective),
+                if encrypted {
+                    "Choose an existing Kassiber project database, not an empty or unrelated SQLCipher file."
+                } else {
+                    "Choose an existing Kassiber project database, not an empty or unrelated SQLite file."
+                },
+            ));
         }
         // A child may never silently discard its environment binding, even if
         // its caller did not supply explicit OpenOptions.
@@ -1155,4 +1173,50 @@ mod close_tests {
             .acquire(project, kassiber_ownership::OwnerKind::Desktop, "released")
             .is_ok());
     }
+}
+
+/// `invalid_project_database` from Python's `open_db(require_existing_schema=True)`.
+fn invalid_project_database(database: &Path, hint: &'static str) -> Error {
+    Error::new(
+        ErrorKind::InvalidProjectDatabase,
+        "database does not contain a Kassiber project schema",
+    )
+    .hint(hint)
+    .details(serde_json::json!({"database": database.to_string_lossy()}))
+}
+
+/// `database_has_core_schema(conn)`.
+fn has_core_schema(connection: &Connection) -> Result<bool> {
+    let mut statement = connection
+        .prepare(
+            "SELECT name FROM sqlite_master WHERE type='table' \
+             AND name IN ('settings','workspaces','profiles')",
+        )
+        .map_err(map_sqlite_error)?;
+    let names = statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(map_sqlite_error)?
+        .collect::<std::result::Result<std::collections::BTreeSet<_>, _>>()
+        .map_err(map_sqlite_error)?;
+    if names.len() != 3 {
+        return Ok(false);
+    }
+    for (table, required) in [
+        ("settings", &["key", "value"][..]),
+        ("workspaces", &["id", "label"]),
+        ("profiles", &["id", "workspace_id", "label", "fiat_currency"]),
+    ] {
+        let mut statement = connection
+            .prepare(&format!("PRAGMA table_info({table})"))
+            .map_err(map_sqlite_error)?;
+        let columns = statement
+            .query_map([], |row| row.get::<_, String>(1))
+            .map_err(map_sqlite_error)?
+            .collect::<std::result::Result<std::collections::BTreeSet<_>, _>>()
+            .map_err(map_sqlite_error)?;
+        if !required.iter().all(|column| columns.contains(*column)) {
+            return Ok(false);
+        }
+    }
+    Ok(true)
 }
