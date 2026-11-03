@@ -13,7 +13,6 @@ pub use rows::{Column, NetworkRow, RateRow, SqlValue, TxRow, WalletRef, Worklist
 pub(crate) struct AdmissionFacts {
     pub book_network: Option<NetworkObject<NetworkFacts>>,
     pub wallets: Vec<WalletRef>,
-    pub rate_rows: Vec<RateRow>,
 }
 
 /// Compatibility model for stages and native callers awaiting their typed slice.
@@ -172,15 +171,9 @@ impl StageSnapshot {
             .iter()
             .map(Record::typed)
             .collect::<Result<_, _>>()?;
-        let rate_rows = self
-            .rate_rows
-            .iter()
-            .map(Record::typed)
-            .collect::<Result<_, _>>()?;
         Ok(AdmissionFacts {
             book_network,
             wallets,
-            rate_rows,
         })
     }
 
@@ -382,7 +375,13 @@ mod tests {
             }
             assert_eq!(text(&facts.book_network), text(&*typed.book_network));
             assert_eq!(text(&facts.wallets), text(&typed.wallets));
-            assert_eq!(text(&facts.rate_rows), text(&typed.rate_rows));
+            let rate_rows = snapshot
+                .rate_rows
+                .iter()
+                .map(Record::typed::<RateRow>)
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap();
+            assert_eq!(text(&rate_rows), text(&typed.rate_rows));
         }
     }
 

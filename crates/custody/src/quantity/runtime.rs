@@ -88,17 +88,18 @@ fn tax_eligibility_events(
     let mut pools = BTreeMap::new();
     let mut aliases = BTreeMap::new();
     for event in events {
-        let key = event.key();
+        let [chain, network, namespace, event_id] =
+            event.key_texts().map(std::borrow::Cow::into_owned);
         let order: Order = [
             event
                 .legs()
                 .map(|o| text(&o["occurred_at"]))
                 .min()
                 .unwrap_or_default(),
-            text(&key["chain"]),
-            text(&key["network"]),
-            text(&key["native_namespace"]),
-            text(&key["native_event_id"]),
+            chain,
+            network,
+            namespace,
+            event_id,
         ];
         for alias in event.aliases() {
             aliases.insert(text(&alias[0]), text(&alias[1]));
@@ -861,10 +862,14 @@ fn compose<'a>(v: &Operands<'a>) -> Result<State<'a>, String> {
     drop(span);
     let span = crate::timing::span("quantity.native");
     let audits = array(&v["native"]);
-    let key = |event: &EventRef| {
-        let key = event.key();
-        ["chain", "network", "native_namespace", "native_event_id"]
-            .map(|field| super::text_key(&key[field]).into_owned())
+    let key = |event: &EventRef| match event {
+        // A typed key holds its fields as text.
+        EventRef::Typed(_) => event.key_texts().map(std::borrow::Cow::into_owned),
+        EventRef::Json(_) => {
+            let key = event.key();
+            ["chain", "network", "native_namespace", "native_event_id"]
+                .map(|field| super::text_key(&key[field]).into_owned())
+        }
     };
     // Without audits, sorted canonical events are the compilation's events;
     // otherwise the native compiler reads the JSON input.

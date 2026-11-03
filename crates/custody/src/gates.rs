@@ -152,13 +152,42 @@ pub(crate) fn require_rates(snapshot: &Snapshot) -> Result<(), Error> {
 }
 
 pub(crate) fn require_rate_rows(rows: &[crate::snapshot::RateRow]) -> Result<(), Error> {
-    use kassiber_pydecimal::{Decimal, DecimalError};
-    use std::str::FromStr;
     let mut seen = BTreeSet::new();
     for row in rows {
+        rate_row(row, &mut seen)?;
+    }
+    Ok(())
+}
+
+/// `require_rate_rows` of loaded records, typing only the rows it reads: a
+/// row whose text asset is already seen is skipped before any other column.
+/// A record that cannot be typed is the outer error.
+pub(crate) fn require_rate_records(
+    records: &[crate::snapshot::Record],
+) -> Result<Result<(), Error>, String> {
+    let mut seen = BTreeSet::new();
+    for record in records {
+        if let Some(asset @ Value::String(_)) = record.get("asset") {
+            if seen.contains(&asset.to_string()) {
+                continue;
+            }
+        }
+        let row: crate::snapshot::RateRow = record.typed()?;
+        if let Err(error) = rate_row(&row, &mut seen) {
+            return Ok(Err(error));
+        }
+    }
+    Ok(Ok(()))
+}
+
+/// One rate row's admission, given the assets an earlier row settled.
+fn rate_row(row: &crate::snapshot::RateRow, seen: &mut BTreeSet<String>) -> Result<(), Error> {
+    use kassiber_pydecimal::{Decimal, DecimalError};
+    use std::str::FromStr;
+    {
         let asset = row.asset.present().ok_or(("KeyError", "'asset'".into()))?;
         if seen.contains(&asset.json().to_string()) {
-            continue;
+            return Ok(());
         }
         let parse = |value: &crate::snapshot::SqlValue| -> Result<(), Error> {
             let raw = if value.is_null() || value.as_str() == Some("") {
@@ -219,6 +248,43 @@ pub(crate) fn require_rate_rows(rows: &[crate::snapshot::RateRow]) -> Result<(),
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn lazy_rate_records_gate_as_typed_rows() {
+        let rows = [
+            json!({"asset": "BTC", "fiat_rate": "1.5", "fiat_value": null, "amount": 1}),
+            json!({"asset": "BTC", "fiat_rate": "bad", "fiat_value": "bad", "amount": 1}),
+            json!({"asset": "EUR", "fiat_rate": null, "fiat_value": "2", "amount": 0}),
+            json!({"asset": "EUR", "fiat_rate": null, "fiat_value": "3", "amount": "x"}),
+            json!({"asset": "EUR", "fiat_rate": null, "fiat_value": "4", "amount": 2}),
+            json!({"asset": "EUR", "fiat_rate": "bad", "fiat_value": "bad", "amount": 2}),
+            json!({"asset": 7, "fiat_rate": "1", "fiat_value": null, "amount": 1}),
+            json!({"asset": 7, "fiat_rate": "bad", "fiat_value": null, "amount": 1}),
+            json!({"asset": "ü\"", "fiat_rate": "1", "fiat_value": null, "amount": 1}),
+            json!({"asset": "ü\"", "fiat_rate": "bad", "fiat_value": null, "amount": 1}),
+            json!({"asset": "LBTC", "fiat_rate": null, "fiat_value": null, "amount": 1}),
+            json!({"asset": "LBTC", "fiat_rate_exact": "1e999999999", "fiat_value": null, "amount": 1}),
+            json!({"fiat_rate": "1", "fiat_value": null, "amount": 1}),
+            json!({"asset": "USD", "fiat_value": null, "amount": 1}),
+            json!({"asset": "USD", "fiat_rate": "bad", "fiat_value": null, "amount": 1}),
+        ];
+        // Every prefix, so each row is the last one read at least once.
+        for end in 0..=rows.len() {
+            let records: Vec<crate::snapshot::Record> = rows[..end]
+                .iter()
+                .map(|row| serde_json::from_value(row.clone()).unwrap())
+                .collect();
+            let typed: Vec<crate::snapshot::RateRow> = records
+                .iter()
+                .map(|record| record.typed().unwrap())
+                .collect();
+            assert_eq!(
+                require_rate_records(&records).unwrap(),
+                require_rate_rows(&typed),
+                "{end}"
+            );
+        }
+    }
     #[test]
     fn cpython_network_evidence() {
         let vectors: Vec<Value> = serde_json::from_str(include_str!(

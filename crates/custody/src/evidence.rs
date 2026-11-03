@@ -875,7 +875,7 @@ fn canonical_with_keys<F: Fields + Sync>(
     non_events: &BTreeSet<String>,
     mut prepared: Vec<Option<EventKey>>,
 ) -> Result<canonical::Canonical, Error> {
-    let mut groups: BTreeMap<EventKey, Vec<&F>> = BTreeMap::new();
+    let mut keyed: Vec<(EventKey, &F)> = Vec::with_capacity(rows.len());
     let mut rejected = Vec::new();
     let mut events = Vec::new();
     for (ordinal, row) in rows.iter().enumerate() {
@@ -887,7 +887,7 @@ fn canonical_with_keys<F: Fields + Sync>(
             .and_then(Option::take)
             .map_or_else(|| event_key_of(row), Ok);
         match key {
-            Ok(key) => groups.entry(key).or_default().push(row),
+            Ok(key) => keyed.push((key, row)),
             Err(message) if message.is_value_or_type() => {
                 let id = if truth(row.at("id")) {
                     text(row.at("id"))
@@ -916,7 +916,16 @@ fn canonical_with_keys<F: Fields + Sync>(
     // Groups are independent; build them in key order, so the first refusal
     // and every output keep their order.
     let span = crate::timing::span("evidence.canonical.events");
-    for (key, group) in groups {
+    // A stable sort keeps each group's rows in row order.
+    keyed.sort_by(|a, b| a.0.cmp(&b.0));
+    let mut keyed = keyed.into_iter().peekable();
+    let mut group = Vec::new();
+    while let Some((key, row)) = keyed.next() {
+        group.clear();
+        group.push(row);
+        while let Some((_, row)) = keyed.next_if(|(next, _)| *next == key) {
+            group.push(row);
+        }
         match canonical_event(key, &group, reconciliations)? {
             Ok(event) => events.push(event),
             Err(issue) => rejected.push(issue),
@@ -991,17 +1000,21 @@ fn canonical_event<F: Fields>(
             json!({"errors":errors}),
         )));
     }
-    let mut slots: BTreeMap<(&str, &str, &str), Vec<usize>> = BTreeMap::new();
-    for (index, observation) in observations.iter().enumerate() {
-        slots.entry(observation.slot()).or_default().push(index);
-    }
+    // Observations by slot, in slot order and then in observation order.
+    let mut by_slot: Vec<usize> = (0..observations.len()).collect();
+    by_slot.sort_by(|a, b| observations[*a].slot().cmp(&observations[*b].slot()));
+    let slots: Vec<&[usize]> = by_slot
+        .chunk_by(|a, b| observations[*a].slot() == observations[*b].slot())
+        .collect();
     let mut contradictions = Vec::new();
-    for ((wallet, direction, asset), items) in &slots {
-        let semantics: BTreeSet<(i128, i128, bool)> = items
+    for items in &slots {
+        let semantics: Vec<_> = items
             .iter()
             .map(|index| observations[*index].semantics())
             .collect();
-        if semantics.len() > 1 {
+        if semantics.iter().any(|s| *s != semantics[0]) {
+            let (wallet, direction, asset) = observations[items[0]].slot();
+            let semantics: BTreeSet<(i128, i128, bool)> = semantics.into_iter().collect();
             contradictions.push(json!({"wallet_id":wallet,"direction":direction,"asset":asset,"semantics":semantics}));
         }
     }
@@ -1017,7 +1030,7 @@ fn canonical_event<F: Fields>(
     // Each slot's selected observation becomes its leg, in slot order.
     let mut selected = vec![0; observations.len()];
     let mut leg_of = vec![usize::MAX; observations.len()];
-    for (at, items) in slots.values().enumerate() {
+    for (at, items) in slots.iter().copied().enumerate() {
         let keeper = *items
             .iter()
             .min_by_key(|index| observations[**index].selection())
@@ -1030,7 +1043,7 @@ fn canonical_event<F: Fields>(
     let leg_count = slots.len();
     drop(slots);
     let mut aliases = Vec::with_capacity(observations.len());
-    let mut ids = BTreeSet::new();
+    let mut ids = Vec::with_capacity(observations.len());
     for (index, item) in observations.iter().enumerate() {
         aliases.push((
             item.transaction_id.as_ref(),
@@ -1039,23 +1052,28 @@ fn canonical_event<F: Fields>(
                 .quantity_hash
                 .as_str(),
         ));
-        ids.insert(item.transaction_id.as_ref());
+        ids.push(item.transaction_id.as_ref());
     }
     aliases.sort();
+    ids.sort();
+    ids.dedup();
     let string = |value: &str| Value::String(value.to_owned());
     let aliases = aliases
         .into_iter()
         .map(|(id, hash)| Value::Array(vec![string(id), string(hash)]))
         .collect();
     let ids = ids.into_iter().map(string).collect();
-    // A later commitment with the same detail hash replaces an earlier one.
-    let mut winners: BTreeMap<&str, usize> = BTreeMap::new();
-    for (index, item) in observations.iter().enumerate() {
-        winners.insert(item.commitment.detail_hash.as_str(), index);
-    }
+    // In detail hash order, a later commitment with the same detail hash
+    // replaces an earlier one.
+    let detail = |index: &usize| observations[*index].commitment.detail_hash.as_str();
+    let mut by_detail: Vec<usize> = (0..observations.len()).collect();
+    by_detail.sort_by(|a, b| detail(a).cmp(detail(b)));
     let mut snapshot_of = vec![usize::MAX; observations.len()];
-    for (at, index) in winners.into_values().enumerate() {
-        snapshot_of[index] = at;
+    for (at, same) in by_detail
+        .chunk_by(|a, b| detail(a) == detail(b))
+        .enumerate()
+    {
+        snapshot_of[*same.last().expect("a nonempty run")] = at;
     }
     // Selected observations move into their legs, which then hold their
     // snapshots; the other snapshots keep their commitments.
@@ -1219,6 +1237,20 @@ pub fn compute(snapshot: &Snapshot) -> Result<Value, Error> {
 #[cfg(test)]
 mod semantic_tests {
     use super::*;
+    #[test]
+    fn canonical_events_follow_key_order_with_unique_sources() {
+        let row = |id: &str, event: &str| json!({"id":id,"profile_id":"p","wallet_id":"w","wallet_kind":"descriptor","direction":"inbound","asset":"BTC","amount":1000,"fee":0,"occurred_at":"2024-01-01T00:00:00+00:00","source_ref":"src","external_id":event,"raw_json":"{}","network":"regtest"});
+        // Rows out of key order, and one transaction observed twice.
+        let rows = [row("t2", "e2"), row("t1", "e1"), row("t1", "e1")];
+        let canonical = canonical_input(&rows, &json!({}), &BTreeSet::new()).unwrap();
+        let events = canonical["events"].as_array().unwrap();
+        let ids: Vec<_> = events
+            .iter()
+            .map(|event| event["event_key"]["native_event_id"].clone())
+            .collect();
+        assert_eq!(ids, [json!("e1"), json!("e2")]);
+        assert_eq!(events[0]["source_transaction_ids"], json!(["t1"]));
+    }
     #[test]
     fn txid_names_match_python_normalization() {
         let names = [

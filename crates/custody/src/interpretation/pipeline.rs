@@ -299,7 +299,7 @@ pub(super) fn prepare_with_samourai<'a>(
             .canonical
             .iter()
             .iter()
-            .any(|event| event.key()["native_namespace"] == "chain");
+            .any(|event| event.chain_namespace());
     let mut normalized = rows.clone();
     if eligible {
         fn normalize(row: &mut Value, observation: &super::Observed) {

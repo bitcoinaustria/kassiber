@@ -60,7 +60,7 @@ fn compose_impl(
             .canonical
             .iter()
             .iter()
-            .any(|event| event.key()["native_namespace"] == "chain");
+            .any(|event| event.chain_namespace());
         // The snapshot records hold the same fields as `rows`.
         let has_hashes = snapshot.transactions.iter().any(|row| {
             row.get("payment_hash")

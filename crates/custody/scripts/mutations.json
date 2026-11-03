@@ -23807,7 +23807,7 @@
   {
     "id": "canonical-leg-event-key",
     "file": "crates/custody/src/evidence/canonical.rs",
-    "find": "        object.insert(\"event_key\".into(), self.event.value.clone());",
+    "find": "        object.insert(\"event_key\".into(), self.event.value().clone());",
     "replace": "        object.insert(\"event_key\".into(), Value::Null);",
     "expect_failing": [
       "quantity_runtime_wrapper_vectors"
@@ -24338,6 +24338,86 @@
       "gaps_search_vectors"
     ],
     "rule": "Gap legs read Samourai policy from the wallet configuration."
+  },
+  {
+    "id": "rate-records-error",
+    "file": "crates/custody/src/gates.rs",
+    "find": "            return Ok(Err(error));",
+    "replace": "            return Ok(Ok(()));",
+    "expect_failing": [
+      "lazy_rate_records_gate_as_typed_rows"
+    ],
+    "rule": "A rate record's refusal is the gate's refusal."
+  },
+  {
+    "id": "event-groups-same-key",
+    "file": "crates/custody/src/evidence.rs",
+    "find": "keyed.next_if(|(next, _)| *next == key)",
+    "replace": "keyed.next_if(|(next, _)| *next != key)",
+    "expect_failing": [
+      "quantity_runtime_wrapper_vectors"
+    ],
+    "rule": "An event groups exactly the rows with its key."
+  },
+  {
+    "id": "event-groups-key-order",
+    "file": "crates/custody/src/evidence.rs",
+    "find": "    keyed.sort_by(|a, b| a.0.cmp(&b.0));",
+    "replace": "    keyed.sort_by(|a, b| b.0.cmp(&a.0));",
+    "expect_failing": [
+      "canonical_events_follow_key_order_with_unique_sources"
+    ],
+    "rule": "Events are built in key order."
+  },
+  {
+    "id": "event-slots-order",
+    "file": "crates/custody/src/evidence.rs",
+    "find": "    by_slot.sort_by(|a, b| observations[*a].slot().cmp(&observations[*b].slot()));",
+    "replace": "    by_slot.sort_by(|a, b| observations[*b].slot().cmp(&observations[*a].slot()));",
+    "expect_failing": [
+      "duplicate_fee_keeper"
+    ],
+    "rule": "Event legs follow slot order."
+  },
+  {
+    "id": "event-slot-contradiction",
+    "file": "crates/custody/src/evidence.rs",
+    "find": "        if semantics.iter().any(|s| *s != semantics[0]) {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "interpretation_full_vectors"
+    ],
+    "rule": "Disagreeing observations of one slot reject their event."
+  },
+  {
+    "id": "event-source-ids-unique",
+    "file": "crates/custody/src/evidence.rs",
+    "find": "    ids.sort();\n    ids.dedup();",
+    "replace": "    ids.sort();",
+    "expect_failing": [
+      "canonical_events_follow_key_order_with_unique_sources"
+    ],
+    "rule": "An event lists each source transaction once."
+  },
+  {
+    "id": "event-chain-namespace",
+    "file": "crates/custody/src/evidence/canonical.rs",
+    "find": "            Self::Typed(event) => event.key().native_namespace == \"chain\",",
+    "replace": "            Self::Typed(event) => event.key().native_namespace != \"chain\",",
+    "expect_failing": [
+      "interpretation_full_vectors"
+    ],
+    "rule": "A typed event is a chain event when its key's namespace is chain."
+  },
+  {
+    "id": "event-key-texts-order",
+    "file": "crates/custody/src/evidence/canonical.rs",
+    "find": "                    &key.chain,\n                    &key.network,",
+    "replace": "                    &key.network,\n                    &key.chain,",
+    "expect_failing": [
+      "quantity_runtime_wrapper_vectors"
+    ],
+    "rule": "Typed key texts follow chain, network, namespace and id."
   },
   {
     "id": "R4-evidence-alias-slot-index",

@@ -60,15 +60,20 @@ pub(crate) fn slot(key: &str) -> Option<usize> {
 #[derive(Debug)]
 pub(crate) struct Keys {
     pub key: EventKey,
-    pub value: Value,
+    /// The `event_key` object, built on first request.
+    value: OnceLock<Value>,
 }
 
 impl Keys {
     pub(crate) fn new(key: EventKey) -> Arc<Self> {
         Arc::new(Self {
-            value: key.value(),
             key,
+            value: OnceLock::new(),
         })
+    }
+
+    pub(crate) fn value(&self) -> &Value {
+        self.value.get_or_init(|| self.key.value())
     }
 }
 
@@ -109,7 +114,7 @@ impl Leg {
     pub fn value(&self) -> Value {
         let mut object = Map::new();
         object.insert("$type".into(), OBSERVATION.clone());
-        object.insert("event_key".into(), self.event.value.clone());
+        object.insert("event_key".into(), self.event.value().clone());
         for (key, value) in FIELDS.iter().zip(&self.fields) {
             object.insert((*key).into(), value.clone());
         }
@@ -123,7 +128,7 @@ impl Index<&str> for Leg {
     fn index(&self, key: &str) -> &Value {
         match key {
             "$type" => &OBSERVATION,
-            "event_key" => &self.event.value,
+            "event_key" => self.event.value(),
             _ => match slot(key) {
                 Some(at) => &self.fields[at],
                 None => &NULL,
@@ -220,7 +225,7 @@ impl Event {
     pub fn value(&self) -> Value {
         let mut object = Map::new();
         object.insert("$type".into(), EVENT.clone());
-        object.insert("event_key".into(), self.keys.value.clone());
+        object.insert("event_key".into(), self.keys.value().clone());
         object.insert(
             "evidence_snapshots".into(),
             Value::Array(self.snapshot_values().to_vec()),
@@ -389,8 +394,39 @@ impl<'a> EventRef<'a> {
     /// The `event_key` object.
     pub fn key(self) -> &'a Value {
         match self {
-            Self::Typed(event) => &event.keys.value,
+            Self::Typed(event) => event.keys.value(),
             Self::Json(value) => &value["event_key"],
+        }
+    }
+
+    /// The key's chain, network, namespace and event id as `codec::text`
+    /// reads them, borrowed from a typed key.
+    pub fn key_texts(self) -> [Cow<'a, str>; 4] {
+        match self {
+            Self::Typed(event) => {
+                let key = event.key();
+                [
+                    &key.chain,
+                    &key.network,
+                    &key.native_namespace,
+                    &key.native_event_id,
+                ]
+                .map(|text| Cow::Borrowed(text.as_str()))
+            }
+            Self::Json(value) => {
+                let key = &value["event_key"];
+                ["chain", "network", "native_namespace", "native_event_id"]
+                    .map(|field| Cow::Owned(crate::codec::text(&key[field])))
+            }
+        }
+    }
+
+    /// Whether the event key's namespace is `chain`, reading a typed key
+    /// without building its object.
+    pub fn chain_namespace(self) -> bool {
+        match self {
+            Self::Typed(event) => event.key().native_namespace == "chain",
+            Self::Json(value) => value["event_key"]["native_namespace"] == "chain",
         }
     }
 
