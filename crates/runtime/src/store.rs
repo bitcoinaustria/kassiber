@@ -341,6 +341,11 @@ pub trait Book: Send {
         ))
     }
 
+    /// `_auto_maintain_for_read`: rebuild stale journals of the active book
+    /// before a report-like read. Stores without journals have nothing to do.
+    fn maintain_for_read(&mut self) -> Result<(), AppError> {
+        Ok(())
+    }
     /// `ui.transactions.dashboard` over the caller's suggestion candidates.
     fn transaction_dashboard(
         &mut self,

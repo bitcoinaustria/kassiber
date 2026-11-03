@@ -9,7 +9,7 @@ mod desktop;
 pub use desktop::run as desktop_command;
 mod providers;
 pub mod time;
-pub use providers::{FetchAction, FetchConsent, Providers};
+pub use providers::{require_live_enabled, FetchAction, FetchConsent, Providers};
 
 use kassiber_envelope::{dict, get, py_str, s, truthy, AppError};
 use kassiber_pydecimal::Decimal;

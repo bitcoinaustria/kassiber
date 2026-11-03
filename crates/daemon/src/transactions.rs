@@ -3,7 +3,7 @@ use kassiber_envelope::{dict, get, s, type_name, AppError};
 use kassiber_pyjson::Value;
 use kassiber_runtime::store::Book;
 
-pub use kassiber_transactions::desktop::KINDS;
+pub use kassiber_transactions::desktop::{AUDIT_KINDS, KINDS};
 
 pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<Value, AppError> {
     if kind == "ui.transactions.dashboard" {

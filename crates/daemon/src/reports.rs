@@ -7,6 +7,7 @@ pub const KINDS: &[&str] = &[
     "ui.transactions.export_xlsx",
     "ui.transactions.export_platform_csv",
     "ui.privacy_hygiene.snapshot",
+    "ui.reports.capital_gains",
     "ui.reports.explain_capital_gain",
     "ui.reports.summary",
     "ui.reports.balance_sheet",

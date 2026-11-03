@@ -8,6 +8,7 @@ import unittest
 from kassiber.db import open_db
 from kassiber.secrets.sqlcipher import open_encrypted
 from tests import cli_runner
+from tests.rust_desktop_parity import run_candidate
 from tests.test_rust_shell_parity import _environment
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -62,12 +63,12 @@ class RustTransactionResolveTest(unittest.TestCase):
                                    capture_output=True, timeout=120)
         self.assertEqual((reference.returncode, reference.stderr), (0, b""), reference.stdout)
         self.assertEqual(self.snapshot(), baseline)
-        candidate = cli_runner.run(
-            argv, env={**self.env, cli_runner.CLI_ENV: RUST_BIN}, input=wire,
-            capture_output=True, timeout=120)
+        candidate = run_candidate(argv, env=self.env, input=wire)
         self.assertEqual((candidate.returncode, candidate.stderr), (0, b""), candidate.stdout)
         actual, expected = candidate.stdout.splitlines(), reference.stdout.splitlines()
-        self.assertIn(KIND, json.loads(actual[0])["data"]["supported_kinds"])
+        ready = json.loads(actual[0])["data"]["supported_kinds"]
+        self.assertEqual(ready[0], "status", "candidate must be the Rust daemon")
+        self.assertIn(KIND, ready)
         self.assertEqual(len(actual), len(expected))
         for request, got, wanted in zip(requests, actual[1:], expected[1:]):
             self.assertEqual(got, wanted, request)
@@ -90,7 +91,7 @@ class RustTransactionResolveTest(unittest.TestCase):
             VALUES('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
                 'w','p','conversion','g','b','BTC','LBTC',100001,100001,'eligible','2025','2025');
             UPDATE profiles SET last_processed_at='2025',last_processed_tx_count=7,
-                journal_input_version=2,last_processed_input_version=2 WHERE id='p';
+                journal_input_version=2,last_processed_input_version=2 WHERE id='p'; UPDATE profiles SET journal_semantics_version=2 WHERE id='p';
         """)
 
     def test_aliases_order_refusals_redaction_and_all_tables_match_wire_bytes(self):
@@ -121,11 +122,12 @@ class RustTransactionResolveTest(unittest.TestCase):
         self.assertEqual(focused["pair"]["feeSat"], focused["feeSat"])
         self.assertEqual(aggregate["amountSat"], -100.001)
         self.assertIsNone(focused["pair"]["reviewPairId"])
-        for marker in ("last_processed_tx_count=0", "last_processed_input_version=1", "last_processed_at=NULL"):
+        for marker in ("last_processed_tx_count=0", "last_processed_input_version=1", "last_processed_at=NULL",
+                       "journal_semantics_version=1"):
             self.change("UPDATE profiles SET " + marker + " WHERE id='p';")
             result = self.compare([{"query": "b"}, {"query": "payment-hash"}])
             self.assertNotIn("pair", result[0]["data"]["transaction"])
-            self.change("UPDATE profiles SET last_processed_at='2025',last_processed_tx_count=7,last_processed_input_version=2 WHERE id='p';")
+            self.change("UPDATE profiles SET last_processed_at='2025',last_processed_tx_count=7,last_processed_input_version=2 WHERE id='p'; UPDATE profiles SET journal_semantics_version=2 WHERE id='p';")
 
     def test_review_reading_fingerprint_binds_observations_and_unique_review(self):
         self.change("UPDATE wallets SET config_json='{\"network\":\"regtest\"}' WHERE id='ln';")
@@ -145,7 +147,7 @@ class RustTransactionResolveTest(unittest.TestCase):
             ["--machine", "--data-root", str(self.root), "transfers", "update", "--pair-id", pair_id, "--note", "note only"],
             reference=True, env=self.env, capture_output=True, timeout=120)
         self.assertEqual(updated.returncode, 0, updated.stdout)
-        self.change("UPDATE profiles SET last_processed_at='2025',last_processed_tx_count=7,journal_input_version=2,last_processed_input_version=2 WHERE id='p';")
+        self.change("UPDATE profiles SET last_processed_at='2025',last_processed_tx_count=7,journal_input_version=2,last_processed_input_version=2 WHERE id='p'; UPDATE profiles SET journal_semantics_version=2 WHERE id='p';")
         note = self.compare([{"query": "b"}])[0]["data"]["transaction"]["pair"]
         self.assertEqual(changed["pairFingerprint"], note["pairFingerprint"])
         self.change("DELETE FROM custody_component_transaction_memberships;")

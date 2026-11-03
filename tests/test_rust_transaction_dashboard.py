@@ -14,7 +14,7 @@ INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,extern
 RELATION = """
 INSERT INTO journal_custody_economic_relations(relation_id,workspace_id,profile_id,relation_kind,source_transaction_id,target_transaction_id,source_asset,target_asset,source_amount_msat,target_amount_msat,basis_state,occurred_at,created_at)
 VALUES('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','w','p','conversion','g','b','BTC','LBTC',100001,100001,'eligible','2025','2025');
-UPDATE profiles SET last_processed_at='2025',last_processed_tx_count=13,journal_input_version=2,last_processed_input_version=2 WHERE id='p';
+UPDATE profiles SET last_processed_at='2025',last_processed_tx_count=13,journal_input_version=2,last_processed_input_version=2 WHERE id='p'; UPDATE profiles SET journal_semantics_version=2 WHERE id='p';
 """
 WINDOW = {"since": "2025-01-01T00:00:00Z", "until": "2025-06-30T23:59:59Z"}
 
@@ -95,7 +95,7 @@ class RustTransactionDashboardTest(DesktopParity, unittest.TestCase):
         self.change("UPDATE profiles SET last_processed_input_version=1 WHERE id='p';")
         stale = self.compare(args)
         self.assertFalse(stale[0]["data"]["metricsScope"]["pairsGrouped"])
-        self.change("UPDATE profiles SET last_processed_input_version=2 WHERE id='p';"
+        self.change("UPDATE profiles SET last_processed_input_version=2 WHERE id='p'; UPDATE profiles SET journal_semantics_version=2 WHERE id='p';"
                     "UPDATE transactions SET fiat_rate=NULL,fiat_value=NULL WHERE id IN ('h','b');")
         self.compare(args + [{"period": "all", "wallet": "cold"}])
 

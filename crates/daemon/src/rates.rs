@@ -7,6 +7,7 @@ pub(crate) const KINDS: &[&str] = &[
     "ui.rates.coverage",
     "ui.rates.kraken_csv.import",
     "ui.rates.latest",
+    "ui.rates.rebuild",
 ];
 pub(crate) fn run(
     book: &mut dyn Book,
@@ -16,7 +17,14 @@ pub(crate) fn run(
     let empty = kassiber_envelope::dict::<&str>([]);
     let args = args.unwrap_or(&empty);
     if !matches!(args, Value::Null | Value::Dict(_)) {
-        return Err(AppError::new("validation", "daemon args must be an object"));
+        let error = AppError::new("validation", "daemon args must be an object");
+        if kind == "ui.rates.rebuild" {
+            return Err(error.with_details(kassiber_envelope::dict([(
+                "type",
+                kassiber_envelope::s(kassiber_envelope::type_name(args)),
+            )])));
+        }
+        return Err(error);
     }
     book.rates(kind, args)
 }

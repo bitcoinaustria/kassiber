@@ -1,5 +1,6 @@
 //! Desktop transaction reads over persisted observations and journal projections.
 //! These reads never process journals, infer ownership or contact a provider.
+mod audit;
 mod dashboard;
 mod render;
 mod resolve;
@@ -21,9 +22,12 @@ pub const KINDS: &[&str] = &[
     "ui.transactions.list",
     "ui.transactions.dashboard",
     "ui.transactions.extremes",
-    "ui.transactions.search",
     "ui.transactions.resolve",
+    "ui.transactions.search",
 ];
+
+/// Audit reads served by the same projection boundary, advertised separately.
+pub const AUDIT_KINDS: &[&str] = &["ui.audit.changes_since_last_answer"];
 
 /// The complete desktop projection allowlist; there is no generic kind dispatch.
 #[derive(Clone, Copy, Debug)]
@@ -32,6 +36,7 @@ pub enum Projection {
     Search,
     Extremes,
     Resolve,
+    AuditChanges,
 }
 impl Projection {
     pub fn from_kind(kind: &str) -> Option<Self> {
@@ -40,6 +45,7 @@ impl Projection {
             "ui.transactions.search" => Some(Self::Search),
             "ui.transactions.extremes" => Some(Self::Extremes),
             "ui.transactions.resolve" => Some(Self::Resolve),
+            "ui.audit.changes_since_last_answer" => Some(Self::AuditChanges),
             _ => None,
         }
     }
@@ -49,6 +55,7 @@ impl Projection {
             Self::Search => "ui.transactions.search",
             Self::Extremes => "ui.transactions.extremes",
             Self::Resolve => "ui.transactions.resolve",
+            Self::AuditChanges => "ui.audit.changes_since_last_answer",
         }
     }
 }
@@ -355,6 +362,9 @@ pub fn execute(
 ) -> Result<Value> {
     if matches!(projection, Projection::Resolve) {
         return resolve::execute(conn, scope, args, pair_reading);
+    }
+    if matches!(projection, Projection::AuditChanges) {
+        return audit::changes(conn, scope, args);
     }
     let kind = projection.kind();
     let empty = dict::<&str>([]);

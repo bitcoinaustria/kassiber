@@ -199,6 +199,24 @@ pub fn refresh_with_sources_checked<'a>(
 
 /// Match the reference's outer exception projection. Refusal details remain
 /// local until the transport applies its ordinary redaction boundary.
+/// `auto_price_transactions_from_rates_cache(conn, profile)` under Python's RP2
+/// decimal context, inside the caller's write transaction.
+pub fn auto_price(
+    conn: &Connection,
+    profile_id: &str,
+    fiat_currency: &str,
+) -> Result<usize, AppError> {
+    crate::prebuild::auto_price_transactions_from_rates_cache(
+        conn,
+        &crate::prebuild::PricingScope {
+            profile_id,
+            fiat_currency,
+            decimal_context: kassiber_pydecimal::Context::RP2,
+        },
+    )
+    .map_err(application_error)
+}
+
 pub fn application_error(refusal: Refusal) -> AppError {
     if refusal.family == "AppError" {
         AppError {

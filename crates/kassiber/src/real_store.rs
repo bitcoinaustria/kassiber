@@ -4,6 +4,7 @@
 mod backends;
 mod journals;
 mod lightning;
+mod rates_rebuild;
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -998,6 +999,9 @@ impl Book for RealBook {
     }
     fn rates(&mut self, command: &str, args: &Value) -> Result<Value, AppError> {
         use kassiber_envelope::{py_str, truthy};
+        if command == "ui.rates.rebuild" {
+            return self.rates_rebuild(args);
+        }
         if command.starts_with("ui.") {
             return kassiber_rates::desktop_command(self.conn()?, command, args, &self.rates);
         }
@@ -1242,6 +1246,45 @@ impl Book for RealBook {
                 )
             },
         )
+    }
+
+    fn maintain_for_read(&mut self) -> Result<(), AppError> {
+        let context = self.context()?;
+        if context.profile_id.is_empty() {
+            return Ok(());
+        }
+        let conn = self.conn()?;
+        let mut sources = sync_sources().0;
+        let policy = kassiber_wallets::freshness::Queue::new(conn, sources.as_mut())
+            .policy(&context.profile_id)?;
+        if kassiber_envelope::truthy(
+            kassiber_envelope::get(&policy, "report_read_sync").unwrap_or(&Value::Null),
+        ) {
+            // Report-read wallet sync is network work; refuse rather than skip it.
+            return Err(AppError::new(
+                "not_implemented",
+                "Report-read wallet sync is not implemented in the Rust daemon yet",
+            ));
+        }
+        let stale: bool = conn
+            .query_row(
+                "SELECT (SELECT COUNT(*) FROM transactions WHERE profile_id=p.id AND excluded=0) AS active, \
+                 COALESCE(p.last_processed_at,'')<>'' AND COALESCE(p.last_processed_tx_count,0)=(SELECT COUNT(*) FROM transactions WHERE profile_id=p.id AND excluded=0) \
+                 AND COALESCE(p.last_processed_input_version,0)=COALESCE(p.journal_input_version,0) AS current FROM profiles p WHERE p.id=?",
+                [&context.profile_id],
+                |row| Ok(row.get::<_, i64>(0)? > 0 && !row.get::<_, bool>(1)?),
+            )
+            .optional()
+            .map_err(map_sqlite_error)
+            .map_err(error)?
+            .unwrap_or(false);
+        if !stale {
+            return Ok(());
+        }
+        let reply = self
+            .process_journals(None, None, false, &mut |_| {})
+            .map_err(|failure| *failure.error)?;
+        reply.after_reply()
     }
 
     fn transaction_dashboard(

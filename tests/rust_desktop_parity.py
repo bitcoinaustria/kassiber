@@ -7,8 +7,10 @@ to the Rust candidate, requires identical response bytes, and checks that all
 """
 import json
 import os
+import shutil
 from pathlib import Path
 import sqlite3
+import subprocess
 import tempfile
 
 from kassiber.db import open_db
@@ -19,6 +21,26 @@ from tests.test_rust_shell_parity import _environment
 ROOT = Path(__file__).resolve().parent.parent
 RUST_BIN = os.environ.get("KASSIBER_RUST_BIN")
 DESKTOP_SQL = ROOT / "crates/transactions/tests/data/desktop.sql"
+
+
+def run_candidate(args, *, env, input):
+    """Run the Rust binary itself; ``cli_runner`` reads its switch from os.environ."""
+    resolved, fds = [], []
+    try:
+        for arg in args:
+            if isinstance(arg, cli_runner.InputFd):
+                read_end, write_end = os.pipe()
+                os.write(write_end, arg.data)
+                os.close(write_end)
+                fds.append(read_end)
+                resolved.append(str(read_end))
+            else:
+                resolved.append(os.fspath(arg))
+        return subprocess.run([RUST_BIN, *resolved], env=env, input=input, capture_output=True,
+                              timeout=300, cwd=ROOT, pass_fds=fds)
+    finally:
+        for fd in fds:
+            os.close(fd)
 
 
 class DesktopParity:
@@ -55,8 +77,8 @@ class DesktopParity:
         with open_db(self.root, passphrase=self.passphrase) as conn:
             conn.executescript(sql)
 
-    def snapshot(self):
-        path = self.root / "kassiber.sqlite3"
+    def snapshot(self, root=None):
+        path = (root or self.root) / "kassiber.sqlite3"
         conn = open_encrypted(path, self.passphrase) if self.passphrase else sqlite3.connect(path)
         try:
             tables = sorted(row[0] for row in conn.execute(
@@ -76,31 +98,47 @@ class DesktopParity:
             requests.append(request)
         return requests
 
-    def compare(self, args, *, kind=None, mutates=False):
+    def compare(self, args, *, kind=None, mutates=False, mask=None, tables=None):
+        """Compare one session; ``mutates`` runs Rust on a copy taken before Python.
+
+        ``mask`` normalizes both response lines and ``tables`` both snapshots when
+        generated identifiers or clocks legitimately differ between the runs.
+        """
         requests = self.requests(args, kind)
         requests.append(dict(request_id="stop", kind="daemon.shutdown"))
         wire = "".join(json.dumps(request) + "\n" for request in requests).encode()
-        argv = ["--machine", "--data-root", str(self.root)]
-        if self.passphrase:
-            argv.extend(["--db-passphrase-fd", cli_runner.InputFd(self.passphrase.encode())])
-        argv.append("daemon")
         baseline = self.snapshot()
-        reference = cli_runner.run(argv, reference=True, env=self.env, input=wire,
+        candidate_root = self.root
+        if mutates:
+            candidate_root = self.base / f"candidate-{len(list(self.base.glob('candidate-*')))}" / "data"
+            shutil.copytree(self.root, candidate_root)
+
+        def argv(root):
+            argv = ["--machine", "--data-root", str(root)]
+            if self.passphrase:
+                argv.extend(["--db-passphrase-fd", cli_runner.InputFd(self.passphrase.encode())])
+            return [*argv, "daemon"]
+
+        reference = cli_runner.run(argv(self.root), reference=True, env=self.env, input=wire,
                                    capture_output=True, timeout=300)
         self.assertEqual((reference.returncode, reference.stderr), (0, b""), reference.stdout)
         after_reference = self.snapshot()
         if not mutates:
             self.assertEqual(after_reference, baseline)
-        candidate = cli_runner.run(
-            argv, env={**self.env, cli_runner.CLI_ENV: RUST_BIN}, input=wire,
-            capture_output=True, timeout=300)
+        candidate = run_candidate(argv(candidate_root), env=self.env, input=wire)
         self.assertEqual((candidate.returncode, candidate.stderr), (0, b""), candidate.stdout)
         actual, expected = candidate.stdout.splitlines(), reference.stdout.splitlines()
-        self.assertIn(kind or self.KIND, json.loads(actual[0])["data"]["supported_kinds"])
+        ready = json.loads(actual[0])["data"]["supported_kinds"]
+        self.assertEqual(ready[0], "status", "candidate must be the Rust daemon")
+        self.assertIn(kind or self.KIND, ready)
         self.assertEqual(len(actual), len(expected))
+        normalize = mask or (lambda line: line)
         for request, got, wanted in zip(requests, actual[1:], expected[1:]):
-            self.assertEqual(got, wanted, request)
-        if not mutates:
+            self.assertEqual(normalize(got), normalize(wanted), request)
+        if mutates:
+            reshape = tables or (lambda snapshot: snapshot)
+            self.assertEqual(reshape(self.snapshot(candidate_root)), reshape(after_reference))
+        else:
             self.assertEqual(self.snapshot(), baseline)
         responses = [json.loads(line) for line in actual[1:-1]]
         if path := os.environ.get("KASSIBER_DESKTOP_COUNTS"):

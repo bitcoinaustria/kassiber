@@ -59,6 +59,20 @@ use crate::output::{with_request_id, Output, OutputClosed, RequestId};
 /// Lifecycle kinds; service families extend `supported_kinds` in Python order.
 pub const SUPPORTED_KINDS: &[&str] = &["status", "daemon.lock", "daemon.unlock", "daemon.shutdown"];
 
+/// `_DIRECT_AUTO_JOURNAL_REFRESH_KINDS`: reads that rebuild stale journals first.
+const MAINTAINED_READS: &[&str] = &[
+    "ui.reports.capital_gains",
+    "ui.reports.summary",
+    "ui.reports.balance_sheet",
+    "ui.reports.portfolio_summary",
+    "ui.reports.tax_summary",
+    "ui.reports.balance_history",
+    "ui.reports.exit_tax_preview",
+    "ui.transfers.review_context",
+    "ui.transactions.review_context",
+    "ui.report.blockers",
+];
+
 const UNLOCK_SCOPE: &str = "unlock_database";
 const UNLOCK_LABEL: &str = "Enter the SQLCipher database passphrase to unlock Kassiber.";
 
@@ -142,6 +156,8 @@ pub fn supported_kinds() -> Vec<&'static str> {
             .contains(k)
     }));
     kinds.extend(rates::KINDS);
+    kinds.extend(transactions::AUDIT_KINDS);
+    kinds.push("ui.review.worklist");
     kinds.extend(review::KINDS);
     kinds.push("ui.freshness.run");
     kinds.extend(freshness::product::CONTROL_KINDS);
@@ -686,6 +702,33 @@ impl Daemon {
         }
         self.backup_sessions.expire();
         self.freshness_before_request(&kind_text)?;
+        if kind_text == "ui.review.worklist" {
+            // Python advertises the worklist but its direct dispatch has no
+            // handler: only the AI projection reads it. Keep that refusal,
+            // after the same book-open boundary every UI read crosses.
+            if let Some(locked) = self.open_lazily(&request_id)? {
+                return Ok((Some(locked), false));
+            }
+            let details = dict([("kind", s(kind_text.as_str()))]);
+            let record = error_envelope(
+                "daemon_unavailable",
+                &format!(
+                    "daemon kind {} is not wired to real UI data yet",
+                    repr_py(&kind)
+                ),
+                &request_id,
+                Some(&details),
+                Some("Add a typed daemon handler and wire the kind through the desktop and browser-bridge allowlists."),
+                true,
+            );
+            return Ok((Some(record), false));
+        }
+        if MAINTAINED_READS.contains(&kind_text.as_str()) {
+            if let Some(locked) = self.open_lazily(&request_id)? {
+                return Ok((Some(locked), false));
+            }
+            self.book_mut()?.maintain_for_read()?;
+        }
         if freshness::product::RUN_KINDS.contains(&kind_text.as_str())
             || freshness::product::CONTROL_KINDS.contains(&kind_text.as_str())
         {
@@ -704,7 +747,9 @@ impl Daemon {
                 false,
             ));
         }
-        if transactions::KINDS.contains(&kind_text.as_str()) {
+        if transactions::KINDS.contains(&kind_text.as_str())
+            || transactions::AUDIT_KINDS.contains(&kind_text.as_str())
+        {
             if let Some(locked) = self.open_lazily(&request_id)? {
                 return Ok((Some(locked), false));
             }
