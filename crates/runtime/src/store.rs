@@ -612,6 +612,15 @@ pub trait BookStore: Send + Sync {
             "database passphrase rotation is unavailable",
         ))
     }
+    /// The desktop `ui.secrets.init` storage step after the daemon closed its
+    /// book: encrypt the plaintext database, or create an empty encrypted one,
+    /// under exclusive maintenance with the desktop role retained.
+    fn init_encryption(&self, _data_root: &str, _passphrase: &Secret) -> Result<Value, AppError> {
+        Err(AppError::new(
+            "not_implemented",
+            "database encryption is unavailable",
+        ))
+    }
     fn forget_cli_unlock(&self, _data_root: &str) -> Result<Value, AppError> {
         Err(AppError::new(
             "not_implemented",

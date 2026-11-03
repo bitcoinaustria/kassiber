@@ -6,6 +6,7 @@ use kassiber_pyjson::Value;
 use kassiber_runtime::store::Secret;
 
 pub const KINDS: &[&str] = &[
+    "ui.secrets.init",
     "ui.secrets.change_passphrase",
     "ui.secrets.forget_cli_unlock",
 ];
@@ -22,6 +23,9 @@ pub(super) fn handle(
             Some(with_request_id(success(kind, result), request_id)),
             false,
         ));
+    }
+    if kind == "ui.secrets.init" {
+        return init(daemon, args, request_id);
     }
     let empty = dict::<&str>([]);
     let args = match args {
@@ -134,6 +138,87 @@ pub(super) fn handle(
     };
     Ok((
         Some(with_request_id(success(kind, result), request_id)),
+        false,
+    ))
+}
+
+/// `ui.secrets.init`: encrypt this project's book with a new passphrase, or
+/// unlock it when it is already encrypted. Credentials never reach a log.
+fn init(daemon: &mut Daemon, args: Option<&Value>, request_id: &RequestId) -> Handled {
+    let args = match args {
+        None | Some(Value::Null) => dict::<&str>([]),
+        Some(value @ Value::Dict(_)) => value.clone(),
+        Some(value) => {
+            return Err(AppError::new("validation", "daemon args must be an object")
+                .with_details(dict([("type", s(type_name(value)))]))
+                .into())
+        }
+    };
+    let Some(supplied) = crate::projects::passphrase(&args).cloned() else {
+        return Ok((
+            Some(locked_envelope(
+                "init_database_encryption",
+                "Choose a SQLCipher database passphrase.",
+                request_id,
+            )),
+            false,
+        ));
+    };
+    let secret = crate::projects::new_passphrase(&supplied)?;
+    let database = kassiber_paths::resolve_database_path(std::path::Path::new(&daemon.data_root));
+    let result = if daemon.store.database_is_encrypted(&daemon.data_root)? {
+        if !daemon.store.verify_passphrase(
+            &daemon.data_root,
+            "init_database_encryption",
+            &secret,
+        )? {
+            return Ok((
+                Some(error_envelope(
+                    "local_auth_denied",
+                    "passphrase verification failed",
+                    request_id,
+                    None,
+                    None,
+                    true,
+                )),
+                false,
+            ));
+        }
+        daemon.open(Some(&secret), false)?;
+        dict([
+            ("encrypted", Value::Bool(true)),
+            ("already_encrypted", Value::Bool(true)),
+            ("database", s(database.to_string_lossy().as_ref())),
+        ])
+    } else {
+        daemon.ensure_owner()?;
+        // Exclusive maintenance precedes retiring the open connection.
+        let maintenance = daemon.store.restore_maintenance(&daemon.data_root)?;
+        daemon.reap_freshness(true)?;
+        if let Some(mut book) = daemon.book.take() {
+            if let Err(error) = book.close() {
+                daemon.book = Some(book);
+                return Err(error.into());
+            }
+            daemon.unlocked_passphrase = None;
+        }
+        drop(maintenance);
+        let mut result = daemon.store.init_encryption(&daemon.data_root, &secret)?;
+        daemon.release_owner()?;
+        daemon.open(Some(&secret), false)?;
+        if get(&args, "migrate_credentials") != Some(&Value::Bool(false)) {
+            let env_file = daemon.runtime_config.env_file.clone();
+            let credentials = daemon.book_mut()?.service(
+                "ui.secrets.migrate_credentials",
+                &dict([("env_file", s(env_file.as_str()))]),
+            )?;
+            kassiber_envelope::set(&mut result, "credentials", credentials);
+            daemon.runtime_config = daemon.store.runtime_config_for(&daemon.data_root)?;
+        }
+        result
+    };
+    Ok((
+        Some(with_request_id(success("ui.secrets.init", result), request_id)),
         false,
     ))
 }

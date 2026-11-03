@@ -281,6 +281,47 @@ impl BookStore for RealStore {
             Some(kassiber_ownership::OwnerKind::Desktop),
         )
     }
+    fn init_encryption(&self, data_root: &str, passphrase: &Secret) -> Result<Value, AppError> {
+        let namespace = namespace()?;
+        let root = Path::new(data_root);
+        let database = kassiber_paths::resolve_database_path(root);
+        let present = std::fs::metadata(&database).is_ok_and(|m| m.len() > 0);
+        if present {
+            let result = kassiber_store::encryption::encrypt_plaintext(
+                &namespace,
+                root,
+                passphrase.expose(),
+                Some(kassiber_ownership::OwnerKind::Desktop),
+            )
+            .map_err(error)?;
+            return Ok(dict([
+                ("encrypted", Value::Bool(true)),
+                ("already_encrypted", Value::Bool(false)),
+                ("database", s(path(&result.encrypted_path))),
+                ("backup_path", s(path(&result.backup_path))),
+                ("integrity_check", s("ok")),
+                ("cipher_integrity_check", s("ok")),
+                ("credential_marker_clean", Value::Bool(true)),
+            ]));
+        }
+        let _maintenance = kassiber_store::restore::maintenance(
+            &namespace,
+            root,
+            Some(kassiber_ownership::OwnerKind::Desktop),
+        )
+        .map_err(kassiber_backup::service::restore_error)?;
+        kassiber_store::encryption::create_empty_database(&database, passphrase.expose())
+            .map_err(error)?;
+        Ok(dict([
+            ("encrypted", Value::Bool(true)),
+            ("already_encrypted", Value::Bool(false)),
+            ("database", s(path(&database))),
+            ("backup_path", Value::Null),
+            ("integrity_check", s("ok")),
+            ("cipher_integrity_check", Value::Null),
+            ("credential_marker_clean", Value::Bool(true)),
+        ]))
+    }
     fn forget_cli_unlock(&self, data_root: &str) -> Result<Value, AppError> {
         kassiber_secrets::policy::forget(
             &namespace()?,
@@ -1146,6 +1187,23 @@ impl Book for RealBook {
     fn service(&mut self, operation: &str, args: &Value) -> Result<Value, AppError> {
         if let Some(result) = self.workspace_read(operation, args) {
             return result;
+        }
+        if operation == "ui.secrets.migrate_credentials" {
+            // `migrate_dotenv_credentials(conn, env_file)`, then reload and
+            // merge the rewritten runtime configuration.
+            let env_file = PathBuf::from(kassiber_envelope::py_str(
+                kassiber_envelope::get(args, "env_file").unwrap_or(&Value::Null),
+            ));
+            let conn = self
+                .book
+                .as_ref()
+                .ok_or_else(|| AppError::new("internal_error", "book is closed"))?
+                .connection();
+            let result = kassiber_secrets::credentials::migrate(conn, &env_file)?;
+            let mut config = backends::Config::load(&env_file)?;
+            config.merge(conn)?;
+            self.backends = config;
+            return Ok(result);
         }
         if operation == "ui.onboarding.complete" {
             let conn = self

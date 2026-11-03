@@ -36,7 +36,8 @@ SHOWN = ["empty", "unprocessed", "current", "semantics_built", "cycle", "ov_jour
 
 def run(tmp_path, argv, *, reference, data=None):
     owners, env = environment(tmp_path)
-    env |= {"KASSIBER_RUST_TEST_SETUP_IDS": "sequential", "KASSIBER_RUST_TEST_SETUP_TIMESTAMP": NOW}
+    env |= {"KASSIBER_RUST_TEST_SETUP_IDS": "sequential", "KASSIBER_RUST_TEST_SETUP_TIMESTAMP": NOW,
+            "KASSIBER_RUST_TEST_SECRETS_TIME": NOW}
     original = cli_runner.prefix
 
     def prefix(*, reference=False, python_options=()):
@@ -210,6 +211,69 @@ def test_onboarding_matches_python_wire_and_all_tables(tmp_path, mode):
     assert responses[len(ONBOARDING)]["kind"] == "ui.onboarding.complete"
     assert responses[len(ONBOARDING) + 1]["error"]["code"] == "conflict"
     shutil.rmtree(tmp_path / "book", ignore_errors=True)
+
+
+def stamped(lines):
+    import re
+    return [re.sub(rb"pre-credentials-migration-\d{8}T\d{6}Z", b"pre-credentials-migration-<ts>", line)
+            for line in lines]
+
+
+def secrets_session(tmp_path, root, requests, *, reference, key):
+    return stamped(session(tmp_path, root, requests, reference=reference))
+
+
+@pytest.mark.parametrize("existing", [True, False], ids=["plaintext-book", "no-database"])
+def test_secrets_init_matches_python_and_migrates_dotenv_credentials(tmp_path, existing):
+    root = tmp_path / "book/data"
+    env_file = tmp_path / "book/config/backends.env"
+    env_file.parent.mkdir(parents=True)
+    env_file.write_text("KASSIBER_BACKEND_CORE_KIND=bitcoinrpc\nKASSIBER_BACKEND_CORE_URL=http://127.0.0.1:8332\n"
+                        "KASSIBER_BACKEND_CORE_RPCUSER=alice\nKASSIBER_BACKEND_CORE_RPCPASSWORD=hunter2\n")
+    if existing:
+        assert run(tmp_path, ["--machine", "--data-root", str(root), "init"], reference=True).returncode == 0
+    else:
+        root.mkdir(parents=True)
+    snapshot = {p.relative_to(tmp_path): p.read_bytes() for p in (tmp_path / "book").rglob("*") if p.is_file()}
+    requests = [
+        ("ui.secrets.init", []),
+        ("ui.secrets.init", {}),
+        ("ui.secrets.init", {"auth_response": {"passphrase_secret": "short"}}),
+        ("ui.secrets.init", {"auth_response": {"passphrase_secret": KEY}}),
+        ("status", {}),
+        ("ui.secrets.init", {"auth_response": {"passphrase_secret": "wrong passphrase!"}}),
+        ("ui.secrets.init", {"auth_response": {"passphrase_secret": KEY}, "migrate_credentials": False}),
+        ("ui.backends.settings.list", {}),
+    ]
+
+    def files():
+        import re
+        output = {}
+        for path in (tmp_path / "book").rglob("*"):
+            if not path.is_file() or ".operator-owner" in path.name:
+                continue
+            name = re.sub(r"pre-credentials-migration-\d{8}T\d{6}Z", "<ts>", path.relative_to(tmp_path).as_posix())
+            # Encrypted pages carry random salts; their rows are compared instead.
+            output[name] = None if "sqlite3" in path.name else path.read_bytes()
+        return output
+
+    expected = secrets_session(tmp_path, root, requests, reference=True, key=KEY)
+    expected_files = files()
+    expected_rows = dump(root / "kassiber.sqlite3", KEY)
+    shutil.rmtree(tmp_path / "book")
+    shutil.rmtree(tmp_path / "owners", ignore_errors=True)
+    for path, data in snapshot.items():
+        (tmp_path / path).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / path).write_bytes(data)
+    root.mkdir(parents=True, exist_ok=True)
+    actual = secrets_session(tmp_path, root, requests, reference=False, key=KEY)
+    assert actual == expected
+    assert files() == expected_files
+    assert dump(root / "kassiber.sqlite3", KEY) == expected_rows
+    responses = [json.loads(line) for line in actual]
+    assert responses[3]["data"]["encrypted"] is True
+    # Without a stored backend row Python skips the secret, as Rust does.
+    assert (b"hunter2" in (tmp_path / "book/config/backends.env").read_bytes()) is not existing
 
 
 def test_onboarding_unknown_tax_country_matches_python_except_traceback(tmp_path):
