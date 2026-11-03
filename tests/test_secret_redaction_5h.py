@@ -35,8 +35,15 @@ def test_each_shape_scales_linearly_to_400k():
     script = """
 import json, sys, time
 from kassiber.redaction import redact_secret_text
+def build(case, size):
+    # A staircase indents each repeat one column deeper (or shallower).
+    stair = case.get('staircase')
+    if not stair:
+        return case['prefix'] + case['repeat'] * (size // len(case['repeat']) + 1) + case['suffix']
+    steps = int((2 * size) ** 0.5)
+    return case['prefix'] + ''.join(' ' * (steps - 1 - i if stair == 'down' else i) + case['repeat'] for i in range(steps)) + case['suffix']
 def cost(case, size):
-    text = case['prefix'] + case['repeat'] * (size // len(case['repeat']) + 1) + case['suffix']
+    text = build(case, size)
     start = time.process_time()
     redact_secret_text(text)
     return time.process_time() - start
