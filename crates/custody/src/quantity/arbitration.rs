@@ -192,6 +192,19 @@ pub(crate) enum DecisionRef<'a> {
 }
 
 impl<'a> DecisionRef<'a> {
+    /// A default decision's source slice hash and bounds, read without
+    /// building its slice object.
+    pub(crate) fn typed_source(self) -> Option<(&'a str, &'a BigInt, &'a BigInt)> {
+        match self {
+            Self::Default(decision) => Some((
+                decision.source.hash.as_str(),
+                &decision.source.start,
+                &decision.source.end,
+            )),
+            Self::Json(_) => None,
+        }
+    }
+
     /// The field `key`, borrowed for the decision's lifetime.
     pub(crate) fn at(self, key: &str) -> &'a Value {
         match self {

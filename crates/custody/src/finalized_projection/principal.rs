@@ -19,11 +19,7 @@ pub fn slice_row(
 #[derive(Clone, Copy)]
 pub(super) enum Slice<'q> {
     Value(&'q Value),
-    Bounds {
-        hash: &'q Value,
-        start: i64,
-        end: i64,
-    },
+    Bounds { hash: &'q str, start: i64, end: i64 },
 }
 
 impl<'q> From<&'q Value> for Slice<'q> {
@@ -67,13 +63,12 @@ pub(super) fn slice_row_with_rows<'a, 'q>(
             }
         }
     }
-    let hash = match quantity {
-        Slice::Value(quantity) => &quantity["observation_hash"],
-        Slice::Bounds { hash, .. } => hash,
-    };
-    let hash = || match hash {
-        Value::String(hash) => std::borrow::Cow::Borrowed(hash.as_str()),
-        hash => std::borrow::Cow::Owned(string(hash)),
+    let hash = || match quantity {
+        Slice::Value(quantity) => match &quantity["observation_hash"] {
+            Value::String(hash) => std::borrow::Cow::Borrowed(hash.as_str()),
+            hash => std::borrow::Cow::Owned(string(hash)),
+        },
+        Slice::Bounds { hash, .. } => std::borrow::Cow::Borrowed(hash),
     };
     let bounds = match quantity {
         Slice::Value(quantity) => quantity["start_msat"]

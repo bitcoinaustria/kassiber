@@ -452,6 +452,10 @@ impl Msat {
             Err(_) => Self::Big(big),
         })
     }
+    /// `Msat::of` an exact integer.
+    fn of_big(n: &BigInt) -> Self {
+        i64::try_from(n).map_or_else(|_| Self::Big(n.clone()), Self::Small)
+    }
     fn big(&self) -> BigInt {
         match self {
             Self::Small(n) => BigInt::from(*n),

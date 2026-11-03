@@ -19,7 +19,7 @@ pub(super) struct Input<'a> {
     pub profile: Cow<'a, Value>,
     pub observations: Vec<LegRef<'a>>,
     pub decisions: Vec<DecisionRef<'a>>,
-    pub eligible: Vec<Cow<'a, Value>>,
+    pub eligible: Vec<Eligible<'a>>,
     pub events: Vec<EventRef<'a>>,
     pub pool_barriers: Cow<'a, Value>,
     pub pool_barrier_roots: Cow<'a, Value>,
@@ -40,7 +40,10 @@ impl<'a> Input<'a> {
                 .iter()
                 .map(DecisionRef::Json)
                 .collect(),
-            eligible: array(&v["eligible"]).iter().map(Cow::Borrowed).collect(),
+            eligible: array(&v["eligible"])
+                .iter()
+                .map(|e| Eligible::Slice(Cow::Borrowed(e)))
+                .collect(),
             events: array(&v["events"]).iter().map(EventRef::Json).collect(),
             pool_barriers: Cow::Borrowed(&v["pool_barriers"]),
             pool_barrier_roots: Cow::Borrowed(&v["pool_barrier_roots"]),
@@ -63,6 +66,41 @@ fn internal(d: DecisionRef<'_>) -> bool {
 fn strings(v: &[Value]) -> BTreeSet<String> {
     v.iter().filter(|v| codec::truth(v)).map(string).collect()
 }
+/// An eligible slice: a slice object, or a decision's source slice.
+pub(super) enum Eligible<'a> {
+    Slice(Cow<'a, Value>),
+    Source(DecisionRef<'a>),
+}
+impl Eligible<'_> {
+    fn key(&self) -> Result<(Cow<'_, str>, Msat, Msat), String> {
+        match self {
+            Self::Slice(slice) => slice_key(slice),
+            Self::Source(decision) => source_key(*decision),
+        }
+    }
+}
+/// `slice_key` of a decision's source slice, typed when the decision is.
+fn source_key(d: DecisionRef<'_>) -> Result<(Cow<'_, str>, Msat, Msat), String> {
+    match d.typed_source() {
+        Some((hash, start, end)) => {
+            Ok((Cow::Borrowed(hash), Msat::of_big(start), Msat::of_big(end)))
+        }
+        None => slice_key(d.at("source")),
+    }
+}
+/// `observation` of a decision's source slice.
+fn source_observation<'a>(
+    observations: &Observations<'a>,
+    d: DecisionRef<'_>,
+) -> Result<LegRef<'a>, String> {
+    match d.typed_source() {
+        Some((hash, ..)) => observations
+            .get(hash)
+            .copied()
+            .ok_or_else(|| "KeyError".into()),
+        None => observation(observations, d.at("source")),
+    }
+}
 fn slice_key(v: &Value) -> Result<(Cow<'_, str>, Msat, Msat), String> {
     let start = Msat::of(&v["start_msat"])?;
     let end = Msat::of(&v["end_msat"])?;
@@ -82,7 +120,7 @@ pub(super) fn connected(
 ) -> Result<Value, String> {
     let mut neighbors: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for d in decisions.iter().filter(|d| internal(**d)) {
-        let a = string(&observation(observations, d.at("source"))?["anchor_transaction_id"]);
+        let a = string(&source_observation(observations, *d)?["anchor_transaction_id"]);
         let b = string(&observation(observations, d.at("target"))?["anchor_transaction_id"]);
         neighbors.entry(a.clone()).or_default().insert(b.clone());
         neighbors.entry(b).or_default().insert(a);
@@ -271,14 +309,8 @@ pub(super) fn evaluate_parts<'r>(
     // Resolve every source before sorting, matching Python's key admission.
     let mut keyed = Vec::new();
     for d in decisions.drain(..) {
-        let source = observation(&observations, d.at("source"))?;
-        keyed.push((
-            (
-                string_ref(source.at("occurred_at")),
-                slice_key(d.at("source"))?,
-            ),
-            d,
-        ));
+        let source = source_observation(&observations, d)?;
+        keyed.push(((string_ref(source.at("occurred_at")), source_key(d)?), d));
     }
     keyed.sort_by(|a, b| a.0.cmp(&b.0));
     decisions = keyed.into_iter().map(|(_, d)| d).collect();
@@ -319,7 +351,7 @@ pub(super) fn evaluate_parts<'r>(
     let eligible: crate::fxhash::HashSet<_> = v
         .eligible
         .iter()
-        .map(|e| slice_key(e))
+        .map(Eligible::key)
         .collect::<Result<_, _>>()?;
     let mut projected = Vec::new();
     let mut intra = Vec::new();
@@ -330,7 +362,7 @@ pub(super) fn evaluate_parts<'r>(
         super::quarantines::Quarantines::with_interpreter(v, &closure, diagnostics, rows)?;
     let mut fees = FeeAllocation::from_decisions(decisions.iter().copied())?;
     for d in &decisions {
-        let source = observation(&observations, d.at("source"))?;
+        let source = source_observation(&observations, *d)?;
         let target = if d.at("target").is_null() {
             None
         } else {
@@ -341,7 +373,7 @@ pub(super) fn evaluate_parts<'r>(
         {
             continue;
         }
-        if !eligible.contains(&slice_key(d.at("source"))?) {
+        if !eligible.contains(&source_key(*d)?) {
             if finalize {
                 quarantines.basis(source)?;
             }
@@ -456,14 +488,29 @@ pub(super) fn evaluate_parts<'r>(
             ]);
             continue;
         }
-        let mut row = slice_row(source, d.at("source"), rows, "external", &fees.raw(source)?)?;
+        let fee = fees.raw(source)?;
+        let mut row = match d.typed_source() {
+            Some((hash, start, end)) => match (i64::try_from(start), i64::try_from(end)) {
+                (Ok(start), Ok(end)) => {
+                    let slice = super::principal::Slice::Bounds { hash, start, end };
+                    slice_row(source, slice, rows, "external", &fee)?
+                }
+                _ => slice_row(source, d.at("source"), rows, "external", &fee)?,
+            },
+            None => slice_row(source, d.at("source"), rows, "external", &fee)?,
+        };
         if !d.at("external_economic_subtype").is_null() {
             row["kind"] = d.at("external_economic_subtype").clone();
             row["custody_external_economic_subtype"] = d.at("external_economic_subtype").clone();
             row["privacy_boundary"] = Value::Null;
         }
-        let amount =
-            integer_big(&d.at("source")["end_msat"])? - integer_big(&d.at("source")["start_msat"])?;
+        let amount = match d.typed_source() {
+            Some((_, start, end)) => end - start,
+            None => {
+                integer_big(&d.at("source")["end_msat"])?
+                    - integer_big(&d.at("source")["start_msat"])?
+            }
+        };
         projected.push(payouts::price_row(row, payout, &amount)?);
     }
     // Index the complete decision population once, including unselected targets.
@@ -507,9 +554,9 @@ pub(super) fn evaluate_parts<'r>(
         targets.sort();
         // An uncovered inbound slice; machine-integer bounds need no object.
         let uncovered = |start: &Msat, end: &Msat| match (start, end) {
-            (Msat::Small(start), Msat::Small(end)) => {
+            (Msat::Small(start), Msat::Small(end)) if o.at("quantity_hash").is_string() => {
                 let slice = super::principal::Slice::Bounds {
-                    hash: o.at("quantity_hash"),
+                    hash: o.at("quantity_hash").as_str().expect("a text hash"),
                     start: *start,
                     end: *end,
                 };

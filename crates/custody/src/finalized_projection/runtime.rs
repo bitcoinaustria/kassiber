@@ -366,7 +366,10 @@ fn state_input<'a>(
     let eligible = match blocked {
         Some(tax) => stored::list(stored::get(tax, "eligible_decisions"))
             .iter()
-            .map(|d| exact(stored::get(d, "source")).map(Cow::Owned))
+            .map(|d| {
+                exact(stored::get(d, "source"))
+                    .map(|source| super::composition::Eligible::Slice(Cow::Owned(source)))
+            })
             .collect::<Result<Vec<_>, _>>()?,
         None => decisions
             .iter()
@@ -381,7 +384,7 @@ fn state_input<'a>(
                     )
                 )
             })
-            .map(|d| Cow::Borrowed(d.at("source")))
+            .map(|d| super::composition::Eligible::Source(*d))
             .collect(),
     };
     let (blocked_anchors, issues) = issue_operands(quantity.issues())?;

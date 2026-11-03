@@ -20726,8 +20726,8 @@
   {
     "id": "projection2-slice-identity",
     "file": "crates/custody/src/finalized_projection/principal.rs",
-    "find": "        Slice::Value(quantity) => &quantity[\"observation_hash\"],",
-    "replace": "        Slice::Value(_) => &observation[\"quantity_hash\"],",
+    "find": "        Slice::Value(quantity) => match &quantity[\"observation_hash\"] {",
+    "replace": "        Slice::Value(_) => match &observation[\"quantity_hash\"] {",
     "expect_failing": [
       "projection_slice_pricing_vectors"
     ],
@@ -21376,8 +21376,8 @@
   {
     "id": "projection3-eligibility",
     "file": "crates/custody/src/finalized_projection/composition.rs",
-    "find": "if !eligible.contains(&slice_key(d.at(\"source\"))?)",
-    "replace": "if eligible.contains(&slice_key(d.at(\"source\"))?)",
+    "find": "if !eligible.contains(&source_key(*d)?)",
+    "replace": "if eligible.contains(&source_key(*d)?)",
     "expect_failing": [
       "projection_selected_composition_vectors"
     ],
@@ -22406,8 +22406,8 @@
   {
     "id": "projection-review-M21",
     "file": "crates/custody/src/finalized_projection/composition.rs",
-    "find": "let amount =\n            integer_big(&d.at(\"source\")[\"end_msat\"])? - integer_big(&d.at(\"source\")[\"start_msat\"])?;",
-    "replace": "let amount =\n            integer_big(&d.at(\"source\")[\"end_msat\"])?;",
+    "find": "                integer_big(&d.at(\"source\")[\"end_msat\"])?\n                    - integer_big(&d.at(\"source\")[\"start_msat\"])?\n            }\n        };",
+    "replace": "                integer_big(&d.at(\"source\")[\"end_msat\"])?\n            }\n        };",
     "expect_failing": [
       "projection_nonzero_slice_pricing"
     ],
@@ -24251,8 +24251,8 @@
   {
     "id": "slice-bounds-hash",
     "file": "crates/custody/src/finalized_projection/principal.rs",
-    "find": "        Slice::Bounds { hash, .. } => hash,",
-    "replace": "        Slice::Bounds { .. } => &NULL,",
+    "find": "        Slice::Bounds { hash, .. } => std::borrow::Cow::Borrowed(hash),",
+    "replace": "        Slice::Bounds { .. } => std::borrow::Cow::Borrowed(\"\"),",
     "expect_failing": [
       "projection_nonzero_slice_pricing"
     ],
@@ -24418,6 +24418,36 @@
       "quantity_operator_audit_vectors"
     ],
     "rule": "Typed key texts follow chain, network, namespace and id."
+  },
+  {
+    "id": "typed-source-bounds",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "                &decision.source.start,\n                &decision.source.end,",
+    "replace": "                &decision.source.end,\n                &decision.source.start,",
+    "expect_failing": [
+      "typed_finalized_matches_python_value_adapter"
+    ],
+    "rule": "A default decision's typed source reads start, then end."
+  },
+  {
+    "id": "typed-source-observation",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "        Some((hash, ..)) => observations\n            .get(hash)",
+    "replace": "        Some(_) => observations\n            .get(\"\")",
+    "expect_failing": [
+      "duplicate_fee_keeper"
+    ],
+    "rule": "A typed source finds its observation by hash."
+  },
+  {
+    "id": "typed-external-bounds",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "                    let slice = super::principal::Slice::Bounds { hash, start, end };",
+    "replace": "                    let slice = super::principal::Slice::Bounds { hash, start, end: end + 1 };",
+    "expect_failing": [
+      "typed_finalized_matches_python_value_adapter"
+    ],
+    "rule": "An external slice row covers its decision's source bounds."
   },
   {
     "id": "R4-evidence-alias-slot-index",
