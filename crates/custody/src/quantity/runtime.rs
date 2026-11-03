@@ -364,8 +364,7 @@ fn component_claims_observed(
     let snapshot_hashes: BTreeSet<_> = canonical
         .events()
         .into_iter()
-        .flat_map(|e| e.snapshots())
-        .map(|s| text(&s["quantity_hash"]))
+        .flat_map(|e| e.snapshot_quantity_hashes())
         .collect();
     let mut components: Vec<&Value> = components.iter().collect();
     components.sort_by_cached_key(|c| text(&c["id"]));
@@ -396,7 +395,7 @@ fn component_claims_observed(
                 .collect();
             let current: BTreeSet<_> = relevant
                 .iter()
-                .filter(|h| snapshot_hashes.contains(*h))
+                .filter(|h| snapshot_hashes.contains(h.as_str()))
                 .cloned()
                 .collect();
             let expected: BTreeSet<_> = array(&evidence[&id])
@@ -1223,8 +1222,8 @@ pub(crate) fn plain(value: &Value) -> bool {
             if n.as_i64().is_some() {
                 return true;
             }
-            let s = n.to_string();
-            let digits = s.strip_prefix('-').unwrap_or(&s);
+            let s = n.as_str();
+            let digits = s.strip_prefix('-').unwrap_or(s);
             !digits.is_empty()
                 && digits.bytes().all(|b| b.is_ascii_digit())
                 && !digits.starts_with('0')
@@ -1280,6 +1279,10 @@ impl QuantityState {
             .map(|at| self.located(*at))
     }
     /// Arbitrated decisions as their complete JSON objects.
+    /// The canonical input the state's typed events belong to.
+    pub(crate) fn canonical_arc(&self) -> std::sync::Arc<crate::evidence::canonical::Canonical> {
+        self.canonical.clone()
+    }
     pub(crate) fn decisions(&self) -> impl Iterator<Item = super::arbitration::DecisionRef<'_>> {
         self.projection.decisions.iter().map(|d| d.as_ref())
     }

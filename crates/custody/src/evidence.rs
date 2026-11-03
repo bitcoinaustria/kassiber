@@ -989,9 +989,10 @@ fn canonical_event<F: Fields>(
         )));
     }
     let key_value = std::sync::Arc::new(key.value());
+    // Each slot's selected observation becomes its leg, in slot order.
     let mut selected = vec![0; observations.len()];
-    let mut legs = Vec::with_capacity(slots.len());
-    for items in slots.values() {
+    let mut leg_of = vec![usize::MAX; observations.len()];
+    for (at, items) in slots.values().enumerate() {
         let keeper = *items
             .iter()
             .min_by_key(|index| observations[**index].selection())
@@ -999,8 +1000,10 @@ fn canonical_event<F: Fields>(
         for index in items {
             selected[*index] = keeper;
         }
-        legs.push(observations[keeper].leg(&key_value));
+        leg_of[keeper] = at;
     }
+    let leg_count = slots.len();
+    drop(slots);
     let mut aliases = Vec::with_capacity(observations.len());
     let mut ids = BTreeSet::new();
     for (index, item) in observations.iter().enumerate() {
@@ -1020,23 +1023,41 @@ fn canonical_event<F: Fields>(
         .map(|(id, hash)| Value::Array(vec![string(id), string(hash)]))
         .collect();
     let ids = ids.into_iter().map(string).collect();
-    // The commitments move into the snapshots; a later one with the same
-    // detail hash replaces an earlier one.
-    let mut snapshots = BTreeMap::new();
-    for item in observations {
-        let commitment = item.commitment;
-        snapshots.insert(commitment.detail_hash.clone(), commitment);
+    // A later commitment with the same detail hash replaces an earlier one.
+    let mut winners: BTreeMap<&str, usize> = BTreeMap::new();
+    for (index, item) in observations.iter().enumerate() {
+        winners.insert(item.commitment.detail_hash.as_str(), index);
     }
+    let mut snapshot_of = vec![usize::MAX; observations.len()];
+    for (at, index) in winners.into_values().enumerate() {
+        snapshot_of[index] = at;
+    }
+    // Selected observations move into their legs, which then hold their
+    // snapshots; the other snapshots keep their commitments.
+    let mut legs: Vec<Option<canonical::Leg>> = vec![None; leg_count];
+    let mut snapshots: Vec<Option<canonical::Snapshot>> =
+        vec![None; snapshot_of.iter().filter(|at| **at != usize::MAX).count()];
+    for (index, item) in observations.into_iter().enumerate() {
+        let leg = leg_of[index];
+        let snapshot = snapshot_of[index];
+        if leg != usize::MAX {
+            if snapshot != usize::MAX {
+                snapshots[snapshot] = Some(canonical::Snapshot::Leg(leg));
+            }
+            legs[leg] = Some(item.into_leg(&key_value));
+        } else if snapshot != usize::MAX {
+            let commitment = item.commitment;
+            snapshots[snapshot] = Some(canonical::Snapshot::Owned {
+                quantity_hash: commitment.quantity_hash,
+                detail_hash: commitment.detail_hash,
+                payload_json: commitment.payload_json,
+            });
+        }
+    }
+    let legs = legs.into_iter().map(|leg| leg.expect("slot leg")).collect();
     let snapshots = snapshots
-        .into_values()
-        .map(|item| {
-            let mut snapshot = serde_json::Map::new();
-            snapshot.insert("$type".into(), string("EvidenceSnapshot"));
-            snapshot.insert("detail_hash".into(), Value::String(item.detail_hash));
-            snapshot.insert("payload_json".into(), Value::String(item.payload_json));
-            snapshot.insert("quantity_hash".into(), Value::String(item.quantity_hash));
-            Value::Object(snapshot)
-        })
+        .into_iter()
+        .map(|snapshot| snapshot.expect("winning snapshot"))
         .collect();
     Ok(Ok(canonical::Event::new(
         key, key_value, legs, snapshots, ids, aliases,

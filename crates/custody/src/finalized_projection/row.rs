@@ -1,4 +1,5 @@
 use super::*;
+use crate::evidence::canonical::{Canonical, Leg, LegRef};
 use crate::snapshot::Record;
 use serde::ser::SerializeMap;
 use std::borrow::Cow;
@@ -19,25 +20,56 @@ impl Fields for Value {
     }
 }
 
+/// A generated field: a JSON value, or a part of the row's observation or
+/// an integer that is written as JSON only when the row is.
+#[derive(Clone, Debug)]
+pub(super) enum Field<'a> {
+    Value(Value),
+    Static(&'static Value),
+    /// A field of a typed canonical observation, by its slot.
+    Leg(&'a Leg, usize),
+    /// An integer, built as a JSON number on first read.
+    Int(i64, std::cell::OnceCell<Value>),
+}
+
+impl Field<'_> {
+    fn get(&self) -> &Value {
+        match self {
+            Self::Value(value) => value,
+            Self::Static(value) => value,
+            Self::Leg(leg, slot) => leg.field(*slot),
+            Self::Int(n, value) => value.get_or_init(|| Value::from(*n)),
+        }
+    }
+
+    fn into_value(self) -> Value {
+        match self {
+            Self::Value(value) => value,
+            Self::Int(n, value) => value.into_inner().unwrap_or_else(|| Value::from(n)),
+            other => other.get().clone(),
+        }
+    }
+}
+
 /// Generated fields in key order. A row has a dozen or so, so a sorted
 /// vector finds them faster than a tree and allocates once.
 #[derive(Clone, Debug, Default)]
-struct Overrides(Vec<(&'static str, Value)>);
+struct Overrides<'a>(Vec<(&'static str, Field<'a>)>);
 
-impl Overrides {
+impl<'a> Overrides<'a> {
     fn position(&self, key: &str) -> Result<usize, usize> {
         self.0.binary_search_by(|(name, _)| (*name).cmp(key))
     }
 
     fn get(&self, key: &str) -> Option<&Value> {
-        self.position(key).ok().map(|at| &self.0[at].1)
+        self.position(key).ok().map(|at| self.0[at].1.get())
     }
 
     fn len(&self) -> usize {
         self.0.len()
     }
 
-    fn insert(&mut self, key: &'static str, value: Value) {
+    fn insert(&mut self, key: &'static str, value: Field<'a>) {
         match self.position(key) {
             Ok(at) => self.0[at].1 = value,
             Err(at) => self.0.insert(at, (key, value)),
@@ -48,24 +80,36 @@ impl Overrides {
         let at = match self.position(key) {
             Ok(at) => at,
             Err(at) => {
-                self.0.insert(at, (key, value()));
+                self.0.insert(at, (key, Field::Value(value())));
                 at
             }
         };
-        &mut self.0[at].1
+        let field = &mut self.0[at].1;
+        if !matches!(field, Field::Value(_)) {
+            *field = Field::Value(std::mem::replace(field, Field::Value(Value::Null)).into_value());
+        }
+        match field {
+            Field::Value(value) => value,
+            _ => unreachable!("made a value above"),
+        }
     }
 
     fn iter(&self) -> impl Iterator<Item = (&&'static str, &Value)> {
-        self.0.iter().map(|(name, value)| (name, value))
+        self.0.iter().map(|(name, value)| (name, value.get()))
     }
 }
 
-impl IntoIterator for Overrides {
+impl<'a> IntoIterator for Overrides<'a> {
     type Item = (&'static str, Value);
-    type IntoIter = std::vec::IntoIter<(&'static str, Value)>;
+    type IntoIter = std::iter::Map<
+        std::vec::IntoIter<(&'static str, Field<'a>)>,
+        fn((&'static str, Field<'a>)) -> (&'static str, Value),
+    >;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.0.into_iter()
+        self.0
+            .into_iter()
+            .map(|(name, value)| (name, value.into_value()))
     }
 }
 
@@ -151,7 +195,7 @@ impl Src<'_> {
 #[derive(Clone)]
 pub(super) struct FinalizedRow<'a> {
     source: Src<'a>,
-    overrides: Overrides,
+    overrides: Overrides<'a>,
 }
 
 impl<'a> FinalizedRow<'a> {
@@ -186,7 +230,28 @@ impl<'a> FinalizedRow<'a> {
 
     /// Replace a field without first copying its source value.
     pub(super) fn set(&mut self, key: &'static str, value: Value) {
-        self.overrides.insert(key, value);
+        self.overrides.insert(key, Field::Value(value));
+    }
+
+    /// Set a field to a constant.
+    pub(super) fn set_static(&mut self, key: &'static str, value: &'static Value) {
+        self.overrides.insert(key, Field::Static(value));
+    }
+
+    /// Set a field to an integer, written as JSON only when read or written.
+    pub(super) fn set_int(&mut self, key: &'static str, value: i64) {
+        self.overrides
+            .insert(key, Field::Int(value, std::cell::OnceCell::new()));
+    }
+
+    /// Set a field to the observation's field `name`, borrowed from a typed
+    /// observation.
+    pub(super) fn set_observed(&mut self, key: &'static str, observation: LegRef<'a>, name: &str) {
+        let field = match (observation, crate::evidence::canonical::slot(name)) {
+            (LegRef::Typed(leg), Some(slot)) => Field::Leg(leg, slot),
+            _ => Field::Value(observation.at(name).clone()),
+        };
+        self.overrides.insert(key, field);
     }
 
     pub(super) fn into_json(self) -> Value {
@@ -242,16 +307,33 @@ enum Source {
     Owned(Value),
 }
 
+/// A detached generated field: a part of an observation is named by its
+/// position in the canonical input the projection holds.
+#[derive(Clone, Debug)]
+enum Stored {
+    Value(Value),
+    Static(&'static Value),
+    Leg((u32, u32), usize),
+    Int(i64),
+}
+
+/// A field of a detached row as it is written.
+enum Written<'a> {
+    Value(&'a Value),
+    Int(i64),
+}
+
 /// A finalized row that names its source row by index in the snapshot rows.
 #[derive(Clone, Debug)]
 pub struct Detached {
     source: Source,
-    overrides: Overrides,
+    overrides: Vec<(&'static str, Stored)>,
 }
 
 impl FinalizedRow<'_> {
-    /// Detach from `records`: a source borrowed from them becomes its index.
-    pub(super) fn detach(self, records: &[Record]) -> Detached {
+    /// Detach from `records`: a source borrowed from them becomes its index,
+    /// and an observation field of `canonical` its position there.
+    pub(super) fn detach(self, records: &[Record], canonical: Option<&Canonical>) -> Detached {
         let source = match self.source {
             Src::Record(source) => {
                 let at = (source as *const Record as usize).wrapping_sub(records.as_ptr() as usize)
@@ -264,10 +346,26 @@ impl FinalizedRow<'_> {
             }
             Src::Value(source) => Source::Owned(source.into_owned()),
         };
-        Detached {
-            source,
-            overrides: self.overrides,
-        }
+        let overrides = self
+            .overrides
+            .0
+            .into_iter()
+            .map(|(name, field)| {
+                let stored = match field {
+                    Field::Value(value) => Stored::Value(value),
+                    Field::Static(value) => Stored::Static(value),
+                    Field::Int(n, _) => Stored::Int(n),
+                    Field::Leg(leg, slot) => match canonical
+                        .and_then(|canonical| canonical.leg_at(leg.position()))
+                    {
+                        Some(held) if std::ptr::eq(held, leg) => Stored::Leg(leg.position(), slot),
+                        _ => Stored::Value(leg.field(slot).clone()),
+                    },
+                };
+                (name, stored)
+            })
+            .collect();
+        Detached { source, overrides }
     }
 }
 
@@ -281,42 +379,58 @@ impl Detached {
 
     /// The merged fields in key order: source fields, replaced or joined by
     /// the generated ones.
-    fn fields<'a>(&'a self, records: &'a [Record]) -> Vec<(&'a str, &'a Value)> {
+    fn fields<'a>(
+        &'a self,
+        records: &'a [Record],
+        canonical: Option<&'a Canonical>,
+    ) -> Vec<(&'a str, Written<'a>)> {
+        let written = |stored: &'a Stored| match stored {
+            Stored::Value(value) => Written::Value(value),
+            Stored::Static(value) => Written::Value(value),
+            Stored::Int(n) => Written::Int(*n),
+            Stored::Leg(position, slot) => Written::Value(
+                canonical
+                    .and_then(|canonical| canonical.leg_at(*position))
+                    .expect("detached observation in the projection's input")
+                    .field(*slot),
+            ),
+        };
         let source = self.source(records);
         let mut fields = Vec::with_capacity(source.len() + self.overrides.len());
         let mut overrides = self.overrides.iter().peekable();
         for (key, value) in source.entries() {
             while overrides
                 .peek()
-                .is_some_and(|(name, _)| **name < key.as_str())
+                .is_some_and(|(name, _)| *name < key.as_str())
             {
                 let (name, value) = overrides.next().unwrap();
-                fields.push((*name, value));
+                fields.push((*name, written(value)));
             }
             if overrides
                 .peek()
-                .is_some_and(|(name, _)| **name == key.as_str())
+                .is_some_and(|(name, _)| *name == key.as_str())
             {
                 let (name, value) = overrides.next().unwrap();
-                fields.push((*name, value));
+                fields.push((*name, written(value)));
             } else {
-                fields.push((key.as_str(), value));
+                fields.push((key.as_str(), Written::Value(value)));
             }
         }
-        fields.extend(overrides.map(|(name, value)| (*name, value)));
+        fields.extend(overrides.map(|(name, value)| (*name, written(value))));
         fields
     }
 
     /// `FinalizedRow::into_python` of the row this was detached from.
-    pub fn py(&self, records: &[Record]) -> Result<Py, String> {
+    pub fn py(&self, records: &[Record], canonical: Option<&Canonical>) -> Result<Py, String> {
         Ok(Py::Dict(
-            self.fields(records)
+            self.fields(records, canonical)
                 .into_iter()
                 .map(|(key, value)| {
-                    Ok((
-                        kassiber_pyjson::Key::Str(key.into()),
-                        codec::from_json(value)?,
-                    ))
+                    let value = match value {
+                        Written::Value(value) => codec::from_json(value)?,
+                        Written::Int(n) => Py::Int(BigInt::from(n)),
+                    };
+                    Ok((kassiber_pyjson::Key::Str(key.into()), value))
                 })
                 .collect::<Result<_, String>>()?,
         ))
@@ -326,12 +440,19 @@ impl Detached {
     pub fn json_with<E>(
         &self,
         records: &[Record],
+        canonical: Option<&Canonical>,
         exact: &impl Fn(&Value) -> Result<Value, E>,
     ) -> Result<Value, E> {
         Ok(Value::Object(
-            self.fields(records)
+            self.fields(records, canonical)
                 .into_iter()
-                .map(|(key, value)| Ok((key.to_owned(), exact(value)?)))
+                .map(|(key, value)| {
+                    let value = match value {
+                        Written::Value(value) => exact(value)?,
+                        Written::Int(n) => Value::from(n),
+                    };
+                    Ok((key.to_owned(), value))
+                })
                 .collect::<Result<_, E>>()?,
         ))
     }

@@ -249,7 +249,7 @@ pub(super) fn evaluate_with_rows(
 }
 
 pub(super) fn evaluate_parts<'r>(
-    v: &Input,
+    v: &Input<'r>,
     diagnostics: &[Py],
     rows: &'r dyn Rows,
 ) -> Result<Composition<'r>, Error> {

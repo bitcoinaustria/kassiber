@@ -49,7 +49,9 @@ impl std::ops::Index<&str> for Row<'_> {
 }
 
 pub(super) fn exact(v: &Value) -> Result<Option<BigInt>, String> {
-    if v.is_number() && !v.to_string().contains(['.', 'e', 'E']) {
+    if v.as_number()
+        .is_some_and(|n| !n.as_str().contains(['.', 'e', 'E']))
+    {
         let n = if let Some(n) = v.as_i64() {
             BigInt::from(n)
         } else if let Some(n) = v.as_u64() {

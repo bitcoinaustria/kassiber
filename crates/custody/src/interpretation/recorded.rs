@@ -141,7 +141,7 @@ fn append_groups<R: Row>(
         Ok(value.as_bool().unwrap_or_else(|| {
             value
                 .as_number()
-                .is_some_and(|n| !n.to_string().starts_with('-'))
+                .is_some_and(|n| !n.as_str().starts_with('-'))
         }))
     };
     for group in groups {

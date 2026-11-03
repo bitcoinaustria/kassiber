@@ -122,7 +122,7 @@ pub(super) fn plain_finite(v: &Value) -> bool {
             if n.as_i64().is_some() {
                 return true;
             }
-            let spelling = n.to_string();
+            let spelling = n.as_str();
             if !spelling.contains(['.', 'e', 'E']) {
                 return false;
             }

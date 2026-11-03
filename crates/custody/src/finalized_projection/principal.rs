@@ -14,7 +14,7 @@ pub fn slice_row(
 }
 
 pub(super) fn slice_row_with_rows<'a>(
-    observation: LegRef<'_>,
+    observation: LegRef<'a>,
     quantity: &Value,
     rows: &'a dyn Rows,
     side: &str,
@@ -63,9 +63,9 @@ pub(super) fn slice_row_with_rows<'a>(
             "id",
             Value::String(format!("custody-tax:{}:{start}:{end}:{side}", hash())),
         );
-        base.set("amount", Value::from(amount));
-        base.set("custody_slice_start_msat", Value::from(start));
-        base.set("custody_slice_end_msat", Value::from(end));
+        base.set_int("amount", amount);
+        base.set_int("custody_slice_start_msat", start);
+        base.set_int("custody_slice_end_msat", end);
     } else {
         let start = integer_big(&quantity["start_msat"])?;
         let end = integer_big(&quantity["end_msat"])?;
@@ -74,17 +74,18 @@ pub(super) fn slice_row_with_rows<'a>(
         base.set("custody_slice_start_msat", number(&start));
         base.set("custody_slice_end_msat", number(&end));
     }
-    base.set(
+    base.set_observed(
         "journal_transaction_id",
-        observation["anchor_transaction_id"].clone(),
+        observation,
+        "anchor_transaction_id",
     );
-    base.set("fee", number(fee));
-    base.set("fiat_value", Value::Null);
-    base.set("fiat_value_exact", Value::Null);
-    base.set("custody_finalized_tax_projection", Value::Bool(true));
-    base.set(
-        "custody_quantity_hash",
-        observation["quantity_hash"].clone(),
-    );
+    match i64::try_from(fee) {
+        Ok(fee) => base.set_int("fee", fee),
+        Err(_) => base.set("fee", number(fee)),
+    }
+    base.set_static("fiat_value", &NULL);
+    base.set_static("fiat_value_exact", &NULL);
+    base.set_static("custody_finalized_tax_projection", &TRUE);
+    base.set_observed("custody_quantity_hash", observation, "quantity_hash");
     Ok(base)
 }

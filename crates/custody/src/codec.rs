@@ -33,11 +33,11 @@ pub fn from_json(v: &Value) -> Result<Py, String> {
         Value::Number(n) if n.as_i64().is_some() => Py::Int(n.as_i64().unwrap().into()),
         Value::Number(n) if n.as_u64().is_some() => Py::Int(n.as_u64().unwrap().into()),
         Value::Number(n) => {
-            let s = n.to_string();
+            let s = n.as_str();
             if s.contains(['.', 'e', 'E']) {
                 Py::Float(s.parse::<f64>().map_err(|e| e.to_string())?)
             } else {
-                Py::Int(BigInt::from_str(&s).map_err(|e| e.to_string())?)
+                Py::Int(BigInt::from_str(s).map_err(|e| e.to_string())?)
             }
         }
         Value::Array(v) => Py::List(v.iter().map(from_json).collect::<Result<_, _>>()?),
@@ -67,7 +67,7 @@ pub(crate) fn dumps_json_into(
         Value::Bool(false) => out.push_str("false"),
         Value::String(s) => kassiber_pyjson::dumps_str_into(s, options, out),
         Value::Number(n) => {
-            let s = n.to_string();
+            let s = n.as_str();
             if s.contains(['.', 'e', 'E']) {
                 let f = s.parse::<f64>().ok()?;
                 if !f.is_finite() || options.separators.is_some() || !options.allow_nan {
@@ -76,7 +76,7 @@ pub(crate) fn dumps_json_into(
                 out.push_str(&kassiber_pyjson::float_repr(f));
             } else {
                 // A plain integer of at most 18 digits is written as its i64.
-                let digits = s.strip_prefix('-').unwrap_or(&s);
+                let digits = s.strip_prefix('-').unwrap_or(s);
                 if digits.is_empty()
                     || digits.len() > 18
                     || !digits.bytes().all(|b| b.is_ascii_digit())
@@ -329,7 +329,7 @@ fn hash_json_into(v: &Value, options: &Options, depth: usize, out: &mut String) 
             } else if let Some(value) = value.as_u64() {
                 write!(out, "{value}").ok()?;
             } else {
-                let text = value.to_string();
+                let text = value.as_str();
                 if !text.contains(['.', 'e', 'E']) {
                     return None;
                 }
@@ -754,11 +754,11 @@ pub fn pystr(v: &Value) -> String {
         Value::Bool(true) => "True".into(),
         Value::Bool(false) => "False".into(),
         Value::Number(n) => {
-            let s = n.to_string();
+            let s = n.as_str();
             if s.contains(['.', 'e', 'E']) {
                 kassiber_pyjson::float_repr(s.parse().unwrap_or(0.0))
             } else {
-                s
+                s.to_owned()
             }
         }
         _ => v.to_string(),
@@ -790,7 +790,7 @@ pub fn integer(v: &Value) -> Result<Value, String> {
         return Ok(serde_json::json!(i64::from(b)));
     }
     if let Some(n) = v.as_number() {
-        if n.to_string().contains(['.', 'e', 'E']) {
+        if n.as_str().contains(['.', 'e', 'E']) {
             let float = n
                 .as_f64()
                 .filter(|v| v.is_finite())

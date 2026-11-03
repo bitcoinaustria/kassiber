@@ -322,27 +322,28 @@ impl<'a> Observation<'a> {
         self.validate()
     }
 
-    /// The typed observation, sharing its event's key object.
-    pub fn leg(&self, event_key: &std::sync::Arc<Value>) -> super::canonical::Leg {
-        let string = |value: &str| Value::String(value.to_owned());
+    /// The typed observation, sharing its event's key object and moving
+    /// its texts.
+    pub fn into_leg(self, event_key: &std::sync::Arc<Value>) -> super::canonical::Leg {
+        let string = |value: Cow<'_, str>| Value::String(value.into_owned());
         super::canonical::Leg::new(
             [
                 Value::Bool(self.quantity.included),
                 crate::quantity::number(&self.quantity.amount),
-                string(&self.anchor_id),
-                string(&self.quantity.asset),
+                string(self.anchor_id),
+                Value::String(self.quantity.asset),
                 Value::Bool(self.authoritative),
-                string(&self.quantity.direction),
-                string(&self.commitment.detail_hash),
-                string(&self.commitment.payload_json),
-                string(&self.fee_attribution),
+                Value::String(self.quantity.direction),
+                Value::String(self.commitment.detail_hash),
+                Value::String(self.commitment.payload_json),
+                Value::String(self.fee_attribution),
                 crate::quantity::number(&self.quantity.fee),
-                string(&self.authority_reason),
-                string(&self.occurred_at),
-                string(&self.profile_id),
-                string(&self.commitment.quantity_hash),
-                string(&self.transaction_id),
-                string(&self.quantity.wallet),
+                Value::String(self.authority_reason),
+                string(self.occurred_at),
+                string(self.profile_id),
+                Value::String(self.commitment.quantity_hash),
+                string(self.transaction_id),
+                string(self.quantity.wallet),
             ],
             event_key.clone(),
         )

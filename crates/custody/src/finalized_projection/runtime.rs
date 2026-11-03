@@ -253,16 +253,18 @@ pub fn stage_from_state(
         unreachable!("finalize composes a finalized projection")
     };
     let source = &snapshot.transactions;
+    let canonical = quantity.canonical_arc();
     Ok(super::FinalizedProjection {
         rows: parts
             .rows
             .into_iter()
-            .map(|row| row.detach(source))
+            .map(|row| row.detach(source, Some(&canonical)))
             .collect(),
         cross: parts.cross,
         intra: parts.intra,
         moves: parts.moves,
         quarantines: parts.quarantines,
+        canonical: Some(canonical),
     })
 }
 

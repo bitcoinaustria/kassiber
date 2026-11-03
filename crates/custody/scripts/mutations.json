@@ -11796,8 +11796,8 @@
   {
     "id": "GAP-001",
     "file": "crates/custody/src/gaps/normalize.rs",
-    "find": "!v.to_string().contains(['.', 'e', 'E'])",
-    "replace": "true",
+    "find": "|n| !n.as_str().contains(['.', 'e', 'E'])",
+    "replace": "|n| true",
     "rule": "Reject floating point amounts rather than coercing them.",
     "expect_failing": [
       "gaps_search_vectors"
@@ -20486,8 +20486,8 @@
   {
     "id": "projection-base-identity",
     "file": "crates/custody/src/finalized_projection.rs",
-    "find": "result.set(key, observation[key].clone());",
-    "replace": "result.set(key, Value::Null);",
+    "find": "result.set_observed(key, observation, key);",
+    "replace": "result.set_static(key, &NULL);",
     "expect_failing": [
       "projection_base_row_vectors"
     ],
@@ -20536,7 +20536,7 @@
   {
     "id": "projection-privacy-clear",
     "file": "crates/custody/src/finalized_projection.rs",
-    "find": "base.set(\"privacy_boundary\", Value::Null);",
+    "find": "base.set_static(\"privacy_boundary\", &NULL);",
     "replace": "base.set(\"privacy_boundary\", json!(\"unresolved\"));",
     "expect_failing": [
       "projection_fee_row_vectors"
@@ -20546,8 +20546,8 @@
   {
     "id": "projection-fee-anchor",
     "file": "crates/custody/src/finalized_projection.rs",
-    "find": "base.set(\n        \"journal_transaction_id\",\n        observation[\"anchor_transaction_id\"].clone(),\n    );",
-    "replace": "base.set(\n        \"journal_transaction_id\",\n        observation[\"transaction_id\"].clone(),\n    );",
+    "find": "base.set_observed(\n        \"journal_transaction_id\",\n        observation,\n        \"anchor_transaction_id\",\n    );",
+    "replace": "base.set_observed(\n        \"journal_transaction_id\",\n        observation,\n        \"transaction_id\",\n    );",
     "expect_failing": [
       "projection_fee_row_vectors"
     ],
@@ -20556,8 +20556,8 @@
   {
     "id": "projection-fee-principal",
     "file": "crates/custody/src/finalized_projection.rs",
-    "find": "base.set(\"amount\", json!(0));",
-    "replace": "base.set(\"amount\", json!(1));",
+    "find": "base.set_int(\"amount\", 0);",
+    "replace": "base.set_int(\"amount\", 1);",
     "expect_failing": [
       "projection_fee_row_vectors"
     ],
@@ -20576,7 +20576,7 @@
   {
     "id": "projection-fee-fiat",
     "file": "crates/custody/src/finalized_projection.rs",
-    "find": "base.set(\"fiat_value\", Value::Null);",
+    "find": "base.set_static(\"fiat_value\", &NULL);",
     "replace": "base.set(\"fiat_value\", json!(0));",
     "expect_failing": [
       "projection_fee_row_vectors"
@@ -20586,7 +20586,7 @@
   {
     "id": "projection-fee-fiat-exact",
     "file": "crates/custody/src/finalized_projection.rs",
-    "find": "base.set(\"fiat_value_exact\", Value::Null);",
+    "find": "base.set_static(\"fiat_value_exact\", &NULL);",
     "replace": "base.set(\"fiat_value_exact\", json!(\"0\"));",
     "expect_failing": [
       "projection_fee_row_vectors"
@@ -20596,8 +20596,8 @@
   {
     "id": "projection-fee-marker",
     "file": "crates/custody/src/finalized_projection.rs",
-    "find": "base.set(\"custody_finalized_tax_projection\", json!(true));",
-    "replace": "base.set(\"custody_finalized_tax_projection\", json!(false));",
+    "find": "base.set_static(\"custody_finalized_tax_projection\", &TRUE);",
+    "replace": "base.set_static(\"custody_finalized_tax_projection\", &FALSE);",
     "expect_failing": [
       "projection_fee_row_vectors"
     ],
@@ -20606,8 +20606,8 @@
   {
     "id": "projection-fee-hash",
     "file": "crates/custody/src/finalized_projection.rs",
-    "find": "base.set(\n        \"custody_quantity_hash\",\n        observation[\"quantity_hash\"].clone(),\n    );",
-    "replace": "base.set(\n        \"custody_quantity_hash\",\n        Value::Null,\n    );",
+    "find": "base.set_observed(\"custody_quantity_hash\", observation, \"quantity_hash\");",
+    "replace": "base.set_static(\"custody_quantity_hash\", &NULL);",
     "expect_failing": [
       "projection_fee_row_vectors"
     ],
@@ -20616,8 +20616,8 @@
   {
     "id": "projection-fee-start",
     "file": "crates/custody/src/finalized_projection.rs",
-    "find": "base.set(\"custody_slice_start_msat\", json!(0));",
-    "replace": "base.set(\"custody_slice_start_msat\", json!(1));",
+    "find": "base.set_int(\"custody_slice_start_msat\", 0);",
+    "replace": "base.set_int(\"custody_slice_start_msat\", 1);",
     "expect_failing": [
       "projection_fee_row_vectors"
     ],
@@ -20626,8 +20626,8 @@
   {
     "id": "projection-fee-end",
     "file": "crates/custody/src/finalized_projection.rs",
-    "find": "base.set(\"custody_slice_end_msat\", json!(0));",
-    "replace": "base.set(\"custody_slice_end_msat\", json!(1));",
+    "find": "base.set_int(\"custody_slice_end_msat\", 0);",
+    "replace": "base.set_int(\"custody_slice_end_msat\", 1);",
     "expect_failing": [
       "projection_fee_row_vectors"
     ],
@@ -20736,8 +20736,8 @@
   {
     "id": "projection2-slice-quantity",
     "file": "crates/custody/src/finalized_projection/principal.rs",
-    "find": "        base.set(\"amount\", Value::from(amount));",
-    "replace": "        base.set(\"amount\", Value::from(end));",
+    "find": "        base.set_int(\"amount\", amount);",
+    "replace": "        base.set_int(\"amount\", end);",
     "expect_failing": [
       "projection_slice_pricing_vectors"
     ],
@@ -20746,8 +20746,8 @@
   {
     "id": "projection2-slice-fee",
     "file": "crates/custody/src/finalized_projection/principal.rs",
-    "find": "base.set(\"fee\", number(fee));",
-    "replace": "base.set(\"fee\", json!(0));",
+    "find": "Ok(fee) => base.set_int(\"fee\", fee),",
+    "replace": "Ok(_) => base.set_int(\"fee\", 0),",
     "expect_failing": [
       "projection_slice_pricing_vectors"
     ],
@@ -21056,7 +21056,7 @@
   {
     "id": "projection2-slice-anchor",
     "file": "crates/custody/src/finalized_projection/principal.rs",
-    "find": "base.set(\n        \"journal_transaction_id\",\n        observation[\"anchor_transaction_id\"].clone(),\n    );",
+    "find": "base.set_observed(\n        \"journal_transaction_id\",\n        observation,\n        \"anchor_transaction_id\",\n    );",
     "replace": "base.set(\n        \"journal_transaction_id\",\n        json!(\"bad\"),\n    );",
     "expect_failing": [
       "projection_slice_pricing_vectors"
@@ -21066,7 +21066,7 @@
   {
     "id": "projection2-slice-clear-fiat",
     "file": "crates/custody/src/finalized_projection/principal.rs",
-    "find": "    base.set(\"fiat_value\", Value::Null);",
+    "find": "    base.set_static(\"fiat_value\", &NULL);",
     "replace": "    base.set(\"fiat_value\", json!(99));",
     "expect_failing": [
       "projection_slice_pricing_vectors"
@@ -21076,7 +21076,7 @@
   {
     "id": "projection2-slice-clear-exact",
     "file": "crates/custody/src/finalized_projection/principal.rs",
-    "find": "    base.set(\"fiat_value_exact\", Value::Null);",
+    "find": "    base.set_static(\"fiat_value_exact\", &NULL);",
     "replace": "    base.set(\"fiat_value_exact\", json!(\"99\"));",
     "expect_failing": [
       "projection_slice_pricing_vectors"
@@ -21086,8 +21086,8 @@
   {
     "id": "projection2-slice-marker",
     "file": "crates/custody/src/finalized_projection/principal.rs",
-    "find": "    base.set(\"custody_finalized_tax_projection\", Value::Bool(true));",
-    "replace": "    base.set(\"custody_finalized_tax_projection\", Value::Bool(false));",
+    "find": "    base.set_static(\"custody_finalized_tax_projection\", &TRUE);",
+    "replace": "    base.set_static(\"custody_finalized_tax_projection\", &FALSE);",
     "expect_failing": [
       "projection_slice_pricing_vectors"
     ],
@@ -21096,8 +21096,8 @@
   {
     "id": "projection2-slice-quantity-hash",
     "file": "crates/custody/src/finalized_projection/principal.rs",
-    "find": "base.set(\n        \"custody_quantity_hash\",\n        observation[\"quantity_hash\"].clone(),\n    );",
-    "replace": "base.set(\n        \"custody_quantity_hash\",\n        json!(\"bad\"),\n    );",
+    "find": "base.set_observed(\"custody_quantity_hash\", observation, \"quantity_hash\");",
+    "replace": "base.set(\"custody_quantity_hash\", json!(\"bad\"));",
     "expect_failing": [
       "projection_slice_pricing_vectors"
     ],
@@ -21106,8 +21106,8 @@
   {
     "id": "projection2-slice-start",
     "file": "crates/custody/src/finalized_projection/principal.rs",
-    "find": "        base.set(\"custody_slice_start_msat\", Value::from(start));",
-    "replace": "        base.set(\"custody_slice_start_msat\", json!(0));",
+    "find": "base.set_int(\"custody_slice_start_msat\", start);",
+    "replace": "base.set_int(\"custody_slice_start_msat\", 0);",
     "expect_failing": [
       "projection_slice_pricing_vectors"
     ],
@@ -21116,8 +21116,8 @@
   {
     "id": "projection2-slice-end",
     "file": "crates/custody/src/finalized_projection/principal.rs",
-    "find": "        base.set(\"custody_slice_end_msat\", Value::from(end));",
-    "replace": "        base.set(\"custody_slice_end_msat\", json!(0));",
+    "find": "base.set_int(\"custody_slice_end_msat\", end);",
+    "replace": "base.set_int(\"custody_slice_end_msat\", 0);",
     "expect_failing": [
       "projection_slice_pricing_vectors"
     ],
@@ -23737,8 +23737,8 @@
   {
     "id": "typed-finalized-overlay-order",
     "file": "crates/custody/src/finalized_projection/row.rs",
-    "find": "                .is_some_and(|(name, _)| **name < key.as_str())",
-    "replace": "                .is_some_and(|(name, _)| **name > key.as_str())",
+    "find": ".is_some_and(|(name, _)| *name < key.as_str())\n            {\n                let (name, value) = overrides.next().unwrap();\n                fields.push((*name, written(value)));",
+    "replace": ".is_some_and(|(name, _)| *name > key.as_str())\n            {\n                let (name, value) = overrides.next().unwrap();\n                fields.push((*name, written(value)));",
     "expect_failing": [
       "typed_finalized_matches_python_value_adapter"
     ],
@@ -23837,8 +23837,8 @@
   {
     "id": "evidence-leg-payload",
     "file": "crates/custody/src/evidence/observation.rs",
-    "find": "                string(&self.commitment.payload_json),",
-    "replace": "                string(\"\"),",
+    "find": "                Value::String(self.commitment.payload_json),",
+    "replace": "                Value::String(String::new()),",
     "expect_failing": [
       "quantity_runtime_wrapper_vectors"
     ],
@@ -24183,6 +24183,50 @@
       "remembered_columns_answer_only_their_own_name"
     ],
     "rule": "A remembered column answers only the name it holds."
+  },
+  {
+    "file": "crates/custody/src/finalized_projection/row.rs",
+    "expect_failing": [
+      "typed_finalized_matches_python_value_adapter",
+      "projection_quarantine_composition_vectors"
+    ],
+    "rule": "Python projection rows merge generated fields in key order.",
+    "id": "typed-finalized-python-overlay-order",
+    "find": ".is_some_and(|(name, _)| *name < key.as_str())\n            {\n                let (name, value) = overrides.next().unwrap();\n                fields.push((\n",
+    "replace": ".is_some_and(|(name, _)| *name > key.as_str())\n            {\n                let (name, value) = overrides.next().unwrap();\n                fields.push((\n"
+  },
+  {
+    "file": "crates/custody/src/evidence/canonical.rs",
+    "expect_failing": [
+      "quantity_runtime_wrapper_vectors",
+      "components_commitment_hash"
+    ],
+    "rule": "A leg-held evidence snapshot reads its own commitment fields.",
+    "id": "evidence-snapshot-leg-fields",
+    "find": "(text(13), text(6), text(7))",
+    "replace": "(text(6), text(13), text(7))"
+  },
+  {
+    "file": "crates/custody/src/evidence.rs",
+    "expect_failing": [
+      "quantity_runtime_wrapper_vectors",
+      "receipt_success"
+    ],
+    "rule": "A selected observation's snapshot names its own leg.",
+    "id": "evidence-snapshot-leg-position",
+    "find": "snapshots[snapshot] = Some(canonical::Snapshot::Leg(leg));",
+    "replace": "snapshots[snapshot] = Some(canonical::Snapshot::Leg(0));"
+  },
+  {
+    "file": "crates/custody/src/evidence/canonical.rs",
+    "expect_failing": [
+      "quantity_evidence_subject_identity",
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Snapshot quantity hashes are the snapshots' quantity hashes.",
+    "id": "evidence-snapshot-quantity-hashes",
+    "find": "Cow::Borrowed(event.snapshot_fields(snapshot).0)",
+    "replace": "Cow::Borrowed(event.snapshot_fields(snapshot).1)"
   },
   {
     "id": "R4-evidence-alias-slot-index",

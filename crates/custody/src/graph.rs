@@ -33,7 +33,7 @@ pub(crate) fn sats(entry: &Value) -> Option<i64> {
     if explicit
         || value
             .as_number()
-            .is_some_and(|n| !n.to_string().contains(['.', 'e', 'E']))
+            .is_some_and(|n| !n.as_str().contains(['.', 'e', 'E']))
         || value.is_string() && !spelling.contains('.')
     {
         return spelling.py_strip().parse::<i64>().ok().or_else(|| {

@@ -27,6 +27,8 @@ pub struct FinalizedProjection {
     intra: Vec<Value>,
     moves: Vec<Value>,
     quarantines: Vec<Py>,
+    /// The canonical input whose observations the rows name.
+    canonical: Option<std::sync::Arc<crate::evidence::canonical::Canonical>>,
 }
 impl FinalizedProjection {
     /// The stage's Python value, given the snapshot rows its rows name.
@@ -59,7 +61,7 @@ impl FinalizedProjection {
                 Py::List(
                     self.rows
                         .iter()
-                        .map(|row| row.py(rows))
+                        .map(|row| row.py(rows, self.canonical.as_deref()))
                         .collect::<Result<_, _>>()?,
                 ),
             ),
@@ -109,7 +111,7 @@ impl FinalizedProjection {
             Value::Array(
                 self.rows
                     .iter()
-                    .map(|row| row.json_with(rows, &exact))
+                    .map(|row| row.json_with(rows, self.canonical.as_deref(), &exact))
                     .collect::<Result<_, E>>()?,
             ),
         );
@@ -324,8 +326,12 @@ pub fn base_row(observation: &Value, rows: &Value) -> Result<Value, Error> {
     base_row_with_rows(LegRef::Json(observation), rows).map(row::FinalizedRow::into_json)
 }
 
+static NULL: Value = Value::Null;
+static TRUE: Value = Value::Bool(true);
+static FALSE: Value = Value::Bool(false);
+
 fn base_row_with_rows<'a>(
-    observation: LegRef<'_>,
+    observation: LegRef<'a>,
     rows: &'a dyn Rows,
 ) -> Result<row::FinalizedRow<'a>, Error> {
     let id = text_ref(observation.at("transaction_id"));
@@ -358,7 +364,7 @@ fn base_row_with_rows<'a>(
     let order = chain_order(result.source())?;
     result.set("custody_chain_order", order);
     for key in ["wallet_id", "asset", "direction", "occurred_at"] {
-        result.set(key, observation[key].clone());
+        result.set_observed(key, observation, key);
     }
     if !codec::truth(&result["external_id"]) {
         result.set(
@@ -369,7 +375,7 @@ fn base_row_with_rows<'a>(
     if !codec::truth(&result["raw_json"]) {
         result.set("raw_json", json!({}));
     }
-    result.set("amount_includes_fee", json!(false));
+    result.set_static("amount_includes_fee", &FALSE);
     Ok(result)
 }
 
@@ -384,7 +390,7 @@ pub fn fee_row(
 }
 
 fn fee_row_with_rows<'a>(
-    observation: LegRef<'_>,
+    observation: LegRef<'a>,
     amount: &BigInt,
     rows: &'a dyn Rows,
     side: &str,
@@ -393,7 +399,7 @@ fn fee_row_with_rows<'a>(
     if codec::truth(&observation["authoritative_chain_observation"])
         && observation["fee_attribution"] == "exact"
     {
-        base.set("privacy_boundary", Value::Null);
+        base.set_static("privacy_boundary", &NULL);
     }
     base.set(
         "id",
@@ -403,22 +409,20 @@ fn fee_row_with_rows<'a>(
             amount
         )),
     );
-    base.set(
+    base.set_observed(
         "journal_transaction_id",
-        observation["anchor_transaction_id"].clone(),
+        observation,
+        "anchor_transaction_id",
     );
-    base.set("amount", json!(0));
+    base.set_int("amount", 0);
     base.set("fee", number(amount));
-    base.set("fiat_value", Value::Null);
-    base.set("fiat_value_exact", Value::Null);
-    base.set("amount_includes_fee", json!(false));
-    base.set("custody_finalized_tax_projection", json!(true));
-    base.set(
-        "custody_quantity_hash",
-        observation["quantity_hash"].clone(),
-    );
-    base.set("custody_slice_start_msat", json!(0));
-    base.set("custody_slice_end_msat", json!(0));
+    base.set_static("fiat_value", &NULL);
+    base.set_static("fiat_value_exact", &NULL);
+    base.set_static("amount_includes_fee", &FALSE);
+    base.set_static("custody_finalized_tax_projection", &TRUE);
+    base.set_observed("custody_quantity_hash", observation, "quantity_hash");
+    base.set_int("custody_slice_start_msat", 0);
+    base.set_int("custody_slice_end_msat", 0);
     Ok(base)
 }
 

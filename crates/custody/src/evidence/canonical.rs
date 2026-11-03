@@ -10,6 +10,7 @@ use std::sync::{Arc, LazyLock, OnceLock};
 static NULL: Value = Value::Null;
 static OBSERVATION: LazyLock<Value> = LazyLock::new(|| Value::String("QuantityObservation".into()));
 static EVENT: LazyLock<Value> = LazyLock::new(|| Value::String("CanonicalQuantityEvent".into()));
+static SNAPSHOT: LazyLock<Value> = LazyLock::new(|| Value::String("EvidenceSnapshot".into()));
 
 /// An observation's fields other than `$type` and `event_key`, in key order.
 const FIELDS: [&str; 16] = [
@@ -33,7 +34,7 @@ const FIELDS: [&str; 16] = [
 
 /// The position of `key` in `FIELDS`. Field names differ in length or first
 /// letters, so a match finds them without searching.
-fn slot(key: &str) -> Option<usize> {
+pub(crate) fn slot(key: &str) -> Option<usize> {
     Some(match key {
         "amount_includes_fee" => 0,
         "amount_msat" => 1,
@@ -60,11 +61,27 @@ fn slot(key: &str) -> Option<usize> {
 pub struct Leg {
     fields: [Value; 16],
     event_key: Arc<Value>,
+    /// The (event, leg) position in the canonical input that holds it.
+    at: (u32, u32),
 }
 
 impl Leg {
     pub(crate) fn new(fields: [Value; 16], event_key: Arc<Value>) -> Self {
-        Self { fields, event_key }
+        Self {
+            fields,
+            event_key,
+            at: (u32::MAX, u32::MAX),
+        }
+    }
+
+    /// The field at `slot` of `FIELDS`.
+    pub(crate) fn field(&self, slot: usize) -> &Value {
+        &self.fields[slot]
+    }
+
+    /// The (event, leg) position in its canonical input.
+    pub(crate) fn position(&self) -> (u32, u32) {
+        self.at
     }
 
     /// The observation's JSON object.
@@ -94,13 +111,27 @@ impl Index<&str> for Leg {
     }
 }
 
+/// One `EvidenceSnapshot`: a selected leg's commitment, which the leg's
+/// evidence fields hold, or another observation's.
+#[derive(Clone, Debug)]
+pub(crate) enum Snapshot {
+    Leg(usize),
+    Owned {
+        quantity_hash: String,
+        detail_hash: String,
+        payload_json: String,
+    },
+}
+
 /// One `CanonicalQuantityEvent`.
 #[derive(Clone, Debug)]
 pub struct Event {
     key: EventKey,
     key_value: Arc<Value>,
     legs: Vec<Leg>,
-    snapshots: Vec<Value>,
+    snapshots: Vec<Snapshot>,
+    /// The snapshots' JSON objects, built on first request.
+    snapshot_values: OnceLock<Vec<Value>>,
     sources: Vec<Value>,
     aliases: Vec<Value>,
 }
@@ -110,7 +141,7 @@ impl Event {
         key: EventKey,
         key_value: Arc<Value>,
         legs: Vec<Leg>,
-        snapshots: Vec<Value>,
+        snapshots: Vec<Snapshot>,
         sources: Vec<Value>,
         aliases: Vec<Value>,
     ) -> Self {
@@ -119,6 +150,7 @@ impl Event {
             key_value,
             legs,
             snapshots,
+            snapshot_values: OnceLock::new(),
             sources,
             aliases,
         }
@@ -132,6 +164,40 @@ impl Event {
         &self.legs
     }
 
+    /// A snapshot's quantity hash, detail hash and payload text.
+    fn snapshot_fields<'a>(&'a self, snapshot: &'a Snapshot) -> (&'a str, &'a str, &'a str) {
+        match snapshot {
+            Snapshot::Leg(at) => {
+                let leg = &self.legs[*at];
+                let text = |slot: usize| leg.fields[slot].as_str().expect("leg commitment text");
+                (text(13), text(6), text(7))
+            }
+            Snapshot::Owned {
+                quantity_hash,
+                detail_hash,
+                payload_json,
+            } => (quantity_hash, detail_hash, payload_json),
+        }
+    }
+
+    /// The `evidence_snapshots` objects.
+    fn snapshot_values(&self) -> &[Value] {
+        self.snapshot_values.get_or_init(|| {
+            self.snapshots
+                .iter()
+                .map(|snapshot| {
+                    let (quantity_hash, detail_hash, payload_json) = self.snapshot_fields(snapshot);
+                    let mut object = Map::new();
+                    object.insert("$type".into(), SNAPSHOT.clone());
+                    object.insert("detail_hash".into(), detail_hash.into());
+                    object.insert("payload_json".into(), payload_json.into());
+                    object.insert("quantity_hash".into(), quantity_hash.into());
+                    Value::Object(object)
+                })
+                .collect()
+        })
+    }
+
     /// The event's JSON object.
     pub fn value(&self) -> Value {
         let mut object = Map::new();
@@ -139,7 +205,7 @@ impl Event {
         object.insert("event_key".into(), (*self.key_value).clone());
         object.insert(
             "evidence_snapshots".into(),
-            Value::Array(self.snapshots.clone()),
+            Value::Array(self.snapshot_values().to_vec()),
         );
         object.insert(
             "legs".into(),
@@ -166,12 +232,25 @@ pub struct Canonical {
 }
 
 impl Canonical {
-    pub(crate) fn new(events: Vec<Event>, rejected: Vec<Value>) -> Self {
+    pub(crate) fn new(mut events: Vec<Event>, rejected: Vec<Value>) -> Self {
+        for (event_at, event) in events.iter_mut().enumerate() {
+            for (leg_at, leg) in event.legs.iter_mut().enumerate() {
+                leg.at = (event_at as u32, leg_at as u32);
+            }
+        }
         Self {
             events,
             rejected,
             value: OnceLock::new(),
         }
+    }
+
+    /// The leg at `position`, when it is this input's leg.
+    pub(crate) fn leg_at(&self, position: (u32, u32)) -> Option<&Leg> {
+        self.events
+            .get(position.0 as usize)?
+            .legs
+            .get(position.1 as usize)
     }
 
     pub fn events(&self) -> &[Event] {
@@ -325,9 +404,30 @@ impl<'a> EventRef<'a> {
 
     pub fn snapshots(self) -> &'a [Value] {
         match self {
-            Self::Typed(event) => &event.snapshots,
+            Self::Typed(event) => event.snapshot_values(),
             Self::Json(value) => array(&value["evidence_snapshots"]),
         }
+    }
+
+    /// Each snapshot's `quantity_hash` text, without building typed
+    /// snapshots' objects.
+    pub fn snapshot_quantity_hashes(self) -> impl Iterator<Item = Cow<'a, str>> {
+        let (typed, json) = match self {
+            Self::Typed(event) => (Some(event), &[][..]),
+            Self::Json(value) => (None, array(&value["evidence_snapshots"])),
+        };
+        typed
+            .into_iter()
+            .flat_map(|event| {
+                event
+                    .snapshots
+                    .iter()
+                    .map(move |snapshot| Cow::Borrowed(event.snapshot_fields(snapshot).0))
+            })
+            .chain(
+                json.iter()
+                    .map(|snapshot| Cow::Owned(crate::codec::text(&snapshot["quantity_hash"]))),
+            )
     }
 
     /// The event as a JSON object, borrowed when it is one.

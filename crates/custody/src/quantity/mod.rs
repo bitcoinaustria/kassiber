@@ -83,7 +83,9 @@ pub(super) fn exact(v: &Value) -> Result<BigInt, String> {
     if let Some(n) = v.as_u64() {
         return Ok(BigInt::from(n));
     }
-    if !v.is_number() || v.to_string().contains(['.', 'e', 'E']) {
+    if v.as_number()
+        .is_none_or(|n| n.as_str().contains(['.', 'e', 'E']))
+    {
         return Err("ValueError".into());
     }
     BigInt::from_str(&v.to_string()).map_err(|_| "ValueError".into())
