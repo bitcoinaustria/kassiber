@@ -112,6 +112,94 @@ pub(super) fn current(shared: &Shared, h: &Value, legs: &[Value]) -> Result<Vec<
     }
     Ok(snapshots.into_values().collect())
 }
+/// The top-level entries of a compact JSON object without the volatile ones,
+/// or `None` when the text is not a compact object this walk can split.
+fn stable_payload(text: &str) -> Option<String> {
+    const VOLATILE: [&[u8]; 4] = [b"fingerprint", b"occurred_at", b"confirmed_at", b"raw_json"];
+    let bytes = text.as_bytes();
+    // The end of the JSON string starting at `at`.
+    let string_end = |mut at: usize| -> Option<usize> {
+        at += 1;
+        loop {
+            match *bytes.get(at)? {
+                b'\\' => at += 2,
+                b'"' => return Some(at + 1),
+                _ => at += 1,
+            }
+        }
+    };
+    // The end of the compact JSON value starting at `at`: the separator or
+    // closing bracket after it.
+    let value_end = |mut at: usize| -> Option<usize> {
+        let mut depth = 0usize;
+        loop {
+            match *bytes.get(at)? {
+                b'"' => at = string_end(at)?,
+                b'{' | b'[' => {
+                    depth += 1;
+                    at += 1;
+                }
+                b'}' | b']' => {
+                    if depth == 0 {
+                        return Some(at);
+                    }
+                    depth -= 1;
+                    at += 1;
+                }
+                b',' if depth == 0 => return Some(at),
+                b' ' | b'\n' | b'\r' | b'\t' => return None,
+                _ => at += 1,
+            }
+        }
+    };
+    if bytes.first() != Some(&b'{') || bytes.last() != Some(&b'}') {
+        return None;
+    }
+    let mut kept = String::with_capacity(text.len());
+    kept.push('{');
+    let mut at = 1;
+    while at < bytes.len() - 1 {
+        if bytes[at] != b'"' {
+            return None;
+        }
+        let key_end = string_end(at)?;
+        if bytes.get(key_end) != Some(&b':') {
+            return None;
+        }
+        let end = value_end(key_end + 1)?;
+        if !VOLATILE.contains(&&bytes[at + 1..key_end - 1]) {
+            if kept.len() > 1 {
+                kept.push(',');
+            }
+            kept.push_str(&text[at..end]);
+        }
+        match bytes.get(end) {
+            // A separator is followed by another entry.
+            Some(b',') if end + 1 < bytes.len() - 1 => at = end + 1,
+            Some(b'}') if end == bytes.len() - 1 => at = end,
+            _ => return None,
+        }
+    }
+    kept.push('}');
+    Some(kept)
+}
+
+/// `commitment_pairs` of snapshots this crate's commitment builder wrote:
+/// their payloads are compact sorted JSON that loading and dumping leaves
+/// unchanged, so the volatile entries are removed from the text.
+fn built_commitment_pairs(snapshots: &[Value]) -> Result<Vec<(String, String)>, Error> {
+    let mut result = Vec::new();
+    for s in snapshots {
+        let stable = s["payload_json"].as_str().and_then(stable_payload);
+        let Some(stable) = stable else {
+            return commitment_pairs(snapshots);
+        };
+        result.push((pystr(&s["quantity_hash"]), codec::sha256(&stable)));
+    }
+    result.sort();
+    Ok(result)
+}
+
 // Python computes detail hashes after the canonical-evidence exception guard.
 pub(super) fn commitment_pairs(snapshots: &[Value]) -> Result<Vec<(String, String)>, Error> {
     let mut result = Vec::new();
@@ -177,7 +265,7 @@ pub(super) fn evidence_status(
         }
         Err(e) => return Err(e),
     };
-    let current = commitment_pairs(&current)?;
+    let current = built_commitment_pairs(&current)?;
     let committed: Vec<_> = commitments
         .iter()
         .map(|c| (pystr(&c["quantity_hash"]), pystr(&c["detail_hash"])))
@@ -722,6 +810,62 @@ mod tests {
             let mut candidate = row();
             candidate["raw_json"] = json!(raw);
             compare(&candidate);
+        }
+    }
+
+    #[test]
+    fn built_payloads_hash_as_loaded_payloads() {
+        let mut compared = 0;
+        for fixture in [
+            include_str!("../../../../tests/fixtures/custody_evidence_cases.json"),
+            include_str!("../../../../tests/fixtures/custody_graph_cases.json"),
+            include_str!("../../../../tests/fixtures/custody_component_cases.json"),
+        ] {
+            let cases: Vec<Value> = serde_json::from_str(fixture).unwrap();
+            for case in cases {
+                let Ok(snapshot) = serde_json::from_value::<Snapshot>(case["input"].clone()) else {
+                    continue;
+                };
+                let rows: Vec<_> = snapshot
+                    .transactions
+                    .iter()
+                    .map(WithoutProvenance)
+                    .collect();
+                let Ok(canonical) = evidence::canonical_of_rows(&rows) else {
+                    continue;
+                };
+                for event in canonical.events() {
+                    let snapshots = evidence::canonical::EventRef::Typed(event).snapshots();
+                    for snapshot in snapshots {
+                        let text = snapshot["payload_json"].as_str().unwrap();
+                        assert!(stable_payload(text).is_some(), "{text}");
+                    }
+                    assert_eq!(
+                        built_commitment_pairs(snapshots).unwrap(),
+                        commitment_pairs(snapshots).unwrap()
+                    );
+                    compared += snapshots.len();
+                }
+            }
+        }
+        assert!(compared > 100, "{compared}");
+        for text in [
+            "{}",
+            "{\"a\":1}",
+            "{\"raw_json\":{\"x\":[1,{\"y\":\"}\"}]},\"z\":\"a,b\"}",
+        ] {
+            let mut loaded = codec::loads(text).unwrap();
+            let Py::Dict(ref mut fields) = loaded else {
+                unreachable!()
+            };
+            fields.retain(|(k, _)| !matches!(k, Key::Str(k) if k.is("raw_json")));
+            assert_eq!(
+                stable_payload(text).unwrap(),
+                codec::dumps(&loaded, false).unwrap()
+            );
+        }
+        for text in ["", "{", "[]", "{\"a\": 1}", "{\"a\":1,}", "{\"a\"}"] {
+            assert_eq!(stable_payload(text), None, "{text}");
         }
     }
 

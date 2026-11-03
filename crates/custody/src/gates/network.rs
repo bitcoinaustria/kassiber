@@ -381,6 +381,8 @@ mod tests {
         for payload in [
             json!(["bitcoin", "regtest", null, null, null, null]),
             json!(["invalid", "invalid", null, null, null, null]),
+            // Field names in a positional array still name no fields.
+            json!(["liquid", "network", null, null, "chain", "source"]),
         ] {
             let value = json!({"asset":"BTC","raw_json":payload.to_string()});
             let row = serde_json::from_value(value.clone()).unwrap();

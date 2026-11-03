@@ -963,6 +963,21 @@ fn identity(observation: LegRef) -> usize {
     }
 }
 /// Recompute quantity from preceding Rust stages and the raw snapshot only.
+/// The components that stay effective: every one not reconciled. The stage's
+/// own array serves, uncopied, when none is.
+fn effective_components<'a>(
+    all: &'a Value,
+    reconciled: &BTreeSet<String>,
+) -> std::borrow::Cow<'a, Value> {
+    let kept = |c: &&Value| !reconciled.contains(&text(&c["id"]));
+    if all.is_array() && array(all).iter().all(|c| kept(&c)) {
+        return std::borrow::Cow::Borrowed(all);
+    }
+    std::borrow::Cow::Owned(Value::Array(
+        array(all).iter().filter(kept).cloned().collect(),
+    ))
+}
+
 pub fn stage(
     snapshot: &crate::snapshot::Snapshot,
     components: &Value,
@@ -997,11 +1012,7 @@ pub fn stage(
         .iter()
         .map(|r| text(&r["component_id"]))
         .collect();
-    let effective: Vec<_> = array(&components["components"])
-        .iter()
-        .filter(|c| !reconciled.contains(&text(&c["id"])))
-        .cloned()
-        .collect();
+    let effective = effective_components(&components["components"], &reconciled);
     let blocked = stored::list(stored::get(interpretation, "blocked_transaction_ids"));
     let transient = stored::list(stored::get(
         interpretation,
@@ -1098,7 +1109,7 @@ pub fn stage(
     }
     let reviews: Vec<_> = snapshot.gap_reviews.iter().map(|r| json!(r)).collect();
     // The operands `build` would read from one JSON object, without copying.
-    let components = Value::Array(effective);
+    let components = &*effective;
     let snapshots = Value::Object(
         snapshots
             .into_iter()
@@ -1111,7 +1122,7 @@ pub fn stage(
     let state = compose(&Operands {
         canonical: Canon::Typed(evidence.canonical_input()),
         rows: RowSource::Enriched(evidence.enriched(), &snapshot.transactions),
-        components: &components,
+        components,
         evidence: &snapshots,
         claims: &converted["claims"],
         native: &converted["native_audits"],
@@ -1612,5 +1623,20 @@ mod tests {
         assert!(observations_needed(Canon::Json(&canonical), false)
             .unwrap()
             .is_empty());
+    }
+
+    #[test]
+    fn reconciled_components_leave_the_effective_population() {
+        let all = json!([{"id": "a"}, {"id": "b"}, {"id": 3}]);
+        let none = BTreeSet::new();
+        let kept = effective_components(&all, &none);
+        assert!(matches!(kept, std::borrow::Cow::Borrowed(_)));
+        assert_eq!(*kept, all);
+        let reconciled = BTreeSet::from(["b".to_owned(), "3".to_owned()]);
+        assert_eq!(
+            *effective_components(&all, &reconciled),
+            json!([{"id": "a"}])
+        );
+        assert_eq!(*effective_components(&Value::Null, &none), json!([]));
     }
 }

@@ -19226,8 +19226,8 @@
   {
     "id": "R2-review-reconciled-filter",
     "file": "crates/custody/src/quantity/runtime.rs",
-    "find": ".filter(|c| !reconciled.contains(&text(&c[\"id\"])))",
-    "replace": ".filter(|c| reconciled.contains(&text(&c[\"id\"])))",
+    "find": "    let kept = |c: &&Value| !reconciled.contains(&text(&c[\"id\"]));",
+    "replace": "    let kept = |c: &&Value| reconciled.contains(&text(&c[\"id\"]));",
     "expect_failing": [
       "quantity_native_reconciled_filter"
     ],
@@ -24143,6 +24143,36 @@
       "raw_fields_match_decoded_objects"
     ],
     "rule": "A raw field reads the entry with its key."
+  },
+  {
+    "id": "stable-payload-volatile",
+    "file": "crates/custody/src/components/commitments.rs",
+    "find": "    const VOLATILE: [&[u8]; 4] = [b\"fingerprint\", b\"occurred_at\", b\"confirmed_at\", b\"raw_json\"];",
+    "replace": "    const VOLATILE: [&[u8]; 4] = [b\"fingerprint\", b\"occurred_at\", b\"confirmed_at\", b\"kind\"];",
+    "expect_failing": [
+      "built_payloads_hash_as_loaded_payloads"
+    ],
+    "rule": "Stable payloads drop exactly the volatile entries."
+  },
+  {
+    "id": "stable-payload-nesting",
+    "file": "crates/custody/src/components/commitments.rs",
+    "find": "                b'{' | b'[' => {\n                    depth += 1;\n                    at += 1;\n                }",
+    "replace": "                b'{' | b'[' => {\n                    at += 1;\n                }",
+    "expect_failing": [
+      "built_payloads_hash_as_loaded_payloads"
+    ],
+    "rule": "Nested containers end only at their own closing bracket."
+  },
+  {
+    "id": "quantity-effective-reconciled",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "    let kept = |c: &&Value| !reconciled.contains(&text(&c[\"id\"]));",
+    "replace": "    let kept = |_: &&Value| true;",
+    "expect_failing": [
+      "reconciled_components_leave_the_effective_population"
+    ],
+    "rule": "Reconciled components leave the effective population."
   },
   {
     "id": "R4-evidence-alias-slot-index",
