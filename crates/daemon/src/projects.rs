@@ -8,7 +8,11 @@ use kassiber_pyjson::{PyStr, Value};
 use kassiber_pytext::{repr_py, strip_py};
 use kassiber_runtime::store::{OwnerKind, ProjectCatalog, ProjectOwner, Secret, Unlock};
 
-pub const KINDS: &[&str] = &["ui.projects.list", "ui.projects.create", "ui.projects.select"];
+pub const KINDS: &[&str] = &[
+    "ui.projects.list",
+    "ui.projects.create",
+    "ui.projects.select",
+];
 
 /// `MIN_DATABASE_PASSPHRASE_CHARS`.
 const MIN_PASSPHRASE_CHARS: usize = 12;
@@ -24,7 +28,10 @@ pub(super) fn handle(
         "ui.projects.create" => create(daemon, &coerce(args)?)?,
         _ => return select(daemon, &coerce(args)?, request_id),
     };
-    Ok((Some(with_request_id(success(kind, data), request_id)), false))
+    Ok((
+        Some(with_request_id(success(kind, data), request_id)),
+        false,
+    ))
 }
 
 /// `_coerce_args_dict`.
@@ -61,9 +68,7 @@ pub(crate) fn new_passphrase(text: &PyStr) -> Result<Secret, AppError> {
     if text.code_points().count() < MIN_PASSPHRASE_CHARS {
         return Err(AppError::new(
             "invalid_passphrase",
-            format!(
-                "database passphrase must be at least {MIN_PASSPHRASE_CHARS} characters long"
-            ),
+            format!("database passphrase must be at least {MIN_PASSPHRASE_CHARS} characters long"),
         )
         .with_hint("Pick a long passphrase from a password manager."));
     }
@@ -271,7 +276,9 @@ fn select(daemon: &mut Daemon, args: &Value, request_id: &RequestId) -> Handled 
                 daemon.unlocked_passphrase = None;
                 return Err(error.into());
             }
-            entry = daemon.store.project_catalog(ProjectCatalog::Get(&entry_id))?;
+            entry = daemon
+                .store
+                .project_catalog(ProjectCatalog::Get(&entry_id))?;
         } else {
             let mut runtime_config = daemon.store.runtime_config_for(&target.data_root)?;
             target_book = Some(daemon.store.open_book(
@@ -354,7 +361,10 @@ fn selected(daemon: &mut Daemon, entry: Value, request_id: &RequestId) -> Handle
     let status = daemon.status_payload()?;
     let data = dict([("project", entry), ("status", status)]);
     Ok((
-        Some(with_request_id(success("ui.projects.select", data), request_id)),
+        Some(with_request_id(
+            success("ui.projects.select", data),
+            request_id,
+        )),
         false,
     ))
 }

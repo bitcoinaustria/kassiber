@@ -142,7 +142,7 @@ fn policy(values: &Value, check_algorithm: bool, create: bool) -> Result<Value> 
     replace(&mut result, "cost_basis_pool_scope", s(scope));
     Ok(result)
 }
-fn create(conn: &Connection, args: &Value, sources: &dyn Sources) -> Result<Value> {
+pub(crate) fn create(conn: &Connection, args: &Value, sources: &dyn Sources) -> Result<Value> {
     let w = references::workspace(conn, args)?;
     let wid = text(&w, "id");
     // Negative holding days are refused before country/method validation.

@@ -45,6 +45,7 @@ kassiber-rates = { path = "../rates" }
 kassiber-setup = { path = "../setup" }
 
 kassiber-transactions = { path = "../transactions" }
+kassiber-workspace = { path = "../workspace" }
 kassiber-cli = { path = "../cli" }
 kassiber-imports = { path = "../imports" }
 kassiber-wallets = { path = "../wallets" }

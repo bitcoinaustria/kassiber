@@ -753,13 +753,15 @@ impl BookStore for RealStore {
                 stamp.then(timestamp).transpose()?.as_deref(),
                 select,
             )?,
-            ProjectCatalog::Select(id) => {
-                catalog::set_selected(&context, id, Some(&timestamp()?))?
-            }
+            ProjectCatalog::Select(id) => catalog::set_selected(&context, id, Some(&timestamp()?))?,
         };
         Ok(catalog::payload(&entry))
     }
-    fn create_encrypted_database(&self, database: &str, passphrase: &Secret) -> Result<(), AppError> {
+    fn create_encrypted_database(
+        &self,
+        database: &str,
+        passphrase: &Secret,
+    ) -> Result<(), AppError> {
         kassiber_store::encryption::create_empty_database(Path::new(database), passphrase.expose())
             .map_err(error)
     }
@@ -920,6 +922,71 @@ impl kassiber_setup::Sources for ReportSources {
     }
 }
 impl RealBook {
+    /// Workspace shell reads (`kassiber-workspace`); `None` for other operations.
+    fn workspace_read(&self, operation: &str, args: &Value) -> Option<Result<Value, AppError>> {
+        use kassiber_envelope::{get, truthy};
+        use kassiber_workspace::{overview, readiness};
+        if !matches!(
+            operation,
+            "health"
+                | "next-actions"
+                | "ui.workspace.health"
+                | "ui.next_actions"
+                | "ui.review.badges"
+                | "ui.overview.snapshot"
+                | "ui.workspace.overview.snapshot"
+        ) {
+            return None;
+        }
+        Some((|| {
+            let conn = self.conn()?;
+            match operation {
+                "ui.overview.snapshot" => {
+                    return overview::overview(conn, &Default::default(), &SetupSources)
+                }
+                "ui.workspace.overview.snapshot" => {
+                    let args = (*args != Value::Null).then_some(args);
+                    return overview::workspace_overview(
+                        conn,
+                        args,
+                        &Default::default(),
+                        &SetupSources,
+                    );
+                }
+                _ => {}
+            }
+            let cli = !operation.starts_with("ui.");
+            let flag = |key| get(args, key).is_some_and(truthy);
+            if cli && flag("workspace") != flag("profile") {
+                return Err(AppError::new(
+                    "validation",
+                    format!("{operation} requires --workspace and --profile together"),
+                ));
+            }
+            let (context, profile) = if cli && flag("workspace") {
+                let (workspace, profile) = kassiber_setup::references::scope(conn, args)?;
+                let id = |row: &Value| kassiber_envelope::py_str(get(row, "id").unwrap());
+                readiness::scope(conn, Some((&id(&workspace), &id(&profile))))?
+            } else {
+                readiness::scope(conn, None)?
+            };
+            if operation == "ui.review.badges" {
+                return readiness::badges(conn, profile.as_ref());
+            }
+            let health = readiness::health(conn, &context, profile.as_ref())?;
+            if matches!(operation, "health" | "ui.workspace.health") {
+                return Ok(health);
+            }
+            readiness::next_actions(health, || {
+                kassiber_rates::desktop_command(
+                    conn,
+                    "ui.rates.coverage",
+                    &dict([("limit", Value::Int(1.into()))]),
+                    &self.rates,
+                )
+            })
+        })())
+    }
     fn conn(&self) -> Result<&Connection, AppError> {
         self.book
             .as_ref()
@@ -1077,6 +1144,17 @@ impl Book for RealBook {
         Some(self.backends.default_backend.clone())
     }
     fn service(&mut self, operation: &str, args: &Value) -> Result<Value, AppError> {
+        if let Some(result) = self.workspace_read(operation, args) {
+            return result;
+        }
+        if operation == "ui.onboarding.complete" {
+            let conn = self
+                .book
+                .as_ref()
+                .ok_or_else(|| AppError::new("internal_error", "book is closed"))?
+                .connection();
+            return self.backends.onboard(conn, args, &SetupSources);
+        }
         if kassiber_chain::probes::KINDS.contains(&operation) {
             use kassiber_net::{Gate, Ledger, Offline};
             let args = serde_json::from_str::<serde_json::Value>(

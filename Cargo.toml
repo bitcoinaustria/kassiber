@@ -32,6 +32,7 @@ members = [
   "crates/xlsx",
   "crates/reports",
   "crates/wallets",
+  "crates/workspace",
   "tax-engine/core",
   "tax-engine/python",
 ]

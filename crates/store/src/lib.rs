@@ -1204,7 +1204,10 @@ fn has_core_schema(connection: &Connection) -> Result<bool> {
     for (table, required) in [
         ("settings", &["key", "value"][..]),
         ("workspaces", &["id", "label"]),
-        ("profiles", &["id", "workspace_id", "label", "fiat_currency"]),
+        (
+            "profiles",
+            &["id", "workspace_id", "label", "fiat_currency"],
+        ),
     ] {
         let mut statement = connection
             .prepare(&format!("PRAGMA table_info({table})"))

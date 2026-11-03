@@ -92,7 +92,11 @@ pub(super) fn execute(
                 );
             }
             if text(pair, "kind") != "journal-derived" {
-                let ranks = rows(conn, &queue(conn, "", "", "", current)?, [scope.profile_id])?;
+                let ranks = rows(
+                    conn,
+                    &queue_items(conn, "", "", "", current)?,
+                    [scope.profile_id],
+                )?;
                 if let Some(rank) = ranks.iter().find(|rank| val(rank, "id") == val(&row, "id")) {
                     set(
                         &mut payload,

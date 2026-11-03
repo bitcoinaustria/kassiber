@@ -10,6 +10,10 @@ use kassiber_store::rusqlite::{params, types::Value as SqlValue};
 use std::collections::{BTreeMap, BTreeSet};
 #[path = "backend_desktop.rs"]
 mod desktop;
+/// `registered_capabilities(kind).to_wire_dict()` for a Lightning adapter kind.
+pub use desktop::capabilities as lightning_capabilities;
+#[path = "onboarding.rs"]
+mod onboarding;
 #[path = "backend_output.rs"]
 mod output;
 

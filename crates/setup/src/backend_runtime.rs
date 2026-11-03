@@ -430,6 +430,10 @@ impl Config {
             default_backend,
         })
     }
+    /// `runtime_config["bootstrap_default_backend"]`.
+    pub(crate) fn bootstrap_default(&self) -> &str {
+        &self.bootstrap_default
+    }
     pub fn merge(&mut self, conn: &Connection) -> Result<(), AppError> {
         super::backends::merge(conn, self)
     }

@@ -4,7 +4,12 @@ use kassiber_envelope::AppError;
 use kassiber_pyjson::Value;
 use kassiber_runtime::store::Book;
 
-pub const COMMANDS: &[&str] = &["workspaces.list", "workspaces.create"];
+pub const COMMANDS: &[&str] = &[
+    "workspaces.list",
+    "workspaces.create",
+    "health",
+    "next-actions",
+];
 pub fn execute(book: &mut dyn Book, command: &str, args: &Namespace) -> Result<Value, AppError> {
     book.service(
         command,

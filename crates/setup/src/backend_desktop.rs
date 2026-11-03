@@ -149,7 +149,7 @@ fn cookie_policy(kind: &str, url: &str, config: &Value) -> Result<()> {
     }
     Ok(())
 }
-fn capabilities(kind: &str) -> Value {
+pub fn capabilities(kind: &str) -> Value {
     dict(
         [
             "nodeSnapshot",

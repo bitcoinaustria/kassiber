@@ -808,7 +808,7 @@ pub(super) fn execute(
         add(stats_of(stats, segment), tx);
     }
     let current = current(conn, scope)?;
-    let queue_sql = queue(conn, &wallet, &since, &until, current)?;
+    let queue_sql = queue_items(conn, &wallet, &since, &until, current)?;
     let counts = rows(
         conn,
         &format!("SELECT queue_leg.item_rank AS rank,COUNT(DISTINCT queue_leg.item_key) AS count FROM ({queue_sql}) queue_leg GROUP BY queue_leg.item_rank"),
@@ -988,7 +988,7 @@ fn activity(
     if !paired.is_empty() {
         let ranks = rows(
             conn,
-            &queue(conn, wallet, since, until, current)?,
+            &queue_items(conn, wallet, since, until, current)?,
             params_from_iter(queue_args(scope, wallet, since, until)),
         )?;
         let ranks: BTreeMap<String, i64> = ranks

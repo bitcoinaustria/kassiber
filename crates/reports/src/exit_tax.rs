@@ -262,6 +262,30 @@ pub(super) fn report(
     args: &Value,
     sources: &dyn kassiber_setup::Sources,
 ) -> Result<Value> {
+    inventory(conn, workspace, profile, args, sources, None)
+}
+
+/// `compute_deemed_disposal` over a caller's BTC/L-BTC journal entries with
+/// no holdings or latest-rate fallbacks, as the overview's tax-free balance
+/// passes it. Only the inventory walk and cached quotes apply.
+pub fn overview_inventory(
+    conn: &Connection,
+    profile: &Value,
+    entries: Vec<Value>,
+    sources: &dyn kassiber_setup::Sources,
+) -> Result<Value> {
+    let empty = dict::<&str>([]);
+    inventory(conn, &empty, profile, &empty, sources, Some(entries))
+}
+
+fn inventory(
+    conn: &Connection,
+    workspace: &Value,
+    profile: &Value,
+    args: &Value,
+    sources: &dyn kassiber_setup::Sources,
+    supplied: Option<Vec<Value>>,
+) -> Result<Value> {
     let is_at = kassiber_pytext::strip(&text(profile, "tax_country")).to_lowercase() == "at";
     let fiat = if truthy(value(profile, "fiat_currency")) {
         text(profile, "fiat_currency").to_uppercase()
@@ -269,8 +293,12 @@ pub(super) fn report(
         "EUR".into()
     };
     let (day, cutoff) = departure(conn, args, sources, is_at)?;
-    let entries = rows(conn,"SELECT e.*,w.label AS wallet_label FROM journal_entries e LEFT JOIN wallets w ON w.id=e.wallet_id WHERE e.profile_id=? ORDER BY e.occurred_at ASC,e.created_at ASC,e.id ASC",[text(profile,"id")])?;
-    for row in &entries {
+    let overview = supplied.is_some();
+    let entries = match supplied {
+        Some(entries) => entries,
+        None => rows(conn,"SELECT e.*,w.label AS wallet_label FROM journal_entries e LEFT JOIN wallets w ON w.id=e.wallet_id WHERE e.profile_id=? ORDER BY e.occurred_at ASC,e.created_at ASC,e.id ASC",[text(profile,"id")])?,
+    };
+    for row in entries.iter().filter(|_| !overview) {
         for field in [
             "fiat_value",
             "unit_cost",
@@ -282,11 +310,28 @@ pub(super) fn report(
         }
     }
     let mut holdings: Vec<Value> = Vec::new();
-    for row in rows(conn,"SELECT wallet_id,wallet_label,account_code,asset,quantity,cost_basis FROM journal_wallet_holdings WHERE profile_id=?",[text(profile,"id")])? {
-        exact(&row,"cost_basis")?;
-        if let Some(previous) = holdings.iter_mut().find(|r| ["wallet_id","wallet_label","account_code","asset"].iter().all(|k| value(r,k) == value(&row,k))) { *previous = row; } else { holdings.push(row); }
+    let stored = if overview {
+        Vec::new()
+    } else {
+        rows(conn,"SELECT wallet_id,wallet_label,account_code,asset,quantity,cost_basis FROM journal_wallet_holdings WHERE profile_id=?",[text(profile,"id")])?
+    };
+    for row in stored {
+        exact(&row, "cost_basis")?;
+        if let Some(previous) = holdings.iter_mut().find(|r| {
+            ["wallet_id", "wallet_label", "account_code", "asset"]
+                .iter()
+                .all(|k| value(r, k) == value(&row, k))
+        }) {
+            *previous = row;
+        } else {
+            holdings.push(row);
+        }
     }
-    let fallback = fallback_rates(conn, profile, cutoff)?;
+    let fallback = if overview {
+        BTreeMap::new()
+    } else {
+        fallback_rates(conn, profile, cutoff)?
+    };
     let dest = destination(value(args, "destination"))?;
     if !is_at && truthy(value(profile, "tax_long_term_days")) {
         artifact_csv::history_limit(value(profile, "tax_long_term_days")).map_err(|e| {

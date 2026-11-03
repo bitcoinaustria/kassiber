@@ -37,6 +37,7 @@ mod test_kinds;
 mod transactions;
 mod transfers;
 mod wallets;
+mod workspace_reads;
 
 use std::io::{Read, Write};
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -88,6 +89,7 @@ pub struct DaemonConfig {
 pub fn supported_kinds() -> Vec<&'static str> {
     let mut kinds = vec![SUPPORTED_KINDS[0]];
     kinds.extend(services::kinds().filter(|k| offline::KINDS.contains(k)));
+    kinds.extend(workspace_reads::OVERVIEW_KINDS);
     kinds.extend(transactions::KINDS);
     kinds.extend(
         reports::KINDS
@@ -148,10 +150,11 @@ pub fn supported_kinds() -> Vec<&'static str> {
     kinds.extend(transfers::KINDS);
     kinds.extend(services::kinds().filter(|k| views::KINDS.contains(k)));
     kinds.extend(services::kinds().filter(|k| networks::KINDS.contains(k)));
+    kinds.extend(services::kinds().filter(|k| *k == "ui.profiles.snapshot"));
+    kinds.push(workspace_reads::ONBOARDING_KIND);
     kinds.extend(services::kinds().filter(|k| {
         profiles::KINDS.contains(k)
             && [
-                "ui.profiles.snapshot",
                 "ui.profiles.create",
                 "ui.profiles.rename",
                 "ui.profiles.update",
@@ -166,6 +169,7 @@ pub fn supported_kinds() -> Vec<&'static str> {
     kinds.extend(settings::KINDS);
     kinds.push("ui.freshness.run");
     kinds.extend(freshness::product::CONTROL_KINDS);
+    kinds.push(workspace_reads::HEALTH_KIND);
     kinds.push("ui.workspace.freshness.run");
     kinds.extend(services::kinds().filter(|k| workspaces::KINDS.contains(k)));
     kinds.extend(
@@ -175,6 +179,7 @@ pub fn supported_kinds() -> Vec<&'static str> {
     kinds.extend(projects::KINDS);
     kinds.extend(backup::KINDS);
     kinds.extend(secrets::KINDS);
+    kinds.extend(workspace_reads::ACTION_KINDS);
     kinds.extend(
         wallets::KINDS
             .iter()
@@ -764,6 +769,17 @@ impl Daemon {
         }
         if projects::KINDS.contains(&kind_text.as_str()) {
             return projects::handle(self, &kind_text, args.as_ref(), &request_id);
+        }
+        if workspace_reads::handles(&kind_text) {
+            if let Some(locked) = self.open_lazily(&request_id)? {
+                return Ok((Some(locked), false));
+            }
+            let payload =
+                workspace_reads::execute(self.book_mut()?.as_mut(), &kind_text, args.as_ref())?;
+            return Ok((
+                Some(with_request_id(success(&kind_text, payload), &request_id)),
+                false,
+            ));
         }
         if documents::KINDS.contains(&kind_text.as_str()) {
             if let Some(locked) = self.open_lazily(&request_id)? {

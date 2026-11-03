@@ -267,6 +267,131 @@ fn current(conn: &Connection, scope: &Scope<'_>) -> Result<bool> {
     let result = rows(conn, &format!("SELECT CASE WHEN (SELECT COUNT(*) FROM transactions WHERE profile_id=p.id AND excluded=0)=0 THEN 1 ELSE COALESCE(p.last_processed_at,'')<>'' AND p.last_processed_tx_count=(SELECT COUNT(*) FROM transactions WHERE profile_id=p.id AND excluded=0) AND p.journal_input_version=p.last_processed_input_version AND {} END AS current FROM profiles p WHERE p.id=?",kassiber_store::semantics::current_sql("p")), [scope.profile_id])?;
     Ok(result.first().is_some_and(|r| truthy(&val(r, "current"))))
 }
+/// `transaction_review_queue_counts(conn, profile_id)` over the whole book.
+pub fn review_queue_counts(conn: &Connection, scope: &Scope<'_>) -> Result<Value> {
+    let current = current(conn, scope)?;
+    let counts = rows(
+        conn,
+        &format!(
+            "SELECT queue_leg.item_rank AS rank,COUNT(DISTINCT queue_leg.item_key) AS count FROM ({}) queue_leg GROUP BY queue_leg.item_rank",
+            queue_items(conn, "", "", "", current)?
+        ),
+        params_from_iter(queue_args(scope, "", "", "")),
+    )?;
+    let count = |rank: i64| {
+        counts
+            .iter()
+            .find(|row| num(row, "rank") == rank)
+            .map_or(0, |row| num(row, "count"))
+    };
+    let (review, pending, failed) = (count(3), count(1), count(2));
+    Ok(dict([
+        ("review", review.into()),
+        ("pending", pending.into()),
+        ("failed", failed.into()),
+        ("total", (review + pending + failed).into()),
+        ("pairs_grouped", Value::Bool(current)),
+        ("scope", s(if current {
+            "all transactions in the active book, any date; the two legs of a reviewed transfer or swap count as one item"
+        } else {
+            "all transactions in the active book, any date; journals are not current, so each leg of a transfer or swap counts separately until they are processed"
+        })),
+        ("definitions", dict([
+            ("review", s("Marked for review (review/needs_review/blocked) or held in journal quarantine; needs a decision before reports are trustworthy.")),
+            ("pending", s("Marked pending by the user, or, without a status the user set, no confirmation timestamp is recorded: unconfirmed on-chain, or imported from a ledger/CSV without a confirmation time. It is not a quarantine and does not by itself block reports.")),
+            ("failed", s("Marked failed by its import or source.")),
+        ])),
+    ]))
+}
+/// Overview rows (`_transactions`, `_activity_transactions`): newest-first
+/// recent rows with tags, or the uncapped oldest-first BTC/L-BTC activity
+/// with each leg's running balance and cost basis.
+pub enum OverviewRows<'a> {
+    Recent,
+    /// Running `(balance_btc, cost_basis)` per transaction id.
+    Activity(&'a dyn Fn(&str) -> (f64, f64)),
+}
+pub fn overview_rows(
+    conn: &Connection,
+    scope: &Scope<'_>,
+    shape: OverviewRows<'_>,
+) -> Result<Vec<Value>> {
+    let activity = matches!(shape, OverviewRows::Activity(_));
+    let sql = if activity {
+        format!("SELECT {COLUMNS},{} AS payment_method {FROM} WHERE t.profile_id=? AND t.asset IN ('BTC','LBTC') AND COALESCE(t.excluded,0)=0 ORDER BY t.occurred_at ASC,t.created_at ASC,t.id ASC", sql::PAYMENT)
+    } else {
+        format!("SELECT {COLUMNS},{} AS payment_method {FROM} WHERE t.profile_id=? ORDER BY t.occurred_at DESC,t.created_at DESC,t.id DESC LIMIT 40", sql::PAYMENT)
+    };
+    let mut raw = rows(conn, &sql, [scope.profile_id])?;
+    let current = current(conn, scope)?;
+    let mut pairs = BTreeMap::new();
+    if activity {
+        // Python's 400-row chunks let a later chunk replace a leg's pair.
+        for chunk in raw.chunks(400) {
+            pairs.extend(render::pairs(conn, chunk, current)?);
+        }
+    } else {
+        pairs = render::pairs(conn, &raw, current)?;
+    }
+    if let OverviewRows::Activity(running) = &shape {
+        for row in &mut raw {
+            let (balance, basis) = running(text(row, "id"));
+            set(row, "running_balance_btc", Value::Float(balance));
+            set(row, "running_cost_basis_eur", Value::Float(basis));
+        }
+    }
+    let mut last_leg: BTreeMap<&str, &Value> = BTreeMap::new();
+    if activity {
+        for row in &raw {
+            if let Some(pair) = pairs.get(text(row, "id")) {
+                last_leg.insert(text(pair, "pair_id"), row);
+            }
+        }
+    }
+    let ranks = rows(
+        conn,
+        &queue_items(conn, "", "", "", current)?,
+        params_from_iter(queue_args(scope, "", "", "")),
+    )?;
+    let ranks: BTreeMap<_, _> = ranks
+        .iter()
+        .map(|r| (text(r, "id").to_owned(), num(r, "item_rank")))
+        .collect();
+    let mut seen = BTreeSet::new();
+    let mut output = Vec::new();
+    for row in &raw {
+        let pair = pairs.get(text(row, "id"));
+        let mut shown = row;
+        if let Some(pair) = pair {
+            if !seen.insert(text(pair, "pair_id")) {
+                continue;
+            }
+            if activity {
+                shown = last_leg.get(text(pair, "pair_id")).copied().unwrap_or(row);
+            }
+        }
+        let mut payload = render::row_with(conn, shown, pair, !activity)?;
+        if pair.is_some_and(|p| text(p, "kind") != "journal-derived") {
+            if let Some(rank) = ranks.get(text(&payload, "id")) {
+                set(
+                    &mut payload,
+                    "queueStatus",
+                    s(match rank {
+                        3 => "review",
+                        2 => "failed",
+                        1 => "pending",
+                        _ => "completed",
+                    }),
+                );
+            }
+        }
+        output.push(payload);
+    }
+    if !activity {
+        output.truncate(20);
+    }
+    Ok(output)
+}
 fn group(current: bool) -> &'static str {
     if current {
         sql::GROUP
@@ -274,7 +399,7 @@ fn group(current: bool) -> &'static str {
         "'tx:' || t.id"
     }
 }
-fn queue(
+fn queue_items(
     conn: &Connection,
     wallet: &str,
     since: &str,
@@ -570,7 +695,7 @@ fn page(conn: &Connection, scope: &Scope<'_>, kind: &str, args: &Value) -> Resul
             return Err(invalid("order must be asc or desc").with_details(dict([("order", order)])))
         }
     };
-    let queue_sql = queue(conn, &wallet, &since, &until, current)?;
+    let queue_sql = queue_items(conn, &wallet, &since, &until, current)?;
     let queue_bind = queue_args(scope, &wallet, &since, &until);
     let mut conditions = vec!["t.profile_id=?".to_owned(), wallet_sql(&wallet)];
     let mut bind = vec![SqlValue::Text(scope.profile_id.into())];

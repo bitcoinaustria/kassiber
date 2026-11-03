@@ -17,7 +17,7 @@ mod cross_check_number;
 mod cross_check_request;
 mod cross_check_xlsx;
 mod desktop;
-mod exit_tax;
+pub mod exit_tax;
 mod exit_xlsx;
 pub mod export;
 pub mod export_completion;

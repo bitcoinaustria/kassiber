@@ -209,7 +209,21 @@ fn chain_network(row: &Value) -> (String, String) {
     (chain.into(), network.into())
 }
 pub(super) fn row(conn: &Connection, row: &Value, pair: Option<&Value>) -> Result<Value> {
-    let tags=rows(conn,"SELECT tags.label FROM transaction_tags tt JOIN tags ON tags.id=tt.tag_id WHERE tt.transaction_id=? ORDER BY tags.code ASC",[text(row,"id")])?;
+    row_with(conn, row, pair, true)
+}
+/// `_transaction_row_to_ui`; overview activity rows pass no metadata tags and
+/// carry their running balance and cost basis.
+pub(super) fn row_with(
+    conn: &Connection,
+    row: &Value,
+    pair: Option<&Value>,
+    with_tags: bool,
+) -> Result<Value> {
+    let tags = if with_tags {
+        rows(conn,"SELECT tags.label FROM transaction_tags tt JOIN tags ON tags.id=tt.tag_id WHERE tt.transaction_id=? ORDER BY tags.code ASC",[text(row,"id")])?
+    } else {
+        Vec::new()
+    };
     let tags: Vec<_> = tags
         .iter()
         .map(|t| val(t, "label"))
@@ -422,6 +436,19 @@ fn present(row: &Value, pair: Option<&Value>, tags: Vec<Value>) -> Value {
     }
     if truthy(&val(row, "occurred_at")) {
         set(&mut output, "occurredAt", val(row, "occurred_at"));
+    }
+    for (key, field) in [
+        ("running_balance_btc", "balanceBtc"),
+        ("running_cost_basis_eur", "costBasisEur"),
+    ] {
+        if let Some(value) = get(row, key) {
+            let number = match value {
+                Value::Float(n) => *n,
+                Value::Int(n) => i64::try_from(n.clone()).unwrap_or_default() as f64,
+                _ => 0.0,
+            };
+            set(&mut output, field, Value::Float(number));
+        }
     }
     output
 }
