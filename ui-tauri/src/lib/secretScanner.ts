@@ -5,24 +5,28 @@ const SEPARATORS = /[^A-Za-z0-9]+/;
 const KEY_PARTS = /(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|(?<=[0-9])(?=[A-Za-z])/;
 const VERSION = /[_-]v[0-9]+_*$/i;
 const words = (text: string) => text.split(/\s+/).filter(Boolean);
-// Secret words match whole identifier words, never raw substrings, so `prune`,
-// `dnsseed`, `bypass`, `passed` and `tokenizer` remain ordinary vocabulary.
+// Secret words match identifier words. A part that does not segment into known
+// words is secret when it contains one outside a listed ordinary word, so
+// `prune`, `dnsseed`, `bypass`, `passed` and `tokenizer` remain vocabulary.
 const SECRET_WORDS = new Set(words(`authorization bearer blinding cookie cookies credential credentials descriptor
-macaroon mnemonic otp pass passcode passphrase passwd password pin pw pwd rpcauth rune secret seed token
-totp wif xprv`));
+macaroon mfa mnemonic otp pass passcode passphrase passwd password pin pw pwd rpcauth rune secret seed sessid
+token totp twofa wif xprv`));
 // Short names count only as a whole identifier part (`user_id`, not `author`
-// or `sighash`); the shortest only as the final word (`db_pw`, not `pw_hash`).
-const PART_NAMES = new Set(words("auth jwt session sid sig signature user"));
-const LAST_NAMES = new Set(words("otp pin pw totp"));
-const WEAK_NAMES = new Set(["pass", "user", "auth"]);
+// or `sighash`); the shortest only as the final word (`db_pw`, not `pw_hash`),
+// though a version or encoding modifier may follow (`pwold`, `pin_new`).
+const PART_NAMES = new Set(words("auth jwt session sid sig sign signature user"));
+const LAST_NAMES = new Set(words("mfa otp pin pw sign totp twofa"));
+const MODIFIERS = new Set(words("backup confirm copy enc encoded hex new old plain raw repeat value"));
+const WEAK_NAMES = new Set(["pass", "user", "auth", "mfa", "twofa"]);
 // Adjacent words that name a secret together, spelled apart or concatenated.
 const COMPOUNDS = new Map(([
-  ["api", "key"], ["api", "secret"], ["api", "token"], ["auth", "code"], ["auth", "header"], ["blinding", "key"],
-  ["encryption", "key"], ["master", "key"], ["mfa", "code"], ["otp", "code"], ["pin", "code"], ["priv", "key"],
-  ["private", "key"], ["recovery", "phrase"], ["scan", "key"], ["scan", "private"], ["secret", "key"],
+  ["access", "key"], ["api", "key"], ["api", "secret"], ["api", "token"], ["auth", "code"], ["auth", "header"],
+  ["auth", "key"], ["backup", "code"], ["blinding", "key"], ["encryption", "key"], ["hmac", "key"],
+  ["master", "key"], ["mfa", "code"], ["otp", "code"], ["pin", "code"], ["priv", "key"], ["private", "key"],
+  ["recovery", "code"], ["recovery", "phrase"], ["scan", "key"], ["scan", "private"], ["secret", "key"],
   ["seed", "phrase"], ["seed", "words"], ["session", "id"], ["session", "key"], ["signing", "key"],
   ["silent", "payment"], ["silent", "payments"], ["sp", "descriptor"], ["sp", "scan"], ["sp", "spend"],
-  ["spend", "key"], ["totp", "code"], ["twofa", "code"], ["verification", "code"],
+  ["spend", "key"], ["subscription", "key"], ["totp", "code"], ["twofa", "code"], ["verification", "code"],
 ] as const).map(([first, second]) => [`${first} ${second}`, first + second]));
 const COMPOUND_WORDS = new Set(COMPOUNDS.values());
 const METADATA = new Set(words("disabled enabled fd file hint path statistics stdin"));
@@ -36,15 +40,25 @@ scan server service signing silent sp spend str test text total twofa v value ve
 x azure binance bitfinex bitpanda bitstamp blockstream btcpay cln coinbase core discord electrs fulcrum gcp
 gitlab google kassiber kraken lightning mempool mongo nostr postgres redis slack smtp strike stripe telegram
 umbrel`), ...COUNT_WORDS, ...METADATA]);
-const PLURALS = new Set([...SECRET_WORDS, ...PART_NAMES].filter((word) => !word.endsWith("s")).map((word) => word + "s"));
+const PLURALS = new Set([...SECRET_WORDS, ...PART_NAMES, ...COMPOUND_WORDS].filter((word) => !word.endsWith("s")).map((word) => word + "s"));
 const VOCAB = new Set([...SECRET_WORDS, ...PART_NAMES, ...QUALIFIERS, ...COMPOUND_WORDS, ...PLURALS]);
 const SIZES = [...new Set([...VOCAB].map((word) => word.length))].sort((a, b) => b - a);
 const byLength = (a: string, b: string) => b.length - a.length || (a < b ? -1 : a > b ? 1 : 0);
-// An unknown prefix before a distinctive secret word still names it
-// (`krakenpassword`, `jsessionid`); an unknown suffix (`tokenizer`) does not.
-const STRONG = [...new Set([...[...SECRET_WORDS].filter((word) => word.length >= 5), "pwd", "xprv", ...COMPOUND_WORDS])].sort(byLength);
+// Fail closed: an unknown prefix or suffix keeps a secret word secret
+// (`krakenpassword`, `btcpass`, `passwordbackup`), unless the word sits inside
+// one of these ordinary words (`tokenizer`, `bypass`, `prune`, `spinner`).
+const ORDINARY = new Set(words(`bypass compass dnsseed encompass overpass passable passage passed passenger passerby
+passing passive passover passport passthrough passwordless prune secretar seeded seeder seednode spin surpass
+swift tokeniz trespass underpass wifi`));
+const EMBEDDED = [...new Set([...SECRET_WORDS, ...COMPOUND_WORDS])].sort(byLength);
+const CONTAINERS = new Map(EMBEDDED.map((word) => [word, [...ORDINARY].sort().flatMap((ordinary) => {
+  const found: [string, number][] = [];
+  for (let offset = 0; offset + word.length <= ordinary.length; offset += 1) if (ordinary.startsWith(word, offset)) found.push([ordinary, offset]);
+  return found;
+})]));
+const NAMED = new Set([...SECRET_WORDS, ...COMPOUND_WORDS, ...PLURALS]);
 const TWOFA = /2fa/gi;
-const HINT = new RegExp([...new Set([...SECRET_WORDS, ...PART_NAMES, "2fa", "code", "key", "mfa", "phrase", "recovery", "scan", "silent", "spend", "twofa"])].sort().join("|"), "i");
+const HINT = new RegExp([...new Set([...SECRET_WORDS, ...PART_NAMES, "2fa", "code", "key", "phrase", "recovery", "scan", "silent", "spend"])].sort().join("|"), "i");
 const segments = new Map<string, string[]>();
 const keyWordCache = new Map<string, [word: string, whole: boolean][][]>();
 
@@ -61,7 +75,7 @@ function cached<T>(cache: Map<string, T>, key: string, compute: () => T): T {
 function segment(part: string): string[] {
   return cached(segments, part, () => {
     if (VOCAB.has(part)) return [part];
-    if (part.length > 40) return strongSegment(part);
+    if (part.length > 40) return embeddedSegment(part);
     // Fewest words; ties keep the longest leading word.
     const best: ([count: number, end: number] | undefined)[] = Array.from({ length: part.length + 1 }, () => undefined);
     best[part.length] = [0, part.length];
@@ -73,21 +87,35 @@ function segment(part: string): string[] {
         if (following && VOCAB.has(part.slice(start, end)) && (!current || following[0] + 1 < current[0])) best[start] = [following[0] + 1, end];
       }
     }
-    if (!best[0]) return strongSegment(part);
+    if (!best[0]) return embeddedSegment(part);
     const pieces: string[] = [];
     for (let start = 0; start < part.length; start = best[start]![1]) pieces.push(part.slice(start, best[start]![1]));
     return pieces;
   });
 }
 
-function strongSegment(part: string): string[] {
-  for (const word of STRONG) {
-    const start = part.lastIndexOf(word);
+function knownPrefix(part: string, end: number): boolean {
+  // An ordinary word counts only at the start or after known words:
+  // `pruneheight` and `mytokenizer`, not `ftprune` (`ftp` + `rune`).
+  return !end || (end <= 40 && segment(part.slice(0, end)).every((piece) => VOCAB.has(piece)));
+}
+
+function embeddedSegment(part: string): string[] {
+  // Split an unknown part around its last secret word outside ordinary words.
+  for (const word of EMBEDDED) {
+    const containers = CONTAINERS.get(word)!;
+    let start = part.lastIndexOf(word);
+    while (start >= 0 && containers.some(([ordinary, offset]) => start >= offset && part.startsWith(ordinary, start - offset) && knownPrefix(part, start - offset))) {
+      start = start > 0 ? part.lastIndexOf(word, start - 1) : -1;
+    }
+    if (start < 0) continue;
     const rest = part.slice(start + word.length);
-    if (start <= 0 || rest.length > 40) continue;
-    if (rest === "s") return [part.slice(0, start), word + "s"];
-    const tail = rest ? segment(rest) : [];
-    if (tail.every((piece) => VOCAB.has(piece))) return [part.slice(0, start), word, ...tail];
+    const head = start ? [part.slice(0, start)] : [];
+    if (rest === "s") return [...head, word + "s"];
+    const tail = rest ? (rest.length <= 40 ? segment(rest) : [rest]) : [];
+    // `rootpwdconfirm` names `pwd`, not a non-final `otp`.
+    if (LAST_NAMES.has(word) && !tail.every((piece) => MODIFIERS.has(piece))) continue;
+    return [...head, word, ...tail];
   }
   return [part];
 }
@@ -112,7 +140,7 @@ function keyReadings(value: string): Word[][] {
       // Identifiers can hold 100,000 parts: append without spreading arguments.
       for (const piece of pieces) split.push(piece);
       const segmented = parts.length > 1 ? segment(parts.join("")) : [];
-      if (segmented.length && segmented.every((piece) => VOCAB.has(piece))) for (const piece of segmented) joined.push([piece, segmented.length === 1]);
+      if (segmented.length && (segmented.every((piece) => VOCAB.has(piece)) || segmented.some((piece) => NAMED.has(piece)))) for (const piece of segmented) joined.push([piece, segmented.length === 1]);
       else for (const piece of pieces) joined.push(piece);
     }
     const same = joined.length === split.length && joined.every(([word, whole], index) => word === split[index][0] && whole === split[index][1]);
@@ -123,20 +151,23 @@ function keyReadings(value: string): Word[][] {
 function readingNames(words: Word[]): string[] {
   if (!words.length || METADATA.has(words.at(-1)![0])) return [];
   const names: string[] = [];
+  // Whether only modifiers follow each word, so a final name may carry one.
+  const final = words.map(() => true);
+  for (let index = words.length - 2; index >= 0; index -= 1) final[index] = final[index + 1] && MODIFIERS.has(words[index + 1][0]);
   words.forEach(([word, whole], index) => {
     if (index + 1 < words.length) {
       const second = words[index + 1][0];
       const pair = COMPOUNDS.get(`${word} ${second}`) ?? (second.endsWith("s") ? COMPOUNDS.get(`${word} ${second.slice(0, -1)}`) : undefined);
       if (pair) names.push(pair);
     }
-    if (COMPOUND_WORDS.has(word)) {
-      names.push(word);
+    const base = PLURALS.has(word) && !SECRET_WORDS.has(word) ? word.slice(0, -1) : word;
+    if (COMPOUND_WORDS.has(base)) {
+      names.push(base);
       return;
     }
-    const base = PLURALS.has(word) && !SECRET_WORDS.has(word) ? word.slice(0, -1) : word;
     if (["user", "auth"].includes(base) && base !== word) return;
     if (PART_NAMES.has(base) && !whole) return;
-    if (LAST_NAMES.has(base) && index + 1 < words.length) return;
+    if (LAST_NAMES.has(base) && !final[index]) return;
     if (SECRET_WORDS.has(base) || PART_NAMES.has(base)) names.push(base);
   });
   return names;
@@ -152,7 +183,11 @@ const COUNT_VALUE = /^[0-9]{1,9}(?:\.[0-9]{1,9})?$/;
 const LITERAL = /-?[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?(?![A-Za-z0-9_.])|(?:null|true|false|None|True|False)(?![A-Za-z0-9_.])/y;
 
 function countName(key: string, name: string): boolean {
-  return keyReadings(key).some((words) => words.some(([word]) => COUNT_WORDS.has(word) || (word === name + "s" && !SECRET_WORDS.has(word))));
+  // A count word or the name's plural, whole or compound (`descriptors`,
+  // `disable_private_keys`).
+  const plural = name + "s";
+  return keyReadings(key).some((words) => words.some(([word], index) => COUNT_WORDS.has(word) || (word === plural && !SECRET_WORDS.has(word))
+    || (index > 0 && words[index - 1][0] + word === plural)));
 }
 
 // URL delimiters establish credential context regardless of scheme spelling.
@@ -309,22 +344,11 @@ function keyedSpans(text: string, offsets?: number[]): Span[] {
   let previous: RegExpExecArray | undefined;
   let lineStart = 0;
   let scanned = 0;
-  // Per-line facts, computed once however many keys share the line.
   let lineSeen = -1;
-  let keyLineEnd = 0;
   let indent = 0;
-  let continued = 0;
-  let continuedSeen = -1;
-  let yaml = 0;
-  let yamlSeen = -1;
-  const lineYamlEnd = (pos: number): number => {
-    if (pos > keyLineEnd) return yamlEnd(text, pos);
-    if (yamlSeen !== lineStart) {
-      yaml = yamlEnd(text, pos);
-      yamlSeen = lineStart;
-    }
-    return yaml;
-  };
+  let lines: Lines | undefined;
+  const table = () => (lines ??= new Lines(text));
+  const lineYamlEnd = (pos: number) => table().yamlEnd(pos);
   for (const match of text.matchAll(IDENTIFIER)) {
     if (match.index < cursor) continue;
     const key = match[0];
@@ -348,7 +372,6 @@ function keyedSpans(text: string, offsets?: number[]): Span[] {
     for (; scanned < match.index; scanned += 1) if (LINES.includes(text[scanned])) lineStart = scanned + 1;
     if (lineSeen !== lineStart) {
       lineSeen = lineStart;
-      keyLineEnd = lineEnd(text, match.index + key.length);
       indent = lineIndent(text, lineStart);
     }
     while (headEnd < match.index && headEnd >= 0) [headStart, headEnd, credentialContext] = heads.next().value ?? noHead;
@@ -402,15 +425,16 @@ function keyedSpans(text: string, offsets?: number[]): Span[] {
       replacement = start === pos ? delimiter + "[redacted]" + (closed ? delimiter : "") : "[redacted]";
       resume = end;
     } else {
+      const argv = key.startsWith("-") || inCommand;
       LITERAL.lastIndex = pos;
       const literal = LITERAL.exec(text);
       const literalEnd = literal ? pos + literal[0].length : -1;
-      if (literal && literalEndsValue(text, literalEnd, indent)) {
-        // A bare count after a count-shaped name (`max_tokens: 16`,
-        // `token_ttl=3600`) and JSON null, booleans, sampling seeds and
-        // counts are metadata. A string value never is.
+      if (literal && literalEndsValue(text, literalEnd, indent, table(), argv)) {
+        // A bare count or boolean after a count-shaped name
+        // (`max_tokens: 16`, `descriptors=true`) and JSON null, booleans,
+        // sampling seeds and counts are metadata. A string value never is.
         const value = literal[0];
-        if ((COUNT_VALUE.test(value) && countName(key, name)) || (keyQuote && (
+        if (((COUNT_VALUE.test(value) || ["true", "false", "True", "False"].includes(value)) && countName(key, name)) || (keyQuote && (
           ["null", "true", "false", "None", "True", "False"].includes(value)
           || name === "seed" || countName(key, name)))) {
           cursor = literalEnd;
@@ -433,15 +457,7 @@ function keyedSpans(text: string, offsets?: number[]): Span[] {
       const tokenEnd = end;
       // A plain value owns lines indented deeper than its line (a YAML or
       // shell continuation), so neither exceptions nor masks stop at the first.
-      let line: number;
-      if (pos > keyLineEnd) line = continuedEnd(text, pos, indent);
-      else {
-        if (continuedSeen !== lineStart) {
-          continued = continuedEnd(text, pos, indent);
-          continuedSeen = lineStart;
-        }
-        line = continued;
-      }
+      const line = table().continuedEnd(pos, indent);
       // Exceptions describe the entire value. A familiar first word never
       // licenses the rest of an otherwise unquoted credential.
       const whole = line - pos <= 256 ? text.slice(pos, line).replace(/^[ \t]+|[ \t]+$/g, "") : undefined;
@@ -459,8 +475,8 @@ function keyedSpans(text: string, offsets?: number[]): Span[] {
       } else if (["|", "|-", "|+", ">", ">-", ">+"].includes(token) || "`<".includes(text[pos])) {
         end = lineYamlEnd(pos);
         resume = end;
-      } else if ((key.startsWith("-") || inCommand) && flagValueEnd(text, tokenEnd)) {
-        // Whitespace before a new `-flag` ends an argv value.
+      } else if (argv && flagValueEnd(text, tokenEnd)) {
+        // Whitespace before a known flag ends an argv value.
         end = tokenEnd;
       } else end = line;
       const header = name === "authorization" || (["cookie", "cookies"].includes(name) && !keyQuote && !key.startsWith("-"));
@@ -486,14 +502,20 @@ function lineIndent(text: string, start: number): number {
   }
 }
 
-function literalEndsValue(text: string, start: number, indent: number): boolean {
-  // The literal is the whole value: closers then a record boundary, or
-  // nothing but whitespace through its line and any continuation.
+function literalEndsValue(text: string, start: number, column: number, lines: Lines, argv: boolean): boolean {
+  // The literal is the whole value: closers then a record boundary, nothing
+  // but whitespace through its line and any continuation, or in argv a
+  // following flag or `name=` argument.
   let pos = start;
   while (pos < text.length && ")]}".includes(text[pos])) pos += 1;
   if (pos < text.length && ",;".includes(text[pos])) return valueBoundary(text, pos);
+  const closed = pos > start;
+  const gap = pos;
   while (pos < text.length && " \t".includes(text[pos])) pos += 1;
-  return (pos === text.length || LINES.includes(text[pos])) && continuedEnd(text, pos, indent) === pos;
+  if (pos === text.length) return true;
+  // A closed structure ends its literal; a bare one owns its continuation.
+  if (LINES.includes(text[pos])) return closed || !lines.continues(pos, column);
+  return pos > gap && (closed || (argv && argvBoundary(text, pos)));
 }
 
 function countObject(text: string, start: number): boolean {
@@ -522,7 +544,18 @@ function countObject(text: string, start: number): boolean {
   }
 }
 
-const NEXT_FLAG = /--?[A-Za-z][A-Za-z0-9_.-]*(?=[= \t\r\n\u0085\u2028\u2029]|$)/y;
+// Bitcoin Core's argument-free options. A bare single-dash word can be part of
+// a passphrase (`--passphrase correct -horse battery`), so only these, `-h`,
+// long `--flags`, `-name=` assignments and a letter flag before a `NAME=`
+// argument (`docker run -e NETWORK=mainnet`) end an argv value.
+const CORE_FLAGS = words(`addrinfo blocksonly coinstatsindex daemon daemonwait debug disablewallet discover dns dnsseed
+fixedseeds forcednsseed generate getinfo h help help-debug listen listenonion logips logsourcelocations
+logthreadnames logtimestamps named natpmp netinfo nodebuglogfile peerblockfilters peerbloomfilters
+persistmempool printtoconsole regtest reindex reindex-chainstate rest rpcwait server shrinkdebugfile signet
+stdin stdinrpcpass stdinwalletpassphrase testnet testnet4 txindex upnp version walletbroadcast`);
+const NEXT_FLAG = new RegExp("--[A-Za-z][A-Za-z0-9_.-]*(?=[= \\t\\r\\n\\u0085\\u2028\\u2029]|$)|-[A-Za-z][A-Za-z0-9_.-]*(?==)"
+  + "|-[A-Za-z][ \\t]+(?=[A-Za-z_][A-Za-z0-9_]*=)|-(?:no)?(?:" + CORE_FLAGS.sort(byLength).join("|") + ")(?=[ \\t\\r\\n\\u0085\\u2028\\u2029]|$)", "y");
+const ARGV_ASSIGNMENT = /[A-Za-z_][A-Za-z0-9_.-]*=/y;
 
 function flagValueEnd(text: string, start: number): boolean {
   if (start >= text.length || !" \t".includes(text[start]) || text[start - 1] === "\\") return false;
@@ -530,6 +563,12 @@ function flagValueEnd(text: string, start: number): boolean {
   while (pos < text.length && " \t".includes(text[pos])) pos += 1;
   NEXT_FLAG.lastIndex = pos;
   return NEXT_FLAG.test(text);
+}
+
+function argvBoundary(text: string, pos: number): boolean {
+  NEXT_FLAG.lastIndex = pos;
+  ARGV_ASSIGNMENT.lastIndex = pos;
+  return NEXT_FLAG.test(text) || ARGV_ASSIGNMENT.test(text);
 }
 
 function urlView(original: string): [string, number[] | undefined] {
@@ -661,14 +700,31 @@ function urlCandidateEnd(view: string, original: string, offset: (pos: number) =
       const tail = view.slice(lastAt + 1, gap).split(/[/?#]/, 1)[0];
       // An encoded @ before a bare word (`%40q (ZK…@h`) may be userinfo
       // data, unless a dotted/port host or ordinary words follow.
+      // A line whose first token reaches an @ continues a wrapped password.
       const literal = original.slice(offset(lastAt), offset(lastAt + 1)) === "@";
       let following = gap;
       while (following < end && view[following] !== "@") following += 1;
-      if (clearHost(tail) && (literal || tail.startsWith("[") || /[.:]/.test(tail) || !strongOpaque(view.slice(gap, following)))) return gap;
+      if (clearHost(tail) && (literal || tail.startsWith("[") || /[.:]/.test(tail)
+        || !(strongOpaque(view.slice(gap, following)) || wrappedUserinfo(view, original, offset, gap, end)))) return gap;
     }
     gap += 1;
   }
   return end;
+}
+
+function wrappedUserinfo(view: string, original: string, offset: (pos: number) => number, gap: number, end: number): boolean {
+  if (!LINES.includes(view[gap])) return false;
+  let pos = gap;
+  while (pos < end && SPACE.includes(view[pos])) pos += 1;
+  while (pos < end && view[pos] !== "@" && !(SPACE.includes(view[pos]) && original.slice(offset(pos), offset(pos + 1)) === view[pos])) pos += 1;
+  return pos < end && view[pos] === "@";
+}
+
+function fragmentUserinfo(prefix: string): boolean {
+  // `https://Pw9#Leak@host`: a `#` after a bare token, not a dotted, port or
+  // bracketed host, is credential data before the later @.
+  const boundary = /[/?#]/.exec(prefix);
+  return !!boundary && boundary[0] === "#" && !/[.:[]/.test(prefix.slice(0, boundary.index));
 }
 
 function urlSpans(text: string): Span[] {
@@ -706,7 +762,7 @@ function urlSpans(text: string): Span[] {
       continue;
     }
     const lastAt = view.slice(start, end).lastIndexOf("@") + start;
-    if (publicUrlPrefix(view.slice(start, lastAt), text, offset, start)) {
+    if (publicUrlPrefix(view.slice(start, lastAt), text, offset, start) && !fragmentUserinfo(view.slice(start, lastAt))) {
       pending = -1;
       // A public @handle path cannot license a `handle:password` pair.
       const handle = new RegExp(`^[^/?#${SPACE}]*`).exec(view.slice(lastAt + 1, end))![0];
@@ -743,7 +799,7 @@ function helpValue(value: string): boolean {
 
 function aliasProse(name: string, value: string): boolean {
   // Lowercase passwords remain credentials; exemptions are ordinary status/user prose.
-  return (name === "user" ? ["alice", "bob", "root", "anonymous", "alice logged in"] : name === "auth" ? ["ok", "required", "enabled", "disabled", "none", "expired"] : []).includes(value);
+  return (name === "user" ? ["alice", "bob", "root", "anonymous", "alice logged in"] : ["auth", "mfa", "twofa"].includes(name) ? ["ok", "required", "enabled", "disabled", "none", "expired"] : []).includes(value);
 }
 
 function yamlMarker(text: string, pos: number): boolean {
@@ -907,6 +963,82 @@ function cliSpans(text: string, offsets?: number[]): Span[] {
 }
 
 
+const BREAK = /\r\n|[\r\n\u0085\u2028\u2029]/g;
+
+class Lines {
+  // One record's line facts, built once and on demand. A value's indented
+  // continuation and a YAML block end are lookups instead of scans, so an
+  // indentation staircase stays linear however many keys and lines share one
+  // continuation.
+  private readonly starts = [0];
+  private readonly ends: number[] = [];
+  private depth: number[] = [];
+  private below: number[] = [];
+  private yaml: number[] = [];
+
+  constructor(private readonly text: string) {
+    for (const match of text.matchAll(BREAK)) {
+      this.ends.push(match.index);
+      this.starts.push(match.index + match[0].length);
+    }
+    this.ends.push(text.length);
+  }
+
+  private line(pos: number): number {
+    let low = 0;
+    let high = this.starts.length - 1;
+    while (low < high) {
+      const middle = (low + high + 1) >> 1;
+      if (this.starts[middle] <= pos) low = middle;
+      else high = middle - 1;
+    }
+    // The LF of a CRLF pair is its own empty line to the scanners.
+    return pos <= this.ends[low] ? low : -1;
+  }
+
+  continuedEnd(pos: number, column: number): number {
+    const line = this.line(pos);
+    if (line < 0) return continuedEnd(this.text, pos, column);
+    if (!this.depth.length) {
+      // Plain indents; a blank line (-1) ends every continuation. `below` is
+      // the next shallower line, so each walk descends strictly.
+      for (let index = 0; index < this.starts.length; index += 1) {
+        let indent = this.starts[index];
+        while (indent < this.ends[index] && " \t".includes(this.text[indent])) indent += 1;
+        this.depth.push(indent < this.ends[index] ? indent - this.starts[index] : -1);
+      }
+      const count = this.depth.length;
+      this.below = this.depth.map(() => count);
+      const stack: number[] = [];
+      for (let index = count - 1; index >= 0; index -= 1) {
+        while (stack.length && this.depth[stack.at(-1)!] >= this.depth[index]) stack.pop();
+        if (stack.length) this.below[index] = stack.at(-1)!;
+        stack.push(index);
+      }
+    }
+    let following = line + 1;
+    while (following < this.depth.length && this.depth[following] > column) following = this.below[following];
+    return this.ends[following - 1];
+  }
+
+  continues(pos: number, column: number): boolean {
+    return this.continuedEnd(pos, column) !== lineEnd(this.text, pos);
+  }
+
+  yamlEnd(pos: number): number {
+    const line = this.line(pos);
+    if (line < 0) return yamlEnd(this.text, pos);
+    if (!this.yaml.length) {
+      this.yaml = [...this.ends];
+      for (let index = this.ends.length - 2; index >= 0; index -= 1) {
+        const start = this.starts[index + 1];
+        if (!(start < this.ends[index + 1] && !" \t".includes(this.text[start]))) this.yaml[index] = this.yaml[index + 1];
+      }
+    }
+    return this.yaml[line];
+  }
+}
+
 function continuedEnd(text: string, pos: number, column: number): number {
   let end = lineEnd(text, pos);
   while (end < text.length) {
@@ -970,7 +1102,7 @@ function bareUserinfoSpans(text: string): Span[] {
 
 // Bot and webhook tokens travel in URL paths. Their extent is ambiguous, so
 // the mask runs to the next literal whitespace.
-const PATH_TOKEN = /\/bot(?=[0-9]{3,}:)|hooks\.slack\.com\/services\/[^/ \t\r\n\v\f]+\/[^/ \t\r\n\v\f]+\/|discord(?:app)?\.com\/api\/webhooks\/[0-9]+\/|(?<![A-Za-z0-9_])(?=xox[abposr]-)/gi;
+const PATH_TOKEN = /\/bot(?=[0-9]{3,}:)|hooks\.slack\.com\/services\/[^/ \t\r\n\v\f]+\/[^/ \t\r\n\v\f]+\/|hooks\.slack\.com\/(?:services|workflows|triggers)\/|discord(?:app)?\.com\/api\/(?:v[0-9]+\/)?webhooks\/[0-9]+\/|(?<![A-Za-z0-9_])(?=xox[a-z]-|xapp-)/gi;
 
 function pathTokenSpans(text: string, offsets?: number[]): Span[] {
   const offset = (pos: number) => offsets ? offsets[pos] : pos;

@@ -4,6 +4,7 @@ import stress from "../../../tests/fixtures/secret_redaction_stress_cases.json";
 import fixes5f from "../../../tests/fixtures/secret_redaction_5f_cases.json";
 import fixes5g from "../../../tests/fixtures/secret_redaction_5g_cases.json";
 import fixes5h from "../../../tests/fixtures/secret_redaction_5h_cases.json";
+import fixes5i from "../../../tests/fixtures/secret_redaction_5i_cases.json";
 import scaling from "../../../tests/fixtures/secret_redaction_scaling_cases.json";
 import failClosed from "../../../tests/fixtures/secret_redaction_5e_cases.json";
 import secrets from "../../../tests/fixtures/secret_redaction_cases.json";
@@ -69,10 +70,20 @@ it("scales adversarial secret shapes linearly to 400k characters", () => {
   expect(total(400_000)).toBeLessThan(25 * small + 1_000);
 }, 120_000);
 
+function scaled(testCase: (typeof scaling)[number], size: number): string {
+  // A staircase indents each repeat one column deeper (or shallower).
+  const stair = "staircase" in testCase ? testCase.staircase : undefined;
+  if (!stair) return testCase.prefix + testCase.repeat.repeat(Math.floor(size / testCase.repeat.length) + 1) + testCase.suffix;
+  const steps = Math.floor(Math.sqrt(2 * size));
+  let body = "";
+  for (let step = 0; step < steps; step += 1) body += " ".repeat(stair === "down" ? steps - 1 - step : step) + testCase.repeat;
+  return testCase.prefix + body + testCase.suffix;
+}
+
 it.each(scaling)("scales shape $name linearly to 400k characters", (testCase) => {
   // Each shape on its own: quadratic growth costs ~100x for ten times the input.
   const cost = (size: number) => {
-    const text = testCase.prefix + testCase.repeat.repeat(Math.floor(size / testCase.repeat.length) + 1) + testCase.suffix;
+    const text = scaled(testCase, size);
     const start = performance.now();
     logs.emitAppLog({ level: "info", module: "test", file: "test", line: 1, msg: text, fields: {} });
     logs.clearAppLogRecords();
@@ -91,7 +102,7 @@ it("masks oversized records whole, counting code points like Python", () => {
   logs.clearAppLogRecords();
 });
 
-it.each([...failClosed, ...fixes5f, ...fixes5g, ...fixes5h])("fails closed for review regression $id", (testCase) => {
+it.each([...failClosed, ...fixes5f, ...fixes5g, ...fixes5h, ...fixes5i])("fails closed for review regression $id", (testCase) => {
   const output = logs.emitAppLog({ level: "info", module: "test", file: "test", line: 1, msg: testCase.input, fields: {} })!.msg;
   if ("expected" in testCase) expect(output).toBe(testCase.expected);
   if (testCase.sentinel) {
