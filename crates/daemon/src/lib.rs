@@ -96,6 +96,7 @@ pub fn supported_kinds() -> Vec<&'static str> {
             .copied()
             .filter(|k| ["ui.wallets.list"].contains(k)),
     );
+    kinds.push("ui.privacy_hygiene.snapshot");
     kinds.extend(loans::KINDS);
     kinds.extend(services::kinds().filter(|k| {
         backends::KINDS.contains(k)
@@ -115,11 +116,15 @@ pub fn supported_kinds() -> Vec<&'static str> {
             ]
             .contains(k)
     }));
-    kinds.extend(
-        reports::KINDS.iter().copied().filter(|k| {
-            !k.starts_with("ui.transactions.export_") && *k != "ui.reports.cross_check"
-        }),
-    );
+    kinds.extend(reports::KINDS.iter().copied().filter(|k| {
+        !k.starts_with("ui.transactions.export_")
+            && !matches!(
+                *k,
+                "ui.reports.cross_check"
+                    | "ui.privacy_hygiene.snapshot"
+                    | "ui.reports.lightning_profitability"
+            )
+    }));
     kinds.extend(documents::KINDS);
     kinds.extend(transfers::KINDS);
     kinds.extend(services::kinds().filter(|k| views::KINDS.contains(k)));
@@ -160,6 +165,7 @@ pub fn supported_kinds() -> Vec<&'static str> {
             .copied()
             .filter(|k| ["ui.wallets.preview_descriptor"].contains(k)),
     );
+    kinds.push("ui.reports.lightning_profitability");
     kinds.extend(metadata::KINDS.iter().copied().filter(|k| {
         [
             "ui.metadata.bip329.preview",
