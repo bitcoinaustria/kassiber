@@ -279,4 +279,175 @@ mod tests {
                 .collect()
         );
     }
+
+    /// A stand-in child: prints its argv, cwd and broker variables, and
+    /// each inherited secret descriptor's contents.
+    #[cfg(unix)]
+    fn script(directory: &std::path::Path) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        let path = directory.join("child.sh");
+        std::fs::write(
+            &path,
+            "#!/bin/sh\n\
+             echo \"argv=$*\"\n\
+             echo \"cwd=$(pwd -P)\"\n\
+             echo \"caller=$KASSIBER_OPERATOR_WORKING_DIRECTORY\"\n\
+             echo \"egress=$KASSIBER_NO_EGRESS\"\n\
+             echo \"child=$KASSIBER_OPERATOR_CHILD direct=$KASSIBER_OPERATOR_DIRECT\"\n\
+             echo \"project=$KASSIBER_OPERATOR_EXPECTED_PROJECT_IDENTITY\"\n\
+             echo \"database=$KASSIBER_OPERATOR_EXPECTED_DATABASE_IDENTITY\"\n\
+             echo \"lease=$(cat <&$2)\"\n\
+             while [ $# -gt 0 ]; do if [ \"$1\" = --token-fd ]; then echo \"secret=$(cat <&$2)\"; fi; shift; done\n\
+             echo oops >&2\n\
+             exit 3\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
+        path
+    }
+
+    #[cfg(unix)]
+    fn dispatch(
+        fake: &crate::service::tests::Fake,
+        data_root: &str,
+        working_directory: Option<String>,
+    ) -> Dispatch {
+        let project = fake.canonical_project(data_root).unwrap();
+        Dispatch {
+            id: "generation.caller-context".into(),
+            project_identity: project.identity,
+            database_identity: "d".repeat(32),
+            data_root: data_root.into(),
+            argv: argv(&[
+                "--db-passphrase-fd",
+                "broker-secret-caller",
+                "--machine",
+                "status",
+                "--token-fd",
+                "broker-secret-x",
+            ]),
+            command_path: "status".into(),
+            capability: crate::service::Capability::Read,
+            secret_arguments: vec![
+                (
+                    "broker-secret-caller".into(),
+                    zeroize::Zeroizing::new(b"caller".to_vec()),
+                ),
+                (
+                    "broker-secret-x".into(),
+                    zeroize::Zeroizing::new(vec![b'x'; 70_000]),
+                ),
+            ],
+            working_directory,
+            no_egress: true,
+            owner_tokens: Vec::new(),
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn worker_child_gets_caller_directory_and_tightened_egress() {
+        use crate::service::tests::Fake;
+        let book = tempfile::tempdir().unwrap();
+        let caller = tempfile::tempdir().unwrap();
+        let launch = tempfile::tempdir().unwrap();
+        let fake = Fake::new();
+        let runner = CliRunner::new(
+            Arc::clone(&fake) as Arc<dyn Backend>,
+            script(launch.path()),
+            launch.path().to_owned(),
+        );
+        let data_root = book.path().to_string_lossy().into_owned();
+        let operation = dispatch(
+            &fake,
+            &data_root,
+            Some(caller.path().to_string_lossy().into_owned()),
+        );
+        let result = runner.run(&operation, b"lease-passphrase").unwrap();
+        assert_eq!(result.exit_code, 3);
+        assert_eq!(result.stderr, "oops\n");
+        let lines: Vec<&str> = result.stdout.lines().collect();
+        // The caller's own database descriptor is gone; the lease's comes first.
+        assert!(
+            lines[0].starts_with("argv=--db-passphrase-fd "),
+            "{lines:?}"
+        );
+        assert!(!lines[0].contains("broker-secret"), "{lines:?}");
+        assert!(
+            lines[0].contains(" --machine status --token-fd "),
+            "{lines:?}"
+        );
+        // The launch directory is the broker's, never the caller's.
+        assert_eq!(
+            lines[1],
+            format!(
+                "cwd={}",
+                std::fs::canonicalize(launch.path()).unwrap().display()
+            )
+        );
+        assert_eq!(lines[2], format!("caller={}", caller.path().display()));
+        assert_eq!(lines[3], "egress=1");
+        assert_eq!(lines[4], "child=1 direct=1");
+        assert_eq!(lines[5], format!("project={}", operation.project_identity));
+        assert_eq!(lines[6], format!("database={}", "d".repeat(32)));
+        assert_eq!(lines[7], "lease=lease-passphrase");
+        // A secret larger than a pipe's buffer arrives whole.
+        assert_eq!(lines[8], format!("secret={}", "x".repeat(70_000)));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn worker_refuses_when_the_callers_directory_disappeared() {
+        use crate::service::tests::Fake;
+        let book = tempfile::tempdir().unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let launch = tempfile::tempdir().unwrap();
+        let fake = Fake::new();
+        let program = script(launch.path());
+        let runner = CliRunner::new(
+            Arc::clone(&fake) as Arc<dyn Backend>,
+            program,
+            launch.path().to_owned(),
+        );
+        let data_root = book.path().to_string_lossy().into_owned();
+        let gone = root.path().join("gone").to_string_lossy().into_owned();
+        let error = runner
+            .run(&dispatch(&fake, &data_root, Some(gone)), b"lease")
+            .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "operator caller working directory changed before child launch"
+        );
+        // A replaced project is refused before launch too.
+        let mut moved = dispatch(&fake, &data_root, None);
+        moved.project_identity = "f".repeat(64);
+        let error = runner.run(&moved, b"lease").unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "operator project changed before child launch"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_signalled_child_reports_the_negative_signal() {
+        use crate::service::tests::Fake;
+        use std::os::unix::fs::PermissionsExt;
+        let book = tempfile::tempdir().unwrap();
+        let launch = tempfile::tempdir().unwrap();
+        let program = launch.path().join("killed.sh");
+        std::fs::write(&program, "#!/bin/sh\nkill -9 $$\n").unwrap();
+        std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let fake = Fake::new();
+        let runner = CliRunner::new(
+            Arc::clone(&fake) as Arc<dyn Backend>,
+            program,
+            launch.path().to_owned(),
+        );
+        let data_root = book.path().to_string_lossy().into_owned();
+        let mut operation = dispatch(&fake, &data_root, None);
+        operation.secret_arguments.clear();
+        let result = runner.run(&operation, b"lease").unwrap();
+        assert_eq!(result.exit_code, -9);
+    }
 }

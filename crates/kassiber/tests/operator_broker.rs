@@ -129,6 +129,12 @@ impl Broker {
     /// A direct run of this binary on the book, with the passphrase on
     /// stdin as descriptor 0.
     fn direct(&self, data_root: &Path, args: &[&str]) -> Output {
+        self.direct_with(data_root, PASSPHRASE, args)
+    }
+
+    /// A direct run that bypasses brokered routing, as Python's tests open
+    /// the database themselves.
+    fn direct_with(&self, data_root: &Path, passphrase: &str, args: &[&str]) -> Output {
         let mut command = binary();
         command
             .arg("--data-root")
@@ -137,6 +143,7 @@ impl Broker {
             .args(args);
         self.environment(&mut command);
         command
+            .env("KASSIBER_OPERATOR_DIRECT", "1")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -145,7 +152,7 @@ impl Broker {
             .stdin
             .take()
             .unwrap()
-            .write_all(PASSPHRASE.as_bytes())
+            .write_all(passphrase.as_bytes())
             .unwrap();
         child.wait_with_output().unwrap()
     }
@@ -687,4 +694,45 @@ fn a_child_refuses_a_database_whose_identity_changed() {
         "operator_working_directory_unavailable"
     );
     let _ = PyStr::from("");
+}
+
+#[test]
+fn brokered_rotation_cannot_break_a_live_desktop_owner() {
+    let broker = Broker::start();
+    let (data_root, _, _) = book(&broker);
+    let namespace = kassiber_ownership::OwnerNamespace::isolated(broker.owners.path().to_owned());
+    let project = namespace
+        .canonical_project(&std::fs::canonicalize(data_root.path()).unwrap())
+        .unwrap();
+    let desktop = namespace
+        .acquire(project, kassiber_ownership::OwnerKind::Desktop, "desktop")
+        .unwrap();
+    let client = broker.client();
+    unlock(&client, &root(&data_root), PASSPHRASE);
+    let mut prepared = PreparedArguments::new(argv(&[
+        "--machine",
+        "secrets",
+        "change-passphrase",
+        "--new-passphrase-fd",
+        "broker-secret-new-passphrase",
+    ]));
+    prepared.secrets = vec![(
+        "broker-secret-new-passphrase".into(),
+        zeroize::Zeroizing::new(b"new correct horse battery staple".to_vec()),
+    )];
+    let completed = run(
+        &client,
+        &root(&data_root),
+        &prepared,
+        Some(PASSPHRASE.as_bytes()),
+    );
+    // A mutation's failure is unproven, so it is result_unknown; the old
+    // passphrase still opens the book.
+    assert_eq!(text(&completed, "state"), "result_unknown", "{completed:?}");
+    assert_eq!(text(&json(&text(&completed, "stdout")), "kind"), "error");
+    drop(desktop);
+    assert!(broker
+        .direct(data_root.path(), &["status"])
+        .status
+        .success());
 }
