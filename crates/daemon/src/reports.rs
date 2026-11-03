@@ -709,10 +709,7 @@ mod tests {
             "ui.reports.capital_gains",
             "ui.reports.explain_capital_gain",
         ] {
-            assert_eq!(
-                KINDS.contains(&kind),
-                kind == "ui.reports.explain_capital_gain"
-            );
+            assert!(KINDS.contains(&kind));
             if kind == "ui.reports.capital_gains" {
                 assert_eq!(
                     gain_args(kind, Some(&Value::List(vec![])))

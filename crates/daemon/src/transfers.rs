@@ -17,6 +17,8 @@ pub const KINDS: &[&str] = &[
     "ui.transfers.components.get",
     "ui.transfers.components.plan",
     "ui.transfers.components.apply",
+    "ui.custody.coverage.snapshot",
+    "ui.custody.lineage.snapshot",
     "ui.custody.gaps.list",
     "ui.custody.gaps.review_context",
     "ui.custody.gaps.history",
@@ -36,6 +38,27 @@ pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<
         return Err(AppError::new("validation", "daemon args must be an object")
             .with_details(dict([("type", s(type_name(args)))])));
     };
+    if kind == "ui.custody.coverage.snapshot" {
+        let mut unknown: Vec<_> = fields
+            .iter()
+            .filter(|(k, _)| !["workspace", "profile"].contains(&key_text(k).as_str()))
+            .map(|(k, _)| s(key_text(k)))
+            .collect();
+        unknown.sort_by_key(kassiber_envelope::py_str);
+        if !unknown.is_empty() {
+            return Err(
+                AppError::new("validation", format!("{kind} received unsupported fields"))
+                    .with_details(dict([("unknown", Value::List(unknown))])),
+            );
+        }
+        return book.transfers("custody.coverage", args);
+    }
+    if kind == "ui.custody.lineage.snapshot" {
+        return book.transaction_desktop(
+            kassiber_transactions::desktop::Projection::CustodyLineage,
+            Some(args),
+        );
+    }
     if matches!(
         kind,
         "ui.custody.gaps.list" | "ui.custody.gaps.review_context"

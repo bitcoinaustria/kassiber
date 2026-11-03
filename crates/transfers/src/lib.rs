@@ -3,6 +3,7 @@ mod component_reads;
 mod component_review;
 mod component_rows;
 mod component_store;
+mod coverage;
 mod dismissals;
 mod gap_candidates;
 mod gap_review;
@@ -92,6 +93,7 @@ pub fn execute_with_sources(
         | "transfers.rules.delete"
         | "transfers.rules.enable"
         | "transfers.rules.disable" => rules::write(conn, scope, operation, args, sources),
+        "custody.coverage" => coverage::snapshot(conn, scope),
         "transfers.list" => records::pairs(conn, scope),
         "transfers.payouts.list" => records::payouts(conn, scope),
         "transfers.gaps.history" => history::list(conn, scope, args),

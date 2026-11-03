@@ -2,6 +2,7 @@
 //! These reads never process journals, infer ownership or contact a provider.
 mod audit;
 mod dashboard;
+mod lineage;
 mod render;
 mod resolve;
 mod sql;
@@ -37,6 +38,7 @@ pub enum Projection {
     Extremes,
     Resolve,
     AuditChanges,
+    CustodyLineage,
 }
 impl Projection {
     pub fn from_kind(kind: &str) -> Option<Self> {
@@ -46,6 +48,7 @@ impl Projection {
             "ui.transactions.extremes" => Some(Self::Extremes),
             "ui.transactions.resolve" => Some(Self::Resolve),
             "ui.audit.changes_since_last_answer" => Some(Self::AuditChanges),
+            "ui.custody.lineage.snapshot" => Some(Self::CustodyLineage),
             _ => None,
         }
     }
@@ -56,6 +59,7 @@ impl Projection {
             Self::Extremes => "ui.transactions.extremes",
             Self::Resolve => "ui.transactions.resolve",
             Self::AuditChanges => "ui.audit.changes_since_last_answer",
+            Self::CustodyLineage => "ui.custody.lineage.snapshot",
         }
     }
 }
@@ -365,6 +369,9 @@ pub fn execute(
     }
     if matches!(projection, Projection::AuditChanges) {
         return audit::changes(conn, scope, args);
+    }
+    if matches!(projection, Projection::CustodyLineage) {
+        return lineage::snapshot(conn, scope, args);
     }
     let kind = projection.kind();
     let empty = dict::<&str>([]);

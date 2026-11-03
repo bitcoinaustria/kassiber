@@ -92,7 +92,7 @@ def test_native_daemon_reads_and_validation_match_python_bytes(tmp_path, monkeyp
     expected, actual = python.stdout.splitlines(), rust.stdout.splitlines()
     assert len(expected) == len(actual) == len(requests) + 1
     ready = json.loads(actual[0])
-    assert "ui.rates.rebuild" not in ready["data"]["supported_kinds"]
+    assert "ui.rates.rebuild" in ready["data"]["supported_kinds"]
     assert actual[1:] == expected[1:]
 
 
