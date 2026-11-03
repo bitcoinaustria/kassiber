@@ -167,3 +167,66 @@ mutations re-anchored. Each commit records its numbers.
 
 If a stage cannot reach its budget under byte parity, the report will name
 the floor, show the profile evidence for it and give its cost.
+
+## Results so far (2026-11-03)
+
+Steps 1–14 are committed on this branch; each one passed the gate above
+before the next started. Mutations ran on the changed hunks of each step,
+and the full catalog is still to run.
+
+Best of five alternating Python/native pairs on step 13 (`0ee0f2383`),
+custody CPU in seconds, with the one-minute load during the run:
+
+| Book | Python | Native | Speedup | Load |
+| --- | ---: | ---: | ---: | --- |
+| generic 2k | 0.763 | 0.085 | 9.0× | 17–18 |
+| multi-wallet 2k | 1.091 | 0.141 | 7.7× | 13–16 |
+| generic 20k | 5.181 | 0.785 | 6.6× | 5–12 |
+| multi-wallet 20k | 12.397 | 1.311 | 9.5× | 6–18 |
+
+The single-run Python figures in "Starting point" overstated Python by up to
+37% (generic 20k: 7.10 s there, 5.18 s here). Only alternating pairs are
+comparable. Step 14 (record column positions) took native custody to 0.081 /
+0.141 / 0.739 / 1.228 s in a best-of-three A/B. Against the pairs above that
+is 9.4× / 7.7× / 7.0× / 10.1×.
+
+What the steps changed, by cost removed:
+
+- JSON rows are no longer materialized for custody. Interpretation, evidence,
+  derivation and finalization read snapshot records through one `Row`
+  trait, and derivation layers its overrides over them.
+- Each raw JSON text is loaded once per operation. Single fields are read
+  from the loaded value, and the transfer decoding is built only when a
+  reader needs the whole object.
+- Record field reads remember column positions; a remembered position is
+  checked against its name.
+- Large JSON parts move into their results instead of being copied by
+  `json!`, as do pairs, components and claim lists.
+- Default arbitrated decisions are read without building them.
+- Finalized rows overlay generated fields on their source records.
+- Gap search ranks qualifying groups by keys it already holds.
+
+### Where the remaining time goes
+
+Instructions retired in native custody, generic 20k, step 14 (3.51 G in
+total), by stage: evidence canonical events 28%, finalized projection 15%,
+gap admission and search 15%, evidence enrichment 11%, quantity 11%,
+interpretation 9%, admission 8% (Python's figure has no admission). No
+single function is above 3% of the total. glibc allocation and string
+comparison together are 35%, spread over row, observation, claim and
+finalized-row values.
+
+To reach 10× everywhere, custody CPU must drop a further 10% (generic 2k),
+23% (multi-wallet 2k) and 30% (generic 20k). These parts are not a parity
+floor; they need more structural work:
+
+1. Finalized rows as typed overlays, with values built only when a row is
+   written. About 25k instructions per row remain, mostly building and reading
+   JSON values.
+2. Evidence events that keep typed observations and build their legs,
+   aliases and snapshots lazily, plus event keys computed once per row
+   instead of in both enrichment and the canonical pass.
+3. Admission over records, without typed copies of every network
+   observation and rate row.
+4. Component materialization (multi-wallet) without the per-component
+   canonical rebuild for evidence status.
