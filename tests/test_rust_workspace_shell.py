@@ -276,6 +276,13 @@ def test_secrets_init_matches_python_and_migrates_dotenv_credentials(tmp_path, e
     assert (b"hunter2" in (tmp_path / "book/config/backends.env").read_bytes()) is not existing
 
 
+def test_generic_cancel_keeps_python_unclassified_refusal(tmp_path):
+    root = seeded(tmp_path, "")
+    requests = [("cancel", {}), ("cancel", None), ("cancel", {"request_id": "x", "target": "1"}), ("status", {})]
+    _, _, responses = compare_session(tmp_path, root, requests)
+    assert [r.get("error", {}).get("code") for r in responses[:3]] == ["unsupported_kind"] * 3
+
+
 def test_onboarding_unknown_tax_country_matches_python_except_traceback(tmp_path):
     """tests/rust_port/repro_onboarding_tax_country.py: Python's unhandled
     ValueError carries a traceback in `debug`; Rust leaves it empty."""
