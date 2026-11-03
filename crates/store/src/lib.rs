@@ -438,11 +438,7 @@ impl Book {
                     if sqlite_is_busy(&e) {
                         map_sqlite_error(e)
                     } else {
-                        Error::new(
-                            ErrorKind::UnlockFailed,
-                            "wrong passphrase or unsupported database format",
-                        )
-                        .retryable(true)
+                        unlock_failed(&e)
                     }
                 })?;
         }
@@ -725,6 +721,22 @@ fn verify_project(database: &Path, expected: Option<&CanonicalProject>) -> Resul
     }
     Ok(())
 }
+/// `verify_unlock`'s refusal: the key did not open the file. The driver's
+/// own message is the detail, as Python reports `str(exc)`.
+pub(crate) fn unlock_failed(error: &rusqlite::Error) -> Error {
+    let driver_error = match error {
+        rusqlite::Error::SqliteFailure(_, Some(message)) => message.clone(),
+        other => other.to_string(),
+    };
+    Error::new(
+        ErrorKind::UnlockFailed,
+        "wrong passphrase or unsupported database format",
+    )
+    .hint("Double-check the SQLCipher passphrase you entered.")
+    .details(json!({"driver_error": driver_error}))
+    .retryable(true)
+}
+
 fn verify_operator_child_project(data_root: &Path) -> Result<Option<CanonicalProject>> {
     let child = std::env::var_os("KASSIBER_OPERATOR_CHILD").is_some_and(|v| v == "1");
     let expected = std::env::var_os("KASSIBER_OPERATOR_EXPECTED_PROJECT_IDENTITY");

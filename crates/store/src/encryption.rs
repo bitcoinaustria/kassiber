@@ -230,11 +230,7 @@ fn open_container_inner(path: &Path, pass: Option<&str>, backup: bool) -> Result
         })
         .map_err(|e| {
             if pass.is_some() && !sqlite_is_busy(&e) {
-                Error::new(
-                    ErrorKind::UnlockFailed,
-                    "wrong passphrase or unsupported database format",
-                )
-                .retryable(true)
+                crate::unlock_failed(&e)
             } else {
                 map_sqlite_error(e)
             }
