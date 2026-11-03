@@ -72,5 +72,15 @@ fn main() -> ExitCode {
         stderr: Box::new(std::io::stderr()),
     };
     let code = run(&argv, &Environment::from_process(), store(), BUILD, streams);
-    ExitCode::from(u8::try_from(code).unwrap_or(1))
+    ExitCode::from(exit_status(code))
+}
+
+/// `sys.exit(code)`: POSIX keeps the low byte, so a brokered child killed
+/// by signal 9 that still printed its envelope exits 247 here as in Python.
+fn exit_status(code: i32) -> u8 {
+    if cfg!(unix) {
+        (code & 0xff) as u8
+    } else {
+        u8::try_from(code).unwrap_or(1)
+    }
 }

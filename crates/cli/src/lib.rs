@@ -40,6 +40,7 @@ mod context;
 mod networks;
 mod offline;
 pub mod operator;
+mod operator_cli;
 mod profiles;
 mod projects;
 mod reports;

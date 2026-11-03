@@ -1,5 +1,6 @@
 //! Local book setup shared by the CLI and desktop daemon. No transport clients.
 pub mod accounts;
+pub mod agent_access;
 mod backend_runtime;
 pub mod backends;
 pub mod context;

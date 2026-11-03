@@ -241,9 +241,32 @@ fn status_errors_are_typed() {
         unlock_mode: UnlockMode::Brokered,
         ..FakeConfig::default()
     };
-    let (code, out, _) = invoke(fake(brokered.clone()), &env, &["--machine", "status"]);
+    // Without a broker, an ordinary command asks for a lease and starts
+    // nothing; the client only probes the disposable endpoint.
+    let runtime = tempfile::tempdir().unwrap();
+    let isolated = Environment {
+        operator_runtime: Some(kassiber_operator::runtime::Runtime {
+            account_home: None,
+            override_dir: Some(runtime.path().join("run").into_os_string()),
+            override_gate: Some("1".into()),
+            frozen: false,
+        }),
+        ..Environment::default()
+    };
+    let (code, out, _) = invoke(fake(brokered.clone()), &isolated, &["--machine", "status"]);
     assert_eq!(code, 1);
-    assert!(out.contains("operator broker is not implemented"), "{out}");
+    assert!(out.contains("\"code\": \"interaction_required\""), "{out}");
+    assert!(
+        out.contains("\"reason\": \"operator_lease_required\""),
+        "{out}"
+    );
+    assert_eq!(
+        std::fs::read_dir(runtime.path().join("run"))
+            .unwrap()
+            .count(),
+        0,
+        "no broker was started"
+    );
     let direct = Environment {
         operator_direct: Some("1".into()),
         ..Environment::default()

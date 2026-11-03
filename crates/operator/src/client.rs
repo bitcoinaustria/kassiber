@@ -15,7 +15,7 @@ use crate::values::{
     as_str, dict, get, get_or_null, is_false, is_true, pop, py_eq, py_str_value, s, set, truthy,
 };
 use kassiber_envelope::AppError;
-use kassiber_pyjson::{Key, PyStr, Value};
+use kassiber_pyjson::{BigInt, Key, PyStr, Value};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 use zeroize::Zeroizing;
@@ -268,7 +268,7 @@ impl<H: Host> BrokerClient<H> {
         &self,
         data_root: &str,
         passphrase: &[u8],
-        duration_seconds: Option<i64>,
+        duration_seconds: Option<BigInt>,
         capability: &str,
         authentication_method: &str,
         only_if_locked: bool,
@@ -278,7 +278,10 @@ impl<H: Host> BrokerClient<H> {
         self.require_same_build(&self.ensure_running()?)?;
         let mut fields = vec![
             ("data_root", s(data_root)),
-            ("duration_seconds", optional_int(duration_seconds)),
+            (
+                "duration_seconds",
+                duration_seconds.map_or(Value::Null, Value::Int),
+            ),
             ("capability", s(capability)),
             ("authentication_method", s(authentication_method)),
         ];

@@ -100,6 +100,8 @@ pub(super) fn handle(
     {
         return Ok((Some(denied()), false));
     }
+    // Rotation ends the agents' lease before anything changes.
+    let _ = daemon.agent_access.end_lease(false);
     let new = new
         .as_str()
         .ok_or_else(|| AppError::new("invalid_passphrase", "passphrase is not valid UTF-8"))?;
@@ -116,6 +118,7 @@ pub(super) fn handle(
             return Err(error.into());
         }
     }
+    let _ = daemon.agent_access.end_lease(false);
     daemon.unlocked_passphrase = None;
     let result = daemon.store.rotate_passphrase(
         &daemon.data_root,

@@ -544,14 +544,16 @@ impl BookStore for RealStore {
             Some(v) if v == "manual" => UnlockMode::Manual,
             Some(v) if v == "brokered" => UnlockMode::Brokered,
             Some(v) if v == "unattended" => UnlockMode::Unattended,
-            _ => {
+            Some(other) => {
+                let configured = kassiber_pytext::loads(&other.to_string())
+                    .map(|value| kassiber_envelope::py_str(&value))
+                    .unwrap_or_default();
                 return Err(AppError::new(
                     "invalid_operator_unlock_mode",
                     "the configured operator unlock mode is invalid",
                 )
-                .with_hint(
-                    "Choose manual, brokered, or unattended with `kassiber operator mode`.",
-                ))
+                .with_hint("Choose manual, brokered, or unattended with `kassiber operator mode`.")
+                .with_details(dict([("configured", s(configured))])));
             }
         };
         if configured != UnlockMode::Manual {
@@ -571,6 +573,39 @@ impl BookStore for RealStore {
             }
         }
         Ok(configured)
+    }
+    fn selected_data_root(&self, selection: &Selection) -> Result<String, AppError> {
+        // resolve_runtime_paths: the selected catalog project is created on
+        // first use, an explicit root need not have a layout yet.
+        let context = context()?;
+        match context.resolve_for_bootstrap(&options(selection)) {
+            Ok(resolved) => Ok(path(&resolved.data_root)),
+            Err(e)
+                if selection.data_root.is_none()
+                    && selection.project.is_none()
+                    && matches!(
+                        e.kind,
+                        kassiber_paths::ErrorKind::NotInitialized
+                            | kassiber_paths::ErrorKind::RequiresPythonMigration
+                    ) =>
+            {
+                kassiber_store::projects::ensure_default(
+                    &context,
+                    None,
+                    &timestamp()?,
+                    &mut |_| Ok(()),
+                )
+                .map_err(error)?;
+                context
+                    .resolve_for_bootstrap(&options(selection))
+                    .map(|resolved| path(&resolved.data_root))
+                    .map_err(error)
+            }
+            Err(e) => Err(error(e)),
+        }
+    }
+    fn unlock_mode_status(&self, root: &str) -> Result<Value, AppError> {
+        kassiber_secrets::modes::unlock_mode_status(&namespace()?, Path::new(root))
     }
     fn database_is_encrypted(&self, root: &str) -> Result<bool, AppError> {
         let db = kassiber_paths::resolve_database_path(Path::new(root));

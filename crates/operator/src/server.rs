@@ -167,6 +167,8 @@ struct Inner {
     guard: SessionGuard,
     session_runtime: Option<LoginRuntime>,
     logind_observed: bool,
+    /// `peers.process_label`; tests name the program instead.
+    labels: fn(Option<u32>) -> Option<String>,
 }
 
 /// `BrokerServer`.
@@ -248,7 +250,24 @@ impl BrokerServer {
                 guard: parts.guard,
                 session_runtime,
                 logind_observed,
+                labels: crate::peers::process_label,
             }),
+        }
+    }
+
+    /// A detached broker whose agent sessions take their labels from
+    /// `labels`, as the Python tests patch `peers.process_label`.
+    #[cfg(test)]
+    pub(crate) fn detached_with_labels(
+        parts: ServerParts,
+        labels: fn(Option<u32>) -> Option<String>,
+    ) -> Self {
+        let server = Self::detached(parts);
+        let mut inner = Arc::try_unwrap(server.inner)
+            .unwrap_or_else(|_| unreachable!("a new broker is not shared"));
+        inner.labels = labels;
+        BrokerServer {
+            inner: Arc::new(inner),
         }
     }
 
@@ -490,7 +509,7 @@ impl BrokerServer {
             .and_then(|data_root| self.canonical_data_root(&data_root))
             .and_then(|data_root| {
                 let pid = channel.peer_pid();
-                service.open_agent_session(&data_root, pid, crate::peers::process_label(pid))
+                service.open_agent_session(&data_root, pid, (self.inner.labels)(pid))
             });
         let ticket = match opened {
             Ok(ticket) => ticket,

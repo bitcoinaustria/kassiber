@@ -262,6 +262,13 @@ pub const IMPLEMENTED: &[&str] = &[
     "chain-analysis.acquire.plan",
     "chain-analysis.acquire.apply",
     "chain-analysis.datasets.import",
+    "operator.unlock",
+    "operator.status",
+    "operator.lock",
+    "operator.stop",
+    "operator.mode",
+    "operator.operation.status",
+    "operator.operation.cancel",
 ];
 
 /// `_NO_BOOTSTRAP_DATABASE_PREFIXES`.

@@ -152,6 +152,38 @@ pub fn effective_unlock_mode(namespace: &OwnerNamespace, data_root: &Path) -> Re
     Ok(configured)
 }
 
+/// `project_policy_state(data_root).binding_state`: `missing`, `mismatch`
+/// or `valid`, without exposing either identity.
+pub fn policy_binding_state(namespace: &OwnerNamespace, data_root: &Path) -> Result<&'static str> {
+    let located = locate(namespace, data_root)?;
+    let settings = load(&located.settings);
+    let project = settings.get(OPERATOR_POLICY_PROJECT_IDENTITY_SETTING);
+    let database = settings.get(OPERATOR_POLICY_DATABASE_IDENTITY_SETTING);
+    Ok(
+        if !valid_project_identity(project) || !valid_database_identity(database) {
+            "missing"
+        } else if project.and_then(Json::as_str) != Some(located.identity.as_str()) {
+            "mismatch"
+        } else {
+            "valid"
+        },
+    )
+}
+
+/// `unlock_mode_status(data_root)`: what `kassiber operator status` shows
+/// as `mode`.
+pub fn unlock_mode_status(namespace: &OwnerNamespace, data_root: &Path) -> Result<Value> {
+    let configured = configured_unlock_mode(namespace, data_root)?;
+    let binding_state = policy_binding_state(namespace, data_root)?;
+    let effective = effective_unlock_mode(namespace, data_root)?;
+    Ok(dict([
+        ("configured", configured.as_deref().map_or(Value::Null, s)),
+        ("effective", s(effective.as_str())),
+        ("legacy_inferred", Value::Bool(false)),
+        ("binding_state", s(binding_state)),
+    ]))
+}
+
 /// `bind_project_policy(data_root, database_identity, ...)`: bind after an
 /// authenticated open, clearing permissive keys when the binding changes.
 pub fn bind_project_policy(

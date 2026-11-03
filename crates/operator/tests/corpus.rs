@@ -228,7 +228,7 @@ fn run(client: &BrokerClient<ScriptedHost>, call: &[Value]) -> kassiber_operator
         "unlock" => client.unlock(
             &text(&call[1]),
             &base64(&call[2]).unwrap(),
-            opt_int(&call[3]),
+            opt_int(&call[3]).map(Into::into),
             &text(&call[4]),
             &text(&call[5]),
             flag(&call[6]),

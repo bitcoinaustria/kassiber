@@ -1204,3 +1204,247 @@ fn test_agent_session_open_needs_a_peer_and_an_agent_lease() {
         .agent_session_alive(&text(&opened, "session_id")));
     let _ = argv(&[]);
 }
+
+// ----- `AgentSessionServerTest` (`tests/test_operator_agent_sessions.py`) -----
+
+const AGENT_PID: u32 = 4242;
+const CONTROL: [u8; 32] = [b'c'; 32];
+
+/// A channel whose client frames are produced one read at a time, so a
+/// test can act between the frames a session's connection sees.
+struct Stepped {
+    reads: VecDeque<Box<dyn FnMut() -> Result<Value> + Send>>,
+    taken: usize,
+    sent: Vec<Value>,
+}
+
+impl FrameChannel for Stepped {
+    fn send_json(&mut self, payload: &Value) -> Result<()> {
+        self.sent.push(payload.clone());
+        Ok(())
+    }
+    fn receive_json(&mut self) -> Result<Value> {
+        self.taken += 1;
+        match self.reads.pop_front() {
+            Some(mut read) => read(),
+            None => Err(Error::Eof("process exited")),
+        }
+    }
+    fn send_secret(&mut self, _: &str, _: &[u8]) -> Result<()> {
+        unreachable!("the server never sends secrets")
+    }
+    fn receive_secret(&mut self, _: &str) -> Result<Zeroizing<Vec<u8>>> {
+        unreachable!("an agent session takes no secret")
+    }
+    fn peer_pid(&self) -> Option<u32> {
+        Some(AGENT_PID)
+    }
+    fn close(&mut self) {}
+}
+
+fn claude(pid: Option<u32>) -> Option<String> {
+    (pid == Some(AGENT_PID)).then(|| "claude".to_owned())
+}
+
+fn agent_broker(fake: &Arc<Fake>) -> (BrokerServer, Closing) {
+    let service = OperatorService::new(
+        "generation",
+        Arc::clone(fake) as Arc<dyn Backend>,
+        ok_runner(),
+    );
+    let server = BrokerServer::detached_with_labels(
+        ServerParts {
+            generation: "generation".into(),
+            service: service.clone(),
+            native: Arc::new(NativeAuthUnavailable),
+            build: build(),
+            guard: SessionGuard::system(),
+        },
+        claude,
+    );
+    (server, Closing(service))
+}
+
+fn agent_grant(service: &OperatorService, data_root: &str) {
+    service
+        .unlock(
+            data_root,
+            b"passphrase",
+            UnlockRequest {
+                capability: Capability::Read,
+                agent_scope: true,
+                idle_timeout_seconds: Some(900),
+                agent_control: Some(&CONTROL),
+                ..UnlockRequest::default()
+            },
+        )
+        .unwrap();
+}
+
+fn session_list(service: &OperatorService, data_root: &str) -> Vec<Value> {
+    let status = service.status(Some(data_root)).unwrap();
+    match get(get(&status, "agent").unwrap(), "sessions") {
+        Some(Value::List(sessions)) => sessions.clone(),
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
+fn test_a_session_lives_while_heartbeats_arrive_and_ends_with_the_process() {
+    let tmp = tempfile::tempdir().unwrap();
+    let fake = Fake::new();
+    let (server, closing) = agent_broker(&fake);
+    agent_grant(&closing, &root(&tmp));
+    let data_root = root(&tmp);
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let heartbeat = || request(vec![("action", s("agent_session_heartbeat"))]);
+    let mut reads: VecDeque<Box<dyn FnMut() -> Result<Value> + Send>> = VecDeque::new();
+    let open = request(vec![
+        ("action", s("agent_session_open")),
+        ("data_root", s(&data_root)),
+    ]);
+    reads.push_back(Box::new(move || Ok(open.clone())));
+    for _ in 0..2 {
+        let (service, data_root, seen) = (closing.0.clone(), data_root.clone(), Arc::clone(&seen));
+        reads.push_back(Box::new(move || {
+            seen.lock()
+                .unwrap()
+                .push(session_list(&service, &data_root));
+            Ok(heartbeat())
+        }));
+    }
+    let mut channel = Stepped {
+        reads,
+        taken: 0,
+        sent: Vec::new(),
+    };
+    server.serve_channel(&mut channel);
+    // One reply: the session, its state and the token for this process.
+    assert_eq!(channel.sent.len(), 1);
+    let opened = data(&channel.sent[0]);
+    let Value::Dict(pairs) = &opened else {
+        panic!("{opened:?}")
+    };
+    let keys: Vec<String> = pairs
+        .iter()
+        .map(|(key, _)| match key {
+            Key::Str(key) => key.as_str().unwrap_or_default().to_owned(),
+            other => panic!("{other:?}"),
+        })
+        .collect();
+    assert_eq!(keys, ["session_id", "state", "token"]);
+    assert_eq!(text(&opened, "state"), "pending");
+    // It was open, with the program's label, while the heartbeats came ...
+    let seen = seen.lock().unwrap().clone();
+    assert_eq!(seen.len(), 2);
+    for sessions in &seen {
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(text(&sessions[0], "label"), "claude");
+        assert_eq!(get(&sessions[0], "pid"), Some(&Value::from(AGENT_PID)));
+    }
+    // ... and closed at end of file, after the fourth read.
+    assert_eq!(channel.taken, 4);
+    assert!(session_list(&closing, &data_root).is_empty());
+    assert!(!closing.agent_session_alive(&text(&opened, "session_id")));
+}
+
+#[test]
+fn test_a_session_ends_on_any_other_frame_or_when_its_lease_ends() {
+    let tmp = tempfile::tempdir().unwrap();
+    let fake = Fake::new();
+    let (server, closing) = agent_broker(&fake);
+    let data_root = root(&tmp);
+    let open = request(vec![
+        ("action", s("agent_session_open")),
+        ("data_root", s(&data_root)),
+    ]);
+    // Any other frame ends it.
+    agent_grant(&closing, &data_root);
+    let mut reads: VecDeque<Box<dyn FnMut() -> Result<Value> + Send>> = VecDeque::new();
+    let first = open.clone();
+    reads.push_back(Box::new(move || Ok(first.clone())));
+    reads.push_back(Box::new(|| Ok(request(vec![("action", s("ping"))]))));
+    reads.push_back(Box::new(|| panic!("no read after another frame")));
+    let mut channel = Stepped {
+        reads,
+        taken: 0,
+        sent: Vec::new(),
+    };
+    server.serve_channel(&mut channel);
+    assert_eq!(channel.taken, 2);
+    assert!(session_list(&closing, &data_root).is_empty());
+    // The end of its lease ends it before the next read.
+    let mut reads: VecDeque<Box<dyn FnMut() -> Result<Value> + Send>> = VecDeque::new();
+    reads.push_back(Box::new(move || Ok(open.clone())));
+    let (service, locked_root) = (closing.0.clone(), data_root.clone());
+    reads.push_back(Box::new(move || {
+        service.lock(&locked_root, None, false).unwrap();
+        Ok(request(vec![("action", s("agent_session_heartbeat"))]))
+    }));
+    reads.push_back(Box::new(|| panic!("no read after the lease ended")));
+    let mut channel = Stepped {
+        reads,
+        taken: 0,
+        sent: Vec::new(),
+    };
+    server.serve_channel(&mut channel);
+    assert_eq!(channel.taken, 2);
+    assert_eq!(text(&data(&channel.sent[0]), "state"), "pending");
+}
+
+#[test]
+fn test_a_refused_session_gets_an_error_and_holds_nothing() {
+    let tmp = tempfile::tempdir().unwrap();
+    let fake = Fake::new();
+    let (server, closing) = agent_broker(&fake);
+    unlock(&closing, &root(&tmp)).unwrap();
+    let mut refused = channel();
+    refused.0.peer_pid = Some(AGENT_PID);
+    refused.0.json.push_back(request(vec![
+        ("action", s("agent_session_open")),
+        ("data_root", s(&root(&tmp))),
+    ]));
+    server.serve_channel(&mut refused);
+    assert_eq!(refused.0.sent.len(), 1);
+    assert_eq!(get(&refused.0.sent[0], "ok"), Some(&Value::Bool(false)));
+    assert_eq!(error_code(&refused.0.sent[0]), "agent_session_not_needed");
+    assert!(closing.state().agent_sessions.is_empty());
+}
+
+#[test]
+fn test_decisions_need_the_control_secret_frame() {
+    let tmp = tempfile::tempdir().unwrap();
+    let fake = Fake::new();
+    let (server, closing) = agent_broker(&fake);
+    agent_grant(&closing, &root(&tmp));
+    let session = closing
+        .open_agent_session(&root(&tmp), Some(AGENT_PID), None)
+        .unwrap();
+    let decide = |allow: Value| {
+        request(vec![
+            ("action", s("agent_session_decide")),
+            ("data_root", s(&root(&tmp))),
+            ("session_id", s(&session.id)),
+            ("allow", allow),
+        ])
+    };
+    let mut allowed = channel();
+    allowed.0.json.push_back(decide(Value::Bool(true)));
+    allowed.0.secrets.push_back(CONTROL.to_vec());
+    server.serve_channel(&mut allowed);
+    let continuation = &allowed.0.sent[0];
+    assert_eq!(get(continuation, "continue"), Some(&s("secret")));
+    assert_eq!(get(continuation, "label"), Some(&s("agent_control")));
+    assert_eq!(
+        allowed.0.secret_challenges,
+        [text(continuation, "challenge")]
+    );
+    assert_eq!(text(&data(&allowed.0.sent[1]), "state"), "allowed");
+    // A non-boolean decision is refused before any secret is asked for.
+    let mut malformed = channel();
+    malformed.0.json.push_back(decide(s("yes")));
+    server.serve_channel(&mut malformed);
+    assert_eq!(malformed.0.sent.len(), 1);
+    assert_eq!(error_code(&malformed.0.sent[0]), "operator_protocol_error");
+    assert!(malformed.0.secret_challenges.is_empty());
+}

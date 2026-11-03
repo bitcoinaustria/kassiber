@@ -70,6 +70,7 @@ pub struct Limits {
     pub max_cached_backoffs: usize,
     pub admin_auth_ttl: Duration,
     pub janitor_interval: Duration,
+    pub max_remembered_agent_denials: usize,
 }
 
 impl Default for Limits {
@@ -82,6 +83,7 @@ impl Default for Limits {
             max_cached_backoffs: MAX_CACHED_AUTH_BACKOFFS,
             admin_auth_ttl: ADMIN_AUTH_TTL,
             janitor_interval: Duration::from_secs(1),
+            max_remembered_agent_denials: MAX_REMEMBERED_AGENT_DENIALS,
         }
     }
 }
@@ -2481,7 +2483,7 @@ impl OperatorService {
                 .iter()
                 .filter(|(project, denied_epoch, _)| *project == identity && *denied_epoch == epoch)
                 .count();
-            if denials >= MAX_REMEMBERED_AGENT_DENIALS {
+            if denials >= self.inner.limits.max_remembered_agent_denials {
                 // Denials last as long as the grant; rather than forget
                 // one, stop taking new requests until the user unlocks again.
                 return Err(Error::App(

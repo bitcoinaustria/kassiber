@@ -786,6 +786,19 @@ pub trait BookStore: Send + Sync {
     fn resolve_data_root(&self, _selection: &Selection) -> Result<String, AppError> {
         Err(not_implemented("store", "resolving the project data root"))
     }
+    /// `_selected_data_root(args)`: `resolve_runtime_paths(...).data_root`,
+    /// creating the default catalog project on first use as Python does.
+    /// The operator leaves and brokered routing name the book by it.
+    fn selected_data_root(&self, _selection: &Selection) -> Result<String, AppError> {
+        Err(not_implemented("store", "resolving the selected project"))
+    }
+    /// `unlock_mode_status(data_root)`: the `mode` of `operator status`.
+    fn unlock_mode_status(&self, _data_root: &str) -> Result<Value, AppError> {
+        Err(not_implemented(
+            "store",
+            "reading the project's unlock mode",
+        ))
+    }
     /// `_verify_operator_child_database`: authenticate a broker child's
     /// bound database with the lease passphrase and close it, before a
     /// command that does not bootstrap a database runs.

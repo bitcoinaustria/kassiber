@@ -192,9 +192,15 @@ pub fn new_challenge() -> Result<String> {
 
 /// `secrets.token_hex(bytes)`.
 pub fn token_hex(bytes: usize) -> Result<String> {
+    let raw = token_bytes(bytes)?;
+    Ok(raw.iter().map(|byte| format!("{byte:02x}")).collect())
+}
+
+/// `secrets.token_bytes(bytes)`, wiped when dropped.
+pub fn token_bytes(bytes: usize) -> Result<Zeroizing<Vec<u8>>> {
     let mut raw = Zeroizing::new(vec![0u8; bytes]);
     getrandom::fill(&mut raw).map_err(|_| Error::Io(io::Error::other("entropy unavailable")))?;
-    Ok(raw.iter().map(|byte| format!("{byte:02x}")).collect())
+    Ok(raw)
 }
 
 /// Length-prefixed frames over one transport, with a distinct non-JSON

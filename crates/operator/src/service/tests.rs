@@ -3528,3 +3528,629 @@ fn test_idle_timeout_ends_an_agent_lease() {
         "agent_session_scope"
     );
 }
+
+// ----- agent sessions (`tests/test_operator_agent_sessions.py`) -----
+
+const CONTROL: [u8; 32] = [b'c'; 32];
+const AGENT_PID: u32 = 4242;
+
+fn mcp_call(data_root: &str) -> Vec<String> {
+    argv(&[
+        "--data-root",
+        data_root,
+        "--machine",
+        "mcp",
+        "call",
+        "--tool",
+        "status",
+        "--arguments",
+        "{}",
+        "--workspace",
+        "workspace-a",
+        "--profile",
+        "book-a",
+    ])
+}
+
+fn grant(service: &OperatorService, data_root: &str, idle_timeout: i64) -> Result<Value> {
+    service.unlock(
+        data_root,
+        b"passphrase",
+        UnlockRequest {
+            duration_seconds: Some(3600),
+            capability: Capability::Read,
+            only_if_locked: true,
+            agent_scope: true,
+            idle_timeout_seconds: Some(idle_timeout),
+            agent_control: Some(&CONTROL),
+            ..UnlockRequest::default()
+        },
+    )
+}
+
+fn agent_submit(
+    service: &OperatorService,
+    data_root: &str,
+    pid: Option<u32>,
+    token: Option<&str>,
+) -> Result<Value> {
+    service.submit(
+        data_root,
+        &mcp_call(data_root),
+        SubmitRequest {
+            peer_pid: pid,
+            agent_session_token: token.map(str::to_owned),
+            ..SubmitRequest::default()
+        },
+    )
+}
+
+fn reason(result: Result<Value>) -> (String, String) {
+    match result {
+        Err(Error::App(error)) => (
+            error.code,
+            error
+                .details
+                .as_ref()
+                .and_then(|details| kassiber_envelope::get(details, "reason"))
+                .map(kassiber_envelope::py_str)
+                .unwrap_or_default(),
+        ),
+        other => panic!("expected an AppError, got {other:?}"),
+    }
+}
+
+fn decide(service: &OperatorService, data_root: &str, id: &str, allow: bool) -> Result<Value> {
+    service.decide_agent_session(data_root, id, allow, &CONTROL)
+}
+
+fn agent(service: &OperatorService, data_root: &str) -> Value {
+    kassiber_envelope::get(&service.status(Some(data_root)).unwrap(), "agent")
+        .cloned()
+        .unwrap()
+}
+
+fn sessions(service: &OperatorService, data_root: &str) -> Vec<Value> {
+    match kassiber_envelope::get(&agent(service, data_root), "sessions") {
+        Some(Value::List(sessions)) => sessions.clone(),
+        other => panic!("sessions {other:?}"),
+    }
+}
+
+#[test]
+fn test_an_agent_lease_is_read_only_and_needs_a_control_secret_and_idle_timeout() {
+    let tmp = tempfile::tempdir().unwrap();
+    let fake = Fake::new();
+    let service = Closing(service_with(&fake, ok_runner()));
+    let short = b"short".to_vec();
+    for (capability, idle, control) in [
+        (Capability::Operator, 900, CONTROL.to_vec()),
+        (Capability::Read, 900, short),
+        (Capability::Read, 30, CONTROL.to_vec()),
+    ] {
+        let refused = service.unlock(
+            &root(&tmp),
+            b"passphrase",
+            UnlockRequest {
+                duration_seconds: Some(3600),
+                capability,
+                agent_scope: true,
+                idle_timeout_seconds: Some(idle),
+                agent_control: Some(&control),
+                ..UnlockRequest::default()
+            },
+        );
+        assert!(
+            matches!(refused, Err(Error::App(_))),
+            "{capability:?} {idle}"
+        );
+    }
+    // Terminal leases take neither.
+    assert!(matches!(
+        service.unlock(
+            &root(&tmp),
+            b"passphrase",
+            UnlockRequest {
+                idle_timeout_seconds: Some(900),
+                ..UnlockRequest::default()
+            },
+        ),
+        Err(Error::App(_))
+    ));
+}
+
+#[test]
+fn test_an_unknown_process_is_asked_to_pair_and_nothing_runs() {
+    let tmp = tempfile::tempdir().unwrap();
+    let fake = Fake::new();
+    let service = Closing(service_with(&fake, ok_runner()));
+    grant(&service, &root(&tmp), 900).unwrap();
+    assert_eq!(
+        reason(agent_submit(&service, &root(&tmp), Some(AGENT_PID), None)),
+        (
+            "interaction_required".into(),
+            "agent_session_required".into()
+        )
+    );
+    let session = service
+        .open_agent_session(&root(&tmp), Some(AGENT_PID), Some("claude".into()))
+        .unwrap();
+    let refused = agent_submit(&service, &root(&tmp), Some(AGENT_PID), Some(&session.token));
+    match &refused {
+        Err(Error::App(error)) => assert!(error
+            .hint
+            .as_deref()
+            .unwrap_or_default()
+            .contains("allow this agent in Kassiber")),
+        other => panic!("{other:?}"),
+    }
+    assert_eq!(
+        reason(refused),
+        (
+            "interaction_required".into(),
+            "agent_pairing_required".into()
+        )
+    );
+    let status = service.status(Some(&root(&tmp))).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&status, "agent_scope"),
+        Some(&Value::Bool(true))
+    );
+    let listed = sessions(&service, &root(&tmp));
+    assert_eq!(listed.len(), 1);
+    assert_eq!(text(&listed[0], "id"), session.id);
+    assert_eq!(text(&listed[0], "state"), "pending");
+    assert_eq!(text(&listed[0], "label"), "claude");
+    assert!(service.state().operations.is_empty());
+}
+
+#[test]
+fn test_only_the_control_secret_holder_can_allow_an_agent() {
+    let tmp = tempfile::tempdir().unwrap();
+    let fake = Fake::new();
+    let service = Closing(service_with(&fake, ok_runner()));
+    grant(&service, &root(&tmp), 900).unwrap();
+    let session = service
+        .open_agent_session(&root(&tmp), Some(AGENT_PID), Some("claude".into()))
+        .unwrap();
+    assert_eq!(
+        code(service.decide_agent_session(&root(&tmp), &session.id, true, &[b'x'; 32])),
+        "agent_pairing_unauthorized"
+    );
+    assert!(agent_submit(&service, &root(&tmp), Some(AGENT_PID), Some(&session.token)).is_err());
+}
+
+#[test]
+fn test_an_allowed_process_reads_and_its_activity_is_counted() {
+    let tmp = tempfile::tempdir().unwrap();
+    let fake = Fake::new();
+    let service = Closing(service_with(&fake, ok_runner()));
+    grant(&service, &root(&tmp), 900).unwrap();
+    let session = service
+        .open_agent_session(&root(&tmp), Some(AGENT_PID), Some("claude".into()))
+        .unwrap();
+    let decided = decide(&service, &root(&tmp), &session.id, true).unwrap();
+    assert_eq!(text(&decided, "state"), "allowed");
+    assert!(kassiber_envelope::get(&decided, "token").is_none());
+    let accepted =
+        agent_submit(&service, &root(&tmp), Some(AGENT_PID), Some(&session.token)).unwrap();
+    assert!(["queued", "running", "completed"].contains(&text(&accepted, "state").as_str()));
+    let activity = agent(&service, &root(&tmp));
+    assert_eq!(kassiber_envelope::get(&activity, "calls"), Some(&int(1u64)));
+    let listed = sessions(&service, &root(&tmp));
+    assert_eq!(
+        kassiber_envelope::get(&listed[0], "calls"),
+        Some(&int(1u64))
+    );
+    assert!(!matches!(
+        kassiber_envelope::get(&listed[0], "last_call_at"),
+        None | Some(Value::Null)
+    ));
+    // Another process, even with the token, is not that session; nor is the
+    // same process id without the token (a later process reusing it never
+    // received it).
+    for (pid, token) in [
+        (Some(AGENT_PID + 1), Some(session.token.as_str())),
+        (Some(AGENT_PID), None),
+        (Some(AGENT_PID), Some("x")),
+        (None, Some(session.token.as_str())),
+    ] {
+        assert_eq!(
+            reason(agent_submit(&service, &root(&tmp), pid, token)),
+            (
+                "interaction_required".into(),
+                "agent_session_required".into()
+            ),
+            "{pid:?} {token:?}"
+        );
+    }
+}
+
+#[test]
+fn test_an_agent_lease_admits_only_mcp_tool_calls() {
+    let tmp = tempfile::tempdir().unwrap();
+    let fake = Fake::new();
+    let service = Closing(service_with(&fake, ok_runner()));
+    grant(&service, &root(&tmp), 900).unwrap();
+    let session = service
+        .open_agent_session(&root(&tmp), Some(AGENT_PID), Some("claude".into()))
+        .unwrap();
+    decide(&service, &root(&tmp), &session.id, true).unwrap();
+    assert_eq!(
+        code(service.submit(
+            &root(&tmp),
+            &argv(&[
+                "--data-root",
+                &root(&tmp),
+                "--machine",
+                "transactions",
+                "list",
+                "--workspace",
+                "workspace-a",
+                "--profile",
+                "book-a",
+            ]),
+            SubmitRequest {
+                peer_pid: Some(AGENT_PID),
+                agent_session_token: Some(session.token.clone()),
+                ..SubmitRequest::default()
+            },
+        )),
+        "agent_session_scope"
+    );
+}
+
+#[test]
+fn test_denying_withdraws_and_cannot_be_undone_for_that_process() {
+    let tmp = tempfile::tempdir().unwrap();
+    let fake = Fake::new();
+    let service = Closing(service_with(&fake, ok_runner()));
+    grant(&service, &root(&tmp), 900).unwrap();
+    let session = service
+        .open_agent_session(&root(&tmp), Some(AGENT_PID), Some("claude".into()))
+        .unwrap();
+    decide(&service, &root(&tmp), &session.id, true).unwrap();
+    let denied = decide(&service, &root(&tmp), &session.id, false).unwrap();
+    assert_eq!(text(&denied, "state"), "denied");
+    // The session closes (its connection ends at the next heartbeat) ...
+    assert!(!service.agent_session_alive(&session.id));
+    assert!(sessions(&service, &root(&tmp)).is_empty());
+    assert_eq!(
+        code(decide(&service, &root(&tmp), &session.id, true)),
+        "agent_session_not_found"
+    );
+    // ... and the process stays refused, without a new request to allow.
+    assert_eq!(
+        code(agent_submit(&service, &root(&tmp), Some(AGENT_PID), None)),
+        "agent_pairing_denied"
+    );
+    assert_eq!(
+        code(service.open_agent_session(&root(&tmp), Some(AGENT_PID), Some("claude".into()))),
+        "agent_pairing_denied"
+    );
+}
+
+#[test]
+fn test_denying_a_second_registration_withdraws_the_first_approval() {
+    let tmp = tempfile::tempdir().unwrap();
+    let fake = Fake::new();
+    let service = Closing(service_with(&fake, ok_runner()));
+    grant(&service, &root(&tmp), 900).unwrap();
+    let first = service
+        .open_agent_session(&root(&tmp), Some(AGENT_PID), Some("claude".into()))
+        .unwrap();
+    decide(&service, &root(&tmp), &first.id, true).unwrap();
+    agent_submit(&service, &root(&tmp), Some(AGENT_PID), Some(&first.token)).unwrap();
+    let second = service
+        .open_agent_session(&root(&tmp), Some(AGENT_PID), Some("claude".into()))
+        .unwrap();
+    decide(&service, &root(&tmp), &second.id, false).unwrap();
+    assert!(!service.agent_session_alive(&first.id));
+    assert!(!service.agent_session_alive(&second.id));
+    assert_eq!(
+        code(agent_submit(
+            &service,
+            &root(&tmp),
+            Some(AGENT_PID),
+            Some(&first.token)
+        )),
+        "agent_pairing_denied"
+    );
+}
+
+#[test]
+fn test_denying_frees_a_session_slot() {
+    let tmp = tempfile::tempdir().unwrap();
+    let fake = Fake::new();
+    let service = Closing(service_with(&fake, ok_runner()));
+    grant(&service, &root(&tmp), 900).unwrap();
+    let sessions: Vec<_> = (0..MAX_AGENT_SESSIONS_PER_PROJECT as u32)
+        .map(|offset| {
+            service
+                .open_agent_session(&root(&tmp), Some(AGENT_PID + offset), None)
+                .unwrap()
+        })
+        .collect();
+    decide(&service, &root(&tmp), &sessions[0].id, false).unwrap();
+    service
+        .open_agent_session(&root(&tmp), Some(AGENT_PID + 99), None)
+        .unwrap();
+}
+
+#[test]
+fn test_denials_are_never_forgotten_while_the_grant_lasts() {
+    let tmp = tempfile::tempdir().unwrap();
+    let fake = Fake::new();
+    let service = Closing(service_with_limits(
+        &fake,
+        ok_runner(),
+        Limits {
+            max_remembered_agent_denials: 2,
+            ..Limits::default()
+        },
+    ));
+    grant(&service, &root(&tmp), 900).unwrap();
+    for offset in 0..2 {
+        let session = service
+            .open_agent_session(&root(&tmp), Some(AGENT_PID + offset), None)
+            .unwrap();
+        decide(&service, &root(&tmp), &session.id, false).unwrap();
+    }
+    assert_eq!(
+        code(service.open_agent_session(&root(&tmp), Some(AGENT_PID + 50), None)),
+        "agent_session_limit"
+    );
+    assert_eq!(
+        code(service.open_agent_session(&root(&tmp), Some(AGENT_PID), None)),
+        "agent_pairing_denied"
+    );
+}
+
+#[test]
+fn test_a_denial_does_not_outlive_its_grant() {
+    let tmp = tempfile::tempdir().unwrap();
+    let fake = Fake::new();
+    let service = Closing(service_with(&fake, ok_runner()));
+    grant(&service, &root(&tmp), 900).unwrap();
+    let session = service
+        .open_agent_session(&root(&tmp), Some(AGENT_PID), None)
+        .unwrap();
+    decide(&service, &root(&tmp), &session.id, false).unwrap();
+    service.lock(&root(&tmp), None, false).unwrap();
+    grant(&service, &root(&tmp), 900).unwrap();
+    let again = service
+        .open_agent_session(&root(&tmp), Some(AGENT_PID), None)
+        .unwrap();
+    assert_eq!(again.state, "pending");
+}
+
+#[test]
+fn test_a_closed_session_or_a_new_lease_needs_approval_again() {
+    let tmp = tempfile::tempdir().unwrap();
+    let fake = Fake::new();
+    let service = Closing(service_with(&fake, ok_runner()));
+    grant(&service, &root(&tmp), 900).unwrap();
+    let session = service
+        .open_agent_session(&root(&tmp), Some(AGENT_PID), Some("claude".into()))
+        .unwrap();
+    decide(&service, &root(&tmp), &session.id, true).unwrap();
+    service.close_agent_session(&session.id);
+    assert_eq!(
+        reason(agent_submit(
+            &service,
+            &root(&tmp),
+            Some(AGENT_PID),
+            Some(&session.token)
+        ))
+        .1,
+        "agent_session_required"
+    );
+    let again = service
+        .open_agent_session(&root(&tmp), Some(AGENT_PID), Some("claude".into()))
+        .unwrap();
+    decide(&service, &root(&tmp), &again.id, true).unwrap();
+    service.lock(&root(&tmp), None, false).unwrap();
+    assert!(!service.agent_session_alive(&again.id));
+    grant(&service, &root(&tmp), 900).unwrap();
+    // The same process id under a new grant is a stranger again.
+    assert_eq!(
+        reason(agent_submit(
+            &service,
+            &root(&tmp),
+            Some(AGENT_PID),
+            Some(&again.token)
+        ))
+        .1,
+        "agent_session_required"
+    );
+}
+
+#[test]
+fn test_sessions_need_an_agent_lease_and_a_known_process() {
+    let tmp = tempfile::tempdir().unwrap();
+    let fake = Fake::new();
+    let service = Closing(service_with(&fake, ok_runner()));
+    assert_eq!(
+        code(service.open_agent_session(&root(&tmp), Some(AGENT_PID), None)),
+        "interaction_required"
+    );
+    unlock(&service, &root(&tmp)).unwrap();
+    assert_eq!(
+        code(service.open_agent_session(&root(&tmp), Some(AGENT_PID), None)),
+        "agent_session_not_needed"
+    );
+    service.lock(&root(&tmp), None, false).unwrap();
+    grant(&service, &root(&tmp), 900).unwrap();
+    assert_eq!(
+        code(service.open_agent_session(&root(&tmp), None, None)),
+        "agent_pairing_unavailable"
+    );
+}
+
+#[test]
+fn test_waiting_sessions_are_capped() {
+    let tmp = tempfile::tempdir().unwrap();
+    let fake = Fake::new();
+    let service = Closing(service_with(&fake, ok_runner()));
+    grant(&service, &root(&tmp), 900).unwrap();
+    for offset in 0..MAX_AGENT_SESSIONS_PER_PROJECT as u32 {
+        service
+            .open_agent_session(&root(&tmp), Some(AGENT_PID + offset), None)
+            .unwrap();
+    }
+    assert_eq!(
+        code(service.open_agent_session(&root(&tmp), Some(AGENT_PID + 99), None)),
+        "agent_session_limit"
+    );
+}
+
+#[test]
+fn test_sessions_are_capped_across_projects() {
+    let fake = Fake::new();
+    let service = Closing(service_with(&fake, ok_runner()));
+    let books: Vec<_> = (0..3).map(|_| tempfile::tempdir().unwrap()).collect();
+    let mut pid = AGENT_PID;
+    for book in &books[..2] {
+        grant(&service, &root(book), 900).unwrap();
+        for _ in 0..MAX_AGENT_SESSIONS_PER_PROJECT {
+            service
+                .open_agent_session(&root(book), Some(pid), None)
+                .unwrap();
+            pid += 1;
+        }
+    }
+    grant(&service, &root(&books[2]), 900).unwrap();
+    assert_eq!(MAX_AGENT_SESSIONS, 2 * MAX_AGENT_SESSIONS_PER_PROJECT);
+    assert_eq!(
+        code(service.open_agent_session(&root(&books[2]), Some(pid), None)),
+        "agent_session_limit"
+    );
+}
+
+#[test]
+fn test_an_idle_agent_lease_expires() {
+    let tmp = tempfile::tempdir().unwrap();
+    let fake = Fake::new();
+    let service = Closing(service_with(&fake, ok_runner()));
+    grant(&service, &root(&tmp), 60).unwrap();
+    assert!(!with_lease(&service, &fake, &root(&tmp), |lease| lease.expired()));
+    with_lease(&service, &fake, &root(&tmp), |lease| {
+        lease.last_used = Instant::now() - Duration::from_secs(61);
+        assert!(lease.expired());
+    });
+    assert_eq!(
+        text(&service.status(Some(&root(&tmp))).unwrap(), "lease"),
+        "locked"
+    );
+}
+
+#[test]
+fn test_an_approval_counts_as_activity() {
+    let tmp = tempfile::tempdir().unwrap();
+    let fake = Fake::new();
+    let service = Closing(service_with(&fake, ok_runner()));
+    grant(&service, &root(&tmp), 60).unwrap();
+    let session = service
+        .open_agent_session(&root(&tmp), Some(AGENT_PID), None)
+        .unwrap();
+    with_lease(&service, &fake, &root(&tmp), |lease| {
+        lease.last_used = Instant::now() - Duration::from_secs(50);
+    });
+    decide(&service, &root(&tmp), &session.id, true).unwrap();
+    with_lease(&service, &fake, &root(&tmp), |lease| {
+        assert!(lease.last_used.elapsed() < Duration::from_secs(5));
+    });
+    // A denial is not activity: it keeps nothing alive.
+    let other = service
+        .open_agent_session(&root(&tmp), Some(AGENT_PID + 1), None)
+        .unwrap();
+    with_lease(&service, &fake, &root(&tmp), |lease| {
+        lease.last_used = Instant::now() - Duration::from_secs(50);
+    });
+    decide(&service, &root(&tmp), &other.id, false).unwrap();
+    with_lease(&service, &fake, &root(&tmp), |lease| {
+        assert!(lease.last_used.elapsed() >= Duration::from_secs(50));
+    });
+}
+
+#[test]
+fn test_denying_an_agent_cancels_its_queued_reads_and_withholds_results() {
+    struct Gate {
+        started: Event,
+        release: Event,
+    }
+    impl Runner for Gate {
+        fn run(&self, _: &Dispatch, _: &[u8]) -> Result<OperationResult> {
+            self.started.set();
+            self.release.wait(Duration::from_secs(10));
+            Ok(OperationResult::new(0, "{\"secret\": \"balances\"}", ""))
+        }
+    }
+    let gate = Arc::new(Gate {
+        started: Event::default(),
+        release: Event::default(),
+    });
+    let tmp = tempfile::tempdir().unwrap();
+    let fake = Fake::new();
+    let service = Closing(service_with(&fake, gate.clone()));
+    let data_root = root(&tmp);
+    grant(&service, &data_root, 900).unwrap();
+    let first = service
+        .open_agent_session(&data_root, Some(AGENT_PID), Some("a".into()))
+        .unwrap();
+    let second = service
+        .open_agent_session(&data_root, Some(AGENT_PID + 1), Some("b".into()))
+        .unwrap();
+    for session in [&first, &second] {
+        decide(&service, &data_root, &session.id, true).unwrap();
+    }
+    let running =
+        id(&agent_submit(&service, &data_root, Some(AGENT_PID), Some(&first.token)).unwrap());
+    assert!(gate.started.wait(Duration::from_secs(5)));
+    let queued = id(&agent_submit(
+        &service,
+        &data_root,
+        Some(AGENT_PID + 1),
+        Some(&second.token),
+    )
+    .unwrap());
+    assert_eq!(state_of(&service, &queued), "queued");
+
+    decide(&service, &data_root, &second.id, false).unwrap();
+    let withdrawn = service.operation_status(&queued, true);
+    assert_eq!(text(&withdrawn, "state"), "cancelled");
+    assert_eq!(text(&withdrawn, "output_withheld"), "agent_denied");
+    assert!(kassiber_envelope::get(&withdrawn, "stdout").is_none());
+
+    // A read queued through an earlier, since closed registration of the
+    // same process is withdrawn when that process is denied.
+    let third = service
+        .open_agent_session(&data_root, Some(AGENT_PID + 2), Some("c".into()))
+        .unwrap();
+    decide(&service, &data_root, &third.id, true).unwrap();
+    let earlier = id(&agent_submit(
+        &service,
+        &data_root,
+        Some(AGENT_PID + 2),
+        Some(&third.token),
+    )
+    .unwrap());
+    service.close_agent_session(&third.id);
+    let again = service
+        .open_agent_session(&data_root, Some(AGENT_PID + 2), Some("c".into()))
+        .unwrap();
+    decide(&service, &data_root, &again.id, false).unwrap();
+    let earlier = service.operation_status(&earlier, true);
+    assert_eq!(text(&earlier, "state"), "cancelled");
+    assert_eq!(text(&earlier, "output_withheld"), "agent_denied");
+
+    gate.release.set();
+    let finished = wait_terminal(&service, &running);
+    assert_eq!(text(&finished, "state"), "completed");
+    assert!(text(&finished, "stdout").contains("balances"));
+    // Denying the other agent afterwards withholds its finished result.
+    decide(&service, &data_root, &first.id, false).unwrap();
+    let finished = service.operation_status(&running, true);
+    assert!(kassiber_envelope::get(&finished, "stdout").is_none());
+    assert_eq!(text(&finished, "output_withheld"), "agent_denied");
+}

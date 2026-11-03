@@ -16,6 +16,9 @@ pub(super) fn handle(
     args: Option<&Value>,
     request: &RequestId,
 ) -> Handled {
+    if kind == "ui.backup.apply" {
+        let _ = daemon.agent_access.end_lease(false);
+    }
     let empty = dict::<&str>([]);
     let args = match args {
         None | Some(Value::Null) => &empty,
@@ -79,6 +82,7 @@ impl Host for Daemon {
             .expect("unlocked backup")
             .close_for_restore(expected, self.project_id.as_deref())?;
         self.book = None;
+        let _ = self.agent_access.end_lease(false);
         self.unlocked_passphrase = None;
         Ok(())
     }

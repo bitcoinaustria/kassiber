@@ -976,7 +976,7 @@ fn unlock_with_agent_control_sends_both_secrets_in_order() {
         .unlock(
             "/project",
             b"pass",
-            Some(3600),
+            Some(3600.into()),
             "operator",
             "password",
             true,

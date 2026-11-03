@@ -736,3 +736,459 @@ fn brokered_rotation_cannot_break_a_live_desktop_owner() {
         .status
         .success());
 }
+
+// ----- R6-3: the operator leaves, brokered routing and agent access -----
+
+/// The binary as a CLI against this broker, with `stdin` on descriptor 0.
+fn cli(broker: &Broker, args: &[&str], stdin: &[u8]) -> Output {
+    let mut command = binary();
+    command.args(args);
+    broker.environment(&mut command);
+    command
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let mut child = command.spawn().unwrap();
+    child.stdin.take().unwrap().write_all(stdin).unwrap();
+    child.wait_with_output().unwrap()
+}
+
+fn stdout_json(output: &Output) -> Value {
+    json(&String::from_utf8_lossy(&output.stdout))
+}
+
+fn error_code(output: &Output) -> String {
+    text(get(&stdout_json(output), "error"), "code")
+}
+
+#[test]
+fn operator_leaves_unlock_route_and_lock_through_the_broker() {
+    let broker = Broker::start();
+    let (data_root, _, _) = book(&broker);
+    let data_root = root(&data_root);
+    let pw = PASSPHRASE.as_bytes();
+    let machine = |args: &[&str]| {
+        let mut full = vec!["--data-root", data_root.as_str(), "--machine"];
+        full.extend_from_slice(args);
+        full.into_iter().map(str::to_owned).collect::<Vec<_>>()
+    };
+    let run_cli = |args: &[&str], stdin: &[u8]| {
+        let args = machine(args);
+        let args: Vec<&str> = args.iter().map(String::as_str).collect();
+        cli(&broker, &args, stdin)
+    };
+
+    let status = run_cli(&["operator", "status"], b"");
+    assert!(status.status.success(), "{status:?}");
+    let data = get(&stdout_json(&status), "data").clone();
+    assert_eq!(text(&data, "broker"), "running");
+    assert_eq!(text(&data, "lease"), "locked");
+    assert_eq!(text(get(&data, "mode"), "effective"), "manual");
+    assert_eq!(get(&data, "same_build"), &Value::Bool(true));
+    assert!(!String::from_utf8_lossy(&status.stdout).contains(&data_root));
+
+    // Machines never get a prompt.
+    let refused = run_cli(&["operator", "unlock"], b"");
+    assert_eq!(error_code(&refused), "interaction_required");
+    assert_eq!(
+        text(
+            get(get(&stdout_json(&refused), "error"), "details"),
+            "reason"
+        ),
+        "fresh_local_authentication"
+    );
+    let refused = run_cli(&["operator", "unlock", "--auth", "touch-id"], b"");
+    assert_eq!(error_code(&refused), "interaction_required");
+
+    let mode = run_cli(
+        &["operator", "mode", "brokered", "--passphrase-fd", "0"],
+        pw,
+    );
+    assert!(mode.status.success(), "{mode:?}");
+    assert_eq!(text(get(&stdout_json(&mode), "data"), "mode"), "brokered");
+
+    // An ordinary command now needs a lease and never starts or reaches
+    // another broker.
+    let no_lease = run_cli(&["status"], b"");
+    assert_eq!(no_lease.status.code(), Some(1));
+    assert_eq!(error_code(&no_lease), "interaction_required");
+    assert_eq!(
+        text(
+            get(get(&stdout_json(&no_lease), "error"), "details"),
+            "reason"
+        ),
+        "operator_lease_required"
+    );
+    assert!(no_lease.stderr.is_empty());
+
+    let unlocked = run_cli(
+        &[
+            "operator",
+            "unlock",
+            "--passphrase-fd",
+            "0",
+            "--capability",
+            "read",
+            "--duration",
+            "30m",
+        ],
+        pw,
+    );
+    assert!(unlocked.status.success(), "{unlocked:?}");
+    let lease = get(&stdout_json(&unlocked), "data").clone();
+    assert_eq!(text(&lease, "lease"), "unlocked");
+    assert_eq!(get(&lease, "duration_seconds"), &Value::from(1800));
+    // A duration beyond the timestamp range reaches the broker exactly.
+    let too_long = run_cli(
+        &[
+            "operator",
+            "unlock",
+            "--passphrase-fd",
+            "0",
+            "--duration",
+            "99999999999999999999d",
+        ],
+        pw,
+    );
+    assert_eq!(error_code(&too_long), "operator_invalid_duration");
+
+    // Brokered: the child's envelope on stdout, one accepted event on stderr.
+    let brokered = run_cli(&["status"], b"");
+    assert!(brokered.status.success(), "{brokered:?}");
+    assert_eq!(text(&stdout_json(&brokered), "kind"), "status");
+    let event = json(String::from_utf8_lossy(&brokered.stderr).trim_end());
+    assert_eq!(text(&event, "kind"), "operator.operation.accepted");
+    let operation_id = text(get(&event, "data"), "operation_id");
+    assert_eq!(text(get(&event, "data"), "state"), "queued");
+    assert!(String::from_utf8_lossy(&brokered.stderr).ends_with("}\n"));
+    let direct = broker.direct(Path::new(&data_root), &["status"]);
+    assert_eq!(brokered.stdout, direct.stdout);
+    let table = cli(&broker, &["--data-root", &data_root, "status"], b"");
+    assert!(table.status.success(), "{table:?}");
+    assert!(String::from_utf8_lossy(&table.stderr).starts_with("operator operation accepted: "));
+    assert!(String::from_utf8_lossy(&table.stdout).starts_with("field "));
+
+    let operation = run_cli(&["operator", "operation", "status", &operation_id], b"");
+    assert_eq!(
+        text(get(&stdout_json(&operation), "data"), "state"),
+        "completed"
+    );
+    let cancel = run_cli(&["operator", "operation", "cancel", &operation_id], b"");
+    assert_eq!(
+        text(&stdout_json(&cancel), "kind"),
+        "operator.operation.cancel"
+    );
+
+    // Admin work needs fresh authentication through its own descriptor.
+    let admin = run_cli(&["secrets", "verify"], b"");
+    assert_eq!(error_code(&admin), "interaction_required");
+    assert!(text(get(&stdout_json(&admin), "error"), "hint").contains("--operator-auth-fd"));
+    let admin = run_cli(&["--operator-auth-fd", "0", "secrets", "verify"], pw);
+    assert!(admin.status.success(), "{admin:?}");
+    assert_eq!(text(&stdout_json(&admin), "kind"), "secrets.verify");
+
+    let locked = run_cli(&["operator", "lock"], b"");
+    assert_eq!(
+        get(get(&stdout_json(&locked), "data"), "locked"),
+        &Value::Bool(true)
+    );
+    let manual = run_cli(&["operator", "mode", "manual", "--passphrase-fd", "0"], pw);
+    assert!(manual.status.success(), "{manual:?}");
+    let stop = cli(&broker, &["--machine", "operator", "stop"], b"");
+    assert_eq!(text(get(&stdout_json(&stop), "data"), "broker"), "stopping");
+    // Once it has exited, stopping again finds nothing to stop.
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let stopped = cli(&broker, &["--machine", "operator", "stop"], b"");
+        let reply = stdout_json(&stopped);
+        if kassiber_envelope::get(&reply, "data")
+            .is_some_and(|data| text(data, "broker") == "stopped")
+        {
+            break;
+        }
+        assert!(Instant::now() < deadline, "{stopped:?}");
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
+#[test]
+fn ctrl_c_cancels_a_queued_brokered_command_with_exit_130() {
+    let broker = Broker::start();
+    let (data_root, _, _) = book(&broker);
+    let data_root = root(&data_root);
+    let client = broker.client();
+    client
+        .set_mode(&data_root, "brokered", PASSPHRASE.as_bytes())
+        .unwrap();
+    unlock(&client, &data_root, PASSPHRASE);
+    // Keep the project's worker busy, so the next command waits queued.
+    let mut ahead = Vec::new();
+    for _ in 0..12 {
+        let accepted = client
+            .submit(
+                &data_root,
+                &PreparedArguments::new(argv(&["--data-root", &data_root, "--machine", "status"])),
+                None,
+                &SubmitOptions::new(),
+            )
+            .unwrap();
+        ahead.push(get(&accepted, "operation_id").clone());
+    }
+    let mut command = binary();
+    command.args(["--data-root", &data_root, "--machine", "status"]);
+    broker.environment(&mut command);
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let mut child = command.spawn().unwrap();
+    // Wait for the accepted event, then press Ctrl-C.
+    let mut stderr = child.stderr.take().unwrap();
+    let mut accepted = Vec::new();
+    {
+        use std::io::Read;
+        let mut byte = [0u8; 1];
+        while !accepted.ends_with(b"\n") {
+            assert_eq!(stderr.read(&mut byte).unwrap(), 1, "{accepted:?}");
+            accepted.push(byte[0]);
+        }
+    }
+    let operation_id = text(
+        get(&json(String::from_utf8_lossy(&accepted).trim_end()), "data"),
+        "operation_id",
+    );
+    interrupt(child.id());
+    let output = child.wait_with_output().unwrap();
+    let mut rest = String::new();
+    {
+        use std::io::Read;
+        stderr.read_to_string(&mut rest).unwrap();
+    }
+    assert_eq!(output.status.code(), Some(130), "{rest}");
+    assert!(output.stdout.is_empty(), "{output:?}");
+    assert_eq!(
+        rest,
+        format!("operator cancellation requested: {operation_id} (cancelled)\n")
+    );
+    let state = client
+        .operation_status(&PyStr::from(operation_id.as_str()))
+        .unwrap();
+    assert_eq!(text(&state, "state"), "cancelled");
+    for id in ahead {
+        let Value::Str(id) = id else { panic!() };
+        client.wait(&id).unwrap();
+    }
+}
+
+/// Ctrl-C: `kill -INT <pid>`, without a libc dependency in this crate.
+fn interrupt(pid: u32) {
+    let status = Command::new("/bin/kill")
+        .args(["-INT".to_owned(), pid.to_string()])
+        .status()
+        .unwrap();
+    assert!(status.success());
+}
+
+/// `kassiber daemon` on one book with this broker's environment.
+struct DesktopDaemon {
+    child: Child,
+    stdin: std::process::ChildStdin,
+    stdout: std::io::BufReader<std::process::ChildStdout>,
+    next: u32,
+}
+
+impl DesktopDaemon {
+    fn start(broker: &Broker, data_root: &str, access_file: &Path) -> Self {
+        let mut command = binary();
+        command.args(["--data-root", data_root, "daemon"]);
+        broker.environment(&mut command);
+        command
+            .env("KASSIBER_AGENT_ACCESS_FILE", access_file)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null());
+        let mut child = command.spawn().unwrap();
+        let stdin = child.stdin.take().unwrap();
+        let mut stdout = std::io::BufReader::new(child.stdout.take().unwrap());
+        let mut ready = String::new();
+        std::io::BufRead::read_line(&mut stdout, &mut ready).unwrap();
+        let ready = json(&ready);
+        assert_eq!(text(&ready, "kind"), "daemon.ready");
+        let kinds = format!("{:?}", get(get(&ready, "data"), "supported_kinds"));
+        assert!(kinds.contains("ui.agent_access.pairing"), "{kinds}");
+        DesktopDaemon {
+            child,
+            stdin,
+            stdout,
+            next: 0,
+        }
+    }
+
+    fn request(&mut self, kind: &str, args: &str) -> Value {
+        self.next += 1;
+        let id = format!("r{}", self.next);
+        writeln!(
+            self.stdin,
+            "{{\"request_id\": \"{id}\", \"kind\": \"{kind}\", \"args\": {args}}}"
+        )
+        .unwrap();
+        loop {
+            let mut line = String::new();
+            assert!(std::io::BufRead::read_line(&mut self.stdout, &mut line).unwrap() > 0);
+            let record = json(&line);
+            if kassiber_envelope::get(&record, "request_id") == Some(&Value::from(id.as_str())) {
+                return record;
+            }
+        }
+    }
+
+    fn data(&mut self, kind: &str, args: &str) -> Value {
+        let record = self.request(kind, args);
+        assert_eq!(text(&record, "kind"), kind, "{record:?}");
+        get(&record, "data").clone()
+    }
+}
+
+impl Drop for DesktopDaemon {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+#[test]
+fn desktop_agent_access_grants_pairs_and_ends_with_the_desktop_session() {
+    let broker = Broker::start();
+    let (data_root, workspace, profile) = book(&broker);
+    let data_root = root(&data_root);
+    let config = private_dir("kb-cfg-");
+    let access_file = config.path().join("agent-access.json");
+    let mut daemon = DesktopDaemon::start(&broker, &data_root, &access_file);
+
+    // Nothing is open yet, and agents are off: status reads memory only.
+    let status = daemon.data("ui.agent_access.status", "{\"refresh\": true}");
+    assert_eq!(get(&status, "mcp_available"), &Value::Bool(false));
+    assert_eq!(text(&status, "reason"), "mcp_disabled");
+    assert_eq!(get(get(&status, "session"), "needed"), &Value::Bool(false));
+    let refused = daemon.request("ui.agent_access.unlock", "{}");
+    assert_eq!(text(get(&refused, "error"), "code"), "mcp_disabled");
+    daemon.data(
+        "daemon.unlock",
+        &format!("{{\"auth_response\": {{\"passphrase_secret\": \"{PASSPHRASE}\"}}}}"),
+    );
+    let configured = daemon.data("ui.agent_access.configure", "{\"mcp_enabled\": true}");
+    assert_eq!(get(&configured, "mcp_available"), &Value::Bool(true));
+    assert_eq!(
+        std::fs::read(&access_file).unwrap(),
+        b"{\"ai_features_enabled\": null, \"mcp_enabled\": true, \"schema_version\": 1}\n"
+    );
+    assert_eq!(
+        get(get(&configured, "session"), "needed"),
+        &Value::Bool(true)
+    );
+
+    let granted = daemon.data("ui.agent_access.unlock", "{}");
+    let session = get(&granted, "session");
+    assert_eq!(get(session, "active"), &Value::Bool(true));
+    assert_eq!(get(session, "idle_timeout_seconds"), &Value::from(900));
+    let client = broker.client();
+    let lease = client.status(Some(&data_root)).unwrap();
+    assert_eq!(text(&lease, "capability"), "read");
+    assert_eq!(get(&lease, "duration_seconds"), &Value::from(8 * 60 * 60));
+    assert_eq!(get(&lease, "agent_scope"), &Value::Bool(true));
+    let mode = cli(
+        &broker,
+        &["--data-root", &data_root, "--machine", "operator", "status"],
+        b"",
+    );
+    assert_eq!(
+        text(get(get(&stdout_json(&mode), "data"), "mode"), "effective"),
+        "brokered"
+    );
+
+    // This process asks to read; the desktop shows it waiting, then allows it.
+    let agent = client.open_agent_session(&data_root).unwrap();
+    let waiting = daemon.data("ui.agent_access.status", "{\"refresh\": true}");
+    let agents = get(get(&waiting, "session"), "agents");
+    let Value::List(agents) = agents else {
+        panic!("{agents:?}")
+    };
+    assert_eq!(agents.len(), 1);
+    assert_eq!(get(&agents[0], "pid"), &Value::from(std::process::id()));
+    assert_eq!(text(&agents[0], "state"), "pending");
+    let allowed = daemon.data(
+        "ui.agent_access.pairing",
+        &format!(
+            "{{\"session_id\": \"{}\", \"allow\": true}}",
+            agent.session_id.as_str().unwrap()
+        ),
+    );
+    let Value::List(agents) = get(get(&allowed, "session"), "agents") else {
+        panic!()
+    };
+    assert_eq!(text(&agents[0], "state"), "allowed");
+
+    // Its tool calls are admitted and counted; any other command is not.
+    let call = PreparedArguments::new(argv(&[
+        "--data-root",
+        &data_root,
+        "--machine",
+        "mcp",
+        "call",
+        "--tool",
+        "status",
+        "--arguments",
+        "{}",
+        "--workspace",
+        &workspace,
+        "--profile",
+        &profile,
+    ]));
+    let token = agent.token.as_str().unwrap().to_owned();
+    let accepted = client
+        .submit(
+            &data_root,
+            &call,
+            None,
+            &SubmitOptions {
+                start_broker: false,
+                agent_session_token: Some(&token),
+                ..SubmitOptions::default()
+            },
+        )
+        .unwrap();
+    let Value::Str(id) = get(&accepted, "operation_id").clone() else {
+        panic!()
+    };
+    client.wait(&id).unwrap();
+    let counted = daemon.data("ui.agent_access.status", "{\"refresh\": true}");
+    assert_eq!(get(get(&counted, "session"), "calls"), &Value::from(1));
+    let other = client.submit(
+        &data_root,
+        &PreparedArguments::new(argv(&["--data-root", &data_root, "--machine", "status"])),
+        None,
+        &SubmitOptions {
+            start_broker: false,
+            agent_session_token: Some(&token),
+            ..SubmitOptions::default()
+        },
+    );
+    assert_eq!(other.unwrap_err().code(), Some("agent_session_scope"));
+
+    // The desktop locking itself ends the agents' lease and restores manual.
+    daemon.data("daemon.lock", "{}");
+    assert_eq!(
+        text(&client.status(Some(&data_root)).unwrap(), "lease"),
+        "locked"
+    );
+    let mode = cli(
+        &broker,
+        &["--data-root", &data_root, "--machine", "operator", "status"],
+        b"",
+    );
+    assert_eq!(
+        text(get(get(&stdout_json(&mode), "data"), "mode"), "effective"),
+        "manual"
+    );
+    drop(agent);
+}

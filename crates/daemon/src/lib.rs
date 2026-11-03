@@ -13,6 +13,7 @@
 //! `not_implemented`, and an unclassified one `unsupported_kind`, as in
 //! Python. See docs/reference/rust-shell.md.
 
+mod agent_access;
 mod attachments;
 mod backends;
 mod backup;
@@ -99,6 +100,7 @@ pub struct DaemonConfig {
 pub fn supported_kinds() -> Vec<&'static str> {
     let mut kinds = vec![SUPPORTED_KINDS[0]];
     kinds.extend(diagnostics::KINDS);
+    kinds.extend(agent_access::KINDS);
     kinds.extend(services::kinds().filter(|k| offline::KINDS.contains(k)));
     kinds.extend(workspace_reads::OVERVIEW_KINDS);
     kinds.extend(transactions::KINDS);
@@ -487,6 +489,8 @@ pub(crate) struct Daemon {
     verifications: Arc<onboarding::Verifications>,
     /// Native-picker document grants (`DocumentImportSessions`).
     document_sessions: documents_import::Sessions,
+    /// The broker lease this desktop granted agents for its open book.
+    pub(crate) agent_access: agent_access::AgentAccess,
 }
 
 impl Daemon {
@@ -514,6 +518,7 @@ impl Daemon {
             egress_backends: None,
             verifications: Default::default(),
             document_sessions: Default::default(),
+            agent_access: agent_access::AgentAccess::system(config.build),
         }
     }
 
@@ -527,7 +532,16 @@ impl Daemon {
                 return 1;
             }
             self.backup_sessions.expire();
+            let _ = self.agent_access.expire();
             let timeout = self.backup_sessions.remaining();
+            // The desktop agent lease's next check, expiry or lock retry.
+            let timeout = match self.agent_access.due() {
+                Some(due) => {
+                    let wait = due.saturating_duration_since(std::time::Instant::now());
+                    Some(timeout.map_or(wait, |timeout| timeout.min(wait)))
+                }
+                None => timeout,
+            };
             let timeout = if self.freshness_requests.polling() {
                 Some(
                     timeout
@@ -857,6 +871,38 @@ impl Daemon {
             } else {
                 self.egress_snapshot(args.as_ref())?
             };
+            return Ok((
+                Some(with_request_id(success(&kind_text, payload), &request_id)),
+                false,
+            ));
+        }
+        if agent_access::KINDS.contains(&kind_text.as_str()) {
+            // A global, non-secret preference answered without opening or
+            // unlocking any book. Only an explicit unlock or lock, a
+            // pairing, or a refresh while the desktop's own session exists
+            // contacts the operator broker.
+            let store = Arc::clone(&self.store);
+            let data_root = self.data_root.clone();
+            let unlock_mode = move || {
+                match store.effective_unlock_mode(&kassiber_runtime::store::Selection {
+                    data_root: Some(data_root.clone()),
+                    ..Default::default()
+                }) {
+                    Ok(kassiber_runtime::store::UnlockMode::Brokered) => "brokered",
+                    Ok(kassiber_runtime::store::UnlockMode::Unattended) => "unattended",
+                    _ => "manual",
+                }
+                .to_owned()
+            };
+            let desktop = agent_access::Desktop {
+                data_root: &self.data_root,
+                book_open: self.book.is_some(),
+                passphrase: self.unlocked_passphrase.as_ref().map(Secret::expose),
+                unlock_mode: &unlock_mode,
+            };
+            let payload = self
+                .agent_access
+                .payload(&desktop, &kind_text, args.as_ref())?;
             return Ok((
                 Some(with_request_id(success(&kind_text, payload), &request_id)),
                 false,
@@ -1585,6 +1631,9 @@ impl Daemon {
             }
         }
         self.release_owner()?;
+        // `_clear_unlocked_passphrase`: the agents' lease ends with the
+        // desktop's session.
+        let _ = self.agent_access.end_lease(false);
         self.unlocked_passphrase = None;
         Ok(())
     }
@@ -1698,6 +1747,7 @@ impl Daemon {
     fn shutdown_resources(&mut self) {
         let _ = self.stop_watch_worker(false);
         self.analysis.clear();
+        let _ = self.agent_access.end_lease(false);
         self.backup_sessions.clear();
         self.unlocked_passphrase = None;
         if self.reap_freshness(true).is_err() {

@@ -24,6 +24,9 @@ kassiber-runtime = { path = "../runtime" }
 kassiber-release = { path = "../release" }
 kassiber-secrets = { path = "../secrets" }
 kassiber-store = { path = "../store" }
+kassiber-operator = { path = "../operator" }
+kassiber-ipc = { path = "../ipc" }
+zeroize = "1"
 # argparse's usage formatter and textwrap split text with lookaround
 # patterns; the same engine the redaction rules use.
 fancy-regex = "0.20"

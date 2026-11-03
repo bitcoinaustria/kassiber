@@ -22,6 +22,26 @@ pub fn storage_error(error: kassiber_paths::Error) -> AppError {
     }
 }
 
+/// `prompt_passphrase(label)`: one no-echo prompt on the controlling
+/// terminal, refusing an empty value or one holding NUL.
+pub fn prompt_passphrase(label: &str) -> Result<Passphrase, AppError> {
+    let invalid = |message: &str| AppError::new("invalid_passphrase", message);
+    let value = rpassword::prompt_password(label)
+        .map(Zeroizing::new)
+        .map_err(|_| {
+            invalid("no TTY available for passphrase prompt").with_hint(
+                "Run interactively or pass --db-passphrase-fd from a controlling process.",
+            )
+        })?;
+    if value.is_empty() {
+        return Err(invalid("passphrase must not be empty"));
+    }
+    if value.contains('\0') {
+        return Err(invalid("passphrase must not contain NUL bytes"));
+    }
+    Passphrase::new(value).map_err(storage_error)
+}
+
 /// Secret channels are a descriptor or a restoring no-echo controlling TTY.
 /// The transport passes flags only; secret values never enter an argument map.
 fn passphrase(

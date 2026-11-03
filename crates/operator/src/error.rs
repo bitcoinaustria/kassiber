@@ -98,6 +98,37 @@ impl From<io::Error> for Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// How a CLI or daemon caller reports an operator failure: an `AppError` as
+/// is, any other exception through the generic `internal_error` with
+/// Python's `str(exc)` (`[Errno N] text` for an `OSError`, `timed out` for a
+/// socket timeout).
+pub fn into_app_error(error: Error) -> AppError {
+    let message = match error {
+        Error::App(error) => return error,
+        Error::Io(error) => os_error_text(&error),
+        Error::Eof(message) => message.to_owned(),
+        Error::Value(message) => message,
+    };
+    AppError::new("internal_error", message)
+}
+
+/// `str(OSError)`.
+pub fn os_error_text(error: &io::Error) -> String {
+    if let Some(number) = error.raw_os_error() {
+        let text = error.to_string();
+        let suffix = format!(" (os error {number})");
+        let label = if cfg!(windows) { "WinError" } else { "Errno" };
+        return format!(
+            "[{label} {number}] {}",
+            text.strip_suffix(&suffix).unwrap_or(&text)
+        );
+    }
+    if error.kind() == io::ErrorKind::TimedOut {
+        return "timed out".to_owned();
+    }
+    error.to_string()
+}
+
 /// `AppError(message, code=code)`: not retryable unless set.
 pub(crate) fn app(code: &str, message: impl Into<String>) -> AppError {
     AppError::new(code, message)

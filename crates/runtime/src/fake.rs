@@ -337,6 +337,36 @@ impl BookStore for FakeStore {
         Ok(self.config.unlock_mode)
     }
 
+    fn selected_data_root(&self, selection: &Selection) -> Result<String, AppError> {
+        if selection.data_root.is_some() && selection.project.is_some() {
+            return Err(AppError::new(
+                "invalid_flag_combination",
+                "--project and --data-root cannot be used together",
+            )
+            .with_hint(
+                "Use --project for a catalog project or --data-root for an explicit project data directory, not both.",
+            ));
+        }
+        Ok(selection
+            .data_root
+            .clone()
+            .unwrap_or_else(|| self.config.data_root.clone()))
+    }
+
+    fn unlock_mode_status(&self, _: &str) -> Result<Value, AppError> {
+        let mode = match self.config.unlock_mode {
+            UnlockMode::Manual => "manual",
+            UnlockMode::Brokered => "brokered",
+            UnlockMode::Unattended => "unattended",
+        };
+        Ok(dict([
+            ("configured", s(mode)),
+            ("effective", s(mode)),
+            ("legacy_inferred", Value::Bool(false)),
+            ("binding_state", s("valid")),
+        ]))
+    }
+
     fn database_is_encrypted(&self, _: &str) -> Result<bool, AppError> {
         Ok(self.config.encrypted)
     }

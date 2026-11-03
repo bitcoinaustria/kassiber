@@ -14,7 +14,7 @@ use std::sync::Arc;
 use kassiber_envelope::{build_error_envelope, cli_text, derive_kind, dict, s, AppError};
 use kassiber_pyjson::Value;
 use kassiber_runtime::status::status_payload;
-use kassiber_runtime::store::{not_implemented, BookStore, Secret, Selection, Unlock, UnlockMode};
+use kassiber_runtime::store::{not_implemented, BookStore, Secret, Selection, Unlock};
 use kassiber_runtime::BuildInfo;
 
 use crate::argparse::{parse_args, Context, Namespace, Stop};
@@ -40,6 +40,11 @@ pub struct Environment {
     pub operator_expected_database_identity: Option<String>,
     /// `KASSIBER_OPERATOR_DIRECT`.
     pub operator_direct: Option<String>,
+    /// Where the operator broker listens; `None` reads this process's
+    /// account and environment (`Runtime::from_process`). Tests name a
+    /// disposable directory here so no client ever probes the account's
+    /// endpoint.
+    pub operator_runtime: Option<kassiber_operator::runtime::Runtime>,
     /// `KASSIBER_RUST_TEST_PROBE=1`: parse the command line, print the
     /// selected command path (`wallets.list`), then exit 0 when this binary
     /// implements the command or 3 when it does not, without touching any
@@ -74,6 +79,7 @@ impl Environment {
                 "KASSIBER_OPERATOR_EXPECTED_DATABASE_IDENTITY",
             ),
             operator_direct: var("KASSIBER_OPERATOR_DIRECT"),
+            operator_runtime: None,
             #[cfg(feature = "test-probe")]
             test_probe: var("KASSIBER_RUST_TEST_PROBE").as_deref() == Some("1"),
             #[cfg(feature = "test-probe")]
@@ -349,11 +355,68 @@ pub fn run(
     // bootstrap. `commands describe` never migrates (nor bootstraps).
     let migrate = globals.selection.data_root.is_none()
         && globals.selection.env_file.is_none()
-        && !matches!(path.first(), Some(&"commands") | Some(&"verify-download"));
+        && !matches!(path.first(), Some(&"commands") | Some(&"verify-download"))
+        && !(path.first() == Some(&"operator")
+            && matches!(
+                path.get(1),
+                Some(&"status") | Some(&"lock") | Some(&"operation")
+            ));
     if migrate {
         if let Err(error) = store.migrate_default_state_root() {
             return fail(&mut stdout, &mut stderr, error);
         }
+    }
+    let interaction = crate::operator_cli::Interaction {
+        non_interactive: globals.non_interactive,
+        stdin_is_tty,
+    };
+    if path.first() == Some(&"operator") {
+        let result = crate::operator_cli::dispatch(
+            &operator_client(build, env),
+            store.as_ref(),
+            &namespace,
+            &globals.selection,
+            interaction,
+        )
+        .and_then(|payload| {
+            let mut sink = Sink {
+                output: output.as_deref(),
+                home: env.home.as_deref(),
+                stdout: &mut stdout,
+                stderr: &mut stderr,
+            };
+            emit(&mut sink, format, &kind, payload)
+        });
+        return match result {
+            Ok(()) => 0,
+            Err(error) => fail(&mut stdout, &mut stderr, error),
+        };
+    }
+    let routed = crate::operator_cli::route_brokered(
+        &|| operator_client(build, env),
+        &crate::operator_cli::ctrl_c,
+        store.as_ref(),
+        &crate::operator_cli::Routed {
+            argv,
+            path: &dotted,
+            args: &namespace,
+            selection: &globals.selection,
+            interaction,
+            direct: env.operator_direct.as_deref() == Some("1"),
+        },
+        &mut crate::operator_cli::Output {
+            stdout: &mut stdout,
+            stderr: &mut stderr,
+            output: output.as_deref(),
+            home: env.home.as_deref(),
+            format,
+            machine: globals.machine,
+        },
+    );
+    match routed {
+        Ok(Some(code)) => return code,
+        Ok(None) => {}
+        Err(error) => return fail(&mut stdout, &mut stderr, error),
     }
     if env.operator_child() && path.first() != Some(&"projects") {
         if let Err(error) =
@@ -400,8 +463,8 @@ pub fn run(
     let mut sync_handoff = false;
     let result = match dotted.as_str() {
         command if crate::backup::COMMANDS.contains(&command) => {
-            route_brokered(env, store.as_ref(), &globals.selection)
-                .and_then(|_| store.bootstrap(&globals.selection))
+            store
+                .bootstrap(&globals.selection)
                 .and_then(|bootstrap| {
                     diagnostics.args = crate::diagnostics::arguments(&namespace, Some(&bootstrap));
                     crate::backup::execute(store.as_ref(), &bootstrap.paths, command, &namespace)
@@ -409,8 +472,8 @@ pub fn run(
                 .and_then(|payload| emit(&mut sink, format, &kind, payload))
         }
         command if crate::secrets::COMMANDS.contains(&command) => {
-            route_brokered(env, store.as_ref(), &globals.selection)
-                .and_then(|_| store.bootstrap(&globals.selection))
+            store
+                .bootstrap(&globals.selection)
                 .and_then(|bootstrap| {
                     diagnostics.args = crate::diagnostics::arguments(&namespace, Some(&bootstrap));
                     crate::secrets::execute(store.as_ref(), &bootstrap.paths, command, &namespace)
@@ -625,7 +688,6 @@ fn book_command(
 ) -> Result<(), AppError> {
     let (operation, namespace, stdin_is_tty, diagnostics) = command;
     let initialize = operation == "init";
-    route_brokered(env, store, &globals.selection)?;
     let bootstrap = store.bootstrap(&globals.selection)?;
     diagnostics.args = crate::diagnostics::arguments(namespace, Some(&bootstrap));
     let mut runtime_config = bootstrap.runtime_config.clone();
@@ -805,7 +867,6 @@ fn with_book(
         &kassiber_runtime::store::Bootstrap,
     ) -> Result<(), AppError>,
 ) -> Result<(), AppError> {
-    route_brokered(env, store, &globals.selection)?;
     let (args, version, diagnostics) = diagnostics;
     let mut bootstrap = store.bootstrap(&globals.selection)?;
     diagnostics.args = crate::diagnostics::arguments(args, Some(&bootstrap));
@@ -979,23 +1040,22 @@ fn operator_expected_database_identity(env: &Environment) -> Result<Option<Strin
     Ok(env.operator_expected_database_identity.clone())
 }
 
-/// `route_brokered_command`: a brokered project's commands go through the
-/// operator broker, which is not ported yet.
-fn route_brokered(
+/// The broker client for this binary's build identity.
+fn operator_client(
+    build: BuildInfo,
     env: &Environment,
-    store: &dyn BookStore,
-    selection: &Selection,
-) -> Result<(), AppError> {
-    if env.operator_direct.as_deref() == Some("1") {
-        return Ok(());
+) -> kassiber_operator::client::BrokerClient<kassiber_operator::client::SystemHost> {
+    let mut host = kassiber_operator::client::SystemHost::new(
+        kassiber_operator::build::current_build_identity(kassiber_operator::build::BuildInputs {
+            version: build.version,
+            channel: build.channel,
+            commit: build.commit,
+        }),
+    );
+    if let Some(runtime) = &env.operator_runtime {
+        host.runtime = runtime.clone();
     }
-    if store.effective_unlock_mode(selection)? == UnlockMode::Brokered {
-        return Err(not_implemented(
-            "operator",
-            "running commands through the operator broker",
-        ));
-    }
-    Ok(())
+    kassiber_operator::client::BrokerClient::new(host)
 }
 
 #[cfg(test)]

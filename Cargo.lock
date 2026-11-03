@@ -1658,6 +1658,8 @@ dependencies = [
  "kassiber-diagnostics",
  "kassiber-envelope",
  "kassiber-imports",
+ "kassiber-ipc",
+ "kassiber-operator",
  "kassiber-pyjson",
  "kassiber-pytext",
  "kassiber-release",
@@ -1668,6 +1670,7 @@ dependencies = [
  "kassiber-wallets",
  "serde_json",
  "tempfile",
+ "zeroize",
 ]
 
 [[package]]
@@ -1691,6 +1694,7 @@ dependencies = [
  "kassiber-envelope",
  "kassiber-imports",
  "kassiber-net",
+ "kassiber-operator",
  "kassiber-paths",
  "kassiber-pyjson",
  "kassiber-pytext",
@@ -1699,6 +1703,8 @@ dependencies = [
  "kassiber-transactions",
  "kassiber-wallets",
  "serde_json",
+ "tempfile",
+ "zeroize",
 ]
 
 [[package]]

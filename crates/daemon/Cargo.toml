@@ -30,9 +30,12 @@ kassiber-pyjson = { path = "../pyjson" }
 kassiber-pytext = { path = "../pytext" }
 kassiber-runtime = { path = "../runtime" }
 kassiber-setup = { path = "../setup" }
+kassiber-operator = { path = "../operator" }
+zeroize = "1"
 
 [dev-dependencies]
 kassiber-runtime = { path = "../runtime", features = ["fake"] }
+tempfile = "3"
 
 [lints.rust]
 unsafe_code = "forbid"
