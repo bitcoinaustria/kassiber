@@ -90,14 +90,12 @@ ordered compatibility, hidden-home cutover and legacy project migration through
 ## Rust backend R5 desktop projections
 
 The [desktop projection checkpoint](docs/reference/rust-shell.md#desktop-projections-r5-continuation)
-serves **9/15** requested unassigned desktop kinds natively, plus Python's
+serves **10/15** requested unassigned desktop kinds natively, plus Python's
 report-read journal rebuild for every report-like read. Remaining:
 
 - [ ] Port `ui.transactions.graph` (local graph, owned index, consented public
   lookups through `kassiber-net`), then `ui.transactions.review_context`, which
   embeds the graph and evidence summary.
-- [ ] Port `ui.exports.preview` over the native transaction, platform, year
-  handoff and BIP329 export builders, keeping their stale/quarantine refusals.
 - [ ] Port `ui.audit.evidence.summary` (no PDF package export).
 - [ ] Port `ui.report.blockers` once the workspace-health snapshot is native
   (workspace-shell slice); keep the sync-failure blocker.

@@ -38,7 +38,7 @@ fn now(conn: &Connection, sources: &dyn Sources) -> Result<(String, i64)> {
     let epoch = kassiber_rates::time::parse("1970-01-01T00:00:00Z").unwrap();
     Ok((stamp, (instant - epoch).div_euclid(1_000_000)))
 }
-fn range(
+pub(super) fn range(
     conn: &Connection,
     profile: &Value,
     args: &Value,

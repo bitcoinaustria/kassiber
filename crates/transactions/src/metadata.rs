@@ -9,7 +9,9 @@ use kassiber_store::rusqlite::{params, Connection};
 use crate::sql::{atomic, error, invalidate, now, rows, string, uuid, Result, Scope};
 
 mod bip329;
-pub use bip329::{managed_export as managed_bip329_export, Bip329};
+pub use bip329::{
+    export_records as bip329_export_records, managed_export as managed_bip329_export, Bip329,
+};
 pub(crate) mod cursor;
 mod grouped;
 mod history;

@@ -190,6 +190,26 @@ fn scope(wallets: &[kassiber_wallets::Wallet]) -> String {
 }
 
 pub(super) fn prepare(conn: &Connection, profile: &Value, args: &Value) -> Result<Prepared> {
+    let (output, metadata) = table(conn, profile, args)?;
+    let count = output.len() - 1;
+    Ok(Prepared {
+        files: vec![File {
+            name: "platform.csv".into(),
+            sheet: String::new(),
+            bytes: artifact_csv::encode(&output),
+            rows: count,
+        }],
+        metadata,
+        completion: None,
+    })
+}
+
+/// The import file's header and rows with the export's metadata, unencoded.
+pub(super) fn table(
+    conn: &Connection,
+    profile: &Value,
+    args: &Value,
+) -> Result<(Vec<Vec<Value>>, Value)> {
     let target = platform(value(args, "platform"))?;
     require_context(conn, profile, false)?;
     export_request::freshness(conn, profile)?;
@@ -565,14 +585,9 @@ pub(super) fn prepare(conn: &Connection, profile: &Value, args: &Value) -> Resul
         warning_text.push(s(format!("{} without a known date could belong to this period but {} not in this file. Export All time to include undated transactions.",if no_date == 1 { "1 transaction".into() } else { format!("{no_date} transactions") },if no_date == 1 { "is" } else { "are" })));
     }
     let count = output.len() - 1;
-    Ok(Prepared {
-        files: vec![File {
-            name: "platform.csv".into(),
-            sheet: String::new(),
-            bytes: artifact_csv::encode(&output),
-            rows: count,
-        }],
-        metadata: dict([
+    Ok((
+        output,
+        dict([
             ("format", s("csv")),
             ("platform", s(target)),
             (
@@ -588,8 +603,7 @@ pub(super) fn prepare(conn: &Connection, profile: &Value, args: &Value) -> Resul
             ("warnings", Value::List(warning_text)),
             ("range", range.clone()),
         ]),
-        completion: None,
-    })
+    ))
 }
 
 #[cfg(test)]

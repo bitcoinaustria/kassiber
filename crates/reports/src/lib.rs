@@ -21,6 +21,7 @@ mod exit_tax;
 mod exit_xlsx;
 pub mod export;
 pub mod export_completion;
+pub mod export_preview;
 pub mod export_range;
 pub mod export_request;
 mod full_csv;

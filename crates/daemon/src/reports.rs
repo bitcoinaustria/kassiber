@@ -47,11 +47,19 @@ pub const KINDS: &[&str] = &[
     "ui.source_funds.recipients.update",
     "ui.source_funds.recipients.delete",
     "ui.reports.lightning_profitability",
+    "ui.exports.preview",
     "ui.reports.cross_check",
 ];
 pub fn execute(book: &mut dyn Book, kind: &str, raw: Option<&Value>) -> Result<Value, AppError> {
     if kind == "ui.privacy_hygiene.snapshot" {
         return book.reports(kind, raw.unwrap_or(&Value::Null));
+    }
+    if kind == "ui.exports.preview" {
+        let empty = dict::<&str>([]);
+        return book.reports(
+            kind,
+            raw.filter(|v| !matches!(v, Value::Null)).unwrap_or(&empty),
+        );
     }
     if kind == "ui.reports.psbt_privacy" {
         return book.reports(kind, &psbt_args(raw)?);

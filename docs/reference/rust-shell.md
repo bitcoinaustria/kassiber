@@ -15441,7 +15441,7 @@ Remaining kinds, in the requested order:
 ## Desktop projections (R5, continuation)
 
 `t3code/r5-desktop-projections-2` continues the resolver checkpoint on the
-r10b integration tip `4844ba8b8`. It serves **9/15** requested desktop kinds
+r10b integration tip `4844ba8b8`. It serves **10/15** requested desktop kinds
 natively, with no Python fallback, new dependency, schema change or Python
 product change.
 
@@ -15464,6 +15464,7 @@ semantics marker that freshness now requires.
 | `ui.custody.coverage.snapshot` | transfers coverage | `test_rust_custody_projections.py` |
 | `ui.custody.lineage.snapshot` | transactions desktop | `test_rust_custody_projections.py` |
 | `ui.transfers.review_context` | transfers review context | `test_rust_transfer_review_context.py` |
+| `ui.exports.preview` | the transaction, platform, year-handoff and BIP329 export builders | `test_rust_export_preview.py` |
 
 Every suite compares raw response JSONL with the unchanged Python daemon and
 checks all 112 logical tables, on plaintext and SQLCipher books. Reads leave
@@ -15497,9 +15498,14 @@ fold handling: `astimezone` fold detection and fold-aware wall offsets, so
 bucket starts at ambiguous midnights (Havana, Beirut) and skipped midnights
 (Santiago) match Python's `isoformat()`.
 
+**Export preview.** Each preview runs its export's own builder (standalone
+transaction rows, platform import rows, year handoff sheets, BIP329 records)
+on a rolled-back read snapshot, so it refuses exactly where the export does
+and never writes a file. Display text follows Python's `_text` formatting,
+including `Decimal` cells and grouped money/integer columns.
+
 Not yet native: `ui.transactions.graph`, `ui.transactions.review_context`
-(embeds the graph and evidence summary), `ui.exports.preview`,
-`ui.audit.evidence.summary`, `ui.report.blockers` (needs the workspace-health
+(embeds the graph and evidence summary), `ui.audit.evidence.summary`, `ui.report.blockers` (needs the workspace-health
 snapshot from the workspace-shell slice) and `ui.review.request_input` (needs
 the native review loader accepted for production routes). Named Rust mutation
 kills for these projections are still to be added; the parity suites are the

@@ -833,13 +833,12 @@ fn synthesized(conn: &Connection, profile: &str, wallet: Option<&str>) -> Result
     }
     Ok(result)
 }
-fn export(
+fn select(
     conn: &Connection,
     scope: &Scope<'_>,
-    file: &str,
     refs: &Option<Vec<String>>,
     mode: &str,
-) -> Result<Value> {
+) -> Result<Selected> {
     let mode = lower(strip(if mode.is_empty() { "stored" } else { mode }));
     if !["stored", "synthesized", "all"].contains(&mode.as_str()) {
         return Err(AppError::new(
@@ -927,6 +926,47 @@ fn export(
             }
         }
     }
+    Ok(Selected {
+        mode,
+        wallets,
+        output,
+        stored_count,
+        synthesized_count,
+    })
+}
+
+struct Selected {
+    mode: String,
+    wallets: Vec<Value>,
+    output: Vec<Value>,
+    stored_count: usize,
+    synthesized_count: usize,
+}
+
+/// The records a BIP329 export writes, for the export dialog's preview.
+pub fn export_records(
+    conn: &Connection,
+    scope: &Scope<'_>,
+    refs: &Option<Vec<String>>,
+    mode: &str,
+) -> Result<Vec<Value>> {
+    Ok(select(conn, scope, refs, mode)?.output)
+}
+
+fn export(
+    conn: &Connection,
+    scope: &Scope<'_>,
+    file: &str,
+    refs: &Option<Vec<String>>,
+    mode: &str,
+) -> Result<Value> {
+    let Selected {
+        mode,
+        wallets,
+        output,
+        stored_count,
+        synthesized_count,
+    } = select(conn, scope, refs, mode)?;
     let mut bytes = String::new();
     for record in &output {
         let mut payload = dict([

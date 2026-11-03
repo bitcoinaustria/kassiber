@@ -1613,6 +1613,31 @@ impl Book for RealBook {
                 &ReportSources,
             );
         }
+        if command == "ui.exports.preview" {
+            let conn = self.conn()?;
+            return kassiber_reports::export_preview::preview(
+                conn,
+                args,
+                &ReportSources,
+                &|profile, refs| {
+                    let text = |key| {
+                        kassiber_envelope::get(profile, key)
+                            .map(kassiber_envelope::py_str)
+                            .unwrap_or_default()
+                    };
+                    let (workspace_id, profile_id) = (text("workspace_id"), text("id"));
+                    kassiber_transactions::metadata::bip329_export_records(
+                        conn,
+                        &kassiber_transactions::Scope {
+                            workspace_id: &workspace_id,
+                            profile_id: &profile_id,
+                        },
+                        refs,
+                        "all",
+                    )
+                },
+            );
+        }
         kassiber_reports::execute_with_sources(self.conn()?, command, args, &ReportSources)
     }
     fn derive_wallet(&mut self, request: kassiber_wallets::Derive) -> Result<Value, AppError> {

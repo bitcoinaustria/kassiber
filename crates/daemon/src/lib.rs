@@ -136,6 +136,7 @@ pub fn supported_kinds() -> Vec<&'static str> {
             && !matches!(
                 *k,
                 "ui.reports.cross_check"
+                    | "ui.exports.preview"
                     | "ui.privacy_hygiene.snapshot"
                     | "ui.reports.lightning_profitability"
             )
@@ -191,6 +192,7 @@ pub fn supported_kinds() -> Vec<&'static str> {
         ]
         .contains(k)
     }));
+    kinds.push("ui.exports.preview");
     kinds.push("ui.reports.cross_check");
     kinds.extend(
         wallets::KINDS

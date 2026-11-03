@@ -195,7 +195,7 @@ fn sheet(spec: &Value, title: String, rows: &[Value], fiat: &str) -> Result<Shee
         operations,
     })
 }
-fn overview(report: &Value) -> Vec<Value> {
+pub(super) fn overview(report: &Value) -> Vec<Value> {
     let profile = value(report, "profile");
     let mut rows = Vec::new();
     let mut add = |group: &str, field: &str, v: Value| {
