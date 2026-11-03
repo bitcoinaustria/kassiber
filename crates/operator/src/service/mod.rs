@@ -13,7 +13,7 @@
 mod backend;
 mod ordered;
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 pub use backend::*;
 
@@ -337,7 +337,7 @@ impl AdminAuthorization {
 
 /// A connection or owner whose close failed and is retried later
 /// (`_PendingProjectResource`).
-struct PendingResource {
+pub(crate) struct PendingResource {
     project_identity: String,
     connection: Option<Box<dyn Database>>,
     owner: Option<SharedOwner>,
@@ -345,7 +345,7 @@ struct PendingResource {
 
 /// A re-entrant per-thread gate (`threading.RLock`).
 #[derive(Default)]
-struct Gate {
+pub(crate) struct Gate {
     holder: Mutex<(Option<ThreadId>, usize)>,
     released: Condvar,
 }
@@ -461,23 +461,23 @@ impl Worker {
 }
 
 #[derive(Default)]
-struct State {
-    leases: Ordered<Lease>,
-    agent_sessions: Vec<AgentSession>,
-    agent_denials: Vec<(String, String, u32)>,
-    workers: HashMap<String, Arc<Worker>>,
-    operations: Ordered<Operation>,
-    tombstones: Ordered<(String, String)>,
-    lease_aliases: HashMap<String, String>,
-    auth_backoffs: Ordered<Arc<crate::backoff::AuthAttemptBackoff>>,
-    gates: HashMap<String, (Arc<Gate>, usize)>,
-    pending_owner_releases: VecDeque<PendingResource>,
-    active_project_transitions: usize,
-    sequence: u64,
-    closed: bool,
-    close_complete: bool,
-    close_in_progress: bool,
-    close_prepared: bool,
+pub(crate) struct State {
+    pub(crate) leases: Ordered<Lease>,
+    pub(crate) agent_sessions: Vec<AgentSession>,
+    pub(crate) agent_denials: Vec<(String, String, u32)>,
+    pub(crate) workers: HashMap<String, Arc<Worker>>,
+    pub(crate) operations: Ordered<Operation>,
+    pub(crate) tombstones: Ordered<(String, String)>,
+    pub(crate) lease_aliases: HashMap<String, String>,
+    pub(crate) auth_backoffs: Ordered<Arc<crate::backoff::AuthAttemptBackoff>>,
+    pub(crate) gates: HashMap<String, (Arc<Gate>, usize)>,
+    pub(crate) pending_owner_releases: VecDeque<PendingResource>,
+    pub(crate) active_project_transitions: usize,
+    pub(crate) sequence: u64,
+    pub(crate) closed: bool,
+    pub(crate) close_complete: bool,
+    pub(crate) close_in_progress: bool,
+    pub(crate) close_prepared: bool,
 }
 
 struct Inner {
@@ -715,7 +715,11 @@ impl OperatorService {
         &self.inner.generation
     }
 
-    fn state(&self) -> MutexGuard<'_, State> {
+    pub fn backend(&self) -> &dyn Backend {
+        &*self.inner.backend
+    }
+
+    pub(crate) fn state(&self) -> MutexGuard<'_, State> {
         locked(&self.inner.state)
     }
 

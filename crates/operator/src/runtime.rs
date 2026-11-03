@@ -607,7 +607,9 @@ mod listener {
             )))
         }
 
-        pub fn close(&mut self) -> Result<()> {
+        /// Stop accepting; a blocked [`WindowsBrokerListener::accept`]
+        /// returns an error. Callable from another thread.
+        pub fn close(&self) -> Result<()> {
             self.pipe.close();
             Ok(())
         }

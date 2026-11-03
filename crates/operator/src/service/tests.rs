@@ -12,21 +12,21 @@ use std::sync::Barrier;
 
 const WAIT: Duration = Duration::from_secs(10);
 
-fn io_error(message: &str) -> Error {
+pub(crate) fn io_error(message: &str) -> Error {
     Error::Io(std::io::Error::other(message.to_owned()))
 }
 
 // ----- the fake backend -----
 
 #[derive(Default)]
-struct DbScript {
-    identity: Option<String>,
-    context: (Option<String>, Option<String>),
-    close_failures: Mutex<VecDeque<String>>,
-    closes: AtomicUsize,
+pub(crate) struct DbScript {
+    pub(crate) identity: Option<String>,
+    pub(crate) context: (Option<String>, Option<String>),
+    pub(crate) close_failures: Mutex<VecDeque<String>>,
+    pub(crate) closes: AtomicUsize,
 }
 
-struct FakeDb(Arc<DbScript>);
+pub(crate) struct FakeDb(pub(crate) Arc<DbScript>);
 
 impl Database for FakeDb {
     fn instance_id(&self) -> Result<Option<String>> {
@@ -54,13 +54,13 @@ type Opener = dyn Fn(&str, &str, Option<&str>) -> Result<Box<dyn Database>> + Se
 
 /// A scripted owner (Python's `mock.Mock()` owner).
 #[derive(Default)]
-struct OwnerScript {
-    release_failures: Mutex<VecDeque<String>>,
-    releases: AtomicUsize,
-    duplicate_failures: Mutex<VecDeque<String>>,
-    child_close_failures: Mutex<VecDeque<String>>,
-    child_closes: AtomicUsize,
-    duplicate_gate: Mutex<Option<(Arc<Event>, Arc<Event>)>>,
+pub(crate) struct OwnerScript {
+    pub(crate) release_failures: Mutex<VecDeque<String>>,
+    pub(crate) releases: AtomicUsize,
+    pub(crate) duplicate_failures: Mutex<VecDeque<String>>,
+    pub(crate) child_close_failures: Mutex<VecDeque<String>>,
+    pub(crate) child_closes: AtomicUsize,
+    pub(crate) duplicate_gate: Mutex<Option<(Arc<Event>, Arc<Event>)>>,
 }
 
 struct ScriptedOwner(Arc<OwnerScript>);
@@ -124,16 +124,16 @@ impl Owner for RealOwner {
     }
 }
 
-struct Fake {
-    _owners: tempfile::TempDir,
-    namespace: OwnerNamespace,
-    opener: Mutex<Arc<Opener>>,
-    opened: AtomicUsize,
-    owners: Mutex<VecDeque<Arc<OwnerScript>>>,
-    modes: Mutex<HashMap<String, String>>,
-    mode_calls: Mutex<Vec<ModeCall>>,
-    fixed_mode: Mutex<Option<String>>,
-    unclassified: AtomicBool,
+pub(crate) struct Fake {
+    pub(crate) _owners: tempfile::TempDir,
+    pub(crate) namespace: OwnerNamespace,
+    pub(crate) opener: Mutex<Arc<Opener>>,
+    pub(crate) opened: AtomicUsize,
+    pub(crate) owners: Mutex<VecDeque<Arc<OwnerScript>>>,
+    pub(crate) modes: Mutex<HashMap<String, String>>,
+    pub(crate) mode_calls: Mutex<Vec<ModeCall>>,
+    pub(crate) fixed_mode: Mutex<Option<String>>,
+    pub(crate) unclassified: AtomicBool,
 }
 
 fn default_opener() -> Arc<Opener> {
@@ -141,7 +141,7 @@ fn default_opener() -> Arc<Opener> {
 }
 
 impl Fake {
-    fn new() -> Arc<Fake> {
+    pub(crate) fn new() -> Arc<Fake> {
         let owners = tempfile::tempdir().unwrap();
         std::fs::create_dir(owners.path().join("owners")).unwrap();
         Arc::new(Fake {
@@ -157,20 +157,20 @@ impl Fake {
         })
     }
 
-    fn open_with(
+    pub(crate) fn open_with(
         &self,
         opener: impl Fn(&str, &str, Option<&str>) -> Result<Box<dyn Database>> + Send + Sync + 'static,
     ) {
         *locked(&self.opener) = Arc::new(opener);
     }
 
-    fn scripted_owner(&self) -> Arc<OwnerScript> {
+    pub(crate) fn scripted_owner(&self) -> Arc<OwnerScript> {
         let script = Arc::new(OwnerScript::default());
         locked(&self.owners).push_back(Arc::clone(&script));
         script
     }
 
-    fn opened(&self) -> usize {
+    pub(crate) fn opened(&self) -> usize {
         self.opened.load(Ordering::SeqCst)
     }
 }
@@ -359,20 +359,20 @@ fn fake_classify(argv: &[String]) -> Result<Classified> {
 
 /// `threading.Event`.
 #[derive(Default)]
-struct Event {
+pub(crate) struct Event {
     set: Mutex<bool>,
     changed: Condvar,
 }
 
 impl Event {
-    fn set(&self) {
+    pub(crate) fn set(&self) {
         *locked(&self.set) = true;
         self.changed.notify_all();
     }
-    fn is_set(&self) -> bool {
+    pub(crate) fn is_set(&self) -> bool {
         *locked(&self.set)
     }
-    fn wait(&self, timeout: Duration) -> bool {
+    pub(crate) fn wait(&self, timeout: Duration) -> bool {
         let guard = locked(&self.set);
         let (guard, _) = self
             .changed
@@ -382,11 +382,11 @@ impl Event {
     }
 }
 
-fn ok_runner() -> Arc<dyn Runner> {
+pub(crate) fn ok_runner() -> Arc<dyn Runner> {
     Arc::new(|_: &Dispatch, _: &[u8]| Ok(OperationResult::new(0, "", "")))
 }
 
-fn service_with(fake: &Arc<Fake>, runner: Arc<dyn Runner>) -> OperatorService {
+pub(crate) fn service_with(fake: &Arc<Fake>, runner: Arc<dyn Runner>) -> OperatorService {
     OperatorService::new("generation", Arc::clone(fake) as Arc<dyn Backend>, runner)
 }
 
@@ -405,7 +405,7 @@ fn service_with_limits(
 }
 
 /// Closes the service when a test ends, as Python's `finally`.
-struct Closing(OperatorService);
+pub(crate) struct Closing(pub(crate) OperatorService);
 
 impl Drop for Closing {
     fn drop(&mut self) {
@@ -420,7 +420,7 @@ impl std::ops::Deref for Closing {
     }
 }
 
-fn argv(items: &[&str]) -> Vec<String> {
+pub(crate) fn argv(items: &[&str]) -> Vec<String> {
     items.iter().map(|item| (*item).to_owned()).collect()
 }
 
@@ -428,11 +428,11 @@ fn scoped(command: &str) -> Vec<String> {
     argv(&[command, "--workspace", "workspace-a", "--profile", "book-a"])
 }
 
-fn root(dir: &tempfile::TempDir) -> String {
+pub(crate) fn root(dir: &tempfile::TempDir) -> String {
     dir.path().to_string_lossy().into_owned()
 }
 
-fn unlock(service: &OperatorService, data_root: &str) -> Result<Value> {
+pub(crate) fn unlock(service: &OperatorService, data_root: &str) -> Result<Value> {
     service.unlock(data_root, b"passphrase", UnlockRequest::default())
 }
 
@@ -440,7 +440,7 @@ fn submit(service: &OperatorService, data_root: &str, command: Vec<String>) -> R
     service.submit(data_root, &command, SubmitRequest::default())
 }
 
-fn text(value: &Value, key: &str) -> String {
+pub(crate) fn text(value: &Value, key: &str) -> String {
     match kassiber_envelope::get(value, key) {
         Some(Value::Str(text)) => text.as_str().unwrap_or_default().to_owned(),
         other => panic!("{key} is {other:?}"),
@@ -451,7 +451,7 @@ fn id(value: &Value) -> String {
     text(value, "operation_id")
 }
 
-fn code(result: Result<impl std::fmt::Debug>) -> String {
+pub(crate) fn code(result: Result<impl std::fmt::Debug>) -> String {
     match result {
         Err(Error::App(error)) => error.code,
         other => panic!("expected an AppError, got {other:?}"),
@@ -497,7 +497,7 @@ fn state_of(service: &OperatorService, operation_id: &str) -> String {
     text(&service.operation_status(operation_id, true), "state")
 }
 
-fn identity(fake: &Fake, data_root: &str) -> String {
+pub(crate) fn identity(fake: &Fake, data_root: &str) -> String {
     fake.canonical_project(data_root).unwrap().identity
 }
 

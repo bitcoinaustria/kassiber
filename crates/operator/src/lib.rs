@@ -19,9 +19,13 @@ pub mod build;
 pub mod client;
 pub mod clock;
 pub mod error;
+pub mod peers;
 pub mod protocol;
+pub mod runner;
 pub mod runtime;
+pub mod server;
 pub mod service;
+pub mod session;
 pub mod telemetry;
 pub mod values;
 
