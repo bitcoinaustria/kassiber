@@ -4505,3 +4505,13 @@ from the book's review queue. A shared transfer helper binds a uniquely matched
 review to its observations and allocations; ambiguous or missing reviews get
 no confirmation fingerprint. Reads grant no custody or tax authority and make
 no network request. Python product code remains unchanged.
+
+### R5 unassigned desktop projections: continuation (partial)
+
+`t3code/r5-desktop-projections-2` rebases the resolver checkpoint onto
+`4844ba8b8` and serves 9/15 requested desktop kinds natively; see the
+[continuation checkpoint](../reference/rust-shell.md#desktop-projections-r5-continuation).
+It corrects the resolver acceptance, which had compared Python with Python, and
+adds Python's report-read journal rebuild to the daemon for all report-like
+reads. Graph, transaction review context, export preview, evidence summary,
+report blockers and review input requests remain.

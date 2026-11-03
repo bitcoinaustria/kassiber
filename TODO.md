@@ -89,22 +89,24 @@ ordered compatibility, hidden-home cutover and legacy project migration through
 
 ## Rust backend R5 desktop projections
 
-The [resolver checkpoint](docs/reference/rust-shell.md#desktop-transaction-resolution-r5-partial)
-ports **1/15** requested unassigned desktop kinds. The first transaction group
-is incomplete; no subsequent group has been started.
+The [desktop projection checkpoint](docs/reference/rust-shell.md#desktop-projections-r5-continuation)
+serves **9/15** requested unassigned desktop kinds natively, plus Python's
+report-read journal rebuild for every report-like read. Remaining:
 
-- [ ] Finish `ui.transactions.dashboard`, `ui.transactions.graph` and
-  `ui.transactions.review_context`, with exact envelopes, all-table comparisons,
-  named mutation kills and a group commit.
-- [ ] Port `ui.transfers.review_context`, `ui.custody.coverage.snapshot` and
-  `ui.custody.lineage.snapshot`.
-- [ ] Port `ui.reports.capital_gains` and `ui.exports.preview` while retaining
-  report-readiness and maintenance barriers.
-- [ ] Port `ui.report.blockers`, `ui.audit.changes_since_last_answer`,
-  `ui.audit.evidence.summary`, `ui.review.worklist` and `ui.review.request_input`.
-  Keep their AI projections in Python and retain the direct worklist refusal.
-- [ ] Port `ui.rates.rebuild` through the native rates service, with exact-action
-  consent and offline checks on every `kassiber-net` fetch.
+- [ ] Port `ui.transactions.graph` (local graph, owned index, consented public
+  lookups through `kassiber-net`), then `ui.transactions.review_context`, which
+  embeds the graph and evidence summary.
+- [ ] Port `ui.exports.preview` over the native transaction, platform, year
+  handoff and BIP329 export builders, keeping their stale/quarantine refusals.
+- [ ] Port `ui.audit.evidence.summary` (no PDF package export).
+- [ ] Port `ui.report.blockers` once the workspace-health snapshot is native
+  (workspace-shell slice); keep the sync-failure blocker.
+- [ ] Port `ui.review.request_input` once the native review loader is accepted
+  for production routes.
+- [ ] Serve report-read wallet sync natively; the prelude now refuses with
+  `not_implemented` when a book enables it.
+- [ ] Add named Rust mutation kills for the new projections; current evidence
+  is the Python-oracle parity suites listed in the checkpoint.
 
 ## Rust backend R5 rates
 

@@ -15437,3 +15437,70 @@ Remaining kinds, in the requested order:
    Their AI projections stay in Python; the direct worklist refusal remains.
 5. Rates: `ui.rates.rebuild`. Reuse the native rates crate; every fetch must
    pass exact-action consent and offline checks through `kassiber-net`.
+
+## Desktop projections (R5, continuation)
+
+`t3code/r5-desktop-projections-2` continues the resolver checkpoint on the
+r10b integration tip `4844ba8b8`. It serves **9/15** requested desktop kinds
+natively, with no Python fallback, new dependency, schema change or Python
+product change.
+
+**Correction to the resolver checkpoint.** Its product acceptance passed the
+Rust binary to `cli_runner` through `env=`, but `cli_runner` selects the
+candidate from the test process's `os.environ`, so both sides ran Python. The
+shared harness `tests/rust_desktop_parity.py` now spawns the Rust binary
+directly and requires the ready record to be Rust's (`status` first). Rerun
+against Rust, the resolver suites pass after their fixtures gained the journal
+semantics marker that freshness now requires.
+
+| Kind | Native service | Parity suite |
+| --- | --- | --- |
+| `ui.transactions.resolve` | transactions desktop | `test_rust_transaction_resolve.py` |
+| `ui.transactions.dashboard` | transactions desktop, native suggestions, zoneinfo | `test_rust_transaction_dashboard.py` |
+| `ui.reports.capital_gains` | reports gains projection | `test_rust_report_capital_gains.py` |
+| `ui.rates.rebuild` | rates rebuild, journal pricing and processing | `test_rust_rates_rebuild.py` |
+| `ui.audit.changes_since_last_answer` | transactions desktop | `test_rust_audit_projections.py` |
+| `ui.review.worklist` | daemon (Python's direct-dispatch refusal) | `test_rust_audit_projections.py` |
+| `ui.custody.coverage.snapshot` | transfers coverage | `test_rust_custody_projections.py` |
+| `ui.custody.lineage.snapshot` | transactions desktop | `test_rust_custody_projections.py` |
+| `ui.transfers.review_context` | transfers review context | `test_rust_transfer_review_context.py` |
+
+Every suite compares raw response JSONL with the unchanged Python daemon and
+checks all 112 logical tables, on plaintext and SQLCipher books. Reads leave
+the tables unchanged. Mutating sessions (stale-journal rebuilds, rates
+rebuild) run Rust on a copy taken before Python and compare the two resulting
+books with generated UUIDs and clocks masked; `ui.audit.changes_since_last_answer`
+masks only `generated_at`.
+
+**Report-read maintenance.** Python's `_DIRECT_AUTO_JOURNAL_REFRESH_KINDS`
+rebuild stale journals before `ui.reports.capital_gains`, `summary`,
+`balance_sheet`, `portfolio_summary`, `tax_summary`, `balance_history`,
+`exit_tax_preview`, `ui.transfers.review_context`,
+`ui.transactions.review_context` and `ui.report.blockers`. The daemon now runs
+the same prelude through the native `journals process` (no auto-pair) for each
+of these kinds, so the previously registered report kinds no longer read stale
+journals. Report-read wallet sync is network work; when a book's freshness
+policy enables it, the prelude refuses with `not_implemented` before touching
+journals or providers.
+
+**Rates rebuild.** The desktop request is the exact-action consent for its one
+provider fetch. Live sources still require the book's market-data opt-in
+(`live_market_rates_disabled`) and pass the shared offline gate; the parity
+suite shows enabled live sources stopping at the offline gate exactly as
+Python does. Local Kraken CSV rebuilds reprice cleared provider prices,
+invalidate journals when needed and process journals, matching Python's
+response and book.
+
+**Dashboard time zones.** The CPython `zoneinfo` port moves from
+`kassiber-reports` to `kassiber-pytext` (re-exported by reports) and gains
+fold handling: `astimezone` fold detection and fold-aware wall offsets, so
+bucket starts at ambiguous midnights (Havana, Beirut) and skipped midnights
+(Santiago) match Python's `isoformat()`.
+
+Not yet native: `ui.transactions.graph`, `ui.transactions.review_context`
+(embeds the graph and evidence summary), `ui.exports.preview`,
+`ui.audit.evidence.summary`, `ui.report.blockers` (needs the workspace-health
+snapshot from the workspace-shell slice) and `ui.review.request_input` (needs
+the native review loader accepted for production routes). Named Rust mutation
+kills for these projections are still to be added; the parity suites are the
+current evidence.
