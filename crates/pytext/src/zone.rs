@@ -94,9 +94,12 @@ impl Rule {
     }
     /// `_TZStr._get_trans_info(ts, year, fold=0)`.
     fn local(&self, ts: i64, year: i64) -> i64 {
+        self.local_fold(ts, year, false)
+    }
+    /// `_TZStr._get_trans_info(ts, year, fold)`.
+    fn local_fold(&self, ts: i64, year: i64, fold: bool) -> i64 {
         let (mut start, mut end) = (self.start.year_to_epoch(year), self.end.year_to_epoch(year));
-        // CPython: `fold == (dst_diff >= 0)` with fold 0.
-        if self.diff() < 0 {
+        if fold == (self.diff() >= 0) {
             end -= self.diff();
         } else {
             start += self.diff();
@@ -111,6 +114,17 @@ impl Rule {
         } else {
             self.std
         }
+    }
+    /// The fold `_TZStr._get_trans_info_fromutc(ts, year)` returns.
+    fn utc_fold(&self, ts: i64, year: i64) -> bool {
+        let start = self.start.year_to_epoch(year) - self.std;
+        let end = self.end.year_to_epoch(year) - self.dst;
+        let (from, to) = if self.diff() > 0 {
+            (end, end + self.diff())
+        } else {
+            (start, start - self.diff())
+        };
+        from <= ts && ts < to
     }
     /// `_TZStr._get_trans_info_fromutc(ts, year)`.
     fn utc(&self, ts: i64, year: i64) -> i64 {
@@ -141,6 +155,8 @@ pub struct Zone {
     pub key: String,
     trans_utc: Vec<i64>,
     trans_local: Vec<i64>,
+    /// Wall-clock transitions for fold 1, at the smaller adjacent offset.
+    trans_local_fold: Vec<i64>,
     offsets: Vec<i64>,
     before: Option<i64>,
     after: After,
@@ -161,6 +177,53 @@ impl Zone {
         }
         let idx = lt.partition_point(|t| *t <= local) - 1;
         Some(self.offsets[idx])
+    }
+    /// `utcoffset()` of a wall time with an explicit `fold`.
+    pub fn local_offset_fold(&self, local: i64, fold: bool) -> Option<i64> {
+        let lt = if fold {
+            &self.trans_local_fold
+        } else {
+            &self.trans_local
+        };
+        if !lt.is_empty() && local < lt[0] {
+            return self.before;
+        }
+        if lt.is_empty() || local > *lt.last().unwrap() {
+            return Some(match &self.after {
+                After::Fixed(offset) => *offset,
+                After::Rule(rule) => rule.local_fold(local, year_of(local), fold),
+            });
+        }
+        let idx = lt.partition_point(|t| *t <= local) - 1;
+        Some(self.offsets[idx])
+    }
+    /// Whether `fromutc` marks a UTC instant's wall time as its second
+    /// occurrence (`fold=1`), following zoneinfo's detection.
+    pub fn utc_fold(&self, utc: i64) -> bool {
+        let tu = &self.trans_utc;
+        let n = tu.len();
+        if n > 0 && utc < tu[0] {
+            return false;
+        }
+        if n == 0 || utc > tu[n - 1] {
+            match &self.after {
+                After::Rule(rule) => return rule.utc_fold(utc, year_of(utc)),
+                After::Fixed(_) if n == 0 => return false,
+                After::Fixed(_) => {}
+            }
+        }
+        let idx = tu.partition_point(|t| *t <= utc);
+        let (previous, current) = if n > 1 && utc >= tu[1] {
+            (Some(self.offsets[idx - 2]), self.offsets[idx - 1])
+        } else if utc > tu[n - 1] {
+            let After::Fixed(after) = self.after else {
+                unreachable!()
+            };
+            (Some(self.offsets[n - 1]), after)
+        } else {
+            (self.before, self.offsets[0])
+        };
+        previous.is_some_and(|previous| previous - current > utc - tu[idx - 1])
     }
     /// The offset `fromutc` applies to a UTC instant.
     pub fn utc_offset(&self, utc: i64) -> Option<i64> {
@@ -184,6 +247,7 @@ impl Zone {
             key: key.into(),
             trans_utc: Vec::new(),
             trans_local: Vec::new(),
+            trans_local_fold: Vec::new(),
             offsets: Vec::new(),
             before: None,
             after: After::Fixed(0),
@@ -244,15 +308,19 @@ fn build(
     }
     // `_ts_to_local`, fold 0: each transition at the larger adjacent offset.
     let mut trans_local = trans_utc.clone();
+    let mut trans_local_fold = trans_utc.clone();
     if !trans_utc.is_empty() {
-        let first = if utcoff.len() > 1 {
-            utcoff[0].max(utcoff[trans_idx[0]])
+        let (a, b) = if utcoff.len() > 1 {
+            (utcoff[0], utcoff[trans_idx[0]])
         } else {
-            utcoff[0]
+            (utcoff[0], utcoff[0])
         };
-        trans_local[0] += first;
+        trans_local[0] += a.max(b);
+        trans_local_fold[0] += a.min(b);
         for i in 1..trans_idx.len() {
-            trans_local[i] += utcoff[trans_idx[i - 1]].max(utcoff[trans_idx[i]]);
+            let (a, b) = (utcoff[trans_idx[i - 1]], utcoff[trans_idx[i]]);
+            trans_local[i] += a.max(b);
+            trans_local_fold[i] += a.min(b);
         }
     }
     let offsets: Vec<i64> = trans_idx.iter().map(|i| utcoff[*i]).collect();
@@ -269,6 +337,7 @@ fn build(
         key: key.into(),
         trans_utc,
         trans_local,
+        trans_local_fold,
         offsets,
         before,
         after,
@@ -343,6 +412,41 @@ fn valid_key(key: &str) -> bool {
         return false;
     }
     normpath(&format!("_/{normalized}")).starts_with("_/")
+}
+
+/// Why `ZoneInfo(key)` raises: `ZoneInfoNotFoundError`, or another
+/// exception (an invalid key, directory or TZif file) with its message.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Failure {
+    NotFound,
+    Invalid(String),
+}
+
+/// [`load`], keeping Python's split between unknown keys and other failures.
+pub fn lookup(key: &str, tzpath: &[PathBuf]) -> Result<Zone, Failure> {
+    if !valid_key(key) {
+        let reason = if key.contains('\0') {
+            "embedded null byte".to_owned()
+        } else if key.starts_with('/') {
+            format!("ZoneInfo keys may not be absolute paths, got: {key}")
+        } else if normpath(key).chars().count() != key.chars().count() {
+            format!("ZoneInfo keys must be normalized relative paths, got: {key}")
+        } else {
+            format!("ZoneInfo keys must refer to subdirectories of TZPATH, got: {key}")
+        };
+        return Err(Failure::Invalid(reason));
+    }
+    for root in tzpath {
+        let path = root.join(key);
+        if path.is_file() {
+            return parse(key, &path)
+                .ok_or_else(|| Failure::Invalid("Invalid TZif file: magic not found".into()));
+        }
+    }
+    if tzpath.iter().any(|root| root.join(key).is_dir()) {
+        return Err(Failure::Invalid("[Errno 21] Is a directory".into()));
+    }
+    Err(Failure::NotFound)
 }
 
 /// `ZoneInfo(key)` from `tzpath`. Unknown keys, invalid TZif data and keys
@@ -542,7 +646,7 @@ fn transition(text: &str) -> Option<Offset> {
         Some(number) => (true, number),
         None => (false, date),
     };
-    let d = i64::try_from(kassiber_pytext::parse_int(number).ok()?).ok()?;
+    let d = i64::try_from(crate::parse_int(number).ok()?).ok()?;
     if !(i64::from(julian)..=365).contains(&d) {
         return None;
     }

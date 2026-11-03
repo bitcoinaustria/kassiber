@@ -1,8 +1,11 @@
 //! Desktop transaction reads over persisted observations and journal projections.
 //! These reads never process journals, infer ownership or contact a provider.
+mod dashboard;
 mod render;
 mod resolve;
 mod sql;
+
+pub use dashboard::Zones;
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -16,6 +19,7 @@ use crate::sql::{rows, Result, Scope};
 
 pub const KINDS: &[&str] = &[
     "ui.transactions.list",
+    "ui.transactions.dashboard",
     "ui.transactions.extremes",
     "ui.transactions.search",
     "ui.transactions.resolve",
@@ -273,7 +277,7 @@ fn queue(
             conditions.push(time::predicate(conn, "t.occurred_at", op)?);
         }
     }
-    Ok(format!("SELECT leg.id,MAX(leg.rank) OVER (PARTITION BY leg.item_key) AS item_rank FROM (SELECT t.id,{} AS item_key,CASE ({}) WHEN 'review' THEN 3 WHEN 'failed' THEN 2 WHEN 'pending' THEN 1 ELSE 0 END AS rank {FROM} WHERE {}) leg", group(current),sql::STATUS,conditions.join(" AND ")))
+    Ok(format!("SELECT leg.id,leg.item_key,MAX(leg.rank) OVER (PARTITION BY leg.item_key) AS item_rank FROM (SELECT t.id,{} AS item_key,CASE ({}) WHEN 'review' THEN 3 WHEN 'failed' THEN 2 WHEN 'pending' THEN 1 ELSE 0 END AS rank {FROM} WHERE {}) leg", group(current),sql::STATUS,conditions.join(" AND ")))
 }
 fn queue_args(scope: &Scope<'_>, wallet: &str, since: &str, until: &str) -> Vec<SqlValue> {
     let mut args = vec![SqlValue::Text(scope.profile_id.into())];
@@ -328,6 +332,17 @@ fn year(conn: &Connection, page: &[Value]) -> Result<Value> {
     Ok(Value::Int(
         crate::sql::now(conn)?[..4].parse::<i64>().unwrap().into(),
     ))
+}
+
+/// `ui.transactions.dashboard` over suggestion candidates the caller computed.
+pub fn dashboard(
+    conn: &Connection,
+    scope: &Scope<'_>,
+    args: &Value,
+    candidates: &[Value],
+    zones: &Zones<'_>,
+) -> Result<Value> {
+    dashboard::execute(conn, scope, args, candidates, zones)
 }
 
 /// Existing desktop kinds share one projection, independently of the CLI renderer.

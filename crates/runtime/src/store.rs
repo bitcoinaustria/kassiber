@@ -341,6 +341,18 @@ pub trait Book: Send {
         ))
     }
 
+    /// `ui.transactions.dashboard` over the caller's suggestion candidates.
+    fn transaction_dashboard(
+        &mut self,
+        _args: &Value,
+        _candidates: &[Value],
+    ) -> Result<Value, AppError> {
+        Err(not_implemented(
+            "transactions",
+            "desktop transaction dashboard",
+        ))
+    }
+
     /// Observed transaction pages, without journal processing or report authority.
     fn transactions(
         &mut self,

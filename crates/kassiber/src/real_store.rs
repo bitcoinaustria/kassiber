@@ -1244,6 +1244,28 @@ impl Book for RealBook {
         )
     }
 
+    fn transaction_dashboard(
+        &mut self,
+        args: &Value,
+        candidates: &[Value],
+    ) -> Result<Value, AppError> {
+        let context = self.context()?;
+        let tzpath = kassiber_reports::zone::tzpath(std::env::var("PYTHONTZPATH").ok().as_deref());
+        kassiber_transactions::desktop::dashboard(
+            self.conn()?,
+            &kassiber_transactions::Scope {
+                workspace_id: &context.workspace_id,
+                profile_id: &context.profile_id,
+            },
+            args,
+            candidates,
+            &kassiber_transactions::desktop::Zones {
+                display: &|key| kassiber_reports::zone::lookup(key, &tzpath),
+                book: &|austrian| kassiber_reports::export_range::book_zone(austrian, &tzpath),
+            },
+        )
+    }
+
     fn transactions(
         &mut self,
         workspace: Option<&Value>,

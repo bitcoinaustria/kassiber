@@ -14,7 +14,8 @@
 //!   including surrounding whitespace, underscores between digits, non-ASCII
 //!   decimal digits, and the 4,300-digit limit;
 //! - [`loads`]: `json.loads` into [`kassiber_pyjson::Value`], with the C
-//!   scanner's error messages and positions.
+//!   scanner's error messages and positions;
+//! - [`zone`]: `zoneinfo.ZoneInfo` key validation, TZif loading and offsets.
 //!
 //! The Unicode tables come from CPython 3.11 (Unicode 14.0.0) through
 //! `scripts/gen_unicode_tables.py`; `tests/data/vectors.txt` comes from the
@@ -57,3 +58,4 @@ pub use iso_datetime::{iso_datetime, IsoDateTime};
 #[rustfmt::skip]
 mod casefold;
 pub use casefold::casefold;
+pub mod zone;

@@ -199,7 +199,7 @@ pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<
     }
 }
 
-fn pairing_args(kind: &str, args: &Value) -> Result<Value, AppError> {
+pub(crate) fn pairing_args(kind: &str, args: &Value) -> Result<Value, AppError> {
     use kassiber_envelope::{py_str, set, truthy};
     let mut payload = dict([("authored_source", s("gui"))]);
     for name in [

@@ -68,7 +68,7 @@ mod verification;
 mod verification_xlsx;
 mod year_handoff;
 mod year_handoff_xlsx;
-pub mod zone;
+pub use kassiber_pytext::zone;
 
 use kassiber_envelope::{dict, get, py_str, s, truthy, AppError};
 use kassiber_pydecimal::{Context, Decimal, Rounding};

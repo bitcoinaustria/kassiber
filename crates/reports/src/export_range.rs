@@ -160,7 +160,7 @@ fn zone(profile: &Value, timezone: &Value, tzpath: &[PathBuf]) -> Result<Zone> {
     })
 }
 /// The book calendar; the pinned Vienna table serves only without tzdata.
-pub(super) fn book_zone(austrian: bool, tzpath: &[PathBuf]) -> Result<Zone> {
+pub fn book_zone(austrian: bool, tzpath: &[PathBuf]) -> Result<Zone> {
     let key = if austrian { "Europe/Vienna" } else { "UTC" };
     if let Ok(zone) = crate::zone::load(key, tzpath) {
         return Ok(zone);

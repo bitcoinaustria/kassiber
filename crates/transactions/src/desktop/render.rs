@@ -215,6 +215,13 @@ pub(super) fn row(conn: &Connection, row: &Value, pair: Option<&Value>) -> Resul
         .map(|t| val(t, "label"))
         .filter(truthy)
         .collect();
+    Ok(present(row, pair, tags))
+}
+/// Activity chart rows skip metadata tags, as Python's uncapped overview does.
+pub(super) fn untagged(row: &Value, pair: Option<&Value>) -> Value {
+    present(row, pair, Vec::new())
+}
+fn present(row: &Value, pair: Option<&Value>, tags: Vec<Value>) -> Value {
     let mut display: Vec<String> = tags.iter().map(py_str).collect();
     let mut rate = positive(&val(row, "fiat_rate"));
     let fee = num(row, "fee");
@@ -416,5 +423,5 @@ pub(super) fn row(conn: &Connection, row: &Value, pair: Option<&Value>) -> Resul
     if truthy(&val(row, "occurred_at")) {
         set(&mut output, "occurredAt", val(row, "occurred_at"));
     }
-    Ok(output)
+    output
 }
