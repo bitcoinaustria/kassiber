@@ -1678,8 +1678,8 @@
       "OperatorClientBuildBindingTest": {"disposition": "rust-test", "flags": ["mock", "mock-internal"], "group": "ai-mcp-operator", "reason": "calls kassiber.operator.client, kassiber.operator.build directly", "reviewed": false, "tests": 13}
     },
     "tests/test_operator_integration.py": {
-      "OperatorIntegrationTest": {"disposition": "rust-test", "flags": ["sql", "subprocess"], "group": "ai-mcp-operator", "reason": "calls kassiber.core.accounts, kassiber.db directly", "reviewed": false, "tests": 5},
-      "OperatorIntegrationTest::test_desktop_grant_serves_mcp_and_ends_with_the_desktop_session": {"disposition": "subprocess-scenario", "flags": ["sql", "subprocess"], "group": "ai-mcp-operator", "reason": "drives the mcp entry in process", "reviewed": false, "tests": 1}
+      "OperatorIntegrationTest": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql", "subprocess"], "group": "ai-mcp-operator", "reason": "calls kassiber.operator.client, kassiber.core.accounts directly", "reviewed": false, "tests": 5},
+      "OperatorIntegrationTest::test_desktop_grant_serves_mcp_and_ends_with_the_desktop_session": {"disposition": "subprocess-scenario", "flags": ["mock", "mock-internal", "sql", "subprocess"], "group": "ai-mcp-operator", "reason": "drives the mcp entry in process; patches internals", "reviewed": false, "tests": 1}
     },
     "tests/test_operator_modes.py": {
       "OperatorModeTest": {"disposition": "rust-test", "flags": ["mock", "mock-internal"], "group": "ai-mcp-operator", "reason": "calls kassiber.operator.modes, kassiber.secrets.unlock_store directly", "reviewed": false, "tests": 9}

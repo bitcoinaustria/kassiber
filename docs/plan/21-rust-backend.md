@@ -4649,3 +4649,28 @@ All 29 mutation entries are killed.
 The Windows code is not compiled here because no Windows target is
 installed. The [checkpoint](../reference/rust-shell.md#operator-protocol-local-ipc-and-ownership-r6-1)
 records its tests, reviewed differences and what R6-2 builds on it.
+
+### R6-2 broker service, server and children
+
+`kassiber --operator-broker-server` runs the Rust broker. `crates/operator`
+ports the service (leases, per-project queues, the operation state machine,
+retention and tombstones, replay, single-use admin authorization, auth
+backoff, the janitor, idle restart and close), the runner and the server
+with its 64-client limit, signal stop, detail filter and Linux login guard,
+read from systemd's user record. Storage, modes, classification and paths
+come through a backend seam the binary implements; the CLI gains a
+`classify` API and the broker-child mode. Touch ID answers
+`native_auth_unavailable` until R6-4.
+
+Parity: 93 service, 31 server and 10 mode tests port the Python suites with
+fakes; nine binary tests run real children; the Python integration suite
+passes five of six scenarios against the Rust broker through a fixture
+switch; and a differential driver compares a whole scenario of replies,
+errors, operation records and child envelopes with the Python broker. It
+found that the store's `unlock_failed` lacked Python's hint and driver
+error, and a brokered rotation failed on its own inherited owner lock; both
+are fixed. 39 new mutation entries cover admission order, capabilities,
+scope, replay, retention, expiry, admin authorization, result states,
+pinning and the guards. The
+[checkpoint](../reference/rust-shell.md#operator-broker-service-server-and-children-r6-2)
+records the details and what R6-3 and R6-4 take on.

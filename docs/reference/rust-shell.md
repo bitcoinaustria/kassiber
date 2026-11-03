@@ -16546,3 +16546,162 @@ Every `ChildCommand` construction site is listed in
   - The brokered-versus-direct differential driver.
 - **Recheck.** The Windows code is compiled and its tests run on a Windows
   runner.
+
+## Operator broker service, server and children (R6-2)
+
+Slice R6-2 of the [R6 design](r6-ai-operator-port.md#r6-2-broker-service-server-and-broker-children).
+`kassiber --operator-broker-server` is native: the Rust binary runs the
+per-user broker on the R6-1 endpoint, and its children are the Rust CLI. The
+`operator` leaves, brokered routing (`route_brokered_command`, still
+`not_implemented`) and the agent-session client side are R6-3; Touch ID is
+R6-4. As the owner settled, Python and Rust brokers share the one endpoint.
+
+### What is native
+
+- **The service** (`crates/operator/src/service`) is `service.py`: leases
+  with the operator epoch and public lease id, per-project FIFO queues of 64
+  with one worker thread each, the operation state machine (`queued`,
+  `running`, `completed`, `failed`, `cancelled`, `result_unknown`), 256
+  retained results within 16 MiB pruned by completion order, 1,024
+  fingerprint tombstones, replay by operation id bound to argv, caller
+  directory and egress switch, single-use 60 s admin authorization bound to
+  the lease epoch, the 256-entry auth-backoff cache over
+  `config/auth_backoff.json`, the one-second lease janitor, retried owner
+  and connection releases, idle restart and retryable close. Agent-session
+  state (open, decide, admission, withdrawal, idle timeout) is in the service
+  too, as in Python. Python's re-entrant global lock becomes one state mutex
+  never held across storage, ownership or child calls, plus re-entrant
+  per-project gates; every check keeps Python's order and message.
+- **The backend seam.** Storage, ownership, unlock modes, the backoff path,
+  argv classification and path resolution reach the service through
+  `Backend`; the binary implements it (`crates/kassiber/src/broker.rs`) over
+  `kassiber-store`, `kassiber-ownership`, `kassiber-secrets` and the CLI
+  grammar, and the tests implement it with fakes.
+- **Modes and policy** (`crates/secrets/src/modes.rs`): `set_unlock_mode`,
+  `bind_project_policy`, `require_project_policy_binding`,
+  `configured_unlock_mode` and `effective_unlock_mode`, with Python's
+  permissive-key clearing on rebinding.
+- **Argv classification** (`kassiber_cli::operator::classify`) runs the
+  argparse emulation and capability tables and reports the leaf, its
+  capability, whether it declares `--workspace`/`--profile` (Python's
+  `hasattr`), `--install`, and the global locators.
+- **The runner** (`crates/operator/src/runner.rs`) re-runs this executable
+  from its own directory through `ChildCommand`, so a Windows launch passes
+  only its own handles. The lease passphrase and each command secret cross
+  `std::io::pipe` ends the child inherits by number; each pipe is fed on its
+  own thread while stdout and stderr drain. The caller's
+  `--db-passphrase-fd` is dropped, `KASSIBER_NO_EGRESS=1` is added when the
+  caller set it, and the caller's directory travels in
+  `KASSIBER_OPERATOR_WORKING_DIRECTORY`. Output is UTF-8-lossy, stderr passes
+  the secret floor, a signal is a negative exit code, and
+  `operator_result_too_large` is measured on the ASCII-escaped length.
+- **The server** (`crates/operator/src/server.rs`) answers ping, status,
+  unlock (with the agent control frame), lock, submit (argv continuation,
+  secrets in sorted label order, admin frame), operation status and cancel,
+  set_mode, restart_for_native_auth, and agent_session_open, heartbeat and
+  decide. It serves at most 64 clients (`operator_client_limit` beyond),
+  stops on SIGTERM/SIGINT through `install_stop_signals` and a polled
+  listener, and filters error details as `_public_safe_details` does
+  (`sanitize_traceback_text` is now in `kassiber-envelope`). Touch ID actions
+  answer `native_auth_unavailable`, as Python does off macOS.
+- **The Linux login guard** (`crates/operator/src/session.rs`) reads
+  `/run/systemd/users/<uid>` as `sd_uid_get_state` does (a missing record is
+  `offline`), treats a host without `/run/systemd/system` as unknown, and pins
+  the trusted, tmpfs-backed `/run/user/<uid>` by device and inode. Startup
+  fails with `operator_session_lifetime_unavailable` without a witness, and a
+  monitor closes the broker every 2 s check that fails. Agent-session labels
+  read `/proc` (`peers.py`); macOS labels need `/bin/ps` and come with R6-3.
+- **Broker children** (`crates/cli/src/run.rs`): a child enters the caller's
+  directory (a vanished one reports on stdout, never to a relative
+  `--output`), proves the project identity, drains the lease pipe before
+  dispatch (`kassiber_secrets::prime_passphrase_descriptor` caches it by
+  number), and authenticates the bound database before a command that
+  bootstraps none. Database opens enforce the expected identity in
+  `kassiber-store`. On Windows a child reads its secrets from inherited OS
+  handles, as `msvcrt.open_osfhandle` does.
+
+### Fixes found on the way
+
+- A brokered `secrets change-passphrase` reserved both owner roles and failed
+  `project_in_use` against its own inherited broker lock; it now reserves only
+  the desktop role in a broker child, as Python's `active_owner_kind` does.
+- `unlock_failed` lacked Python's hint and `details.driver_error`; the store
+  now reports both, so a wrong passphrase is byte-identical in the direct CLI
+  and in broker replies.
+
+### Verification
+
+- **Rust tests:**
+  - `kassiber-operator`: 93 service tests (the `test_operator_service.py`
+    cases that need no real child, plus pinned contracts), 31 server tests
+    (`test_operator_server.py`), 9 login-guard tests, 4 runner tests, 3
+    backoff tests and the peer-label test.
+  - `kassiber-secrets`: 10 mode tests (`test_operator_modes.py`).
+  - `crates/kassiber/tests/operator_broker.rs`: 9 end-to-end tests of the
+    binary as broker and child (status and scoped reads, relative output in
+    the caller's directory, two 5,000-byte command secrets, rotation revoking
+    the lease, rotation against a live desktop owner, admin and refusal
+    paths, two projects, the startup election, and child binding refusals).
+- **Python:**
+  - `KASSIBER_TEST_OPERATOR_BROKER=rust` runs `test_operator_integration.py`
+    against the Rust broker; five scenarios pass and the MCP agent-session
+    scenario is skipped until R6-3 and R6-8. The switch uses
+    `KASSIBER_RUST_TEST_OPERATOR_SESSION=fixture`, a `test-harness`-only
+    equivalent of `operator_server_fixture.py`, and the Python client adopts
+    the broker's build.
+  - `tests/test_rust_operator.py` runs one 38-step scenario through the
+    Python client against each broker on copies of one book and compares
+    every reply, error, operation record and raw refusal after mapping
+    generations, operation, lease and project ids, times, builds and paths.
+    Brokered child envelopes equal direct Rust runs and the Python CLI's.
+- **Mutations.** `crates/operator/scripts/mutations.json` gains 39 entries
+  (68 in all) for admission order, capability checks, scope and project
+  mismatch, the replay fingerprint, retention limits, lease and idle expiry,
+  admin TTL and single use, the `failed`/`result_unknown` split, lease-ending
+  commands, argv pinning, the queue and client limits, the result size
+  boundary, detail filtering, the build check, the login guard, the backoff
+  threshold and the runner's directory and egress handling.
+  The scratch-tree run killed 38 of them. `idle-expiry` first moved the
+  boundary from `>=` to `>`, which real time cannot tell apart; rewritten to
+  expire one second late, it is killed by the 59 s/60 s idle test.
+
+### Reviewed differences
+
+- Logind is read from systemd's user record rather than through
+  `libsystemd`; a host without a running systemd is unknown where Python
+  would load the library and read `offline`.
+- A worker whose recovery itself fails keeps serving its queue; Python's
+  thread would end.
+- A runner or worker panic is `result_unknown` with a fixed message, where
+  Python reports the exception text.
+- A child's OS error text in `operator child failed: ...` is Rust's wording.
+- Agent-session process labels are Linux-only until R6-3 ports the macOS
+  `/bin/ps` lookup.
+- `PYINSTALLER_RESET_ENVIRONMENT` is not set for children (R6-1's note).
+- Python's `close()` remembers an interrupt during preparation; Rust's
+  preparation cannot fail, so there is no terminal close error.
+
+### Not tested here
+
+- Windows: no target is installed, so the Windows arms of the server
+  (blocking pipe accept closed from another thread), runner (handle tokens)
+  and child secret reads were written against `windows-sys`/std and reviewed,
+  not compiled.
+- `privacy_hygiene_frozen_oracle_matches_unchanged_python` in
+  `crates/kassiber/tests/privacy_reports.rs` fails with
+  `AssertionError: baseline` in this environment; it does not touch the
+  operator code.
+
+### Left for R6-3 and R6-4
+
+- **R6-3:** the seven `operator` leaves and `--operator-auth-fd`;
+  `route_brokered_command` (fd-to-label conversion, the accepted line,
+  waiting, Ctrl-C cancel with exit 130, typed result mapping); agent-session
+  client handling and its tests (`test_operator_agent_sessions.py`), the macOS
+  `/bin/ps` labels; `config/agent-access.json`; the five
+  `ui.agent_access.*` kinds and the desktop agent-lease tick; the MCP
+  agent-session integration scenario under the Rust broker switch.
+- **R6-4:** `unlock_touch_id` and `touch_id_configure` past the
+  `NativeAuth` seam (helper launch with result, ready and go pipes, live
+  code-signing checks, account derivation, `configure_touch_id_authenticated`
+  in the service), the restart handoff, and the signed hardware run.

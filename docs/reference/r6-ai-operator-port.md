@@ -474,6 +474,11 @@ records its verification and what is left for R6-2.
 
 ### R6-2 Broker service, server and broker children
 
+Done on branch `t3code/r6-2-broker-service`; the
+[checkpoint](rust-shell.md#operator-broker-service-server-and-children-r6-2)
+records its verification, reviewed differences and what is left for R6-3
+and R6-4.
+
 **Scope:**
 
 - **`crates/operator` service:**

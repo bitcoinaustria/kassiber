@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
-"""Run the shared scratch-tree mutation checker on the R6-1 operator catalog.
+"""Run the shared scratch-tree mutation checker on the R6 operator catalog.
 
-The entries break the frame limits, the challenge comparison, the peer and
-runtime-directory checks, the stale-socket unlink condition, build-identity
-equality, connect timeouts, explicit inheritance and the owner janitor; each
-must make its named Rust tests fail. Set TMPDIR to a disposable directory
+The R6-1 entries break the frame limits, the challenge comparison, the peer
+and runtime-directory checks, the stale-socket unlink condition,
+build-identity equality, connect timeouts, explicit inheritance and the owner
+janitor. The R6-2 entries break the broker service's admission order,
+capability and scope checks, replay fingerprint, retention, expiry, admin
+authorization, result states, lease-ending commands and argv pinning, the
+server's limits, detail filter and build check, the login guard, the backoff
+threshold and the runner's caller context. Each must make its named Rust
+tests fail. Set TMPDIR to a disposable directory
 outside /tmp; the scratch tree and its build go there.
 """
 import importlib.util

@@ -1205,15 +1205,18 @@ journal registration remains on R4-13.
 ## Rust backend R6
 
 The [R6 port design](docs/reference/r6-ai-operator-port.md) lists the
-census, slices, oracles and owner decisions. R6-1's libraries are native; no
+census, slices, oracles and owner decisions. R6-1's libraries and R6-2's
+broker (`kassiber --operator-broker-server` and its children) are native; no
 R6 command or kind is registered yet.
 
 - [x] R6-1: local IPC and child-process primitives (`crates/ipc`), the operator
   protocol and client, and the remaining ownership pieces; see the
   [R6-1 checkpoint](docs/reference/rust-shell.md#operator-protocol-local-ipc-and-ownership-r6-1).
   Its Windows code has not been compiled: build and run it on a Windows runner.
-- [ ] R6-2: broker service, server, runner and broker-child mode, on the
-  R6-1 listener, `ChildCommand` launches and client.
+- [x] R6-2: broker service, server, runner and broker-child mode; see the
+  [R6-2 checkpoint](docs/reference/rust-shell.md#operator-broker-service-server-and-children-r6-2).
+  Its Windows arms have not been compiled: build and run them on a Windows
+  runner.
 - [ ] R6-3: operator leaves, brokered routing, agent sessions and
   `ui.agent_access.*`.
 - [ ] R6-4: Touch ID flow, including the signed hardware run on a Mac.

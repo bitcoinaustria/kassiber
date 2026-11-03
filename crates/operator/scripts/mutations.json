@@ -298,5 +298,398 @@
       "conflict_names_the_holding_process"
     ],
     "rule": "project_in_use names the holder's pid."
+  },
+  {
+    "id": "admission-capability",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "            if !Capability::allows(lease.capability, parsed.capability) {",
+    "replace": "            if !Capability::allows(Capability::AccountingDecisions, parsed.capability) {",
+    "expect_failing": [
+      "test_rejected_submissions_wipe_every_staged_secret"
+    ],
+    "rule": "Admission checks the command's capability against the lease's grant."
+  },
+  {
+    "id": "dispatch-capability-recheck",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "                    && !Capability::allows(lease.capability, capability)\n",
+    "replace": "                    && false\n",
+    "expect_failing": [
+      "test_capability_is_rechecked_immediately_before_dispatch"
+    ],
+    "rule": "A narrowed lease cancels queued work it no longer grants."
+  },
+  {
+    "id": "capability-order",
+    "file": "crates/operator/src/service/backend.rs",
+    "find": "        granted.order() >= required.order()",
+    "replace": "        granted.order() > required.order()",
+    "expect_failing": [
+      "test_capabilities_are_cumulative_and_never_admin"
+    ],
+    "rule": "Grants are cumulative: a capability covers itself and below."
+  },
+  {
+    "id": "lease-before-scope",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "            self.require_lease_locked(&mut state, &project)?;\n            Ok(())",
+    "replace": "            Ok(())",
+    "expect_failing": [
+      "test_missing_lease_precedes_scope_validation"
+    ],
+    "rule": "A missing lease is reported before scope validation."
+  },
+  {
+    "id": "scope-required",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": ".filter(|(_, declared, value)| *declared && value.is_none())",
+    "replace": ".filter(|(_, declared, value)| !*declared && value.is_none())",
+    "expect_failing": [
+      "test_scoped_command_without_explicit_book_fails_closed"
+    ],
+    "rule": "Every declared scope flag must be given explicitly."
+  },
+  {
+    "id": "context-set-scope",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "        if workspace.is_some() || profile.is_some() {",
+    "replace": "        if workspace.is_some() {",
+    "expect_failing": [
+      "test_context_set_needs_one_scope_flag"
+    ],
+    "rule": "context set accepts either scope flag."
+  },
+  {
+    "id": "project-mismatch",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "            if requested_project.identity != project.identity {",
+    "replace": "            if requested_project.identity == \"\" {",
+    "expect_failing": [
+      "test_child_project_locator_cannot_borrow_another_projects_lease"
+    ],
+    "rule": "A command naming another project never borrows this lease."
+  },
+  {
+    "id": "replay-egress",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "                    || existing.no_egress != no_egress\n",
+    "replace": "",
+    "expect_failing": [
+      "test_operation_id_replay_must_repeat_the_callers_directory"
+    ],
+    "rule": "A replayed operation id must repeat the caller's egress switch."
+  },
+  {
+    "id": "fingerprint-context",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "        Value::Bool(no_egress),\n    ]);",
+    "replace": "        Value::Bool(false),\n    ]);",
+    "expect_failing": [
+      "test_fingerprints_follow_python_json"
+    ],
+    "rule": "Tombstone fingerprints bind the caller context."
+  },
+  {
+    "id": "tombstone-conflict",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "                    || *bound_fingerprint\n",
+    "replace": "                    || false && *bound_fingerprint\n",
+    "expect_failing": [
+      "test_evicted_operation_id_is_not_reexecuted"
+    ],
+    "rule": "An evicted id with another request is a conflict."
+  },
+  {
+    "id": "retention-count",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "            && (terminal.len() > limits.max_retained_results",
+    "replace": "            && (terminal.len() > limits.max_retained_results + 1",
+    "expect_failing": [
+      "test_terminal_transition_prunes_retained_results"
+    ],
+    "rule": "At most 256 terminal results are kept."
+  },
+  {
+    "id": "retention-bytes",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "|| (retained_bytes > limits.max_retained_result_bytes && terminal.len() > 1))",
+    "replace": "|| (retained_bytes > limits.max_retained_result_bytes && terminal.len() > 2))",
+    "expect_failing": [
+      "test_result_byte_budget_evicts_to_bounded_fingerprint_tombstones"
+    ],
+    "rule": "The byte budget evicts down to the newest result."
+  },
+  {
+    "id": "tombstone-bound",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "        while state.tombstones.len() > limits.max_tombstones {",
+    "replace": "        while state.tombstones.len() > limits.max_tombstones + 1 {",
+    "expect_failing": [
+      "test_tombstones_are_bounded_oldest_first"
+    ],
+    "rule": "Tombstones are bounded, oldest first."
+  },
+  {
+    "id": "lease-expiry",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "        if self.expires_at.is_some_and(|deadline| now >= deadline) {",
+    "replace": "        if self.expires_at.is_some_and(|deadline| now >= deadline + Duration::from_secs(3600)) {",
+    "expect_failing": [
+      "test_lease_expires_by_duration_and_status_reports_locked"
+    ],
+    "rule": "A lease ends at its deadline."
+  },
+  {
+    "id": "idle-expiry",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "now.saturating_duration_since(self.last_used).as_secs_f64() >= timeout as f64",
+    "replace": "now.saturating_duration_since(self.last_used).as_secs_f64() >= timeout as f64 + 1.0",
+    "expect_failing": [
+      "test_idle_timeout_ends_an_agent_lease"
+    ],
+    "rule": "An agent lease ends once its idle timeout has passed, not a second later."
+  },
+  {
+    "id": "admin-ttl",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "                expires_at: Instant::now() + self.inner.limits.admin_auth_ttl,",
+    "replace": "                expires_at: Instant::now() + self.inner.limits.admin_auth_ttl * 2,",
+    "expect_failing": [
+      "test_admin_authorization_lives_sixty_seconds"
+    ],
+    "rule": "Fresh admin authorization lives 60 seconds."
+  },
+  {
+    "id": "admin-single-use",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "let already_consumed = authorization.consumed.swap(true, Ordering::SeqCst);",
+    "replace": "let already_consumed = authorization.consumed.load(Ordering::SeqCst);",
+    "expect_failing": [
+      "test_admin_authorization_is_single_use_and_bound_to_lease_epoch"
+    ],
+    "rule": "An admin authorization is consumed by its first use."
+  },
+  {
+    "id": "admin-epoch",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "                && authorization.lease_epoch == lease.epoch\n",
+    "replace": "",
+    "expect_failing": [
+      "test_admin_authorization_is_single_use_and_bound_to_lease_epoch"
+    ],
+    "rule": "An admin authorization is bound to the lease it was issued under."
+  },
+  {
+    "id": "admin-dispatch-recheck",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "                let admin_expired = capability == Capability::Admin\n",
+    "replace": "                let admin_expired = false && capability == Capability::Admin\n",
+    "expect_failing": [
+      "test_admin_authentication_is_rechecked_after_owner_inheritance"
+    ],
+    "rule": "Admin authorization is rechecked after owner inheritance."
+  },
+  {
+    "id": "failed-versus-unknown",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "|| (result.exit_code != 0 && dispatch.capability != Capability::Read)",
+    "replace": "|| (result.exit_code != 0 && dispatch.capability == Capability::Admin)",
+    "expect_failing": [
+      "test_unproven_nonzero_mutation_is_unknown_but_read_failure_is_failed"
+    ],
+    "rule": "Only a read's failure is failed; a mutation's is result_unknown."
+  },
+  {
+    "id": "signal-unknown",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "                    || result.exit_code < 0\n",
+    "replace": "",
+    "expect_failing": [
+      "test_signalled_read_child_is_result_unknown"
+    ],
+    "rule": "A signalled child is result_unknown."
+  },
+  {
+    "id": "lease-ending-rotation",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "        \"secrets.change-passphrase\" => Some(",
+    "replace": "        \"secrets.change-passphrase-x\" => Some(",
+    "expect_failing": [
+      "test_successful_passphrase_rotation_revokes_the_lease"
+    ],
+    "rule": "A rotation ends the lease."
+  },
+  {
+    "id": "lease-ending-remembered",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "        \"secrets.remember-unlock\" => {",
+    "replace": "        \"secrets.remember-unlock-x\" => {",
+    "expect_failing": [
+      "test_credential_mode_commands_revoke_lease_after_success",
+      "test_credential_mode_partial_outcomes_revoke_and_drain_lease"
+    ],
+    "rule": "Remembered-unlock enrollment ends the lease."
+  },
+  {
+    "id": "pin-data-root",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "        if token == \"--project\" || token == \"--data-root\" {",
+    "replace": "        if token == \"--project\" {",
+    "expect_failing": [
+      "test_pinning_strips_every_project_locator"
+    ],
+    "rule": "Pinning strips the caller's --data-root."
+  },
+  {
+    "id": "pin-inline",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "        if token.starts_with(\"--project=\") || token.starts_with(\"--data-root=\") {",
+    "replace": "        if token.starts_with(\"--project=\") {",
+    "expect_failing": [
+      "test_pinning_strips_every_project_locator"
+    ],
+    "rule": "Pinning strips inline locators too."
+  },
+  {
+    "id": "queue-limit",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "        if queue.0.len() >= limit {",
+    "replace": "        if queue.0.len() > limit {",
+    "expect_failing": [
+      "test_bounded_queue_rejects_before_false_acceptance"
+    ],
+    "rule": "A project queue holds 64 operations."
+  },
+  {
+    "id": "result-too-large",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "    encoded > MAX_JSON_FRAME - OPERATION_STATUS_FRAME_HEADROOM",
+    "replace": "    encoded >= MAX_JSON_FRAME - OPERATION_STATUS_FRAME_HEADROOM",
+    "expect_failing": [
+      "test_oversized_result_is_measured_on_the_escaped_length"
+    ],
+    "rule": "The result limit is measured on the escaped length, at its boundary."
+  },
+  {
+    "id": "stderr-redaction",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "            redact_secret_text(&result.stderr),",
+    "replace": "            result.stderr.clone(),",
+    "expect_failing": [
+      "test_completed_child_stderr_is_secret_floor_redacted"
+    ],
+    "rule": "A child's stderr passes the secret floor."
+  },
+  {
+    "id": "client-limit",
+    "file": "crates/operator/src/server.rs",
+    "find": "(count < MAX_CLIENT_THREADS).then_some(count + 1)",
+    "replace": "(count <= MAX_CLIENT_THREADS).then_some(count + 1)",
+    "expect_failing": [
+      "test_excess_clients_get_retryable_backpressure"
+    ],
+    "rule": "At most 64 clients are served at once."
+  },
+  {
+    "id": "public-details-paths",
+    "file": "crates/operator/src/server.rs",
+    "find": "\"path\" | \"database\" | \"data_root\"",
+    "replace": "\"path\" | \"data_root\"",
+    "expect_failing": [
+      "test_error_details_recursively_redact_secret_keys_and_values"
+    ],
+    "rule": "Error details never carry a database path."
+  },
+  {
+    "id": "expected-build",
+    "file": "crates/operator/src/server.rs",
+    "find": "            if !py_eq(expected, &self.inner.build) {",
+    "replace": "            if false {",
+    "expect_failing": [
+      "test_submit_for_another_build_is_refused_before_admission"
+    ],
+    "rule": "A submit for another build is refused before admission."
+  },
+  {
+    "id": "login-required",
+    "file": "crates/operator/src/server.rs",
+    "find": "            && (logind_alive == Some(false)\n                || (logind_alive.is_none() && session_runtime.is_none()))",
+    "replace": "            && (logind_alive == Some(false))",
+    "expect_failing": [
+      "test_linux_refuses_broker_without_logout_lifetime_primitive"
+    ],
+    "rule": "A broker needs logind or the runtime directory to start."
+  },
+  {
+    "id": "logind-logout",
+    "file": "crates/operator/src/session.rs",
+    "find": "    if logind_alive == Some(false) {\n        return false;",
+    "replace": "    if false {\n        return false;",
+    "expect_failing": [
+      "runtime_guard_can_cover_transient_logind_query_loss"
+    ],
+    "rule": "A logout logind reports ends the broker."
+  },
+  {
+    "id": "logind-states",
+    "file": "crates/operator/src/session.rs",
+    "find": "    matches!(state, \"online\" | \"active\")",
+    "replace": "    matches!(state, \"online\" | \"active\" | \"lingering\")",
+    "expect_failing": [
+      "logind_user_state_distinguishes_login_from_linger"
+    ],
+    "rule": "Lingering is not a live login."
+  },
+  {
+    "id": "logind-missing-record",
+    "file": "crates/operator/src/session.rs",
+    "find": "            return Some(\"offline\".into())",
+    "replace": "            return None",
+    "expect_failing": [
+      "user_records_parse_as_sd_uid_get_state",
+      "logind_is_unknown_without_a_running_systemd"
+    ],
+    "rule": "A missing logind user record is offline."
+  },
+  {
+    "id": "volatile-runtime",
+    "file": "crates/operator/src/session.rs",
+    "find": "best.is_some_and(|(_, filesystem)| matches!(filesystem, \"ramfs\" | \"tmpfs\"))",
+    "replace": "best.is_some_and(|(_, filesystem)| matches!(filesystem, \"ramfs\" | \"tmpfs\" | \"ext4\"))",
+    "expect_failing": [
+      "runtime_fallback_requires_the_canonical_volatile_owner_directory"
+    ],
+    "rule": "Only a memory-backed runtime directory counts."
+  },
+  {
+    "id": "backoff-threshold",
+    "file": "crates/operator/src/backoff.rs",
+    "find": "        if counters.failures < AUTH_FAILURES_BEFORE_BACKOFF {",
+    "replace": "        if counters.failures <= AUTH_FAILURES_BEFORE_BACKOFF {",
+    "expect_failing": [
+      "three_failures_start_a_persisted_backoff",
+      "test_wrong_passphrases_feed_the_shared_backoff"
+    ],
+    "rule": "The third failed passphrase starts a backoff."
+  },
+  {
+    "id": "runner-caller-directory",
+    "file": "crates/operator/src/runner.rs",
+    "find": ".is_some_and(|directory| !std::path::Path::new(directory).is_dir())",
+    "replace": ".is_some_and(|_| false)",
+    "expect_failing": [
+      "worker_refuses_when_the_callers_directory_disappeared"
+    ],
+    "rule": "A vanished caller directory refuses the launch."
+  },
+  {
+    "id": "runner-egress",
+    "file": "crates/operator/src/runner.rs",
+    "find": "        if operation.no_egress {",
+    "replace": "        if !operation.no_egress {",
+    "expect_failing": [
+      "worker_child_gets_caller_directory_and_tightened_egress"
+    ],
+    "rule": "The caller's egress kill switch reaches the child."
   }
 ]

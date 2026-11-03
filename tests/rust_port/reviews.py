@@ -599,3 +599,11 @@ REVIEWS["tests/test_rust_analysis_watch_worker.py"] = {"*": {
     "disposition": "oracle", "group": "chain-sync",
     "reason": "runs the native and unchanged-Python daemon background workers on encrypted books and compares wake-up events, loopback Bitcoin Core request sequences and all 112 tables for watch evaluation, subject and block-range source runs, and a reorg with resume; a delivered event is not repeated",
 }}
+
+REVIEWS["tests/test_rust_operator.py"] = {
+    "*": {
+        "disposition": "oracle",
+        "group": "ai-mcp-operator",
+        "reason": "runs one broker scenario through the Python client against the Python broker fixture and the Rust --operator-broker-server on copies of one book; compares every reply, error, operation record and child envelope after declared id/time/build/path mappings",
+    }
+}

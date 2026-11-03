@@ -3468,3 +3468,63 @@ fn test_admin_authorization_lives_sixty_seconds() {
         "operator_admin_auth_required"
     );
 }
+
+#[test]
+fn test_idle_timeout_ends_an_agent_lease() {
+    let tmp = tempfile::tempdir().unwrap();
+    let fake = Fake::new();
+    let service = Closing(service_with(&fake, ok_runner()));
+    let control = vec![b'c'; MIN_AGENT_CONTROL_BYTES];
+    let grant = |timeout: i64| {
+        service.unlock(
+            &root(&tmp),
+            b"passphrase",
+            UnlockRequest {
+                capability: Capability::Read,
+                agent_scope: true,
+                idle_timeout_seconds: Some(timeout),
+                agent_control: Some(&control),
+                ..UnlockRequest::default()
+            },
+        )
+    };
+    assert_eq!(code(grant(59)), "operator_invalid_duration");
+    let status = grant(60).unwrap();
+    let agent = kassiber_envelope::get(&status, "agent").unwrap();
+    assert_eq!(
+        kassiber_envelope::get(agent, "idle_timeout_seconds"),
+        Some(&int(60u64))
+    );
+    with_lease(&service, &fake, &root(&tmp), |lease| {
+        lease.last_used = Instant::now() - Duration::from_secs(59);
+    });
+    assert_eq!(
+        text(&service.status(Some(&root(&tmp))).unwrap(), "lease"),
+        "unlocked"
+    );
+    with_lease(&service, &fake, &root(&tmp), |lease| {
+        lease.last_used = Instant::now() - Duration::from_secs(60);
+    });
+    assert_eq!(
+        text(&service.status(Some(&root(&tmp))).unwrap(), "lease"),
+        "locked"
+    );
+    // A terminal lease cannot carry an idle timeout or control secret.
+    assert_eq!(
+        code(service.unlock(
+            &root(&tmp),
+            b"passphrase",
+            UnlockRequest {
+                idle_timeout_seconds: Some(600),
+                ..UnlockRequest::default()
+            },
+        )),
+        "operator_protocol_error"
+    );
+    // An agent lease admits only MCP tool calls.
+    grant(600).unwrap();
+    assert_eq!(
+        code(submit(&service, &root(&tmp), argv(&["status"]))),
+        "agent_session_scope"
+    );
+}
