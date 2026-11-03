@@ -158,7 +158,7 @@ impl<'a> FinalizedRow<'a> {
     pub(super) fn borrowed(source: &'a Value) -> Self {
         Self {
             source: Src::Value(Cow::Borrowed(source)),
-            overrides: Overrides(Vec::with_capacity(16)),
+            overrides: Overrides(Vec::with_capacity(24)),
         }
     }
 
@@ -174,7 +174,7 @@ impl<'a> FinalizedRow<'a> {
             RowRef::Value(row) => Self::borrowed(row),
             RowRef::Record(row) => Self {
                 source: Src::Record(row),
-                overrides: Overrides(Vec::with_capacity(16)),
+                overrides: Overrides(Vec::with_capacity(24)),
             },
         }
     }

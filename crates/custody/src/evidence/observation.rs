@@ -142,7 +142,9 @@ impl Commitment {
             .compact()
             .ensure_ascii(false)
             .default_str(true);
-        let mut payload_json = String::with_capacity(preimage.len() + 384);
+        // The raw object's text length bounds most of its dump.
+        let raw_len = row.at("raw_json").as_str().map_or(0, str::len);
+        let mut payload_json = String::with_capacity(preimage.len() + raw_len + 384);
         payload_json.push('{');
         for (index, field) in [
             "confirmed_at",

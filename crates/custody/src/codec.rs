@@ -546,7 +546,7 @@ pub(crate) fn loads_bytes(text: &[u8]) -> Result<Py, String> {
                 Some(b'{') => {
                     self.at += 1;
                     self.ws();
-                    let mut values: Vec<(Key, Py)> = Vec::new();
+                    let mut values: Vec<(Key, Py)> = Vec::with_capacity(8);
                     if !self.take(b"}") {
                         loop {
                             self.ws();
@@ -730,13 +730,15 @@ pub fn truth(v: &Value) -> bool {
         Value::Null => false,
         Value::Bool(b) => *b,
         // Plain integers are zero exactly when their value is.
-        Value::Number(n) if n.as_i64().is_some() => n.as_i64() != Some(0),
-        Value::Number(n) if n.as_u64().is_some() => true,
-        Value::Number(n) => n
-            .to_string()
-            .parse::<f64>()
-            .map(|n| n != 0.0)
-            .unwrap_or(true),
+        Value::Number(n) => match n.as_i64() {
+            Some(n) => n != 0,
+            None if n.as_u64().is_some() => true,
+            None => n
+                .to_string()
+                .parse::<f64>()
+                .map(|n| n != 0.0)
+                .unwrap_or(true),
+        },
         Value::String(s) => !s.is_empty(),
         Value::Array(a) => !a.is_empty(),
         Value::Object(o) => !o.is_empty(),
