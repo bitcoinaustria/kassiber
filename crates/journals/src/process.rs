@@ -365,6 +365,21 @@ fn fusion_error(error: ledger_request::Refusal) -> Refusal {
     let mut refusal = Refusal::new(error.family, error.message);
     refusal.code = error.code.map(str::to_owned);
     refusal.hint = error.hint.map(String::from);
+    if let (Some(order), Some(map)) = (error.details_order, error.details.as_object()) {
+        refusal.ordered_details = order
+            .iter()
+            .filter_map(|key| Some((*key, map.get(*key)?)))
+            .map(|(key, value)| {
+                Ok((
+                    kassiber_pyjson::Key::from(key),
+                    kassiber_custody::codec::from_json(value)?,
+                ))
+            })
+            .collect::<Result<Vec<_>, String>>()
+            .ok()
+            .filter(|pairs| pairs.len() == map.len())
+            .map(kassiber_pyjson::Value::Dict);
+    }
     refusal.details = *error.details;
     refusal.invariant = error.invariant.map(str::to_owned);
     refusal.error_class = error.invariant.map(|_| "RequestError".into());

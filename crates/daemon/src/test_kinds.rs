@@ -15,8 +15,9 @@ use crate::input::Input;
 use crate::output::{with_request_id, RequestId};
 use crate::{Daemon, Failure, Handled};
 
-pub const KINDS: [&str; 16] = [
+pub const KINDS: [&str; 17] = [
     "test.stream",
+    "test.journals.refresh",
     "test.emit_event",
     "test.late",
     "test.secret_store",
@@ -61,6 +62,34 @@ pub(crate) fn handle(
     }
     let args = get(request, "args");
     Some(match kind {
+        // The journal step of the assistant's scoped `ui.journals.process`
+        // tool: Python's `_journals_refresh_payload(conn, auto_pair=False)`
+        // on the daemon's own connection. The chat loop that owns its
+        // consent and scope binding is not native yet.
+        "test.journals.refresh" => (|| {
+            if let Some(locked) = daemon.open_lazily(request_id)? {
+                return Ok((Some(locked), false));
+            }
+            let auto_pair = matches!(
+                args.and_then(|v| get(v, "auto_pair")),
+                Some(Value::Bool(true))
+            );
+            let context = daemon.book_mut()?.context()?;
+            let output = daemon.output.clone();
+            let cancel = kassiber_wallets::scan::Cancellation::default();
+            let result =
+                daemon
+                    .book_mut()?
+                    .refresh_journals(&context, auto_pair, &cancel, &mut |_| Ok(()))?;
+            output
+                .write(&with_request_id(
+                    success("ui.journals.process", result.payload().clone()),
+                    request_id,
+                ))
+                .map_err(|_| AppError::new("cancelled", "Journal output closed"))?;
+            result.after_reply()?;
+            Ok((None, false))
+        })(),
         "test.freshness.select" | "test.freshness.invoke" => (|| {
             let product_kind = arg_text(args, "kind");
             if !crate::freshness::product::RUN_KINDS.contains(&product_kind.as_str()) {

@@ -3287,9 +3287,8 @@ processing preserves Python's table mutations without queueing a freshness job.
 The [seventh continuation](../reference/r4-journal-process-checkpoint.md#seventh-continuation-desktop-registration)
 records the separate verification boundary. Transitional JSON boundaries
 remain open. The assistant's internal tool, whose consent covers a rebuild
-without automatic pairing, stays in Python's chat loop under R6: the R4 design
-keeps AI projections in Python and rules out Python product changes and an
-early PyO3 path, so no native route can serve it before the R7 cutover. Registered-route
+without automatic pairing, has a verified native journal step on the same
+service; Python's chat loop serves it until R6 ports `ai.chat`. Registered-route
 campaigns, census/shadow, inherited mutation and performance acceptance are
 still required. Python retains production authority until R4-16.
 

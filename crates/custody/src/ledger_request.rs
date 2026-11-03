@@ -23,6 +23,10 @@ pub struct Refusal {
     pub hint: Option<Box<str>>,
     pub code: Option<&'static str>,
     pub invariant: Option<&'static str>,
+    /// Python's insertion order of the top-level `details` keys, when it
+    /// differs from the sorted JSON map.
+    /// A thin reference keeps the refusal within its error-size budget.
+    pub details_order: Option<&'static &'static [&'static str]>,
 }
 impl Refusal {
     fn new(stage: &'static str, family: &'static str, message: impl Into<String>) -> Self {
@@ -34,6 +38,7 @@ impl Refusal {
             hint: None,
             code: None,
             invariant: None,
+            details_order: None,
         }
     }
     fn contract(invariant: &'static str, detail: String) -> Self {

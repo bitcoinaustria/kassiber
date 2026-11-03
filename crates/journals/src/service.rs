@@ -225,9 +225,11 @@ pub fn application_error(refusal: Refusal) -> AppError {
             hint: refusal.hint.clone().map(Into::into),
             message_codepoints: None,
             sqlite_origin: false,
-            details: (!refusal.details.is_null())
-                .then(|| kassiber_custody::codec::from_json(&refusal.details).ok())
-                .flatten(),
+            details: refusal.ordered_details.clone().or_else(|| {
+                (!refusal.details.is_null())
+                    .then(|| kassiber_custody::codec::from_json(&refusal.details).ok())
+                    .flatten()
+            }),
             retryable: refusal.retryable.unwrap_or(false),
         }
     } else {

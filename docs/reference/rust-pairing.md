@@ -3,8 +3,8 @@
 `kassiber_transfers::pairing` ports the automatic pairing used before journal
 processing. The journal stage remains separate from R4-13's pipeline wiring:
 CLI `journals process --auto-pair`, desktop `ui.journals.process` and freshness
-journal jobs use the native refresh coordinator. The assistant's scoped
-processing tool stays in Python's chat loop under R6, as the R4 design requires.
+journal jobs use the native refresh coordinator. The assistant's no-pairing
+journal step is native and verified; its chat loop awaits the R6 port.
 Python retains production authority until R4-16. The existing
 native transfer commands reuse this same library. The [service slice contract](../plan/21-rust-backend.md#service-slice-contract-r4-onward)
 and [transfers classification](rust-shell.md#transfers-and-review-classification-r5)

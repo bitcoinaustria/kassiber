@@ -58,6 +58,9 @@ def seed(root, cipher=False, country='generic', shape='unchanged'):
         conn.execute("UPDATE profiles SET gains_algorithm='invalid-method'")
     elif shape == 'admission-refusal':
         conn.execute("UPDATE profiles SET tax_country='unsupported'")
+    elif shape == 'label-refusal':
+        # A multi-key refusal whose details keep Python's insertion order.
+        conn.execute("UPDATE wallets SET label='Wallet:1'")
     conn.commit()
     conn.close()
     return root
@@ -275,7 +278,7 @@ def test_registered_auto_pair_explicit_scope_overrides_foreign_active_context(tm
 
 
 @pytest.mark.parametrize('cipher', [False, True])
-@pytest.mark.parametrize('shape', ['changed', 'build-refusal', 'admission-refusal', 'fault'])
+@pytest.mark.parametrize('shape', ['changed', 'build-refusal', 'label-refusal', 'admission-refusal', 'fault'])
 def test_hybrid_plain_counts_native_and_proven_rollback_fallback_shapes(tmp_path, environment, cipher, shape):
     reference = seed(tmp_path / 'python', cipher, shape=shape)
     native = tmp_path / 'rust'
@@ -298,8 +301,10 @@ def test_hybrid_plain_counts_native_and_proven_rollback_fallback_shapes(tmp_path
     records = [json.loads(line) for line in Path(env['KASSIBER_HYBRID_LOG']).read_text().splitlines()]
     assert len(records) == 1
     assert records[0]['command'] == 'journals.process'
-    assert records[0]['served_by'] == ('rust' if shape == 'changed' else 'python'), records
-    assert ('fallback_shape' in records[0]) == (shape != 'changed')
+    # Typed AppError refusals are exact natively; exception families replay.
+    native = shape in ('changed', 'build-refusal', 'label-refusal')
+    assert records[0]['served_by'] == ('rust' if native else 'python'), records
+    assert ('fallback_shape' in records[0]) == (not native)
 
 
 @pytest.mark.parametrize('cipher', [False, True])
@@ -340,7 +345,8 @@ def test_registered_plain_fault_rolls_back_every_table_before_replay(tmp_path, e
 
 @pytest.mark.parametrize('cipher', [False, True])
 def test_registered_plain_never_replays_after_a_bootstrap_schema_write(tmp_path, environment, cipher):
-    root = seed(tmp_path / 'migration', cipher, shape='build-refusal')
+    # A replayable exception family, so only the schema write can block replay.
+    root = seed(tmp_path / 'migration', cipher, shape='admission-refusal')
     conn = open_db(root, passphrase=KEY if cipher else None)
     conn.execute('DROP INDEX idx_transactions_profile_page')
     conn.commit()
@@ -363,7 +369,8 @@ def test_registered_plain_never_replays_after_a_bootstrap_schema_write(tmp_path,
 
 @pytest.mark.parametrize('style', ['inline', 'abbreviated', 'repeated'])
 def test_hybrid_refusal_replays_the_last_passphrase_descriptor(tmp_path, environment, style):
-    reference = seed(tmp_path / 'python', True, shape='build-refusal')
+    # An exception-family refusal; typed AppError refusals no longer replay.
+    reference = seed(tmp_path / 'python', True, shape='admission-refusal')
     native = tmp_path / 'rust'
     shutil.copytree(reference, native)
     expected = invoke(reference, environment, cipher=True)
@@ -379,4 +386,4 @@ def test_hybrid_refusal_replays_the_last_passphrase_descriptor(tmp_path, environ
                                 env=environment, pass_fds=fds, capture_output=True, cwd=ROOT, timeout=120)
     assert (actual.returncode, actual.stdout, actual.stderr) == (expected.returncode, expected.stdout, expected.stderr)
     record = json.loads(Path(environment['KASSIBER_HYBRID_LOG']).read_text())
-    assert record == dict(command='journals.process', served_by='python', fallback_shape='building:AppError')
+    assert record == dict(command='journals.process', served_by='python', fallback_shape='preparing:ValueError')

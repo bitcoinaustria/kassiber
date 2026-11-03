@@ -32,6 +32,7 @@ fn token(value: &Value, field: &str) -> Result<String, Refusal> {
         );
         error.hint = Some(TOKEN_HINT.into());
         error.details = Box::new(json!({"field":field,"value":value,"characters":chars}));
+        error.details_order = Some(&(&["field", "value", "characters"] as &[&str]));
         return Err(error);
     }
     Ok(value.into())

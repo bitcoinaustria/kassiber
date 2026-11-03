@@ -81,6 +81,7 @@ pub(crate) fn app(error: kassiber_envelope::AppError) -> Refusal {
         .as_ref()
         .map(kassiber_custody::codec::to_json)
         .unwrap_or_default();
+    refusal.ordered_details = error.details;
     refusal
 }
 

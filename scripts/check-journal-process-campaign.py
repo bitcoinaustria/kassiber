@@ -110,7 +110,7 @@ def main():
     if args.seeds < 1 or args.shard_size < 1 or args.start_shard < 0 or (args.max_shards is not None and args.max_shards < 1):
         parser.error('positive sizes and nonnegative start shard required')
     destination = args.output.resolve()
-    if not destination.is_relative_to(ROOT / 'target'):
+    if not destination.is_relative_to((ROOT / 'target').resolve()):
         parser.error('campaign output must stay in the worktree target directory')
     destination.mkdir(mode=0o700, parents=True, exist_ok=True)
     destination.chmod(0o700)

@@ -1107,21 +1107,48 @@ Default-feature production clippy also passes. Static applicability passes for
 all 44 mutation catalogs, including the re-anchored freshness lifecycle and
 product entries.
 
-### Assistant tool disposition
+### Assistant tool journal step
 
 The assistant's `ui.journals.process` tool runs inside `ai.chat` through
-`_execute_mutating_ai_tool` and `_run_scoped_ai_mutation` on the Python
-daemon's main-thread connection, with `auto_pair=False`. The native daemon
-does not serve `ai.chat`. Registering only the tool's journal step natively
-would require either a Python product change that calls the binary or an
-in-process binding. The [R4 design](r4-journal-pipeline.md#what-stays-python)
-keeps the AI tool projections, including this tool, in Python under R6. Its
-[authority switch](r4-journal-pipeline.md#authority-switch-r4-16) leaves the
-Python product unchanged and rules out an early PyO3 path. The owner's scope
-also leaves R6 untouched. The tool therefore stays Python, and this continuation
-records that boundary instead of registering it. A public no-pairing daemon
-kind would not substitute for it. Both runtimes write identical stored state,
-so reports read either runtime's rebuild.
+`_execute_mutating_ai_tool` and `_run_scoped_ai_mutation` on the daemon's
+main-thread connection. Its step is `_journals_refresh_payload(conn,
+auto_pair=False)`, because the assistant's consent does not cover authoring
+transfer pairs. An earlier note in this continuation kept the tool in Python
+because R6 was out of scope. The owner has since brought R6 into scope.
+
+`Book::refresh_journals` now takes the pairing choice explicitly. The desktop
+route passes `true`; the assistant's step passes `false` through the same
+resolved-profile service, freshness slot and cancellation checks. The native
+daemon does not serve `ai.chat` yet, so the test-only `test.journals.refresh`
+kind reaches the step on the daemon's own connection. It is not advertised
+and not a substitute for the tool. `tests/rust_port/journal_ai_reference.py`
+runs Python's exact step under the registered tests' clock and identity
+bindings. `tests/test_rust_journal_ai.py` compares payload bytes or the typed
+refusal and every table on SQLite and SQLCipher. It covers all eleven pairing
+scenarios, current and stale, plus plain, refused and label-refused books.
+A control shows that the oracle sees pairing when it is requested. All
+**57 cases** pass. Consent, scope binding, result redaction and the chat
+loop remain R6 work; the journal step itself is native and verified.
+
+### Typed refusals stay native
+
+The generated plain campaign below showed that every replayed refusal was a
+typed `AppError`. Unguarded, 1,047 of 1,207 already matched Python's bytes and
+books. The other 160 differed only in detail-key order: the RP2 label
+refusal's `{"field","value","characters"}` reached the envelope through a
+sorted JSON map. Native refusals now carry Python's insertion order to the
+transport. Ledger-request refusals declare it, and pre-build refusals retain
+their ordered application error. The CLI replay guard now requests development
+replay only for exception families such as `ValueError` or `DatabaseError`;
+typed `AppError` refusals are answered natively. Tests that pinned replay now
+use an exception-family book, and a label-refusal book pins the detail order.
+The freshness job's own replay policy is unchanged.
+
+One run passes **438 tests** across the CLI, desktop, assistant-step and
+freshness journal suites. Three new mutations and the re-anchored desktop
+pairing control are all killed: the assistant step pairing, typed refusals
+replaying, and sorted detail order. Path guards in the journal tests and
+campaign scripts now resolve `target/`, which is a symlink to a separate disk.
 
 ### Registered-route CPU (eighth continuation)
 
@@ -1158,6 +1185,45 @@ multi-wallet desktop pairs ran while other workers raised the load sharply,
 so that cell is the least reliable. This record does not attribute time to
 phases; that remains with the separate performance track. Python retains
 production authority until R4-16.
+
+### Registered-route campaigns: plain route at `4afcc8d16`
+
+`scripts/check-journal-route-campaign.py` materializes each generated or
+recorded operand into a freshly created book, applies that book's pending
+compatibility migrations once, and processes copies through the registered
+route in unchanged Python (forked from a preloaded worker, with the registered
+tests' clock binding) and in the test-harness binary. It compares exit status,
+stdout and stderr bytes, `integrity_check` and every table scalar-exactly. A
+guarded replay must leave the native book unchanged. The unguarded native run
+is then also compared, to record whether the replay was necessary. Shards are
+resumable against a manifest that binds the binary and sources. A deliberately
+skewed native clock fails every compared operand on both CLI and desktop
+routes. `--census` builds the perturbed operands defined in
+`tests/rust_port/journal_route_census.py`.
+
+The [evidence record](r4-journal-route-campaign.json) covers the plain route
+with the binary built from `4afcc8d16` (before the native-refusal change
+above). All **318 recorded** operands match natively. Of **25,030 generated**
+operands, 23,544 succeed natively and 201 native refusals
+(`custody_schema_migration_failed`) match Python. The 1,207 guarded replays are
+typed refusals: 1,032 `book_network_review_required` and 15 pricing validations
+already matched unguarded, and 160 RP2 label refusals differed only in
+detail-key order. That order is now fixed.
+
+Two causes remain outside the journal service. **64** books from
+`gaps/blocked_competitor` keep unresolved legacy custody-migration issues.
+Python retries that migration on every open and processes the book. Native
+book open refuses it with `unsupported_schema_layout`
+(`legacy_authored_custody`), as the store's compatibility gate requires.
+**14** operands use the adapter's relaxed (constraint-free) tables, which
+native schema admission refuses with `requires_python_migration` before any
+write; the other 201 relaxed operands are migrated and match. Neither is a
+journal parity defect, but both remain native refusals of books Python
+processes.
+
+The automatic-pairing, desktop and assistant routes, the census and a plain
+rerun on the current binary have not completed; machine crashes interrupted
+the first attempt.
 
 ### Seventh-continuation remaining work
 

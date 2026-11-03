@@ -21,9 +21,9 @@
   },
   {
     "id": "JDESKTOP-pairing",
-    "file": "crates/kassiber/src/real_store/journals.rs",
-    "find": "                auto_pair: true,",
-    "replace": "                auto_pair: false,",
+    "file": "crates/daemon/src/freshness.rs",
+    "find": "                            // The desktop action pairs automatically.\n                            true,",
+    "replace": "                            // The desktop action pairs automatically.\n                            false,",
     "expect_failing": [
       "tests/test_rust_journal_desktop.py::test_desktop_journals_match_ordered_envelopes_events_and_all_tables[exact-generic-False-False]"
     ],
@@ -88,5 +88,35 @@
       "tests/test_rust_journal_desktop.py::test_desktop_journals_unresolved_active_profile_matches_python_plain_resolution[no-context]"
     ],
     "rule": "An unresolved active profile takes Python's plain-processing resolution, not the scoped refresh."
+  },
+  {
+    "id": "JAI-no-pairing",
+    "file": "crates/daemon/src/test_kinds.rs",
+    "find": "            let auto_pair = matches!(\n                args.and_then(|v| get(v, \"auto_pair\")),\n                Some(Value::Bool(true))\n            );",
+    "replace": "            let auto_pair = true;",
+    "expect_failing": [
+      "tests/test_rust_journal_ai.py::test_ai_journal_step_never_pairs_and_matches_python[exact-False-False]"
+    ],
+    "rule": "The assistant tool's journal step never authors transfer pairs."
+  },
+  {
+    "id": "JROUTE-apperror-native",
+    "file": "crates/kassiber/src/real_store.rs",
+    "find": "                && refusal.family != \"AppError\"\n",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_journal_commands.py::test_hybrid_plain_counts_native_and_proven_rollback_fallback_shapes[build-refusal-False]"
+    ],
+    "rule": "Typed AppError refusals are served natively; only exception families request development replay."
+  },
+  {
+    "id": "JROUTE-ordered-details",
+    "file": "crates/journals/src/service.rs",
+    "find": "details: refusal.ordered_details.clone().or_else(|| {",
+    "replace": "details: None.or_else(|| {",
+    "expect_failing": [
+      "tests/test_rust_journal_commands.py::test_hybrid_plain_counts_native_and_proven_rollback_fallback_shapes[label-refusal-False]"
+    ],
+    "rule": "Refusal details keep Python's insertion order in the transport envelope."
   }
 ]

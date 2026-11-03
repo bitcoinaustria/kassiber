@@ -203,6 +203,7 @@ impl<
 pub(super) fn explicit<'a>(
     conn: &'a Connection,
     context: &kassiber_runtime::store::BookContext,
+    auto_pair: bool,
     cancel: &kassiber_wallets::scan::Cancellation,
     progress: &mut dyn FnMut(&Value) -> Result<(), kassiber_envelope::AppError>,
 ) -> Result<Committed<'a>, kassiber_envelope::AppError> {
@@ -281,7 +282,7 @@ pub(super) fn explicit<'a>(
             &profile,
             &sources,
             kassiber_journals::process::RefreshOptions {
-                auto_pair: true,
+                auto_pair,
                 ..Default::default()
             },
             &mut |phase| {

@@ -57,7 +57,7 @@ def main():
     parser.add_argument('--payouts',action='store_true',help='capture the separate real-writer payout corpus')
     args=parser.parse_args()
     args.directory=args.directory.resolve()
-    if not args.directory.is_relative_to(ROOT/'target'):
+    if not args.directory.resolve().is_relative_to((ROOT/'target').resolve()):
         parser.error('capture directory must be under worktree target/')
     args.directory.mkdir(parents=True,exist_ok=True)
     scratch_root=ROOT/'target/r4-persist/tmp'

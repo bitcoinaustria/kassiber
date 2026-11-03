@@ -125,7 +125,7 @@ def main():
     parser.add_argument('--shapes', nargs='+', default=list(BOOKS), choices=BOOKS)
     args = parser.parse_args()
     output = args.output.resolve()
-    if not output.is_relative_to(ROOT / 'target'):
+    if not output.is_relative_to((ROOT / 'target').resolve()):
         parser.error('output must stay in the worktree target directory')
     from tests.rust_port.journal_persistence_oracle import dump
     from tests.test_rust_journal_process import scalar_exact

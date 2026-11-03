@@ -1,0 +1,93 @@
+{
+ "schema": "kassiber.r4-route-campaign-evidence.v1",
+ "date_utc": "2026-11-02",
+ "source_commit": "4afcc8d16",
+ "entry": "registered CLI journals process (plain) through the test-harness binary with the development replay guard",
+ "compared": [
+  "exit status, stdout and stderr bytes",
+  "every application table scalar-exactly, including REAL bits and rowids",
+  "integrity_check on both runtimes",
+  "for guarded replays: unchanged native book, plus unguarded native bytes and book against Python"
+ ],
+ "runs": {
+  "generated-plain": {
+   "manifest": {
+    "adapter": "Stored columns materialized into a freshly created book; omitted derived fields are counted. Synthetic rate cache; no inferred ownership or legacy pair links.",
+    "binary": "5368432b0ac7d0209e05b9df5fac45639a33d8e736a1dc68122a71623000cb72",
+    "census": false,
+    "operands": 25030,
+    "python_hash_seed": null,
+    "route": "plain",
+    "schema": "kassiber.r4-route-campaign.v1",
+    "seeds": 2000,
+    "shard_size": 250,
+    "sources": "68c08381eb9858e0d16de2e8f03e773cf05bc5b78d6d498f1d7015d0f97cf737"
+   },
+   "operands": 25030,
+   "books": 24000,
+   "permutations": 1030,
+   "outcomes": {
+    "mismatch": 64,
+    "native-refusal": 201,
+    "native-success": 23544,
+    "replayed:building:AppError:divergent": 160,
+    "replayed:building:AppError:equivalent": 1032,
+    "replayed:pricing:AppError:equivalent": 15,
+    "schema-admission": 14
+   },
+   "mismatch_causes": {
+    "store-open:unsupported_schema_layout:legacy_authored_custody": 64
+   },
+   "mismatch_scenarios": {
+    "gaps/blocked_competitor": 64
+   },
+   "python_refusals": [
+    {
+     "code": "book_network_review_required",
+     "count": 1032,
+     "outcome": "replayed:building:AppError:equivalent"
+    },
+    {
+     "code": "custody_schema_migration_failed",
+     "count": 201,
+     "outcome": "native-refusal"
+    },
+    {
+     "code": "validation",
+     "count": 160,
+     "outcome": "replayed:building:AppError:divergent"
+    },
+    {
+     "code": "validation",
+     "count": 15,
+     "outcome": "replayed:pricing:AppError:equivalent"
+    }
+   ],
+   "relaxed_schema": 215
+  },
+  "recorded-plain": {
+   "manifest": {
+    "adapter": "Stored columns materialized into a freshly created book; omitted derived fields are counted. Synthetic rate cache; no inferred ownership or legacy pair links.",
+    "binary": "5368432b0ac7d0209e05b9df5fac45639a33d8e736a1dc68122a71623000cb72",
+    "census": false,
+    "operands": 318,
+    "python_hash_seed": null,
+    "route": "plain",
+    "schema": "kassiber.r4-route-campaign.v1",
+    "seeds": 2000,
+    "shard_size": 250,
+    "sources": "1279417bca23b7707cd4ce3cd4122e3b24ab0a794951f6a165ef8033e74ee688"
+   },
+   "operands": 318,
+   "books": 159,
+   "permutations": 159,
+   "outcomes": {
+    "native-success": 318
+   },
+   "mismatch_causes": {},
+   "mismatch_scenarios": {},
+   "python_refusals": [],
+   "relaxed_schema": 0
+  }
+ }
+}

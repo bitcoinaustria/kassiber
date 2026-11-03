@@ -1096,11 +1096,12 @@ impl Book for RealBook {
     fn refresh_journals(
         &mut self,
         context: &BookContext,
+        auto_pair: bool,
         cancel: &kassiber_wallets::scan::Cancellation,
         progress: &mut dyn FnMut(&Value) -> Result<(), AppError>,
     ) -> Result<Box<dyn JournalReply + '_>, AppError> {
         let slot = kassiber_wallets::freshness::planning::Execution::acquire()?;
-        let result = journals::explicit(self.conn()?, context, cancel, progress)?;
+        let result = journals::explicit(self.conn()?, context, auto_pair, cancel, progress)?;
         Ok(Box::new(NativeJournalReply {
             result,
             _slot: Some(slot),
@@ -1121,8 +1122,12 @@ impl Book for RealBook {
             progress(phase);
         })
         .map_err(|refusal| JournalFailure {
-            replay_shape: (last_phase != "complete" && guard.unchanged(conn))
-                .then(|| format!("{last_phase}:{}", refusal.family)),
+            // Typed AppError refusals are exact natively (registered-route
+            // census); only exception families keep the development replay.
+            replay_shape: (last_phase != "complete"
+                && refusal.family != "AppError"
+                && guard.unchanged(conn))
+            .then(|| format!("{last_phase}:{}", refusal.family)),
             error: Box::new(kassiber_journals::service::application_error(refusal)),
         })?;
         Ok(Box::new(NativeJournalReply {

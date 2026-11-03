@@ -520,6 +520,8 @@ impl Daemon {
                     if journals {
                         let result = book.refresh_journals(
                             journal_context.as_ref().expect("captured journal context"),
+                            // The desktop action pairs automatically.
+                            true,
                             &worker_cancel,
                             &mut emit,
                         )?;

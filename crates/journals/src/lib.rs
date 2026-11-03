@@ -49,6 +49,10 @@ pub struct RefusalDetails {
     /// Driver metadata used by daemon retry/error projection, outside oracle JSON.
     #[serde(skip)]
     pub sqlite_code: Option<i32>,
+    /// `details` in Python's insertion order for the transport envelope;
+    /// `details` itself is a sorted JSON map.
+    #[serde(skip)]
+    pub ordered_details: Option<kassiber_pyjson::Value>,
 }
 impl Refusal {
     pub(crate) fn new(family: &str, message: impl Into<String>) -> Self {
@@ -63,6 +67,7 @@ impl Refusal {
             invariant: None,
             cause: None,
             sqlite_code: None,
+            ordered_details: None,
         }))
     }
 }

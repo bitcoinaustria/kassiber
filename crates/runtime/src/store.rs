@@ -236,9 +236,12 @@ pub trait WatchWorker: Send {
 }
 
 pub trait Book: Send {
+    /// Python's `_journals_refresh_payload`: the desktop action pairs
+    /// automatically, the assistant's scoped tool does not.
     fn refresh_journals(
         &mut self,
         _context: &BookContext,
+        _auto_pair: bool,
         _cancel: &kassiber_wallets::scan::Cancellation,
         _progress: &mut dyn FnMut(&Value) -> Result<(), AppError>,
     ) -> Result<Box<dyn JournalReply + '_>, AppError> {
