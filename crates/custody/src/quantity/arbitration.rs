@@ -676,7 +676,7 @@ fn posting_py(
 ) -> Result<kassiber_pyjson::Value, String> {
     use kassiber_pyjson::Value as Py;
     // A posting's domain is its observation's.
-    let domain = &super::Domain::of(&observation);
+    let domain = &super::Domain::of_leg(observation);
     Ok(super::py_dict([
         ("$type", Py::Str("QuantityPosting".into())),
         ("amount_msat", Py::Int(amount)),
@@ -955,7 +955,7 @@ impl ProjectionState {
             .iter()
             .map(|p| {
                 let o = observation(p.observation);
-                let domain = &super::Domain::of(&o);
+                let domain = &super::Domain::of_leg(o);
                 let mut domain_value = serde_json::Map::new();
                 domain_value.insert("$type".into(), json!("QuantityDomain"));
                 domain_value.insert("exposure".into(), Value::String(domain.exposure.clone()));
@@ -1049,7 +1049,9 @@ pub(super) fn arbitrate<'a>(
     }
     let mut totals: BTreeMap<_, BigInt> = BTreeMap::new();
     for (observation, sum) in by_observation.values() {
-        *totals.entry(super::Domain::key(observation)).or_default() += sum;
+        *totals
+            .entry(super::Domain::leg_key(*observation))
+            .or_default() += sum;
     }
     if totals.values().any(|n| *n != BigInt::from(0)) {
         return Err("AssertionError".into());

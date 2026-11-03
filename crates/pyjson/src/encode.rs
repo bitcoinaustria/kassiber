@@ -292,10 +292,17 @@ impl Encoder<'_> {
             Value::Null => self.out.push_str("null"),
             Value::Bool(true) => self.out.push_str("true"),
             Value::Bool(false) => self.out.push_str("false"),
-            Value::Int(n) => {
-                let text = int_text(n)?;
-                self.out.push_str(&text);
-            }
+            Value::Int(n) => match i64::try_from(n) {
+                // A machine integer has too few digits to exceed the limit.
+                Ok(small) => {
+                    use fmt::Write as _;
+                    write!(self.out, "{small}").expect("writing to a String");
+                }
+                Err(_) => {
+                    let text = int_text(n)?;
+                    self.out.push_str(&text);
+                }
+            },
             Value::Float(x) => {
                 let text = self.float_text(*x)?;
                 self.out.push_str(&text);
@@ -690,6 +697,22 @@ mod tests {
             dumps(&doc, &Options::new().indent(2)).unwrap(),
             "{\n  \"b\": [\n    1,\n    null,\n    true\n  ],\n  \"a\": 1.5\n}"
         );
+    }
+
+    #[test]
+    fn machine_and_big_integers_write_their_digits() {
+        for n in [
+            BigInt::from(0),
+            BigInt::from(-7),
+            BigInt::from(i64::MAX),
+            BigInt::from(i64::MIN),
+            BigInt::from(i64::MAX) + 1,
+            BigInt::from(i64::MIN) - 1,
+            BigInt::from(10).pow(40),
+        ] {
+            let text = n.to_string();
+            assert_eq!(dumps(&Value::Int(n), &Options::new()).unwrap(), text);
+        }
     }
 
     #[test]

@@ -13,7 +13,7 @@ pub mod transfers;
 
 use crate::{
     codec,
-    evidence::canonical::{EventRef, Obs},
+    evidence::canonical::{EventRef, LegRef, Obs},
     python_text::PythonText,
 };
 pub use arbitration::project;
@@ -128,10 +128,32 @@ impl Domain {
             rail: v["event_key"]["chain"].clone(),
         }
     }
+    /// [`Self::of`] an observation, reading a typed one's event key.
+    pub fn of_leg(v: LegRef<'_>) -> Self {
+        let (network, exposure) = Self::leg_key(v);
+        Self {
+            network: network.into_owned(),
+            exposure: exposure.into_owned(),
+            rail: match v {
+                LegRef::Typed(leg) => Value::String(leg.event().chain.clone()),
+                LegRef::Json(_) => v["event_key"]["chain"].clone(),
+            },
+        }
+    }
     /// The domain's network and exposure, borrowed where the observation
     /// spells them.
     pub fn key<O: Obs + ?Sized>(v: &O) -> (Cow<'_, str>, Cow<'_, str>) {
-        let network = text_key(&v["event_key"]["network"]);
+        Self::spelled(text_key(&v["event_key"]["network"]), text_key(&v["asset"]))
+    }
+    /// [`Self::key`] of an observation, reading a typed one's event key.
+    pub fn leg_key(v: LegRef<'_>) -> (Cow<'_, str>, Cow<'_, str>) {
+        let network = match v {
+            LegRef::Typed(leg) => Cow::Borrowed(leg.event().network.as_str()),
+            LegRef::Json(_) => text_key(&v.at("event_key")["network"]),
+        };
+        Self::spelled(network, text_key(v.at("asset")))
+    }
+    fn spelled<'a>(network: Cow<'a, str>, asset: Cow<'a, str>) -> (Cow<'a, str>, Cow<'a, str>) {
         let mapped = match network.as_ref() {
             "liquidv1" => Some("main"),
             "liquidtestnet" => Some("test"),
@@ -139,7 +161,6 @@ impl Domain {
             _ => None,
         };
         let network = mapped.map_or(network, Cow::Borrowed);
-        let asset = text_key(&v["asset"]);
         let exposure = if matches!(asset.as_ref(), "BTC" | "LBTC") {
             Cow::Borrowed("bitcoin")
         } else {

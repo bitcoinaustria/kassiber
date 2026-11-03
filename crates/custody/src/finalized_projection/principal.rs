@@ -1,5 +1,6 @@
 use super::*;
 use crate::evidence::canonical::LegRef;
+use std::fmt::Write as _;
 
 /// Construct one principal slice, retaining the raw unit rate when supplied.
 pub fn slice_row(
@@ -13,13 +14,32 @@ pub fn slice_row(
         .map(row::FinalizedRow::into_json)
 }
 
-pub(super) fn slice_row_with_rows<'a>(
+/// The slice a principal row covers: a JSON slice object, or an
+/// observation's hash and machine-integer bounds.
+#[derive(Clone, Copy)]
+pub(super) enum Slice<'q> {
+    Value(&'q Value),
+    Bounds {
+        hash: &'q Value,
+        start: i64,
+        end: i64,
+    },
+}
+
+impl<'q> From<&'q Value> for Slice<'q> {
+    fn from(value: &'q Value) -> Self {
+        Self::Value(value)
+    }
+}
+
+pub(super) fn slice_row_with_rows<'a, 'q>(
     observation: LegRef<'a>,
-    quantity: &Value,
+    quantity: impl Into<Slice<'q>>,
     rows: &'a dyn Rows,
     side: &str,
     fee: &BigInt,
 ) -> Result<row::FinalizedRow<'a>, Error> {
+    let quantity = quantity.into();
     let mut base = base_row_with_rows(observation, rows)?;
     let original = if codec::truth(&base["amount"]) {
         &base["amount"]
@@ -47,28 +67,40 @@ pub(super) fn slice_row_with_rows<'a>(
             }
         }
     }
-    let hash = || match &quantity["observation_hash"] {
+    let hash = match quantity {
+        Slice::Value(quantity) => &quantity["observation_hash"],
+        Slice::Bounds { hash, .. } => hash,
+    };
+    let hash = || match hash {
         Value::String(hash) => std::borrow::Cow::Borrowed(hash.as_str()),
         hash => std::borrow::Cow::Owned(string(hash)),
     };
-    let bounds = match (
-        quantity["start_msat"].as_i64(),
-        quantity["end_msat"].as_i64(),
-    ) {
-        (Some(start), Some(end)) => end.checked_sub(start).map(|amount| (start, end, amount)),
-        _ => None,
-    };
+    let bounds = match quantity {
+        Slice::Value(quantity) => quantity["start_msat"]
+            .as_i64()
+            .zip(quantity["end_msat"].as_i64()),
+        Slice::Bounds { start, end, .. } => Some((start, end)),
+    }
+    .and_then(|(start, end)| end.checked_sub(start).map(|amount| (start, end, amount)));
     if let Some((start, end, amount)) = bounds {
-        base.set(
-            "id",
-            Value::String(format!("custody-tax:{}:{start}:{end}:{side}", hash())),
-        );
+        let hash = hash();
+        let mut id = String::with_capacity(hash.len() + side.len() + 54);
+        id.push_str("custody-tax:");
+        id.push_str(&hash);
+        write!(id, ":{start}:{end}:").expect("writing to a String");
+        id.push_str(side);
+        base.set("id", Value::String(id));
         base.set_int("amount", amount);
         base.set_int("custody_slice_start_msat", start);
         base.set_int("custody_slice_end_msat", end);
     } else {
-        let start = integer_big(&quantity["start_msat"])?;
-        let end = integer_big(&quantity["end_msat"])?;
+        let (start, end) = match quantity {
+            Slice::Value(quantity) => (
+                integer_big(&quantity["start_msat"])?,
+                integer_big(&quantity["end_msat"])?,
+            ),
+            Slice::Bounds { start, end, .. } => (BigInt::from(start), BigInt::from(end)),
+        };
         base.set("id", json!(slice_row_id(&hash(), &start, &end, side)));
         base.set("amount", number(&(&end - &start)));
         base.set("custody_slice_start_msat", number(&start));

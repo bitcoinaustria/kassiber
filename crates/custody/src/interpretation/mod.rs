@@ -257,7 +257,7 @@ fn observations<'a>(events: &[EventRef<'a>]) -> BTreeMap<String, Observed<'a>> {
             None => Cow::Owned(text(value)),
         }
     }
-    let by_hash: std::collections::HashMap<_, _> = events
+    let by_hash: crate::fxhash::HashMap<_, _> = events
         .iter()
         .flat_map(|event| event.legs())
         .map(|item| (identity(item.at("quantity_hash")), item))

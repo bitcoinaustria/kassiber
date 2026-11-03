@@ -56,20 +56,36 @@ pub(crate) fn slot(key: &str) -> Option<usize> {
     })
 }
 
+/// An event's key, typed and as its `event_key` object.
+#[derive(Debug)]
+pub(crate) struct Keys {
+    pub key: EventKey,
+    pub value: Value,
+}
+
+impl Keys {
+    pub(crate) fn new(key: EventKey) -> Arc<Self> {
+        Arc::new(Self {
+            value: key.value(),
+            key,
+        })
+    }
+}
+
 /// One `QuantityObservation`.
 #[derive(Clone, Debug)]
 pub struct Leg {
     fields: [Value; 16],
-    event_key: Arc<Value>,
+    event: Arc<Keys>,
     /// The (event, leg) position in the canonical input that holds it.
     at: (u32, u32),
 }
 
 impl Leg {
-    pub(crate) fn new(fields: [Value; 16], event_key: Arc<Value>) -> Self {
+    pub(crate) fn new(fields: [Value; 16], event: Arc<Keys>) -> Self {
         Self {
             fields,
-            event_key,
+            event,
             at: (u32::MAX, u32::MAX),
         }
     }
@@ -77,6 +93,11 @@ impl Leg {
     /// The field at `slot` of `FIELDS`.
     pub(crate) fn field(&self, slot: usize) -> &Value {
         &self.fields[slot]
+    }
+
+    /// The typed key of the observation's event.
+    pub(crate) fn event(&self) -> &EventKey {
+        &self.event.key
     }
 
     /// The (event, leg) position in its canonical input.
@@ -88,7 +109,7 @@ impl Leg {
     pub fn value(&self) -> Value {
         let mut object = Map::new();
         object.insert("$type".into(), OBSERVATION.clone());
-        object.insert("event_key".into(), (*self.event_key).clone());
+        object.insert("event_key".into(), self.event.value.clone());
         for (key, value) in FIELDS.iter().zip(&self.fields) {
             object.insert((*key).into(), value.clone());
         }
@@ -102,7 +123,7 @@ impl Index<&str> for Leg {
     fn index(&self, key: &str) -> &Value {
         match key {
             "$type" => &OBSERVATION,
-            "event_key" => &self.event_key,
+            "event_key" => &self.event.value,
             _ => match slot(key) {
                 Some(at) => &self.fields[at],
                 None => &NULL,
@@ -126,8 +147,7 @@ pub(crate) enum Snapshot {
 /// One `CanonicalQuantityEvent`.
 #[derive(Clone, Debug)]
 pub struct Event {
-    key: EventKey,
-    key_value: Arc<Value>,
+    keys: Arc<Keys>,
     legs: Vec<Leg>,
     snapshots: Vec<Snapshot>,
     /// The snapshots' JSON objects, built on first request.
@@ -138,16 +158,14 @@ pub struct Event {
 
 impl Event {
     pub(crate) fn new(
-        key: EventKey,
-        key_value: Arc<Value>,
+        keys: Arc<Keys>,
         legs: Vec<Leg>,
         snapshots: Vec<Snapshot>,
         sources: Vec<Value>,
         aliases: Vec<Value>,
     ) -> Self {
         Self {
-            key,
-            key_value,
+            keys,
             legs,
             snapshots,
             snapshot_values: OnceLock::new(),
@@ -157,7 +175,7 @@ impl Event {
     }
 
     pub fn key(&self) -> &EventKey {
-        &self.key
+        &self.keys.key
     }
 
     pub fn legs(&self) -> &[Leg] {
@@ -202,7 +220,7 @@ impl Event {
     pub fn value(&self) -> Value {
         let mut object = Map::new();
         object.insert("$type".into(), EVENT.clone());
-        object.insert("event_key".into(), (*self.key_value).clone());
+        object.insert("event_key".into(), self.keys.value.clone());
         object.insert(
             "evidence_snapshots".into(),
             Value::Array(self.snapshot_values().to_vec()),
@@ -371,7 +389,7 @@ impl<'a> EventRef<'a> {
     /// The `event_key` object.
     pub fn key(self) -> &'a Value {
         match self {
-            Self::Typed(event) => &event.key_value,
+            Self::Typed(event) => &event.keys.value,
             Self::Json(value) => &value["event_key"],
         }
     }

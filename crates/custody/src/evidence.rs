@@ -97,11 +97,22 @@ pub fn scope(row: &Value) -> Result<(String, String), Error> {
 }
 
 fn scope_of<F: Fields + ?Sized>(row: &F) -> Result<(String, String), Error> {
-    scope_fields(|key| row.at(key))
+    let raw = match row.raw_text() {
+        Some(raw) => crate::graph::raw_object(raw),
+        None => crate::graph::transfer_object_ref(row.at("raw_json")),
+    };
+    scope_with(|key| row.at(key), raw)
 }
 
 pub(crate) fn scope_fields<'a>(row: impl Fn(&str) -> &'a Value) -> Result<(String, String), Error> {
-    let raw = crate::graph::transfer_object_ref(row("raw_json"));
+    scope_with(&row, crate::graph::transfer_object_ref(row("raw_json")))
+}
+
+/// `scope_fields` of a row whose `raw_json` object is `raw`.
+fn scope_with<'a>(
+    row: impl Fn(&str) -> &'a Value,
+    raw: crate::graph::TransferValue<'_>,
+) -> Result<(String, String), Error> {
     let config = crate::graph::transfer_object_ref(if truth(row("config_json")) {
         row("config_json")
     } else {
@@ -194,7 +205,12 @@ fn txid_name(key: &str) -> bool {
 pub(crate) fn event_key_of<F: Fields + ?Sized>(row: &F) -> Result<EventKey, Error> {
     // The JSON object of `raw_json` is read only by some branches below.
     let raw = std::cell::OnceCell::new();
-    let raw = || raw.get_or_init(|| crate::graph::transfer_object_ref(row.at("raw_json")));
+    let raw = || {
+        raw.get_or_init(|| match row.raw_text() {
+            Some(raw) => crate::graph::raw_object(raw),
+            None => crate::graph::transfer_object_ref(row.at("raw_json")),
+        })
+    };
     let (chain, network) = scope_of(row)?;
     let null = Py::Null;
     let parsed;
@@ -656,6 +672,10 @@ impl<R: RowRecord> Fields for EnrichedRow<'_, R> {
     fn loaded_raw(&self) -> Option<&Result<Py, ()>> {
         self.facts.raw.as_deref().map(crate::graph::RawText::loaded)
     }
+
+    fn raw_text(&self) -> Option<&std::sync::Arc<crate::graph::RawText>> {
+        self.facts.raw.as_ref()
+    }
 }
 
 pub fn enriched_rows<R: RowRecord>(rows: &[R]) -> Result<Vec<Value>, Error> {
@@ -674,7 +694,10 @@ fn enrich_with_keys<R: RowRecord>(
         let config = crate::graph::transfer_object_ref(original("config_json"));
         // The loaded text is shared with every later reader of it.
         let loaded = original("raw_json").as_str().map(crate::graph::raw_text);
-        let raw = crate::graph::transfer_object_ref(original("raw_json"));
+        let raw = match &loaded {
+            Some(loaded) => crate::graph::raw_object(loaded),
+            None => crate::graph::transfer_object_ref(original("raw_json")),
+        };
         let raw_chain = raw.field("chain");
         let mut chain = if truth(&raw_chain) {
             raw_chain.into_owned()
@@ -919,6 +942,9 @@ fn canonical_event<F: Fields>(
     group: &[&F],
     reconciliations: &Value,
 ) -> Result<Result<canonical::Event, Value>, Error> {
+    // The typed key and its object, shared by the event and its legs.
+    let keys = canonical::Keys::new(key);
+    let key = &keys.key;
     let reconciled = |row: &F| {
         if reconciliations.as_object().is_some_and(|m| m.is_empty()) {
             None
@@ -931,7 +957,7 @@ fn canonical_event<F: Fields>(
         .any(|r| reconciled(r).is_some_and(Value::is_null))
     {
         return Ok(Err(issue(
-            &key,
+            key,
             "source_overlap_quantity_unresolved",
             "overlapping wallet receipts lack complete disjoint output coverage",
             group,
@@ -942,7 +968,7 @@ fn canonical_event<F: Fields>(
     let mut errors = BTreeSet::new();
     for row in group {
         let built = (|| {
-            let mut observation = observation::Observation::new(*row, &key)?;
+            let mut observation = observation::Observation::new(*row, key)?;
             if let Some(proof) = reconciled(row).filter(|v| !v.is_null()) {
                 observation.reconcile(proof)?;
             }
@@ -958,7 +984,7 @@ fn canonical_event<F: Fields>(
     }
     if !errors.is_empty() {
         return Ok(Err(issue(
-            &key,
+            key,
             "canonical_event_leg_invalid",
             "one or more wallet-event aggregate legs are invalid",
             group,
@@ -981,14 +1007,13 @@ fn canonical_event<F: Fields>(
     }
     if !contradictions.is_empty() {
         return Ok(Err(issue(
-            &key,
+            key,
             "canonical_event_leg_contradiction",
             "wallet-event aggregate observations disagree",
             group,
             json!({"contradictory_slots":contradictions}),
         )));
     }
-    let key_value = std::sync::Arc::new(key.value());
     // Each slot's selected observation becomes its leg, in slot order.
     let mut selected = vec![0; observations.len()];
     let mut leg_of = vec![usize::MAX; observations.len()];
@@ -1044,7 +1069,7 @@ fn canonical_event<F: Fields>(
             if snapshot != usize::MAX {
                 snapshots[snapshot] = Some(canonical::Snapshot::Leg(leg));
             }
-            legs[leg] = Some(item.into_leg(&key_value));
+            legs[leg] = Some(item.into_leg(&keys));
         } else if snapshot != usize::MAX {
             let commitment = item.commitment;
             snapshots[snapshot] = Some(canonical::Snapshot::Owned {
@@ -1060,7 +1085,7 @@ fn canonical_event<F: Fields>(
         .map(|snapshot| snapshot.expect("winning snapshot"))
         .collect();
     Ok(Ok(canonical::Event::new(
-        key, key_value, legs, snapshots, ids, aliases,
+        keys, legs, snapshots, ids, aliases,
     )))
 }
 

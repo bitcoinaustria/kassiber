@@ -20726,8 +20726,8 @@
   {
     "id": "projection2-slice-identity",
     "file": "crates/custody/src/finalized_projection/principal.rs",
-    "find": "    let hash = || match &quantity[\"observation_hash\"] {",
-    "replace": "    let hash = || match &observation[\"quantity_hash\"] {",
+    "find": "        Slice::Value(quantity) => &quantity[\"observation_hash\"],",
+    "replace": "        Slice::Value(_) => &observation[\"quantity_hash\"],",
     "expect_failing": [
       "projection_slice_pricing_vectors"
     ],
@@ -23807,7 +23807,7 @@
   {
     "id": "canonical-leg-event-key",
     "file": "crates/custody/src/evidence/canonical.rs",
-    "find": "        object.insert(\"event_key\".into(), (*self.event_key).clone());",
+    "find": "        object.insert(\"event_key\".into(), self.event.value.clone());",
     "replace": "        object.insert(\"event_key\".into(), Value::Null);",
     "expect_failing": [
       "quantity_runtime_wrapper_vectors"
@@ -23977,8 +23977,8 @@
   {
     "id": "slice-fast-amount",
     "file": "crates/custody/src/finalized_projection/principal.rs",
-    "find": "        (Some(start), Some(end)) => end.checked_sub(start).map(|amount| (start, end, amount)),",
-    "replace": "        (Some(start), Some(end)) => end.checked_sub(start).map(|amount| (start, end, amount + 1)),",
+    "find": "end.checked_sub(start).map(|amount| (start, end, amount)));",
+    "replace": "end.checked_sub(start).map(|amount| (start, end, amount + 1)));",
     "expect_failing": [
       "projection_slice_pricing_vectors"
     ],
@@ -24117,10 +24117,10 @@
   {
     "id": "quoted-fast-quote",
     "file": "crates/custody/src/evidence/observation.rs",
-    "find": "        .all(|b| matches!(b, 0x20..=0x7e) && b != b'\"' && b != b'\\\\')",
-    "replace": "        .all(|b| matches!(b, 0x20..=0x7e) && b != b'\\\\')",
+    "find": "        let quote = zero(word ^ (ONES * u64::from(b'\"')));",
+    "replace": "        let quote = 0;",
     "expect_failing": [
-      "quoted_strings_match_the_encoder"
+      "plain_words_match_the_byte_test"
     ],
     "rule": "Quotes are escaped even on the plain-text path."
   },
@@ -24227,6 +24227,117 @@
     "id": "evidence-snapshot-quantity-hashes",
     "find": "Cow::Borrowed(event.snapshot_fields(snapshot).0)",
     "replace": "Cow::Borrowed(event.snapshot_fields(snapshot).1)"
+  },
+  {
+    "id": "plain-word-high-bytes",
+    "file": "crates/custody/src/evidence/observation.rs",
+    "find": "        let high = (word.wrapping_add(ONES) | word) & HIGH;",
+    "replace": "        let high = word & HIGH;",
+    "expect_failing": [
+      "plain_words_match_the_byte_test"
+    ],
+    "rule": "Plain words exclude DEL as well as non-ASCII bytes."
+  },
+  {
+    "id": "plain-word-control-bytes",
+    "file": "crates/custody/src/evidence/observation.rs",
+    "find": "        let control = word.wrapping_sub(ONES * 0x20) & !word & HIGH;",
+    "replace": "        let control = word.wrapping_sub(ONES * 0x1f) & !word & HIGH;",
+    "expect_failing": [
+      "plain_words_match_the_byte_test"
+    ],
+    "rule": "Plain words exclude every control byte below space."
+  },
+  {
+    "id": "slice-bounds-hash",
+    "file": "crates/custody/src/finalized_projection/principal.rs",
+    "find": "        Slice::Bounds { hash, .. } => hash,",
+    "replace": "        Slice::Bounds { .. } => &NULL,",
+    "expect_failing": [
+      "projection_nonzero_slice_pricing"
+    ],
+    "rule": "Bounded slices keep their observation hash in the row id."
+  },
+  {
+    "id": "slice-bounds-end",
+    "file": "crates/custody/src/finalized_projection/principal.rs",
+    "find": "        Slice::Bounds { start, end, .. } => Some((start, end)),",
+    "replace": "        Slice::Bounds { start, end, .. } => Some((start, end + 1)),",
+    "expect_failing": [
+      "projection_nonzero_slice_pricing"
+    ],
+    "rule": "Bounded slices cover exactly their bounds."
+  },
+  {
+    "id": "slice-id-side",
+    "file": "crates/custody/src/finalized_projection/principal.rs",
+    "find": "        write!(id, \":{start}:{end}:\").expect(\"writing to a String\");",
+    "replace": "        write!(id, \":{start}:{end}\").expect(\"writing to a String\");",
+    "expect_failing": [
+      "projection_nonzero_slice_pricing"
+    ],
+    "rule": "Slice ids separate the bounds from the side."
+  },
+  {
+    "id": "inbound-bounds-start",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "                    start: *start,\n",
+    "replace": "                    start: *start + 1,\n",
+    "expect_failing": [
+      "projection_nonzero_slice_pricing"
+    ],
+    "rule": "An uncovered inbound slice starts at its cursor."
+  },
+  {
+    "id": "domain-typed-network",
+    "file": "crates/custody/src/quantity/mod.rs",
+    "find": "            LegRef::Typed(leg) => Cow::Borrowed(leg.event().network.as_str()),",
+    "replace": "            LegRef::Typed(leg) => Cow::Borrowed(leg.event().chain.as_str()),",
+    "expect_failing": [
+      "quantity_runtime_wrapper_vectors"
+    ],
+    "rule": "A typed observation's domain network is its event key's network."
+  },
+  {
+    "id": "domain-typed-rail",
+    "file": "crates/custody/src/quantity/mod.rs",
+    "find": "                LegRef::Typed(leg) => Value::String(leg.event().chain.clone()),",
+    "replace": "                LegRef::Typed(leg) => Value::String(leg.event().network.clone()),",
+    "expect_failing": [
+      "quantity_runtime_wrapper_vectors"
+    ],
+    "rule": "A typed observation's domain rail is its event key's chain."
+  },
+  {
+    "id": "raw-object-shape",
+    "file": "crates/custody/src/graph.rs",
+    "find": "pub(crate) fn raw_object<'a>(raw: &std::sync::Arc<RawText>) -> TransferValue<'a> {\n    if raw.is_object() {",
+    "replace": "pub(crate) fn raw_object<'a>(raw: &std::sync::Arc<RawText>) -> TransferValue<'a> {\n    if true {",
+    "expect_failing": [
+      "raw_fields_match_decoded_objects"
+    ],
+    "rule": "A loaded raw text stands for an object only when it is one."
+  },
+  {
+    "id": "scope-loaded-raw",
+    "file": "crates/custody/src/evidence.rs",
+    "find": "    let raw = match row.raw_text() {\n        Some(raw) => crate::graph::raw_object(raw),\n        None => crate::graph::transfer_object_ref(row.at(\"raw_json\")),\n    };\n    scope_with",
+    "replace": "    let raw = match row.raw_text() {\n        Some(_) => crate::graph::TransferValue::Empty,\n        None => crate::graph::transfer_object_ref(row.at(\"raw_json\")),\n    };\n    scope_with",
+    "expect_failing": [
+      "native_support_shares_evidence_enrichment",
+      "interpretation_pipeline_projection"
+    ],
+    "rule": "Event scopes read the row's loaded raw object."
+  },
+  {
+    "id": "gap-samourai-config",
+    "file": "crates/custody/src/gaps/normalize.rs",
+    "find": "    let samourai = config.field(\"samourai\");",
+    "replace": "    let samourai = config.field(\"samurai\");",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ],
+    "rule": "Gap legs read Samourai policy from the wallet configuration."
   },
   {
     "id": "R4-evidence-alias-slot-index",

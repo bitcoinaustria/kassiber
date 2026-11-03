@@ -25,12 +25,32 @@ fn amount(value: &Value) -> Result<BigInt, Error> {
     Ok(crate::quantity::exact(&value).expect("converted evidence integer"))
 }
 
+/// Whether every byte is printable ASCII other than quote and backslash,
+/// tested eight bytes at a time.
+fn plain(value: &str) -> bool {
+    const ONES: u64 = 0x0101_0101_0101_0101;
+    const HIGH: u64 = 0x8080_8080_8080_8080;
+    // Each test sets a byte's high bit when that byte qualifies; a set bit
+    // may stand for a lower byte, but no qualifying word escapes them.
+    let zero = |word: u64| word.wrapping_sub(ONES) & !word & HIGH;
+    let (words, rest) = value.as_bytes().as_chunks::<8>();
+    for word in words {
+        let word = u64::from_le_bytes(*word);
+        let control = word.wrapping_sub(ONES * 0x20) & !word & HIGH;
+        let high = (word.wrapping_add(ONES) | word) & HIGH;
+        let quote = zero(word ^ (ONES * u64::from(b'"')));
+        let backslash = zero(word ^ (ONES * u64::from(b'\\')));
+        if control | high | quote | backslash != 0 {
+            return false;
+        }
+    }
+    rest.iter()
+        .all(|b| matches!(b, 0x20..=0x7e) && *b != b'"' && *b != b'\\')
+}
+
 fn quoted(value: &str, out: &mut String) {
     // Printable ASCII other than quote and backslash is written as is.
-    if value
-        .bytes()
-        .all(|b| matches!(b, 0x20..=0x7e) && b != b'"' && b != b'\\')
-    {
+    if plain(value) {
         out.reserve(value.len() + 2);
         out.push('"');
         out.push_str(value);
@@ -324,7 +344,7 @@ impl<'a> Observation<'a> {
 
     /// The typed observation, sharing its event's key object and moving
     /// its texts.
-    pub fn into_leg(self, event_key: &std::sync::Arc<Value>) -> super::canonical::Leg {
+    pub fn into_leg(self, event: &std::sync::Arc<super::canonical::Keys>) -> super::canonical::Leg {
         let string = |value: Cow<'_, str>| Value::String(value.into_owned());
         super::canonical::Leg::new(
             [
@@ -345,7 +365,7 @@ impl<'a> Observation<'a> {
                 string(self.transaction_id),
                 string(self.quantity.wallet),
             ],
-            event_key.clone(),
+            event.clone(),
         )
     }
 
@@ -372,6 +392,30 @@ mod tests {
         Ok(
             json!({"$type":"EvidenceSnapshot","quantity_hash":quantity_hash,"detail_hash":detail_hash,"payload_json":payload_json}),
         )
+    }
+
+    #[test]
+    fn plain_words_match_the_byte_test() {
+        let byte_plain = |text: &[u8]| {
+            text.iter()
+                .all(|b| matches!(b, 0x20..=0x7e) && *b != b'"' && *b != b'\\')
+        };
+        // Every byte value at every position of a word and of its tail.
+        for len in [1, 7, 8, 9, 16, 17] {
+            for at in 0..len {
+                for byte in 0..=0x7f_u8 {
+                    let mut text = vec![b'a'; len];
+                    text[at] = byte;
+                    let text = String::from_utf8(text).unwrap();
+                    assert_eq!(plain(&text), byte_plain(text.as_bytes()), "{text:?}");
+                }
+                let mut text = "a".repeat(len);
+                text.replace_range(at..=at, "é");
+                assert!(!plain(&text), "{text:?}");
+            }
+        }
+        assert!(plain(""));
+        assert!(plain("0123456789abcdef0123456789abcdef~ !#[]{}"));
     }
 
     #[test]

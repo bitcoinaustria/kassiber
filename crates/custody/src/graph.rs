@@ -183,16 +183,20 @@ pub(crate) fn raw_text(text: &str) -> std::sync::Arc<RawText> {
     }) {
         return hit;
     }
+    // Only a text's first sighting is remembered by address: an equal text
+    // elsewhere is found by its content without growing the address map.
     let (key, entry) = RAW_TEXTS.with(|m| {
-        if let Some((key, entry)) = m.borrow().get_key_value(text) {
-            return (key.clone(), entry.clone());
+        if let Some(entry) = m.borrow().get(text) {
+            return (None, entry.clone());
         }
         let key: std::sync::Arc<str> = text.into();
         let entry = std::sync::Arc::new(RawText::new(text));
         m.borrow_mut().insert(key.clone(), entry.clone());
-        (key, entry)
+        (Some(key), entry)
     });
-    RAW_ADDRESSES.with(|m| m.borrow_mut().insert(address, (key, entry.clone())));
+    if let Some(key) = key {
+        RAW_ADDRESSES.with(|m| m.borrow_mut().insert(address, (key, entry.clone())));
+    }
     entry
 }
 
@@ -236,7 +240,20 @@ pub fn transfer_object(value: &Value) -> Value {
     (*transfer_object_ref(value)).clone()
 }
 
+/// `transfer_object_ref` of a string whose shared loaded text is `raw`.
+pub(crate) fn raw_object<'a>(raw: &std::sync::Arc<RawText>) -> TransferValue<'a> {
+    if raw.is_object() {
+        TransferValue::Raw(raw.clone())
+    } else {
+        TransferValue::Empty
+    }
+}
+
 pub(crate) fn transfer_object_ref(value: &Value) -> TransferValue<'_> {
+    // The empty object's text needs no loading.
+    if value.as_str() == Some("{}") {
+        return TransferValue::Empty;
+    }
     let value = transfer_value(value);
     let object = match &value {
         TransferValue::Raw(raw) => raw.is_object(),
@@ -1242,6 +1259,13 @@ mod semantic_tests {
                     );
                 }
             }
+            // A loaded text stands for the same object as its string.
+            codec::clear_memos();
+            assert_eq!(
+                *raw_object(&raw_text(text)),
+                transfer_object(&json!(text)),
+                "{text}"
+            );
         }
         codec::clear_memos();
     }

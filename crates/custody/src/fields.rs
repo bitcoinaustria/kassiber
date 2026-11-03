@@ -18,6 +18,12 @@ pub(crate) trait Fields {
     fn loaded_raw(&self) -> Option<&Result<kassiber_pyjson::Value, ()>> {
         None
     }
+
+    /// The shared loaded text of this row's string `raw_json`, when the row
+    /// holds it.
+    fn raw_text(&self) -> Option<&std::sync::Arc<crate::graph::RawText>> {
+        None
+    }
 }
 
 impl Fields for Value {
@@ -100,6 +106,13 @@ impl<R: Fields> Fields for Layered<'_, R> {
             Self::Value(_) => None,
         }
     }
+
+    fn raw_text(&self) -> Option<&std::sync::Arc<crate::graph::RawText>> {
+        match self {
+            Self::Row(row) => row.raw_text(),
+            Self::Value(_) => None,
+        }
+    }
 }
 
 impl<R: Row> Row for Layered<'_, R> {
@@ -136,5 +149,9 @@ impl<T: Fields + ?Sized> Fields for &T {
 
     fn loaded_raw(&self) -> Option<&Result<kassiber_pyjson::Value, ()>> {
         (**self).loaded_raw()
+    }
+
+    fn raw_text(&self) -> Option<&std::sync::Arc<crate::graph::RawText>> {
+        (**self).raw_text()
     }
 }

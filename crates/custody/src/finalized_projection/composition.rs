@@ -505,18 +505,31 @@ pub(super) fn evaluate_parts<'r>(
             .cloned()
             .unwrap_or_default();
         targets.sort();
+        // An uncovered inbound slice; machine-integer bounds need no object.
+        let uncovered = |start: &Msat, end: &Msat| match (start, end) {
+            (Msat::Small(start), Msat::Small(end)) => {
+                let slice = super::principal::Slice::Bounds {
+                    hash: o.at("quantity_hash"),
+                    start: *start,
+                    end: *end,
+                };
+                slice_row(o, slice, rows, "inbound", &BigInt::from(0))
+            }
+            _ => {
+                let q = json!({"observation_hash":o["quantity_hash"],"start_msat":start.value(),"end_msat":end.value()});
+                slice_row(o, &q, rows, "inbound", &BigInt::from(0))
+            }
+        };
         let mut cursor = Msat::Small(0);
         for (start, end) in targets {
             if start > cursor {
-                let q = json!({"observation_hash":o["quantity_hash"],"start_msat":cursor.value(),"end_msat":start.value()});
-                projected.push(slice_row(o, &q, rows, "inbound", &BigInt::from(0))?);
+                projected.push(uncovered(&cursor, &start)?);
             }
             cursor = cursor.max(end);
         }
         let principal = Msat::of(&o["amount_msat"])?;
         if cursor < principal {
-            let q = json!({"observation_hash":o["quantity_hash"],"start_msat":cursor.value(),"end_msat":principal.value()});
-            projected.push(slice_row(o, &q, rows, "inbound", &BigInt::from(0))?);
+            projected.push(uncovered(&cursor, &principal)?);
         }
     }
     let hashes: crate::fxhash::HashSet<_> = projected

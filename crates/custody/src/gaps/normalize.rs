@@ -150,8 +150,8 @@ fn codes(row: &Row<'_>) -> (BTreeSet<String>, BTreeSet<String>) {
     {
         disqualifiers.insert("structured_external_origin".into());
     }
-    let config = codec::object(&row["wallet_config_json"]);
-    let samourai = &config["samourai"];
+    let config = crate::graph::transfer_object_ref(&row["wallet_config_json"]);
+    let samourai = config.field("samourai");
     if samourai.is_object() && policy(&samourai["role"], &samourai["section"])
         || policy(&row["samourai_role"], &row["samourai_section"])
     {
