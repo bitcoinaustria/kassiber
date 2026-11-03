@@ -243,7 +243,9 @@ class OperatorIntegrationTest(unittest.TestCase):
                 else:
                     os.environ[TEST_RUNTIME_OVERRIDE_ENV] = old_test_gate
 
-    @unittest.skipIf(RUST_BROKER, "Rust agent sessions and MCP calls are R6-3 and R6-8")
+    # Agent sessions are native (R6-3); the Rust broker's children still
+    # answer `mcp call` with not_implemented until R6-8 ports MCP.
+    @unittest.skipIf(RUST_BROKER, "Rust `mcp call` children are R6-8")
     def test_desktop_grant_serves_mcp_and_ends_with_the_desktop_session(self) -> None:
         import threading
         from types import SimpleNamespace
