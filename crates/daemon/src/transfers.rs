@@ -4,6 +4,7 @@ use kassiber_runtime::store::Book;
 
 pub const KINDS: &[&str] = &[
     "ui.transfers.suggest",
+    "ui.transfers.review_context",
     "ui.transfers.list",
     "ui.transfers.payouts.list",
     "ui.transfers.payouts.create",
@@ -38,6 +39,9 @@ pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<
         return Err(AppError::new("validation", "daemon args must be an object")
             .with_details(dict([("type", s(type_name(args)))])));
     };
+    if kind == "ui.transfers.review_context" {
+        return review_context(book, args);
+    }
     if kind == "ui.custody.coverage.snapshot" {
         let mut unknown: Vec<_> = fields
             .iter()
@@ -1310,4 +1314,96 @@ fn gap_read_projection(raw: Value) -> Value {
 fn gap_reads(book: &mut dyn Book, kind: &str, args: &Value) -> Result<Value, AppError> {
     let (operation, payload) = gap_read_args(kind, args)?;
     book.transfers(operation, &payload).map(gap_read_projection)
+}
+
+/// `build_swap_review_context_payload`: validate in Python's order, then hand
+/// the shared suggestion and saved-view reads to the transfer service.
+fn review_context(book: &mut dyn Book, args: &Value) -> Result<Value, AppError> {
+    let kind = "ui.transfers.review_context";
+    let Value::Dict(fields) = args else {
+        unreachable!()
+    };
+    let allowed = [
+        "workspace",
+        "profile",
+        "limit",
+        "confidence",
+        "method",
+        "asset_pair",
+        "route_pair",
+        "candidate_type",
+        "time_window_seconds",
+        "fee_pct_max",
+        "fee_sats_min",
+    ];
+    let mut unknown: Vec<_> = fields
+        .iter()
+        .filter(|(k, _)| !allowed.contains(&key_text(k).as_str()))
+        .map(|(k, _)| s(key_text(k)))
+        .collect();
+    unknown.sort_by_key(kassiber_envelope::py_str);
+    if !unknown.is_empty() {
+        return Err(AppError::new(
+            "validation",
+            format!("{kind} received unsupported arguments"),
+        )
+        .with_details(dict([("unknown", Value::List(unknown))])));
+    }
+    book.resolve_scope(get(args, "workspace"), get(args, "profile"))?;
+    let invalid = || AppError::new("validation", format!("{kind} limit must be an integer"));
+    let limit = match get(args, "limit").cloned().unwrap_or(Value::Int(8.into())) {
+        Value::Int(n) => i64::try_from(n).unwrap_or(i64::MAX),
+        Value::Bool(b) => i64::from(b),
+        Value::Float(n) if n.is_finite() => n.trunc() as i64,
+        Value::Float(n) if n.is_nan() => return Err(invalid()),
+        Value::Float(_) => {
+            return Err(AppError::new(
+                "internal_error",
+                "cannot convert float infinity to integer",
+            ))
+        }
+        Value::Str(t) => kassiber_pytext::parse_int(t.as_str().unwrap_or_default())
+            .ok()
+            .map(|n| i64::try_from(n).unwrap_or(i64::MAX))
+            .ok_or_else(invalid)?,
+        _ => return Err(invalid()),
+    };
+    if limit < 1 {
+        return Err(AppError::new(
+            "validation",
+            format!("{kind} limit must be positive"),
+        ));
+    }
+    let suggest = pairing_args("ui.transfers.suggest", args)?;
+    let suggestion = book.transfers("transfers.suggest", &suggest)?;
+    let surface = match get(args, "candidate_type").and_then(|v| match v {
+        Value::Str(t) => t.as_str(),
+        _ => None,
+    }) {
+        Some("transfer") => Value::Str("transfer_candidates".into()),
+        Some("swap") => Value::Str("swap_candidates".into()),
+        _ => Value::Null,
+    };
+    let mut scope = dict([("surface", surface)]);
+    for name in ["workspace", "profile"] {
+        if let Some(value) = get(args, name) {
+            kassiber_envelope::set(&mut scope, name, value.clone());
+        }
+    }
+    let views = book.service("ui.saved_views.list", &scope)?;
+    let mut payload = dict([
+        ("args", args.clone()),
+        ("suggestion", suggestion),
+        ("limit", Value::Int(limit.min(50).into())),
+        (
+            "saved_views",
+            get(&views, "views").cloned().unwrap_or(Value::List(vec![])),
+        ),
+    ]);
+    for name in ["workspace", "profile", "fee_pct_max", "fee_sats_min"] {
+        if let Some(value) = get(&suggest, name) {
+            kassiber_envelope::set(&mut payload, name, value.clone());
+        }
+    }
+    book.transfers("transfers.review-context", &payload)
 }

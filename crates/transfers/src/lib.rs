@@ -22,6 +22,7 @@ mod records;
 pub mod review_artifact;
 #[cfg(any(test, feature = "test-harness"))]
 pub mod review_cases;
+mod review_context;
 #[cfg(feature = "test-harness")]
 pub mod review_operations;
 pub mod review_reading;
@@ -94,6 +95,7 @@ pub fn execute_with_sources(
         | "transfers.rules.enable"
         | "transfers.rules.disable" => rules::write(conn, scope, operation, args, sources),
         "custody.coverage" => coverage::snapshot(conn, scope),
+        "transfers.review-context" => review_context::execute(conn, scope, args),
         "transfers.list" => records::pairs(conn, scope),
         "transfers.payouts.list" => records::payouts(conn, scope),
         "transfers.gaps.history" => history::list(conn, scope, args),
