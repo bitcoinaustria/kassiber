@@ -39,6 +39,7 @@ mod backup;
 mod context;
 mod networks;
 mod offline;
+pub mod operator;
 mod profiles;
 mod projects;
 mod reports;

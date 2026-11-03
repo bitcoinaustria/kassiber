@@ -168,12 +168,9 @@ fn describes_all_commands_and_keeps_unported_execution_closed() {
 
 #[test]
 fn hidden_argv_forms_dispatch_by_name() {
-    let output = run(&mut kassiber(&["--operator-broker-server"]));
-    assert_eq!(output.status.code(), Some(1));
-    assert_eq!(
-        text(&output.stderr),
-        "not_implemented: the operator broker server is not implemented in the Rust backend yet\n"
-    );
+    // `--operator-broker-server` starts a real broker on the account's
+    // endpoint, so it runs only against a gated test runtime directory
+    // (tests/operator_broker.rs).
     let output = run(&mut kassiber(&["--migrate-default-state-root"]));
     assert!(output.status.success());
     assert!(output.stdout.is_empty());

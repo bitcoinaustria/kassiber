@@ -2,6 +2,7 @@
 //! constructed lazily for explicit unlock/lifecycle actions, never by ordinary
 //! display reads.
 pub mod credentials;
+pub mod modes;
 #[cfg(feature = "native-keyring")]
 mod native;
 #[cfg(not(feature = "native-keyring"))]
@@ -73,8 +74,38 @@ pub fn read_passphrase(reader: impl Read) -> Result<Passphrase> {
     let text = std::str::from_utf8(&raw).map_err(|_| invalid("passphrase is not valid UTF-8"))?;
     Passphrase::new(Zeroizing::new(text.into()))
 }
-#[cfg(unix)]
+/// Descriptors a broker child drained before dispatch, by number
+/// (`prime_db_passphrase`): a later read of the same number returns the
+/// cached passphrase instead of reading a closed pipe.
+static PRIMED: std::sync::Mutex<Vec<(i32, Zeroizing<String>)>> = std::sync::Mutex::new(Vec::new());
+
+/// Drain and cache `fd` now, so a parent writing several secret pipes in
+/// order cannot block on this one while the child waits on another.
+pub fn prime_passphrase_descriptor(fd: i32) -> Result<()> {
+    let passphrase = read_descriptor_passphrase(fd)?;
+    let mut primed = PRIMED.lock().unwrap_or_else(|poison| poison.into_inner());
+    primed.retain(|(number, _)| *number != fd);
+    primed.push((fd, passphrase.0.clone()));
+    Ok(())
+}
+
+/// Read a passphrase from a descriptor the caller named, once; a primed
+/// descriptor answers from its cache.
 pub fn read_passphrase_from_fd(fd: i32) -> Result<Passphrase> {
+    let cached = PRIMED
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner())
+        .iter()
+        .find(|(number, _)| *number == fd)
+        .map(|(_, passphrase)| passphrase.clone());
+    match cached {
+        Some(passphrase) => Passphrase::new(passphrase),
+        None => read_descriptor_passphrase(fd),
+    }
+}
+
+#[cfg(unix)]
+fn read_descriptor_passphrase(fd: i32) -> Result<Passphrase> {
     if fd < 0 {
         return Err(invalid("passphrase descriptor must be non-negative"));
     }
@@ -103,13 +134,22 @@ pub fn read_passphrase_from_fd(fd: i32) -> Result<Passphrase> {
     read_passphrase(Descriptor(fd))
 }
 #[cfg(windows)]
-pub fn read_passphrase_from_fd(fd: i32) -> Result<Passphrase> {
+fn read_descriptor_passphrase(fd: i32) -> Result<Passphrase> {
     unsafe extern "C" {
         fn _read(fd: i32, buffer: *mut u8, count: u32) -> i32;
         fn _close(fd: i32) -> i32;
     }
     if fd < 0 {
         return Err(invalid("passphrase descriptor must be non-negative"));
+    }
+    // A broker child is handed OS handles, not CRT descriptors
+    // (`msvcrt.open_osfhandle` in Python).
+    if std::env::var_os("KASSIBER_OPERATOR_CHILD").is_some_and(|v| v == "1") {
+        use std::os::windows::io::{FromRawHandle, OwnedHandle, RawHandle};
+        // SAFETY: the broker listed this handle for the child to own; it is
+        // consumed exactly once here and closed when the file drops.
+        let handle = unsafe { OwnedHandle::from_raw_handle(fd as usize as RawHandle) };
+        return read_passphrase_from_inherited_handle(handle);
     }
     struct Descriptor(i32);
     impl Read for Descriptor {

@@ -12,6 +12,7 @@ use kassiber_cli::{run, Environment, Streams};
 use kassiber_net::{Gate, Ledger, Offline};
 use kassiber_runtime::store::BookStore;
 use kassiber_runtime::BuildInfo;
+mod broker;
 mod real_store;
 
 const BUILD: BuildInfo = BuildInfo {
@@ -59,6 +60,9 @@ fn main() -> ExitCode {
                 return ExitCode::from(2);
             }
         }
+    }
+    if argv == ["--operator-broker-server"] {
+        return ExitCode::from(u8::try_from(broker::serve(BUILD)).unwrap_or(1));
     }
     let stdin = std::io::stdin();
     let streams = Streams {

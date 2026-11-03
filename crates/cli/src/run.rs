@@ -14,7 +14,7 @@ use std::sync::Arc;
 use kassiber_envelope::{build_error_envelope, cli_text, derive_kind, dict, s, AppError};
 use kassiber_pyjson::Value;
 use kassiber_runtime::status::status_payload;
-use kassiber_runtime::store::{not_implemented, BookStore, Selection, Unlock, UnlockMode};
+use kassiber_runtime::store::{not_implemented, BookStore, Secret, Selection, Unlock, UnlockMode};
 use kassiber_runtime::BuildInfo;
 
 use crate::argparse::{parse_args, Context, Namespace, Stop};
@@ -297,7 +297,14 @@ pub fn run(
         };
     }
     let kind = derive_kind(|name| namespace.text(name), crate::reports::kind(&dotted));
-    let output = globals.output.clone();
+    // A broker child enters its caller's directory and proves its project
+    // before anything else; a vanished directory reports on stdout, never
+    // to a relative --output in the broker's directory.
+    let bindings = check_operator_bindings(env, store.as_ref(), &globals.selection);
+    let output = match &bindings {
+        Err(error) if error.code == "operator_working_directory_unavailable" => None,
+        _ => globals.output.clone(),
+    };
     let fail = |stdout: &mut Box<dyn Write + Send>,
                 stderr: &mut Box<dyn Write + Send>,
                 error: AppError| {
@@ -319,6 +326,7 @@ pub fn run(
     };
 
     let prepared = (|| -> Result<(), AppError> {
+        bindings?;
         if !implemented(&dotted, &namespace) {
             let mut error = not_implemented("cli", &format!("the command `{}`", path.join(" ")));
             error.details = Some(dict([
@@ -327,7 +335,6 @@ pub fn run(
             ]));
             return Err(error);
         }
-        check_operator_bindings(env)?;
         Ok(())
     })();
     if let Err(error) = prepared {
@@ -345,6 +352,13 @@ pub fn run(
         && !matches!(path.first(), Some(&"commands") | Some(&"verify-download"));
     if migrate {
         if let Err(error) = store.migrate_default_state_root() {
+            return fail(&mut stdout, &mut stderr, error);
+        }
+    }
+    if env.operator_child() && path.first() != Some(&"projects") {
+        if let Err(error) =
+            prepare_operator_child(env, store.as_ref(), &globals, &dotted, &namespace)
+        {
             return fail(&mut stdout, &mut stderr, error);
         }
     }
@@ -612,9 +626,6 @@ fn book_command(
     let (operation, namespace, stdin_is_tty, diagnostics) = command;
     let initialize = operation == "init";
     route_brokered(env, store, &globals.selection)?;
-    if env.operator_child() {
-        return Err(not_implemented("operator", "running as a broker child"));
-    }
     let bootstrap = store.bootstrap(&globals.selection)?;
     diagnostics.args = crate::diagnostics::arguments(namespace, Some(&bootstrap));
     let mut runtime_config = bootstrap.runtime_config.clone();
@@ -795,9 +806,6 @@ fn with_book(
     ) -> Result<(), AppError>,
 ) -> Result<(), AppError> {
     route_brokered(env, store, &globals.selection)?;
-    if env.operator_child() {
-        return Err(not_implemented("operator", "running as a broker child"));
-    }
     let (args, version, diagnostics) = diagnostics;
     let mut bootstrap = store.bootstrap(&globals.selection)?;
     diagnostics.args = crate::diagnostics::arguments(args, Some(&bootstrap));
@@ -851,26 +859,113 @@ fn check_project_selection(selection: &Selection) -> Result<(), AppError> {
 }
 
 /// `_enter_operator_caller_directory` and `_verify_operator_child_project`:
-/// a broker child must carry its bindings, and only a broker child may.
-/// Broker children themselves are not ported yet.
-fn check_operator_bindings(env: &Environment) -> Result<(), AppError> {
+/// a broker child must carry its bindings, and only a broker child may. The
+/// child enters its caller's directory, then proves the selected project is
+/// the file the broker admitted.
+fn check_operator_bindings(
+    env: &Environment,
+    store: &dyn BookStore,
+    selection: &Selection,
+) -> Result<(), AppError> {
     let invalid = |message: &str| AppError::new("operator_project_binding_invalid", message);
-    if env.operator_working_directory.is_some() {
+    if let Some(directory) = &env.operator_working_directory {
         if !env.operator_child() {
             return Err(invalid(
                 "operator working directory is only valid in a broker child",
             ));
         }
-        return Err(not_implemented("operator", "running as a broker child"));
+        if std::env::set_current_dir(directory).is_err() {
+            return Err(AppError::new(
+                "operator_working_directory_unavailable",
+                "the caller's working directory is no longer available",
+            )
+            .with_hint("Run the command from an existing directory or pass absolute paths."));
+        }
     }
-    match &env.operator_expected_project_identity {
-        None if env.operator_child() => Err(invalid("operator child project binding is missing")),
-        None => Ok(()),
-        Some(_) if !env.operator_child() => Err(invalid(
-            "operator project binding is only valid in a broker child",
-        )),
-        Some(_) => Err(not_implemented("operator", "running as a broker child")),
+    let expected = match &env.operator_expected_project_identity {
+        None if env.operator_child() => {
+            return Err(invalid("operator child project binding is missing"))
+        }
+        None => return Ok(()),
+        Some(_) if !env.operator_child() => {
+            return Err(invalid(
+                "operator project binding is only valid in a broker child",
+            ))
+        }
+        Some(expected) => expected,
+    };
+    check_project_selection(selection)?;
+    let project = store.canonical_project(&store.resolve_data_root(selection)?)?;
+    if project.identity != *expected {
+        return Err(AppError::new(
+            "operator_project_replaced",
+            "the operator project changed before the database was opened",
+        )
+        .with_details(dict([("project", s(project.public_id.as_str()))])));
     }
+    Ok(())
+}
+
+/// `command_needs_database(args)`.
+fn command_needs_database(dotted: &str, namespace: &Namespace) -> bool {
+    if !crate::describe::needs_database(dotted) {
+        return false;
+    }
+    if dotted == "wallets.import-ledger" && namespace.flag("dry_run") {
+        return false;
+    }
+    if dotted == "btcpay.key-url" && namespace.text("backend").is_none() {
+        // A link from --server-url is pure; only --backend reads a saved instance.
+        return false;
+    }
+    true
+}
+
+/// A broker child, before dispatch: drain the lease pipe eagerly
+/// (`prime_db_passphrase`) so the broker can feed the next secret pipe, and
+/// for a command that bootstraps no database, authenticate the bound
+/// database with it first (`_verify_operator_child_database`).
+fn prepare_operator_child(
+    env: &Environment,
+    store: &dyn BookStore,
+    globals: &Globals,
+    dotted: &str,
+    namespace: &Namespace,
+) -> Result<(), AppError> {
+    let passphrase = match globals.db_passphrase_fd {
+        Some(fd) => {
+            let fd = i32::try_from(fd).map_err(|_| {
+                AppError::new(
+                    "invalid_passphrase",
+                    "passphrase descriptor must be non-negative",
+                )
+            })?;
+            kassiber_secrets::prime_passphrase_descriptor(fd)
+                .map_err(kassiber_secrets::service::storage_error)?;
+            Some(
+                kassiber_secrets::read_passphrase_from_fd(fd)
+                    .map_err(kassiber_secrets::service::storage_error)?,
+            )
+        }
+        None => None,
+    };
+    if command_needs_database(dotted, namespace) {
+        return Ok(());
+    }
+    if env.operator_expected_database_identity.is_none() {
+        return Err(AppError::new(
+            "operator_project_binding_invalid",
+            "operator child database binding is missing",
+        ));
+    }
+    let Some(passphrase) = passphrase else {
+        return Err(AppError::new(
+            "operator_project_binding_invalid",
+            "operator child database passphrase is missing",
+        ));
+    };
+    let data_root = store.resolve_data_root(&globals.selection)?;
+    store.verify_operator_child_database(&data_root, &Secret::new(passphrase.expose().to_owned()))
 }
 
 /// `_operator_expected_database_identity()`.

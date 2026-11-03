@@ -31,6 +31,7 @@ test-harness = [
   "kassiber-store/test-hooks",
   "kassiber-secrets/test-hooks",
   "kassiber-backup/test-hooks",
+  "kassiber-operator/test-harness",
 ]
 
 [dependencies]
@@ -58,6 +59,8 @@ kassiber-envelope = { path = "../envelope" }
 kassiber-pyjson = { path = "../pyjson" }
 kassiber-paths = { path = "../paths" }
 kassiber-ownership = { path = "../ownership" }
+kassiber-operator = { path = "../operator" }
+kassiber-ipc = { path = "../ipc" }
 kassiber-store = { path = "../store" }
 kassiber-secrets = { path = "../secrets", features = ["native-keyring"] }
 serde_json = "1"

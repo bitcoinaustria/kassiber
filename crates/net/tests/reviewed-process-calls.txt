@@ -17,6 +17,7 @@ ui-tauri/src-tauri/src/lib.rs|verified_codesign_identity|let verified = Command:
 ui-tauri/src-tauri/src/lib.rs|verified_codesign_identity|let details = Command::new("/usr/bin/codesign")
 crates/kassiber/tests/supervisor_protocol.rs|spawn|let mut child = Command::new(env!("CARGO_BIN_EXE_kassiber"))
 crates/kassiber/tests/binary.rs|kassiber|let mut command = Command::new(env!("CARGO_BIN_EXE_kassiber"));
+crates/kassiber/tests/operator_broker.rs|binary|let mut command = Command::new(env!("CARGO_BIN_EXE_kassiber"));
 crates/setup/src/network_partition.rs|export|let status = std::process::Command::new(&binary)
 crates/backup/src/encryption.rs|run|let status = std::process::Command::new(path)
 crates/backup/src/desktop_tests.rs|incoming_authentication_is_quiet_and_ignores_active_operator_binding|let child = std::process::Command::new(std::env::current_exe().unwrap())

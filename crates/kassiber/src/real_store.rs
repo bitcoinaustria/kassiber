@@ -109,6 +109,12 @@ fn error(error: kassiber_paths::Error) -> AppError {
     }
 }
 
+/// The owner rendezvous every process uses (an isolated root in test
+/// builds that name one).
+pub(crate) fn owner_namespace() -> Result<OwnerNamespace, AppError> {
+    namespace()
+}
+
 fn namespace() -> Result<OwnerNamespace, AppError> {
     #[cfg(feature = "test-harness")]
     if let Some(root) = std::env::var_os("KASSIBER_RUST_TEST_OWNER_ROOT") {
@@ -808,6 +814,26 @@ impl BookStore for RealStore {
             write_auth(&state, &saved)?;
         }
         Ok(verified)
+    }
+    fn resolve_data_root(&self, selection: &Selection) -> Result<String, AppError> {
+        // resolve_runtime_paths: an explicit root need not have a layout yet.
+        context()?
+            .resolve_for_bootstrap(&options(selection))
+            .map(|resolved| path(&resolved.data_root))
+            .map_err(error)
+    }
+    fn verify_operator_child_database(
+        &self,
+        root: &str,
+        passphrase: &Secret,
+    ) -> Result<(), AppError> {
+        let project = namespace()?
+            .canonical_project(Path::new(root))
+            .map_err(error)?;
+        // open_encrypted checks the child's database binding itself.
+        kassiber_store::encryption::open_container(&project.database, Some(passphrase.expose()))
+            .map(drop)
+            .map_err(error)
     }
     fn mark_project_opened(&self, id: &str, root: &str, select: bool) -> Result<(), AppError> {
         kassiber_setup::projects::record_opened(

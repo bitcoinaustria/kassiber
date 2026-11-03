@@ -220,7 +220,14 @@ pub fn execute_with_store(
             if rotation {
                 let current = passphrase(args, "db_passphrase_fd", "Current passphrase: ", false)?;
                 let new = passphrase(args, "new_passphrase_fd", "New passphrase: ", true)?;
-                rotate(namespace, paths, &current, &new, store, None)
+                rotate(
+                    namespace,
+                    paths,
+                    &current,
+                    &new,
+                    store,
+                    broker_child_owner(),
+                )
             } else {
                 let secret = passphrase(args, "passphrase_fd", "Database passphrase: ", false)?;
                 policy::enroll(namespace, &paths.data_root, &secret, store)
@@ -257,9 +264,13 @@ pub fn execute_with_store(
             let new = passphrase(args, "new_passphrase_fd", "New database passphrase: ", true)?;
             enforce_new_passphrase(&new)?;
             if plaintext {
-                let result =
-                    encryption::encrypt_plaintext(namespace, &paths.data_root, new.expose(), None)
-                        .map_err(storage_error)?;
+                let result = encryption::encrypt_plaintext(
+                    namespace,
+                    &paths.data_root,
+                    new.expose(),
+                    broker_child_owner(),
+                )
+                .map_err(storage_error)?;
                 return Ok(dict([
                     ("mode", s("migrated")),
                     (
@@ -319,6 +330,14 @@ pub fn execute_with_store(
             "secrets operation is not implemented in the Rust backend yet",
         )),
     }
+}
+
+/// `active_owner_kind`: a broker child already holds the broker role by
+/// inheritance, so project maintenance reserves only the other one.
+fn broker_child_owner() -> Option<OwnerKind> {
+    std::env::var_os("KASSIBER_OPERATOR_CHILD")
+        .is_some_and(|value| value == "1")
+        .then_some(OwnerKind::Broker)
 }
 
 pub fn rotate(

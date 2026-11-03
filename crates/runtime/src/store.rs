@@ -781,6 +781,24 @@ pub trait BookStore: Send + Sync {
         scope: &str,
         passphrase: &Secret,
     ) -> Result<bool, AppError>;
+    /// `resolve_runtime_paths(data_root, env_file, project).data_root`,
+    /// without creating anything: where a broker child's command points.
+    fn resolve_data_root(&self, _selection: &Selection) -> Result<String, AppError> {
+        Err(not_implemented("store", "resolving the project data root"))
+    }
+    /// `_verify_operator_child_database`: authenticate a broker child's
+    /// bound database with the lease passphrase and close it, before a
+    /// command that does not bootstrap a database runs.
+    fn verify_operator_child_database(
+        &self,
+        _data_root: &str,
+        _passphrase: &Secret,
+    ) -> Result<(), AppError> {
+        Err(not_implemented(
+            "store",
+            "verifying the operator child database",
+        ))
+    }
     /// `mark_project_opened(project_id, data_root, select)`.
     fn mark_project_opened(
         &self,
