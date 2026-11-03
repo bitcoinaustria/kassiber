@@ -24415,7 +24415,7 @@
     "find": "                    &key.chain,\n                    &key.network,",
     "replace": "                    &key.network,\n                    &key.chain,",
     "expect_failing": [
-      "quantity_runtime_wrapper_vectors"
+      "quantity_operator_audit_vectors"
     ],
     "rule": "Typed key texts follow chain, network, namespace and id."
   },
