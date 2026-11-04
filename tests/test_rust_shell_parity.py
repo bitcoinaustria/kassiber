@@ -1040,6 +1040,7 @@ class RustRealStoreParityTest(_Roots):
         self.ok(self.call(True, ["init"], default=True))
         self.same_status(default=True)
         unrelated = self.home / "unported" / "data"
+        response = self.call(True, ["ai", "providers", "list"], root=unrelated)
         self.assertEqual(json.loads(response.stdout)["error"]["code"], "not_implemented")
         self.assertFalse(unrelated.exists())
 
