@@ -347,7 +347,7 @@
     "expect_failing": [
       "tests/test_rust_release_cli.py::test_verify_download_matches_python_for_success_and_every_refusal"
     ],
-    "rule": "The supplied public key must hash to the pinned fingerprint before ssh-keygen runs."
+    "rule": "The supplied public key must hash to the pinned fingerprint before the signature is checked."
   },
   {
     "id": "wire-verify-artifact-hash",
@@ -411,5 +411,155 @@
       "release_selection_skips_drafts_and_keeps_the_first_highest"
     ],
     "rule": "Draft releases are never offered."
+  },
+  {
+    "id": "sshsig-version-zero",
+    "file": "crates/release/src/verify.rs",
+    "find": "    if sig.take(6)? != b\"SSHSIG\" || sig.u32()? > 1 {",
+    "replace": "    if sig.take(6)? != b\"SSHSIG\" || sig.u32()? != 1 {",
+    "expect_failing": [
+      "sshsig_verdicts_match_python_and_ssh_keygen"
+    ],
+    "rule": "OpenSSH refuses only versions above 1; version 0 verifies."
+  },
+  {
+    "id": "sshsig-namespace",
+    "file": "crates/release/src/verify.rs",
+    "find": "    if !sig.0.is_empty() || namespace != NAMESPACE.as_bytes() {",
+    "replace": "    if !sig.0.is_empty() {",
+    "expect_failing": [
+      "sshsig_verdicts_match_python_and_ssh_keygen"
+    ],
+    "rule": "The declared namespace must be kassiber-release even when the signed data uses it."
+  },
+  {
+    "id": "sshsig-outer-trailing",
+    "file": "crates/release/src/verify.rs",
+    "find": "    if !sig.0.is_empty() || namespace != NAMESPACE.as_bytes() {",
+    "replace": "    if namespace != NAMESPACE.as_bytes() {",
+    "expect_failing": [
+      "sshsig_verdicts_match_python_and_ssh_keygen"
+    ],
+    "rule": "Bytes after the SSHSIG signature field are refused."
+  },
+  {
+    "id": "sshsig-signer-identity",
+    "file": "crates/release/src/verify.rs",
+    "find": "    if key != pinned || application.is_some_and(|app| app.contains(&0)) {",
+    "replace": "    if application.is_some_and(|app| app.contains(&0)) {",
+    "expect_failing": [
+      "sshsig_verdicts_match_python_and_ssh_keygen"
+    ],
+    "rule": "Only the pinned allowed-signers key may sign; a different embedded key blob is refused."
+  },
+  {
+    "id": "sshsig-sk-application-nul",
+    "file": "crates/release/src/verify.rs",
+    "find": "    if key != pinned || application.is_some_and(|app| app.contains(&0)) {",
+    "replace": "    if key != pinned {",
+    "expect_failing": [
+      "sshsig_verdicts_match_python_and_ssh_keygen"
+    ],
+    "rule": "OpenSSH cannot load a pinned SK key whose application contains NUL."
+  },
+  {
+    "id": "sshsig-inner-type",
+    "file": "crates/release/src/verify.rs",
+    "find": "    if inner.cstring()? != key_type.as_bytes() {",
+    "replace": "    if inner.cstring().is_none() {",
+    "expect_failing": [
+      "sshsig_verdicts_match_python_and_ssh_keygen"
+    ],
+    "rule": "The signature blob's key type must equal the pinned key's type."
+  },
+  {
+    "id": "sshsig-inner-trailing",
+    "file": "crates/release/src/verify.rs",
+    "find": "    if !inner.0.is_empty() || raw.len() != 64 {",
+    "replace": "    if raw.len() != 64 {",
+    "expect_failing": [
+      "sshsig_verdicts_match_python_and_ssh_keygen"
+    ],
+    "rule": "Bytes after the Ed25519 or SK signature fields are refused."
+  },
+  {
+    "id": "sshsig-sk-application-hash",
+    "file": "crates/release/src/verify.rs",
+    "find": "            &Sha256::digest(application)[..],",
+    "replace": "            &Sha256::digest(b\"ssh:\")[..],",
+    "expect_failing": [
+      "sshsig_verdicts_match_python_and_ssh_keygen"
+    ],
+    "rule": "The SK payload hashes the pinned key's own FIDO application."
+  },
+  {
+    "id": "dearmor-crlf-header",
+    "file": "crates/release/src/verify.rs",
+    "find": "        .strip_prefix(b\"\\r\\n\")",
+    "replace": "        .strip_prefix(b\"\\n\\n\")",
+    "expect_failing": [
+      "sshsig_verdicts_match_python_and_ssh_keygen"
+    ],
+    "rule": "The header line may end in CRLF."
+  },
+  {
+    "id": "dearmor-trailing-nul",
+    "file": "crates/release/src/verify.rs",
+    "find": "        if nul + 1 != body.len() {",
+    "replace": "        if nul + 1 == body.len() {",
+    "expect_failing": [
+      "sshsig_verdicts_match_python_and_ssh_keygen"
+    ],
+    "rule": "sshbuf_dup_string tolerates one NUL, and only as the body's last byte."
+  },
+  {
+    "id": "b64-whitespace",
+    "file": "crates/release/src/verify.rs",
+    "find": "    matches!(byte, b' ' | b'\\t' | b'\\n' | 0x0b | 0x0c | b'\\r')",
+    "replace": "    matches!(byte, b'\\n' | b'\\r')",
+    "expect_failing": [
+      "sshsig_verdicts_match_python_and_ssh_keygen"
+    ],
+    "rule": "b64_pton skips every C-locale space anywhere in the body."
+  },
+  {
+    "id": "b64-unpadded-quantum",
+    "file": "crates/release/src/verify.rs",
+    "find": "        return (state == 0).then_some(out);",
+    "replace": "        return Some(out);",
+    "expect_failing": [
+      "sshsig_verdicts_match_python_and_ssh_keygen"
+    ],
+    "rule": "A partial final quantum needs padding."
+  },
+  {
+    "id": "b64-second-padding",
+    "file": "crates/release/src/verify.rs",
+    "find": "            if bytes.by_ref().find(|byte| !c_space(*byte)) != Some(b'=') {",
+    "replace": "            if false {",
+    "expect_failing": [
+      "sshsig_verdicts_match_python_and_ssh_keygen"
+    ],
+    "rule": "Two data characters in the last quantum need two padding characters."
+  },
+  {
+    "id": "b64-slop-bits",
+    "file": "crates/release/src/verify.rs",
+    "find": "    (bytes.all(c_space) && pending == 0).then_some(out)",
+    "replace": "    bytes.all(c_space).then_some(out)",
+    "expect_failing": [
+      "sshsig_verdicts_match_python_and_ssh_keygen"
+    ],
+    "rule": "The bits padding drops must be zero."
+  },
+  {
+    "id": "b64-after-padding",
+    "file": "crates/release/src/verify.rs",
+    "find": "    (bytes.all(c_space) && pending == 0).then_some(out)",
+    "replace": "    (pending == 0).then_some(out)",
+    "expect_failing": [
+      "sshsig_verdicts_match_python_and_ssh_keygen"
+    ],
+    "rule": "Only whitespace may follow the padding."
   }
 ]

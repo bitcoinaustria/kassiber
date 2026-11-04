@@ -164,6 +164,11 @@ natively; generic `cancel` keeps Python's refusal.
   database-header proof over `kassiber-net`'s ledger.
 - [x] Port `update` and `verify-download` with Python's signature verification;
   fetch only after the explicit update action, through `kassiber-net`.
+- [x] Verify release signatures in process with `ssh-key` instead of the
+  `ssh-keygen` subprocess, with 106 frozen `ssh-keygen` verdicts.
+- [ ] Owner decision: keep Rust verifying without OpenSSH where Python reports
+  `ssh_keygen_unavailable`/`ssh_keygen_unsupported` (the CLI oracle asserts
+  the difference today).
 - [ ] Merge the round-5h redaction-scanner delta (`a12f3ad85`) into both the
   Python scanner and `kassiber-envelope`'s mirror, with shared vectors.
 - [ ] Add a loopback release-server oracle for `update --check` so the fetch,

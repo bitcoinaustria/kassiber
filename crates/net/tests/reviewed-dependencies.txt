@@ -43,6 +43,10 @@ serde derive
 # raw_value retains local custody snapshot fragments; it adds no transport.
 serde_json arbitrary_precision float_roundtrip raw_value
 sha2
+# In-process OpenSSH release-signature verification (Ed25519 via
+# ed25519-dalek); no I/O, no transport. `signature` is ssh-key's own trait crate.
+ssh-key std ed25519
+signature
 tauri
 tauri-build
 tauri-plugin-deep-link

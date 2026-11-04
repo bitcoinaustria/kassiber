@@ -1,9 +1,7 @@
 //! `verify_download`: authenticate the manifest with a pinned OpenSSH key,
 //! then verify the selected artifact's SHA-256. No network access.
-use std::io::{Read, Write};
+use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
 
 use base64::Engine;
 use kassiber_envelope::{dict, s, AppError};
@@ -15,11 +13,8 @@ use crate::{splitlines, strip, Result};
 const MAX_MANIFEST_BYTES: u64 = 1024 * 1024;
 const MAX_SIGNATURE_BYTES: u64 = 16 * 1024;
 const MAX_PUBLIC_KEY_BYTES: u64 = 16 * 1024;
-const MAX_SSH_KEYGEN_OUTPUT_BYTES: usize = 16 * 1024;
 const NAMESPACE: &str = "kassiber-release";
 const PRINCIPAL: &str = "release@kassiber";
-const MINIMUM_OPENSSH_VERSION: &str = "8.1";
-const SSH_KEYGEN_TIMEOUT: Duration = Duration::from_secs(30);
 const MANIFEST_HEADER: &str = "# Kassiber release manifest v1";
 const MANIFEST_VERSION_PREFIX: &str = "# Version: ";
 const SIGNATURE_HEADER: &[u8] = b"-----BEGIN SSH SIGNATURE-----";
@@ -251,51 +246,6 @@ pub fn fingerprint(blob: &[u8]) -> String {
     )
 }
 
-/// `allowed_signers_entry(key_type, blob)`: the only entry trusted.
-fn allowed_signers(key_type: &str, blob: &[u8]) -> String {
-    format!(
-        "{PRINCIPAL} namespaces=\"{NAMESPACE}\" {key_type} {}\n",
-        base64::engine::general_purpose::STANDARD.encode(blob)
-    )
-}
-
-/// `ssh_keygen_command()`: `shutil.which("ssh-keygen")` over `PATH`.
-fn ssh_keygen() -> Result<PathBuf> {
-    let found = std::env::var_os("PATH").and_then(|paths| {
-        std::env::split_paths(&paths)
-            .map(|dir| {
-                if dir.as_os_str().is_empty() {
-                    PathBuf::from(".")
-                } else {
-                    dir
-                }
-            })
-            .map(|dir| dir.join("ssh-keygen"))
-            .find(|candidate| {
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::PermissionsExt;
-                    candidate
-                        .metadata()
-                        .is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
-                }
-                #[cfg(not(unix))]
-                {
-                    candidate.is_file()
-                }
-            })
-    });
-    found.ok_or_else(|| {
-        AppError::new(
-            "ssh_keygen_unavailable",
-            "OpenSSH's ssh-keygen is required to verify this release signature",
-        )
-        .with_hint(format!(
-            "Install OpenSSH {MINIMUM_OPENSSH_VERSION} or newer, then run kassiber verify-download again."
-        ))
-    })
-}
-
 fn signature_failed(expected: &str) -> AppError {
     AppError::new(
         "release_signature_verification_failed",
@@ -305,41 +255,179 @@ fn signature_failed(expected: &str) -> AppError {
     .with_details(dict([("expected_fingerprint", s(expected))]))
 }
 
-/// `_GOOD_SIGNATURE.fullmatch(line)` → the signing key's fingerprint.
-fn good_signature(line: &str) -> Option<&str> {
-    let rest = line.strip_prefix(&format!(
-        "Good \"{NAMESPACE}\" signature for {PRINCIPAL} with "
-    ))?;
-    let (kind, rest) = rest.split_once(" key ")?;
-    if kind.is_empty()
-        || !kind
-            .bytes()
-            .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'-')
-    {
+/// C `isspace` in the C and UTF-8 locales, which `b64_pton` skips.
+fn c_space(byte: u8) -> bool {
+    matches!(byte, b' ' | b'\t' | b'\n' | 0x0b | 0x0c | b'\r')
+}
+
+/// OpenBSD `b64_pton` as OpenSSH's `sshbuf_b64tod` calls it: whitespace is
+/// skipped anywhere, padding is required for a partial quantum, nothing but
+/// whitespace may follow it, and the bits it drops must be zero.
+fn b64_pton(text: &[u8]) -> Option<Vec<u8>> {
+    let mut out = Vec::with_capacity(text.len() / 4 * 3);
+    let (mut state, mut pending) = (0u8, 0u8);
+    let mut bytes = text.iter().copied();
+    let mut padded = false;
+    for byte in bytes.by_ref() {
+        if c_space(byte) {
+            continue;
+        }
+        if byte == b'=' {
+            padded = true;
+            break;
+        }
+        let value = match byte {
+            b'A'..=b'Z' => byte - b'A',
+            b'a'..=b'z' => byte - b'a' + 26,
+            b'0'..=b'9' => byte - b'0' + 52,
+            b'+' => 62,
+            b'/' => 63,
+            _ => return None,
+        };
+        (state, pending) = match state {
+            0 => (1, value << 2),
+            1 => {
+                out.push(pending | value >> 4);
+                (2, (value & 0x0f) << 4)
+            }
+            2 => {
+                out.push(pending | value >> 2);
+                (3, (value & 0x03) << 6)
+            }
+            _ => {
+                out.push(pending | value);
+                (0, 0)
+            }
+        };
+    }
+    if !padded {
+        return (state == 0).then_some(out);
+    }
+    match state {
+        2 => {
+            // A second '=' must follow, possibly after whitespace.
+            if bytes.by_ref().find(|byte| !c_space(*byte)) != Some(b'=') {
+                return None;
+            }
+        }
+        3 => {}
+        _ => return None,
+    }
+    (bytes.all(c_space) && pending == 0).then_some(out)
+}
+
+/// OpenSSH's `sshsig_dearmor`: the header at offset zero ending in LF or
+/// CRLF, the body up to the first `\n-----END SSH SIGNATURE-----` (anything
+/// after it is ignored), at most one trailing NUL, then base64.
+fn dearmor(armored: &[u8]) -> Option<Vec<u8>> {
+    const FOOTER: &[u8] = b"\n-----END SSH SIGNATURE-----";
+    let rest = armored.strip_prefix(SIGNATURE_HEADER)?;
+    let rest = rest
+        .strip_prefix(b"\r\n")
+        .or_else(|| rest.strip_prefix(b"\n"))?;
+    let end = rest.windows(FOOTER.len()).position(|w| w == FOOTER)?;
+    let mut body = &rest[..end];
+    // sshbuf_dup_string refuses an embedded NUL unless it is the last byte.
+    if let Some(nul) = body.iter().position(|b| *b == 0) {
+        if nul + 1 != body.len() {
+            return None;
+        }
+        body = &body[..nul];
+    }
+    b64_pton(body)
+}
+
+/// Big-endian SSH wire fields, read the way `sshbuf_get_*` does.
+struct Fields<'a>(&'a [u8]);
+impl<'a> Fields<'a> {
+    fn take(&mut self, count: usize) -> Option<&'a [u8]> {
+        let (head, tail) = (self.0.get(..count)?, self.0.get(count..)?);
+        self.0 = tail;
+        Some(head)
+    }
+    fn u32(&mut self) -> Option<u32> {
+        Some(u32::from_be_bytes(self.take(4)?.try_into().ok()?))
+    }
+    fn string(&mut self) -> Option<&'a [u8]> {
+        let length = usize::try_from(self.u32()?).ok()?;
+        self.take(length)
+    }
+    /// `sshbuf_get_cstring`: no embedded NUL.
+    fn cstring(&mut self) -> Option<&'a [u8]> {
+        self.string().filter(|value| !value.contains(&0))
+    }
+}
+
+/// `ssh-keygen -Y verify` with the one allowed-signers entry Python writes
+/// (`release@kassiber namespaces="kassiber-release" <pinned key>`): OpenSSH's
+/// SSHSIG parsing and checks, with ssh-key's signed-data encoding and
+/// Ed25519 verification. The pinned blob has already passed `key_fields`.
+fn sshsig_verifies(armored: &[u8], message: &[u8], key_type: &str, pinned: &[u8]) -> bool {
+    sshsig(armored, message, key_type, pinned).is_some()
+}
+
+fn sshsig(armored: &[u8], message: &[u8], key_type: &str, pinned: &[u8]) -> Option<()> {
+    use ssh_key::{public::Ed25519PublicKey, Algorithm, HashAlg, Signature, SshSig};
+    let blob = dearmor(armored)?;
+    let mut sig = Fields(&blob);
+    // sshsig_parse_preamble: later versions are refused, version 0 is not.
+    if sig.take(6)? != b"SSHSIG" || sig.u32()? > 1 {
         return None;
     }
-    normalize_fingerprint(rest)
-        .ok()
-        .filter(|f| f == rest)
-        .map(|_| rest)
-}
-
-/// `ssh_keygen_output_is_unsupported(output)`.
-fn unsupported(output: &str) -> bool {
-    let lower = output.to_lowercase();
-    lower.contains("usage: ssh-keygen")
-        || ["unknown", "illegal", "invalid", "unrecognized"]
-            .iter()
-            .any(|word| lower.contains(&format!("{word} option")))
-}
-
-/// `_bounded_text(value)`.
-fn bounded(bytes: &[u8]) -> String {
-    String::from_utf8_lossy(&bytes[..bytes.len().min(MAX_SSH_KEYGEN_OUTPUT_BYTES)]).into_owned()
+    let (key, namespace) = (sig.string()?, sig.cstring()?);
+    // The reserved field is read and ignored; signed data always uses "".
+    let _reserved = sig.string()?;
+    let (hash, inner) = (sig.cstring()?, sig.string()?);
+    if !sig.0.is_empty() || namespace != NAMESPACE.as_bytes() {
+        return None;
+    }
+    let hash = match hash {
+        b"sha256" => HashAlg::Sha256,
+        b"sha512" => HashAlg::Sha512,
+        _ => return None,
+    };
+    // sshsig_check_allowed_keys: sshkey_froms refuses trailing data and the
+    // key encodings are fixed-width, so equal keys are equal blobs.
+    let mut pinned_fields = Fields(pinned);
+    let (_, public, application) = (
+        pinned_fields.string()?,
+        pinned_fields.string()?,
+        pinned_fields.string(),
+    );
+    if key != pinned || application.is_some_and(|app| app.contains(&0)) {
+        return None;
+    }
+    let mut inner = Fields(inner);
+    if inner.cstring()? != key_type.as_bytes() {
+        return None;
+    }
+    let raw = inner.string()?;
+    let trailer = match application {
+        Some(_) => Some(inner.take(5)?),
+        None => None,
+    };
+    if !inner.0.is_empty() || raw.len() != 64 {
+        return None;
+    }
+    let signed = SshSig::signed_data(NAMESPACE, hash, message).ok()?;
+    // ssh_ed25519_sk_verify: the authenticator signed SHA-256(application),
+    // flags and counter, then SHA-256 of the SSHSIG signed data.
+    let payload = match (application, trailer) {
+        (Some(application), Some(trailer)) => [
+            &Sha256::digest(application)[..],
+            trailer,
+            &Sha256::digest(&signed)[..],
+        ]
+        .concat(),
+        _ => signed,
+    };
+    let ed25519 = Signature::new(Algorithm::Ed25519, raw).ok()?;
+    let public = Ed25519PublicKey(public.try_into().ok()?);
+    signature::Verifier::verify(&public, &payload, &ed25519).ok()
 }
 
 /// `verify_signature_bytes(...)`: the pinned fingerprint is the root of trust.
-fn verify_signature(
+pub fn verify_signature(
     manifest: &[u8],
     signature: &[u8],
     public_key: &[u8],
@@ -369,90 +457,8 @@ fn verify_signature(
         .with_hint("Do not install or run the release artifact.")
         .with_details(dict([("expected_fingerprint", s(expected.as_str()))])));
     }
-    let program = ssh_keygen()?;
-    let failed = || {
-        AppError::new(
-            "release_signature_verification_failed",
-            "ssh-keygen could not verify the release signature",
-        )
-        .with_hint("Do not install or run the release artifact.")
-        .with_details(dict([("expected_fingerprint", s(expected.as_str()))]))
-    };
-    let workspace = tempfile::Builder::new()
-        .prefix("kassiber-sshsig-")
-        .tempdir()
-        .map_err(|e| AppError::new("internal_error", e.to_string()))?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(workspace.path(), std::fs::Permissions::from_mode(0o700))
-            .map_err(|e| AppError::new("internal_error", e.to_string()))?;
-    }
-    let signers = workspace.path().join("allowed_signers");
-    let signature_path = workspace.path().join("release-manifest.txt.sig");
-    std::fs::write(&signers, allowed_signers(&key_type, &blob))
-        .and_then(|_| std::fs::write(&signature_path, signature))
-        .map_err(|e| AppError::new("internal_error", e.to_string()))?;
-    let mut child = Command::new(&program)
-        .args(["-Y", "verify", "-f"])
-        .arg(&signers)
-        .args(["-I", PRINCIPAL, "-n", NAMESPACE, "-s"])
-        .arg(&signature_path)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|_| failed())?;
-    let mut stdin = child.stdin.take().expect("piped stdin");
-    let input = manifest.to_vec();
-    let writer = std::thread::spawn(move || {
-        let _ = stdin.write_all(&input);
-    });
-    let mut stdout = child.stdout.take().expect("piped stdout");
-    let mut stderr = child.stderr.take().expect("piped stderr");
-    let out = std::thread::spawn(move || {
-        let mut bytes = Vec::new();
-        let _ = stdout.read_to_end(&mut bytes);
-        bytes
-    });
-    let err = std::thread::spawn(move || {
-        let mut bytes = Vec::new();
-        let _ = stderr.read_to_end(&mut bytes);
-        bytes
-    });
-    let started = Instant::now();
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break status,
-            Ok(None) if started.elapsed() < SSH_KEYGEN_TIMEOUT => {
-                std::thread::sleep(Duration::from_millis(10))
-            }
-            _ => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(failed());
-            }
-        }
-    };
-    let _ = writer.join();
-    let stdout = bounded(&out.join().unwrap_or_default());
-    let stderr = bounded(&err.join().unwrap_or_default());
-    drop(workspace);
-    let signed_by: std::collections::BTreeSet<&str> = splitlines(&stdout)
-        .into_iter()
-        .filter_map(|line| good_signature(strip(line)))
-        .collect();
-    if status.success() && signed_by.len() == 1 && signed_by.contains(expected.as_str()) {
+    if sshsig_verifies(signature, manifest, &key_type, &blob) {
         return Ok(expected);
-    }
-    if !status.success() && unsupported(&format!("{stdout}\n{stderr}")) {
-        return Err(AppError::new(
-            "ssh_keygen_unsupported",
-            format!("This ssh-keygen cannot verify OpenSSH signatures (OpenSSH {MINIMUM_OPENSSH_VERSION} or newer is required)"),
-        )
-        .with_hint(format!(
-            "Install OpenSSH {MINIMUM_OPENSSH_VERSION} or newer, then run kassiber verify-download again."
-        )));
     }
     Err(signature_failed(&expected))
 }
@@ -695,7 +701,7 @@ mod tests {
     }
 
     #[test]
-    fn manifest_lines_versions_and_good_signatures() {
+    fn manifest_lines_and_versions() {
         let digest = "a".repeat(64);
         assert!(manifest_line(&format!("{digest}  kassiber-1.0.0.dmg")).is_some());
         assert!(manifest_line(&format!("{digest} kassiber.dmg")).is_none());
@@ -705,12 +711,5 @@ mod tests {
             "1.2.3"
         );
         assert!(manifest_version("kassiber-vv1.2.3-manifest.txt").is_err());
-        let fp = format!("SHA256:{}", "A".repeat(43));
-        let line = format!(
-            "Good \"kassiber-release\" signature for release@kassiber with ED25519 key {fp}"
-        );
-        assert_eq!(good_signature(&line), Some(fp.as_str()));
-        assert!(good_signature(&format!("{line}x")).is_none());
-        assert!(unsupported("ssh-keygen: illegal option -- Y"));
     }
 }

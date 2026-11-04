@@ -15776,7 +15776,7 @@ reused, both regenerated against current freshness semantics.
 | Secrets | `ui.secrets.init` | plaintext and missing-database books, dotenv credential migration, verify-only re-initialization; files, wire and all tables |
 | Cancellation | generic `cancel` | refusal oracle: unclassified in both runtimes, `unsupported_kind` before any handler |
 | Diagnostics | `ui.logs.snapshot`, `ui.egress.snapshot` | `tests/test_rust_daemon_diagnostics.py`: plaintext and locked/unlocked SQLCipher sessions, paging and argument refusals, all tables unchanged |
-| Update | `update` (status, enable, disable, check refusals), `verify-download` | `tests/test_rust_release_cli.py`: JSON, table and plain bytes, 21 signature/manifest/artifact cases; frozen Python vectors in `crates/release/tests/data/vectors.json` |
+| Update | `update` (status, enable, disable, check refusals), `verify-download` | `tests/test_rust_release_cli.py`: JSON, table and plain bytes, 20 signature/manifest/artifact cases plus the no-OpenSSH difference; frozen Python vectors in `crates/release/tests/data/vectors.json` and 106 `ssh-keygen` verdicts in `sshsig_vectors.json` |
 
 Project creation and selection follow `_select_project_payload`: the desktop
 role is acquired before any passphrase probe, the target book opens before
@@ -15882,24 +15882,59 @@ book.
 ### Update and release verification (group 6)
 
 The new `kassiber-release` crate holds the update preference, version
-ordering, release selection and `ssh-keygen -Y verify` flow. `update
+ordering, release selection and release-signature verification. `update
 --status/--enable/--disable` and every refusal (offline mode first, then
 consent, which `KASSIBER_DISABLE_UPDATE_CHECK` withdraws) contact nothing; the process
 oracle runs them with the strict socket guard armed. `update --check` fetches
 only after that explicit action, through the `kassiber-net` gate with
 `Consent::explicit_trigger`, a 5-second timeout and a 2 MiB cap.
-`verify-download` checks the pinned fingerprint before running `ssh-keygen`
-(found on `PATH`, run in a temporary directory with a 30-second limit), then
-the signed manifest name and version, then the artifact digest. Inputs are
-opened without following a final symlink. Error codes, messages and hints
-match `release_verification.py`.
+`verify-download` checks the pinned fingerprint, then the OpenSSH signature
+in process (below), then the signed manifest name and version, then the
+artifact digest. Inputs are opened without following a final symlink. Error
+codes, messages and hints match `release_verification.py`.
+
+**In-process SSHSIG (plan 21 dependency step).** The `ssh-keygen -Y verify`
+subprocess, its `PATH` lookup, temporary allowed-signers file, timeout and
+output parsing are gone. `crates/release/src/verify.rs` follows OpenSSH's
+`sshsig_dearmor`, OpenBSD `b64_pton` and `sshsig_wrap_verify` field by field,
+then uses `ssh-key` 0.6.7 for the SSHSIG signed data and Ed25519 verification
+(through `ed25519-dalek`). It does not use `ssh-key`'s own SSHSIG decoder,
+because that decoder accepts and refuses different inputs from `ssh-keygen`:
+its PEM reader is stricter about armour, `read_prefixed` does not require a
+nested field to be fully consumed, it signs over the signature's `reserved`
+field where OpenSSH always uses an empty one, and it needs a UTF-8 FIDO
+application. The SK payload (SHA-256 of the application, flags, counter,
+SHA-256 of the signed data) is built from the pinned key's raw bytes.
+
+`crates/release/scripts/export_sshsig_vectors.py` freezes Python's verdicts
+(`verify_signature_bytes`, which runs the system `ssh-keygen`) for 106
+signatures built from fixed seeds. The plain Ed25519 case is first checked
+byte for byte against `ssh-keygen -Y sign`. 34 are accepted. The corpus covers
+version 0 (accepted) and 2 (refused), namespace, reserved, hash name and
+trailing-data variants, other signers, embedded-key and inner-type mismatches,
+signature lengths, malleated scalars, Ed25519-SK keys (no user-presence flag
+is accepted, as `ssh-keygen` accepts it; a non-UTF-8 application is accepted,
+one containing NUL is refused) and the armour and base64 grammar (CRLF, text
+after the footer, whitespace anywhere, padding classes, non-zero slop bits,
+one trailing NUL). `sshsig_verdicts_match_python_and_ssh_keygen` compares
+every code, message, hint and detail. The vectors were frozen with OpenSSH
+10.6p1, which refuses a scalar in [ℓ, 2^253); OpenSSH 8.1 to 9.x accepted that
+malleated form, so Python's verdict for it depends on the installed OpenSSH.
+Rust follows the frozen verdict (ed25519-dalek's default canonical check).
+
+Documented difference: Python needs OpenSSH 8.1 or newer and reports
+`ssh_keygen_unavailable` or `ssh_keygen_unsupported` without it. Rust needs no
+external program, so the same inputs verify. The CLI oracle asserts this
+difference instead of byte equality for that one case. The 15
+`sshsig-`/`dearmor-`/`b64-` entries in `crates/daemon/scripts/shell_mutations.json`
+are killed by the vector test.
 
 | Surface | Rust requests in the oracles | Python fallback |
 | --- | ---: | ---: |
 | `ui.logs.snapshot` | 39 | 0 |
 | `ui.egress.snapshot` | 19 | 0 |
 | `update` CLI | 39 | 0 |
-| `verify-download` CLI | 21 | 0 |
+| `verify-download` CLI | 20 (+1 documented difference) | 0 |
 
 The diagnostics counts are the requests of one clean run of
 `tests/test_rust_daemon_diagnostics.py` (each session asserts the Rust

@@ -2,9 +2,10 @@
 //!
 //! Update checks contact GitHub only after the explicit command, with the
 //! persisted consent and outside offline mode, through the shared egress gate.
-//! Release verification is local: it pins the release key by fingerprint,
-//! hands `ssh-keygen -Y verify` one canonical allowed-signers entry, and then
-//! checks the artifact against the authenticated SHA-256 manifest.
+//! Release verification is local and in process: it pins the release key by
+//! fingerprint, checks the OpenSSH signature the way `ssh-keygen -Y verify`
+//! does with one canonical allowed-signers entry, and then checks the
+//! artifact against the authenticated SHA-256 manifest.
 pub mod update;
 pub mod verify;
 

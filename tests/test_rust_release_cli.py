@@ -188,7 +188,11 @@ def test_verify_download_matches_python_for_success_and_every_refusal(tmp_path, 
         (verify(artifact=str(d / "tampered.tar.gz")), None, nothing),
         (verify(artifact=str(d / "tampered/kassiber-cli-linux-x64.tar.gz")), None, nothing),
         (verify(artifact=str(d / "kassiber-macos-arm64.dmg")), None, nothing),
-        (verify(), no_ssh, nothing),
     ]
     results = compare(tmp_path, cases)
     assert json.loads(results[0][0][1])["data"]["verified"] is True
+    # Documented difference: Rust checks the SSHSIG in process (ssh-key), so it
+    # verifies without OpenSSH on PATH where Python reports ssh_keygen_unavailable.
+    code, stdout, _ = run(tmp_path, verify(), reference=True, extra=no_ssh)
+    assert code != 0 and json.loads(stdout)["error"]["code"] == "ssh_keygen_unavailable"
+    assert run(tmp_path, verify(), reference=False, extra=no_ssh)[:2] == results[0][0][:2]

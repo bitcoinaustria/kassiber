@@ -19,7 +19,11 @@ kassiber-store = { path = "../store" }
 # Already locked by the chain, backup and ownership crates.
 base64 = "0.22"
 sha2 = "0.11"
-tempfile = "3"
+# OpenSSH SSHSIG signed data and Ed25519 verification (through ed25519-dalek)
+# in process, replacing `ssh-keygen -Y verify`; verification features only.
+ssh-key = { version = "=0.6.7", default-features = false, features = ["std", "ed25519"] }
+# The `Verifier` trait ssh-key implements but does not re-export; already locked.
+signature = { version = "=2.2.0", default-features = false }
 
 [target.'cfg(unix)'.dependencies]
 # Already locked by kassiber-paths; only the libc re-export is used.

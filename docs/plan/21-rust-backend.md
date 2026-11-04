@@ -141,7 +141,7 @@ Replacements for today's dependencies, decided per stage:
 | `pyrage`, `age`/`rage` binary | the `age` crate |
 | `keyring` | the same keyring stores the desktop shell uses, with the item formats Python wrote |
 | `urllib`, the SOCKS5 client, the Electrum client | one transport layer (`reqwest` or `ureq` with no environment proxy and no redirects, SOCKS with remote DNS) |
-| `ssh-keygen -Y verify` | the `ssh-key` crate |
+| `ssh-keygen -Y verify` | the `ssh-key` crate (done: in process, over OpenSSH's own armour and field parsing) |
 | `zoneinfo`, `tzdata` | `jiff` with its bundled database |
 | `Decimal` | `crates/pydecimal`, never `rust_decimal` |
 
@@ -4597,8 +4597,10 @@ served-by counts and limits.
 The daemon's diagnostics (`ui.logs.snapshot` over a bounded, redacted RAM log
 ring and `ui.egress.snapshot` over the process-wide `kassiber-net` ledger) and
 the `update`/`verify-download` CLI leaves are native too. The new
-`kassiber-release` crate verifies release signatures with `ssh-keygen` as
-Python does, and contacts GitHub only after an explicit `update --check`. The
+`kassiber-release` crate verifies release signatures in process with the
+`ssh-key` crate, accepting and refusing what Python's `ssh-keygen -Y verify`
+does over 106 frozen signatures (it no longer needs OpenSSH, a documented
+difference), and contacts GitHub only after an explicit `update --check`. The
 round-5h redaction-scanner delta (`a12f3ad85`) is still unmerged on both
 runtimes.
 
