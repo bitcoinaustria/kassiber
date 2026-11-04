@@ -47,6 +47,17 @@ fn rates(
 }
 
 pub fn report(conn: &Connection, profile: &Value, wallet: bool) -> Result<Value> {
+    report_with(conn, profile, wallet, false)
+}
+
+/// `report_portfolio_summary(..., include_wallet_id=...)`: wallet rows end
+/// with their wallet id when asked.
+pub fn report_with(
+    conn: &Connection,
+    profile: &Value,
+    wallet: bool,
+    include_wallet_id: bool,
+) -> Result<Value> {
     let query = if wallet {
         "SELECT wallet_id,wallet_label,account_code,asset,quantity,cost_basis FROM journal_wallet_holdings WHERE profile_id=? ORDER BY wallet_label ASC,asset ASC,id ASC"
     } else {
@@ -99,6 +110,9 @@ pub fn report(conn: &Connection, profile: &Value, wallet: bool) -> Result<Value>
                 float(&market.sub(&basis, &DECIMAL).map_err(arithmetic)?)?,
             ),
         ]);
+        if wallet && include_wallet_id {
+            fields.push(("wallet_id", value(&row, "wallet_id").clone()));
+        }
         result.push(dict(fields));
     }
     Ok(Value::List(result))

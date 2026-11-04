@@ -9,7 +9,7 @@ const DAY: i64 = 86_400_000_000;
 
 // Python's msat_to_btc first applies int(), including to legacy numeric rows.
 // Invalid stored quantities must raise instead of becoming a zero balance.
-fn msat(raw: &Value) -> Result<Decimal> {
+pub(super) fn msat(raw: &Value) -> Result<Decimal> {
     if let Value::Int(n) = raw {
         if let Ok(n) = i64::try_from(n.clone()) {
             return btc(n);
@@ -65,7 +65,7 @@ pub fn validate_interval(args: &Value) -> Result<()> {
     }
     Ok(())
 }
-fn parse(raw: &Value, field: &str) -> Result<Option<i64>> {
+pub(super) fn parse(raw: &Value, field: &str) -> Result<Option<i64>> {
     if matches!(raw, Value::Null) || raw == &s("") {
         return Ok(None);
     }
@@ -86,10 +86,10 @@ fn parse(raw: &Value, field: &str) -> Result<Option<i64>> {
         .with_hint("Use RFC3339 UTC like 2025-01-01T00:00:00Z")
     })
 }
-fn stamp(us: i64) -> Result<String> {
+pub(super) fn stamp(us: i64) -> Result<String> {
     time::format(us).ok_or_else(|| AppError::new("internal_error", "date value out of range"))
 }
-fn floor(us: i64, interval: &str) -> Result<i64> {
+pub(super) fn floor(us: i64, interval: &str) -> Result<i64> {
     let day = us / DAY * DAY;
     Ok(match interval {
         "hour" => us / 3_600_000_000 * 3_600_000_000,
@@ -99,7 +99,7 @@ fn floor(us: i64, interval: &str) -> Result<i64> {
         _ => unreachable!(),
     })
 }
-fn next(us: i64, interval: &str) -> Result<i64> {
+pub(super) fn next(us: i64, interval: &str) -> Result<i64> {
     match interval {
         "hour" => Ok(us + 3_600_000_000),
         "day" => Ok(us + DAY),

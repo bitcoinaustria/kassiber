@@ -46,6 +46,7 @@
 
 // A table is its header, a hairline under it and right-aligned figures.
 #let report-table(block) = {
+  if block.title != "" { std.block(sticky: true, below: 4pt, text(size: 8pt, weight: 500, block.title)) }
   let cols = block.columns
   let aligns = cols.map(c => if c.align == "right" { right } else { left })
   let header = cols.map(c => text(size: 7pt, weight: 500, fill: muted, c.label))
@@ -106,7 +107,10 @@
         if s.kind == "line" {
           let stroke = (paint: paint, thickness: s.weight * 1pt,
             dash: if s.dashed { (2pt, 1.5pt) } else { none })
-          place(top + left, path(stroke: stroke, ..s.points.map(p => (px(p.at(0)), py(p.at(1))))))
+          let pts = s.points.map(p => (px(p.at(0)), py(p.at(1))))
+          if pts.len() > 1 {
+            place(top + left, curve(stroke: stroke, curve.move(pts.first()), ..pts.slice(1).map(p => curve.line(p))))
+          }
         } else {
           for b in s.bars {
             let top-y = calc.max(b.at(2), b.at(3))
@@ -122,8 +126,21 @@
   })
   if block.legend.len() > 0 {
     v(2pt)
-    block.legend.map(item => text(size: 6.8pt, fill: muted, item)).join(h(10pt))
+    block.legend.map(item => {
+      let paint = tone-fill(item.tone)
+      let mark = if item.mark == "filled" {
+        box(width: 7pt, height: 6pt, fill: paint)
+      } else if item.mark == "hollow" {
+        box(width: 7pt, height: 6pt, stroke: 0.5pt + paint)
+      } else {
+        let weight = if item.mark == "line" { 1.4pt } else if item.mark == "thin" { 0.6pt } else { 0.8pt }
+        box(width: 14pt, height: 6pt, align(horizon, line(length: 14pt, stroke: (paint: paint, thickness: weight,
+          dash: if item.mark == "dashed" { (2pt, 1.5pt) } else { none }))))
+      }
+      box[#mark #h(3pt) #text(size: 6.8pt, fill: muted, item.label)]
+    }).join(h(12pt))
   }
+  v(6pt)
 }
 
 #let section(s) = {

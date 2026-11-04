@@ -1,0 +1,82 @@
+[
+  {
+    "id": "summary-top-five",
+    "file": "crates/reports/src/summary_pdf.rs",
+    "find": "Ok(ranked.into_iter().take(5).map(|(_, row)| row).collect())",
+    "replace": "Ok(ranked.into_iter().take(4).map(|(_, row)| row).collect())",
+    "expect_failing": ["summary_model_matches_python_and_renders_deterministically"],
+    "rule": "The summary lists Python's five largest movements."
+  },
+  {
+    "id": "summary-default-start",
+    "file": "crates/reports/src/summary_pdf.rs",
+    "find": "kassiber_rates::time::parse(&format!(\"{}-01-01\", &stamp(end)?[..4]))",
+    "replace": "kassiber_rates::time::parse(&format!(\"{}-02-01\", &stamp(end)?[..4]))",
+    "expect_failing": ["summary_model_matches_python_and_renders_deterministically"],
+    "rule": "Without --start the period begins on January 1 of the end year."
+  },
+  {
+    "id": "summary-wallet-dedupe",
+    "file": "crates/reports/src/summary_pdf.rs",
+    "find": "if !resolved.iter().any(|w| w.id == wallet.id) {",
+    "replace": "if true {",
+    "expect_failing": ["summary_model_matches_python_and_renders_deterministically"],
+    "rule": "A wallet named twice in the scope is reported once."
+  },
+  {
+    "id": "summary-partial-month",
+    "file": "crates/reports/src/summary_pdf.rs",
+    "find": "(\"period_partial\", Value::Bool(end < period_end_at)),",
+    "replace": "(\"period_partial\", Value::Bool(end <= period_end_at)),",
+    "expect_failing": ["summary_model_matches_python_and_renders_deterministically"],
+    "rule": "Only a month that ends after the period is marked partial."
+  },
+  {
+    "id": "summary-holding-age-days",
+    "file": "crates/reports/src/summary_pdf.rs",
+    "find": "&Decimal::from(86_400_i64))?;",
+    "replace": "&Decimal::from(86_000_i64))?;",
+    "expect_failing": ["summary_model_matches_python_and_renders_deterministically"],
+    "rule": "The weighted holding age is in days of 86,400 seconds."
+  },
+  {
+    "id": "design-display-half-even",
+    "file": "crates/reports/src/report_design.rs",
+    "find": "        .to_fixed_places(places, Rounding::HalfEven)",
+    "replace": "        .to_fixed_places(places, Rounding::HalfUp)",
+    "expect_failing": ["display_rounding_and_csv_text_come_from_one_exact_value"],
+    "rule": "Display rounding is half-even, as Python's Decimal formatting."
+  },
+  {
+    "id": "design-minus-sign",
+    "file": "crates/reports/src/report_design.rs",
+    "find": "        out.push('\\u{2212}');",
+    "replace": "        out.push('-');",
+    "expect_failing": ["display_rounding_and_csv_text_come_from_one_exact_value"],
+    "rule": "Displayed negatives use a true minus sign."
+  },
+  {
+    "id": "design-csv-plain",
+    "file": "crates/reports/src/report_design.rs",
+    "find": "    d.to_fixed_string().unwrap_or_else(|_| d.to_canonical())",
+    "replace": "    d.to_canonical()",
+    "expect_failing": ["display_rounding_and_csv_text_come_from_one_exact_value", "summary_model_matches_python_and_renders_deterministically"],
+    "rule": "CSV amounts are plain decimals without exponent."
+  },
+  {
+    "id": "design-msat-exact",
+    "file": "crates/reports/src/report_design.rs",
+    "find": "            if exact == text.parse::<Decimal>().unwrap_or_else(|_| Decimal::zero()) =>",
+    "replace": "            if true =>",
+    "expect_failing": ["display_rounding_and_csv_text_come_from_one_exact_value"],
+    "rule": "An msat column is written only when the amount is whole msat."
+  },
+  {
+    "id": "design-manifest-hash",
+    "file": "crates/reports/src/report_design.rs",
+    "find": "(\"sha256\", s(format!(\"{:x}\", Sha256::digest(bytes)))),",
+    "replace": "(\"sha256\", s(format!(\"{:x}\", Sha256::digest(b\"\")))),",
+    "expect_failing": ["summary_model_matches_python_and_renders_deterministically"],
+    "rule": "The CSV manifest hashes each file's bytes."
+  }
+]
