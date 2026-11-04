@@ -25,17 +25,19 @@ def step(argv):
     parser.add_argument('--data-root', type=Path, required=True)
     args = parser.parse_args(argv)
     passphrase = os.environ.get('KASSIBER_TEST_JOURNAL_AI_PASSPHRASE')
-    conn = open_db(args.data_root, passphrase=passphrase)
+    conn = None
     try:
-        try:
-            value = build_envelope('ui.journals.process', _journals_refresh_payload(conn, auto_pair=False))
-        except AppError as error:
-            value = dict(error=dict(code=error.code, message=str(error), hint=error.hint,
-                                    details=error.details, retryable=error.retryable))
-        except Exception as error:  # the chat loop reports these as internal tool failures
-            value = dict(exception=type(error).__name__, message=str(error))
+        # The daemon's book open precedes the tool; its refusal is the reply.
+        conn = open_db(args.data_root, passphrase=passphrase)
+        value = build_envelope('ui.journals.process', _journals_refresh_payload(conn, auto_pair=False))
+    except AppError as error:
+        value = dict(error=dict(code=error.code, message=str(error), hint=error.hint,
+                                details=error.details, retryable=error.retryable))
+    except Exception as error:  # the chat loop reports these as internal tool failures
+        value = dict(exception=type(error).__name__, message=str(error))
     finally:
-        conn.close()
+        if conn is not None:
+            conn.close()
     sys.stdout.write(json.dumps(value) + '\n')
     sys.stdout.flush()
     return 0
