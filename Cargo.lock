@@ -1616,6 +1616,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "kassiber-ai"
+version = "0.1.0"
+dependencies = [
+ "fancy-regex",
+ "kassiber-envelope",
+ "kassiber-pyjson",
+ "kassiber-pytext",
+]
+
+[[package]]
 name = "kassiber-backup"
 version = "0.1.0"
 dependencies = [

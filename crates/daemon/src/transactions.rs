@@ -34,7 +34,7 @@ fn dashboard(book: &mut dyn Book, args: Option<&Value>) -> Result<Value, AppErro
     let candidates = if book.context()?.profile_id.is_empty() {
         Vec::new()
     } else {
-        let payload = crate::transfers::pairing_args("ui.transfers.suggest", &empty)?;
+        let payload = crate::transfers::pairing_args("ui.transfers.suggest", &empty, "gui")?;
         match get(
             &book.transfers("transfers.suggest", &payload)?,
             "candidates",

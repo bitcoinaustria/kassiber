@@ -1,0 +1,278 @@
+//! The pure AI parts against Python's answers (`tests/data/vectors.json`,
+//! from `scripts/gen_vectors.py`).
+
+use std::sync::OnceLock;
+
+use kassiber_ai::executor::{parse_tool_call, tool_result_denied};
+use kassiber_ai::planner::{auto_tool_context_for_model, planned_auto_reads};
+use kassiber_ai::provenance::{answer_provenance, record_tool_usage};
+use kassiber_ai::redact::{redact_ai_tool_result, redact_tool_arguments};
+use kassiber_ai::select::{build_responses_tools, select_tool_capabilities, tool_capabilities};
+use kassiber_ai::summary::summarize_tool_call;
+use kassiber_ai::validate::{validate_arguments, validate_schema_value};
+use kassiber_ai::{get_tool, tools, ToolError};
+use kassiber_envelope::{dict, get, s, AppError};
+use kassiber_pyjson::{PyStr, Value};
+
+fn vectors() -> &'static Value {
+    static VECTORS: OnceLock<Value> = OnceLock::new();
+    VECTORS.get_or_init(|| {
+        kassiber_pytext::loads(include_str!("data/vectors.json")).expect("vectors parse")
+    })
+}
+
+fn section(name: &str) -> &'static [Value] {
+    match get(vectors(), name) {
+        Some(Value::List(items)) => items,
+        _ => panic!("missing section {name}"),
+    }
+}
+
+fn field<'a>(value: &'a Value, key: &str) -> &'a Value {
+    get(value, key).unwrap_or_else(|| panic!("missing {key} in {value:?}"))
+}
+
+fn text(value: &Value) -> &str {
+    match value {
+        Value::Str(text) => text.as_str().expect("UTF-8 text"),
+        other => panic!("not text: {other:?}"),
+    }
+}
+
+fn optional_text(value: &Value) -> Option<&str> {
+    match value {
+        Value::Null => None,
+        other => Some(text(other)),
+    }
+}
+
+fn message(error: &AppError) -> Value {
+    match &error.message_codepoints {
+        Some(message) => Value::Str((**message).clone()),
+        None => s(error.message.as_str()),
+    }
+}
+
+/// The Python `outcome()` record for a Rust result.
+fn outcome(result: Result<(), ToolError>) -> Value {
+    match result {
+        Ok(()) => dict([("ok", Value::Null)]),
+        Err(ToolError::App(error)) => dict([(
+            "error",
+            dict([
+                ("code", s(error.code.as_str())),
+                ("message", message(&error)),
+                ("details", error.details.clone().unwrap_or(Value::Null)),
+                ("hint", error.hint.as_deref().map(s).unwrap_or(Value::Null)),
+                ("retryable", Value::Bool(error.retryable)),
+            ]),
+        )]),
+        Err(other) => dict([("exception", s(format!("{other:?}")))]),
+    }
+}
+
+fn messages(value: &Value) -> Option<&[Value]> {
+    match value {
+        Value::List(items) => Some(items),
+        Value::Null => None,
+        other => panic!("messages: {other:?}"),
+    }
+}
+
+#[test]
+fn tool_capabilities_match_python() {
+    let Some(Value::Dict(expected)) = get(vectors(), "capabilities") else {
+        panic!("capabilities");
+    };
+    assert_eq!(expected.len(), tools().len());
+    for tool in tools() {
+        let want: Vec<Value> = match get(vectors(), "capabilities").and_then(|c| get(c, &tool.name))
+        {
+            Some(Value::List(items)) => items.clone(),
+            other => panic!("{}: {other:?}", tool.name),
+        };
+        let have: Vec<Value> = tool_capabilities(tool).into_iter().map(s).collect();
+        assert_eq!(have, want, "{}", tool.name);
+    }
+}
+
+#[test]
+fn selection_matches_python() {
+    for case in section("selection") {
+        let screen = match field(case, "screen_context") {
+            Value::Null => None,
+            other => Some(other),
+        };
+        let profile = optional_text(field(case, "profile"));
+        let have = match build_responses_tools(messages(field(case, "messages")), screen, profile) {
+            Ok(selected) => {
+                let indexes: Vec<Value> = selected
+                    .iter()
+                    .map(|tool| {
+                        Value::from(
+                            tools()
+                                .iter()
+                                .position(|entry| std::ptr::eq(entry, *tool))
+                                .unwrap(),
+                        )
+                    })
+                    .collect();
+                dict([("tools", Value::List(indexes))])
+            }
+            Err(error) => outcome(Err(ToolError::App(error))),
+        };
+        assert_eq!(&have, field(case, "result"), "{case:?}");
+        if profile != Some("bogus") {
+            let capabilities = select_tool_capabilities(messages(field(case, "messages")), screen)
+                .map(|set| Value::List(set.into_iter().map(s).collect()))
+                .unwrap_or(Value::Null);
+            assert_eq!(&capabilities, field(case, "capabilities"), "{case:?}");
+        }
+    }
+}
+
+#[test]
+fn catalog_validation_matches_python() {
+    for case in section("validation") {
+        let tool = get_tool(text(field(case, "tool"))).unwrap();
+        let have = outcome(validate_arguments(tool, field(case, "arguments")));
+        assert_eq!(&have, field(case, "result"), "{case:?}");
+    }
+}
+
+#[test]
+fn synthetic_validation_matches_python() {
+    for case in section("synthetic_validation") {
+        let have = outcome(validate_schema_value(
+            field(case, "value"),
+            field(case, "schema"),
+            "t",
+        ));
+        assert_eq!(&have, field(case, "result"), "{case:?}");
+    }
+}
+
+#[test]
+fn redaction_matches_python() {
+    for case in section("redaction") {
+        let value = field(case, "value");
+        assert_eq!(
+            &redact_tool_arguments(value),
+            field(case, "arguments"),
+            "{value:?}"
+        );
+        assert_eq!(
+            &redact_ai_tool_result(value),
+            field(case, "result"),
+            "{value:?}"
+        );
+    }
+}
+
+#[test]
+fn summaries_match_python() {
+    for case in section("summaries") {
+        let tool = get_tool(text(field(case, "tool"))).unwrap();
+        let have = Value::Str(summarize_tool_call(tool, field(case, "arguments")));
+        assert_eq!(&have, field(case, "summary"), "{case:?}");
+    }
+}
+
+#[test]
+fn call_parsing_and_denials_match_python() {
+    for case in section("parse") {
+        let index = match field(case, "index") {
+            Value::Int(n) => usize::try_from(n.clone()).unwrap(),
+            other => panic!("{other:?}"),
+        };
+        let call = parse_tool_call(field(case, "raw"), index);
+        let have = dict([
+            ("call_id", Value::Str(call.call_id)),
+            ("name", Value::Str(call.name)),
+            ("arguments", call.arguments),
+            (
+                "argument_error",
+                call.argument_error.map(s).unwrap_or(Value::Null),
+            ),
+        ]);
+        // Compared as JSON text: NaN is not equal to itself.
+        let json = |value: &Value| {
+            kassiber_pyjson::dumps(value, &kassiber_pyjson::Options::new()).unwrap()
+        };
+        assert_eq!(json(&have), json(field(case, "call")), "{case:?}");
+    }
+    for case in section("denied") {
+        let message = match field(case, "message") {
+            Value::Str(text) => Some(text.clone()),
+            _ => None,
+        };
+        let have = tool_result_denied(text(field(case, "reason")), message.as_ref());
+        assert_eq!(&have, field(case, "result"), "{case:?}");
+    }
+}
+
+#[test]
+fn planner_matches_python() {
+    for case in section("planner") {
+        let kind = optional_text(field(case, "system_prompt_kind"));
+        let planned: Vec<Value> =
+            planned_auto_reads(kind, messages(field(case, "messages")).unwrap())
+                .into_iter()
+                .map(|read| Value::List(vec![s(read.name), read.arguments]))
+                .collect();
+        assert_eq!(&Value::List(planned), field(case, "planned"), "{case:?}");
+    }
+}
+
+#[test]
+fn context_messages_match_python() {
+    for case in section("context") {
+        let Value::List(context) = field(case, "context") else {
+            panic!("context");
+        };
+        let have = auto_tool_context_for_model(context);
+        assert_eq!(have, text(field(case, "message")), "{case:?}");
+    }
+}
+
+#[test]
+fn provenance_matches_python() {
+    for case in section("provenance") {
+        let mut state = field(case, "initial").clone();
+        let Value::List(steps) = field(case, "steps") else {
+            panic!("steps");
+        };
+        for step in steps {
+            let Value::List(step) = step else {
+                panic!("step")
+            };
+            record_tool_usage(&mut state, text(&step[0]), &step[1]);
+        }
+        assert_eq!(&state, field(case, "state"), "{case:?}");
+        let have = answer_provenance(
+            field(case, "provider"),
+            field(case, "validated"),
+            &state,
+            field(case, "egress"),
+            "2026-11-05T00:00:00Z",
+        );
+        assert_eq!(&have, field(case, "provenance"), "{case:?}");
+    }
+}
+
+#[test]
+fn surrogate_text_survives_redaction() {
+    let raw = PyStr::from_code_points([0xD800, 0x20, 0x2F, 0x61, 0x2F, 0x62]).unwrap();
+    let redacted = redact_ai_tool_result(&Value::Str(raw));
+    assert_eq!(
+        redacted,
+        Value::Str(
+            PyStr::from_code_points(
+                [0xD800, 0x20]
+                    .into_iter()
+                    .chain("<redacted-path>".chars().map(u32::from))
+            )
+            .unwrap()
+        )
+    );
+}

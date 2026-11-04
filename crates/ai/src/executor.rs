@@ -1,0 +1,420 @@
+//! The read executor (`_execute_read_only_ai_tool`, `kassiber/daemon.py:6569`)
+//! and the call parsing around it.
+//!
+//! Gates run in Python's order: argument errors, the catalog and its
+//! `kind_class`, the local-provider custody gate, the per-turn advertised
+//! set, the schema, then the read. Every read runs on the daemon's request
+//! loop through [`ReadHost`], first checking that the open book is still the
+//! project and book frozen for the turn (`_run_scoped_ai_operation`). Every
+//! result is redacted before it leaves this module. A tool whose service is
+//! not native yet is refused with `not_implemented` before the book is
+//! touched, and an egressing tool is refused unless a consent bound to this
+//! call is supplied.
+
+use kassiber_envelope::{dict, get, s, success, AppError};
+use kassiber_pyjson::{Key, PyStr, Value};
+
+use crate::catalog::{get_tool_py, KindClass, ToolEntry};
+use crate::projections;
+use crate::redact::redact_ai_tool_result;
+use crate::skills::read_skill_reference;
+use crate::validate::validate_arguments;
+use crate::ToolError;
+
+/// `_AI_AUTO_JOURNAL_REFRESH_TOOL_NAMES`: reads that rebuild stale journals
+/// first, unless the caller disabled read maintenance (MCP).
+pub const AUTO_JOURNAL_REFRESH_TOOLS: [&str; 20] = [
+    "ui.audit.changes_since_last_answer",
+    "ui.audit.evidence.summary",
+    "ui.journals.quarantine",
+    "ui.journals.snapshot",
+    "ui.journals.transfers.list",
+    "ui.next_actions",
+    "ui.overview.snapshot",
+    "ui.rates.coverage",
+    "ui.report.blockers",
+    "ui.reports.balance_history",
+    "ui.reports.balance_sheet",
+    "ui.reports.capital_gains",
+    "ui.reports.exit_tax_preview",
+    "ui.reports.portfolio_summary",
+    "ui.reports.summary",
+    "ui.reports.tax_summary",
+    "ui.review.worklist",
+    "ui.transactions.review_context",
+    "ui.transfers.review_context",
+    "ui.workspace.health",
+];
+
+/// `_LOCAL_CUSTODY_READ_DAEMON_KINDS`: custody lineage reads, for the local
+/// desktop workflow and local providers only.
+pub const LOCAL_CUSTODY_READ_KINDS: [&str; 6] = [
+    "ui.custody.coverage.snapshot",
+    "ui.custody.gaps.history",
+    "ui.custody.gaps.list",
+    "ui.custody.gaps.review_context",
+    "ui.custody.lineage.snapshot",
+    "ui.custody.review.plan",
+];
+
+/// Read tools refused until the service behind them is native, with the
+/// work that owns it (design doc §2).
+pub const REFUSED_READS: [(&str, &str); 23] = [
+    ("ui.overview.snapshot", "workspace overview and health"),
+    ("ui.wallets.identify", "ownership verification"),
+    ("ui.wallets.analyze_file", "file analysis"),
+    ("ui.connections.node.snapshot", "Lightning node snapshot"),
+    (
+        "ui.reports.lightning_profitability",
+        "the aggregate-only Lightning projection",
+    ),
+    ("ui.reports.privacy_mirror", "Privacy Mirror reports"),
+    ("ui.journals.snapshot", "journal reads"),
+    ("ui.journals.quarantine", "journal reads"),
+    ("ui.journals.events.list", "journal reads"),
+    ("ui.journals.transfers.list", "journal reads"),
+    ("ui.report.blockers", "workspace readiness"),
+    ("ui.workspace.health", "workspace overview and health"),
+    ("ui.next_actions", "workspace readiness"),
+    (
+        "ui.workspace.overview.snapshot",
+        "workspace overview and health",
+    ),
+    ("ui.transactions.graph", "transaction graph projections"),
+    (
+        "ui.transactions.review_context",
+        "the transaction review composite",
+    ),
+    ("ui.audit.evidence.summary", "audit evidence summaries"),
+    ("ui.review.badges", "review badges"),
+    ("ui.review.worklist", "the review worklist composite"),
+    ("ui.egress.snapshot", "the diagnostics egress ledger"),
+    ("ui.review.cases", "the review workflow"),
+    ("ui.review.request_input", "the review workflow"),
+    ("ui.review.plan", "the review workflow"),
+];
+
+/// `ParsedAiToolCall`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ParsedCall {
+    pub call_id: PyStr,
+    pub name: PyStr,
+    pub arguments: Value,
+    pub argument_error: Option<&'static str>,
+}
+
+impl ParsedCall {
+    /// A call the daemon planned itself (auto-reads) or a test supplied.
+    pub fn new(call_id: impl Into<PyStr>, name: impl Into<PyStr>, arguments: Value) -> Self {
+        ParsedCall {
+            call_id: call_id.into(),
+            name: name.into(),
+            arguments,
+            argument_error: None,
+        }
+    }
+}
+
+/// `_parse_ai_tool_call(raw, index)`: a provider's tool call, with
+/// `arguments` as a JSON object string, an object, or nothing.
+pub fn parse_tool_call(raw: &Value, index: usize) -> ParsedCall {
+    let call_id = match get(raw, "id") {
+        Some(Value::Str(id)) if id.code_points().next().is_some() => id.clone(),
+        _ => PyStr::from(format!("call_{index}")),
+    };
+    let failed = |call_id: PyStr, name: PyStr, error| ParsedCall {
+        call_id,
+        name,
+        arguments: Value::Dict(Vec::new()),
+        argument_error: Some(error),
+    };
+    let Some(function @ Value::Dict(_)) = get(raw, "function") else {
+        return failed(call_id, PyStr::new(), "invalid_tool_call");
+    };
+    let name = match get(function, "name") {
+        Some(Value::Str(name)) => name.clone(),
+        _ => PyStr::new(),
+    };
+    match get(function, "arguments") {
+        None | Some(Value::Null) => ParsedCall::new(call_id, name, Value::Dict(Vec::new())),
+        Some(Value::Str(text)) if text.code_points().next().is_none() => {
+            ParsedCall::new(call_id, name, Value::Dict(Vec::new()))
+        }
+        Some(arguments @ Value::Dict(_)) => ParsedCall::new(call_id, name, arguments.clone()),
+        Some(Value::Str(text)) => match kassiber_pytext::loads_py(text) {
+            Ok(arguments @ Value::Dict(_)) => ParsedCall::new(call_id, name, arguments),
+            _ => failed(call_id, name, "invalid_arguments"),
+        },
+        Some(_) => failed(call_id, name, "invalid_arguments"),
+    }
+}
+
+/// `_tool_result_denied(reason, message=...)`.
+pub fn tool_result_denied(reason: &str, message: Option<&PyStr>) -> Value {
+    let mut result = vec![
+        (Key::from("ok"), Value::Bool(false)),
+        (Key::from("reason"), s(reason)),
+    ];
+    if let Some(message) = message.filter(|message| message.code_points().next().is_some()) {
+        result.push((
+            Key::from("message"),
+            redact_ai_tool_result(&Value::Str(message.clone())),
+        ));
+    }
+    Value::Dict(result)
+}
+
+fn message_of(error: &AppError) -> PyStr {
+    match &error.message_codepoints {
+        Some(message) => (**message).clone(),
+        None => PyStr::from(error.message.as_str()),
+    }
+}
+
+/// The denial Python's executor returns for a failure.
+pub fn denial_for(error: ToolError) -> Value {
+    match error {
+        ToolError::App(error) => {
+            let code = if error.code.is_empty() {
+                "tool_error"
+            } else {
+                &error.code
+            };
+            tool_result_denied(code, Some(&message_of(&error)))
+        }
+        ToolError::Busy => tool_result_denied(
+            "database_busy",
+            Some(&PyStr::from(
+                "The database is busy in another Kassiber process; retry shortly.",
+            )),
+        ),
+        ToolError::Unexpected => tool_result_denied(
+            "tool_error",
+            Some(&PyStr::from("AI tool execution failed unexpectedly")),
+        ),
+    }
+}
+
+/// What a read needs from the open book. Implemented by the daemon; every
+/// method runs on its request loop.
+pub trait Book {
+    /// `_assert_ai_runtime_database_scope`: whether the open database is the
+    /// one `data_root` names.
+    fn database_in_scope(&mut self, data_root: &str) -> Result<bool, ToolError>;
+    /// `current_context_snapshot(conn)`: the active workspace and profile ids.
+    fn context(&mut self) -> Result<(Value, Value), ToolError>;
+    /// `_auto_maintain_for_read` for an AI read: the journal-processing
+    /// payload when stale journals were rebuilt. With report-read sync
+    /// enabled and not yet attempted this turn, it refuses
+    /// (`not_implemented`), because that sync is network work.
+    fn maintain_for_read(&mut self, sync_attempted: bool) -> Result<Option<Value>, ToolError>;
+    /// One native read: the kind's payload, with `authored_source` passed to
+    /// the services that record it.
+    fn read(
+        &mut self,
+        kind: &str,
+        arguments: &Value,
+        authored_source: &'static str,
+    ) -> Result<Value, ToolError>;
+}
+
+/// Runs database work on the daemon's request loop.
+pub trait ReadHost {
+    fn on_request_loop(
+        &mut self,
+        work: &mut dyn FnMut(&mut dyn Book) -> Result<Value, ToolError>,
+    ) -> Result<Value, ToolError>;
+}
+
+/// `AiToolRuntime`: the frozen data root and the turn's `maintenance_state`.
+pub struct Runtime<'a> {
+    pub data_root: &'a str,
+    pub state: &'a mut Value,
+}
+
+impl Runtime<'_> {
+    fn field(&self, key: &str) -> Option<&Value> {
+        get(self.state, key)
+    }
+
+    fn is(&self, key: &str, text: &str) -> bool {
+        matches!(self.field(key), Some(Value::Str(value)) if value.is(text))
+    }
+}
+
+/// `_ai_tool_is_advertised(entry, runtime)`: without an advertised list
+/// (direct callers outside a chat turn) the catalog allowlist applies.
+pub fn is_advertised(entry: &ToolEntry, state: &Value) -> bool {
+    match get(state, "advertised_tools") {
+        Some(Value::List(advertised)) => advertised
+            .iter()
+            .any(|name| matches!(name, Value::Str(name) if name.is(entry.provider_name()))),
+        _ => true,
+    }
+}
+
+/// The owning work of a refused read tool, if it is refused.
+pub fn refused_read(name: &str) -> Option<&'static str> {
+    if name.starts_with("ui.chain_analysis.") {
+        return Some("the chain-analysis AI projection");
+    }
+    REFUSED_READS
+        .iter()
+        .find(|(tool, _)| *tool == name)
+        .map(|(_, owner)| *owner)
+}
+
+/// Whether `state` holds a consent bound to this call (`consented_call_ids`).
+/// The chat loop (R6-7) records it after the user's decision; nothing else
+/// may run an egressing tool.
+fn consented(state: &Value, call_id: &PyStr) -> bool {
+    matches!(get(state, "consented_call_ids"), Some(Value::List(ids))
+        if ids.iter().any(|id| matches!(id, Value::Str(id) if id == call_id)))
+}
+
+/// `_execute_read_only_ai_tool(call, runtime, planned_auto_read=...)`.
+pub fn execute_read_only(
+    call: &ParsedCall,
+    runtime: &mut Runtime<'_>,
+    host: &mut dyn ReadHost,
+    planned_auto_read: bool,
+) -> Value {
+    if let Some(error) = call.argument_error {
+        return tool_result_denied(error, None);
+    }
+    let Some(entry) =
+        get_tool_py(&call.name).filter(|entry| entry.kind_class == KindClass::ReadOnly)
+    else {
+        return tool_result_denied("tool_not_allowed", None);
+    };
+    if entry
+        .daemon_kind
+        .as_deref()
+        .is_some_and(|kind| LOCAL_CUSTODY_READ_KINDS.contains(&kind))
+        && !runtime.is("provider_kind", "local")
+    {
+        return tool_result_denied(
+            "local_provider_required",
+            Some(&PyStr::from(
+                "Custody lineage is available in the local desktop workflow and to local AI providers only.",
+            )),
+        );
+    }
+    if !planned_auto_read && !is_advertised(entry, runtime.state) {
+        return tool_result_denied("tool_not_advertised", None);
+    }
+    match read(entry, call, runtime, host) {
+        Ok(result) => result,
+        Err(error) => denial_for(error),
+    }
+}
+
+fn read(
+    entry: &'static ToolEntry,
+    call: &ParsedCall,
+    runtime: &mut Runtime<'_>,
+    host: &mut dyn ReadHost,
+) -> Result<Value, ToolError> {
+    validate_arguments(entry, &call.arguments)?;
+    if entry.name == "read_skill_reference" {
+        let Some(Value::Str(name)) = get(&call.arguments, "name") else {
+            return Err(
+                AppError::new("validation", "read_skill_reference requires a name string").into(),
+            );
+        };
+        let reference = read_skill_reference(name)?;
+        return Ok(redact_ai_tool_result(&dict([
+            ("ok", Value::Bool(true)),
+            ("envelope", success("read_skill_reference", reference)),
+        ])));
+    }
+    let Some(kind) = entry.daemon_kind.as_deref() else {
+        return Ok(tool_result_denied("tool_not_allowed", None));
+    };
+    if entry.egresses && !consented(runtime.state, &call.call_id) {
+        // Auto-reads skip egressing tools, and the chat loop asks first:
+        // reaching here without a bound consent is a request nobody made.
+        return Ok(tool_result_denied("consent_required", None));
+    }
+    if let Some(owner) = refused_read(&entry.name) {
+        return Err(not_native(&entry.name, owner).into());
+    }
+    let data_root = runtime.data_root.to_owned();
+    let refresh = AUTO_JOURNAL_REFRESH_TOOLS.contains(&entry.name.as_str())
+        && !runtime.is("read_maintenance", "disabled");
+    let state = &mut *runtime.state;
+    let mut work = |book: &mut dyn Book| -> Result<Value, ToolError> {
+        assert_scope(book, &data_root, state)?;
+        let mut metadata: Vec<(Key, Value)> = Vec::new();
+        if refresh {
+            let attempted =
+                get(state, "auto_sync_attempted").is_some_and(kassiber_envelope::truthy);
+            if let Some(processed) = book.maintain_for_read(attempted)? {
+                kassiber_envelope::set(state, "auto_journal_process", processed.clone());
+                metadata.push((
+                    Key::from("auto_journal_process"),
+                    success("ui.journals.process", processed),
+                ));
+            }
+        }
+        let payload = projections::read_for_ai(entry, kind, &call.arguments, state, book)?;
+        let mut result = vec![
+            (Key::from("ok"), Value::Bool(true)),
+            (Key::from("envelope"), success(kind, payload)),
+        ];
+        result.extend(metadata);
+        Ok(Value::Dict(result))
+    };
+    let result = host.on_request_loop(&mut work)?;
+    Ok(redact_ai_tool_result(&result))
+}
+
+/// `_assert_ai_runtime_database_scope` and the frozen book check.
+fn assert_scope(book: &mut dyn Book, data_root: &str, state: &Value) -> Result<(), ToolError> {
+    if !book.database_in_scope(data_root)? {
+        return Err(AppError::new(
+            "stale_context",
+            "The active project changed while the AI turn was running",
+        )
+        .with_hint("Ask the assistant again in the current project.")
+        .retryable(true)
+        .into());
+    }
+    let (Some(expected_workspace), Some(expected_profile)) = (
+        get(state, "scope_workspace_id"),
+        get(state, "scope_profile_id"),
+    ) else {
+        return Ok(());
+    };
+    let (workspace, profile) = book.context()?;
+    if &workspace != expected_workspace || &profile != expected_profile {
+        return Err(AppError::new(
+            "stale_context",
+            "The active book changed while the AI turn was running",
+        )
+        .with_hint("Ask the assistant again in the current book.")
+        .with_details(dict([
+            ("expected_workspace_id", expected_workspace.clone()),
+            ("expected_profile_id", expected_profile.clone()),
+            ("current_workspace_id", workspace),
+            ("current_profile_id", profile),
+        ]))
+        .retryable(true)
+        .into());
+    }
+    Ok(())
+}
+
+/// The refusal for a tool whose service is not native yet.
+pub fn not_native(name: &str, owner: &str) -> AppError {
+    AppError::new(
+        "not_implemented",
+        format!("AI tool {name} is not implemented in the Rust backend yet ({owner})"),
+    )
+}
+
+/// The model-visible bytes of a result: `json.dumps(json_ready(
+/// redact_ai_tool_result(result)), sort_keys=True, separators=(",", ":"))`.
+pub fn model_output(result: &Value) -> String {
+    crate::planner::model_json(&redact_ai_tool_result(result))
+}

@@ -33,6 +33,18 @@ pub const KINDS: &[&str] = &[
 ];
 
 pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<Value, AppError> {
+    execute_as(book, kind, args, "gui")
+}
+
+/// `_ui_swap_matching_payload_from_conn` and `_ui_custody_gap_payload_from_conn`
+/// with their `authored_source`: `"gui"` for the desktop, `"ai_tool"` for
+/// the assistant, which also gets the AI conversion-review guard.
+pub fn execute_as(
+    book: &mut dyn Book,
+    kind: &str,
+    args: Option<&Value>,
+    source: &'static str,
+) -> Result<Value, AppError> {
     let empty = dict::<&str>([]);
     let args = args.filter(|v| !matches!(v, Value::Null)).unwrap_or(&empty);
     let Value::Dict(fields) = args else {
@@ -79,7 +91,7 @@ pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<
         kind,
         "ui.transfers.suggest" | "ui.transfers.bulk_pair" | "ui.transfers.rules.apply"
     ) {
-        let payload = pairing_args(kind, args)?;
+        let payload = pairing_args(kind, args, source)?;
         return book.transfers(
             if kind == "ui.transfers.bulk_pair" {
                 "transfers.bulk-pair"
@@ -90,13 +102,13 @@ pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<
         );
     }
     if matches!(kind, "ui.custody.review.plan" | "ui.custody.review.apply") {
-        return gaps(book, kind, args);
+        return gaps(book, kind, args, source);
     }
     if matches!(
         kind,
         "ui.transfers.components.plan" | "ui.transfers.components.apply"
     ) {
-        return components(book, kind, args);
+        return components(book, kind, args, source);
     }
     let mut operation = if kind == "ui.custody.gaps.history" {
         let allowed = ["workspace", "profile", "gap_id", "limit"];
@@ -142,9 +154,9 @@ pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<
         kind.strip_prefix("ui.").expect("registered kind")
     };
     let mut args = args.clone();
-    normalize_pair_args(kind, &mut args)?;
-    normalize_payout_create_args(kind, &mut args);
-    normalize_payout_delete_args(kind, &mut args)?;
+    normalize_pair_args(kind, &mut args, source)?;
+    normalize_payout_create_args(kind, &mut args, source);
+    normalize_payout_delete_args(kind, &mut args, source)?;
     if kind == "ui.custody.gaps.history" {
         if let Value::Dict(fields) = &mut args {
             for (k, v) in fields {
@@ -226,9 +238,13 @@ pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<
     }
 }
 
-pub(crate) fn pairing_args(kind: &str, args: &Value) -> Result<Value, AppError> {
+pub(crate) fn pairing_args(
+    kind: &str,
+    args: &Value,
+    source: &'static str,
+) -> Result<Value, AppError> {
     use kassiber_envelope::{py_str, set, truthy};
-    let mut payload = dict([("authored_source", s("gui"))]);
+    let mut payload = dict([("authored_source", s(source))]);
     for name in [
         "workspace",
         "profile",
@@ -383,7 +399,7 @@ fn component_read_page(result: Value, limit: usize) -> Result<Value, AppError> {
     ])))
 }
 
-fn normalize_payout_create_args(kind: &str, args: &mut Value) {
+fn normalize_payout_create_args(kind: &str, args: &mut Value, source: &str) {
     if kind != "ui.transfers.payouts.create" {
         return;
     }
@@ -407,10 +423,14 @@ fn normalize_payout_create_args(kind: &str, args: &mut Value) {
     {
         set(args, "policy", s(v));
     }
-    set(args, "authored_source", s("gui"));
+    set(args, "authored_source", s(source));
 }
 
-fn normalize_payout_delete_args(kind: &str, args: &mut Value) -> Result<(), AppError> {
+fn normalize_payout_delete_args(
+    kind: &str,
+    args: &mut Value,
+    source: &str,
+) -> Result<(), AppError> {
     if kind == "ui.transfers.payouts.delete" {
         let id = get(args, "payout_id")
             .filter(|v| kassiber_envelope::truthy(v))
@@ -422,7 +442,7 @@ fn normalize_payout_delete_args(kind: &str, args: &mut Value) -> Result<(), AppE
             })?;
         let id = kassiber_envelope::py_str(id);
         kassiber_envelope::set(args, "payout_id", s(id));
-        kassiber_envelope::set(args, "authored_source", s("gui"));
+        kassiber_envelope::set(args, "authored_source", s(source));
     }
 
     Ok(())
@@ -430,12 +450,12 @@ fn normalize_payout_delete_args(kind: &str, args: &mut Value) -> Result<(), AppE
 
 // The desktop calls int() before dispatching to the scoped domain service.
 // Preserve error precedence even when a transaction reference is missing.
-fn normalize_pair_args(kind: &str, args: &mut Value) -> Result<(), AppError> {
+fn normalize_pair_args(kind: &str, args: &mut Value, source: &str) -> Result<(), AppError> {
     if matches!(
         kind,
         "ui.transfers.pair" | "ui.transfers.unpair" | "ui.transfers.update"
     ) {
-        kassiber_envelope::set(args, "authored_source", s("gui"));
+        kassiber_envelope::set(args, "authored_source", s(source));
         if kind == "ui.transfers.pair" {
             for (name, alias) in [("tx_out", "out_id"), ("tx_in", "in_id")] {
                 let id = get(args, name)
@@ -533,10 +553,24 @@ fn key_text(key: &kassiber_pyjson::Key) -> String {
 
 /// Desktop component review: the bulk cap precedes scope; apply then requires
 /// the plan's exact input version. Authorship is the desktop's, never the request's.
-fn components(book: &mut dyn Book, kind: &str, args: &Value) -> Result<Value, AppError> {
+fn components(
+    book: &mut dyn Book,
+    kind: &str,
+    args: &Value,
+    source: &str,
+) -> Result<Value, AppError> {
     component_cap(kind, args)?;
+    if source == "ai_tool" && get(args, "action").is_none_or(|action| *action == s("create")) {
+        if let Some(Value::List(components)) = get(args, "components") {
+            let activate = match get(args, "activate") {
+                None | Some(Value::Null) => true,
+                Some(activate) => kassiber_envelope::truthy(activate),
+            };
+            ai_conversion_boundary(components, activate)?;
+        }
+    }
     book.resolve_scope(get(args, "workspace"), get(args, "profile"))?;
-    let (operation, payload) = component_payload(kind, args)?;
+    let (operation, payload) = component_payload(kind, args, source)?;
     Ok(exact_integers(book.transfers(operation, &payload)?))
 }
 
@@ -556,7 +590,58 @@ fn component_cap(kind: &str, args: &Value) -> Result<(), AppError> {
     Ok(())
 }
 
-fn component_payload(kind: &str, args: &Value) -> Result<(&'static str, Value), AppError> {
+/// `_validate_ai_custody_conversion_boundary`: an AI-authored conversion
+/// component can neither attest its own review nor activate itself.
+fn ai_conversion_boundary(components: &[Value], activate: bool) -> Result<(), AppError> {
+    let conversions: Vec<usize> = components
+        .iter()
+        .enumerate()
+        .filter(|(_, component)| {
+            let mode = get(component, "conservation_mode")
+                .filter(|mode| kassiber_envelope::truthy(mode))
+                .map(kassiber_envelope::py_str)
+                .unwrap_or_else(|| "quantity".to_owned());
+            mode == "conversion"
+        })
+        .map(|(index, _)| index)
+        .collect();
+    if conversions.is_empty() {
+        return Ok(());
+    }
+    let indexes = |indexes: Vec<usize>| Value::List(indexes.into_iter().map(Value::from).collect());
+    let attested: Vec<usize> = conversions
+        .iter()
+        .copied()
+        .filter(|&index| get(&components[index], "conversion_reviewed") == Some(&Value::Bool(true)))
+        .collect();
+    if !attested.is_empty() {
+        return Err(AppError::new(
+            "interaction_required",
+            "AI-authored conversion components cannot attest their own review",
+        )
+        .with_hint(
+            "Create the conversion as a draft, then review and activate it in Custody Review.",
+        )
+        .with_details(dict([("component_indexes", indexes(attested))])));
+    }
+    if activate {
+        return Err(AppError::new(
+            "interaction_required",
+            "AI-authored conversion components require separate human review before activation",
+        )
+        .with_hint(
+            "Retry with activate=false, then review and activate the draft in Custody Review.",
+        )
+        .with_details(dict([("component_indexes", indexes(conversions))])));
+    }
+    Ok(())
+}
+
+fn component_payload(
+    kind: &str,
+    args: &Value,
+    source: &str,
+) -> Result<(&'static str, Value), AppError> {
     let field = |key: &str| get(args, key).cloned().unwrap_or(Value::Null);
     let mut payload = dict([
         (
@@ -573,7 +658,7 @@ fn component_payload(kind: &str, args: &Value) -> Result<(&'static str, Value), 
         ),
         ("activate", field("activate")),
         ("reason", field("reason")),
-        ("authored_source", s("gui")),
+        ("authored_source", s(source)),
     ]);
     for key in ["workspace", "profile"] {
         if let Some(v) = get(args, key) {
@@ -769,7 +854,7 @@ mod tests {
                 ("dry_run", Value::Bool(true)),
                 ("skip_user_unpaired", Value::Bool(true)),
             ]);
-            let payload = pairing_args(kind, &args).unwrap();
+            let payload = pairing_args(kind, &args, "gui").unwrap();
             assert_eq!(get(&payload, "time_window_seconds"), Some(&86400.into()));
             assert_eq!(get(&payload, "fee_pct_max"), Some(&Value::Float(0.01)));
             assert_eq!(get(&payload, "fee_sats_min"), Some(&2500.into()));
@@ -786,7 +871,7 @@ mod tests {
                 ("fee_pct_max", s("0.5")),
                 ("fee_sats_min", Value::Float(2500.9)),
             ]);
-            let payload = pairing_args(kind, &args).unwrap();
+            let payload = pairing_args(kind, &args, "gui").unwrap();
             assert_eq!(get(&payload, "time_window_seconds"), Some(&86400.into()));
             assert_eq!(get(&payload, "fee_pct_max"), Some(&Value::Float(0.5)));
             assert_eq!(get(&payload, "fee_sats_min"), Some(&2500.into()));
@@ -796,6 +881,7 @@ mod tests {
                     ("time_window_seconds", s("bad")),
                     ("fee_pct_max", s("also bad")),
                 ]),
+                "gui",
             )
             .unwrap_err();
             assert_eq!(
@@ -826,13 +912,13 @@ mod tests {
             ("authored_source", s("ai_tool")),
             ("action", Value::Null),
         ]);
-        let (operation, payload) = component_payload(plan, &args).unwrap();
+        let (operation, payload) = component_payload(plan, &args, "gui").unwrap();
         assert_eq!(operation, "transfers.components.plan");
         assert_eq!(get(&payload, "action"), Some(&Value::Null));
         assert_eq!(get(&payload, "authored_source"), Some(&s("gui")));
         assert_eq!(get(&payload, "spec"), Some(&dict([("notes", s("alias"))])));
         let explicit = dict([("spec", Value::Null), ("component", dict::<&str>([]))]);
-        let (_, payload) = component_payload(plan, &explicit).unwrap();
+        let (_, payload) = component_payload(plan, &explicit, "gui").unwrap();
         assert_eq!(get(&payload, "spec"), Some(&Value::Null));
         assert_eq!(get(&payload, "action"), Some(&s("create")));
         for version in [
@@ -842,14 +928,14 @@ mod tests {
             Value::Null,
         ] {
             let args = dict([("expected_input_version", version)]);
-            let error = component_payload(apply, &args).unwrap_err();
+            let error = component_payload(apply, &args, "gui").unwrap_err();
             assert_eq!(
                 error.message,
                 format!("{apply} requires the input version returned by plan")
             );
         }
         let args = dict([("expected_input_version", Value::Int(0.into()))]);
-        let (operation, payload) = component_payload(apply, &args).unwrap();
+        let (operation, payload) = component_payload(apply, &args, "gui").unwrap();
         assert_eq!(operation, "transfers.components.apply");
         assert_eq!(
             get(&payload, "expected_input_version"),
@@ -863,13 +949,14 @@ mod tests {
             ("payout_id", Value::Int(123.into())),
             ("authored_source", s("untrusted")),
         ]);
-        normalize_payout_delete_args("ui.transfers.payouts.delete", &mut args).unwrap();
+        normalize_payout_delete_args("ui.transfers.payouts.delete", &mut args, "gui").unwrap();
         assert_eq!(get(&args, "payout_id"), Some(&s("123")));
         assert_eq!(get(&args, "authored_source"), Some(&s("gui")));
         for id in [Value::Null, Value::Bool(false), s(""), Value::Int(0.into())] {
             let mut args = dict([("payout_id", id)]);
             let error =
-                normalize_payout_delete_args("ui.transfers.payouts.delete", &mut args).unwrap_err();
+                normalize_payout_delete_args("ui.transfers.payouts.delete", &mut args, "gui")
+                    .unwrap_err();
             assert_eq!(error.code, "validation");
             assert_eq!(
                 error.message,
@@ -906,7 +993,7 @@ mod tests {
             ("note", s("alias note")),
             ("authored_source", s("untrusted")),
         ]);
-        normalize_pair_args("ui.transfers.pair", &mut args).unwrap();
+        normalize_pair_args("ui.transfers.pair", &mut args, "gui").unwrap();
         for (key, expected) in [
             ("tx_out", "out"),
             ("tx_in", "in"),
@@ -919,17 +1006,17 @@ mod tests {
             assert_eq!(get(&args, key), Some(&s(expected)), "{key}");
         }
         let mut args = dict([("pair_id", 17.into()), ("kind", Value::Bool(false))]);
-        normalize_pair_args("ui.transfers.update", &mut args).unwrap();
+        normalize_pair_args("ui.transfers.update", &mut args, "gui").unwrap();
         assert_eq!(get(&args, "pair_id"), Some(&s("17")));
         assert_eq!(get(&args, "kind"), Some(&s("False")));
         assert!(get(&args, "notes").is_none());
         kassiber_envelope::set(&mut args, "notes", s(""));
-        normalize_pair_args("ui.transfers.update", &mut args).unwrap();
+        normalize_pair_args("ui.transfers.update", &mut args, "gui").unwrap();
         assert_eq!(get(&args, "notes"), Some(&Value::Null));
         for kind in ["ui.transfers.update", "ui.transfers.unpair"] {
             for id in [Value::Null, s(""), Value::Bool(false)] {
                 let mut args = dict([("pair_id", id)]);
-                let error = normalize_pair_args(kind, &mut args).unwrap_err();
+                let error = normalize_pair_args(kind, &mut args, "gui").unwrap_err();
                 assert_eq!(error.code, "validation");
                 assert_eq!(error.message, format!("{kind} requires pair_id"));
             }
@@ -981,7 +1068,7 @@ mod payout_create_tests {
             ("policy", 123.into()),
             ("authored_source", s("untrusted")),
         ]);
-        normalize_payout_create_args("ui.transfers.payouts.create", &mut args);
+        normalize_payout_create_args("ui.transfers.payouts.create", &mut args, "gui");
         assert_eq!(get(&args, "tx_out"), Some(&s("out")));
         assert_eq!(get(&args, "notes"), Some(&s("note")));
         assert_eq!(get(&args, "kind"), Some(&s("direct-swap-payout")));
@@ -992,7 +1079,7 @@ mod payout_create_tests {
 
 /// Gap transport checks retain Python's order: shape, scope, action, candidate,
 /// then apply's version. The service owns the candidate read inside its action.
-fn gaps(book: &mut dyn Book, kind: &str, args: &Value) -> Result<Value, AppError> {
+fn gaps(book: &mut dyn Book, kind: &str, args: &Value, source: &str) -> Result<Value, AppError> {
     use kassiber_envelope::set;
     let applying = kind == "ui.custody.review.apply";
     let Value::Dict(fields) = args else {
@@ -1066,7 +1153,7 @@ fn gaps(book: &mut dyn Book, kind: &str, args: &Value) -> Result<Value, AppError
     }
     let mut payload = args.clone();
     set(&mut payload, "gap_id", s(gap));
-    set(&mut payload, "authored_source", s("gui"));
+    set(&mut payload, "authored_source", s(source));
     set(&mut payload, "desktop_kind", s(kind));
     Ok(exact_integers(book.transfers(
         if applying {
@@ -1375,7 +1462,7 @@ fn review_context(book: &mut dyn Book, args: &Value) -> Result<Value, AppError> 
             format!("{kind} limit must be positive"),
         ));
     }
-    let suggest = pairing_args("ui.transfers.suggest", args)?;
+    let suggest = pairing_args("ui.transfers.suggest", args, "gui")?;
     let suggestion = book.transfers("transfers.suggest", &suggest)?;
     let surface = match get(args, "candidate_type").and_then(|v| match v {
         Value::Str(t) => t.as_str(),

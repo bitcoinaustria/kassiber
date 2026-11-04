@@ -107,7 +107,10 @@ fn compile(pattern: &str) -> Regex {
 /// Translate this module's ASCII regex syntax, rather than enabling the
 /// engine's IGNORECASE (which also folds boundary character classes).
 /// SRE's ASCII literal/range equivalences include İ, ı, ſ, and K.
-fn python_pattern(pattern: &str) -> String {
+///
+/// `kassiber-ai` compiles its Python patterns through this too, so `\w`
+/// is Python's word class and `\Z` the end of the text.
+pub fn python_pattern(pattern: &str) -> String {
     let (ignore_case, pattern) = pattern
         .strip_prefix("(?i)")
         .map_or((false, pattern), |rest| (true, rest));
@@ -125,6 +128,8 @@ fn python_pattern(pattern: &str) -> String {
                 )),
                 's' => out.push_str(REGEX_SPACE),
                 'd' => out.push_str(REGEX_DIGIT),
+                'w' => out.push_str(REGEX_WORD),
+                'Z' => out.push_str(r"\z"),
                 escaped => {
                     out.push('\\');
                     out.push(escaped);

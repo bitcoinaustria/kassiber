@@ -1,0 +1,23 @@
+[package]
+name = "kassiber-ai"
+description = "Kassiber's in-product AI tools: the catalog, selection, validation, redaction, consent, auto-reads and provenance"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lib]
+name = "kassiber_ai"
+
+[dependencies]
+kassiber-envelope = { path = "../envelope" }
+kassiber-pyjson = { path = "../pyjson" }
+kassiber-pytext = { path = "../pytext" }
+# Python `re` patterns (schema `pattern`, the planner's word rules and the
+# result path/URL scrubbers), as kassiber-envelope's redaction compiles them.
+fancy-regex = "0.20"
+
+[lints.rust]
+unsafe_code = "forbid"

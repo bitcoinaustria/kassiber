@@ -6,6 +6,7 @@
 exclude = ["ui-tauri"]
 resolver = "2"
 members = [
+  "crates/ai",
   "crates/backup",
   "crates/cli",
   "crates/chain",
