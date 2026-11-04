@@ -30,6 +30,7 @@ pub struct Consent {
     revoked: Arc<AtomicBool>,
     grants: Mutex<Vec<Arc<FetchConsent>>>,
     graph_grants: Mutex<Vec<super::graph::Grant>>,
+    report_read: bool,
 }
 
 impl Consent {
@@ -40,7 +41,35 @@ impl Consent {
             revoked: Arc::new(AtomicBool::new(false)),
             grants: Mutex::new(vec![]),
             graph_grants: Mutex::new(vec![]),
+            report_read: false,
         }
+    }
+    /// A report read under a book whose freshness policy enables report-read
+    /// refresh. Each fetch re-checks that policy and its source class, and no
+    /// graph follow-up is collected.
+    pub fn report_read(plan: &Plan) -> Self {
+        Self {
+            report_read: true,
+            ..Self::explicit_trigger(plan)
+        }
+    }
+    /// `require_network_permission`: an automatic trigger needs its feature
+    /// and the source class enabled when the request is made.
+    fn permitted(&self, conn: &Connection, profile: &str) -> Result<()> {
+        if !self.report_read {
+            return Ok(());
+        }
+        let policy =
+            super::Queue::new(conn, &mut wallet::SystemSources::default()).policy(profile)?;
+        if !truthy(field(&policy, "report_read_sync"))
+            || !truthy(field(field(&policy, "source_classes"), "onchain_wallet"))
+        {
+            return Err(AppError::new(
+                "cancelled",
+                "Freshness network permission was disabled",
+            ));
+        }
+        Ok(())
     }
     pub fn revoke(&self) {
         self.revoked.store(true, Ordering::SeqCst);
@@ -78,7 +107,7 @@ impl Consent {
     }
 
     fn collect_graph(&self, grant: super::graph::Grant) {
-        if self.check().is_err() {
+        if self.report_read || self.check().is_err() {
             return;
         }
         if let Ok(mut grants) = self.graph_grants.lock() {
@@ -108,7 +137,11 @@ impl Consent {
     }
     fn grant(&self, action: &Fetch) -> Result<Arc<FetchConsent>> {
         self.check()?;
-        let grant = Arc::new(FetchConsent::explicit_trigger(action));
+        let grant = Arc::new(if self.report_read {
+            FetchConsent::narrowly_scoped(action)
+        } else {
+            FetchConsent::explicit_trigger(action)
+        });
         self.grants
             .lock()
             .map_err(|_| {
@@ -263,6 +296,7 @@ impl<'a, B: FnMut(&Connection, &str) -> Result<Json>> Native<'a, B> {
                 "Wallet sync selection changed",
             ));
         }
+        self.proof.permitted(conn, &selected.profile)?;
         let grant = self.proof.grant(&action)?;
         let graph = super::graph::Grant::capture(
             conn,
@@ -304,6 +338,7 @@ impl<'a, B: FnMut(&Connection, &str) -> Result<Json>> Native<'a, B> {
                     "Wallet sync backend changed",
                 ));
             }
+            self.proof.permitted(conn, &selected.profile)?;
             action.revalidate(conn)
         };
         let control = Checked {
@@ -469,6 +504,7 @@ impl<B: FnMut(&Connection, &str) -> Result<Json>> Handler for Native<'_, B> {
                             "Wallet sync backend changed",
                         ));
                     }
+                    this.proof.permitted(conn, &selected.profile)?;
                     action.check_permission(this.gate, Some(&grant))
                 },
             )?;

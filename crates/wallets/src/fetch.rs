@@ -90,6 +90,15 @@ impl FetchConsent {
             started: AtomicBool::new(false),
         }
     }
+    /// A feature the user enabled for this exact kind of action (report-read
+    /// refresh), re-checked against the book's policy before each fetch.
+    pub fn narrowly_scoped(action: &Fetch) -> Self {
+        Self {
+            identity: action.identity.clone(),
+            transport: Consent::narrowly_scoped(action.transport.request()),
+            started: AtomicBool::new(false),
+        }
+    }
     pub fn revoke(&self) {
         self.transport.revoke();
     }

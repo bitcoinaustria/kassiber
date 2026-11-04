@@ -206,6 +206,45 @@ fn identity(conn: &Connection) -> Result<Option<Value>> {
     )
 }
 
+/// A report-read refresh with no source to enqueue and no due job answers
+/// Python's empty sync payload without admitting a plan, so books whose
+/// wallets the native refresh cannot run still read normally while their
+/// source classes stay off.
+pub fn report_read_idle(
+    conn: &Connection,
+    profile: &str,
+    policy: &Value,
+    force: bool,
+    sources: &mut dyn Sources,
+) -> Result<Option<Value>> {
+    let rates = truthy(field(field(policy, "source_classes"), "market_rates"));
+    let specs = super::sources::build(
+        conn,
+        profile,
+        &super::sources::Options {
+            wallet: None,
+            rates,
+            journals: false,
+            auto_pair: false,
+            force_full: false,
+        },
+    )?;
+    if !super::sources::filter_by_policy(specs, policy, force).is_empty()
+        || !Queue::new(conn, sources).due(Some(profile), 1)?.is_empty()
+    {
+        return Ok(None);
+    }
+    let freshness = ui::payload(&Queue::new(conn, sources).snapshot(profile)?);
+    let mut payload = ui::payload(&dict([
+        ("results", Value::List(vec![])),
+        ("enqueued", Value::List(vec![])),
+        ("completed", Value::List(vec![])),
+        ("freshness", freshness),
+    ]));
+    put(&mut payload, "ok", Value::Bool(true));
+    Ok(Some(payload))
+}
+
 impl Plan {
     pub fn new(
         conn: &Connection,
@@ -607,6 +646,126 @@ impl Plan {
             books.remove(0)
         };
         Ok(ui::payload(&result))
+    }
+
+    /// `_run_auto_sync_wallets` after its rate limit: enqueue the book's
+    /// wallet sources (filtered by source class unless `force`d), run the due
+    /// jobs (or exactly the requested ones when forced) through the native
+    /// handler, and answer Python's sync payload. Sources the native handler
+    /// cannot run refuse with `not_implemented` before any of them starts.
+    #[allow(clippy::too_many_arguments)]
+    pub fn execute_report_read(
+        self,
+        conn: &mut Connection,
+        force: bool,
+        sources: &mut dyn Sources,
+        gate: &kassiber_net::Gate,
+        consent: &super::native::Consent,
+        cancel: &crate::scan::Cancellation,
+        deadline: std::time::Instant,
+        start_time: u64,
+        version: &str,
+        mut backend: impl FnMut(&Connection, &str) -> Result<Json>,
+    ) -> Result<Value> {
+        let unsupported = |kind: &str| {
+            AppError::new(
+                "not_implemented",
+                "Report-read refresh of this source is not implemented in the Rust daemon yet",
+            )
+            .with_details(dict([("job_type", s(kind))]))
+        };
+        self.validate(conn, &mut backend)?;
+        let (Some(profile), Some(policy), Some(specs)) = (
+            self.captured.profiles.first(),
+            self.captured.policies.first(),
+            self.captured.specs.first(),
+        ) else {
+            return Err(AppError::new(
+                "not_found",
+                "Freshness profile was not found",
+            ));
+        };
+        let profile = or_text(field(profile, "id"));
+        let specs = sources::filter_by_policy(specs.clone(), policy, force);
+        let proof = super::native::Consent::consume(Some(consent), &self)?;
+        let resolver = std::cell::RefCell::new(&mut backend);
+        let mut native = super::native::Native::new(
+            &self,
+            conn,
+            proof,
+            gate,
+            cancel,
+            deadline,
+            start_time,
+            version,
+            |conn, name| resolver.borrow_mut()(conn, name),
+        )?;
+        execution::begin(conn)?;
+        let mut enqueued = Vec::new();
+        for spec in &specs {
+            let mut input = spec.clone();
+            put(&mut input, "profile_id", s(profile.as_str()));
+            let job = Queue::new(conn, sources).enqueue(&input)?;
+            if truthy(field(&job, "job_type")) {
+                enqueued.push(job);
+            }
+        }
+        execution::commit(conn)?;
+        let limit = enqueued.len().max(1);
+        let handler: &mut dyn execution::Handler = &mut native;
+        let completed = if force {
+            let ids: Vec<String> = enqueued.iter().map(|j| or_text(field(j, "id"))).collect();
+            for job in Queue::new(conn, sources).selected(&profile, &ids)? {
+                let kind = or_text(field(&job, "job_type"));
+                if !handler.supports(&kind) {
+                    return Err(unsupported(&kind));
+                }
+            }
+            execution::run_requested(
+                conn,
+                &profile,
+                &ids,
+                limit as i64,
+                sources,
+                handler,
+                &mut |_| Ok(()),
+                &execution::retry_time,
+            )?
+        } else {
+            let mut completed = Vec::new();
+            for _ in 0..limit {
+                let Some(job) = Queue::new(conn, sources).due(Some(&profile), 1)?.pop() else {
+                    break;
+                };
+                let kind = or_text(field(&job, "job_type"));
+                if !handler.supports(&kind) {
+                    return Err(unsupported(&kind));
+                }
+                if let Some(done) = execution::run_job(
+                    conn,
+                    &or_text(field(&job, "id")),
+                    sources,
+                    handler,
+                    &mut |_| Ok(()),
+                    &execution::retry_time,
+                    false,
+                )? {
+                    completed.push(done);
+                }
+            }
+            completed
+        };
+        let freshness = ui::payload(&Queue::new(conn, sources).snapshot(&profile)?);
+        let mut payload = ui::payload(&dict([
+            ("results", Value::List(ui::results(&completed))),
+            ("enqueued", Value::List(enqueued)),
+            ("completed", Value::List(completed)),
+            ("freshness", freshness),
+        ]));
+        // The UI projection already defaults `ok` from the error rows.
+        let ok = field(&payload, "ok") != &Value::Bool(false);
+        put(&mut payload, "ok", Value::Bool(ok));
+        Ok(payload)
     }
 
     #[allow(clippy::too_many_arguments)]

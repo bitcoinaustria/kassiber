@@ -1,9 +1,8 @@
-import json
 import re
 import unittest
 
 from kassiber.db import open_db
-from tests.rust_desktop_parity import ROOT, RUST_BIN, DesktopParity, run_candidate
+from tests.rust_desktop_parity import ROOT, RUST_BIN, DesktopParity
 from crates.reports.scripts.gen_gain_vectors import BASE
 
 BOOK = (ROOT / "crates/reports/tests/data/book.sql").read_text() + BASE
@@ -48,19 +47,11 @@ class RustReportCapitalGainsTest(DesktopParity, unittest.TestCase):
                 "SELECT journal_input_version,last_processed_input_version FROM profiles WHERE id='p'").fetchone()
         self.assertEqual(versions[0], versions[1])
 
-    def test_report_read_sync_policy_fails_closed_in_rust(self):
+    def test_report_read_sync_policy_refreshes_before_the_read(self):
         self.change("UPDATE profiles SET journal_input_version=8 WHERE id='p';"
                     "INSERT INTO settings(key,value) VALUES('freshness.policy.profile.p',"
                     "'{\"report_read_sync\": true}');")
-        requests = self.requests([{}])
-        wire = "".join(json.dumps(request) + "\n" for request in [*requests, dict(kind="daemon.shutdown")])
-        result = run_candidate(["--machine", "--data-root", str(self.root), "daemon"],
-                               env=self.env, input=wire.encode())
-        response = json.loads(result.stdout.splitlines()[1])
-        self.assertEqual(response["error"]["code"], "not_implemented")
-        with open_db(self.root, passphrase=self.passphrase) as conn:
-            self.assertEqual(conn.execute(
-                "SELECT last_processed_input_version FROM profiles WHERE id='p'").fetchone()[0], 7)
+        self.compare([{}, {"year": 2024}], mutates=True, mask=generated, tables=journal_shape)
 
     def test_sqlcipher_capital_gains_matches_wire_bytes(self):
         self.encrypt("synthetic gains key")

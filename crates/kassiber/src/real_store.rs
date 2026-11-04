@@ -731,6 +731,7 @@ impl BookStore for RealStore {
             db_passphrase: retained_key.into_inner(),
             backends,
             backend_kinds,
+            report_read_attempts: Default::default(),
         }))
     }
     fn verify_passphrase(
@@ -913,6 +914,9 @@ struct RealBook {
     data_root: String,
     db_passphrase: Option<Secret>,
     backends: backends::Config,
+    /// Report-read refresh attempts of this open book, per profile: when the
+    /// last one started and its payload. A reopened book starts empty.
+    report_read_attempts: std::collections::HashMap<String, (std::time::Instant, Option<Value>)>,
 }
 
 struct NativeJournalReply<'a> {
@@ -1553,26 +1557,176 @@ impl Book for RealBook {
     }
 
     fn report_read_sync(&mut self, force: bool) -> Result<Option<Value>, AppError> {
+        use kassiber_envelope::{get, set, truthy};
+        use kassiber_wallets::freshness::planning::{Plan, Request, Scope};
+        use std::time::{Duration, Instant};
+        const MIN_INTERVAL: Duration = Duration::from_secs(60);
         let context = self.context()?;
         if context.profile_id.is_empty() {
             return Ok(None);
         }
-        let conn = self.conn()?;
-        let mut sources = sync_sources().0;
-        let policy = kassiber_wallets::freshness::Queue::new(conn, sources.as_mut())
-            .policy(&context.profile_id)?;
-        if !force
-            && !kassiber_envelope::truthy(
-                kassiber_envelope::get(&policy, "report_read_sync").unwrap_or(&Value::Null),
-            )
-        {
+        let profile = context.profile_id.clone();
+        let (mut sources, start_time) = sync_sources();
+        let policy = kassiber_wallets::freshness::Queue::new(self.conn()?, sources.as_mut())
+            .policy(&profile)?;
+        if !force && !get(&policy, "report_read_sync").is_some_and(truthy) {
             return Ok(None);
         }
-        // Report-read wallet sync is network work; refuse rather than skip it.
-        Err(AppError::new(
-            "not_implemented",
-            "Report-read wallet sync is not implemented in the Rust daemon yet",
-        ))
+        let failure = |error: &AppError| {
+            dict([
+                ("ok", Value::Bool(false)),
+                (
+                    "reason",
+                    s(if error.code.is_empty() {
+                        "sync_failed"
+                    } else {
+                        error.code.as_str()
+                    }),
+                ),
+                (
+                    "message",
+                    s(kassiber_wallets::freshness::ui::text(&error.message)),
+                ),
+            ])
+        };
+        let request = Request {
+            scope: Scope::ActiveProfile,
+            wallet: None,
+            rates: None,
+            journals: Some(false),
+            force_full: false,
+            auto_pair: false,
+            wallets_sync: false,
+        };
+        let plan = {
+            let backends = &self.backends;
+            Plan::new(
+                self.conn()?,
+                &request,
+                env!("CARGO_PKG_VERSION"),
+                |conn, name| kassiber_wallets::sync::resolve_backend(conn, backends, name),
+            )
+        };
+        // Another refresh holds the execution slot: the automatic attempt
+        // answers busy without counting against the rate limit.
+        if let Err(error) = &plan {
+            if error.code == "project_operation_in_progress" {
+                return Ok(Some(failure(error)));
+            }
+        }
+        if !force {
+            let now = Instant::now();
+            if let Some((last, cached)) = self.report_read_attempts.get(&profile) {
+                let elapsed = now.duration_since(*last);
+                if elapsed < MIN_INTERVAL {
+                    let mut payload = match cached {
+                        None => dict([
+                            ("ok", Value::Bool(true)),
+                            ("status", s("skipped")),
+                            ("reason", s("auto_sync_rate_limited")),
+                        ]),
+                        Some(cached) => {
+                            let mut payload = cached.clone();
+                            set(&mut payload, "status", s("cached"));
+                            set(&mut payload, "reason", s("auto_sync_rate_limited"));
+                            payload
+                        }
+                    };
+                    let retry = (MIN_INTERVAL - elapsed).as_secs_f64().trunc() as i64;
+                    set(
+                        &mut payload,
+                        "retry_after_seconds",
+                        Value::Int(retry.into()),
+                    );
+                    return Ok(Some(payload));
+                }
+            }
+            self.report_read_attempts
+                .insert(profile.clone(), (now, None));
+        }
+        let outcome = (|| {
+            if self.backends.default_backend.is_empty() && self.backends.kinds().is_empty() {
+                // Python falls back to the explicit wallets-sync path here.
+                return Err(AppError::new(
+                    "not_implemented",
+                    "Report-read refresh without configured backends is not implemented in the Rust daemon yet",
+                ));
+            }
+            if let Err(error) = &plan {
+                if error.code == "native_fallback_required" {
+                    let conn = self.conn()?;
+                    if let Some(idle) = kassiber_wallets::freshness::planning::report_read_idle(
+                        conn,
+                        &profile,
+                        &policy,
+                        force,
+                        sources.as_mut(),
+                    )? {
+                        return Ok(idle);
+                    }
+                }
+            }
+            let plan = plan.map_err(|error| {
+                if error.code == "native_fallback_required" {
+                    AppError::new(
+                        "not_implemented",
+                        "Report-read refresh of these sources is not implemented in the Rust daemon yet",
+                    )
+                    .with_details(error.details.clone().unwrap_or(Value::Null))
+                } else {
+                    error
+                }
+            })?;
+            let consent = if force {
+                kassiber_wallets::freshness::native::Consent::explicit_trigger(&plan)
+            } else {
+                kassiber_wallets::freshness::native::Consent::report_read(&plan)
+            };
+            let gate = kassiber_net::Gate::new(
+                || match Context::from_env()
+                    .ok()
+                    .and_then(|ctx| kassiber_setup::offline::preference_path(&ctx).ok())
+                {
+                    Some(path) if kassiber_setup::offline::enabled(&path) => {
+                        kassiber_net::Offline::Offline
+                    }
+                    Some(_) => kassiber_net::Offline::Online,
+                    None => kassiber_net::Offline::Unavailable,
+                },
+                kassiber_net::Ledger::default(),
+            );
+            let backends = &self.backends;
+            let conn = self
+                .book
+                .as_mut()
+                .ok_or_else(|| AppError::new("internal_error", "book is closed"))?
+                .connection_mut();
+            plan.execute_report_read(
+                conn,
+                force,
+                sources.as_mut(),
+                &gate,
+                &consent,
+                &kassiber_wallets::scan::Cancellation::default(),
+                Instant::now() + Duration::from_secs(900),
+                start_time,
+                env!("CARGO_PKG_VERSION"),
+                |conn, name| kassiber_wallets::sync::resolve_backend(conn, backends, name),
+            )
+        })();
+        let payload = match outcome {
+            Ok(payload) => payload,
+            Err(error) if error.code == "not_implemented" || error.code == "internal_error" => {
+                return Err(error)
+            }
+            Err(error) => failure(&error),
+        };
+        if !force {
+            if let Some(entry) = self.report_read_attempts.get_mut(&profile) {
+                entry.1 = Some(payload.clone());
+            }
+        }
+        Ok(Some(payload))
     }
 
     fn auto_process_journals(&mut self) -> Result<Option<Value>, AppError> {
