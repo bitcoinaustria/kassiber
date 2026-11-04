@@ -1040,6 +1040,8 @@ class RustRealStoreParityTest(_Roots):
         self.ok(self.call(True, ["init"], default=True))
         self.same_status(default=True)
         unrelated = self.home / "unported" / "data"
+        # Any leaf the binary has not ported (R6 AI providers here) must fail
+        # closed before it resolves or creates the requested book.
         response = self.call(True, ["ai", "providers", "list"], root=unrelated)
         self.assertEqual(json.loads(response.stdout)["error"]["code"], "not_implemented")
         self.assertFalse(unrelated.exists())
