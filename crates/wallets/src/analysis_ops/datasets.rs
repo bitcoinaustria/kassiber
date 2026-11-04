@@ -161,7 +161,7 @@ pub struct Import<'a> {
 
 /// `import_dataset`: stage at most 2,000 claims per commit on an idle
 /// connection and activate only a complete, unchanged pack.
-pub fn import(
+pub fn import_dataset(
     conn: &Connection,
     profile: &str,
     request: &Import<'_>,

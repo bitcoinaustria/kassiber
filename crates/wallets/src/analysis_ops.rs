@@ -103,7 +103,7 @@ pub fn execute_with_sources(
     match operation {
         "labels.upsert" => labels::upsert(conn, scope.profile_id, &args, sources),
         "labels.delete" => labels::delete(conn, scope.profile_id, &args, sources),
-        "labels.import" => labels::import(conn, scope.profile_id, &args, sources),
+        "labels.import" => labels::import_labels(conn, scope.profile_id, &args, sources),
         "cases.save" => cases::save(conn, scope.profile_id, &args, sources),
         "cases.delete" => cases::delete(conn, scope.profile_id, &args),
         "datasets.revoke" => datasets::revoke(conn, scope.profile_id, &args, sources),
@@ -161,7 +161,7 @@ pub fn import_dataset(
     let format = get(&args, "format").cloned().unwrap_or(s("csv"));
     let adapter = get(&args, "adapter").cloned().unwrap_or(s("generic"));
     let mut stream = crate::analysis_index::reads::preview::Stream(file);
-    datasets::import(
+    datasets::import_dataset(
         conn,
         scope.profile_id,
         &datasets::Import {

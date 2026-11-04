@@ -46,13 +46,15 @@ fn subject(value: &str, chain: &str, network: &str) -> Result<String> {
         let address = value
             .parse::<bitcoin::Address<_>>()
             .map_err(|_| invalid())?;
-        let net = match network {
+        let bitcoin_network = match network {
             "main" => bitcoin::Network::Bitcoin,
             "regtest" => bitcoin::Network::Regtest,
             "signet" => bitcoin::Network::Signet,
             _ => bitcoin::Network::Testnet,
         };
-        address.require_network(net).map_err(|_| invalid())?;
+        address
+            .require_network(bitcoin_network)
+            .map_err(|_| invalid())?;
         if ["bc1", "tb1", "bcrt1"]
             .iter()
             .any(|p| lower(value).starts_with(p))
@@ -247,7 +249,7 @@ pub(super) fn delete(
     })
 }
 
-pub(super) fn import(
+pub(super) fn import_labels(
     conn: &Connection,
     profile: &str,
     args: &Value,

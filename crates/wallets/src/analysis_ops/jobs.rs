@@ -2,7 +2,7 @@
 //! read port's `analysis_index::runtime`. Workers never receive the caller's
 //! connection: each opens its own, fenced to the original database identity,
 //! and reads only a picker-staged local file. Nothing egresses.
-use super::datasets::{discard_with, get_dataset, import, Import};
+use super::datasets::{discard_with, get_dataset, import_dataset, Import};
 use super::*;
 use crate::analysis_index::runtime::{scope_key, Runtime, Worker};
 use std::sync::Arc;
@@ -63,7 +63,7 @@ pub fn import_token(
     let mut source = runtime.open(&key, &token, "dataset")?;
     let format = get(&args, "format").cloned().unwrap_or(s("csv"));
     let adapter = get(&args, "adapter").cloned().unwrap_or(s("generic"));
-    import(
+    import_dataset(
         conn,
         scope.profile_id,
         &Import {
@@ -172,7 +172,7 @@ pub fn start(
                 return discard_with(conn, &profile, &id, &update, &stopped);
             }
             let mut source = sources.open(&worker_key, &token, "dataset")?;
-            import(
+            import_dataset(
                 conn,
                 &profile,
                 &Import {

@@ -1,5 +1,5 @@
 //! Bounded, consented reads from exactly the reviewed backend. Every request
-//! passes the explicit-action grant through `kassiber-net`; no retries, no
+//! passes the explicit-action grant through `kassiber_net`; no retries, no
 //! redirects and no ambient proxies. Errors never carry server prose.
 use super::super::routing::{backend_value, py_text};
 use super::super::*;

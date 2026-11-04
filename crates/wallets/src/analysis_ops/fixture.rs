@@ -87,7 +87,7 @@ pub fn evaluate(case: &Value, conn: &Connection) -> Result<Value> {
                         reader,
                         &mut sources,
                     ),
-                    "datasets.import.job" => datasets::import(
+                    "datasets.import.job" => datasets::import_dataset(
                         conn,
                         profile,
                         &datasets::Import {
