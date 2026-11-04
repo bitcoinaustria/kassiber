@@ -272,10 +272,24 @@ pub(super) fn revert(
                     .map_err(error)?;
                 }
             }
-            for (column, after) in updates {
+            // One statement, as Python's audited update, so row triggers
+            // fire once per revert rather than once per column.
+            if !updates.is_empty() {
+                let assignments = updates
+                    .iter()
+                    .map(|(column, _)| format!("{column}=?"))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                let mut values = updates
+                    .iter()
+                    .map(|(_, after)| cursor::bind(after))
+                    .collect::<Result<Vec<_>>>()?;
+                values.push(kassiber_store::rusqlite::types::Value::Text(
+                    text(&tx, "id").into(),
+                ));
                 conn.execute(
-                    &format!("UPDATE transactions SET {column}=? WHERE id=?"),
-                    params![cursor::bind(&after)?, text(&tx, "id")],
+                    &format!("UPDATE transactions SET {assignments} WHERE id=?"),
+                    kassiber_store::rusqlite::params_from_iter(values),
                 )
                 .map_err(error)?;
             }

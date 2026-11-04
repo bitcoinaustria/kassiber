@@ -488,22 +488,24 @@ pub(super) fn update(conn: &Connection, scope: &Scope<'_>, input: &GroupedUpdate
                     .map_err(error)?;
                 }
             }
+            // One statement, as in Python, so row triggers (the chain-index
+            // clock among them) fire once per save rather than per column.
             if !updates.is_empty() {
                 let assignments = updates
                     .keys()
                     .map(|column| format!("{column}=?"))
                     .collect::<Vec<_>>()
                     .join(",");
-                let mut bindings = updates
+                let mut values = updates
                     .values()
                     .map(cursor::bind)
                     .collect::<Result<Vec<_>>>()?;
-                bindings.push(kassiber_store::rusqlite::types::Value::Text(
+                values.push(kassiber_store::rusqlite::types::Value::Text(
                     text(&tx, "id").into(),
                 ));
                 conn.execute(
                     &format!("UPDATE transactions SET {assignments} WHERE id=?"),
-                    kassiber_store::rusqlite::params_from_iter(bindings),
+                    kassiber_store::rusqlite::params_from_iter(values),
                 )
                 .map_err(error)?;
             }
