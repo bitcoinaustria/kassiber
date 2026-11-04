@@ -1,0 +1,21 @@
+[package]
+name = "kassiber-tax"
+description = "Python binding for Kassiber's tax engine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lib]
+# The Python import name; PyInit_kassiber_tax must match it.
+name = "kassiber_tax"
+crate-type = ["cdylib"]
+
+[dependencies]
+kassiber-tax-core = { path = "../core" }
+# 0.25 is the newest line that builds with Rust 1.77; >= 0.24.1 is required
+# for RUSTSEC-2025-0020. abi3-py310 builds one wheel for every supported
+# CPython (requires-python >= 3.10).
+pyo3 = { version = "0.25.1", default-features = false, features = ["macros", "abi3-py310"] }

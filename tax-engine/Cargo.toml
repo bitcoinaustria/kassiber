@@ -1,0 +1,16 @@
+[workspace]
+resolver = "2"
+members = ["core", "python"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+# Matches ui-tauri/src-tauri so one toolchain builds every Rust crate.
+rust-version = "1.77"
+license = "AGPL-3.0-only"
+authors = ["Bitcoin Austria"]
+publish = false
+
+[profile.release]
+# A panic is a bug; keep unwinding so the binding can turn it into an error.
+panic = "unwind"

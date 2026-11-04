@@ -10,6 +10,11 @@ concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+env:
+  # uv builds the tax engine's binding with maturin. Never let maturin fetch
+  # its own Rust toolchain mid-build; the runner image provides one.
+  MATURIN_NO_INSTALL_RUST: "1"
+
 jobs:
   preflight:
     name: Preflight
@@ -223,6 +228,24 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+  tax-engine:
+    name: Tax engine (Rust 1.77)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      # The crates declare rust-version 1.77, like ui-tauri/src-tauri. Building
+      # with exactly that toolchain keeps newer-only dependencies out.
+      - name: Install Rust 1.77
+        run: rustup toolchain install 1.77.0 --profile minimal --component rustfmt
+
+      - name: Check formatting
+        run: cargo +1.77.0 fmt --manifest-path tax-engine/Cargo.toml --all --check
+
+      - name: Run engine tests
+        run: cargo +1.77.0 test --manifest-path tax-engine/Cargo.toml --locked
+
   chain-observers:
     name: Chain observers (Linux Docker)
     runs-on: ubuntu-latest
@@ -301,6 +324,7 @@ jobs:
       - python-tests
       - frontend
       - cli-smoke
+      - tax-engine
       - chain-observers
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -312,8 +336,9 @@ jobs:
           echo "- Python shards: ${{ needs.python-tests.result }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Frontend: ${{ needs.frontend.result }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- CLI smoke: ${{ needs.cli-smoke.result }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Tax engine: ${{ needs.tax-engine.result }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Chain observers: ${{ needs.chain-observers.result }}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Enforce required checks
-        if: ${{ needs.preflight.result != 'success' || needs.python-tests.result != 'success' || needs.frontend.result != 'success' || needs.cli-smoke.result != 'success' || needs.chain-observers.result != 'success' }}
+        if: ${{ needs.preflight.result != 'success' || needs.python-tests.result != 'success' || needs.frontend.result != 'success' || needs.cli-smoke.result != 'success' || needs.tax-engine.result != 'success' || needs.chain-observers.result != 'success' }}
         run: exit 1

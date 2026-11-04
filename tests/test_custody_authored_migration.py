@@ -570,6 +570,81 @@ def test_malformed_legacy_review_becomes_persisted_journal_blocker(tmp_path):
         migrated.close()
 
 
+@pytest.mark.parametrize(
+    "typed",
+    [
+        "2026-01-04 00:00:30 +00:00",
+        "2026-01-04T00:00:30 UTC",
+        " 2026-01-04t00:00:30z ",
+        "20260104T000030Z",
+        "2026-01-04T01:00:30+01:00",
+    ],
+)
+def test_legacy_payout_time_migrates_canonical(tmp_path, typed):
+    # Legacy direct payouts kept --payout-occurred-at as typed. The migration
+    # canonicalizes it for both the payout leg and the stored term.
+    conn = open_db(tmp_path)
+    _legacy_rows(conn)
+    conn.execute(
+        "UPDATE direct_swap_payouts SET payout_occurred_at = ? WHERE id = 'payout'",
+        (typed,),
+    )
+    conn.commit()
+    conn.close()
+
+    migrated = open_db(tmp_path)
+    try:
+        assert migrated.execute(
+            "SELECT COUNT(*) FROM custody_authored_migration_issues "
+            "WHERE resolved_at IS NULL"
+        ).fetchone()[0] == 0
+        payout_link = migrated.execute(
+            "SELECT component_id FROM direct_swap_payouts WHERE id = 'payout'"
+        ).fetchone()[0]
+        payout = get_component(migrated, payout_link)
+        assert payout["state"] == "active"
+        assert [
+            (leg["role"], leg["occurred_at"]) for leg in payout["legs"]
+        ] == [
+            ("source", "2026-01-03T00:00:00Z"),
+            ("retained", "2026-01-04T00:00:30Z"),
+        ]
+        assert [
+            terms["payout_occurred_at"] for terms in payout["economic_terms"]
+        ] == ["2026-01-04T00:00:30Z"]
+    finally:
+        migrated.close()
+
+
+def test_unparseable_legacy_payout_time_becomes_migration_issue(tmp_path):
+    conn = open_db(tmp_path)
+    _legacy_rows(conn)
+    conn.execute(
+        "UPDATE direct_swap_payouts SET payout_occurred_at = 'next tuesday' "
+        "WHERE id = 'payout'"
+    )
+    conn.commit()
+    conn.close()
+
+    migrated = open_db(tmp_path)
+    try:
+        issue = migrated.execute(
+            "SELECT * FROM custody_authored_migration_issues "
+            "WHERE legacy_source_id = 'payout' AND resolved_at IS NULL"
+        ).fetchone()
+        assert issue is not None
+        assert issue["legacy_table"] == "direct_swap_payouts"
+        assert issue["issue_code"] == "validation"
+        assert migrated.execute(
+            "SELECT component_id FROM direct_swap_payouts WHERE id = 'payout'"
+        ).fetchone()[0] is None
+        assert migrated.execute(
+            "SELECT component_id FROM transaction_pairs WHERE id = 'pair'"
+        ).fetchone()[0]
+    finally:
+        migrated.close()
+
+
 def test_deleted_legacy_reviews_migrate_to_component_history(tmp_path):
     conn = open_db(tmp_path)
     _legacy_rows(conn)

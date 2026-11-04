@@ -9,6 +9,7 @@ from kassiber.daemon import _create_profile_payload
 from kassiber.db import (
     CUSTODY_HOLD_SEMANTICS_MIGRATION,
     RP2_POOL_BASIS_SEMANTICS_MIGRATION,
+    TAX_ENGINE_SEMANTICS_MIGRATION,
     WAGES_ACQUISITION_SEMANTICS_MIGRATION,
     open_db,
 )
@@ -403,3 +404,79 @@ def test_custody_hold_semantics_rebuild_books_processed_before_upgrade(tmp_path)
             assert json.loads(audits[0][0])["changes"][0]["affected_profile_count"] == 1
         finally:
             reopened.close()
+
+
+def test_tax_engine_semantics_rebuild_books_processed_before_upgrade(tmp_path):
+    # Journals built through RP2 carry thread-dependent decimal precision;
+    # their inputs did not change, so only this one-shot marker sends them
+    # through the next (automatic) rebuild with Kassiber's own engine.
+    data_root = tmp_path / "data"
+    conn = open_db(data_root)
+    workspace = core_accounts.create_workspace(conn, "Books")
+    processed = core_accounts.create_profile(
+        conn, workspace["id"], "Processed", "EUR", "fifo", "generic", 365
+    )
+    untouched = core_accounts.create_profile(
+        conn, workspace["id"], "Never processed", "EUR", "fifo", "generic", 365
+    )
+    conn.execute(
+        "UPDATE profiles SET journal_input_version = 4, last_processed_input_version = 4, "
+        "last_processed_at = ? WHERE id = ?",
+        (NOW, processed["id"]),
+    )
+    conn.execute(
+        "DELETE FROM schema_migration_audits WHERE migration_name = ?",
+        (TAX_ENGINE_SEMANTICS_MIGRATION,),
+    )
+    conn.commit()
+    conn.close()
+    for _ in range(2):
+        reopened = open_db(data_root)
+        try:
+            row = reopened.execute(
+                "SELECT * FROM profiles WHERE id = ?", (processed["id"],)
+            ).fetchone()
+            assert row["journal_input_version"] == 5
+            assert row["last_processed_input_version"] == 4
+            assert row["last_processed_at"] is None
+            other = reopened.execute(
+                "SELECT journal_input_version FROM profiles WHERE id = ?",
+                (untouched["id"],),
+            ).fetchone()
+            assert other[0] == 0
+            audits = reopened.execute(
+                "SELECT impact_json FROM schema_migration_audits WHERE migration_name = ?",
+                (TAX_ENGINE_SEMANTICS_MIGRATION,),
+            ).fetchall()
+            assert len(audits) == 1
+            impact = json.loads(audits[0][0])
+            assert impact["changes"][0]["affected_profile_count"] == 1
+            assert processed["id"] not in audits[0][0]
+        finally:
+            reopened.close()
+
+
+def test_fresh_tax_engine_marker_does_not_invalidate_new_processed_books(tmp_path):
+    data_root = tmp_path / "data"
+    conn = open_db(data_root)
+    workspace = core_accounts.create_workspace(conn, "Books")
+    profile = core_accounts.create_profile(
+        conn, workspace["id"], "Fresh", "EUR", "fifo", "generic", 365
+    )
+    conn.execute(
+        "UPDATE profiles SET journal_input_version = 2, last_processed_input_version = 2, "
+        "last_processed_at = ? WHERE id = ?",
+        (NOW, profile["id"]),
+    )
+    conn.commit()
+    conn.close()
+    reopened = open_db(data_root)
+    try:
+        row = reopened.execute(
+            "SELECT journal_input_version, last_processed_at FROM profiles WHERE id = ?",
+            (profile["id"],),
+        ).fetchone()
+        assert row["journal_input_version"] == 2
+        assert row["last_processed_at"] == NOW
+    finally:
+        reopened.close()

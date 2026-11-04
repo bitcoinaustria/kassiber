@@ -135,6 +135,11 @@ def build_generic_policy(profile):
 
 
 def _load_rp2_austrian_country():
+    # Imported here: the engine adapter imports this module.
+    from .core.engines import rp2 as engine_adapter
+
+    if engine_adapter._tax_engine_backend() == "native":
+        return engine_adapter._native_backend().AT()
     try:
         module = import_module("rp2.plugin.country.at")
     except ModuleNotFoundError as exc:
