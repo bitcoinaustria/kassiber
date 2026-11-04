@@ -151,12 +151,23 @@
   {
     "id": "builder-drops-coarse-flag",
     "file": "kassiber/core/engines/ledger_request.py",
-    "find": "        \"coarse\": _get(row, \"pricing_quality\") == pricing.QUALITY_COARSE_FALLBACK,",
+    "find": "        \"coarse\": _coarse_needs_review(row),",
     "replace": "        \"coarse\": False,",
     "expect_failing": [
       "tests/test_tax_ledger_contract.py::test_the_builder_reproduces_the_stored_request[generic-coarse-events-review]"
     ],
     "rule": "A coarse-priced row says so in the request."
+  },
+  {
+    "id": "builder-ignores-coarse-acceptance",
+    "file": "kassiber/core/engines/ledger_request.py",
+    "find": "    return not pricing.same_reviewed_price(accepted, reviewed)",
+    "replace": "    return True",
+    "expect_failing": [
+      "tests/test_coarse_price_acceptance.py::CoarsePriceAcceptanceTest::test_needs_review_follows_the_price_the_journals_read",
+      "tests/test_review_regressions.py::ReviewRegressionTest::test_transfer_pricing_review_targets_used_price_leg"
+    ],
+    "rule": "A coarse price the owner accepted at this exact price is not held for review again."
   },
   {
     "id": "builder-text-prefers-description",
