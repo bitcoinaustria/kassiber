@@ -6,6 +6,7 @@ identical rows in all 112 logical tables. Applied sessions mask only generated
 UUIDs (through one consistent bijection) and the clocks sampled by each run.
 """
 import base64
+from contextlib import closing
 from datetime import datetime, timedelta, timezone
 import json
 import os
@@ -42,13 +43,20 @@ _STAMP = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,6})?(?:Z|\+00:00)"
 
 class Masker:
     """Map each generated UUID to its order of first use and recent clocks to
-    one token. Response lines are walked first, then tables in name order with
-    rows ordered by their masked text, so the mapping never depends on the
-    random values themselves."""
+    one token. The harness normalizes the candidate, then the reference, for
+    every line and then for the tables, so calls alternate between two
+    independent maps. Tables are walked in name order with rows ordered by
+    their masked text (identities the responses named keep their tokens), so
+    no mapping depends on the random values themselves."""
 
     def __init__(self, since):
         self.since = since
-        self.ids = {}
+        self.maps = ({}, {})
+        self.calls = 0
+
+    def _side(self):
+        self.calls += 1
+        return self.maps[(self.calls - 1) % 2]
 
     def _clock(self, match):
         text = match.group(0)
@@ -58,23 +66,26 @@ class Masker:
             return text
         return "<now>" if stamp >= self.since else text
 
-    def _blank(self, text):
-        return _STAMP.sub(self._clock, _UUID.sub("<uuid>", text))
+    def _blank(self, ids, text):
+        # Identities already mapped (by the responses) break ties between rows.
+        return _STAMP.sub(self._clock, _UUID.sub(lambda match: ids.get(match.group(0), "<uuid>"), text))
 
-    def text(self, text):
+    def _text(self, ids, text):
         def identity(match):
-            return self.ids.setdefault(match.group(0), f"<uuid:{len(self.ids)}>")
+            return ids.setdefault(match.group(0), f"<uuid:{len(ids)}>")
         return _STAMP.sub(self._clock, _UUID.sub(identity, text))
 
-    def value(self, value):
-        return self.text(value) if isinstance(value, str) else value
+    def text(self, line):
+        return self._text(self._side(), line.decode() if isinstance(line, bytes) else line)
 
     def tables(self, snapshot):
+        ids = self._side()
         result = {}
         for table in sorted(snapshot):
             rows = sorted(snapshot[table], key=lambda row: repr(tuple(
-                self._blank(value) if isinstance(value, str) else value for value in row)))
-            result[table] = sorted((tuple(self.value(value) for value in row) for row in rows), key=repr)
+                self._blank(ids, value) if isinstance(value, str) else value for value in row)))
+            result[table] = sorted((tuple(self._text(ids, value) if isinstance(value, str) else value
+                                          for value in row) for row in rows), key=repr)
         return result
 
 
@@ -88,7 +99,7 @@ class ReviewParity(DesktopParity):
         super().setUp()
 
     def seed(self):
-        with open_db(self.root, passphrase=self.passphrase) as conn:
+        with closing(open_db(self.root, passphrase=self.passphrase)) as conn:
             conn.execute("INSERT INTO workspaces(id,label,created_at) VALUES('ws','Main',?)", (NOW,))
             conn.execute("INSERT INTO profiles(id,workspace_id,label,created_at) VALUES('profile','ws','Book',?)", (NOW,))
             conn.execute("INSERT INTO accounts(id,workspace_id,profile_id,code,label,account_type,created_at) "
@@ -108,6 +119,13 @@ class ReviewParity(DesktopParity):
         if self.PAIR:
             self.python("transfers", "pair", "--tx-out", "out", "--tx-in", "in")
 
+    def change(self, sql):
+        # A connection left open across a daemon session that removes the WAL
+        # makes this process's next read fail, so close each one explicitly.
+        with closing(open_db(self.root, passphrase=self.passphrase)) as conn:
+            conn.executescript(sql)
+            conn.commit()
+
     def python(self, *argv):
         args = ["--machine", "--data-root", str(self.root)]
         if self.passphrase:
@@ -117,13 +135,13 @@ class ReviewParity(DesktopParity):
         return json.loads(result.stdout)["data"]
 
     def profile_scope(self):
-        with open_db(self.root, passphrase=self.passphrase) as conn:
+        with closing(open_db(self.root, passphrase=self.passphrase)) as conn:
             row = conn.execute("SELECT id, journal_input_version, last_processed_at FROM profiles").fetchone()
         return [row[0], int(row[1] or 0), row[2]]
 
     def python_cases(self):
         from kassiber.core import review_workflow
-        with open_db(self.root, passphrase=self.passphrase) as conn:
+        with closing(open_db(self.root, passphrase=self.passphrase)) as conn:
             profile = conn.execute("SELECT * FROM profiles").fetchone()
             return review_workflow.inspect_cases(conn, profile, limit=100)
 
@@ -155,7 +173,7 @@ class ReviewReadParity(ReviewParity, unittest.TestCase):
         self.python("journals", "process")
         version = self.profile_scope()[1]
         operations = [{"type": "exclude", "transaction_id": "sell", "reason": "Duplicate import"}]
-        with open_db(self.root, passphrase=self.passphrase) as conn:
+        with closing(open_db(self.root, passphrase=self.passphrase)) as conn:
             from kassiber.core import review_workflow
             from kassiber.cli.handlers import _metadata_hooks
             profile = conn.execute("SELECT * FROM profiles").fetchone()
@@ -313,6 +331,106 @@ class ReviewPlanParity(ReviewParity, unittest.TestCase):
         self.compare(self.request_inputs(version)[:3], kind="ui.review.request_input")
 
 
+def planned(case, operations):
+    """Python's own artifact for ``operations`` on the seeded book (read-only)."""
+    from kassiber.cli.handlers import _metadata_hooks
+    from kassiber.core import review_workflow
+    with closing(open_db(case.root, passphrase=case.passphrase)) as conn:
+        profile = conn.execute("SELECT * FROM profiles").fetchone()
+        return review_workflow.plan_review(
+            conn, profile, operations=operations, hooks=review_workflow.ReviewHooks(metadata=_metadata_hooks()),
+            expected_input_version=int(profile["journal_input_version"] or 0))
+
+
+def redigest(artifact, **changes):
+    from kassiber.core.review_workflow import _digest
+    changed = {key: value for key, value in {**artifact, **changes}.items() if key != "digest"}
+    return {**changed, "digest": _digest(changed)}
+
+
+MIXED = [price("out", fiat_rate="50000"), price("in", fiat_rate="50000"),
+         {"type": "custody_component", "request": {"action": "create", "components": [component_spec()]}},
+         {"type": "exclude", "transaction_id": "sell", "reason": "Duplicate"}]
+
+
+class ReviewApplyParity(ReviewParity, unittest.TestCase):
+    KIND = "ui.review.apply"
+
+    def apply_session(self, operations, key="key-1"):
+        artifact = planned(self, operations)
+        other = planned(self, [{"type": "exclude", "transaction_id": "buy", "reason": "Not mine"}])
+        self.masked([
+            {"artifact": artifact, "idempotency_key": key},
+            {"artifact": artifact, "idempotency_key": key},
+            {"artifact": other, "idempotency_key": key},
+        ])
+        self.compare([{"idempotency_key": key}], kind="ui.review.receipt")
+        self.compare([{}], kind="ui.review.cases")
+
+    def test_price_apply_retry_and_conflict_match_python(self):
+        self.apply_session([price()])
+
+    def test_exclusion_and_acquisition_applies_match_python(self):
+        self.apply_session([{"type": "exclude", "transaction_id": "sell", "reason": "Duplicate import"},
+                            {"type": "kind_override", "transaction_id": "gift", "kind": "income",
+                             "reason": "Mining payout"}])
+
+    def test_mixed_component_batch_apply_matches_python(self):
+        self.apply_session(MIXED)
+
+    def test_processed_book_apply_replaces_journals_like_python(self):
+        self.python("journals", "process")
+        self.apply_session(MIXED, key="processed")
+
+    def test_encrypted_apply_matches_python(self):
+        self.encrypt("correct horse battery staple")
+        self.apply_session([price(), {"type": "exclude", "transaction_id": "sell", "reason": "Duplicate"}])
+
+    def test_refused_applies_leave_every_table_unchanged(self):
+        artifact = planned(self, [price()])
+        baseline = self.snapshot()
+        spaced = redigest(artifact, operations=[{**artifact["operations"][0], "reason": " Verified exchange rate "}])
+        self.masked([
+            {"artifact": {**artifact, "digest": "0" * 64}, "idempotency_key": "k"},
+            {"artifact": {key: value for key, value in artifact.items() if key != "after"}, "idempotency_key": "k"},
+            {"artifact": redigest(artifact, profile_id="other"), "idempotency_key": "k"},
+            {"artifact": redigest(artifact, schema_version=2), "idempotency_key": "k"},
+            {"artifact": spaced, "idempotency_key": "k"},
+            {"artifact": redigest(artifact, base_input_version=artifact["base_input_version"] + 1),
+             "idempotency_key": "k"},
+            {"artifact": redigest(artifact, after={**artifact["after"], "quarantine_count": 0}),
+             "idempotency_key": "k"},
+            {"artifact": redigest(artifact, before={**artifact["before"], "entries_count": 99}),
+             "idempotency_key": "k"},
+            {"artifact": artifact, "idempotency_key": ""},
+            {"artifact": artifact, "idempotency_key": "   "},
+            {"artifact": artifact, "idempotency_key": "x" * 201},
+            {"artifact": artifact, "idempotency_key": 7},
+            {"artifact": [artifact], "idempotency_key": "k"},
+            {"artifact": artifact},
+        ])
+        self.assertEqual(self.snapshot(), baseline)
+
+    def test_changed_book_refuses_stale_plans_atomically(self):
+        artifact = planned(self, [price()])
+        self.change("UPDATE profiles SET journal_input_version = journal_input_version + 1")
+        self.masked([{"artifact": artifact, "idempotency_key": "stale-version"}])
+        self.change("UPDATE profiles SET journal_input_version = journal_input_version - 1;"
+                    "UPDATE transactions SET fiat_rate = 41000 WHERE id = 'sell'")
+        baseline = self.snapshot()
+        self.masked([{"artifact": artifact, "idempotency_key": "stale-effects"}])
+        self.assertEqual(self.snapshot(), baseline)
+
+    def test_historical_key_returns_its_receipt_after_the_book_changes(self):
+        artifact = planned(self, [price()])
+        other = planned(self, [{"type": "exclude", "transaction_id": "sell", "reason": "x"}])
+        self.masked([{"artifact": artifact, "idempotency_key": "kept"}])
+        self.change("UPDATE profiles SET journal_input_version = journal_input_version + 5")
+        self.masked([{"artifact": artifact, "idempotency_key": "kept"},
+                     {"artifact": other, "idempotency_key": "kept"},
+                     {"artifact": other, "idempotency_key": "new"}])
+
+
 class ReviewPairParity(ReviewParity, unittest.TestCase):
     KIND = "ui.review.cases"
     PAIR = True
@@ -338,6 +456,16 @@ class ReviewPairParity(ReviewParity, unittest.TestCase):
             {"operations": [price(), self.unpair()], "expected_input_version": version},
             {"operations": [self.unpair(), self.unpair()], "expected_input_version": version},
         ], kind="ui.review.plan")
+
+    def test_unpair_apply_matches_python(self):
+        artifact = planned(self, [self.unpair()])
+        self.masked([{"artifact": artifact, "idempotency_key": "unpair"},
+                     {"artifact": artifact, "idempotency_key": "unpair"}], kind="ui.review.apply")
+        self.compare([{}], kind="ui.review.cases")
+
+    def test_unpair_after_metadata_apply_matches_python(self):
+        artifact = planned(self, [price(), self.unpair()])
+        self.masked([{"artifact": artifact, "idempotency_key": "batch"}], kind="ui.review.apply")
 
 
 if __name__ == "__main__":

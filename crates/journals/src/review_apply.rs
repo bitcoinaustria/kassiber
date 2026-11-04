@@ -208,6 +208,7 @@ pub fn apply(
             &mut (),
         )?;
         set(&mut effects, "processed_at", s(stored.processed_at));
+        let affected = transaction_ids(&results);
         let receipt = dict([
             ("id", s(sources.uuid(conn)?)),
             ("schema_version", 1.into()),
@@ -221,8 +222,8 @@ pub fn apply(
                 review_support::input_version(&current).into(),
             ),
             ("status", s("verified")),
-            ("transaction_ids", transaction_ids(&results)),
             ("operations", results),
+            ("transaction_ids", affected),
             ("before", value(artifact, "before")),
             (
                 "proposed_operations",

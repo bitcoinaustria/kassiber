@@ -542,3 +542,46 @@ fn review_apply_receipt_survives_reopening_both_database_bindings() {
         assert_eq!(bytes.starts_with(b"SQLite format 3\0"), !encrypted);
     }
 }
+
+#[test]
+fn review_apply_receipts_keep_python_transport_key_order() {
+    let case = first(fixtures());
+    let conn = seed(case, false);
+    let receipt = apply(&conn, case, field(case, "artifact"), "order", true).unwrap();
+    let Value::Dict(entries) = &receipt else {
+        panic!("receipt object")
+    };
+    let keys: Vec<String> = entries.iter().map(|(key, _)| format!("{key:?}")).collect();
+    let expected = [
+        "id",
+        "schema_version",
+        "workspace_id",
+        "profile_id",
+        "idempotency_key",
+        "artifact_digest",
+        "base_input_version",
+        "result_input_version",
+        "status",
+        "operations",
+        "transaction_ids",
+        "before",
+        "proposed_operations",
+        "verification",
+        "authored_source",
+        "created_at",
+    ];
+    assert_eq!(
+        keys,
+        expected
+            .iter()
+            .map(|key| format!("{:?}", kassiber_pyjson::Key::Str((*key).into())))
+            .collect::<Vec<_>>()
+    );
+    let Value::Dict(verification) = field(&receipt, "verification") else {
+        panic!("verification object")
+    };
+    assert_eq!(
+        format!("{:?}", verification.last().unwrap().0),
+        format!("{:?}", kassiber_pyjson::Key::Str("processed_at".into()))
+    );
+}

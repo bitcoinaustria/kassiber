@@ -9,6 +9,7 @@ pub const KINDS: &[&str] = &[
     "ui.review.cases",
     "ui.review.request_input",
     "ui.review.plan",
+    "ui.review.apply",
     "ui.review.receipt",
 ];
 
