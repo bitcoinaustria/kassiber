@@ -15927,7 +15927,9 @@ Documented difference: Python needs OpenSSH 8.1 or newer and reports
 external program, so the same inputs verify. The CLI oracle asserts this
 difference instead of byte equality for that one case. The 15
 `sshsig-`/`dearmor-`/`b64-` entries in `crates/daemon/scripts/shell_mutations.json`
-are killed by the vector test.
+are killed by the vector test. The unstripped Linux x86_64 release binary
+(`cargo build --release -p kassiber`) grows by 80,672 bytes, from 86,903,144
+to 86,983,816.
 
 | Surface | Rust requests in the oracles | Python fallback |
 | --- | ---: | ---: |
