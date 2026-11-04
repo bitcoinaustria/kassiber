@@ -222,9 +222,17 @@ pub fn supported_kinds() -> Vec<&'static str> {
         .collect();
     analysis.sort_unstable();
     kinds.splice(0..0, analysis);
-    kinds.extend(
+    // Among the kinds served here, Python's internal staging kind follows
+    // `ui.wallets.create` (its document-import neighbours stay Python).
+    let at = kinds
+        .iter()
+        .position(|k| *k == "ui.wallets.create")
+        .map_or(kinds.len(), |i| i + 1);
+    kinds.splice(
+        at..at,
         chain_analysis_reads::KINDS
             .iter()
+            .copied()
             .filter(|k| !k.starts_with("ui.chain_analysis.")),
     );
     #[cfg(feature = "test-kinds")]

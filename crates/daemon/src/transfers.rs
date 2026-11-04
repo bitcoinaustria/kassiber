@@ -881,9 +881,10 @@ mod tests {
     #[test]
     fn desktop_pair_aliases_defaults_and_absent_notes_match_python() {
         assert_eq!(
-            &KINDS[..8],
+            &KINDS[..9],
             &[
                 "ui.transfers.suggest",
+                "ui.transfers.review_context",
                 "ui.transfers.list",
                 "ui.transfers.payouts.list",
                 "ui.transfers.payouts.create",

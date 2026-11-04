@@ -855,6 +855,7 @@ mod tests {
                 .filter(|k| k.starts_with("ui.reports."))
                 .collect::<Vec<_>>(),
             [
+                "ui.reports.capital_gains",
                 "ui.reports.explain_capital_gain",
                 "ui.reports.summary",
                 "ui.reports.balance_sheet",
