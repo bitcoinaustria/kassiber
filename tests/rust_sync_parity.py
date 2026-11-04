@@ -37,6 +37,7 @@ from kassiber.core.chain_observer import provenance, store  # noqa: E402
 from kassiber.core.chain_observer.bdk import BdkObserver  # noqa: E402
 from kassiber.core.chain_observer.contract import PreparedObserverUpdate  # noqa: E402
 from kassiber.core.chain_observer.identity import ObserverIdentity  # noqa: E402
+from kassiber.db import JOURNAL_CALCULATION_SEMANTICS_VERSION  # noqa: E402
 
 CLOCK_MODULES = (imports, provenance, filed_report_chain, output_inventory, ownership_policy_epochs, store,
                  freshness, handlers)
@@ -154,7 +155,13 @@ def seed_reviewed_state(conn, *, clear_authority=False):
     on a later round preserves the original saved dependency and its inbox.
     """
     conn.execute("UPDATE profiles SET last_processed_at='reviewed', "
-                 "last_processed_input_version=journal_input_version WHERE id='p'")
+                 "last_processed_input_version=journal_input_version, "
+                 "last_processed_tx_count=(SELECT COUNT(*) FROM transactions "
+                 "WHERE profile_id='p' AND excluded=0) WHERE id='p'")
+    # Canonical freshness also needs the count and the calculation semantics;
+    # stamp after the markers because the clearing trigger fires on them.
+    conn.execute("UPDATE profiles SET journal_semantics_version=? WHERE id='p'",
+                 (JOURNAL_CALCULATION_SEMANTICS_VERSION,))
     conn.execute("INSERT OR IGNORE INTO filed_report_snapshots(id,workspace_id,profile_id,report_kind,report_state,"
                  "period_start_year,period_end_year,content_sha256,created_at) "
                  "VALUES('saved','w','p','summary.pdf','filed',2023,2023,?,'fixed')", ("0" * 64,))

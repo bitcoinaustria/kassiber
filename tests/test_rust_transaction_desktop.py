@@ -4,7 +4,7 @@ import os
 import subprocess
 import unittest
 
-from kassiber.db import open_db
+from kassiber.db import JOURNAL_CALCULATION_SEMANTICS_VERSION, open_db
 from tests import cli_runner
 from tests import test_rust_transaction_listing as listing
 
@@ -55,6 +55,8 @@ class RustTransactionDesktopTest(unittest.TestCase):
         conn.execute("UPDATE transactions SET review_status='review' WHERE id='out'")
         conn.execute("UPDATE transactions SET confirmed_at=occurred_at,review_status='completed' WHERE id='b'")
         conn.execute("UPDATE profiles SET last_processed_at='2025',last_processed_tx_count=(SELECT COUNT(*) FROM transactions WHERE excluded=0),journal_input_version=2,last_processed_input_version=2")
+        # Stamp after the markers; the clearing trigger fires on marker writes.
+        conn.execute("UPDATE profiles SET journal_semantics_version=?", (JOURNAL_CALCULATION_SEMANTICS_VERSION,))
         conn.commit()
         conn.close()
 
