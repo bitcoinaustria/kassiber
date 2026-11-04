@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import socketserver
 import subprocess
+import sys
 import threading
 
 from embit.script import Script, Witness
@@ -26,6 +27,7 @@ from tests.test_rust_wallet_discovery import _config, _server as discovery_serve
 from tests.test_rust_bitcoin_records import project
 from kassiber.time_utils import timestamp_to_iso
 
+ROOT = Path(__file__).resolve().parents[1]
 RUST_BIN = os.environ.get("KASSIBER_RUST_BIN")
 pytestmark = pytest.mark.skipif(not RUST_BIN, reason="requires Rust acquisition fixture build")
 
@@ -251,25 +253,42 @@ def test_acquisition_no_traffic_before_consent_or_while_offline(tmp_path, protoc
             assert hits == []
 
 
-def test_acquisition_product_defaults_require_whole_invocation_fallback(tmp_path):
-    binary = str(Path(RUST_BIN).resolve())
-    root = tmp_path / "book"
+def test_acquisition_product_defaults_match_python_without_wallets(tmp_path):
+    # With no wallet to fetch, the plan holds only the local journal refresh,
+    # which runs natively since R4-15. Each route gets its own daemon so the
+    # documented busy answer for a pipelined second refresh cannot apply.
     env = {**_env(tmp_path), "KASSIBER_NO_EGRESS": "1", "KASSIBER_TEST_NO_EGRESS": "1"}
     owners = tmp_path / "owners"
     owners.mkdir(mode=0o700)
     env["KASSIBER_RUST_TEST_OWNER_ROOT"] = str(owners)
-    argv = [binary, "--machine", "--data-root", str(root)]
-    subprocess.run([*argv, "init"], env=env, capture_output=True, check=True, timeout=15)
+    runtimes = {"native": [str(Path(RUST_BIN).resolve())], "python": [sys.executable, "-m", "kassiber"]}
     kinds = ["ui.wallets.sync", "ui.freshness.run", "ui.workspace.freshness.run"]
-    requests = [{"kind": kind, "request_id": str(i),
-                 "args": {"workspace_id": "unused"} if kind == kinds[2] else {"all": True}}
-                for i, kind in enumerate(kinds)]
-    requests.append({"kind": "daemon.shutdown", "request_id": "shutdown"})
-    result = subprocess.run([*argv, "daemon"], env=env,
-                            input="".join(json.dumps(r) + "\n" for r in requests),
-                            capture_output=True, text=True, check=True, timeout=15)
-    messages = [json.loads(line) for line in result.stdout.splitlines()]
     for i, kind in enumerate(kinds):
-        assert kind in messages[0]["data"]["supported_kinds"]
-        response = next(m for m in messages if m.get("request_id") == str(i))
-        assert response["error"]["code"] == "native_fallback_required"
+        request = {"kind": kind, "request_id": str(i),
+                   "args": {"workspace_id": "unused"} if kind == kinds[2] else {"all": True}}
+        lines = {}
+        for name, command in runtimes.items():
+            argv = [*command, "--machine", "--data-root", str(tmp_path / f"{name}-{i}")]
+            subprocess.run([*argv, "init"], env=env, capture_output=True, check=True, timeout=60)
+            daemon = subprocess.Popen([*argv, "daemon"], env=env, cwd=ROOT, text=True,
+                                      stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            try:
+                ready = json.loads(daemon.stdout.readline())
+                if name == "native":
+                    assert kind in ready["data"]["supported_kinds"]
+                daemon.stdin.write(json.dumps(request) + "\n")
+                daemon.stdin.flush()
+                # Shutdown cancels a running native refresh, so wait for the
+                # final answer; progress events share the request id.
+                for line in daemon.stdout:
+                    if json.loads(line).get("kind") in (kind, "error"):
+                        lines[name] = line
+                        break
+                daemon.stdin.write(json.dumps({"kind": "daemon.shutdown"}) + "\n")
+                daemon.stdin.close()
+                assert daemon.wait(timeout=60) == 0
+            finally:
+                if daemon.poll() is None:
+                    daemon.kill()
+                    daemon.wait()
+        assert lines["native"] == lines["python"], kind

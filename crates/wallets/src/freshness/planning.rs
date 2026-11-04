@@ -370,13 +370,21 @@ impl Plan {
     ) -> Result<Value> {
         self.validate(conn, backend)?;
         if self.captured.profiles.is_empty() && self.captured.workspace.is_none() {
-            let mut result = Queue::new(conn, sources).snapshot("")?;
-            for (key, value) in [
+            // Python spreads the snapshot after these keys, so they lead.
+            let mut result = dict([
                 ("profile", Value::Null),
                 ("enqueued", Value::List(vec![])),
                 ("completed", Value::List(vec![])),
-            ] {
-                put(&mut result, key, value);
+            ]);
+            if let (Value::Dict(out), Value::Dict(snapshot)) =
+                (&mut result, Queue::new(conn, sources).snapshot("")?)
+            {
+                for (key, value) in snapshot {
+                    match out.iter_mut().find(|(k, _)| *k == key) {
+                        Some((_, old)) => *old = value,
+                        None => out.push((key, value)),
+                    }
+                }
             }
             return Ok(ui::payload(&result));
         }
