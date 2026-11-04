@@ -60,10 +60,11 @@ per-asset pool, so no per-account balance can go negative.
 ## Surface
 
 - Storage: one row per mark in `loan_legs` (`transaction_id`, `role`, optional
-  `loan_id`); the engine reads only `(transaction_id → role)` via
-  `kassiber.core.loans.load_collateral_role_map`. `loan_id` is UI/audit grouping
-  metadata and has no tax effect.
-- Engine: suppression in `kassiber/core/tax_events.py` + `kassiber/core/engines/rp2.py`.
+  `loan_id`); journal processing reads only `(transaction_id → role)`.
+  `loan_id` is UI/audit grouping metadata and has no tax effect.
+- Engine: none. Custody interpretation (`kassiber/core/custody_interpreters.py`)
+  reports marked legs as non-event transactions, which the finalized tax
+  projection leaves out, so the tax engine sees at most their network fee.
 - CLI: `kassiber loans mark|link|unmark|list`.
 - Daemon: `ui.loans.{list,link,mark,unmark}`.
 - GUI: a row action + understated badge on the Transactions screen, with linked
@@ -73,7 +74,10 @@ per-asset pool, so no per-account balance can go negative.
 
 Independent of loans: a carrying-value swap whose leg was blocked in phase 1
 (e.g. `insufficient_lots` on a self-custody round-trip mis-paired as a BTC↔L-BTC
-swap) is quarantined as a *pair* in `_select_at_cross_asset_swap_links` rather than
-promoted to an `at_swap_link` that would bypass the quantity gate and abort the
-whole multi-asset report. Regression: `ATSwapOverSellQuarantineTest`; contract in
+swap) is quarantined as a *pair* by the engine's Austrian swap-link selection
+(`tax-engine/core/src/ledger/swaplinks.rs`, a port of the frozen oracle's
+`_select_at_cross_asset_swap_links`) rather than promoted to an `at_swap_link`
+that would bypass the quantity gate and abort the whole multi-asset report. Regression:
+`CarryPairPhaseOneBlockJournalTest.test_oversold_at_swap_leg_quarantines_pair_instead_of_aborting`
+in `tests/test_austrian_classification.py`; contract in
 [docs/austrian-handoff.md](../austrian-handoff.md).

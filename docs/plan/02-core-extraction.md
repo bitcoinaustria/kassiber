@@ -36,7 +36,7 @@ kassiber/
     reports.py
     engines/
       base.py
-      rp2.py
+      ledger.py
   ui/
     app.py
     dashboard.py
@@ -57,7 +57,9 @@ kassiber/
 - Keep support modules leaf-like: `db.py`, `envelope.py`, `errors.py`,
   `msat.py`, `backends.py`, `tax_policy.py`, `transfers.py`,
   `wallet_descriptors.py`, and `importers.py` should not import the CLI layer.
-- RP2 imports stay behind `kassiber/core/engines/`.
+- No module under `kassiber/` imports RP2, `prezzemolo`, `pycountry`, or
+  `tests` (`tests/test_tax_oracle_imports.py`). RP2 is a development
+  dependency of the frozen oracle in `tests/tax_oracle/`.
 - Core functions should return data or raise `AppError`; printing and process
   exit belong at the CLI boundary.
 - Use explicit SQL and small typed helpers. Do not introduce an ORM without a
@@ -69,8 +71,10 @@ kassiber/
 - [x] shared bootstrap lives in `kassiber/core/runtime.py`
 - [x] report, sync, attachment, metadata, import, and rates flows moved into
   `kassiber.core`
-- [x] tax normalization lives in `kassiber/core/tax_events.py`
-- [x] RP2 journal building lives behind `kassiber/core/engines/rp2.py`
+- [x] tax normalization and RP2 journal building moved behind
+  `kassiber/core/tax_events.py` and `kassiber/core/engines/rp2.py`; plan 20
+  phase 4 moved both into the Rust tax engine, called through
+  `kassiber/core/engines/ledger.py`
 - [x] desktop UI imports the same local core instead of shelling out to the CLI
 
 ## Current Follow-Ups

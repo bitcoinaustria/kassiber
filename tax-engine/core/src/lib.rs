@@ -12,10 +12,14 @@
 //! derived views). Austrian rules live in `austria` (markers, regimes,
 //! classification) and `swaps` (swap-pair validation and the multi-asset
 //! runner).
+//!
+//! [`mod@ledger`] is the schema-2 layer that takes the finalized custody
+//! projection (plan 20 phase 4); its `ledger` function is the only one the
+//! Python binding exposes. [`manifest`] lists the names and tables Python
+//! also spells.
 
-/// Version of this engine build, reported by the binding's
-/// `engine_version()`. Journals do not record it yet; their calculation
-/// metadata names only the backend (`"engine": "kassiber_tax"`).
+/// Version of this engine build. The binding reports it; journals do not
+/// record it yet (TODO "Record the engine and country-rules versions").
 pub const ENGINE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub mod api;
@@ -26,6 +30,8 @@ mod engine;
 pub mod entry;
 pub mod error;
 mod heap;
+pub mod ledger;
+pub mod manifest;
 mod methods;
 pub mod model;
 mod num;
@@ -34,5 +40,5 @@ mod pool;
 mod swaps;
 pub mod time;
 
-pub use api::{check_entry, compute};
+pub use api::{check_entry, compute, ledger};
 pub use engine::Country;

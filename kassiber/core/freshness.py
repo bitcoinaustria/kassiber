@@ -1303,7 +1303,7 @@ def _run_existing_job(
     except Exception as exc:
         # Carry the exception's fully-qualified TYPE (never str(exc), which can
         # hold backend URLs/credentials) so a swallowed non-AppError failure —
-        # e.g. an RP2/Liquid balance error during the journal refresh — is
+        # e.g. an engine/Liquid balance error during the journal refresh — is
         # diagnosable from the log instead of a bare "freshness_job_failed".
         sqlite_details = _safe_sqlite_error_details(exc)
         if _sqlite_error_is_busy(sqlite_details):

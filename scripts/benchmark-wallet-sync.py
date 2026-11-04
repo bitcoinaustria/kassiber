@@ -307,7 +307,7 @@ class Book:
         # switch would also refuse the loopback Fulcrum that BDK talks to.
         env["KASSIBER_TEST_NO_EGRESS"] = "1"
         env["KASSIBER_OFFLINE_PREFERENCE_FILE"] = str(scratch / "offline-preference.json")
-        guard = REPO_ROOT / "tests" / "_egress_guard"
+        guard = REPO_ROOT / "tests" / "_child_hooks"
         env["PYTHONPATH"] = os.pathsep.join(
             part for part in (str(guard), str(REPO_ROOT), env.get("PYTHONPATH", "")) if part
         )

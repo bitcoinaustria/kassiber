@@ -532,7 +532,7 @@ dev = [
 
 [[package]]
 name = "kassiber-tax"
-version = "0.1.0+local"
+version = "0.2.0+local"
 source = { editable = "tax-engine/python" }
 
 [[package]]

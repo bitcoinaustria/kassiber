@@ -2433,10 +2433,10 @@ def _clone_row(
 ) -> dict[str, Any]:
     """Clone a source row into a split / synthetic leg.
 
-    Mirrors ``rp2._split_review_source_row``: a row priced by value alone keeps
-    its evidence by materializing a per-unit rate before the absolute
-    ``fiat_value`` is cleared, so each leg reprices from its own amount instead
-    of becoming a false missing-price quarantine.
+    Mirrors the RP2 adapter's former ``_split_review_source_row``: a row
+    priced by value alone keeps its evidence by materializing a per-unit rate
+    before the absolute ``fiat_value`` is cleared, so each leg reprices from
+    its own amount instead of becoming a false missing-price quarantine.
     """
     base = dict(source_row)
     full = int(_get(source_row, "amount") or 0)

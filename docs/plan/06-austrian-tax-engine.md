@@ -5,8 +5,8 @@ under [plan 20](20-kassiber-tax-engine.md) with identical results; review-gated
 E 1kv CSV/PDF/XLSX export is implemented for the current ausländisch /
 self-custody slice.
 **Current source of truth:** `docs/austrian-handoff.md`,
-`docs/reference/tax-engine.md`, `kassiber/core/tax_events.py`,
-`kassiber/core/engines/rp2.py`, `kassiber/core/austrian.py`,
+`docs/reference/tax-engine.md`, `kassiber/core/engines/ledger_request.py`,
+`tax-engine/core/src/ledger/`, `kassiber/core/austrian.py`,
 `tests/test_review_regressions.py`, and TODO.md.
 **Legal gate:** Kassiber is not tax advice. Austrian output must be reviewed by
 a Steuerberater before filing.
@@ -31,8 +31,9 @@ The tax engine owns:
 - accounting methods and lot/moving-average math
 - cross-asset Neu swap carried-basis computation
 - gains/losses and disposal classification
-- the Austrian country APIs the adapter calls, `AT` and `classify_disposal()`,
-  which `kassiber.core.engines.native` exposes under RP2's names
+- Austrian normalization: the Alt/Neu regime tracker, the swap-link
+  selection, and the markers in journal descriptions
+  (`tax-engine/core/src/ledger/`)
 
 Do not grow a second Austrian tax engine in Python.
 
@@ -54,13 +55,18 @@ Do not grow a second Austrian tax engine in Python.
 
 ## Normalization Contract
 
-`kassiber/core/tax_events.py` turns raw transaction rows plus wallet metadata,
-manual pairs, rates, and explicit annotations into typed normalized events.
+Custody journal processing compiles raw transaction rows plus wallet
+metadata, reviewed pairs, rates, and explicit annotations into a finalized tax
+projection; `kassiber/core/engines/ledger_request.py` sends its rows to the
+engine as typed facts, and the engine's normalizer
+(`tax-engine/core/src/ledger/normalize.rs`) turns them into typed normalized
+events.
 
-A **normalized cost-basis pool** is country-neutral and opaque to the engine
-adapter. Every currently enabled country policy permits only the legacy-safe
-`global` scope. A narrower scope must be explicitly advertised by that country
-and must have a reviewed source/destination transfer contract before activation.
+A **normalized cost-basis pool** is country-neutral and opaque to the
+engine's lot rules. Every currently enabled country policy permits only the
+legacy-safe `global` scope. A narrower scope must be explicitly advertised by
+that country and must have a reviewed source/destination transfer contract
+before activation.
 
 Typed normalized pool fields:
 
@@ -73,7 +79,7 @@ Typed Austrian semantic fields remain:
 - `at_regime`
 - `at_swap_link`
 
-The adapter maps the generic global id to the legacy `at_pool=default`
+The engine writes the generic global id as the legacy `at_pool=default`
 marker only for Austrian rows. Differing transfer pool ids fail closed because
 the engine has no approved two-ended Austrian marker contract. The engine's
 `compute_tax_for_assets` hook still owns carried-basis math for reviewed Neu
@@ -84,7 +90,7 @@ cross-asset swaps.
 The engine boundary is intentionally narrow:
 
 ```python
-GenericRP2TaxEngine.build_ledger_state(
+KassiberTaxEngine.build_ledger_state(
     inputs: TaxEngineLedgerInputs,
 ) -> TaxEngineLedgerResult
 ```

@@ -8,7 +8,7 @@ build-backend = "maturin"
 name = "kassiber-tax"
 # The local label (+local) keeps this off PyPI, which cannot host local versions,
 # so pip can never fetch an impostor; install the binding from the checkout.
-version = "0.1.0+local"
+version = "0.2.0+local"
 description = "Python binding for Kassiber's tax engine"
 requires-python = ">=3.10"
 license = { text = "AGPL-3.0-only" }

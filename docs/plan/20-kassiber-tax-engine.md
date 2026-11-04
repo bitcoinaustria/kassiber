@@ -1,11 +1,15 @@
 # Kassiber tax engine
 
-**Status:** Direction accepted 2026-10-01. Phases 0-3 are implemented: the
-engine is the default and RP2 is a test-only oracle. Still open from those
-phases: the invariant property tests (Verification 1), planned with phase 4;
-the authoritative fixtures (Verification 3, part of phase 2's exit), which
-need reviewed sources from the owner; and the provenance invariant. Phases 4-6
-remain; tasks move to [TODO.md](../../TODO.md) as each phase starts.
+**Status:** Direction accepted 2026-10-01. Phases 0-4 are implemented: the
+engine is the default and RP2 is a test-only oracle. Phase 4 moved the
+boundary to the finalized projection: journals run on the engine's schema-2
+`ledger` operation, the binding exposes only that, and the phase-3 adapter
+survives only as the frozen test oracle in `tests/tax_oracle/`; its RP2-shaped
+mirror is deleted, and the core keeps the schema-1 operations as the lot
+engine's fixture API. Still open from earlier phases: the authoritative
+fixtures (Verification 3, part of phase 2's exit), which need reviewed sources
+from the owner, and the provenance invariant. Phases 5-6 remain; tasks move to
+[TODO.md](../../TODO.md) as each phase starts.
 **Current source of truth:** [tax engine](../reference/tax-engine.md),
 [tax](../reference/tax.md), [Austrian handoff](../austrian-handoff.md),
 [plan 06](06-austrian-tax-engine.md),
@@ -43,6 +47,10 @@ Most of the tax path's complexity comes from adapting Kassiber to RP2's model:
 - RP2 writes an import-time disk log that Kassiber has to suppress, and sets
   the importing thread's decimal context to 32 significant digits.
 - Every tax change needs pull requests in two repositories plus a pin bump.
+
+Phase 4 moved the mirror, the tracker, and the carry into the engine. The
+function names in this plan are the phase-3 adapter's, which survives only as
+the frozen oracle in `tests/tax_oracle/`.
 
 Writing the engine in Rust gives compile-time types to the most
 correctness-sensitive module and avoids writing it twice once the core moves.
@@ -94,8 +102,8 @@ output, RP2 plus the adapter, not RP2's raw calculation:
   (`exit_tax.py`, `RECOGNIZED_ENTRY_TYPES`).
 
 Branches that no finalized projection row can reach are not parity
-requirements. Delete them first under the existing quarantine follow-up in
-TODO.md, so they are not ported.
+requirements. Phase 4 deleted them from the product without porting them, and
+the request builder refuses their shapes.
 
 ### Contracts and invariants
 
@@ -112,10 +120,9 @@ TODO.md, so they are not ported.
   bug; the binding turns it into an error that blocks the report, never a
   partial result.
 - **Provenance.** Each journal run records the engine version and country
-  rules version. Filed reports keep the versions that produced them. Not yet
-  implemented: calculation metadata names only the backend (`"engine":
-  "kassiber_tax"`), and no rules version exists. Phase 4's design defers
-  persisted provenance; recording both versions is a follow-up in TODO.md.
+  rules version. Filed reports keep the versions that produced them. Not met
+  yet: adding the versions to `calculation_json` changes persisted bytes, so
+  phase 4 records neither, and where they go is a TODO entry.
 
 ### Clean implementation
 
@@ -141,44 +148,65 @@ AGPL-3.0 work, so this holds even if the files contain adapted upstream code.
   I/O dependencies.
 - `kassiber-tax` (`tax-engine/python`, Python module `kassiber_tax`): a PyO3
   binding built with maturin as its own Python package so the main package
-  keeps its build backend. It exports `compute` and `check_entry`, each from
-  request JSON to response JSON, and `engine_version`.
+  keeps its build backend. It exports `ledger`, from request JSON to response
+  JSON, and `engine_version`; the core keeps the schema-1 `compute` and
+  `check_entry` as the lot engine's fixture API.
 - `tax-engine` is its own Cargo workspace, separate from `ui-tauri/src-tauri`
   but on the same Rust version. The remaining phase 0 choices are recorded
   below.
 
 ### Boundary
 
-In phases 0-3 the boundary sits where RP2 sat, beneath the adapter.
-`kassiber.core.engines.native` mirrors the part of RP2's interface the adapter
-calls, and one engine call answers each RP2 call; the
-[tax engine reference](../reference/tax-engine.md) owns that format. The same
-adapter code then drives either backend, which is what makes the comparison
-exact.
+In phases 0-3 the boundary sat where RP2 sat, beneath the adapter.
+`kassiber.core.engines.native` mirrored the part of RP2's interface the
+adapter called, and one engine call answered each RP2 call. The same adapter
+code then drove either backend, which is what made the comparison exact.
+Phase 4 deleted that mirror; the adapter left the product and survives
+only as the frozen oracle.
 
-Phase 4 lifts the boundary to the projection: the request carries a
-`schema_version`, the profile's tax policy, and the finalized projection as
-typed events (msat as integers, fiat as decimal strings, ids that anchor back
-to imported evidence), and the response maps one-to-one onto
-`TaxEngineLedgerResult`. The Python adapter then shrinks to building the
-request and reading the response. Drift tests on both sides pin the schema.
+Phase 4 lifted the boundary to the projection. The request carries a
+`schema_version`, the profile's tax policy, the configuration names, and the
+finalized projection as typed rows and pairs: msat as integers, fiat as exact
+decimals, ids that anchor back to imported evidence, and facts only, never
+marker text. The response is the journal ledger, which maps one-to-one onto
+`TaxEngineLedgerResult`; the projection's own quarantines, cross-asset pairs,
+and direct payouts pass through. Python keeps three jobs:
+
+- deriving evidence facts from rows (kind, exact pricing, privacy hops,
+  conflict and pending holds, chain-order evidence, timestamps), and the
+  configuration checks;
+- rendering the response into Kassiber's shapes (uuids, ids, legacy floats,
+  JSON);
+- persistence.
+
+The engine composes the journal descriptions with the phase-3 grammar, and
+shapes a finalized projection cannot have fail closed in the request builder.
+Drift tests on both sides pin the schema, and the
+[tax engine reference](../reference/tax-engine.md) owns the format.
 
 ### Engine
 
 - One chronological pass over all assets, so cross-asset carries need no
   separate validation pass. Events are ordered by time, then by the
   same-timestamp rules in the parity list, then by projection order; the order
-  is total, so ties never depend on iteration order.
+  is total, so ties never depend on iteration order. Phase 4 keeps the
+  adapter's pass structure instead: per-asset computation with the Austrian
+  multi-asset runner, the two-pass Austrian swap-link selection, and the
+  generic carry loop. Each step toward one pass changes results or error texts,
+  so each is its own phase 5 change.
 - Each leg of a linked carry pair keeps its own timestamp, and the
   same-timestamp order above still holds: the incoming lot is listed when it
   occurs, even before its carry resolves. A lot's basis is read only when a
   disposal draws on it, so the outgoing leg's selected basis replaces the
   incoming lot's basis when that leg is processed, and any event that could
   draw on the incoming lot before then waits for the carry. That is how the
-  Austrian runner works today (`tax-engine/core/src/swaps.rs`); phase 4 uses
-  the same rule for the generic BTC↔LBTC carry, replacing its repeated
-  recomputation. Same-time carry chains resolve in dependency order, and the
-  runner fails with an error when no order can resolve them.
+  Austrian runner works today (`tax-engine/core/src/swaps.rs`). Same-time
+  carry chains resolve in dependency order, and the runner fails with an error
+  when no order can resolve them. Phase 4 keeps the fixed-point loop for the
+  generic BTC↔LBTC carry (`tax-engine/core/src/ledger/carry.rs`), because this
+  rule changes results on three shapes (D-carry-1..3 under Findings). Adopting
+  it there is a phase 5 change with those listed differences, a policy for
+  same-instant carry cycles, and a stale migration.
 - Pools are keyed by a country-chosen pool key. Each pool holds lots or an
   average-cost pool according to the method.
 - A basis is `Known(fiat)` or `Unknown(reason)`. Uncertainty flows through the
@@ -233,25 +261,55 @@ Recorded 2026-10-01, from the behavioral specs written before implementation:
 ### Findings for follow-up
 
 The specs found current behavior that parity deliberately keeps. Each is a
-TODO entry, because fixing it changes results and needs its own reviewed
-change:
+TODO entry, because fixing it changes results, stored journals, or error
+texts and needs its own reviewed change:
 
 - An Austrian sale is tagged Neu whenever the wallet holds any Neu, even when
-  the sale needs more, and RP2 has no Alt fallback, so the whole report aborts.
+  the sale needs more, and the lot engine has no Alt fallback, so the whole
+  report aborts.
 - On a Neu swap the fee's share of pool basis is neither realized nor carried.
 - Description text is parsed for Austrian markers, so user text can add or
-  conflict with `at_regime`, `at_pool`, or `at_swap_link`.
-- Transfer-leg quantities in the transfer audit pass through `float`.
+  conflict with `at_regime`, `at_pool`, or `at_swap_link`. Phase 4 keeps this:
+  the engine appends the row's text to the notes it composes, and paired user
+  `at_swap_link=` tags give a successful swap carry, so ignoring user text
+  changes results and stored journals. Ending it is phase 5's first change.
+- Transfer-leg quantities in the transfer audit pass through `float`. The
+  engine returns them exactly; the reader keeps the conversion, because
+  dropping it changes stored quantities.
 - [Plan 06](06-austrian-tax-engine.md) says Neu moving average applies from
   2023; the code applies it to every Neu disposal from 2021-03-01.
+
+Phase 4 found more, each reproduced exactly and pinned by goldens:
+
+- The generic carry loop and the wait-for-carry rule differ on three shapes.
+  A pair blocked in an early pass stays blocked although a later pass prices
+  its source (D-carry-1). A same-instant round trip under moving average runs
+  out of passes and keeps a gain on a carrying-value leg (D-carry-2). One under
+  FIFO converges where the rule would find a carry cycle (D-carry-3).
+- Austrian swap links are chosen on the first prepare pass and not checked
+  again on the second. A chained swap whose first hop is blocked, or a link
+  whose out leg the second pass makes Alt, aborts the whole report, and a
+  linked swap-out can overdraw an account the second pass no longer funds.
+- Pricing an unpriced row can add quarantines: a released sale or move leaves
+  a later one short. Verification 1's pricing invariant holds only with that
+  explicit exclusion.
+- Wallet, profile, and asset labels keep RP2's INI-file rules and their
+  whitespace artifacts, and engine failures keep their "RP2 ..." texts.
 
 ## Verification
 
 1. **Invariants** as property tests: msat and basis conservation across moves
    and carries, no negative pool, deterministic output, and pricing an unknown
-   lot never adding a quarantine. Not built yet; planned with phase 4.
-2. **Existing tests** on the tax path run unchanged through the seam against
-   both engines.
+   lot never adding a quarantine. Built in phase 4 as
+   `tax-engine/core/tests/ledger_properties.rs`
+   ([tax engine](../reference/tax-engine.md)). Basis conservation is checked
+   on Neu swaps and Bitcoin rail carries; the pricing invariant keeps the
+   explicit exclusion above, and a rail carry that ran out of passes is
+   excused (TODO.md).
+2. **Existing tests** on the tax path run on production. Since phase 4 there
+   is no two-engine seam: the `shadow`, `census`, and `oracle` modes of
+   `KASSIBER_TEST_TAX_ENGINE` compare them with the frozen oracle in
+   `tests/tax_oracle/` ([testing](../reference/testing.md#tax-engine-backends)).
 3. **Authoritative fixtures:** BMF worked examples and scenarios reviewed by a
    Steuerberater, starting with plan 16's salary → savings-wallet case. Not
    built yet; they need reviewed sources from the owner (TODO.md).
@@ -305,15 +363,21 @@ change:
    descriptions keep their `at_regime=` markers, because the exit-tax report
    reads them (`exit_tax.py`, `_entry_is_alt`), until those consumers move to
    equivalent typed fields in a reviewed change. The comparison must stay
-   empty.
+   empty. Inside the engine the lot rules still read the composed
+   descriptions, so user-typed markers keep their effect until markers become
+   typed-only (Findings).
 5. **Semantic changes, one reviewed change at a time,** each with fixtures and
    a stale migration:
-   1. Quarantine only disposals that consume an uncertain basis.
-   2. Make the Wahlrecht ordering configurable, under the existing TODO
+   1. Typed-only Austrian markers: the lot rules read markers built from the
+      engine's own facts, never user text, under the existing TODO entry.
+      This comes first because it is the one place where free text still
+      changes tax results.
+   2. Quarantine only disposals that consume an uncertain basis.
+   3. Make the Wahlrecht ordering configurable, under the existing TODO
       entry; changing the default needs legal review and a migration.
-   3. Austrian wallet pools, behind plan 16's legal gate.
-   4. Zero-cost acquisitions, behind their own legal review.
-   5. Per-wallet physical lots, only if a jurisdiction requires them, as the
+   4. Austrian wallet pools, behind plan 16's legal gate.
+   5. Zero-cost acquisitions, behind their own legal review.
+   6. Per-wallet physical lots, only if a jurisdiction requires them, as the
       existing TODO entry says.
 6. **More countries.** Add US (including the 2025 per-wallet switch), ES, and
    IE as Supported with reviewed manifests, then the countries the owner

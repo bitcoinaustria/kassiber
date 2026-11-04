@@ -2,13 +2,14 @@
 
 When the same on-chain transaction appears as outbound in one kassiber wallet
 and inbound in another wallet of the same profile, it is a self-transfer:
-the user moved their own coins between their own wallets. RP2 models this as
-an `IntraTransaction` (MOVE), where the network fee is the only taxable
-portion and the lots themselves carry their original cost basis across to
-the destination wallet.
+the user moved their own coins between their own wallets. The tax engine
+books this as a MOVE, where the network fee is the only taxable portion and
+the lots themselves carry their original cost basis across to the
+destination wallet.
 
-This module is the pure detection layer. Conversion of detected pairs into
-RP2 `IntraTransaction` instances happens in the journal pipeline.
+This module is the pure detection layer. Detected pairs become MOVE pairs in
+the finalized tax projection, which `core/engines/ledger_request.py` sends to
+the engine.
 
 Detection is evidence-first and profile-wide. Exact transaction-graph and
 owned-script evidence can prove same-wallet consolidations, cross-wallet

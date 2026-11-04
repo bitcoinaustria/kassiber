@@ -45,13 +45,18 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
   changing Neu-first would change existing users' tax outcomes.
 - [ ] Evaluate per-wallet physical-lot attribution only if a jurisdiction
   requires it. Current per-wallet basis allocation is not a physical-lot claim.
-- [ ] Stop an Austrian Neu shortfall from aborting the whole report.
-  `infer_outbound_regimes` tags a sale Neu whenever the wallet holds any Neu,
-  even when the sale needs more, and the engine has no Alt fallback for
-  explicit regimes (for example 1 BTC Alt plus 0.1 BTC Neu, then a 0.5 BTC
-  sale). Decide between splitting the disposal across regimes and capping the
-  Neu tag with the Wahlrecht ordering entry above; done when that book
-  processes with test-pinned results and a stale migration.
+- [ ] Stop an Austrian Neu shortfall from aborting the whole report. The
+  engine's regime tracker (`tax-engine/core/src/ledger/regimes.rs`) tags a
+  sale Neu whenever the wallet holds any Neu, even when the sale needs more,
+  and the engine has no Alt fallback for explicit regimes (for example 1 BTC
+  Alt plus 0.1 BTC Neu, then a 0.5 BTC sale). Decide between splitting the
+  disposal across regimes and capping the Neu tag with the Wahlrecht ordering
+  entry above; done when that book processes with test-pinned results and a
+  stale migration. Pricing can release such a disposal, so pricing an unpriced
+  row can turn a processed book into this abort (goldens
+  `at-pricing-releases-a-neu-shortfall-*`, an explicit exclusion in
+  `tax-engine/core/tests/ledger_properties.rs`); the fix must remove that
+  exclusion too.
 - [ ] Decide the Austrian treatment of a Neu swap's fee basis. The pool drops by
   amount plus fee, but only the amount's basis is carried, so the fee's share
   is neither realized nor carried. Needs legal review before any change. Done
@@ -59,30 +64,111 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
   [the Austrian handoff](docs/austrian-handoff.md) and an engine fixture pins
   it, whether the review keeps today's behavior or changes it (a change also
   needs a stale migration).
-- [ ] Stop parsing user description text as Austrian notes markers. A
-  description containing an `at_regime=`, `at_pool=`, or `at_swap_link=` token
-  can add, duplicate, or conflict with the adapter's markers. Done when markers
-  travel as typed fields (plan 20 phase 4) or user text is escaped.
-- [ ] Keep transfer-leg quantities exact in the transfer audit. They pass
-  through `float` before `dec()`, which loses msat above about 15 significant
-  digits.
+- [ ] Stop parsing user description text as Austrian notes markers, as plan 20
+  phase 5's first change. The engine composes each event's and move's notes
+  from typed facts and appends the row's note, description, or kind, and its
+  Austrian rules read markers from the whole text
+  (`tax-engine/core/src/ledger/describe.rs`), so a user's `at_regime=`,
+  `at_pool=`, or `at_swap_link=` token can add, duplicate, or conflict with
+  the engine's markers. Paired user `at_swap_link=` tags on a Neu sale and a
+  receipt of another asset give a swap carry under `moving_average_at`, and a
+  consulted duplicate or conflicting marker aborts the report (goldens
+  `at-usertag-*`). Done when the rules read typed markers built from the
+  engine's own facts, and a stale migration marks Austrian profiles stale
+  whose stored transaction note, description, or kind contains one of the
+  three tokens. Importers write all three columns, and plain CSV and JSON
+  imports copy `kind` verbatim. A move whose outgoing row has no text gets its
+  wallets' labels as notes, but every token contains `=`, which the label rule
+  below rejects.
+- [ ] Keep transfer-leg quantities exact in the transfer audit. The engine
+  returns each move's sent, received, and fee amounts exactly, but the reader
+  (`kassiber/core/engines/ledger_response.py`) still passes them through
+  `float` before `dec()`, as the phase-3 adapter did, which loses msat above
+  about 15 significant digits. Exact values change stored `quantity_exact`
+  text on most books (`1.0` becomes `1`), so done when the reader keeps them
+  and a stale migration marks processed books stale.
 - [ ] Reconcile [plan 06](docs/plan/06-austrian-tax-engine.md)'s "Neuvermögen
   from 2023 uses moving average" with the code, which applies the Neu moving
   average to every Neu disposal from 2021-03-01. Confirm against the
   KryptowährungsVO and fix whichever is wrong.
-- [ ] Run phase 4 of the [tax engine plan](docs/plan/20-kassiber-tax-engine.md):
-  lift the engine boundary to the finalized projection as typed events, fold
-  the adapter's balance mirror, the Austrian regime tracker, and the generic
-  carry workaround into the engine, and drop the `notes` markers that only
-  pass input to it. Persisted `at_regime=` journal descriptions stay while the
-  exit-tax report reads them. Done when the adapter only builds the request
-  and reads the response, drift tests on both sides pin the schema, and the
-  RP2 comparison stays empty.
-- [ ] Record the engine version and a country rules version in journal and
-  filed-report provenance, as [plan 20](docs/plan/20-kassiber-tax-engine.md)
-  requires. Calculation metadata names only the backend (`"engine":
-  "kassiber_tax"`) and no rules version exists. Done when each journal run
-  stores both and filed reports keep the versions that produced them.
+- [ ] Settle the generic Bitcoin rail carry in one pass (plan 20 phase 5). The
+  engine keeps the phase-3 fixed-point loop
+  (`tax-engine/core/src/ledger/carry.rs`), which reprices BTC↔LBTC
+  carrying-value pairs over repeated whole-book passes. Plan 20's
+  wait-for-carry rule changes three shapes the goldens pin: a pair blocked in
+  an early pass stays blocked although a later pass prices its source
+  (`carry-d1-unpriced-peg-in`); a same-instant round trip under moving average
+  runs out of passes and keeps a gain on a carrying-value leg
+  (`carry-d2-round-trip-moving-average`); and one under FIFO that converges
+  today becomes a carry cycle (`carry-d3-round-trip-fifo`). The carry unit
+  tests `a_source_short_of_lots_blocks_its_pair_for_good` and
+  `carries_that_do_not_settle_keep_the_last_passs_pricing` pin the loop too.
+  Done when the rule replaces the loop with a reviewed policy for same-instant
+  cycles (error, quarantine, or iterate), the three shapes are listed
+  differences, the rail property's exclusion for unsettled carries in
+  `tax-engine/core/tests/ledger_properties.rs` is gone, and a stale migration
+  marks the books it changes.
+- [ ] Choose Austrian swap links on the final pass. The engine selects links
+  on the first prepare pass and does not check them again on the second
+  (`tax-engine/core/src/ledger/swaplinks.rs`), as the phase-3 adapter did. A
+  chained swap whose first hop is blocked and a link whose out leg the second
+  pass makes Alt both leave an `at_swap_link=` marker unpaired, and the whole
+  report aborts with `RP2 cross-asset input validation failed: Unpaired ...`
+  (goldens `at-chained-swap-unpaired-abort`, `at-swap-link-turns-alt-abort`).
+  A linked swap-out also skips the balance gates, so it can overdraw an
+  account the first pass funded from a row the second pass leaves out: within
+  the lot engine's tolerance a later sale or move of that asset is
+  quarantined as `missing_cost_basis` (goldens `at-pass-b-overdraw-*`), and
+  beyond it the report aborts. Two same-pool swaps that depend on each other
+  abort too. Done when an unresolvable link quarantines its pair instead of
+  aborting, with goldens, the swap properties' shared-failure exclusions in
+  `ledger_properties.rs` narrowed to match, and a stale migration for the
+  books it changes.
+- [ ] Rename the RP2 texts of engine failures. They keep the phase-3 adapter's
+  wording byte for byte: the `RP2 cross-asset input validation failed:`,
+  `RP2 multi-asset tax calculation failed:`, and `RP2 tax calculation failed
+  for asset ...` wrappers (`kassiber/core/engines/errors.py`), the method
+  gate's `Unsupported RP2 accounting method ...`
+  (`tax-engine/core/src/ledger/run.rs`), the `RP2 configuration ...` checks
+  (`ledger_request.py`), the raw-row `TypeError` naming
+  `GenericRP2TaxEngine`, and the `rp2_input_validation` error code. Done when
+  they name Kassiber's engine, the comparison maps old texts to new ones as a
+  listed difference while RP2 remains the oracle, and the docs and tests that
+  quote them follow. Messages the lot engine reproduces from RP2 itself (such
+  as the unpaired-marker text) stay as the RP2 fixtures pin them.
+- [ ] Relax the configuration label rules RP2's INI file imposed. The request
+  builder keeps them with RP2's messages
+  (`kassiber/core/engines/ledger_request.py`): a wallet, profile, or asset
+  label containing `, \n \r [ ] = : # ;` fails the whole report, even for an
+  unused wallet, and a `%` the INI interpolation cannot read raises
+  `InterpolationSyntaxError` (goldens `error-forbidden-character`,
+  `error-holder-forbidden-character`, `error-percent`). The engine reads no
+  file, so done when the builder accepts every label the engine can tell
+  apart, with goldens. Land it after typed-only markers (above): with `=`
+  allowed, a wallet label can carry a marker into a move's notes
+  (`tax-engine/core/src/ledger/normalize.rs`).
+- [ ] Fix the whitespace artifacts of tax-processing labels. The
+  configuration checks strip wallet and profile labels, but entries carry
+  them unstripped: a label with surrounding whitespace fails the report with
+  RP2's `Parameter 'exchange' value is not known` (or `'holder'`), and two
+  wallet labels that differ only by surrounding whitespace fail as duplicates
+  (golden `error-duplicate-after-strip`). Done when processing strips labels
+  consistently or keeps them exact, with goldens.
+- [ ] Record the engine and country-rules versions of each journal run (plan
+  20, "Provenance"). The engine reports its version
+  (`kassiber_tax.engine_version()` and every `ledger` response), but journals
+  store neither it nor a country-rules version, which does not exist yet;
+  `calculation` records only `"engine": "kassiber_tax"`. Adding them to
+  `calculation_json` changes persisted bytes, so decide between a run-metadata
+  table and adding them to `calculation` with the first phase-5 stale
+  migration. Done when processed journals carry both versions and filed
+  reports keep the versions that produced them.
+- [ ] Decide with phase 5's first change whether RP2 stays a development
+  dependency and the `tax-shadow` CI lane keeps running. Both compare the
+  engine with the frozen phase-3 oracle (`tests/tax_oracle/`). Once phase 5
+  changes results on purpose, either each change lists its differences
+  against the oracle, or the stored goldens (`ledger_fixtures.json`) carry the
+  proof alone and RP2, the oracle, and the lane retire together.
 - [ ] Add authoritative Austrian tax fixtures (plan 20 Verification 3): BMF
   worked examples and Steuerberater-reviewed scenarios, starting with plan
   16's salary → savings-wallet case. Needs reviewed sources from the owner;
@@ -90,13 +176,26 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
 
 ## Quarantine follow-ups
 
-- [ ] Delete the pre-custody normalizer branches that no finalized row can
-  reach (`tax_events` Samourai/multi-pair/unscoped/loan/channel paths,
-  `pair_allocation` max-flow, the `austrian` multi-source branch, RP2 loan
-  branches). First keep the restored `unscoped_transfer_review` and
-  `owned_fanout_unresolved` holds in the live interpreter and migrate the
-  raw-row tests that pin the dead branches; done when the projection-id guard
-  test also covers `accounting-transit:` rows and the suite stays green.
+- [ ] Cover every synthetic projection-row prefix in the projection-id guard
+  test. Plan 20 phase 4 deleted the pre-custody normalizer branches no
+  finalized row can reach from the product (they remain only in the frozen
+  oracle, `tests/tax_oracle/`), and the request builder refuses their shapes
+  (`non_synthetic_row_id`, `shared_pair_leg`). The guard
+  (`test_every_projected_row_id_is_synthetic_and_pairs_are_edge_disjoint`)
+  compiles one fixture, whose rows are all `custody-tax:`. Done when the
+  projection-id guard test covers every synthetic prefix in
+  `transfers._SYNTHETIC_TRANSFER_ID_PREFIXES` and the suite stays green.
+- [ ] Keep pricing from adding quarantines. A quarantined sale or move uses
+  none of its wallet's coins, so pricing an earlier purchase can let it book,
+  and a later move or sale then runs short. The short spend can also be a
+  later Bitcoin rail pair's source, which the generic carry then blocks
+  (`bitcoin_rail_carry_basis_unresolved` on both legs). Plan 20 requires that
+  pricing an unknown lot never adds a quarantine; the engine keeps today's
+  behavior (goldens `generic-pricing-releases-a-sale-*` and
+  `carry-pricing-releases-a-sale-*`, and an explicit exclusion in
+  `tax-engine/core/tests/ledger_properties.rs`). Done when the phase-5
+  inventory change removes the exclusion, with a stale migration for the books
+  it changes.
 - [ ] Tell the owner when `ownership_transfer_source_missing` points at an
   address beyond the wallet's synced depth (the ownership index derives deeper
   than the sync gap limit) and offer that wallet's scoped rescan; done when the

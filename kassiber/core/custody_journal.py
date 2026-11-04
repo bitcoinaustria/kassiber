@@ -34,7 +34,7 @@ from . import quarantine_catalog
 from . import tax_events
 from . import transfer_matching
 from .custody_evidence import build_canonical_quantity_input, enriched_quantity_rows
-from .engines import GenericRP2TaxEngine, TaxEngineLedgerInputs
+from .engines import KassiberTaxEngine, TaxEngineLedgerInputs
 from .lightning import channel_lifecycle
 from .repo import resolve_scope
 
@@ -419,7 +419,7 @@ class CustodyJournalDecisions:
 
 @dataclass(frozen=True)
 class CustodyJournalProjection(CustodyJournalDecisions):
-    """Custody decisions plus the finalized input consumed by RP2."""
+    """Custody decisions plus the finalized input consumed by the tax engine."""
 
     finalized_tax_projection: Any
 
@@ -801,7 +801,7 @@ class CustodyJournalBuilder:
 
     def build(self) -> dict[str, Any]:
         custody = self.build_custody_projection()
-        engine_state = GenericRP2TaxEngine(self.profile).build_ledger_state(
+        engine_state = KassiberTaxEngine(self.profile).build_ledger_state(
             TaxEngineLedgerInputs(
                 finalized_tax_projection=custody.finalized_tax_projection,
                 wallet_refs_by_id=custody.wallet_refs_by_id,
