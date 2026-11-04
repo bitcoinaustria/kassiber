@@ -28,7 +28,7 @@
         "bitcoin:main:tx:0000000000000000000000000000000000000000000000000000000000000004"
       ]
     ],
-    "snapshot_id": "5763489cb324263362389854bdc90ce146947e6aa98be03d4d9454bb02f6289f",
+    "snapshot_id": "d4ad220adf90ec4a6bf4a83388af2ec26991ca07aa9b3aaa018bcc96f74bdbd9",
     "tables": {
       "accounts": "182e354d4fe9e03683e91127d25e8d320be5e79713d35a9b6187f7f2a8f6328f",
       "ai_chat_messages": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -64,7 +64,7 @@
       "chain_index_nodes": "e2c6795c30f3b6473c0cdbbe791d7fd74797c8912d809f6d35d0e4041446c0a6",
       "chain_index_source_nodes": "7b14dfd0418f9bd26ea0b75267165678bf1e72731171c662b27c353444d333fa",
       "chain_index_sources": "23d2d2b9ae096c54a2c061bc6b241a1eebe1f5f0628f6f82d5aac641319fc6e1",
-      "chain_index_state": "f2e020f333fced9fa25a02cec3da6c7ad3eb4641d04303a10cecaf6704794e23",
+      "chain_index_state": "139b1757f8496dd426931be207b2824e1a5677d682b365e9240ef26533d517bb",
       "chain_observation_provenance": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "chain_observer_coverage": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "chain_observer_instances": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -112,12 +112,12 @@
       "lightning_node_records": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "lightning_node_syncs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "loan_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-      "profiles": "6989cd1f564beab6f77c0748eb1aa41c3002f49ef42c0d5b89cc5a109f9d218a",
+      "profiles": "4f524fec731040f114258410273c69d17e82ab6e485fd45b194348481d3fd3ec",
       "rates_cache": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "rates_checked_minutes": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "review_workflow_receipts": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "saved_views": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-      "schema_migration_audits": "3c1493f39bd09e4889fbe6e89d1f32cb172e34a01ef6947b94dee8c4797ae0ea",
+      "schema_migration_audits": "696deaf084ea71e0277fb5905b6a1a0ab34c32c739b1c6f50120acbc8e76dfa2",
       "settings": "b4153c02188b626d5091b2b8215da09a1e820dac2899cdad06f6f04bd1e9d014",
       "source_funds_cases": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "source_funds_link_attachments": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -143,7 +143,7 @@
       "wallets": "710c72f3cff5b92fb6fe1e7756a46b6b20b658ff5d5e3d98359100847630529a",
       "workspaces": "4071bc33d0446f897c4f89c26c034b538c4d3c444c3ca6b74a01dfe6d63dded5"
     },
-    "wire_sha256": "67e9a3c3e6da9013dc38bd8cb54aefde3d8d3ab9a6aef9b5c916439df2ab9c61"
+    "wire_sha256": "f14d034045d3bc9fd96456864c26e1badb77f7ecca80ee4c92e9efdfbab05a43"
   },
   "1": {
     "finding_node_ids": [
@@ -174,7 +174,7 @@
         "bitcoin:main:tx:0000000000000000000000000000000000000000000000000000000000000004"
       ]
     ],
-    "snapshot_id": "5763489cb324263362389854bdc90ce146947e6aa98be03d4d9454bb02f6289f",
+    "snapshot_id": "d4ad220adf90ec4a6bf4a83388af2ec26991ca07aa9b3aaa018bcc96f74bdbd9",
     "tables": {
       "accounts": "182e354d4fe9e03683e91127d25e8d320be5e79713d35a9b6187f7f2a8f6328f",
       "ai_chat_messages": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -210,7 +210,7 @@
       "chain_index_nodes": "e2c6795c30f3b6473c0cdbbe791d7fd74797c8912d809f6d35d0e4041446c0a6",
       "chain_index_source_nodes": "7b14dfd0418f9bd26ea0b75267165678bf1e72731171c662b27c353444d333fa",
       "chain_index_sources": "23d2d2b9ae096c54a2c061bc6b241a1eebe1f5f0628f6f82d5aac641319fc6e1",
-      "chain_index_state": "f2e020f333fced9fa25a02cec3da6c7ad3eb4641d04303a10cecaf6704794e23",
+      "chain_index_state": "139b1757f8496dd426931be207b2824e1a5677d682b365e9240ef26533d517bb",
       "chain_observation_provenance": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "chain_observer_coverage": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "chain_observer_instances": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -258,12 +258,12 @@
       "lightning_node_records": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "lightning_node_syncs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "loan_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-      "profiles": "6989cd1f564beab6f77c0748eb1aa41c3002f49ef42c0d5b89cc5a109f9d218a",
+      "profiles": "4f524fec731040f114258410273c69d17e82ab6e485fd45b194348481d3fd3ec",
       "rates_cache": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "rates_checked_minutes": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "review_workflow_receipts": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "saved_views": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-      "schema_migration_audits": "3c1493f39bd09e4889fbe6e89d1f32cb172e34a01ef6947b94dee8c4797ae0ea",
+      "schema_migration_audits": "696deaf084ea71e0277fb5905b6a1a0ab34c32c739b1c6f50120acbc8e76dfa2",
       "settings": "b4153c02188b626d5091b2b8215da09a1e820dac2899cdad06f6f04bd1e9d014",
       "source_funds_cases": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "source_funds_link_attachments": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -289,7 +289,7 @@
       "wallets": "710c72f3cff5b92fb6fe1e7756a46b6b20b658ff5d5e3d98359100847630529a",
       "workspaces": "4071bc33d0446f897c4f89c26c034b538c4d3c444c3ca6b74a01dfe6d63dded5"
     },
-    "wire_sha256": "67e9a3c3e6da9013dc38bd8cb54aefde3d8d3ab9a6aef9b5c916439df2ab9c61"
+    "wire_sha256": "f14d034045d3bc9fd96456864c26e1badb77f7ecca80ee4c92e9efdfbab05a43"
   },
   "2": {
     "finding_node_ids": [
@@ -320,7 +320,7 @@
         "bitcoin:main:tx:0000000000000000000000000000000000000000000000000000000000000002"
       ]
     ],
-    "snapshot_id": "5763489cb324263362389854bdc90ce146947e6aa98be03d4d9454bb02f6289f",
+    "snapshot_id": "d4ad220adf90ec4a6bf4a83388af2ec26991ca07aa9b3aaa018bcc96f74bdbd9",
     "tables": {
       "accounts": "182e354d4fe9e03683e91127d25e8d320be5e79713d35a9b6187f7f2a8f6328f",
       "ai_chat_messages": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -356,7 +356,7 @@
       "chain_index_nodes": "e2c6795c30f3b6473c0cdbbe791d7fd74797c8912d809f6d35d0e4041446c0a6",
       "chain_index_source_nodes": "7b14dfd0418f9bd26ea0b75267165678bf1e72731171c662b27c353444d333fa",
       "chain_index_sources": "23d2d2b9ae096c54a2c061bc6b241a1eebe1f5f0628f6f82d5aac641319fc6e1",
-      "chain_index_state": "f2e020f333fced9fa25a02cec3da6c7ad3eb4641d04303a10cecaf6704794e23",
+      "chain_index_state": "139b1757f8496dd426931be207b2824e1a5677d682b365e9240ef26533d517bb",
       "chain_observation_provenance": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "chain_observer_coverage": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "chain_observer_instances": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -404,12 +404,12 @@
       "lightning_node_records": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "lightning_node_syncs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "loan_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-      "profiles": "6989cd1f564beab6f77c0748eb1aa41c3002f49ef42c0d5b89cc5a109f9d218a",
+      "profiles": "4f524fec731040f114258410273c69d17e82ab6e485fd45b194348481d3fd3ec",
       "rates_cache": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "rates_checked_minutes": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "review_workflow_receipts": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "saved_views": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-      "schema_migration_audits": "3c1493f39bd09e4889fbe6e89d1f32cb172e34a01ef6947b94dee8c4797ae0ea",
+      "schema_migration_audits": "696deaf084ea71e0277fb5905b6a1a0ab34c32c739b1c6f50120acbc8e76dfa2",
       "settings": "b4153c02188b626d5091b2b8215da09a1e820dac2899cdad06f6f04bd1e9d014",
       "source_funds_cases": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "source_funds_link_attachments": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -435,7 +435,7 @@
       "wallets": "710c72f3cff5b92fb6fe1e7756a46b6b20b658ff5d5e3d98359100847630529a",
       "workspaces": "4071bc33d0446f897c4f89c26c034b538c4d3c444c3ca6b74a01dfe6d63dded5"
     },
-    "wire_sha256": "67e9a3c3e6da9013dc38bd8cb54aefde3d8d3ab9a6aef9b5c916439df2ab9c61"
+    "wire_sha256": "f14d034045d3bc9fd96456864c26e1badb77f7ecca80ee4c92e9efdfbab05a43"
   },
   "3": {
     "finding_node_ids": [
@@ -466,7 +466,7 @@
         "bitcoin:main:tx:0000000000000000000000000000000000000000000000000000000000000001"
       ]
     ],
-    "snapshot_id": "5763489cb324263362389854bdc90ce146947e6aa98be03d4d9454bb02f6289f",
+    "snapshot_id": "d4ad220adf90ec4a6bf4a83388af2ec26991ca07aa9b3aaa018bcc96f74bdbd9",
     "tables": {
       "accounts": "182e354d4fe9e03683e91127d25e8d320be5e79713d35a9b6187f7f2a8f6328f",
       "ai_chat_messages": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -502,7 +502,7 @@
       "chain_index_nodes": "e2c6795c30f3b6473c0cdbbe791d7fd74797c8912d809f6d35d0e4041446c0a6",
       "chain_index_source_nodes": "7b14dfd0418f9bd26ea0b75267165678bf1e72731171c662b27c353444d333fa",
       "chain_index_sources": "23d2d2b9ae096c54a2c061bc6b241a1eebe1f5f0628f6f82d5aac641319fc6e1",
-      "chain_index_state": "f2e020f333fced9fa25a02cec3da6c7ad3eb4641d04303a10cecaf6704794e23",
+      "chain_index_state": "139b1757f8496dd426931be207b2824e1a5677d682b365e9240ef26533d517bb",
       "chain_observation_provenance": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "chain_observer_coverage": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "chain_observer_instances": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -550,12 +550,12 @@
       "lightning_node_records": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "lightning_node_syncs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "loan_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-      "profiles": "6989cd1f564beab6f77c0748eb1aa41c3002f49ef42c0d5b89cc5a109f9d218a",
+      "profiles": "4f524fec731040f114258410273c69d17e82ab6e485fd45b194348481d3fd3ec",
       "rates_cache": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "rates_checked_minutes": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "review_workflow_receipts": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "saved_views": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-      "schema_migration_audits": "3c1493f39bd09e4889fbe6e89d1f32cb172e34a01ef6947b94dee8c4797ae0ea",
+      "schema_migration_audits": "696deaf084ea71e0277fb5905b6a1a0ab34c32c739b1c6f50120acbc8e76dfa2",
       "settings": "b4153c02188b626d5091b2b8215da09a1e820dac2899cdad06f6f04bd1e9d014",
       "source_funds_cases": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "source_funds_link_attachments": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -581,7 +581,7 @@
       "wallets": "710c72f3cff5b92fb6fe1e7756a46b6b20b658ff5d5e3d98359100847630529a",
       "workspaces": "4071bc33d0446f897c4f89c26c034b538c4d3c444c3ca6b74a01dfe6d63dded5"
     },
-    "wire_sha256": "67e9a3c3e6da9013dc38bd8cb54aefde3d8d3ab9a6aef9b5c916439df2ab9c61"
+    "wire_sha256": "f14d034045d3bc9fd96456864c26e1badb77f7ecca80ee4c92e9efdfbab05a43"
   },
   "4": {
     "finding_node_ids": [
@@ -612,7 +612,7 @@
         "bitcoin:main:tx:0000000000000000000000000000000000000000000000000000000000000003"
       ]
     ],
-    "snapshot_id": "5763489cb324263362389854bdc90ce146947e6aa98be03d4d9454bb02f6289f",
+    "snapshot_id": "d4ad220adf90ec4a6bf4a83388af2ec26991ca07aa9b3aaa018bcc96f74bdbd9",
     "tables": {
       "accounts": "182e354d4fe9e03683e91127d25e8d320be5e79713d35a9b6187f7f2a8f6328f",
       "ai_chat_messages": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -648,7 +648,7 @@
       "chain_index_nodes": "e2c6795c30f3b6473c0cdbbe791d7fd74797c8912d809f6d35d0e4041446c0a6",
       "chain_index_source_nodes": "7b14dfd0418f9bd26ea0b75267165678bf1e72731171c662b27c353444d333fa",
       "chain_index_sources": "23d2d2b9ae096c54a2c061bc6b241a1eebe1f5f0628f6f82d5aac641319fc6e1",
-      "chain_index_state": "f2e020f333fced9fa25a02cec3da6c7ad3eb4641d04303a10cecaf6704794e23",
+      "chain_index_state": "139b1757f8496dd426931be207b2824e1a5677d682b365e9240ef26533d517bb",
       "chain_observation_provenance": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "chain_observer_coverage": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "chain_observer_instances": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -696,12 +696,12 @@
       "lightning_node_records": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "lightning_node_syncs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "loan_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-      "profiles": "6989cd1f564beab6f77c0748eb1aa41c3002f49ef42c0d5b89cc5a109f9d218a",
+      "profiles": "4f524fec731040f114258410273c69d17e82ab6e485fd45b194348481d3fd3ec",
       "rates_cache": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "rates_checked_minutes": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "review_workflow_receipts": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "saved_views": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-      "schema_migration_audits": "3c1493f39bd09e4889fbe6e89d1f32cb172e34a01ef6947b94dee8c4797ae0ea",
+      "schema_migration_audits": "696deaf084ea71e0277fb5905b6a1a0ab34c32c739b1c6f50120acbc8e76dfa2",
       "settings": "b4153c02188b626d5091b2b8215da09a1e820dac2899cdad06f6f04bd1e9d014",
       "source_funds_cases": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "source_funds_link_attachments": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -727,7 +727,7 @@
       "wallets": "710c72f3cff5b92fb6fe1e7756a46b6b20b658ff5d5e3d98359100847630529a",
       "workspaces": "4071bc33d0446f897c4f89c26c034b538c4d3c444c3ca6b74a01dfe6d63dded5"
     },
-    "wire_sha256": "67e9a3c3e6da9013dc38bd8cb54aefde3d8d3ab9a6aef9b5c916439df2ab9c61"
+    "wire_sha256": "f14d034045d3bc9fd96456864c26e1badb77f7ecca80ee4c92e9efdfbab05a43"
   },
   "5": {
     "finding_node_ids": [
@@ -758,7 +758,7 @@
         "bitcoin:main:tx:0000000000000000000000000000000000000000000000000000000000000004"
       ]
     ],
-    "snapshot_id": "5763489cb324263362389854bdc90ce146947e6aa98be03d4d9454bb02f6289f",
+    "snapshot_id": "d4ad220adf90ec4a6bf4a83388af2ec26991ca07aa9b3aaa018bcc96f74bdbd9",
     "tables": {
       "accounts": "182e354d4fe9e03683e91127d25e8d320be5e79713d35a9b6187f7f2a8f6328f",
       "ai_chat_messages": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -794,7 +794,7 @@
       "chain_index_nodes": "e2c6795c30f3b6473c0cdbbe791d7fd74797c8912d809f6d35d0e4041446c0a6",
       "chain_index_source_nodes": "7b14dfd0418f9bd26ea0b75267165678bf1e72731171c662b27c353444d333fa",
       "chain_index_sources": "23d2d2b9ae096c54a2c061bc6b241a1eebe1f5f0628f6f82d5aac641319fc6e1",
-      "chain_index_state": "f2e020f333fced9fa25a02cec3da6c7ad3eb4641d04303a10cecaf6704794e23",
+      "chain_index_state": "139b1757f8496dd426931be207b2824e1a5677d682b365e9240ef26533d517bb",
       "chain_observation_provenance": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "chain_observer_coverage": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "chain_observer_instances": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -842,12 +842,12 @@
       "lightning_node_records": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "lightning_node_syncs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "loan_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-      "profiles": "6989cd1f564beab6f77c0748eb1aa41c3002f49ef42c0d5b89cc5a109f9d218a",
+      "profiles": "4f524fec731040f114258410273c69d17e82ab6e485fd45b194348481d3fd3ec",
       "rates_cache": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "rates_checked_minutes": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "review_workflow_receipts": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "saved_views": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-      "schema_migration_audits": "3c1493f39bd09e4889fbe6e89d1f32cb172e34a01ef6947b94dee8c4797ae0ea",
+      "schema_migration_audits": "696deaf084ea71e0277fb5905b6a1a0ab34c32c739b1c6f50120acbc8e76dfa2",
       "settings": "b4153c02188b626d5091b2b8215da09a1e820dac2899cdad06f6f04bd1e9d014",
       "source_funds_cases": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "source_funds_link_attachments": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -873,7 +873,7 @@
       "wallets": "710c72f3cff5b92fb6fe1e7756a46b6b20b658ff5d5e3d98359100847630529a",
       "workspaces": "4071bc33d0446f897c4f89c26c034b538c4d3c444c3ca6b74a01dfe6d63dded5"
     },
-    "wire_sha256": "67e9a3c3e6da9013dc38bd8cb54aefde3d8d3ab9a6aef9b5c916439df2ab9c61"
+    "wire_sha256": "f14d034045d3bc9fd96456864c26e1badb77f7ecca80ee4c92e9efdfbab05a43"
   },
   "6": {
     "finding_node_ids": [
@@ -904,7 +904,7 @@
         "bitcoin:main:tx:0000000000000000000000000000000000000000000000000000000000000003"
       ]
     ],
-    "snapshot_id": "5763489cb324263362389854bdc90ce146947e6aa98be03d4d9454bb02f6289f",
+    "snapshot_id": "d4ad220adf90ec4a6bf4a83388af2ec26991ca07aa9b3aaa018bcc96f74bdbd9",
     "tables": {
       "accounts": "182e354d4fe9e03683e91127d25e8d320be5e79713d35a9b6187f7f2a8f6328f",
       "ai_chat_messages": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -940,7 +940,7 @@
       "chain_index_nodes": "e2c6795c30f3b6473c0cdbbe791d7fd74797c8912d809f6d35d0e4041446c0a6",
       "chain_index_source_nodes": "7b14dfd0418f9bd26ea0b75267165678bf1e72731171c662b27c353444d333fa",
       "chain_index_sources": "23d2d2b9ae096c54a2c061bc6b241a1eebe1f5f0628f6f82d5aac641319fc6e1",
-      "chain_index_state": "f2e020f333fced9fa25a02cec3da6c7ad3eb4641d04303a10cecaf6704794e23",
+      "chain_index_state": "139b1757f8496dd426931be207b2824e1a5677d682b365e9240ef26533d517bb",
       "chain_observation_provenance": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "chain_observer_coverage": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "chain_observer_instances": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -988,12 +988,12 @@
       "lightning_node_records": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "lightning_node_syncs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "loan_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-      "profiles": "6989cd1f564beab6f77c0748eb1aa41c3002f49ef42c0d5b89cc5a109f9d218a",
+      "profiles": "4f524fec731040f114258410273c69d17e82ab6e485fd45b194348481d3fd3ec",
       "rates_cache": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "rates_checked_minutes": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "review_workflow_receipts": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "saved_views": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-      "schema_migration_audits": "3c1493f39bd09e4889fbe6e89d1f32cb172e34a01ef6947b94dee8c4797ae0ea",
+      "schema_migration_audits": "696deaf084ea71e0277fb5905b6a1a0ab34c32c739b1c6f50120acbc8e76dfa2",
       "settings": "b4153c02188b626d5091b2b8215da09a1e820dac2899cdad06f6f04bd1e9d014",
       "source_funds_cases": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "source_funds_link_attachments": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -1019,7 +1019,7 @@
       "wallets": "710c72f3cff5b92fb6fe1e7756a46b6b20b658ff5d5e3d98359100847630529a",
       "workspaces": "4071bc33d0446f897c4f89c26c034b538c4d3c444c3ca6b74a01dfe6d63dded5"
     },
-    "wire_sha256": "67e9a3c3e6da9013dc38bd8cb54aefde3d8d3ab9a6aef9b5c916439df2ab9c61"
+    "wire_sha256": "f14d034045d3bc9fd96456864c26e1badb77f7ecca80ee4c92e9efdfbab05a43"
   },
   "7": {
     "finding_node_ids": [
@@ -1050,7 +1050,7 @@
         "bitcoin:main:tx:0000000000000000000000000000000000000000000000000000000000000002"
       ]
     ],
-    "snapshot_id": "5763489cb324263362389854bdc90ce146947e6aa98be03d4d9454bb02f6289f",
+    "snapshot_id": "d4ad220adf90ec4a6bf4a83388af2ec26991ca07aa9b3aaa018bcc96f74bdbd9",
     "tables": {
       "accounts": "182e354d4fe9e03683e91127d25e8d320be5e79713d35a9b6187f7f2a8f6328f",
       "ai_chat_messages": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -1086,7 +1086,7 @@
       "chain_index_nodes": "e2c6795c30f3b6473c0cdbbe791d7fd74797c8912d809f6d35d0e4041446c0a6",
       "chain_index_source_nodes": "7b14dfd0418f9bd26ea0b75267165678bf1e72731171c662b27c353444d333fa",
       "chain_index_sources": "23d2d2b9ae096c54a2c061bc6b241a1eebe1f5f0628f6f82d5aac641319fc6e1",
-      "chain_index_state": "f2e020f333fced9fa25a02cec3da6c7ad3eb4641d04303a10cecaf6704794e23",
+      "chain_index_state": "139b1757f8496dd426931be207b2824e1a5677d682b365e9240ef26533d517bb",
       "chain_observation_provenance": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "chain_observer_coverage": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "chain_observer_instances": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -1134,12 +1134,12 @@
       "lightning_node_records": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "lightning_node_syncs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "loan_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-      "profiles": "6989cd1f564beab6f77c0748eb1aa41c3002f49ef42c0d5b89cc5a109f9d218a",
+      "profiles": "4f524fec731040f114258410273c69d17e82ab6e485fd45b194348481d3fd3ec",
       "rates_cache": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "rates_checked_minutes": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "review_workflow_receipts": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "saved_views": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-      "schema_migration_audits": "3c1493f39bd09e4889fbe6e89d1f32cb172e34a01ef6947b94dee8c4797ae0ea",
+      "schema_migration_audits": "696deaf084ea71e0277fb5905b6a1a0ab34c32c739b1c6f50120acbc8e76dfa2",
       "settings": "b4153c02188b626d5091b2b8215da09a1e820dac2899cdad06f6f04bd1e9d014",
       "source_funds_cases": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "source_funds_link_attachments": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -1165,6 +1165,6 @@
       "wallets": "710c72f3cff5b92fb6fe1e7756a46b6b20b658ff5d5e3d98359100847630529a",
       "workspaces": "4071bc33d0446f897c4f89c26c034b538c4d3c444c3ca6b74a01dfe6d63dded5"
     },
-    "wire_sha256": "67e9a3c3e6da9013dc38bd8cb54aefde3d8d3ab9a6aef9b5c916439df2ab9c61"
+    "wire_sha256": "f14d034045d3bc9fd96456864c26e1badb77f7ecca80ee4c92e9efdfbab05a43"
   }
 }
