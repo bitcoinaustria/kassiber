@@ -61,6 +61,13 @@ plugin, never from the product.
 Any other edit is a bug fix. It lands in production and in the oracle in the
 same commit, with a fixture that shows it, and updates `FROZEN.json`.
 
+Edits since the freeze:
+
+- `normalize.py` `_pricing_needs_review` takes main's accepted coarse-price
+  rule (#708): a coarse price the owner accepted at this exact price is no
+  longer held for review. Production applies it in the request builder;
+  the `generic-coarse-*-accepted-review` and stale-acceptance goldens show it.
+
 The product modules imported above are shared. A change in one of them moves
 the oracle and production together, so a shadow run cannot see it; the
 stored oracle outcomes of the projection-level goldens can.
