@@ -369,7 +369,7 @@ Current Austrian status:
   which followed the old rules unless the taxpayer opted otherwise. The
   indicative tax is `not_applicable` before 2022, and withheld
   (`crypto_rows_before_2022_03`) for a 2022 with such rows. Kassiber does not restate
-  those rows under the old rules (RP2 owns the classification); a
+  those rows under the old rules (the tax engine owns the classification); a
   Steuerberater does
 - Austrian output should remain review-gated; Kassiber is not tax advice
 
