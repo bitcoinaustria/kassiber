@@ -504,6 +504,14 @@ pub trait Book: Send {
     fn wallets(&mut self, _operation: kassiber_wallets::Operation) -> Result<Value, AppError> {
         Err(not_implemented("wallets", "wallet lifecycle"))
     }
+    /// `ui.wallets.import_file` / `ui.wallets.import_samourai`: the import,
+    /// then the local journal step for the book captured before it.
+    fn desktop_import(
+        &mut self,
+        _import: kassiber_wallets::file_import::DesktopImport,
+    ) -> Result<Value, AppError> {
+        Err(not_implemented("wallets", "desktop import"))
+    }
     /// `ui.wallets.identify_onchain` preparation: the book work, done on the
     /// request thread. The returned verification holds no database handle.
     fn identify_onchain(

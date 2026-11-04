@@ -13,6 +13,64 @@ use kassiber_wallets::identify::{
 use std::time::{Duration, Instant};
 
 impl RealBook {
+    /// `_with_local_journal_refresh` after the import committed: a refresh
+    /// already running elsewhere is reported as deferred, never as an
+    /// import failure.
+    pub(super) fn finish_import(
+        &mut self,
+        mut payload: Value,
+        profile_id: &str,
+    ) -> Result<Value, AppError> {
+        if !matches!(payload, Value::Dict(_)) || profile_id.is_empty() {
+            return Ok(payload);
+        }
+        let journals = match self.local_journal_refresh(profile_id) {
+            Ok(summary) => summary,
+            Err(error) if error.code == "project_operation_in_progress" => {
+                let mut summary = kassiber_wallets::freshness::ui::journal_step_summary(&[], &[]);
+                set(&mut summary, "status", s("deferred"));
+                set(
+                    &mut summary,
+                    "error",
+                    dict([
+                        ("code", s(error.code.as_str())),
+                        ("message", s(error.message.as_str())),
+                    ]),
+                );
+                summary
+            }
+            Err(error) => return Err(error),
+        };
+        set(&mut payload, "journals", journals);
+        Ok(payload)
+    }
+
+    fn local_journal_refresh(&mut self, profile_id: &str) -> Result<Value, AppError> {
+        let cancel = kassiber_wallets::scan::Cancellation::default();
+        #[cfg(feature = "test-harness")]
+        let passphrase = self.db_passphrase.as_ref().map(|v| v.expose().to_owned());
+        let conn = self
+            .book
+            .as_mut()
+            .ok_or_else(|| AppError::new("internal_error", "book is closed"))?
+            .connection_mut();
+        let mut handler = super::journals::Refresh {
+            cancel: &cancel,
+            consent: None,
+            context: kassiber_setup::context::snapshot(conn)?,
+            deadline: Instant::now() + Duration::from_secs(900),
+            #[cfg(feature = "test-harness")]
+            test_passphrase: passphrase.as_deref(),
+        };
+        let (mut sources, _) = super::sync_sources();
+        kassiber_wallets::freshness::planning::local_journal_refresh(
+            conn,
+            profile_id,
+            sources.as_mut(),
+            &mut handler,
+        )
+    }
+
     /// `build_wallet_identify_snapshot`: cache-only, so safe without consent.
     pub(super) fn identify_wallets(&self, args: &Value) -> Result<Value, AppError> {
         let context = self.context()?;

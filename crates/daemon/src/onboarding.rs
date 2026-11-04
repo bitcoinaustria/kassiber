@@ -9,7 +9,11 @@ use crate::{
 use kassiber_envelope::redaction::redact_secret_text;
 use kassiber_envelope::{build_error_envelope, dict, get, py_str, s, success, type_name, AppError};
 use kassiber_pyjson::{BigInt, Value};
-use kassiber_wallets::{catalog_detection, file_import::ledger, identify::onchain::Start};
+use kassiber_wallets::{
+    catalog_detection,
+    file_import::{self, analysis, ledger, DesktopImport},
+    identify::onchain::Start,
+};
 use std::collections::HashMap;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -20,7 +24,10 @@ pub const KINDS: &[&str] = &[
     "ui.wallets.identify",
     "ui.wallets.identify_onchain",
     "ui.wallets.identify_onchain.cancel",
+    "ui.wallets.import_file",
+    "ui.wallets.import_samourai",
     "ui.wallets.ledger_preview",
+    "ui.wallets.analyze_file",
     "ui.wallets.detect_script_types",
 ];
 
@@ -212,7 +219,22 @@ pub(super) fn handle(
     if kind == ONCHAIN {
         return identify_onchain(daemon, args, request_id);
     }
+    if ["ui.wallets.import_file", "ui.wallets.import_samourai"].contains(&kind) {
+        let args = object(args)?;
+        let import = if kind == "ui.wallets.import_file" {
+            import_file(daemon, &args)?
+        } else {
+            DesktopImport::Samourai(samourai(&args)?)
+        };
+        let payload = daemon.book_mut()?.desktop_import(import)?;
+        // Python ends the session after a committed desktop import.
+        return Ok((
+            Some(with_request_id(success(kind, payload), request_id)),
+            true,
+        ));
+    }
     let payload = match kind {
+        "ui.wallets.analyze_file" => analyze_file(daemon, &object(args)?)?,
         ONCHAIN_CANCEL => cancel_onchain(daemon, &object(args)?)?,
         // Python hands the raw args to the snapshot, which checks them itself.
         "ui.wallets.identify" => daemon
@@ -228,6 +250,282 @@ pub(super) fn handle(
         Some(with_request_id(success(kind, payload), request_id)),
         false,
     ))
+}
+
+/// `_import_wallet_file_payload` up to the importer: argument checks in
+/// Python's order, the active book, then the per-format wallet and mode rules.
+fn import_file(daemon: &mut Daemon, args: &Value) -> Result<DesktopImport, AppError> {
+    let required = |key: &str, label: &str| {
+        optional_string(args, key)?.ok_or_else(|| {
+            AppError::new("validation", format!("{label} is required."))
+                .with_hint(format!("Enter {}.", label.to_lowercase()))
+        })
+    };
+    let source_format = required("source_format", "Source format")?;
+    if let Some(bundle) = get(args, "source_bundle").filter(|v| !matches!(v, Value::Null)) {
+        if source_format != "wasabi_bundle" {
+            return Err(AppError::new(
+                "validation",
+                "Inline source_bundle is only supported for Wasabi imports",
+            ));
+        }
+        let wallet = required("wallet", "Wallet")?;
+        let (_, profile_id) = daemon.book_mut()?.resolve_scope(None, None)?;
+        return Ok(DesktopImport::WasabiPayload {
+            request: file_import::Request {
+                profile_id,
+                wallet,
+                file: "inline:wasabi_bundle".into(),
+                format: file_import::Format::Wasabi,
+                mode: None,
+            },
+            payload: bundle.clone(),
+        });
+    }
+    let Some(file) = crate::wallets::source_file(args)? else {
+        return Err(AppError::new("validation", "source_file is required")
+            .with_hint("Choose the local export file to import."));
+    };
+    if !crate::wallets::SOURCE_FORMATS.contains(&source_format.as_str()) {
+        return Err(AppError::new(
+            "validation",
+            format!("Unsupported source format '{source_format}'"),
+        )
+        .with_hint("Choose a supported file format."));
+    }
+    let format = file_import::Format::from_source_format(&source_format);
+    let mode = || -> Result<Option<String>, AppError> {
+        Ok(match optional_string(args, "mode")? {
+            Some(mode) => Some(mode),
+            None => optional_string(args, "import_mode")?,
+        })
+    };
+    let (wallet, mode, column_map) = match source_format.as_str() {
+        "bullbitcoin_csv" | "coinfinity_csv" | "pocketbitcoin_csv" => {
+            let wallet = optional_string(args, "wallet")?;
+            (
+                wallet,
+                Some(mode()?.unwrap_or_else(|| "relevant".into())),
+                None,
+            )
+        }
+        "21bitcoin_csv" => {
+            let wallet = optional_string(args, "wallet")?;
+            (wallet, mode()?, None)
+        }
+        "binance_supplemental_csv" => {
+            let wallet = optional_string(args, "wallet")?;
+            (wallet, Some(mode()?.unwrap_or_else(|| "full".into())), None)
+        }
+        "strike_csv" => (optional_string(args, "wallet")?, Some("full".into()), None),
+        _ => {
+            let wallet = required("wallet", "Wallet")?;
+            let column_map = match get(args, "column_map") {
+                None | Some(Value::Null) => None,
+                Some(value @ Value::Dict(_)) => Some(ledger::ColumnMap::from_python(value)?),
+                Some(_) => {
+                    return Err(AppError::new("validation", "column_map must be an object")
+                        .with_hint("Map ledger fields to this file's column names."))
+                }
+            };
+            (Some(wallet), None, column_map)
+        }
+    };
+    // The Bull Bitcoin wallet-history importer is not native yet.
+    let format = format.ok_or_else(|| {
+        kassiber_runtime::store::not_implemented("wallets", "Bull Bitcoin wallet history import")
+    })?;
+    let (_, profile_id) = daemon.book_mut()?.resolve_scope(None, None)?;
+    Ok(DesktopImport::File {
+        request: file_import::Request {
+            profile_id,
+            wallet: wallet.unwrap_or_default(),
+            file,
+            format,
+            mode,
+        },
+        column_map,
+    })
+}
+
+/// `_import_samourai_payload`: watch-only source sets only.
+fn samourai(args: &Value) -> Result<file_import::samourai::Request, AppError> {
+    let label = optional_string(args, "label")?.ok_or_else(|| {
+        AppError::new("validation", "Connection label is required.")
+            .with_hint("Enter connection label.")
+    })?;
+    let file = optional_string(args, "source_set_file")?;
+    let source_set = get(args, "source_set").filter(|v| !matches!(v, Value::Null));
+    let forbidden: Vec<Value> = [
+        "backup_file",
+        "backup_passphrase",
+        "mnemonic",
+        "mnemonic_passphrase",
+        "source_file",
+    ]
+    .into_iter()
+    .filter(|key| get(args, key).is_some_and(|v| !matches!(v, Value::Null) && *v != s("")))
+    .map(s)
+    .collect();
+    if !forbidden.is_empty() {
+        return Err(AppError::new(
+            "validation",
+            "Samourai imports accept only watch-only descriptor/xpub source sets",
+        )
+        .with_hint("Paste public Deposit, Badbank, Premix, and Postmix descriptors or xpubs instead of backup or recovery material.")
+        .with_details(dict([("unsupported_fields", Value::List(forbidden))])));
+    }
+    if source_set.is_some_and(|v| !matches!(v, Value::Dict(_))) {
+        return Err(AppError::new(
+            "validation",
+            "source_set must be a JSON object",
+        ));
+    }
+    let gap_limit = match get(args, "gap_limit") {
+        None | Some(Value::Null) => None,
+        Some(value) if *value == s("") => None,
+        Some(value @ (Value::Int(_) | Value::Bool(_))) => Some(value.clone()),
+        Some(value) => {
+            return Err(AppError::new("validation", "gap_limit must be an integer")
+                .with_details(dict([("type", s(type_name(value)))])))
+        }
+    };
+    Ok(file_import::samourai::Request {
+        workspace: None,
+        profile: None,
+        label,
+        account: optional_string(args, "account")?,
+        backend: optional_string(args, "backend")?,
+        network: optional_string(args, "network")?,
+        gap_limit,
+        file: file.unwrap_or_default(),
+        source_set: source_set.cloned(),
+    })
+}
+
+/// `_analyze_sample_rows_arg`: bounded, and `0` means no rows.
+fn sample_rows(args: &Value) -> Result<usize, AppError> {
+    let invalid = || AppError::new("validation", "sample_rows must be a number");
+    let number = match get(args, "sample_rows") {
+        None | Some(Value::Null) => return Ok(analysis::DEFAULT_SAMPLE_ROWS),
+        Some(Value::Int(number)) => number.clone(),
+        Some(Value::Float(number)) if number.is_finite() => {
+            kassiber_pytext::parse_int(&format!("{:.0}", number.trunc())).map_err(|_| invalid())?
+        }
+        Some(Value::Float(number)) => {
+            return Err(AppError::new(
+                "internal_error",
+                if number.is_nan() {
+                    "cannot convert float NaN to integer"
+                } else {
+                    "cannot convert float infinity to integer"
+                },
+            ))
+        }
+        Some(_) => return Err(invalid()),
+    };
+    Ok(if number <= BigInt::from(0) {
+        0
+    } else {
+        usize::try_from(number)
+            .unwrap_or(usize::MAX)
+            .min(analysis::MAX_SAMPLE_ROWS)
+    })
+}
+
+/// `_analyze_file_payload`: a staged token or uploaded bytes, never a path.
+fn analyze_file(daemon: &mut Daemon, args: &Value) -> Result<Value, AppError> {
+    let token = optional_string(args, "token")?;
+    let column_map = match get(args, "column_map") {
+        None | Some(Value::Null) => None,
+        Some(value @ Value::Dict(_)) => Some(value.clone()),
+        Some(_) => {
+            return Err(AppError::new("validation", "column_map must be an object")
+                .with_hint("Map ledger fields to this file's column names."))
+        }
+    };
+    let rows = sample_rows(args)?;
+    let mapping = column_map
+        .as_ref()
+        .map(ledger::ColumnMap::from_python)
+        .transpose()?;
+    if let Some(token) = token {
+        let source = daemon.document_source(&token)?;
+        return analysis::analyze(&source, mapping.as_ref(), rows).map_err(|error| {
+            if error.code == "not_found" && error.message.contains(&source) {
+                crate::documents_import::source_unavailable()
+            } else {
+                error
+            }
+        });
+    }
+    let Some(encoded) = optional_string(args, "source_bytes_base64")? else {
+        return Err(
+            AppError::new("validation", "token or source_bytes_base64 is required")
+                .with_hint("Choose the export file with the file picker before analyzing it."),
+        );
+    };
+    let filename = optional_string(args, "filename")?.unwrap_or_else(|| "export.csv".into());
+    let extension = suffix(&filename).to_lowercase();
+    let supported = analysis::supported_extensions();
+    if !supported.contains(&extension.as_str()) {
+        return Err(
+            AppError::new("validation", "Unsupported file type for analysis")
+                .with_hint("Choose a CSV, TSV, XLSX, PDF, or image export.")
+                .with_details(dict([
+                    (
+                        "extension",
+                        if extension.is_empty() {
+                            Value::Null
+                        } else {
+                            s(extension.as_str())
+                        },
+                    ),
+                    (
+                        "supported_extensions",
+                        Value::List(supported.into_iter().map(s).collect()),
+                    ),
+                ])),
+        );
+    }
+    let bytes = strict_base64(&encoded).ok_or_else(|| {
+        AppError::new("validation", "Could not decode the selected file.")
+            .with_hint("Choose the file again and retry.")
+    })?;
+    let mut result = analysis::analyze_upload(&bytes, &extension, mapping.as_ref(), rows)?;
+    // The temporary path is gone; never hand it back as if it were importable.
+    if let Value::Dict(fields) = &mut result {
+        for (key, value) in fields.iter_mut() {
+            if *key == kassiber_pyjson::Key::from("source") {
+                if let Value::Dict(source) = value {
+                    for (key, value) in source.iter_mut() {
+                        if *key == kassiber_pyjson::Key::from("path") {
+                            *value = Value::Null;
+                        } else if *key == kassiber_pyjson::Key::from("filename") {
+                            *value = s(filename.as_str());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(result)
+}
+
+impl Daemon {
+    /// The staged file behind a picker token, for this book only.
+    pub(crate) fn document_source(&mut self, token: &str) -> Result<String, AppError> {
+        let (workspace_id, profile_id) = self.book_mut()?.resolve_scope(None, None)?;
+        let data_root = self.data_root.clone();
+        self.document_sessions.source_for_preview(
+            token,
+            &crate::documents_import::Scope {
+                workspace_id: &workspace_id,
+                profile_id: &profile_id,
+                data_root: &data_root,
+            },
+        )
+    }
 }
 
 /// `_coerce_args_dict`.

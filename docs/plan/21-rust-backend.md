@@ -2501,7 +2501,7 @@ plaintext/encrypted wire/state checks and 38 new named mutations. The
 records final verification and served-by counts.
 
 The continuation accepts core and CLI importer checkpoints independently of
-the [shared file-import daemon follow-up](../reference/rust-shell.md#shared-file-import-daemon-parity-pending).
+the [shared file-import daemon follow-up](../reference/rust-shell.md#shared-file-import-daemon-parity).
 That shared item owns the pending transport contract for every importer.
 
 ### R5 file-import continuation: Blockpit core/CLI checkpoint
@@ -2707,7 +2707,10 @@ on SQLite and SQLCipher; 34 mutation entries are killed by named tests. See
 
 On-chain identification streams from a worker that never touches the book;
 its lookups are the explicit "Verify on chain" action through `kassiber-net`,
-and cancellation follows Python's registry, between lookups only.
+and cancellation follows Python's registry, between lookups only. Desktop file
+imports, Samourai source sets and file analysis are native; each import ends
+with the native local journal step. The Bull Bitcoin wallet-history format
+still refuses with `not_implemented`.
 
 ## Risks
 

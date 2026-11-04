@@ -182,7 +182,7 @@ fn auth(
     }
     Ok(None)
 }
-fn source_file(args: &Value) -> Result<Option<String>, AppError> {
+pub(crate) fn source_file(args: &Value) -> Result<Option<String>, AppError> {
     let Some(file) = crate::imports::optional_string(args, "source_file")? else {
         return Ok(None);
     };
@@ -204,7 +204,7 @@ fn source_file(args: &Value) -> Result<Option<String>, AppError> {
         .map(|p| Some(p.to_string_lossy().into_owned()))
         .map_err(|_| AppError::new("internal_error", "Could not resolve source file"))
 }
-const SOURCE_FORMATS: &[&str] = &[
+pub(crate) const SOURCE_FORMATS: &[&str] = &[
     "json",
     "csv",
     "btcpay_json",

@@ -1,4 +1,5 @@
 //! User-triggered ingestion. Document OCR requires an exact local-provider grant.
+pub mod analysis;
 mod binance;
 mod btcpay;
 mod bull;
@@ -64,6 +65,29 @@ pub enum Format {
     Document,
 }
 impl Format {
+    /// The importer behind a desktop `source_format`, where one is native.
+    pub fn from_source_format(name: &str) -> Option<Self> {
+        Some(match name {
+            "json" => Self::Json,
+            "csv" => Self::Csv,
+            "btcpay_json" => Self::BtcpayJson,
+            "btcpay_csv" => Self::BtcpayCsv,
+            "phoenix_csv" => Self::Phoenix,
+            "river_csv" => Self::River,
+            "bullbitcoin_csv" => Self::Bull,
+            "coinfinity_csv" => Self::Coinfinity,
+            "21bitcoin_csv" => Self::TwentyOne,
+            "pocketbitcoin_csv" => Self::Pocket,
+            "strike_csv" => Self::Strike,
+            "ledgerlive_csv" => Self::LedgerLive,
+            "binance_supplemental_csv" => Self::Binance,
+            "cointracking_csv" => Self::CoinTracking,
+            "blockpit_csv" => Self::Blockpit,
+            "wasabi_bundle" => Self::Wasabi,
+            "generic_ledger" => Self::Ledger,
+            _ => return None,
+        })
+    }
     fn name(self) -> &'static str {
         match self {
             Self::Document => "document_import",
@@ -1200,6 +1224,46 @@ pub fn execute_with_ledger_map(
     column_map: Option<&ledger::ColumnMap>,
     identity: Option<&Identity>,
 ) -> Result<Py, AppError> {
+    run(conn, request, column_map, None, identity)
+}
+
+/// `import_wasabi_bundle_payload_into_wallet`: the desktop's inline Wasabi
+/// bundle. Only the reply's source differs from a bundle file.
+pub fn execute_wasabi_payload(
+    conn: &Connection,
+    request: Request,
+    payload: Py,
+    identity: Option<&Identity>,
+) -> Result<Py, AppError> {
+    let mut result = run(conn, request, None, Some(payload), identity)?;
+    kassiber_envelope::set(&mut result, "source", s("inline:wasabi_bundle"));
+    if let Py::Dict(items) = &mut result {
+        items.retain(|(key, _)| *key != kassiber_pyjson::Key::from("file"));
+    }
+    Ok(result)
+}
+
+/// What the desktop's `ui.wallets.import_file` and `ui.wallets.import_samourai`
+/// ask the book to import before the local journal step.
+pub enum DesktopImport {
+    File {
+        request: Request,
+        column_map: Option<ledger::ColumnMap>,
+    },
+    WasabiPayload {
+        request: Request,
+        payload: Py,
+    },
+    Samourai(samourai::Request),
+}
+
+fn run(
+    conn: &Connection,
+    request: Request,
+    column_map: Option<&ledger::ColumnMap>,
+    inline: Option<Py>,
+    identity: Option<&Identity>,
+) -> Result<Py, AppError> {
     let mut ids = Ids { identity, at: 0 };
     let mode = if request.format.active() {
         let mode = exchange::mode(
@@ -1247,10 +1311,10 @@ pub fn execute_with_ledger_map(
                 .with_details(dict([("wallet",s(wallet.label.as_str())),("wallet_kind",s(kind.as_str()))])));
         }
     }
-    let bundle = if request.format == Format::Wasabi {
-        Some(wasabi::load(&request.file)?)
-    } else {
-        None
+    let bundle = match inline {
+        Some(payload) => Some(wasabi::load_payload(payload)?),
+        None if request.format == Format::Wasabi => Some(wasabi::load(&request.file)?),
+        None => None,
     };
     let rows = if let Some(bundle) = &bundle {
         wasabi::rows(&bundle.records)?

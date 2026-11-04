@@ -54,6 +54,16 @@ fn doubled(chars: &[char], quote: char, delimiter: char) -> bool {
     false
 }
 fn sniff(text: &str) -> Dialect {
+    sniff_decided(text).0
+}
+/// `csv.Sniffer().sniff(text[:8192], delimiters=",;\t|").delimiter`, or
+/// `None` where the Sniffer raises "Could not determine delimiter".
+pub(crate) fn sniffed_delimiter(text: &str) -> Option<char> {
+    let (dialect, decided) = sniff_decided(text);
+    decided.then_some(dialect.delimiter)
+}
+/// The sniffed dialect, falling back to excel's when undecided.
+fn sniff_decided(text: &str) -> (Dialect, bool) {
     let sample = text
         .chars()
         .take(8192)
@@ -141,12 +151,15 @@ fn sniff(text: &str) -> Dialect {
             let quote = quotes.iter().rev().max_by_key(|(_, n)| *n).unwrap().0;
             if let Some((delimiter, n)) = delims.iter().rev().max_by_key(|(_, n)| *n) {
                 let double = doubled(&chars, quote, *delimiter);
-                return Dialect {
-                    delimiter: *delimiter,
-                    quote,
-                    double,
-                    spaces: *n == spaces,
-                };
+                return (
+                    Dialect {
+                        delimiter: *delimiter,
+                        quote,
+                        double,
+                        spaces: *n == spaces,
+                    },
+                    true,
+                );
             }
             break;
         }
@@ -194,14 +207,17 @@ fn sniff(text: &str) -> Dialect {
         .into_iter()
         .find(|d| delims.contains_key(d))
         .unwrap_or(',');
-    Dialect {
-        delimiter,
-        quote: '"',
-        double: delims.is_empty(),
-        spaces: lines.first().is_some_and(|line| {
-            line.matches(delimiter).count() == line.matches(&format!("{delimiter} ")).count()
-        }) && !delims.is_empty(),
-    }
+    (
+        Dialect {
+            delimiter,
+            quote: '"',
+            double: delims.is_empty(),
+            spaces: lines.first().is_some_and(|line| {
+                line.matches(delimiter).count() == line.matches(&format!("{delimiter} ")).count()
+            }) && !delims.is_empty(),
+        },
+        !delims.is_empty(),
+    )
 }
 pub(super) fn raw_rows(file: &str) -> Result<Vec<Vec<String>>, AppError> {
     let text = csv::read_sig(file)?;

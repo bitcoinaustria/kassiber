@@ -468,5 +468,115 @@
       "tests/test_rust_wallet_identify_onchain.py::RustIdentifyOnchainTest::test_sqlcipher_lookup_matches_python"
     ],
     "rule": "The daemon advertises native on-chain identification."
+  },
+  {
+    "id": "IM-journal-step",
+    "file": "crates/kassiber/src/real_store/onboarding.rs",
+    "find": "        set(&mut payload, \"journals\", journals);\n",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_wallet_import_desktop.py::RustDesktopImportTest::test_json_import_runs_the_journal_step"
+    ],
+    "rule": "A desktop import reports its local journal step."
+  },
+  {
+    "id": "IM-journals-disabled",
+    "file": "crates/wallets/src/freshness/planning.rs",
+    "find": "if !truthy(field(field(&policy, \"source_classes\"), \"journals\")) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "tests/test_rust_wallet_import_desktop.py::RustDesktopImportTest::test_csv_import_with_journals_disabled"
+    ],
+    "rule": "A policy without journals reports the step as disabled instead of rebuilding."
+  },
+  {
+    "id": "IM-session-end",
+    "file": "crates/daemon/src/onboarding.rs",
+    "find": "            Some(with_request_id(success(kind, payload), request_id)),\n            true,",
+    "replace": "            Some(with_request_id(success(kind, payload), request_id)),\n            false,",
+    "expect_failing": [
+      "tests/test_rust_wallet_import_desktop.py::RustDesktopImportTest::test_json_import_runs_the_journal_step"
+    ],
+    "rule": "A committed desktop import ends the daemon session like Python."
+  },
+  {
+    "id": "IM-wallet-required",
+    "file": "crates/daemon/src/onboarding.rs",
+    "find": "        _ => {\n            let wallet = required(\"wallet\", \"Wallet\")?;",
+    "replace": "        _ => {\n            let wallet = optional_string(args, \"wallet\")?.unwrap_or_default();",
+    "expect_failing": [
+      "tests/test_rust_wallet_import_desktop.py::RustDesktopImportTest::test_refusals_keep_the_session_and_match_python"
+    ],
+    "rule": "Ordinary file formats need an explicit wallet."
+  },
+  {
+    "id": "IM-inline-source",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "kassiber_envelope::set(&mut result, \"source\", s(\"inline:wasabi_bundle\"));",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_wallet_import_desktop.py::RustDesktopImportTest::test_inline_wasabi_bundle"
+    ],
+    "rule": "An inline Wasabi bundle reports its inline source."
+  },
+  {
+    "id": "AN-delimiter",
+    "file": "crates/wallets/src/file_import/analysis.rs",
+    "find": "delimiter_name(&path).map_or(Py::Null, s)",
+    "replace": "Py::Null",
+    "expect_failing": [
+      "tests/test_rust_wallet_import_desktop.py::RustAnalyzeFileTest::test_uploads_tokens_and_refusals_match_python"
+    ],
+    "rule": "Delimited files report the sniffed delimiter."
+  },
+  {
+    "id": "AN-units",
+    "file": "crates/wallets/src/file_import/analysis.rs",
+    "find": "!negative && significant.len() >= 4",
+    "replace": "!negative && significant.len() >= 7",
+    "expect_failing": [
+      "tests/test_rust_wallet_import_desktop.py::RustAnalyzeFileTest::test_uploads_tokens_and_refusals_match_python"
+    ],
+    "rule": "Amounts of 1000 or more are flagged as probably not BTC."
+  },
+  {
+    "id": "AN-kinds-from-sign",
+    "file": "crates/wallets/src/file_import/analysis.rs",
+    "find": "!native && !(truthy(field(&effective, \"type\")) || truthy(field(&effective, \"direction\")));",
+    "replace": "false;",
+    "expect_failing": [
+      "tests/test_rust_wallet_import_desktop.py::RustAnalyzeFileTest::test_uploads_tokens_and_refusals_match_python"
+    ],
+    "rule": "Without a Type or direction column, row kinds come from the amount's sign and are flagged."
+  },
+  {
+    "id": "SM-forbidden",
+    "file": "crates/daemon/src/onboarding.rs",
+    "find": "get(args, key).is_some_and(|v| !matches!(v, Value::Null) && *v != s(\"\"))",
+    "replace": "false",
+    "expect_failing": [
+      "tests/test_rust_wallet_import_desktop.py::RustDesktopSamouraiTest::test_refusals_match_python"
+    ],
+    "rule": "Samourai imports refuse backup and recovery material."
+  },
+  {
+    "id": "REG-import-file",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "    kinds.push(\"ui.wallets.import_file\");\n",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_wallet_import_desktop.py::RustDesktopImportTest::test_refusals_keep_the_session_and_match_python"
+    ],
+    "rule": "The daemon advertises the native desktop file import."
+  },
+  {
+    "id": "REG-analyze-file",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "    kinds.push(\"ui.wallets.analyze_file\");\n",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_wallet_import_desktop.py::RustAnalyzeFileTest::test_sqlcipher_analysis_matches_python"
+    ],
+    "rule": "The daemon advertises native file analysis."
   }
 ]

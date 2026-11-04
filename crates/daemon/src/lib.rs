@@ -20,6 +20,7 @@ mod chain_analysis_reads;
 pub mod control;
 mod diagnostics;
 mod documents;
+mod documents_import;
 mod freshness;
 mod imports;
 pub mod input;
@@ -207,7 +208,10 @@ pub fn supported_kinds() -> Vec<&'static str> {
             .copied()
             .filter(|k| ["ui.wallets.create"].contains(k)),
     );
+    kinds.push("ui.wallets.import_file");
+    kinds.push("ui.wallets.import_samourai");
     kinds.push("ui.wallets.ledger_preview");
+    kinds.push("ui.wallets.analyze_file");
     kinds.extend(imports::KINDS);
     kinds.extend(
         wallets::KINDS
@@ -477,6 +481,8 @@ pub(crate) struct Daemon {
     egress_backends: Option<Value>,
     /// Running "Verify on chain" workers, by request id.
     verifications: Arc<onboarding::Verifications>,
+    /// Native-picker document grants (`DocumentImportSessions`).
+    document_sessions: documents_import::Sessions,
 }
 
 impl Daemon {
@@ -503,6 +509,7 @@ impl Daemon {
             log_ring: Default::default(),
             egress_backends: None,
             verifications: Default::default(),
+            document_sessions: Default::default(),
         }
     }
 

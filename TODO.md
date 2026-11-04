@@ -460,8 +460,11 @@ projections stay Python. Progress and remaining work for this slice:
 - [x] Port on-chain identification with streamed progress, Python's
   cancellation registry and consent-bound lookups, compared step by step
   against loopback Esplora/Electrum fixtures.
-- [ ] Complete the [shared file-import daemon parity follow-up](docs/reference/rust-shell.md#shared-file-import-daemon-parity-pending)
-  after its native prerequisites land.
+- [x] Complete the [shared file-import daemon parity follow-up](docs/reference/rust-shell.md#shared-file-import-daemon-parity):
+  native desktop imports with the local journal step, Samourai source sets and
+  file analysis, with raw-JSONL/all-table parity.
+- [ ] Port the Bull Bitcoin wallet-history importer (`bullbitcoin_wallet_csv`);
+  the desktop import refuses it with `not_implemented` until then.
 - [ ] Port the remaining wallet commands after file-ingestion acceptance,
   including individual file importers with exact msat/time/deduplication
   parity and mutation entries.

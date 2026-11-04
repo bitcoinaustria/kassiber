@@ -245,6 +245,99 @@ pub fn report_read_idle(
     Ok(Some(payload))
 }
 
+/// One book's local journal step: the jobs it queued and ran, and its
+/// summary for the reply.
+struct JournalStep {
+    enqueued: Vec<Value>,
+    completed: Vec<Value>,
+    summary: Value,
+}
+
+/// `run_local_journal_refresh` without its execution slot: queue and run
+/// only the journal source of one book, honoring the policy's journals
+/// source class.
+#[allow(clippy::too_many_arguments)]
+fn journal_step(
+    conn: &mut Connection,
+    profile_id: &str,
+    auto_pair: bool,
+    sources: &mut dyn Sources,
+    handler: &mut dyn execution::Handler,
+    observer: &mut dyn FnMut(&Value) -> Result<()>,
+    clock: &dyn Fn(i64) -> Result<String>,
+) -> Result<JournalStep> {
+    let policy = Queue::new(conn, sources).policy(profile_id)?;
+    if !truthy(field(field(&policy, "source_classes"), "journals")) {
+        let mut summary = ui::journal_step_summary(&[], &[]);
+        put(&mut summary, "status", s("disabled"));
+        return Ok(JournalStep {
+            enqueued: vec![],
+            completed: vec![],
+            summary,
+        });
+    }
+    let mut payload = dict([("skip_rebuild_when_current", Value::Bool(true))]);
+    if auto_pair {
+        put(&mut payload, "auto_pair", Value::Bool(true));
+    }
+    let mut input = sources::journal(profile_id, payload);
+    put(&mut input, "profile_id", s(profile_id));
+    execution::begin(conn)?;
+    let job = Queue::new(conn, sources).enqueue(&input)?;
+    execution::commit(conn)?;
+    let local = if truthy(field(&job, "job_type")) {
+        vec![job]
+    } else {
+        vec![]
+    };
+    let ids = local
+        .iter()
+        .map(|job| or_text(field(job, "id")))
+        .collect::<Vec<_>>();
+    let selected = Queue::new(conn, sources).requested_due(profile_id, &ids, 1)?;
+    let done = execution::run_requested(
+        conn,
+        profile_id,
+        &selected
+            .iter()
+            .map(|job| or_text(field(job, "id")))
+            .collect::<Vec<_>>(),
+        1,
+        sources,
+        handler,
+        &mut |event| observer(&ui::payload(event)),
+        clock,
+    )?;
+    Ok(JournalStep {
+        summary: ui::journal_step_summary(&local, &done),
+        enqueued: local,
+        completed: done,
+    })
+}
+
+/// `run_local_journal_refresh(auto_pair=True, skip_rebuild_when_current=True)`
+/// after a user-triggered import: the journal step summary for the reply. A
+/// refresh already running elsewhere refuses with
+/// `project_operation_in_progress`, which callers report as deferred.
+pub fn local_journal_refresh(
+    conn: &mut Connection,
+    profile_id: &str,
+    sources: &mut dyn Sources,
+    handler: &mut dyn execution::Handler,
+) -> Result<Value> {
+    let _execution = Execution::acquire()?;
+    let step = journal_step(
+        conn,
+        profile_id,
+        true,
+        sources,
+        handler,
+        &mut |_| Ok(()),
+        &execution::retry_time,
+    )?;
+    Ok(ui::payload(&step.summary))
+}
+
 impl Plan {
     pub fn new(
         conn: &Connection,
@@ -512,48 +605,18 @@ impl Plan {
             };
             let mut journals = None;
             if self.request.wallets_sync && self.request.journals != Some(false) {
-                let policy = Queue::new(conn, sources).policy(&id)?;
-                if truthy(field(field(&policy, "source_classes"), "journals")) {
-                    let mut payload = dict([("skip_rebuild_when_current", Value::Bool(true))]);
-                    if self.request.auto_pair {
-                        put(&mut payload, "auto_pair", Value::Bool(true));
-                    }
-                    let mut input = sources::journal(&id, payload);
-                    put(&mut input, "profile_id", s(id.as_str()));
-                    execution::begin(conn)?;
-                    let job = Queue::new(conn, sources).enqueue(&input)?;
-                    execution::commit(conn)?;
-                    let local = if truthy(field(&job, "job_type")) {
-                        vec![job]
-                    } else {
-                        vec![]
-                    };
-                    let ids = local
-                        .iter()
-                        .map(|job| or_text(field(job, "id")))
-                        .collect::<Vec<_>>();
-                    let selected = Queue::new(conn, sources).requested_due(&id, &ids, 1)?;
-                    let done = execution::run_requested(
-                        conn,
-                        &id,
-                        &selected
-                            .iter()
-                            .map(|job| or_text(field(job, "id")))
-                            .collect::<Vec<_>>(),
-                        1,
-                        sources,
-                        handler,
-                        &mut |event| observer(&ui::payload(event)),
-                        clock,
-                    )?;
-                    journals = Some(ui::journal_step_summary(&local, &done));
-                    enqueued.extend(local);
-                    completed.extend(done);
-                } else {
-                    let mut summary = ui::journal_step_summary(&[], &[]);
-                    put(&mut summary, "status", s("disabled"));
-                    journals = Some(summary);
-                }
+                let step = journal_step(
+                    conn,
+                    &id,
+                    self.request.auto_pair,
+                    sources,
+                    handler,
+                    observer,
+                    clock,
+                )?;
+                journals = Some(step.summary);
+                enqueued.extend(step.enqueued);
+                completed.extend(step.completed);
             } else if workspace.is_none() {
                 if specs
                     .iter()

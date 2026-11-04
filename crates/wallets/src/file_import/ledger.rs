@@ -60,7 +60,7 @@ fn strings(key: &str) -> Vec<&'static str> {
         .map(|v| v.as_str().unwrap())
         .collect()
 }
-fn py(value: &Json) -> Py {
+pub(super) fn py(value: &Json) -> Py {
     kassiber_pytext::loads(&value.to_string()).unwrap()
 }
 fn cell(value: &Json) -> Option<String> {
@@ -496,6 +496,34 @@ pub fn validate_map(mapping: &ColumnMap, headers: &[String]) -> Result<Json, App
         ));
     }
     Ok(plan)
+}
+/// `infer_ledger_columns(header)`: the plan and the recognized columns.
+pub(super) fn infer_columns(header: &[String]) -> (Json, Json) {
+    infer(header)
+}
+/// A validated `type_map` in Python's insertion order: the first occurrence
+/// of each normalized source value, or `None` like `mapped or None`.
+pub(super) fn ordered_type_map(mapping: &ColumnMap, validated: &Json) -> Py {
+    let Some(values) = validated.as_object() else {
+        return Py::Null;
+    };
+    let mut seen = std::collections::BTreeSet::new();
+    let entries: Vec<_> = mapping
+        .type_order
+        .iter()
+        .map(|source| key(source))
+        .filter(|normalized| seen.insert(normalized.clone()))
+        .filter_map(|normalized| {
+            values
+                .get(&normalized)
+                .map(|label| (kassiber_pyjson::Key::from(normalized.as_str()), py(label)))
+        })
+        .collect();
+    if entries.is_empty() {
+        Py::Null
+    } else {
+        Py::Dict(entries)
+    }
 }
 fn infer(header: &[String]) -> (Json, Json) {
     let mut used = std::collections::BTreeSet::new();

@@ -2439,7 +2439,7 @@ data/config/preferences and owner namespaces explicitly.
 
 
 CoinTracking's core/CLI checkpoint is accepted under the current file-import
-scope. The [shared daemon follow-up](#shared-file-import-daemon-parity-pending)
+scope. The [shared daemon follow-up](#shared-file-import-daemon-parity)
 records the remaining transport work for every importer. Python production
 code, dependencies, egress, sync routes and AI projections are unchanged by
 this continuation.
@@ -2460,17 +2460,11 @@ reproductions. Run `uv run --locked python -m tests.rust_port.repro_cointracking
 and `uv run --locked python -m tests.rust_port.repro_blockpit_cr` offline to
 verify the exact refusal and successful equivalent CRLF input.
 
-## Shared file-import daemon parity (pending)
+## Shared file-import daemon parity
 
-`ui.wallets.import_file` stays unregistered for every file importer. Python's
-handler also queues local freshness jobs and rebuilds journals; preserving
-that contract depends on native journal orchestration (R4-13) and the sync
-freshness work proceeding elsewhere. A reduced import-only handler would change
-the contract. Core and CLI checkpoints can proceed independently, one importer
-per commit. Once both prerequisites land, verify the complete handler's raw
-wire bytes and full book dumps on SQLite and SQLCipher before registration.
-All file-import daemon served-by counts remain zero. This is the single shared
-pending daemon-parity item for the importer continuation.
+`ui.wallets.import_file` is native, with the local journal step after each
+import; see [desktop wallet onboarding](#desktop-wallet-onboarding-r5). The
+Bull Bitcoin wallet-history format still refuses with `not_implemented`.
 
 ## Blockpit core and CLI ingestion (R5 continuation)
 
@@ -2870,7 +2864,7 @@ summarizing. Logs and routing/mutation summaries remain under
 Docker/regtest and packaged/platform gates were not run.
 
 Transport scope follows the [shared file-import
-follow-up](#shared-file-import-daemon-parity-pending). No dependency, schema,
+follow-up](#shared-file-import-daemon-parity). No dependency, schema,
 egress, sync route or AI projection is added. Generic ledger, Wasabi, Samourai
 and document ingestion remain separate core/CLI commits.
 ## Wasabi core and CLI ingestion (R5 continuation)
@@ -12204,7 +12198,7 @@ all 370 package records retain their versions and transitive dependencies.
 The standard library has no DEFLATE inflater; no new package is added.
 
 Transport scope follows the [shared file-import
-follow-up](#shared-file-import-daemon-parity-pending). No schema, egress, sync
+follow-up](#shared-file-import-daemon-parity). No schema, egress, sync
 route or AI projection changes. Wasabi, Samourai and document ingestion belong
 to the separate importer worker.
 
@@ -16160,4 +16154,38 @@ prompt.
 Served by Rust in the parity run, with zero fallbacks:
 `ui.wallets.identify_onchain` 18 terminal records (11 reports, 7 errors and
 refusals) and `ui.wallets.identify_onchain.cancel` 7 (3 acknowledgements, 4
+refusals).
+
+### File imports and analysis
+
+`ui.wallets.import_file`, `ui.wallets.import_samourai` and
+`ui.wallets.analyze_file` are native.
+
+- The import handler checks arguments in Python's order and per-format wallet
+  and mode rules, then runs the existing native importer: generic CSV/JSON,
+  provider exports, the generic ledger with a column map, Wasabi bundles from
+  a file or inline, and Samourai watch-only source sets. Inline Wasabi bundles
+  report `inline:wasabi_bundle` and no file, as in Python.
+- After a committed import, the native local journal step runs for the book
+  captured before the import: the freshness policy's journals class, the
+  queued journal job and its summary, `disabled` when the policy turns
+  journals off, and `deferred` while another refresh holds the execution slot.
+  Like Python, the session then ends.
+- Analysis takes a staged picker token or uploaded bytes, never a path, and
+  describes the file through the native ledger preview, column inference and
+  the CPython Sniffer port. PDFs and images are routed to the local document
+  import.
+
+One format stays refused: `bullbitcoin_wallet_csv` answers `not_implemented`
+after Python's argument checks, because its Bull Bitcoin wallet-history
+importer is not native yet. The token path for analysis needs the staged
+sessions of the document group below.
+
+`tests/test_rust_wallet_import_desktop.py` compares raw JSONL and all 112
+tables on SQLite and SQLCipher, masking only generated identifiers, the clock
+and the book's own path. The catalog gains 11 entries for this group.
+
+Served by Rust in the parity run, with zero fallbacks: `ui.wallets.import_file`
+25 requests (6 imports, 19 refusals), `ui.wallets.import_samourai` 16 (1
+import, 15 refusals) and `ui.wallets.analyze_file` 26 (12 analyses, 14
 refusals).

@@ -1023,6 +1023,21 @@ impl kassiber_setup::Sources for ReportSources {
         kassiber_setup::SystemSources.now(conn)
     }
 }
+/// Test builds may pin import identities and clocks for wire comparisons.
+fn import_identity() -> Option<kassiber_wallets::file_import::Identity> {
+    #[cfg(feature = "test-harness")]
+    return std::env::var("KASSIBER_RUST_TEST_IMPORT_IDS")
+        .ok()
+        .and_then(|ids| {
+            Some(kassiber_wallets::file_import::Identity {
+                ids: ids.split(',').map(str::to_owned).collect(),
+                timestamp: std::env::var("KASSIBER_RUST_TEST_IMPORT_TIME").ok()?,
+            })
+        });
+    #[cfg(not(feature = "test-harness"))]
+    None
+}
+
 impl RealBook {
     /// Workspace shell reads (`kassiber-workspace`); `None` for other operations.
     fn workspace_read(&self, operation: &str, args: &Value) -> Option<Result<Value, AppError>> {
@@ -2379,6 +2394,29 @@ impl Book for RealBook {
         args: &Value,
     ) -> Result<kassiber_wallets::identify::onchain::Start, AppError> {
         self.prepare_identify_onchain(args)
+    }
+    fn desktop_import(
+        &mut self,
+        import: kassiber_wallets::file_import::DesktopImport,
+    ) -> Result<Value, AppError> {
+        use kassiber_wallets::file_import::DesktopImport;
+        let profile_id = self.context()?.profile_id;
+        let payload = match import {
+            DesktopImport::File {
+                request,
+                column_map,
+            } => self.import_ledger_file(request, column_map)?,
+            DesktopImport::WasabiPayload { request, payload } => {
+                kassiber_wallets::file_import::execute_wasabi_payload(
+                    self.conn()?,
+                    request,
+                    payload,
+                    import_identity().as_ref(),
+                )?
+            }
+            DesktopImport::Samourai(request) => self.import_samourai(request)?,
+        };
+        self.finish_import(payload, &profile_id)
     }
     fn wallets(&mut self, operation: kassiber_wallets::Operation) -> Result<Value, AppError> {
         #[cfg(feature = "test-harness")]

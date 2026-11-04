@@ -693,8 +693,13 @@ pub(super) fn load(file: &str) -> Result<Bundle, AppError> {
     let raw = csv::read_text_direct(file)?
         .replace("\r\n", "\n")
         .replace('\r', "\n");
-    let mut payload =
+    let payload =
         kassiber_pytext::loads(&raw).map_err(|e| AppError::new("internal_error", e.to_string()))?;
+    load_payload(payload)
+}
+
+/// `load_wasabi_bundle_payload`: a bundle the desktop sent inline.
+pub(super) fn load_payload(mut payload: Py) -> Result<Bundle, AppError> {
     if let Py::List(items) = payload {
         payload = dict([(
             "gethistory",
