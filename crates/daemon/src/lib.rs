@@ -110,7 +110,7 @@ pub fn supported_kinds() -> Vec<&'static str> {
         wallets::KINDS
             .iter()
             .copied()
-            .filter(|k| ["ui.wallets.list"].contains(k)),
+            .filter(|k| ["ui.wallets.list", "ui.wallets.utxos"].contains(k)),
     );
     kinds.push("ui.privacy_hygiene.snapshot");
     kinds.extend(loans::KINDS);

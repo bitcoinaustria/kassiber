@@ -9,6 +9,7 @@ use kassiber_wallets::{config, descriptors, material, Operation};
 use serde_json::{json, Value as Json};
 pub const KINDS: &[&str] = &[
     "ui.wallets.list",
+    "ui.wallets.utxos",
     "ui.wallets.create",
     "ui.wallets.preview_descriptor",
     "ui.wallets.update",
@@ -30,6 +31,21 @@ pub(super) fn handle(
             .as_ref()
             .expect("opened")
             .wallets_snapshot(daemon.runtime_config.default_backend.as_deref())?;
+        return Ok((
+            Some(with_request_id(success(kind, payload), request_id)),
+            false,
+        ));
+    }
+    if kind == "ui.wallets.utxos" {
+        if let Some(locked) = daemon.open_lazily(request_id)? {
+            return Ok((Some(locked), false));
+        }
+        // Python passes the raw request args; the snapshot validates them.
+        let payload = daemon
+            .book
+            .as_ref()
+            .expect("opened")
+            .wallet_utxos(args, daemon.runtime_config.default_backend.as_deref())?;
         return Ok((
             Some(with_request_id(success(kind, payload), request_id)),
             false,

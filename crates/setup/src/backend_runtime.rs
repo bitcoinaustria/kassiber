@@ -243,6 +243,12 @@ impl Config {
         Ok(result)
     }
 
+    /// One merged backend as Python's `runtime_config["backends"][name]`,
+    /// for local classification only; callers must not project it.
+    pub fn configured(&self, name: &str) -> Option<&kassiber_pyjson::Value> {
+        self.view.get(name)
+    }
+
     pub fn kinds(&self) -> BTreeMap<String, String> {
         self.runtime
             .iter()

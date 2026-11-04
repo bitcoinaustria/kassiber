@@ -1561,6 +1561,15 @@ impl Book for RealBook {
     fn wallets_snapshot(&self, default_backend: Option<&str>) -> Result<Value, AppError> {
         kassiber_wallets::snapshot(self.conn()?, default_backend, &self.backend_kinds)
     }
+    fn wallet_utxos(
+        &self,
+        args: Option<&Value>,
+        default_backend: Option<&str>,
+    ) -> Result<Value, AppError> {
+        kassiber_wallets::utxos::snapshot(self.conn()?, args, default_backend, &|name| {
+            self.backends.configured(name).cloned()
+        })
+    }
     fn reports(&mut self, command: &str, args: &Value) -> Result<Value, AppError> {
         if lightning::COMMANDS.contains(&command) {
             return lightning::execute(

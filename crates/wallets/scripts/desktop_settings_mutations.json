@@ -218,5 +218,155 @@
       "tests/test_rust_desktop_backends.py::RustBackendsListTest::test_list_redacts_and_scopes_to_active_profile_wallets"
     ],
     "rule": "Lightning backends carry their registered capabilities."
+  },
+  {
+    "id": "utxos-registration",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "[\"ui.wallets.list\", \"ui.wallets.utxos\"]",
+    "replace": "[\"ui.wallets.list\"]",
+    "expect_failing": [
+      "tests/test_rust_desktop_utxos.py::RustWalletUtxosTest::test_every_support_branch_and_inventory_matches_wire_bytes"
+    ],
+    "rule": "The wallet UTXO inventory is advertised and served by the Rust daemon."
+  },
+  {
+    "id": "utxos-raw-args",
+    "file": "crates/wallets/src/utxos.rs",
+    "find": "    let Some(args @ Value::Dict(_)) = args else {",
+    "replace": "    let empty = dict::<&str>([]);\n    let Some(args @ Value::Dict(_)) = args.or(Some(&empty)) else {",
+    "expect_failing": [
+      "tests/test_rust_desktop_utxos.py::RustWalletUtxosTest::test_refusals_and_missing_profile"
+    ],
+    "rule": "Missing or non-object arguments are refused as Python's raw-args check does."
+  },
+  {
+    "id": "utxos-id-precedence",
+    "file": "crates/wallets/src/utxos.rs",
+    "find": "ORDER BY CASE WHEN w.id = ? THEN 0 ELSE 1 END",
+    "replace": "ORDER BY CASE WHEN w.label = ? THEN 0 ELSE 1 END",
+    "expect_failing": [
+      "tests/test_rust_desktop_utxos.py::RustWalletUtxosTest::test_every_support_branch_and_inventory_matches_wire_bytes"
+    ],
+    "rule": "A wallet id match wins over another wallet's equal label."
+  },
+  {
+    "id": "utxos-unspent-only",
+    "file": "crates/wallets/src/utxos.rs",
+    "find": "FROM wallet_utxos u WHERE u.wallet_id = ? AND spent_at IS NULL{source_where}",
+    "replace": "FROM wallet_utxos u WHERE u.wallet_id = ?{source_where}",
+    "expect_failing": [
+      "tests/test_rust_desktop_utxos.py::RustWalletUtxosTest::test_every_support_branch_and_inventory_matches_wire_bytes"
+    ],
+    "rule": "Spent outputs are not listed."
+  },
+  {
+    "id": "utxos-backend-source-filter",
+    "file": "crates/wallets/src/utxos.rs",
+    "find": "        (\"backend_name\", names),",
+    "replace": "        (\"backend_name\", vec![]),",
+    "expect_failing": [
+      "tests/test_rust_desktop_utxos.py::RustWalletUtxosTest::test_every_support_branch_and_inventory_matches_wire_bytes"
+    ],
+    "rule": "Rows from a previous backend are excluded by the source filter."
+  },
+  {
+    "id": "utxos-truncated",
+    "file": "crates/wallets/src/utxos.rs",
+    "find": "Value::Bool(supported && count > returned as i64),",
+    "replace": "Value::Bool(false),",
+    "expect_failing": [
+      "tests/test_rust_desktop_utxos.py::RustWalletUtxosTest::test_every_support_branch_and_inventory_matches_wire_bytes"
+    ],
+    "rule": "A wallet with more active outputs than the row limit reports truncation."
+  },
+  {
+    "id": "utxos-row-limit",
+    "file": "crates/wallets/src/utxos.rs",
+    "find": "const ROW_LIMIT: i64 = 500;",
+    "replace": "const ROW_LIMIT: i64 = 501;",
+    "expect_failing": [
+      "tests/test_rust_desktop_utxos.py::RustWalletUtxosTest::test_every_support_branch_and_inventory_matches_wire_bytes"
+    ],
+    "rule": "The inventory returns at most Python's 500 rows."
+  },
+  {
+    "id": "utxos-sp-capability",
+    "file": "crates/wallets/src/utxos.rs",
+    "find": "        if !supports_silent_payments(backend)? {",
+    "replace": "        if false && !supports_silent_payments(backend)? {",
+    "expect_failing": [
+      "tests/test_rust_desktop_utxos.py::RustWalletUtxosTest::test_every_support_branch_and_inventory_matches_wire_bytes"
+    ],
+    "rule": "Silent Payments inventory requires a backend declared Silent Payments capable."
+  },
+  {
+    "id": "utxos-liquid-unblind",
+    "file": "crates/wallets/src/utxos.rs",
+    "find": "    if chain == \"liquid\" {",
+    "replace": "    if chain == \"liquid-disabled\" {",
+    "expect_failing": [
+      "tests/test_rust_desktop_utxos.py::RustWalletUtxosTest::test_every_support_branch_and_inventory_matches_wire_bytes"
+    ],
+    "rule": "Liquid inventory requires descriptor material that can unblind outputs."
+  },
+  {
+    "id": "utxos-wasabi-support",
+    "file": "crates/wallets/src/utxos.rs",
+    "find": "    if string_or_empty(field(config, \"source_format\")) == \"wasabi_bundle\" {\n        return Ok(status(true, \"supported\", \"wasabi_import\", \"\"));",
+    "replace": "    if false {\n        return Ok(status(true, \"supported\", \"wasabi_import\", \"\"));",
+    "expect_failing": [
+      "tests/test_rust_desktop_utxos.py::RustWalletUtxosTest::test_every_support_branch_and_inventory_matches_wire_bytes"
+    ],
+    "rule": "Wasabi bundle wallets are supported from their imported inventory."
+  },
+  {
+    "id": "utxos-transaction-link",
+    "file": "crates/wallets/src/utxos.rs",
+    "find": "lower(t.external_id) = lower(u.txid)",
+    "replace": "t.external_id = u.txid",
+    "expect_failing": [
+      "tests/test_rust_desktop_utxos.py::RustWalletUtxosTest::test_every_support_branch_and_inventory_matches_wire_bytes"
+    ],
+    "rule": "Outputs link to their transaction by case-insensitive txid."
+  },
+  {
+    "id": "utxos-refresh-last-seen",
+    "file": "crates/wallets/src/utxos.rs",
+    "find": "        (Some(row), _) => field(row, \"last_seen_at\").clone(),",
+    "replace": "        (Some(_), Some(row)) => field(row, \"active_last_seen_at\").clone(),\n        (Some(row), None) => field(row, \"last_seen_at\").clone(),",
+    "expect_failing": [
+      "tests/test_rust_desktop_utxos.py::RustWalletUtxosTest::test_every_support_branch_and_inventory_matches_wire_bytes"
+    ],
+    "rule": "The refresh record's last-seen time wins over the newest active output."
+  },
+  {
+    "id": "utxos-btc-float",
+    "file": "crates/wallets/src/utxos.rs",
+    "find": "        \"{sign}{}.{:011}\",",
+    "replace": "        \"{sign}{}.{:08}\",",
+    "expect_failing": [
+      "tests/test_rust_desktop_utxos.py::RustWalletUtxosTest::test_every_support_branch_and_inventory_matches_wire_bytes"
+    ],
+    "rule": "BTC amounts are the exact msat quotient, correctly rounded to a float."
+  },
+  {
+    "id": "utxos-surrogate-reference",
+    "file": "crates/wallets/src/utxos.rs",
+    "find": "        None => return Err(surrogate_error(&reference)),",
+    "replace": "        None => None,",
+    "expect_failing": [
+      "tests/test_rust_desktop_utxos.py::RustWalletUtxosTest::test_surrogate_reference_matches_python_crash_code_and_message"
+    ],
+    "rule": "A reference SQLite cannot encode fails as Python's lookup does, not as not_found."
+  },
+  {
+    "id": "utxos-default-backend",
+    "file": "crates/wallets/src/utxos.rs",
+    "find": "        && !default_name.is_empty()",
+    "replace": "        && false",
+    "expect_failing": [
+      "tests/test_rust_desktop_utxos.py::RustWalletUtxosTest::test_every_support_branch_and_inventory_matches_wire_bytes"
+    ],
+    "rule": "Descriptor and address wallets without an explicit backend use the default backend."
   }
 ]

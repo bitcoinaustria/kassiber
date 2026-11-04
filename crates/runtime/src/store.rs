@@ -402,6 +402,14 @@ pub trait Book: Send {
     fn wallets_snapshot(&self, _default_backend: Option<&str>) -> Result<Value, AppError> {
         Err(not_implemented("wallets", "wallet snapshot"))
     }
+    /// `ui.wallets.utxos`: the stored inventory of one wallet; never refreshes.
+    fn wallet_utxos(
+        &self,
+        _args: Option<&Value>,
+        _default_backend: Option<&str>,
+    ) -> Result<Value, AppError> {
+        Err(not_implemented("wallets", "wallet UTXO inventory"))
+    }
     fn wallets(&mut self, _operation: kassiber_wallets::Operation) -> Result<Value, AppError> {
         Err(not_implemented("wallets", "wallet lifecycle"))
     }
