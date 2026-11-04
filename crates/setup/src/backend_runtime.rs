@@ -265,6 +265,32 @@ impl Config {
             })
     }
 
+    /// `backends.resolve_backend`: the named backend, else the default, from
+    /// the merged configuration. Resolving reads configuration only.
+    pub fn resolve_configured(
+        &self,
+        conn: &Connection,
+        requested: Option<&str>,
+    ) -> Result<Value, AppError> {
+        let name = requested
+            .map(kassiber_pytext::strip)
+            .filter(|name| !name.is_empty())
+            .or_else(|| Some(kassiber_pytext::strip(&self.default_backend)))
+            .filter(|name| !name.is_empty())
+            .ok_or_else(|| {
+                AppError::new("backend_not_configured", "No sync backend is configured")
+                    .with_hint("Add a backend in Settings before refreshing this wallet.")
+            })?
+            .to_lowercase();
+        if !self.view.contains_key(&name) {
+            return Err(AppError::new(
+                "app_error",
+                format!("Backend '{name}' is not configured in {}", self.env_file),
+            ));
+        }
+        self.resolve(conn, &name)
+    }
+
     pub fn kinds(&self) -> BTreeMap<String, String> {
         self.runtime
             .iter()

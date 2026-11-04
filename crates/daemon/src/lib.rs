@@ -27,6 +27,7 @@ mod journals;
 mod kind_order;
 mod loans;
 mod metadata;
+mod onboarding;
 pub mod output;
 mod rates;
 mod reports;
@@ -126,6 +127,7 @@ pub fn supported_kinds() -> Vec<&'static str> {
             .filter(|k| ["ui.wallets.list", "ui.wallets.utxos"].contains(k)),
     );
     kinds.push("ui.privacy_hygiene.snapshot");
+    kinds.push("ui.wallets.identify");
     kinds.extend(loans::KINDS);
     kinds.extend(services::kinds().filter(|k| {
         backends::KINDS.contains(k)
@@ -203,6 +205,7 @@ pub fn supported_kinds() -> Vec<&'static str> {
             .copied()
             .filter(|k| ["ui.wallets.create"].contains(k)),
     );
+    kinds.push("ui.wallets.ledger_preview");
     kinds.extend(imports::KINDS);
     kinds.extend(
         wallets::KINDS
@@ -210,6 +213,7 @@ pub fn supported_kinds() -> Vec<&'static str> {
             .copied()
             .filter(|k| ["ui.wallets.preview_descriptor"].contains(k)),
     );
+    kinds.push("ui.wallets.detect_script_types");
     kinds.push("ui.reports.lightning_profitability");
     kinds.extend(metadata::KINDS.iter().copied().filter(|k| {
         [
@@ -1115,6 +1119,9 @@ impl Daemon {
                 Some(with_request_id(success(&kind_text, payload), &request_id)),
                 false,
             ));
+        }
+        if onboarding::KINDS.contains(&kind_text.as_str()) {
+            return onboarding::handle(self, &kind_text, args.as_ref(), &request_id);
         }
         if imports::KINDS.contains(&kind_text.as_str()) {
             return imports::handle(self, &kind_text, args.as_ref(), &request_id);

@@ -873,6 +873,21 @@ pub(super) fn load(file: &str, mapping: Option<&ColumnMap>) -> Result<Vec<csv::R
     }
     Ok(records)
 }
+/// `ui.wallets.ledger_preview`: the desktop uploads bytes, not a path. Like
+/// Python, they are previewed from a private temporary copy carrying the
+/// upload's extension, removed afterwards; nothing is persisted.
+pub fn preview_upload(
+    bytes: &[u8],
+    extension: &str,
+    mapping: Option<&ColumnMap>,
+    limit: usize,
+) -> Result<Py, AppError> {
+    let temp = super::document::files::Temp::new("ledger-preview")?;
+    let path = temp.path().join(format!("upload{extension}"));
+    std::fs::write(&path, bytes).map_err(super::document::files::io)?;
+    preview(&path.to_string_lossy(), mapping, limit)
+}
+
 pub fn preview(file: &str, mapping: Option<&ColumnMap>, limit: usize) -> Result<Py, AppError> {
     let rows = read(file)?;
     let source = source(&rows, mapping);

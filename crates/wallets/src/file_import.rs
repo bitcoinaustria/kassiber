@@ -10,7 +10,7 @@ mod generic_json;
 pub mod ledger;
 mod ledgerlive;
 mod phoenix;
-mod platform_csv;
+pub(crate) mod platform_csv;
 mod pocket;
 mod river;
 pub mod samourai;

@@ -16074,3 +16074,52 @@ refuse with `not_implemented`. `ui.review.request_input` remains. The
 `kassiber-journals` `process_native` vector test fails on this branch's base
 (`3d36e8909`) with a custody `i128` overflow panic; `3defac865` (custody,
 outside this slice) fixes it on `t3code/rust-backend-r10b`.
+
+## Desktop wallet onboarding (R5)
+
+The daemon kinds a user needs to add a wallet are moving to Rust group by
+group. Wallet create/list/update/delete and the descriptor preview were
+already native; this section records the identification, import and reveal
+kinds around them. Python remains the reference and its production code is
+unchanged.
+
+### Local identification
+
+`ui.wallets.identify`, `ui.wallets.ledger_preview` and
+`ui.wallets.detect_script_types` are native.
+
+- `kassiber-wallets::identify` ports `core.ownership`'s cache-only tiers: the
+  watch-only output inventory, exact Bitcoin Core receive outpoints (only when
+  the address resolves to exactly the row's wallet), local transaction graphs
+  through the custody graph parser, address lists and offline derivation of
+  active and retired policy epochs up to Python's per-wallet ceiling. It also
+  ports token parsing (BOLT11 payment hashes without keeping the invoice,
+  BIP352 addresses checked against scan and spend keys for labels 0–50,
+  recognized-but-unsupported formats, private keys named but never echoed) and
+  the CSV harvester, which reuses the platform reader's CPython Sniffer port.
+  A match is ownership evidence for display only; it grants no custody, basis
+  or tax fact.
+- The ledger preview decodes uploads with CPython's strict base64 rules and
+  previews them through the existing native generic-ledger reader from a
+  private temporary copy, like Python. Nothing is persisted.
+- Script-type detection is not local: Python probes receive index 0 of each
+  script type on the selected backend. The request is the user's explicit
+  "detect" action, so the native probe goes only through `kassiber-net` under
+  a grant bound to that one action and spent by one run, after the same
+  backend chain/network/kind checks. Every backend or transport failure falls
+  back to a manual `p2wpkh` choice with Python's reason text, including
+  `KASSIBER_NO_EGRESS` and the offline switch.
+
+`tests/test_rust_wallet_onboarding.py` compares raw JSONL and all 112 tables
+with Python on SQLite and SQLCipher for all three kinds. A loopback regression
+shows that identification, the ledger preview and refused detections send
+nothing to a configured default backend, and that only the explicit detection
+connects. Native unit tests cover the codecs, the index, every classifier and
+the detection grant. `crates/wallets/scripts/onboarding_mutations.json` holds
+34 entries for this group, each killed by its named test
+(`onboarding_mutation_check.py`).
+
+Served by Rust in the parity run, with zero fallbacks: `ui.wallets.identify`
+27 requests (23 successes, 4 refusals), `ui.wallets.ledger_preview` 29 (14
+successes, 15 refusals) and `ui.wallets.detect_script_types` 27 (16 fallback
+reports, 11 refusals).

@@ -5,7 +5,7 @@ use kassiber_envelope::{get, py_str, set, truthy};
 use kassiber_pyjson::{Key, Options, PyStr};
 
 mod coordinator;
-mod files;
+pub(super) mod files;
 mod pdf;
 mod provider;
 mod rows;

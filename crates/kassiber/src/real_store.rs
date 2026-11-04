@@ -4,6 +4,7 @@
 mod backends;
 mod journals;
 mod lightning;
+mod onboarding;
 mod rates_rebuild;
 
 use std::path::{Path, PathBuf};
@@ -1323,6 +1324,12 @@ impl Book for RealBook {
                 .ok_or_else(|| AppError::new("internal_error", "book is closed"))?
                 .connection();
             return self.backends.onboard(conn, args, &SetupSources);
+        }
+        if operation == "ui.wallets.detect_script_types" {
+            return self.detect_script_types(args);
+        }
+        if operation == "ui.wallets.identify" {
+            return self.identify_wallets(args);
         }
         if kassiber_chain::probes::KINDS.contains(&operation) {
             use kassiber_net::{Gate, Ledger, Offline};

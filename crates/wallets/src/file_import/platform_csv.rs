@@ -208,7 +208,18 @@ pub(super) fn raw_rows(file: &str) -> Result<Vec<Vec<String>>, AppError> {
     if kassiber_pytext::strip(&text).is_empty() {
         return Ok(vec![]);
     }
-    let d = sniff(&text);
+    match parse(&text, sniff(&text)) {
+        (records, None) => Ok(records),
+        (_, Some(error)) => Err(error),
+    }
+}
+/// `csv.Sniffer().sniff(text[:8192], delimiters=",;\t|")`, falling back to
+/// the excel dialect when it cannot decide, then `csv.reader` over
+/// `io.StringIO(text)`. A csv.Error keeps the records completed before it.
+pub(crate) fn sniffed_rows(text: &str) -> (Vec<Vec<String>>, Option<AppError>) {
+    parse(text, sniff(text))
+}
+fn parse(text: &str, d: Dialect) -> (Vec<Vec<String>>, Option<AppError>) {
     let mut records = vec![];
     let mut row = vec![];
     let mut field = String::new();
@@ -246,7 +257,7 @@ pub(super) fn raw_rows(file: &str) -> Result<Vec<Vec<String>>, AppError> {
                             ahead.next();
                         }
                         if ahead.next().is_some_and(|c| c != '\n') {
-                            return Err(AppError::new("internal_error","new-line character seen in unquoted field - do you need to open the file with newline=''?"));
+                            return (records, Some(AppError::new("internal_error","new-line character seen in unquoted field - do you need to open the file with newline=''?")));
                         }
                     }
                     if ch == '\r' && chars.peek() == Some(&'\n') {
@@ -267,17 +278,20 @@ pub(super) fn raw_rows(file: &str) -> Result<Vec<Vec<String>>, AppError> {
         start = false;
         touched = true;
         if count > 131072 {
-            return Err(AppError::new(
-                "internal_error",
-                "field larger than field limit (131072)",
-            ));
+            return (
+                records,
+                Some(AppError::new(
+                    "internal_error",
+                    "field larger than field limit (131072)",
+                )),
+            );
         }
     }
     if touched || !row.is_empty() {
         row.push(field);
         records.push(row);
     }
-    Ok(records)
+    (records, None)
 }
 pub(super) fn load(file: &str) -> Result<(Vec<String>, Vec<csv::Row>), AppError> {
     let records = raw_rows(file)?;

@@ -8,7 +8,7 @@ use std::{
 
 pub(super) const MAX_SOURCE: u64 = 25 * 1024 * 1024;
 
-pub(super) fn io(e: std::io::Error) -> AppError {
+pub(in crate::file_import) fn io(e: std::io::Error) -> AppError {
     AppError::new("internal_error", e.to_string())
 }
 pub(super) fn locator(value: &str) -> Result<(String, Option<String>), AppError> {
@@ -161,9 +161,9 @@ pub(super) fn managed_path(root: &Path, relative: &str) -> Option<PathBuf> {
     path.starts_with(root).then_some(path)
 }
 
-pub(super) struct Temp(PathBuf);
+pub(in crate::file_import) struct Temp(PathBuf);
 impl Temp {
-    pub(super) fn new(label: &str) -> Result<Self, AppError> {
+    pub(in crate::file_import) fn new(label: &str) -> Result<Self, AppError> {
         static SERIAL: AtomicU64 = AtomicU64::new(0);
         loop {
             let id = SERIAL.fetch_add(1, Ordering::Relaxed);
@@ -188,7 +188,7 @@ impl Temp {
             }
         }
     }
-    pub(super) fn path(&self) -> &Path {
+    pub(in crate::file_import) fn path(&self) -> &Path {
         &self.0
     }
 }

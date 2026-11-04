@@ -14,6 +14,7 @@ pub mod analysis_ops;
 pub mod bdk;
 mod bdk_state;
 pub mod bitcoin_records;
+pub mod catalog_detection;
 pub mod compatibility_cache;
 pub mod composition;
 mod derive;
@@ -25,6 +26,7 @@ pub use lifecycle::{execute, execute_with_creation_identity, CreationIdentity, O
 pub mod descriptors;
 pub mod fetch;
 pub mod freshness;
+pub mod identify;
 pub mod material;
 pub mod observer_apply;
 pub mod observer_state;

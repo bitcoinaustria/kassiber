@@ -2694,6 +2694,17 @@ the linked checkpoint records their mapping and the local verification scope.
 and shared daemon acceptance land. R6 document AI projections and session/token
 flows remain on Python. PDF report generation also remains Python.
 
+### R5 desktop wallet onboarding
+
+The desktop kinds a user needs to add a wallet move to Rust in groups. Local
+identification (`ui.wallets.identify`), the uploaded-ledger preview and
+script-type detection are native. Detection is not a local read: like Python
+it probes the selected backend, so it runs only as the user's explicit action
+through `kassiber-net`, with a grant bound to that action. Identification and
+the preview make no network calls. Raw JSONL and all 112 tables match Python
+on SQLite and SQLCipher; 34 mutation entries are killed by named tests. See
+[the shell reference](../reference/rust-shell.md#desktop-wallet-onboarding-r5).
+
 ## Risks
 
 - **Scale.** About 218,000 lines of Python, 313 CLI leaves, 303 daemon kinds,

@@ -1,0 +1,342 @@
+[
+  {
+    "id": "ID-match-source-order",
+    "file": "crates/wallets/src/identify.rs",
+    "find": "            \"derived\" => 0,",
+    "replace": "            \"derived\" => 5,",
+    "expect_failing": [
+      "identify_orders_derived_before_listed_and_flags_ambiguity"
+    ],
+    "rule": "Derived matches outrank listed addresses when naming the canonical wallet."
+  },
+  {
+    "id": "ID-ambiguity",
+    "file": "crates/wallets/src/identify.rs",
+    "find": "        .collect::<BTreeSet<_>>()\n        .len()\n        > 1\n}",
+    "replace": "        .collect::<BTreeSet<_>>()\n        .len()\n        > 2\n}",
+    "expect_failing": [
+      "identify_orders_derived_before_listed_and_flags_ambiguity"
+    ],
+    "rule": "Two owning wallets make a match ambiguous."
+  },
+  {
+    "id": "ID-bech32-case",
+    "file": "crates/wallets/src/identify.rs",
+    "find": "        lower\n    } else {\n        text.to_owned()",
+    "replace": "        text.to_owned()\n    } else {\n        text.to_owned()",
+    "expect_failing": [
+      "identify_orders_derived_before_listed_and_flags_ambiguity"
+    ],
+    "rule": "Bech32-family addresses match and deduplicate case-insensitively."
+  },
+  {
+    "id": "ID-retired-only",
+    "file": "crates/wallets/src/identify.rs",
+    "find": "WHERE wallet_id = ? AND status = 'retired'",
+    "replace": "WHERE wallet_id = ? AND status <> 'missing'",
+    "expect_failing": [
+      "identify_scans_retired_policies_and_reports_bad_depths"
+    ],
+    "rule": "Only retired policy epochs extend recognition into history."
+  },
+  {
+    "id": "ID-history-source",
+    "file": "crates/wallets/src/identify.rs",
+    "find": "                        \"derived_history\"\n                    } else {\n                        \"derived\"",
+    "replace": "                        \"derived\"\n                    } else {\n                        \"derived_history\"",
+    "expect_failing": [
+      "identify_scans_retired_policies_and_reports_bad_depths"
+    ],
+    "rule": "Historic derivations stay labelled as history."
+  },
+  {
+    "id": "ID-depth-warning",
+    "file": "crates/wallets/src/identify.rs",
+    "find": "            warnings.push(format!(\n                \"Wallet '{}': ownership scan depth is invalid\",\n                wallet.label\n            ));",
+    "replace": "",
+    "expect_failing": [
+      "identify_scans_retired_policies_and_reports_bad_depths"
+    ],
+    "rule": "An unreadable configured depth is reported, not silently ignored."
+  },
+  {
+    "id": "ID-ceiling-gap",
+    "file": "crates/wallets/src/identify.rs",
+    "find": ".max(used + BigInt::from(plan.gap_limit) + BigInt::from(1))",
+    "replace": ".max(used + BigInt::from(1))",
+    "expect_failing": [
+      "identify_derivation_ceiling_follows_depth_and_inventory"
+    ],
+    "rule": "Used inventory indices extend derivation by the policy's gap limit."
+  },
+  {
+    "id": "ID-ceiling-depth",
+    "file": "crates/wallets/src/identify.rs",
+    "find": "(scan.clone().max(floor) + BigInt::from(1))",
+    "replace": "(scan.clone().max(floor))",
+    "expect_failing": [
+      "identify_derivation_ceiling_follows_depth_and_inventory"
+    ],
+    "rule": "The requested depth is an inclusive index."
+  },
+  {
+    "id": "ID-exclusive-owner",
+    "file": "crates/wallets/src/identify.rs",
+    "find": "!= BTreeSet::from([wallet_id.as_str()])",
+    "replace": "== BTreeSet::new()",
+    "expect_failing": [
+      "identify_core_receive_outpoints_need_an_exclusive_owner"
+    ],
+    "rule": "A Core receive outpoint is owned only when the address resolves to exactly the row's wallet."
+  },
+  {
+    "id": "ID-unspendable",
+    "file": "crates/wallets/src/identify.rs",
+    "find": "                .starts_with(\"6a\")",
+    "replace": "                .starts_with(\"zz\")",
+    "expect_failing": [
+      "identify_classifies_transaction_legs"
+    ],
+    "rule": "OP_RETURN outputs are not recipients."
+  },
+  {
+    "id": "ID-unresolved-inputs",
+    "file": "crates/wallets/src/identify.rs",
+    "find": "source != \"local_tx\"",
+    "replace": "source == \"local_tx\"",
+    "expect_failing": [
+      "identify_unverified_legs_and_inventory_txids"
+    ],
+    "rule": "Only on-chain legs without an input script leave inputs unresolved."
+  },
+  {
+    "id": "ID-receipt-unresolved",
+    "file": "crates/wallets/src/identify.rs",
+    "find": "        if unresolved > 0 {",
+    "replace": "        if unresolved >= 0 {",
+    "expect_failing": [
+      "identify_classifies_transaction_legs"
+    ],
+    "rule": "Resolved inputs with owned outputs are an inbound receipt."
+  },
+  {
+    "id": "ID-private-key",
+    "file": "crates/wallets/src/identify.rs",
+    "find": "        if private_key(text) {",
+    "replace": "        if false && private_key(text) {",
+    "expect_failing": [
+      "identify_tokens_keep_private_and_invoice_material_out"
+    ],
+    "rule": "Pasted private keys are named but never echoed."
+  },
+  {
+    "id": "ID-invoice-display",
+    "file": "crates/wallets/src/identify.rs",
+    "find": "                    input: shown,\n                    normalized: invoice.payment_hash,",
+    "replace": "                    input: text.into(),\n                    normalized: invoice.payment_hash,",
+    "expect_failing": [
+      "identify_tokens_keep_private_and_invoice_material_out"
+    ],
+    "rule": "An invoice is shown shortened, never kept whole."
+  },
+  {
+    "id": "ID-lightning-self",
+    "file": "crates/wallets/src/identify.rs",
+    "find": "directions.contains(\"inbound\") && directions.contains(\"outbound\")",
+    "replace": "false",
+    "expect_failing": [
+      "identify_lightning_history_names_direction"
+    ],
+    "rule": "A payment hash seen leaving and arriving is a payment between own nodes."
+  },
+  {
+    "id": "ID-sp-family",
+    "file": "crates/wallets/src/identify.rs",
+    "find": "network_family(&keys.network) != family",
+    "replace": "false",
+    "expect_failing": [
+      "identify_silent_payment_addresses_need_scan_and_spend_keys"
+    ],
+    "rule": "A silent-payment address matches only its network family."
+  },
+  {
+    "id": "ID-csv-named-columns",
+    "file": "crates/wallets/src/identify.rs",
+    "find": "        for row in rows.iter().skip(1) {",
+    "replace": "        for row in rows.iter().skip(usize::MAX) {",
+    "expect_failing": [
+      "csv_harvest_prefers_named_columns_and_recovers_from_reader_errors"
+    ],
+    "rule": "Recognized address/txid columns are harvested first."
+  },
+  {
+    "id": "ID-csv-cap",
+    "file": "crates/wallets/src/identify.rs",
+    "find": "        out.len() > MAX_HARVEST_CANDIDATES\n",
+    "replace": "        out.len() > MAX_HARVEST_CANDIDATES + 1\n",
+    "expect_failing": [
+      "csv_harvest_prefers_named_columns_and_recovers_from_reader_errors"
+    ],
+    "rule": "The CSV harvest stops past its cap."
+  },
+  {
+    "id": "ID-sp-label-limit",
+    "file": "crates/wallets/src/identify/silent.rs",
+    "find": "for label in 0..=LABEL_CHECK_LIMIT {",
+    "replace": "for label in 0..=LABEL_CHECK_LIMIT + 1 {",
+    "expect_failing": [
+      "identify_silent_payment_addresses_need_scan_and_spend_keys"
+    ],
+    "rule": "Labels past the checked range stay unknown."
+  },
+  {
+    "id": "ID-base58-checksum",
+    "file": "crates/wallets/src/identify/codec.rs",
+    "find": "(sha256d(body)[..4] == *checksum).then(|| body.to_vec())",
+    "replace": "Some(body.to_vec())",
+    "expect_failing": [
+      "address_scripts_follow_the_python_helper"
+    ],
+    "rule": "Base58 addresses must checksum-validate."
+  },
+  {
+    "id": "ID-bech32m-v1",
+    "file": "crates/wallets/src/identify/codec.rs",
+    "find": "        if version > 0 && !bech32m {",
+    "replace": "        if version > 0 && bech32m {",
+    "expect_failing": [
+      "address_scripts_follow_the_python_helper"
+    ],
+    "rule": "Witness v1+ addresses need the bech32m checksum."
+  },
+  {
+    "id": "ID-invoice-tag",
+    "file": "crates/wallets/src/identify/codec.rs",
+    "find": "        if tag == 1 && length == 52 {",
+    "replace": "        if tag == 2 && length == 52 {",
+    "expect_failing": [
+      "invoices_keep_only_their_payment_hash"
+    ],
+    "rule": "Only the p field names the payment hash."
+  },
+  {
+    "id": "ID-fromhex-whitespace",
+    "file": "crates/wallets/src/identify/codec.rs",
+    "find": "        while bytes.next_if(|b| b\" \\t\\n\\r\\x0b\\x0c\".contains(b)).is_some() {}",
+    "replace": "",
+    "expect_failing": [
+      "fromhex_and_splitlines_follow_python"
+    ],
+    "rule": "bytes.fromhex accepts whitespace between byte pairs."
+  },
+  {
+    "id": "DT-consent-identity",
+    "file": "crates/wallets/src/catalog_detection.rs",
+    "find": ".filter(|g| Arc::ptr_eq(&g.identity, &self.identity))",
+    "replace": ".filter(|_| true)",
+    "expect_failing": [
+      "detection_requires_exact_once_only_consent_before_any_request"
+    ],
+    "rule": "A grant authorizes only the detection it was minted for."
+  },
+  {
+    "id": "DT-consent-once",
+    "file": "crates/wallets/src/catalog_detection.rs",
+    "find": "if grant.used.swap(true, Ordering::SeqCst) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "detection_requires_exact_once_only_consent_before_any_request"
+    ],
+    "rule": "A detection grant is spent by one run."
+  },
+  {
+    "id": "DT-network-scope",
+    "file": "crates/wallets/src/catalog_detection.rs",
+    "find": "            if expected != plan.network {",
+    "replace": "            if false {",
+    "expect_failing": [
+      "detection_checks_backend_scope_and_kind_before_any_transport"
+    ],
+    "rule": "A backend for another network is refused before transport."
+  },
+  {
+    "id": "DT-kind-alias",
+    "file": "crates/wallets/src/catalog_detection.rs",
+    "find": "\"bitcoin-core\" | \"bitcoincore\" | \"core\" => \"bitcoinrpc\".into(),",
+    "replace": "\"bitcoin-core\" | \"bitcoincore\" => \"bitcoinrpc\".into(),",
+    "expect_failing": [
+      "detection_checks_backend_scope_and_kind_before_any_transport"
+    ],
+    "rule": "Backend kinds normalize through Python's aliases."
+  },
+  {
+    "id": "DT-xpub-only",
+    "file": "crates/wallets/src/catalog_detection.rs",
+    "find": "    if ![\"xpub\", \"tpub\"].contains(&prefix.as_str()) {",
+    "replace": "    if prefix.is_empty() {",
+    "expect_failing": [
+      "detection_rejects_private_and_typed_material_without_echoing_it"
+    ],
+    "rule": "Detection applies only to bare xpub/tpub keys."
+  },
+  {
+    "id": "LP-base64-excess",
+    "file": "crates/daemon/src/onboarding.rs",
+    "find": "return (at + 1 == bytes.len()).then_some(out);",
+    "replace": "return Some(out);",
+    "expect_failing": [
+      "strict_base64_matches_cpython_validate_mode"
+    ],
+    "rule": "Data after base64 padding is refused."
+  },
+  {
+    "id": "LP-limit-floor",
+    "file": "crates/daemon/src/onboarding.rs",
+    "find": "    Ok(if limit < BigInt::from(0) {",
+    "replace": "    Ok(if limit < BigInt::from(-10) {",
+    "expect_failing": [
+      "upload_suffix_and_limit_follow_python"
+    ],
+    "rule": "A negative preview limit means no rows."
+  },
+  {
+    "id": "LP-hidden-suffix",
+    "file": "crates/daemon/src/onboarding.rs",
+    "find": "Some(at) if at > 0 && at + 1 < name.len() => &name[at..],",
+    "replace": "Some(at) if at + 1 < name.len() => &name[at..],",
+    "expect_failing": [
+      "upload_suffix_and_limit_follow_python"
+    ],
+    "rule": "A dotfile name has no suffix."
+  },
+  {
+    "id": "REG-identify",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "    kinds.push(\"ui.wallets.identify\");\n",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_wallet_onboarding.py::RustWalletIdentifyTest::test_no_active_profile_and_sqlcipher_match_wire_bytes"
+    ],
+    "rule": "The daemon advertises native identification."
+  },
+  {
+    "id": "REG-ledger-preview",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "    kinds.push(\"ui.wallets.ledger_preview\");\n",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_wallet_onboarding.py::RustLedgerPreviewTest::test_sqlcipher_preview_matches_wire_bytes"
+    ],
+    "rule": "The daemon advertises the native ledger preview."
+  },
+  {
+    "id": "REG-detection",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "    kinds.push(\"ui.wallets.detect_script_types\");\n",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_wallet_onboarding.py::RustScriptTypeDetectionTest::test_fallbacks_and_refusals_match_wire_bytes"
+    ],
+    "rule": "The daemon advertises native detection."
+  }
+]

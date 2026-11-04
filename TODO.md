@@ -453,6 +453,10 @@ projections stay Python. Progress and remaining work for this slice:
   registration and CLI wire/full-book/zero-fallback acceptance.
   R6 AI tool projections stay Python. An attachment grants neither ownership
   nor tax facts.
+- [x] Port desktop local identification, the uploaded-ledger preview and
+  consent-bound script-type detection with raw-JSONL/all-table parity, a
+  no-traffic regression and named mutation killers. See
+  [desktop wallet onboarding](docs/reference/rust-shell.md#desktop-wallet-onboarding-r5).
 - [ ] Complete the [shared file-import daemon parity follow-up](docs/reference/rust-shell.md#shared-file-import-daemon-parity-pending)
   after its native prerequisites land.
 - [ ] Port the remaining wallet commands after file-ingestion acceptance,
