@@ -134,6 +134,14 @@ mod tests {
             ),
             ("ui.review.receipt", dict::<&str>([])),
         ];
+        assert_eq!(
+            KINDS,
+            complete
+                .iter()
+                .map(|(kind, _)| *kind)
+                .collect::<Vec<_>>()
+                .as_slice()
+        );
         for (kind, args) in complete {
             let out = execute(&mut Capture, kind, Some(&args)).unwrap();
             assert_eq!(

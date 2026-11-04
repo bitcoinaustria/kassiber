@@ -585,3 +585,53 @@ fn review_apply_receipts_keep_python_transport_key_order() {
         format!("{:?}", kassiber_pyjson::Key::Str("processed_at".into()))
     );
 }
+
+#[test]
+fn review_execute_routes_plans_commits_applies_and_reads_receipts_as_authored() {
+    let case = first(fixtures());
+    let conn = seed(case, false);
+    let artifact = field(case, "artifact");
+    let run = |operation: &str, args: Value| {
+        review_workflow::execute(&conn, &scope(), operation, &args, "cli", &Clock)
+    };
+    let planned = run(
+        "review.plan",
+        dict([
+            ("operations", field(artifact, "operations").clone()),
+            (
+                "expected_input_version",
+                field(artifact, "base_input_version").clone(),
+            ),
+        ]),
+    )
+    .unwrap();
+    assert!(review_artifact::equal(&planned, artifact));
+    let page = run("review.cases", dict::<&str>([])).unwrap();
+    assert_eq!(
+        field(&page, "input_version"),
+        field(artifact, "base_input_version")
+    );
+    let before = snapshot(&conn);
+    let receipt = run(
+        "review.apply",
+        dict([
+            ("artifact", artifact.clone()),
+            ("idempotency_key", s("execute")),
+        ]),
+    )
+    .unwrap();
+    assert!(conn.is_autocommit(), "the service boundary commits");
+    assert_ne!(snapshot(&conn), before);
+    assert_eq!(field(&receipt, "authored_source"), &s("cli"));
+    for selector in [
+        dict([("idempotency_key", s("execute"))]),
+        dict([("receipt_id", field(&receipt, "id").clone())]),
+    ] {
+        let stored = run("review.receipt", selector).unwrap();
+        assert!(review_artifact::equal(&stored, &receipt));
+    }
+    let Err(Error::Service(error)) = run("review.export", dict::<&str>([])) else {
+        panic!("an unknown review operation refuses");
+    };
+    assert_eq!(error.message, "Unsupported review command");
+}

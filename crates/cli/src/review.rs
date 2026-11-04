@@ -110,3 +110,225 @@ pub fn execute(book: &mut dyn Book, operation: &str, args: &Namespace) -> Result
     }
     book.review(operation, &payload, "cli")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use kassiber_runtime::store::{BookContext, StatusFacts};
+
+    struct Capture {
+        scope: Result<(), AppError>,
+    }
+    impl Book for Capture {
+        fn review(
+            &mut self,
+            operation: &str,
+            args: &Value,
+            authored_source: &str,
+        ) -> Result<Value, AppError> {
+            Ok(dict([
+                ("operation", s(operation)),
+                ("args", args.clone()),
+                ("authored_source", s(authored_source)),
+            ]))
+        }
+        fn resolve_scope(
+            &self,
+            _: Option<&Value>,
+            _: Option<&Value>,
+        ) -> Result<(String, String), AppError> {
+            self.scope.clone().map(|()| ("ws".into(), "profile".into()))
+        }
+        fn is_initialized(&self) -> Result<bool, AppError> {
+            unreachable!()
+        }
+        fn context(&self) -> Result<BookContext, AppError> {
+            unreachable!()
+        }
+        fn status_facts(&self) -> Result<StatusFacts, AppError> {
+            unreachable!()
+        }
+        fn rollback(&mut self) -> Result<(), AppError> {
+            unreachable!()
+        }
+        fn close(&mut self) -> Result<(), AppError> {
+            unreachable!()
+        }
+    }
+
+    fn namespace(fields: &[(&str, Value)]) -> Namespace {
+        let mut namespace = Namespace::default();
+        for (name, value) in fields {
+            namespace.set(name, value.clone());
+        }
+        namespace
+    }
+
+    fn run(operation: &str, fields: &[(&str, Value)]) -> Result<Value, AppError> {
+        execute(
+            &mut Capture { scope: Ok(()) },
+            operation,
+            &namespace(fields),
+        )
+    }
+
+    fn file(directory: &std::path::Path, name: &str, payload: &[u8]) -> Value {
+        let path = directory.join(name);
+        std::fs::write(&path, payload).unwrap();
+        s(path.to_str().unwrap())
+    }
+
+    #[test]
+    fn review_cli_reads_bounded_files_unwraps_envelopes_and_authors_cli() {
+        let directory = tempfile::tempdir().unwrap();
+        let dir = directory.path();
+        let version = ("expected_input_version", Value::from(3));
+        let plan = |payload: &[u8]| {
+            run(
+                "review.plan",
+                &[
+                    ("operations_file", file(dir, "ops.json", payload)),
+                    version.clone(),
+                ],
+            )
+        };
+        let out = plan(br#"{"operations":[{"type":"exclude"}]}"#).unwrap();
+        assert_eq!(get(&out, "authored_source"), Some(&s("cli")));
+        let args = get(&out, "args").unwrap();
+        assert_eq!(
+            kassiber_pyjson::dumps(get(args, "operations").unwrap(), &Default::default()).unwrap(),
+            r#"[{"type": "exclude"}]"#
+        );
+        assert_eq!(get(args, "expected_input_version"), Some(&Value::from(3)));
+        let mut exact = b"[]".to_vec();
+        exact.resize(1_000_000, b' ');
+        assert!(plan(&exact).is_ok(), "exactly the bound is admitted");
+        exact.push(b' ');
+        let error = plan(&exact).unwrap_err();
+        assert_eq!(error.message, "Review input file is too large");
+        assert_eq!(
+            error.details,
+            Some(dict([("maximum_bytes", Value::from(1_000_000))]))
+        );
+        let utf16: Vec<u8> = "\u{feff}[]"
+            .encode_utf16()
+            .flat_map(u16::to_le_bytes)
+            .collect();
+        assert!(plan(&utf16).is_ok(), "CPython detects UTF-16 JSON");
+        for (payload, message) in [
+            (
+                &br#"{"ops":[]}"#[..],
+                "Review operations file must contain an array or an operations object",
+            ),
+            (
+                b"\"text\"",
+                "Review operations file must contain an array or an operations object",
+            ),
+            (b"[1,", "Review input file must contain valid JSON"),
+            (b"", "Review input file must contain valid JSON"),
+            (b"\xff\xfe\x00", "Review input file must contain valid JSON"),
+        ] {
+            assert_eq!(plan(payload).unwrap_err().message, message);
+        }
+        let missing = run(
+            "review.plan",
+            &[
+                ("operations_file", s(dir.join("missing").to_str().unwrap())),
+                version.clone(),
+            ],
+        )
+        .unwrap_err();
+        assert_eq!(missing.message, "Unable to read the review input file");
+
+        let apply = |payload: &[u8]| {
+            run(
+                "review.apply",
+                &[
+                    ("artifact_file", file(dir, "artifact.json", payload)),
+                    ("idempotency_key", s("key")),
+                ],
+            )
+        };
+        for envelope in [
+            &br#"{"kind":"review.plan","data":{"digest":"d"}}"#[..],
+            br#"{"kind":"ui.review.plan","data":{"digest":"d"}}"#,
+            br#"{"digest":"d"}"#,
+        ] {
+            let out = apply(envelope).unwrap();
+            assert_eq!(get(&out, "authored_source"), Some(&s("cli")));
+            let args = get(&out, "args").unwrap();
+            assert_eq!(get(args, "artifact"), Some(&dict([("digest", s("d"))])));
+            assert_eq!(get(args, "idempotency_key"), Some(&s("key")));
+        }
+        let kept = apply(br#"{"kind":"other","data":{}}"#).unwrap();
+        assert_eq!(
+            get(get(&kept, "args").unwrap(), "artifact").and_then(|a| get(a, "kind")),
+            Some(&s("other"))
+        );
+        for (payload, code, message) in [
+            (
+                &br#"{"kind":"review.plan"}"#[..],
+                "validation",
+                "Review artifact file must contain a plan object",
+            ),
+            (
+                b"[]",
+                "validation",
+                "Review artifact file must contain a plan object",
+            ),
+            (
+                br#"{"kind":["review.plan"]}"#,
+                "internal_error",
+                "unhashable type: 'list'",
+            ),
+            (
+                br#"{"kind":{}}"#,
+                "internal_error",
+                "unhashable type: 'dict'",
+            ),
+        ] {
+            let error = apply(payload).unwrap_err();
+            assert_eq!(
+                (error.code.as_str(), error.message.as_str()),
+                (code, message)
+            );
+        }
+    }
+
+    #[test]
+    fn review_cli_resolves_scope_before_reading_any_file() {
+        let refused = AppError::new("not_found", "Profile not found");
+        for (operation, field) in [
+            ("review.plan", "operations_file"),
+            ("review.apply", "artifact_file"),
+        ] {
+            let error = execute(
+                &mut Capture {
+                    scope: Err(refused.clone()),
+                },
+                operation,
+                &namespace(&[(field, s("/nonexistent/review.json"))]),
+            )
+            .unwrap_err();
+            assert_eq!(error.code, "not_found");
+        }
+        let out = run(
+            "review.cases",
+            &[
+                ("limit", Value::from(5)),
+                ("cursor", Value::Null),
+                ("profile", s("p")),
+            ],
+        )
+        .unwrap();
+        assert_eq!(get(&out, "operation"), Some(&s("review.cases")));
+        let args = get(&out, "args").unwrap();
+        assert_eq!(get(args, "limit"), Some(&Value::from(5)));
+        assert_eq!(get(args, "profile"), Some(&s("p")));
+        let receipt = run("review.receipt", &[("idempotency_key", s("k"))]).unwrap();
+        assert_eq!(
+            get(get(&receipt, "args").unwrap(), "idempotency_key"),
+            Some(&s("k"))
+        );
+    }
+}

@@ -82,8 +82,8 @@
   {
     "id": "RVA-receipt-anchors",
     "file": "crates/journals/src/review_apply.rs",
-    "find": "(\"transaction_ids\", transaction_ids(&results)),",
-    "replace": "(\"transaction_ids\", Value::List(vec![])),",
+    "find": "let affected = transaction_ids(&results);",
+    "replace": "let affected = Value::List(vec![]);",
     "expect_failing": [
       "review_apply_matches_python_receipts_authorship_and_complete_database_rows"
     ],
