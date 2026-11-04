@@ -433,3 +433,316 @@ impl kassiber_wallets::freshness::execution::Handler for Refresh<'_> {
 
 #[cfg(feature = "test-harness")]
 mod hybrid;
+
+/// `ui.journals.quarantine.resolve`: one audited price override or exclusion,
+/// then an optional plain rebuild, mirroring Python's
+/// `_quarantine_resolution_payload` with `default_source="gui"`.
+pub(super) fn quarantine_resolve(
+    conn: &Connection,
+    scope: &dyn Fn() -> Result<(String, String), kassiber_envelope::AppError>,
+    args: &Value,
+) -> Result<Value, kassiber_envelope::AppError> {
+    use kassiber_envelope::{dict, get, py_str, s, AppError};
+    use kassiber_pyjson::Key;
+    const KIND: &str = "ui.journals.quarantine.resolve";
+    let Value::Dict(fields) = args else {
+        unreachable!("the daemon coerces arguments to an object")
+    };
+    let allowed = [
+        "transaction",
+        "action",
+        "fiat_rate",
+        "fiat_value",
+        "reason",
+        "reprocess",
+    ];
+    let mut unknown: Vec<Value> = fields
+        .iter()
+        .filter_map(|(key, _)| match key {
+            Key::Str(name) if !name.as_str().is_some_and(|n| allowed.contains(&n)) => {
+                Some(Value::Str(name.clone()))
+            }
+            _ => None,
+        })
+        .collect();
+    if !unknown.is_empty() {
+        unknown.sort_by(|a, b| match (a, b) {
+            (Value::Str(a), Value::Str(b)) => a.code_points().cmp(b.code_points()),
+            _ => std::cmp::Ordering::Equal,
+        });
+        return Err(
+            AppError::new("validation", format!("{KIND} received unsupported fields"))
+                .with_details(dict([("unknown", Value::List(unknown))])),
+        );
+    }
+    let present = |key: &str| get(args, key).filter(|v| !matches!(v, Value::Null));
+    let stripped = |key: &str| match get(args, key) {
+        Some(Value::Str(text)) => {
+            let text = kassiber_pytext::strip_py(text);
+            text.code_points()
+                .next()
+                .is_some()
+                .then(|| py_str(&Value::Str(text)))
+        }
+        _ => None,
+    };
+    let transaction = stripped("transaction")
+        .ok_or_else(|| AppError::new("validation", format!("{KIND} requires a transaction")))?;
+    let action = match get(args, "action") {
+        Some(Value::Str(text)) if text.is("price_override") => "price_override",
+        Some(Value::Str(text)) if text.is("exclude") => "exclude",
+        Some(value @ (Value::List(_) | Value::Dict(_))) => {
+            return Err(AppError::new(
+                "internal_error",
+                format!("unhashable type: '{}'", kassiber_envelope::type_name(value)),
+            ))
+        }
+        _ => {
+            return Err(
+                AppError::new("validation", format!("{KIND} action is invalid")).with_details(
+                    dict([(
+                        "allowed",
+                        Value::List(vec![s("price_override"), s("exclude")]),
+                    )]),
+                ),
+            )
+        }
+    };
+    let reason = stripped("reason")
+        .ok_or_else(|| AppError::new("validation", format!("{KIND} requires an audit reason")))?;
+    let reprocess = match get(args, "reprocess") {
+        None => true,
+        Some(Value::Bool(flag)) => *flag,
+        Some(_) => {
+            return Err(AppError::new(
+                "validation",
+                format!("{KIND} reprocess must be boolean"),
+            ))
+        }
+    };
+    let (rate, total) = (present("fiat_rate"), present("fiat_value"));
+    if action == "price_override" {
+        if rate.is_none() && total.is_none() {
+            return Err(AppError::new(
+                "validation",
+                "price_override requires fiat_rate or fiat_value from reviewed evidence",
+            ));
+        }
+        if rate.is_some() && total.is_some() {
+            return Err(AppError::new(
+                "validation",
+                "price_override accepts either fiat_rate or fiat_value, not both",
+            ));
+        }
+    } else if rate.is_some() || total.is_some() {
+        return Err(AppError::new(
+            "validation",
+            "exclude does not accept fiat_rate or fiat_value",
+        ));
+    }
+
+    // Python resolves the active book only after every argument check.
+    let (workspace_id, profile_id) = scope()?;
+    let (workspace_id, profile_id) = (workspace_id.as_str(), profile_id.as_str());
+    let sql =
+        |error: kassiber_store::rusqlite::Error| AppError::new("internal_error", error.to_string());
+    let rows = |query: &str,
+                params: &[&dyn kassiber_store::rusqlite::ToSql]|
+     -> Result<Vec<(String, i64)>, AppError> {
+        let mut statement = conn.prepare(query).map_err(sql)?;
+        let found = statement
+            .query_map(params, |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+            })
+            .map_err(sql)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(sql)?;
+        Ok(found)
+    };
+    // handlers.resolve_transaction: id first, then a unique external id.
+    let mut found = rows(
+        "SELECT id, amount FROM transactions WHERE profile_id = ? AND id = ?",
+        &[&profile_id, &transaction],
+    )?;
+    if found.is_empty() {
+        found = rows(
+            "SELECT id, amount FROM transactions WHERE profile_id = ? AND external_id = ? ORDER BY occurred_at DESC, created_at DESC, id DESC LIMIT 2",
+            &[&profile_id, &transaction],
+        )?;
+        if found.len() > 1 {
+            return Err(AppError::new(
+                "ambiguous_reference",
+                format!("Transaction external_id '{transaction}' matches multiple transactions"),
+            )
+            .with_hint("Use the Kassiber transaction id from `transactions list` or narrow the command to an unambiguous row."));
+        }
+    }
+    let Some((transaction_id, amount)) = found.into_iter().next() else {
+        return Err(AppError::new(
+            "app_error",
+            format!("Transaction '{transaction}' not found"),
+        ));
+    };
+    let quarantined: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM journal_quarantines WHERE profile_id = ? AND transaction_id = ?)",
+            [profile_id, transaction_id.as_str()],
+            |row| row.get(0),
+        )
+        .map_err(sql)?;
+    if !quarantined {
+        return Err(AppError::new("not_found", "Transaction is not quarantined")
+            .with_hint("Run `kassiber journals quarantined` to see active entries."));
+    }
+    let mut update = kassiber_transactions::metadata::GroupedUpdate {
+        transaction: transaction_id.clone(),
+        source: "gui".into(),
+        reason: Some(reason.as_str().into()),
+        ..Default::default()
+    };
+    if action == "exclude" {
+        update.excluded = Some(Value::Bool(true));
+    } else {
+        let (rate, total) = kassiber_journals::views::override_prices(rate, total, amount)?;
+        update.pricing = Some(kassiber_transactions::metadata::PricingUpdate {
+            fiat_rate: rate.map_or(Value::Null, |v| s(v.to_string())),
+            fiat_value: total.map_or(Value::Null, |v| s(v.to_string())),
+            source_kind: s("manual_override"),
+            quality: s("exact"),
+            method: s("quarantine_price_override"),
+            ..Default::default()
+        });
+    }
+    let scope = kassiber_transactions::Scope {
+        workspace_id,
+        profile_id,
+    };
+    conn.execute_batch("BEGIN IMMEDIATE").map_err(sql)?;
+    let applied = (|| -> Result<Value, AppError> {
+        let record = kassiber_transactions::metadata::execute(
+            conn,
+            &scope,
+            &kassiber_transactions::metadata::Command::Update(Box::new(update)),
+        )?;
+        conn.execute(
+            "DELETE FROM journal_quarantines WHERE profile_id = ? AND transaction_id = ?",
+            [profile_id, transaction_id.as_str()],
+        )
+        .map_err(sql)?;
+        if get(&record, "updated") != Some(&Value::Bool(true)) {
+            conn.execute(
+                "UPDATE profiles SET last_processed_at = NULL, last_processed_tx_count = 0, journal_input_version = journal_input_version + 1, ownership_review_counts_json = NULL WHERE id = ?",
+                [profile_id],
+            )
+            .map_err(sql)?;
+        }
+        Ok(record)
+    })();
+    let record = match applied {
+        Ok(record) => {
+            conn.execute_batch("COMMIT").map_err(sql)?;
+            record
+        }
+        Err(error) => {
+            let _ = conn.execute_batch("ROLLBACK");
+            return Err(error);
+        }
+    };
+    let field = |key: &str| get(&record, key).cloned().unwrap_or(Value::Null);
+    let float = |key: &str| match get(&record, key) {
+        Some(Value::Str(text)) => text
+            .as_str()
+            .and_then(|t| kassiber_pytext::parse_float(t).ok())
+            .map_or(Value::Null, Value::Float),
+        _ => Value::Null,
+    };
+    let note = s("Run `kassiber journals process` to regenerate entries.");
+    let resolution = if action == "exclude" {
+        dict([
+            ("transaction_id", s(transaction_id.as_str())),
+            ("resolution", s("exclude")),
+            ("excluded", Value::Bool(true)),
+            ("history_event_id", field("history_event_id")),
+            ("note", note),
+        ])
+    } else {
+        dict([
+            ("transaction_id", s(transaction_id.as_str())),
+            ("resolution", s("price-override")),
+            ("fiat_rate", float("fiat_rate_exact")),
+            ("fiat_value", float("fiat_value_exact")),
+            ("fiat_rate_exact", field("fiat_rate_exact")),
+            ("fiat_value_exact", field("fiat_value_exact")),
+            ("pricing_source_kind", field("pricing_source_kind")),
+            ("history_event_id", field("history_event_id")),
+            ("note", note),
+        ])
+    };
+    let journal_process = if reprocess {
+        let committed = process(conn, None, None, false, &mut |_| {})
+            .map_err(kassiber_journals::service::application_error)?;
+        let payload = committed.ordered_payload.clone();
+        committed
+            .after_reply()
+            .map_err(kassiber_journals::service::application_error)?;
+        payload
+    } else {
+        Value::Null
+    };
+    let remaining = conn
+        .query_row(
+            "SELECT reason, detail_json, created_at FROM journal_quarantines WHERE transaction_id = ?",
+            [transaction_id.as_str()],
+            |row| {
+                Ok((
+                    row.get::<_, kassiber_store::rusqlite::types::Value>(0)?,
+                    row.get::<_, kassiber_store::rusqlite::types::Value>(1)?,
+                    row.get::<_, kassiber_store::rusqlite::types::Value>(2)?,
+                ))
+            },
+        )
+        .map(Some)
+        .or_else(|error| match error {
+            kassiber_store::rusqlite::Error::QueryReturnedNoRows => Ok(None),
+            other => Err(sql(other)),
+        })?;
+    let scalar = |value: kassiber_store::rusqlite::types::Value| {
+        use kassiber_store::rusqlite::types::Value as Sql;
+        match value {
+            Sql::Null => Value::Null,
+            Sql::Integer(n) => Value::Int(n.into()),
+            Sql::Real(n) => Value::Float(n),
+            Sql::Text(text) => Value::Str(text.as_str().into()),
+            Sql::Blob(bytes) => Value::Bytes(bytes),
+        }
+    };
+    let remaining = remaining.map(|(reason, detail, created)| {
+        use kassiber_store::rusqlite::types::Value as Sql;
+        let text = match &detail {
+            Sql::Null => Some("{}".to_owned()),
+            Sql::Text(text) if text.is_empty() => Some("{}".to_owned()),
+            Sql::Text(text) => Some(text.clone()),
+            Sql::Blob(bytes) if bytes.is_empty() => Some("{}".to_owned()),
+            Sql::Blob(bytes) => String::from_utf8(bytes.clone()).ok(),
+            _ => None,
+        };
+        let detail = match text.map(|t| kassiber_pytext::loads(&t)) {
+            Some(Ok(value @ Value::Dict(_))) => value,
+            _ => dict::<&str>([]),
+        };
+        dict([
+            ("reason", scalar(reason)),
+            ("detail", detail),
+            ("created_at", scalar(created)),
+        ])
+    });
+    Ok(dict([
+        ("transaction_id", s(transaction_id.as_str())),
+        ("action", s(action)),
+        ("resolution", resolution),
+        ("reprocessed", Value::Bool(reprocess)),
+        ("journal_process", journal_process),
+        ("cleared", Value::Bool(remaining.is_none())),
+        ("remaining_quarantine", remaining.unwrap_or(Value::Null)),
+    ]))
+}

@@ -1060,7 +1060,8 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   and native journal service, with scoped argument authority, ordered progress,
   cancellation and connection-owner retirement. The assistant's no-pairing
   step uses the same native service and awaits the R6 chat loop. Typed refusals
-  are answered natively. Finish the auto-pair, desktop and assistant campaigns,
+  are answered natively. The desktop journal reads, quarantine page and
+  quarantine resolution are native and registered. Finish the auto-pair, desktop and assistant campaigns,
   census/shadow and inherited mutations.
   The third continuation integrates the requested loader/BLOB, pre-build,
   render and persistence tips, adds resumable complete-process shards, and

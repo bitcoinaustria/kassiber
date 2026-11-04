@@ -118,5 +118,115 @@
       "tests/test_rust_journal_commands.py::test_hybrid_plain_counts_native_and_proven_rollback_fallback_shapes[label-refusal-False]"
     ],
     "rule": "Refusal details keep Python's insertion order in the transport envelope."
+  },
+  {
+    "id": "JVIEW-advertise",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "    kinds.extend(journals::KINDS);\n",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_journal_views.py::test_journal_views_plain_books_match_python[False-unchanged-False]"
+    ],
+    "rule": "Advertise the registered desktop journal reads."
+  },
+  {
+    "id": "JVIEW-pair-type",
+    "file": "crates/journals/src/views.rs",
+    "find": "s(if py(out_asset) == py(in_asset) {",
+    "replace": "s(if py(out_asset) != py(in_asset) {",
+    "expect_failing": [
+      "tests/test_rust_journal_views.py::test_journal_views_rows_carry_pair_metadata_like_python[False-False]"
+    ],
+    "rule": "A same-asset relation is a transfer and a cross-asset one a swap."
+  },
+  {
+    "id": "JVIEW-limit-cap",
+    "file": "crates/journals/src/views.rs",
+    "find": "let limit = limit(&args, 100, MAX_UI_LIST_LIMIT)?;",
+    "replace": "let limit = limit(&args, 100, 100_000)?;",
+    "expect_failing": [
+      "tests/test_rust_journal_views.py::test_journal_views_plain_books_match_python[False-unchanged-False]"
+    ],
+    "rule": "Event listing caps its limit at Python's MAX_UI_LIST_LIMIT."
+  },
+  {
+    "id": "JVIEW-input-version",
+    "file": "crates/journals/src/views.rs",
+    "find": "    } else if input_version != processed_version {",
+    "replace": "    } else if false {",
+    "expect_failing": [
+      "tests/test_rust_journal_views.py::test_journal_views_malformed_freshness_markers_match_python[stale-version]"
+    ],
+    "rule": "A changed journal input version makes the projection stale."
+  },
+  {
+    "id": "JQUAR-waiting-root",
+    "file": "crates/journals/src/quarantine.rs",
+    "find": "            waiting.insert(id.clone(), root);",
+    "replace": "            let _ = root;",
+    "expect_failing": [
+      "tests/test_rust_journal_views.py::test_journal_views_generated_quarantines_match_python[gaps-10]"
+    ],
+    "rule": "A downstream row with a named root waits on it."
+  },
+  {
+    "id": "JQUAR-pair-fingerprint",
+    "file": "crates/journals/src/quarantine.rs",
+    "find": "            .separators(\",\", \":\")",
+    "replace": "            .separators(\", \", \": \")",
+    "expect_failing": [
+      "tests/test_rust_journal_views.py::test_journal_quarantine_pair_evidence_and_refresh_error_match_python[False]"
+    ],
+    "rule": "Pair fingerprints hash Python's compact sorted reading."
+  },
+  {
+    "id": "JQUAR-category",
+    "file": "crates/journals/src/quarantine.rs",
+    "find": "            info(\"missing_price\", &[\"set_price\"])",
+    "replace": "            info(\"needs_decision\", &[\"set_price\"])",
+    "expect_failing": [
+      "tests/test_rust_journal_views.py::test_journal_views_plain_books_match_python[True-blocked-False]"
+    ],
+    "rule": "A missing price is classified as missing_price."
+  },
+  {
+    "id": "JQUAR-redaction",
+    "file": "crates/journals/src/quarantine.rs",
+    "find": "s(kassiber_envelope::redaction::redact_operational_text(",
+    "replace": "s(String::from(",
+    "expect_failing": [
+      "tests/test_rust_journal_views.py::test_journal_quarantine_pair_evidence_and_refresh_error_match_python[False]"
+    ],
+    "rule": "A reported refresh error message is redacted."
+  },
+  {
+    "id": "JQRES-advertise",
+    "file": "crates/daemon/src/journals.rs",
+    "find": "    \"ui.journals.quarantine.resolve\",\n",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_journal_quarantine_resolve.py::test_quarantine_resolve_refusals_match_python_without_writes[False]"
+    ],
+    "rule": "Register the desktop quarantine resolution route."
+  },
+  {
+    "id": "JQRES-delete",
+    "file": "crates/kassiber/src/real_store/journals.rs",
+    "find": "\"DELETE FROM journal_quarantines WHERE profile_id = ? AND transaction_id = ?\",",
+    "replace": "\"DELETE FROM journal_quarantines WHERE 0 AND profile_id = ? AND transaction_id = ?\",",
+    "expect_failing": [
+      "tests/test_rust_journal_quarantine_resolve.py::test_quarantine_resolve_matches_python_envelope_and_book[exclude-False-False]"
+    ],
+    "rule": "A resolution removes the resolved quarantine row in the same transaction."
+  },
+  {
+    "id": "JQRES-precision",
+    "file": "crates/journals/src/views.rs",
+    "find": "    let context = Context::RP2;",
+    "replace": "    let context = Context::new(28, kassiber_pydecimal::Rounding::HalfEven);",
+    "expect_failing": [
+      "tests/test_rust_journal_quarantine_resolve.py::test_quarantine_resolve_matches_python_envelope_and_book[value-False-False]"
+    ],
+    "rule": "Derived override prices use Kassiber's 32-digit default decimal context."
   }
 ]

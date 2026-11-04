@@ -13,6 +13,7 @@ pub mod persistence;
 pub mod pipeline;
 pub mod prebuild;
 pub mod process;
+mod quarantine;
 mod render;
 #[cfg(feature = "test-harness")]
 mod review_apply;
@@ -26,6 +27,7 @@ pub mod scalar;
 pub mod service;
 pub mod storage;
 pub mod timing;
+pub mod views;
 pub use model::*;
 pub use render::{enrich_quarantine_detail, render_ledger, LedgerInputs, LedgerState};
 use serde_json::Value;

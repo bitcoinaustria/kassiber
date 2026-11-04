@@ -920,6 +920,13 @@ Automatic background and report-read syncs keep their journal policy. A queued
 journal job reused by a later request keeps automatic pairing if either
 request asked for it.
 
+The native daemon also serves `ui.journals.snapshot`, `ui.journals.events.list`,
+`ui.journals.transfers.list`, `ui.journals.quarantine` and
+`ui.journals.quarantine.resolve` from the open book, with Python's payloads.
+The resolution applies one audited metadata change and may rebuild journals;
+the reads never write. See the
+[journal desktop checkpoint](r4-journal-process-checkpoint.md#desktop-journal-reads-and-quarantine-resolution).
+
 The native `ui.journals.process` route shares the freshness execution slot and
 journal service. It runs directly without adding queue or source-state rows,
 and grants no wallet, rate or graph transport authority. Its worker binds the

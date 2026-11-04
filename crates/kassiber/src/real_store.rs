@@ -1107,6 +1107,28 @@ impl Book for RealBook {
             _slot: Some(slot),
         }))
     }
+    fn journal_view(&mut self, kind: &str, args: Option<&Value>) -> Result<Value, AppError> {
+        if kind == "ui.journals.quarantine.resolve" {
+            let empty = kassiber_envelope::dict::<&str>([]);
+            let args = match args {
+                None | Some(Value::Null) => &empty,
+                Some(value @ Value::Dict(_)) => value,
+                Some(other) => {
+                    return Err(AppError::new("validation", "daemon args must be an object")
+                        .with_details(kassiber_envelope::dict([(
+                            "type",
+                            kassiber_envelope::s(kassiber_envelope::type_name(other)),
+                        )])))
+                }
+            };
+            return journals::quarantine_resolve(
+                self.conn()?,
+                &|| self.resolve_scope(None, None),
+                args,
+            );
+        }
+        kassiber_journals::views::execute(self.conn()?, kind, args)
+    }
     fn process_journals(
         &mut self,
         workspace: Option<&Value>,

@@ -407,6 +407,10 @@ pub trait Book: Send {
         Err(not_implemented("transactions", "transaction listing"))
     }
 
+    /// Desktop journal reads over the active book (`ui.journals.*` views).
+    fn journal_view(&mut self, kind: &str, _args: Option<&Value>) -> Result<Value, AppError> {
+        Err(not_implemented("journals", kind))
+    }
     /// Local stored transfer/review services. No journal or network fallback.
     fn transfers(&mut self, operation: &str, _args: &Value) -> Result<Value, AppError> {
         Err(not_implemented("transfers", operation))

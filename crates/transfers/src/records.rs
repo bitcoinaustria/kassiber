@@ -55,6 +55,105 @@ pub(super) fn pair_records(
         unreachable!()
     }
 }
+/// `custody_authored_migration.list_pair_review_records` for current terms:
+/// one flat record per pair review, newest first.
+pub fn pair_review_records(
+    conn: &Connection,
+    workspace_id: &str,
+    profile_id: &str,
+) -> Result<Vec<Value>> {
+    let scope = Scope {
+        workspace_id,
+        profile_id,
+    };
+    let contexts = contexts(conn, &scope)?;
+    let int = |value: &Value| -> Result<Value> {
+        match value {
+            Value::Int(_) => Ok(value.clone()),
+            other => Err(AppError::new(
+                "internal_error",
+                format!(
+                    "int() argument is not an integer: {}",
+                    kassiber_envelope::py_repr(other)
+                ),
+            )),
+        }
+    };
+    let mut result = BTreeMap::new();
+    for row in terms(conn, &scope, "transaction_pair")? {
+        let source = context(&contexts, &row, "out_transaction_id")?;
+        let target = context(&contexts, &row, "in_transaction_id")?;
+        let reviewed = value(&row, "reviewed_source_amount_msat");
+        let allocated_out = value(&row, "allocated_source_amount_msat");
+        let allocated_in = value(&row, "allocated_sink_amount_msat");
+        let out_amount = if !matches!(allocated_out, Value::Null) {
+            int(&allocated_out)?
+        } else if !matches!(reviewed, Value::Null) {
+            int(&reviewed)?
+        } else {
+            int(&value(source, "amount"))?
+        };
+        let in_amount = if matches!(allocated_in, Value::Null) {
+            int(&value(target, "amount"))?
+        } else {
+            int(&allocated_in)?
+        };
+        let side = |prefix: &str, context: &Value| -> Result<Vec<(String, Value)>> {
+            Ok(vec![
+                (
+                    format!("{prefix}_external_id"),
+                    value(context, "external_id"),
+                ),
+                (format!("{prefix}_asset"), value(context, "asset")),
+                (
+                    format!("{prefix}_full_amount_msat"),
+                    int(&value(context, "amount"))?,
+                ),
+                (
+                    format!("{prefix}_occurred_at"),
+                    value(context, "occurred_at"),
+                ),
+                (format!("{prefix}_wallet"), value(context, "wallet")),
+            ])
+        };
+        let mut fields: Vec<(String, Value)> = vec![
+            ("id".into(), value(&row, "legacy_source_id")),
+            ("component_id".into(), value(&row, "component_id")),
+            (
+                "out_transaction_id".into(),
+                s(text(&row, "out_transaction_id")),
+            ),
+            (
+                "in_transaction_id".into(),
+                s(text(&row, "in_transaction_id")),
+            ),
+            ("kind".into(), value(&row, "review_kind")),
+            ("policy".into(), value(&row, "tax_policy")),
+            ("swap_fee_msat".into(), value(&row, "swap_fee_msat")),
+            ("swap_fee_kind".into(), value(&row, "swap_fee_kind")),
+            ("out_amount".into(), reviewed),
+            ("created_at".into(), value(&row, "created_at")),
+            ("out_amount_msat".into(), out_amount),
+            ("in_amount_msat".into(), in_amount),
+        ];
+        fields.extend(side("out", source)?);
+        fields.extend(side("in", target)?);
+        result.insert(
+            text(&row, "legacy_source_id"),
+            Value::Dict(
+                fields
+                    .into_iter()
+                    .map(|(k, v)| (k.as_str().into(), v))
+                    .collect(),
+            ),
+        );
+    }
+    if let Value::List(rows) = sorted(result) {
+        Ok(rows)
+    } else {
+        unreachable!()
+    }
+}
 pub(super) fn payout_records(conn: &Connection, scope: &Scope<'_>) -> Result<Vec<Value>> {
     let mut result = BTreeMap::new();
     for row in terms_with_deleted(conn, scope, "direct_swap_payout", true)? {

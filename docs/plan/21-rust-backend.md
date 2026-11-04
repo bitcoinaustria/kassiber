@@ -3288,7 +3288,9 @@ The [seventh continuation](../reference/r4-journal-process-checkpoint.md#seventh
 records the separate verification boundary. Transitional JSON boundaries
 remain open. The assistant's internal tool, whose consent covers a rebuild
 without automatic pairing, has a verified native journal step on the same
-service; Python's chat loop serves it until R6 ports `ai.chat`. Registered-route
+service; Python's chat loop serves it until R6 ports `ai.chat`. The desktop
+journal reads, the explained quarantine page and quarantine resolution are
+also native and registered, so every journal desktop kind is served natively. Registered-route
 campaigns, census/shadow, inherited mutation and performance acceptance are
 still required. Python retains production authority until R4-16.
 

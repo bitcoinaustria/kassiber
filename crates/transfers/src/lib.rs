@@ -36,6 +36,7 @@ pub mod sql;
 use kassiber_envelope::{dict, get, py_str, AppError};
 use kassiber_pyjson::Value;
 use kassiber_store::rusqlite::Connection;
+pub use records::pair_review_records;
 use sql::{rows, Result};
 pub use sql::{Scope, Sources, SystemSources};
 

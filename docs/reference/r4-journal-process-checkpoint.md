@@ -1225,6 +1225,61 @@ The automatic-pairing, desktop and assistant routes, the census and a plain
 rerun on the current binary have not completed; machine crashes interrupted
 the first attempt.
 
+### Desktop journal reads and quarantine resolution
+
+The owner's desktop test build needs every journal desktop kind native. The
+daemon now registers `ui.journals.snapshot`, `ui.journals.events.list`,
+`ui.journals.transfers.list`, `ui.journals.quarantine` and
+`ui.journals.quarantine.resolve` alongside `ui.journals.process`.
+
+`crates/journals/src/views.rs` ports the three journal reads from
+`kassiber.core.ui_snapshot` with Python's queries and scalar conversions:
+`int(x or 0)`, `float(x or 0)`, `float(msat_to_btc(...))`, argument coercion,
+limit caps and the projection-freshness evaluation, including malformed
+stored markers. `crates/journals/src/quarantine.rs` ports
+`quarantine_review` and `quarantine_catalog`: reason categories and actions,
+quantity blockers, waiting roots, groups, evidence, pair fingerprints, the
+refresh-error report with operational redaction, and the presumption
+summaries. Pair reviews come from a new flat `kassiber_transfers::pair_review_records`.
+These reads open no new connection and never write.
+
+`ui.journals.quarantine.resolve` keeps Python's argument order. It resolves
+the book after validation, then the transaction by id or unique external id,
+and requires a stored quarantine. One transaction applies the native audited
+metadata update (exclusion or a manual price override), deletes the
+quarantine row and invalidates journals when nothing changed. Derived
+override prices use Kassiber's 32-digit decimal context, as Python's package
+initialization sets. An optional plain native rebuild and the remaining
+quarantine report follow.
+
+Verification found and fixed a shared metadata defect. Grouped desktop saves
+and history reverts wrote one `UPDATE` per column, so book triggers advanced
+the chain-index revision clock once per column. Python writes one statement.
+Both native paths now write one statement; the existing metadata and grouped
+metadata parity suites pass again.
+
+`tests/test_rust_journal_views.py` compares every request's ordered rows with
+the unchanged Python daemon over plain, stale, quarantined, paired, swapped,
+Austrian and context-less books, and over malformed freshness markers. It
+also covers 54 admitted generated custody books whose quarantine pages
+contain waiting roots, groups, actions and presumptions, and a short-received
+pair with pair evidence plus a reported refresh error. Each session sends
+every argument variant and refusal; reads must leave the book unchanged.
+`tests/test_rust_journal_quarantine_resolve.py` compares refusals without
+writes and each resolution, with and without rebuild, on both codecs. Only
+the metadata layer's audit event ids and edit times are masked; these come
+from the system clock in both runtimes. Python's reference stderr goes to a
+file, because a full pipe once stalled a session with many tracebacks.
+
+One run passes **136 tests** (one relaxed-schema generated book is skipped as
+not admitted) across the two journal suites and the existing metadata and
+grouped-metadata parity suites. All **11 route mutations** are killed: view
+advertisement, pair type, the event limit cap, the input-version freshness
+rule, waiting roots, pair fingerprints, reason categories, refresh-error
+redaction, resolve advertisement, quarantine-row deletion and override-price
+precision. Formatting, all-target/all-feature and production clippy, the
+classifier update and the 57-test CI preflight pass.
+
 ### Seventh-continuation remaining work
 
 Run all **25,030 generated** and **318 recorded** operands through the

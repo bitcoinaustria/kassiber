@@ -23,6 +23,7 @@ mod documents;
 mod freshness;
 mod imports;
 pub mod input;
+mod journals;
 mod loans;
 mod metadata;
 pub mod output;
@@ -150,6 +151,7 @@ pub fn supported_kinds() -> Vec<&'static str> {
     }));
     kinds.extend(documents::KINDS);
     kinds.push("ui.journals.process");
+    kinds.extend(journals::KINDS);
     kinds.extend(transfers::KINDS);
     kinds.extend(services::kinds().filter(|k| views::KINDS.contains(k)));
     kinds.extend(services::kinds().filter(|k| networks::KINDS.contains(k)));
@@ -964,6 +966,16 @@ impl Daemon {
             }
             let payload =
                 chain_analysis_ops::execute(self.book_mut()?.as_mut(), &kind_text, args.as_ref())?;
+            return Ok((
+                Some(with_request_id(success(&kind_text, payload), &request_id)),
+                false,
+            ));
+        }
+        if journals::KINDS.contains(&kind_text.as_str()) {
+            if let Some(locked) = self.open_lazily(&request_id)? {
+                return Ok((Some(locked), false));
+            }
+            let payload = journals::execute(self.book_mut()?.as_mut(), &kind_text, args.as_ref())?;
             return Ok((
                 Some(with_request_id(success(&kind_text, payload), &request_id)),
                 false,
