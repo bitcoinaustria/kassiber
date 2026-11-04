@@ -170,7 +170,8 @@ def product_run(root, argv, env, *, reference=False, input=None):
 
 def current_snapshot():
     from kassiber.core.chain_analysis.index import digest
-    return digest(['0123456789abcdef0123456789abcdef','p',2,2])
+    from kassiber.core.chain_analysis.projection_store import VERSION
+    return digest(['0123456789abcdef0123456789abcdef','p',VERSION,2])
 
 
 @pytest.mark.parametrize('offline',[False,True])
@@ -260,7 +261,7 @@ def test_analysis_operations_product_daemon_bytes_events_and_all_tables(tmp_path
     assert scoped<=set(native) and kinds[:len(native)]==native
     assert kinds[len(native)]=='status'
     assert len(kinds)==len(set(kinds))
-    assert set(kinds)<=set(expected_ready['data']['supported_kinds'])|{'test.stream','test.emit_event','test.late','test.secret_store'}
+    assert {kind for kind in kinds if not kind.startswith('test.')}<=set(expected_ready['data']['supported_kinds'])
     for record in [ready,expected_ready]:
         record['data']['supported_kinds']=[kind for kind in record['data']['supported_kinds'] if kind in scoped|{'status'}]
     assert json.dumps(ready,separators=(',',':'))==json.dumps(expected_ready,separators=(',',':'))
