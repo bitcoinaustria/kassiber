@@ -153,14 +153,26 @@ fn summary_model_matches_python_and_renders_deterministically() {
 
 #[test]
 fn display_rounding_and_csv_text_come_from_one_exact_value() {
-    use report_design::Cell;
+    use report_design::{Cell, Lang};
     let value = |raw: &str| raw.parse::<kassiber_pydecimal::Decimal>().unwrap();
-    assert_eq!(Cell::Fiat(value("-1234.565")).display(), "\u{2212}1,234.56");
+    let (en, de) = (Lang::En, Lang::De);
+    assert_eq!(
+        Cell::Fiat(value("-1234.565")).display(en),
+        "\u{2212}1,234.56"
+    );
+    assert_eq!(
+        Cell::Fiat(value("-1234.565")).display(de),
+        "\u{2212}1.234,56"
+    );
     assert_eq!(Cell::Fiat(value("-1234.565")).csv(), "-1234.565");
-    assert_eq!(Cell::Fiat(value("-0.001")).display(), "0.00");
-    assert_eq!(Cell::Btc(value("1.6473E-7")).display(), "0.00000016");
+    assert_eq!(Cell::Fiat(value("-0.001")).display(en), "0.00");
+    assert_eq!(Cell::Btc(value("1.6473E-7")).display(de), "0,00000016");
     assert_eq!(Cell::Btc(value("1.6473E-7")).csv(), "0.00000016473");
-    assert_eq!(Cell::Percent(value("59.25")).display(), "59.2%");
+    assert_eq!(Cell::Percent(value("59.25")).display(en), "59.2%");
+    assert_eq!(Cell::Date("2025-03-15".into()).display(de), "15.03.2025");
+    assert_eq!(Cell::Date("2025-03".into()).display(de), "März 2025");
+    assert_eq!(Cell::Date("2025-03-15".into()).csv(), "2025-03-15");
+    assert_eq!(Cell::Count(-1234).display(de), "\u{2212}1.234");
     assert_eq!(
         report_design::msat_of(&value("0.00000016473")),
         Cell::Msat(16473.into())
@@ -172,5 +184,77 @@ fn display_rounding_and_csv_text_come_from_one_exact_value() {
     assert_eq!(
         report_design::from_float(&Value::Float(1.6473e-07)),
         value("0.00000016473")
+    );
+}
+
+#[test]
+fn chart_axes_step_on_round_values() {
+    use report_design::{Axis, Lang};
+    let labels = |axis: &Axis| {
+        axis.ticks
+            .iter()
+            .map(|(_, t)| t.clone())
+            .collect::<Vec<_>>()
+    };
+    let axis = Axis::new(&[3_100.0, 51_234.0, 47_000.0], 4, Lang::En, true);
+    assert_eq!((axis.low, axis.high), (0.0, 60_000.0));
+    assert_eq!(labels(&axis), ["0", "20k", "40k", "60k"]);
+    assert_eq!(axis.ticks.last().unwrap().0, 1.0);
+    let axis = Axis::new(&[-12_000.0, 31_000.0], 4, Lang::De, true);
+    assert_eq!(
+        labels(&axis),
+        ["\u{2212}20\u{a0}Tsd.", "0", "20\u{a0}Tsd.", "40\u{a0}Tsd."]
+    );
+    let axis = Axis::new(&[2_300_000.0], 4, Lang::De, true);
+    assert_eq!(
+        labels(&axis),
+        ["0", "1\u{a0}Mio.", "2\u{a0}Mio.", "3\u{a0}Mio."]
+    );
+    let axis = Axis::new(&[0.4, 1.9], 4, Lang::De, false);
+    assert_eq!(labels(&axis), ["0", "0,5", "1,0", "1,5", "2,0"]);
+    let axis = Axis::new(&[0.4, 2.31], 4, Lang::En, false);
+    assert_eq!(labels(&axis), ["0", "1", "2", "3"]);
+    let axis = Axis::new(&[], 4, Lang::En, false);
+    assert_eq!(labels(&axis), ["0", "0.25", "0.50", "0.75", "1.00"]);
+}
+
+#[test]
+fn the_tax_country_picks_the_language_and_sparse_zeros_print_a_dash() {
+    use report_design::{Block, Lang};
+    let model = |country: &str| {
+        kassiber_pytext::loads(&format!(
+            r#"{{"summary": {{"fiat_currency": "EUR", "timeframe": {{"start": "2025-03-01T00:00:00Z", "end": "2025-03-31T00:00:00Z"}},
+               "flow_periods": [{{"period": "2025-03", "inflow_volume": 1234.5, "outflow_volume": 0.0, "fees_fiat": 0.0, "fees_btc": 0.0}}],
+               "realized_pnl_periods": [], "balance_history": []}},
+               "profile": {{"tax_country": "{country}"}}, "kennzahlen": {{}}}}"#
+        ))
+        .unwrap()
+    };
+    let austrian = report_design::summary(&model("at"));
+    let generic = report_design::summary(&model("generic"));
+    assert_eq!((austrian.lang, generic.lang), (Lang::De, Lang::En));
+    assert_eq!(austrian.title, "Übersichtsbericht");
+    assert_eq!(austrian.period, "01.03.2025 bis 31.03.2025");
+    assert_eq!(generic.title, "Summary report");
+    assert_eq!(generic.period, "2025-03-01 to 2025-03-31");
+    let months = |doc: &report_design::Document| {
+        doc.sections
+            .iter()
+            .flat_map(|s| &s.blocks)
+            .find_map(|b| match b {
+                Block::Table(t) if t.id == "monthly_activity" => Some(t.clone()),
+                _ => None,
+            })
+            .unwrap()
+    };
+    let table = months(&austrian);
+    let row = table.display_row(&table.rows[0], Lang::De);
+    assert_eq!(row[..4], ["März 2025", "1.234,50", "\u{2013}", "\u{2014}"]);
+    assert_eq!(row[5..7], ["\u{2013}", "\u{2013}"]);
+    let table = months(&generic);
+    assert_eq!(table.columns[0].label, "Month");
+    assert_eq!(
+        table.display_row(&table.rows[0], Lang::En)[..3],
+        ["2025-03", "1,234.50", "\u{2013}"]
     );
 }

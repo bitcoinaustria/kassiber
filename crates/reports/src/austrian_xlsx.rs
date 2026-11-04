@@ -472,6 +472,7 @@ pub(super) fn prepare(
         completion: Some(export_completion::Completion {
             kind: "austrian-e1kv.xlsx".into(),
             year: Some(value(&report, "tax_year").clone()),
+            end_year: None,
             scope: Value::Null,
         }),
     })

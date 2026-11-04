@@ -69,6 +69,9 @@ pub fn prepare(
         if command == "reports.export-exit-tax-pdf" {
             return exit_pdf::prepare(conn, &args, sources);
         }
+        if command == "reports.export-summary-pdf" {
+            return report_design::prepare_summary(conn, &args, sources);
+        }
         require_context(conn, &profile, false)?;
         match command {
             "reports.export-capital-gains-csv" => capital_csv::prepare(conn, &profile, &args),

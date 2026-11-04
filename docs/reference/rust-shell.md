@@ -17779,5 +17779,14 @@ and daemon sessions against Python: identical stdout, PDF bytes, saved and
 filed markers and every table; all served by Rust). Eleven mutation entries
 in `crates/pdf/scripts/mutations.json` are each killed by named tests.
 
-The summary, Austrian and source-of-funds PDFs wait for the shared report
-design (`docs/reference/report-design.md`), which replaces ReportLab's layouts.
+The owner approved the shared report design
+(`docs/reference/report-design.md`) on 2026-11-04; it replaces ReportLab's
+layouts report by report. `reports export-summary-pdf` and
+`ui.reports.export_summary_pdf` are native in that design: the model is
+Python's `build_summary_pdf_report_data` (parity for 23 fixture cases), the
+daemon kind admits only `start`, `end`, `wallets` and `include_snapshot` with
+Python's messages, the managed name is `kassiber-summary-report-…pdf`, both
+admit source freshness first and register the saved `summary.pdf` marker over
+the period's years and wallets. The envelope keeps Python's keys and title;
+`pages`, `bytes` and the content hash are the new PDF's. The rollout table in
+the design document tracks the remaining reports.

@@ -4851,7 +4851,16 @@ stays the reference for report data, not for layout.
 
 The hand-written PDF 1.4 writer ports directly with byte parity; the full
 report and exit-tax PDFs are registered natively for CLI and desktop (see
-[the checkpoint](../reference/rust-shell.md#text-pdf-reports-r5-partial)). The
-[report design](../reference/report-design.md) is proposed with a prototype of
-the summary report; the other ReportLab reports and the PDF-containing bundles
-wait for the owner's review of that design.
+[the checkpoint](../reference/rust-shell.md#text-pdf-reports-r5-partial)).
+
+The owner approved the [report design](../reference/report-design.md) on
+2026-11-04 with five decisions: Austrian books in German with Austrian number
+and date formats (English otherwise), every string from one table per
+language, CSV always machine format; full upstream DM Sans and JetBrains Mono
+pinned by hash, amounts in DM Sans tabular figures, Liberation Sans as glyph
+fallback; the new CSV format without a legacy option; Austrian sections as a
+`section` column on shared Disposals and Income tables with an index on the
+Kennzahl page; red only for blockers and the main chart line. The rollout
+replaces one report per commit, each with data parity against Python's
+model; the [rollout table](../reference/report-design.md#rollout) records
+progress and every necessary envelope difference.

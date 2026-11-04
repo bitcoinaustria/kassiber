@@ -1,8 +1,7 @@
 # Report design
 
-**Status:** proposal for the owner's review (2026-11-04). Nothing here is
-rolled out yet; the summary report is prototyped in this design for one
-Austrian and one generic book. Plan 21 ports report rendering to Rust; this
+**Status:** approved by the owner on 2026-11-04 and rolling out report by
+report (see [Rollout](#rollout)). Plan 21 ports report rendering to Rust; this
 document decides what the rendered reports look like once they are Rust's.
 
 ## Goal
@@ -99,19 +98,51 @@ tables. It never changes a shared column, label or order.
   long-term threshold in days and Kassiber's tax engine; disposals gain a
   `term` (short/long) column.
 
-Labels are English. The country layer's legal labels are verbatim German
-(the Kennzahl wording the filing needs) next to their English description.
+### Austrian sections
+
+Today's Austrian report numbers its sections (1.1 Veräußerungen Altvermögen …
+4.5). The shared report keeps one Disposals and one Income table; each row
+carries a `section` column with today's Austrian section number (`1.2`), so an
+accountant can still filter a section. The Kennzahl page keeps an index of the
+sections: number, title and the Kennzahl it feeds.
+
+## Language
+
+The book's tax country picks the language: Austrian books read German, every
+other book English. Every label, note and heading is a key in one string
+table per language (`crates/reports/src/report_design/strings.rs`); builders
+and templates never translate ad hoc, and a test requires both tables to hold
+the same keys. German uses the Austrian tax terms (Veräußerungen,
+Anschaffungskosten, Einkünfte, Altvermögen/Neuvermögen, Spekulationsfrist,
+Wegzugsbesteuerung) and Austrian month names (Jänner); the Kennzahl wording is
+verbatim from today's Austrian PDF.
+
+| Format | English | German |
+| --- | --- | --- |
+| PDF numbers | `1,234.56`, `−0.5` | `1.234,56`, `−0,5` |
+| PDF dates | `2025-03-15`, `2025-03-15 14:05 UTC` | `15.03.2025`, `15.03.2025 14:05 UTC` |
+| PDF months | `2025-03` (axis `2025-03`) | `März 2025` (axis `Mär 25`) |
+| PDF percent | `59.2%` | `59,2 %` |
+| XLSX | real numbers and dates; headers in the language; date format `yyyy-mm-dd` | the same numbers; date format `dd.mm.yyyy` |
+| CSV | machine format: plain decimals, ISO dates, English `snake_case` headers | identical to English |
+
+Sheet and CSV file names are the table ids in every language, so a script
+reads either book the same way.
 
 ## Visual style
 
-- **Type:** DM Sans for text and JetBrains Mono for figures, dates and
-  identifiers, the desktop's two families. Mono gives tabular figures; the
-  available DM Sans files have proportional digits and no `tnum` feature.
-  Liberation Sans/Mono stay bundled only as glyph fallback (₿, →).
+- **Type:** DM Sans (upstream 4.004, Regular and Medium) for text and
+  amounts, amounts with its tabular figures (`tnum`) so columns line up;
+  JetBrains Mono (2.304 Regular) only for identifiers such as codes, ids and
+  hashes. One typeface per key/value block. Liberation Sans is the glyph
+  fallback (Greek, Cyrillic, ₿); characters no bundled font draws become
+  U+FFFD before layout, so nothing renders as a missing glyph. Sources and
+  hashes: [`crates/pdf/fonts/README.md`](../../crates/pdf/fonts/README.md).
 - **Colour:** ink `#1f2328`, two greys (`#5b6169` secondary text, `#d0d4d9`
-  hairlines) and one accent, Kassiber red `#c8102e`, used only for report
-  blockers and the chart's primary series. Everything reads in black and
-  white: series differ by line weight and dash, not only by colour.
+  hairlines) and Kassiber red `#c8102e` only for report blockers (stale
+  journals, quarantined transactions) and the main chart line. Everything
+  reads in black and white: series differ by line weight and dash, not only
+  by colour.
 - **No boxes:** no cell borders, fills or zebra stripes. A table is an
   optional caption, its header (secondary grey, medium weight), a 0.5 pt rule
   under it and a totals row set in medium weight above a hairline.
@@ -119,15 +150,20 @@ Labels are English. The country layer's legal labels are verbatim German
   separators, the currency named once in the column header; BTC with eight
   decimals, `sat` where the report option asks for it; true minus sign
   (−) for negatives; percentages with one decimal. Unknown values print
-  `—` with the reason in a note, never `0`.
-- **Dates:** ISO 8601 (`2025-03-15`), times as `2025-03-15 14:05 UTC`.
+  `—` with the reason in a note, never `0`. In sparse columns (fees, gains
+  and disposal counts by month) a zero prints `–` so the few values stand
+  out; XLSX and CSV keep the zero.
+- **Dates:** per [language](#language).
 - **Page:** A4 portrait, 18 mm side margins. Tables wider than the page
   switch the section to landscape pages. Running header from page 2:
   *Kassiber · report title* left, *book · period* right. Footer on every page:
   *Generated … · journal input v…* left, *Page x of y* right.
 - **Charts:** few and quiet: a balance line (market value solid, cost basis
   dashed, quantity thin on a second axis) and monthly bars (gain/loss,
-  inflow/outflow). Axis labels in mono, no gridlines beyond four hairlines.
+  inflow/outflow). Axes step on round values (1, 2, 2.5 or 5 times a power of
+  ten: `0`, `20k`, `40k`; German `20 Tsd.`, `1,5 Mio.`), one hairline per
+  tick. Charts never split across pages; the Activity section follows the
+  holdings on page 1 when it fits.
 
 ## XLSX
 
@@ -152,9 +188,13 @@ Machine-first, one file per table, written into a directory (or ZIP):
 - every BTC amount has an integer `_msat` column beside it;
 - unknown values are empty, with the reason in a `*_status` column where the
   model has one;
+- `summary.csv` holds the facts and headline figures as `section`, `key`,
+  `value`, `unit`; labels stay in PDF and XLSX;
 - `manifest.json` lists `schema` (`kassiber.report/1`), report kind, book
   (workspace and profile labels), period, fiat, country, generated at, journal
   input version and every file with columns, row count and SHA-256.
+
+The new layout replaces today's CSVs outright; there is no legacy option.
 
 ### CSV changes against today
 
@@ -189,52 +229,64 @@ column names except the unit suffixes above, and every `_msat` column.
   templates are embedded, and the Typst world is sealed (no system fonts,
   files, packages or network).
 
-## Prototype
+## Implementation
 
-`crates/reports/src/report_design.rs` holds the document types and the three
-renderers; `report_design_summary.rs` builds the summary report's document
-from the data Python's reports produce: `build_summary_pdf_report_data`, the
-profile's tax settings and, for Austria, the E 1kv Kennzahl totals of each tax
-year in the period. The PDF template is `crates/pdf/templates/report.typ`.
+`crates/reports/src/report_design/` holds the document types and the three
+renderers (`mod.rs`), the language rules (`locale.rs`), the string tables
+(`strings.rs`) and one builder per report kind (`summary.rs`, …). Builders
+take the data Python's reports produce and decide nothing a tax, journal or
+custody decision depends on. The PDF template is
+`crates/pdf/templates/report.typ`; the engine is sealed (`crates/pdf/src/engine.rs`).
 
-Evidence:
+Evidence for every rolled-out report:
 
-- `crates/reports/tests/report_design.rs`: the summary model equals Python's
-  for 23 fixture cases (refusals included); PDF, XLSX and CSV bytes repeat;
-  every CSV file has snake_case headers, plain decimals, integer msat and a
-  manifest entry with its SHA-256; display rounding and CSV text come from
-  one exact value.
-- `crates/reports/scripts/report_design_books.py` builds two books with the
-  CLI from seeded CSVs and `journals process` (an Austrian moving-average
-  book from 2020 and a generic FIFO book from 2022; hot, cold and Liquid
-  wallets with buys, sales, interest, transfers and spends) and records
-  Python's data for them.
-- `crates/reports/scripts/report_design_prototype.py` renders both books twice
-  in separate processes, requires identical bytes and the renderers' model to
-  equal Python's exactly, and writes the samples with PNG pages
-  (`pdftoppm`): `target/report-design/{austria,generic}/` holds
-  `summary.pdf`, `page-*.png`, `summary.xlsx`, `summary-csv/` and
-  `model.json`.
-- Ten mutation entries (`crates/reports/scripts/report_design_mutations.json`)
-  cover the model and the formatting rules.
+- a data-parity test: the model handed to the renderers equals Python's for
+  fixture cases, refusals included (`crates/reports/tests/report_design.rs`);
+- whole-process tests (`tests/test_rust_pdf_exports.py`) run each CLI leaf and
+  daemon kind against Python and require identical envelopes, errors, files,
+  saved and filed markers and database effects, except where this document
+  lists a necessary difference;
+- PDF, XLSX and CSV bytes repeat across runs and processes;
+- mutation entries (`crates/reports/scripts/report_design_mutations.json`,
+  `crates/pdf/scripts/mutations.json`) for the model and formatting rules;
+- PNG samples for two books built with the CLI
+  (`crates/reports/scripts/report_design_books.py`: an Austrian
+  moving-average book from 2020 and a generic FIFO book from 2022) rendered by
+  `crates/reports/scripts/report_design_prototype.py` into
+  `target/report-design/{austria,generic}/`.
 
-The prototype is not registered as a command; `reports export-summary-pdf`
-still runs in Python until the owner approves the design.
+## Rollout
 
-## Open questions for the owner
+One report per commit, each with data parity against Python's model.
 
-1. **Language and number format.** English reports with verbatim German
-   Kennzahl wording, or German reports (and `1.234,56`, `15.03.2025`) for
-   Austrian books?
-2. **Fonts.** The prototype bundles the `@fontsource` 5.x Latin subsets of
-   DM Sans and JetBrains Mono, converted losslessly from WOFF. They lack
-   `tnum`, ₿ and →, so figures are set in mono and Liberation fills the gaps.
-   Full upstream TTFs (Google Fonts DM Sans with `tnum`, JetBrains Mono 2.304)
-   would need a one-time download.
-3. **Accent colour.** Kassiber red only for blockers and the primary series,
-   or no colour at all?
-4. **CSV breaking changes.** Accept the renames above, or keep the old stacked
-   full-report CSV as a legacy option for a release?
-5. **Austrian accountant layout.** Keep today's numbered Steuerbericht
-   sections (1.1–4.5) as the Austrian country layer's table order, or fold
-   them into the shared Disposals/Income tables with a `section` column?
+| # | Report | Commands | State |
+| --- | --- | --- | --- |
+| 1 | Summary | `reports export-summary-pdf`, `ui.reports.export_summary_pdf` | native, shared design |
+| 2 | Full report | `reports export-pdf`, `ui.reports.export_pdf` | text PDF (byte port), pending |
+| 3 | Austrian E 1kv and exit tax | `reports export-austrian-e1kv-pdf`, `reports export-austrian`, `reports export-exit-tax-pdf` and their kinds | pending |
+| 4 | Source of funds | `reports export-source-funds-pdf`, `ui.source_funds.export_pdf` | pending |
+| 5 | XLSX | full, Austrian, exit tax, cross-check, verification, year handoff | pending |
+| 6 | CSV | full, capital gains, Austrian bundle | pending |
+| 7 | Bundles | `reports export-austrian`, `ui.reports.export_audit_package`, source-of-funds bundle | pending |
+| 8 | Registration | every CLI leaf and daemon kind native, no fallback | pending |
+
+### Envelope differences
+
+Envelopes, file names, overwrite and managed-destination rules and errors
+keep byte parity with Python except where the new format changes them:
+
+| Report | Field | Difference |
+| --- | --- | --- |
+| Summary | `pages`, `bytes`, `report_snapshot.content_sha256` | the new PDF's; `title` stays Python's (`Kassiber Summary Report`) while the PDF's own title follows the book's language |
+
+## Owner decisions (2026-11-04)
+
+1. **Language:** German with Austrian formats for Austrian books, English
+   otherwise; one string table per language. See [Language](#language).
+2. **Fonts:** full upstream DM Sans and JetBrains Mono, pinned by SHA-256;
+   amounts move from mono to DM Sans tabular figures; Liberation Sans as
+   fallback with a test for Greek and Cyrillic wallet labels.
+3. **CSV:** the new format, no legacy option.
+4. **Austrian sections:** shared Disposals and Income tables with a `section`
+   column; a section index on the Kennzahl page.
+5. **Colour:** red only for blockers and the main chart line.

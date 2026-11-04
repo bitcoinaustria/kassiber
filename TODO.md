@@ -853,9 +853,13 @@ registers them; exit-tax preserves its reference no-registration boundary.
   preserving sealed identity, frozen dependency copies and existing impact history.
 - [x] Port the hand-written text PDF writer and register `reports export-pdf`,
   `reports export-exit-tax-pdf` and their desktop kinds natively (byte parity).
-- [ ] Port the summary, Austrian E 1kv and source-of-funds PDFs and the
-  PDF-containing bundles in the shared report design once the owner approves
-  [the design](docs/reference/report-design.md).
+- [x] Register the summary report (`reports export-summary-pdf`,
+  `ui.reports.export_summary_pdf`) natively in the approved
+  [shared report design](docs/reference/report-design.md).
+- [ ] Roll out the rest of the [report design](docs/reference/report-design.md#rollout)
+  one report per commit: the full report, the Austrian E 1kv and exit-tax
+  reports, source of funds, the XLSX and CSV exports, the bundles, and native
+  registration of every report leaf and kind.
 
 ## Rust backend R4
 

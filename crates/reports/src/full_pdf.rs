@@ -568,6 +568,7 @@ pub(super) fn prepare(
         completion: Some(crate::export_completion::Completion {
             kind: "full-report.pdf".into(),
             year: None,
+            end_year: None,
             scope: match &wallet {
                 Some(wallet) => dict([("wallet_ids", Value::List(vec![s(wallet.id.as_str())]))]),
                 None => Value::Null,

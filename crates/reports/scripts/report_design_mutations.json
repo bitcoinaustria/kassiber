@@ -41,7 +41,7 @@
   },
   {
     "id": "design-display-half-even",
-    "file": "crates/reports/src/report_design.rs",
+    "file": "crates/reports/src/report_design/locale.rs",
     "find": "        .to_fixed_places(places, Rounding::HalfEven)",
     "replace": "        .to_fixed_places(places, Rounding::HalfUp)",
     "expect_failing": ["display_rounding_and_csv_text_come_from_one_exact_value"],
@@ -49,7 +49,7 @@
   },
   {
     "id": "design-minus-sign",
-    "file": "crates/reports/src/report_design.rs",
+    "file": "crates/reports/src/report_design/locale.rs",
     "find": "        out.push('\\u{2212}');",
     "replace": "        out.push('-');",
     "expect_failing": ["display_rounding_and_csv_text_come_from_one_exact_value"],
@@ -57,7 +57,7 @@
   },
   {
     "id": "design-csv-plain",
-    "file": "crates/reports/src/report_design.rs",
+    "file": "crates/reports/src/report_design/mod.rs",
     "find": "    d.to_fixed_string().unwrap_or_else(|_| d.to_canonical())",
     "replace": "    d.to_canonical()",
     "expect_failing": ["display_rounding_and_csv_text_come_from_one_exact_value", "summary_model_matches_python_and_renders_deterministically"],
@@ -65,7 +65,7 @@
   },
   {
     "id": "design-msat-exact",
-    "file": "crates/reports/src/report_design.rs",
+    "file": "crates/reports/src/report_design/mod.rs",
     "find": "            if exact == text.parse::<Decimal>().unwrap_or_else(|_| Decimal::zero()) =>",
     "replace": "            if true =>",
     "expect_failing": ["display_rounding_and_csv_text_come_from_one_exact_value"],
@@ -73,10 +73,42 @@
   },
   {
     "id": "design-manifest-hash",
-    "file": "crates/reports/src/report_design.rs",
+    "file": "crates/reports/src/report_design/mod.rs",
     "find": "(\"sha256\", s(format!(\"{:x}\", Sha256::digest(bytes)))),",
     "replace": "(\"sha256\", s(format!(\"{:x}\", Sha256::digest(b\"\")))),",
     "expect_failing": ["summary_model_matches_python_and_renders_deterministically"],
     "rule": "The CSV manifest hashes each file's bytes."
+  },
+  {
+    "id": "design-language-by-country",
+    "file": "crates/reports/src/report_design/locale.rs",
+    "find": "        if country.trim().eq_ignore_ascii_case(\"at\") {",
+    "replace": "        if country.trim().eq_ignore_ascii_case(\"de\") {",
+    "expect_failing": ["the_tax_country_picks_the_language_and_sparse_zeros_print_a_dash"],
+    "rule": "Austrian books read German; every other book English."
+  },
+  {
+    "id": "design-german-separators",
+    "file": "crates/reports/src/report_design/locale.rs",
+    "find": "            Lang::De => ('.', ','),",
+    "replace": "            Lang::De => (',', '.'),",
+    "expect_failing": ["display_rounding_and_csv_text_come_from_one_exact_value", "chart_axes_step_on_round_values", "the_tax_country_picks_the_language_and_sparse_zeros_print_a_dash"],
+    "rule": "German numbers group with a period and use a decimal comma."
+  },
+  {
+    "id": "design-sparse-dash",
+    "file": "crates/reports/src/report_design/mod.rs",
+    "find": "                if self.columns[i].sparse && cells[i].is_zero() {",
+    "replace": "                if false {",
+    "expect_failing": ["the_tax_country_picks_the_language_and_sparse_zeros_print_a_dash"],
+    "rule": "Zero amounts in sparse columns print an en dash."
+  },
+  {
+    "id": "design-round-axis",
+    "file": "crates/reports/src/report_design/mod.rs",
+    "find": "        let step = [1.0, 2.0, 2.5, 5.0, 10.0]",
+    "replace": "        let step = [1.0, 10.0]",
+    "expect_failing": ["chart_axes_step_on_round_values"],
+    "rule": "Chart axes step on 1, 2, 2.5 or 5 times a power of ten."
   }
 ]

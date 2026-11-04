@@ -26,6 +26,8 @@ pub struct Completion {
     pub kind: String,
     /// The report's resolved tax year, or `None` for the journal year range.
     pub year: Option<Value>,
+    /// The last year of a multi-year period starting at `year`.
+    pub end_year: Option<Value>,
     pub scope: Value,
 }
 
@@ -597,6 +599,19 @@ pub(crate) fn register(
 ) -> Result<Value> {
     let timestamp = sources.now(conn)?;
     let (start, end) = period_years(conn, profile_id, completion.year.as_ref(), &timestamp)?;
+    let end = match &completion.end_year {
+        Some(year) => {
+            let end = snapshot_write::year(year, "period_end_year")?;
+            if end < start {
+                return Err(invalid(
+                    "period_end_year must not precede period_start_year",
+                    "period_end_year",
+                ));
+            }
+            end
+        }
+        None => end,
+    };
     let digest = content_sha256(paths)?;
     let scope = snapshot_write::scope(&completion.scope)?;
     let (classifications, gains) = summaries(conn, profile_id, start, end, &scope)?;
@@ -691,6 +706,7 @@ mod tests {
         let completion = Completion {
             kind: "full-report.csv".into(),
             year: None,
+            end_year: None,
             scope: Value::Null,
         };
         conn.execute_batch("BEGIN IMMEDIATE").unwrap();
@@ -741,6 +757,7 @@ mod tests {
             conn.execute_batch(&text(&case, "sql")).unwrap();
             let completion = Completion {
                 kind: text(&case, "kind"),
+                end_year: None,
                 year: Some(value(&case, "year").clone()).filter(|v| !matches!(v, Value::Null)),
                 scope: value(&case, "scope").clone(),
             };

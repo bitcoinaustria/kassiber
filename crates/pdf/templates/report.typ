@@ -7,14 +7,23 @@
 #let hairline = rgb("#d0d4d9")
 #let accent = rgb("#c8102e")
 
-#let sans = ("DM Sans", "Liberation Sans")
-#let mono = ("JetBrains Mono", "Liberation Mono")
+// Every bundled face is in both lists so any character the engine admitted
+// (it replaces the rest with U+FFFD) finds a glyph.
+#let sans = ("DM Sans", "Liberation Sans", "JetBrains Mono")
+#let mono = ("JetBrains Mono", "Liberation Sans", "DM Sans")
 
 #let tone-fill(tone) = if tone == "accent" { accent } else if tone == "muted" { muted } else { ink }
 
-#let cell-text(value, mono-figures: false, size: 8pt, weight: "regular", fill: ink) = {
-  if mono-figures {
+// Amount columns use DM Sans's tabular figures so they line up. Its `tnum`
+// also widens the separators, so only digit runs take it; prose and single
+// figures stay proportional. Only identifiers (codes, ids, hashes) use the
+// mono face.
+#let cell-text(value, mono-face: false, tabular: false, size: 8pt, weight: "regular", fill: ink) = {
+  if mono-face {
     text(font: mono, size: size * 0.92, weight: weight, fill: fill, value)
+  } else if tabular {
+    show regex("[0-9]+"): set text(number-width: "tabular")
+    text(font: sans, size: size, weight: weight, fill: fill, value)
   } else {
     text(font: sans, size: size, weight: weight, fill: fill, value)
   }
@@ -27,7 +36,7 @@
   row-gutter: 5pt,
   ..block.rows.map(row => (
     text(size: 8pt, fill: muted, row.label),
-    cell-text(row.value, mono-figures: row.mono, size: 8.5pt, fill: tone-fill(row.tone)),
+    cell-text(row.value, size: 8.5pt, fill: tone-fill(row.tone)),
   )).flatten(),
 )
 
@@ -39,7 +48,7 @@
   ..block.items.map(item => stack(
     spacing: 4pt,
     text(size: 7.5pt, fill: muted, item.label),
-    text(font: mono, size: 11pt, fill: tone-fill(item.tone), item.value),
+    cell-text(item.value, size: 12pt, weight: 500, fill: tone-fill(item.tone)),
     if item.detail != "" { text(size: 7pt, fill: muted, item.detail) },
   )),
 )
@@ -49,12 +58,12 @@
   if block.title != "" { std.block(sticky: true, below: 4pt, text(size: 8pt, weight: 500, block.title)) }
   let cols = block.columns
   let aligns = cols.map(c => if c.align == "right" { right } else { left })
-  let header = cols.map(c => text(size: 7pt, weight: 500, fill: muted, c.label))
+  let header = cols.map(c => text(size: 7pt, weight: 500, fill: muted, hyphenate: true, c.label))
   let body = block.rows.map(row => row.enumerate().map(((i, value)) =>
-    cell-text(value, mono-figures: cols.at(i).mono))).flatten()
+    cell-text(value, mono-face: cols.at(i).mono, tabular: cols.at(i).align == "right"))).flatten()
   let total = if block.total == none { () } else {
     block.total.enumerate().map(((i, value)) =>
-      cell-text(value, mono-figures: cols.at(i).mono, weight: 500))
+      cell-text(value, mono-face: cols.at(i).mono, tabular: cols.at(i).align == "right", weight: 500))
   }
   table(
     columns: cols.map(c => if c.width == "auto" { auto } else { 1fr * c.width }),
@@ -92,15 +101,15 @@
         place(top + left, line(start: (left-gutter, py(tick.pos)), end: (left-gutter + w, py(tick.pos)),
           stroke: 0.3pt + hairline))
         place(top + left, dx: 0pt, dy: py(tick.pos) - 4pt,
-          box(width: left-gutter - 6pt, align(right, text(font: mono, size: 6pt, fill: muted, tick.text))))
+          box(width: left-gutter - 6pt, align(right, cell-text(tick.text, size: 6.2pt, fill: muted))))
       }
       for tick in block.y2_labels {
         place(top + left, dx: left-gutter + w + 6pt, dy: py(tick.pos) - 4pt,
-          text(font: mono, size: 6pt, fill: muted, tick.text))
+          cell-text(tick.text, size: 6.2pt, fill: muted))
       }
       for tick in block.x_labels {
         place(top + left, dx: px(tick.pos) - 20pt, dy: height + 4pt,
-          box(width: 40pt, align(center, text(font: mono, size: 5.6pt, fill: muted, tick.text))))
+          box(width: 40pt, align(center, cell-text(tick.text, size: 6pt, fill: muted))))
       }
       for s in block.series {
         let paint = if s.tone == "accent" { accent } else if s.tone == "muted" { muted } else { ink }
@@ -178,8 +187,9 @@
     footer: context {
       set text(size: 7pt, fill: muted)
       grid(columns: (1fr, auto),
-        "Generated " + m.generated + "  ·  journal input v" + m.input_version,
-        "Page " + str(counter(page).get().first()) + " of " + str(counter(page).final().first()))
+        m.footer,
+        m.page_format.replace("{page}", str(counter(page).get().first()))
+          .replace("{total}", str(counter(page).final().first())))
     },
   )
   text(size: 7.5pt, fill: muted, m.kicker)

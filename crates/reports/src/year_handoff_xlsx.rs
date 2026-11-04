@@ -405,6 +405,7 @@ pub(super) fn project(
             completion: Some(export_completion::Completion {
                 kind: "year-handoff.xlsx".into(),
                 year: Some(Value::Int(year.into())),
+                end_year: None,
                 scope: Value::Null,
             }),
         },

@@ -10,6 +10,7 @@ pub fn handles(command: &str) -> bool {
             | "ui.reports.export_cross_check"
             | "reports.export-csv"
             | "reports.export-pdf"
+            | "reports.export-summary-pdf"
             | "reports.export-exit-tax-pdf"
             | "reports.export-xlsx"
             | "reports.export-exit-tax-xlsx"
@@ -22,6 +23,7 @@ pub fn handles(command: &str) -> bool {
             | "ui.transactions.export_platform_csv"
             | "ui.reports.export_xlsx"
             | "ui.reports.export_pdf"
+            | "ui.reports.export_summary_pdf"
             | "ui.reports.export_exit_tax_pdf"
             | "reports.export-year-handoff"
             | "ui.reports.export_year_handoff"
@@ -118,6 +120,58 @@ pub(super) fn wallet_args(kind: &str, args: &Value) -> Result<Value> {
         Value::Null
     })
 }
+/// `ui.reports.export_summary_pdf` admits only its own four arguments.
+fn summary_args(raw: &Value) -> Result<()> {
+    const KIND: &str = "ui.reports.export_summary_pdf";
+    if let Value::Dict(fields) = raw {
+        let mut unknown: Vec<_> = fields
+            .iter()
+            .filter_map(|(k, _)| match k {
+                kassiber_pyjson::Key::Str(k)
+                    if !["start", "end", "wallets", "include_snapshot"]
+                        .iter()
+                        .any(|a| k.as_str() == Some(a)) =>
+                {
+                    Some(k.clone())
+                }
+                _ => None,
+            })
+            .collect();
+        unknown.sort();
+        if !unknown.is_empty() {
+            return Err(
+                validation(format!("{KIND} received unsupported arguments")).with_details(dict([
+                    (
+                        "unsupported",
+                        Value::List(unknown.into_iter().map(Value::Str).collect()),
+                    ),
+                ])),
+            );
+        }
+    }
+    match value(raw, "wallets") {
+        Value::Null => (),
+        Value::List(v) if v.iter().all(|v| matches!(v, Value::Str(_))) => {
+            if v.is_empty() {
+                return Err(validation(format!(
+                    "{KIND} requires at least one selected wallet"
+                )));
+            }
+        }
+        _ => {
+            return Err(validation(format!(
+                "{KIND} wallets must be an array of strings"
+            )))
+        }
+    }
+    if !matches!(get(raw, "include_snapshot"), None | Some(Value::Bool(_))) {
+        return Err(validation(format!(
+            "{KIND} include_snapshot must be a boolean"
+        )));
+    }
+    Ok(())
+}
+
 /// Paths supplied by the CLI have already been expanded by crates/paths.
 /// Managed desktop roots come from that same resolved book, never request args.
 pub fn execute(
@@ -159,7 +213,10 @@ fn execute_admitted(
         // before it reads anything else, as Python's command handler does.
         if matches!(
             command,
-            "reports.export-year-handoff" | "reports.export-pdf" | "reports.export-exit-tax-pdf"
+            "reports.export-year-handoff"
+                | "reports.export-pdf"
+                | "reports.export-summary-pdf"
+                | "reports.export-exit-tax-pdf"
         ) {
             let (_, profile) = kassiber_setup::references::scope(conn, raw)?;
             freshness(conn, &profile)?;
@@ -242,6 +299,15 @@ fn execute_admitted(
                     ".csv"
                 },
                 "report",
+            )
+        }
+        "ui.reports.export_summary_pdf" => {
+            summary_args(raw)?;
+            (
+                "reports.export-summary-pdf",
+                "kassiber-summary-report".into(),
+                ".pdf",
+                "summary_report",
             )
         }
         "ui.reports.export_year_handoff" => {

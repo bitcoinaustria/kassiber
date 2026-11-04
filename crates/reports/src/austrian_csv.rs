@@ -246,6 +246,7 @@ pub(super) fn prepare(
         completion: Some(crate::export_completion::Completion {
             kind: "austrian-e1kv.csv-bundle".into(),
             year: Some(value(&report, "tax_year").clone()),
+            end_year: None,
             scope: Value::Null,
         }),
     })

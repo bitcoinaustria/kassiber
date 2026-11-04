@@ -9,7 +9,12 @@
 use super::*;
 use sha2::{Digest, Sha256};
 
-pub use crate::report_design_summary::{summary, summary_model};
+mod locale;
+mod strings;
+mod summary;
+pub use locale::Lang;
+pub(crate) use summary::prepare as prepare_summary;
+pub use summary::{summary, summary_model};
 
 /// The CSV bundle's schema identifier, versioned with the layout.
 pub const CSV_SCHEMA: &str = "kassiber.report/1";
@@ -51,8 +56,10 @@ impl Kind {
             Kind::Fiat | Kind::Btc | Kind::Msat | Kind::Count | Kind::Percent
         )
     }
+    /// Only identifiers use the mono face; amounts use DM Sans's tabular
+    /// figures.
     fn mono(self) -> bool {
-        !matches!(self, Kind::Text)
+        matches!(self, Kind::Code)
     }
 }
 
@@ -64,6 +71,27 @@ pub struct Column {
     pub kind: Kind,
     /// Relative PDF width.
     pub width: f64,
+    /// A mostly-zero column: zero shows as `–` in the PDF so the few
+    /// non-zero values stand out. XLSX and CSV keep the zero.
+    pub sparse: bool,
+}
+
+impl Column {
+    pub fn new(key: &'static str, label: impl Into<String>, kind: Kind, width: f64) -> Column {
+        Column {
+            key,
+            label: label.into(),
+            kind,
+            width,
+            sparse: false,
+        }
+    }
+    pub fn sparse(self) -> Column {
+        Column {
+            sparse: true,
+            ..self
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -76,6 +104,28 @@ pub struct Table {
     pub rows: Vec<Vec<Cell>>,
     pub total: Option<Vec<Cell>>,
     pub note: String,
+}
+
+impl Table {
+    /// The columns on paper: every column but the msat companions.
+    fn shown(&self) -> Vec<usize> {
+        (0..self.columns.len())
+            .filter(|i| self.columns[*i].kind != Kind::Msat)
+            .collect()
+    }
+    /// A row as the PDF prints it.
+    pub fn display_row(&self, cells: &[Cell], lang: Lang) -> Vec<String> {
+        self.shown()
+            .into_iter()
+            .map(|i| {
+                if self.columns[i].sparse && cells[i].is_zero() {
+                    "\u{2013}".to_owned()
+                } else {
+                    cells[i].display(lang)
+                }
+            })
+            .collect()
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -166,66 +216,39 @@ pub struct Document {
     pub input_version: i64,
     pub fiat: String,
     pub country: String,
+    pub lang: Lang,
     pub sections: Vec<Section>,
 }
 
 // ---------------------------------------------------------------- formatting
 
-fn grouped(digits: &str) -> String {
-    let mut out = String::new();
-    for (i, c) in digits.chars().enumerate() {
-        if i > 0 && (digits.len() - i).is_multiple_of(3) {
-            out.push(',');
-        }
-        out.push(c);
-    }
-    out
-}
-
-/// Display text: rounded half-even, grouped, with a true minus sign.
-fn display_number(value: &Decimal, places: u32, group: bool) -> String {
-    let fixed = value
-        .to_fixed_places(places, Rounding::HalfEven)
-        .unwrap_or_else(|_| value.to_canonical());
-    let (negative, body) = match fixed.strip_prefix('-') {
-        Some(rest) => (rest.chars().any(|c| c.is_ascii_digit() && c != '0'), rest),
-        None => (false, fixed.as_str()),
-    };
-    let (whole, fraction) = body.split_once('.').unwrap_or((body, ""));
-    let mut out = String::new();
-    if negative {
-        out.push('\u{2212}');
-    }
-    out.push_str(&if group {
-        grouped(whole)
-    } else {
-        whole.to_owned()
-    });
-    if !fraction.is_empty() {
-        out.push('.');
-        out.push_str(fraction);
-    }
-    out
-}
-
 impl Cell {
-    /// PDF text. The same rule rounds every format's display.
-    pub fn display(&self) -> String {
+    /// PDF text in the report's language. The same rounding rule applies to
+    /// every format's display; `Empty` (unknown or not applicable) is `—`.
+    pub fn display(&self, lang: Lang) -> String {
         match self {
             Cell::Empty => "\u{2014}".into(),
-            Cell::Text(t) | Cell::Date(t) => t.clone(),
-            Cell::Fiat(d) => display_number(d, 2, true),
-            Cell::Btc(d) => display_number(d, 8, true),
-            Cell::Msat(n) => grouped(&n.to_string()),
-            Cell::Count(n) => {
-                let text = grouped(&n.unsigned_abs().to_string());
-                if *n < 0 {
-                    format!("\u{2212}{text}")
-                } else {
-                    text
-                }
-            }
-            Cell::Percent(d) => format!("{}%", display_number(d, 1, true)),
+            Cell::Text(t) => t.clone(),
+            Cell::Date(t) if t.len() == 7 => lang.month(t),
+            Cell::Date(t) => lang.date(t),
+            Cell::Fiat(d) => lang.number(d, 2),
+            Cell::Btc(d) => lang.number(d, 8),
+            Cell::Msat(n) => n
+                .to_string()
+                .parse::<i128>()
+                .map(|v| lang.integer(v))
+                .unwrap_or_else(|_| n.to_string()),
+            Cell::Count(n) => lang.integer((*n).into()),
+            Cell::Percent(d) => lang.percent(d),
+        }
+    }
+    /// A zero amount; sparse columns show it as `–`.
+    fn is_zero(&self) -> bool {
+        match self {
+            Cell::Fiat(d) | Cell::Btc(d) | Cell::Percent(d) => d.is_zero(),
+            Cell::Count(n) => *n == 0,
+            Cell::Msat(n) => n.to_string() == "0",
+            _ => false,
         }
     }
     /// CSV text: exact, plain, machine-readable.
@@ -278,6 +301,73 @@ pub fn msat_of(btc: &Decimal) -> Cell {
     }
 }
 
+// ----------------------------------------------------------------- charts
+
+/// A chart axis on round values: its bounds and labelled ticks.
+pub struct Axis {
+    pub low: f64,
+    pub high: f64,
+    pub ticks: Vec<(f64, String)>,
+}
+
+impl Axis {
+    /// The axis over `values` and zero, about `target` steps of 1, 2, 2.5
+    /// or 5 times a power of ten. `compact` writes thousands and millions
+    /// short (`20k`, `1.5M`; `20 Tsd.`, `1,5 Mio.`).
+    pub fn new(values: &[f64], target: usize, lang: Lang, compact: bool) -> Axis {
+        let finite = values.iter().copied().filter(|v| v.is_finite());
+        let low = finite.clone().fold(0.0, f64::min);
+        let high = finite.fold(0.0, f64::max);
+        let span = if high > low { high - low } else { 1.0 };
+        let raw = span / target.max(1) as f64;
+        let magnitude = 10f64.powf(raw.log10().floor());
+        let step = [1.0, 2.0, 2.5, 5.0, 10.0]
+            .into_iter()
+            .map(|m| m * magnitude)
+            .find(|s| *s >= raw * (1.0 - 1e-9))
+            .unwrap_or(10.0 * magnitude);
+        // The tolerance keeps a bound that is already a whole step from
+        // gaining an empty step.
+        let first = (low / step + 1e-9).floor() as i64;
+        let last = ((if high > low { high } else { low + 1.0 }) / step - 1e-9).ceil() as i64;
+        let (axis_low, axis_high) = (first as f64 * step, last as f64 * step);
+        let biggest = axis_low.abs().max(axis_high.abs());
+        let (scale, unit) = match (compact, lang) {
+            (true, _) if biggest >= 1e6 => (1e6, if lang == Lang::De { "\u{a0}Mio." } else { "M" }),
+            (true, _) if biggest >= 1e3 => (1e3, if lang == Lang::De { "\u{a0}Tsd." } else { "k" }),
+            _ => (1.0, ""),
+        };
+        let places = (0..4u32)
+            .find(|p| {
+                let shifted = step / scale * 10f64.powi(*p as i32);
+                (shifted - shifted.round()).abs() < 1e-6
+            })
+            .unwrap_or(4);
+        let ticks = (first..=last)
+            .map(|i| {
+                let v = i as f64 * step;
+                let text = format!("{:.*}", places as usize, v / scale);
+                let d: Decimal = text.parse().unwrap_or_else(|_| Decimal::zero());
+                let label = if d.is_zero() {
+                    "0".to_owned()
+                } else {
+                    format!("{}{unit}", lang.number(&d, places))
+                };
+                ((v - axis_low) / (axis_high - axis_low), label)
+            })
+            .collect();
+        Axis {
+            low: axis_low,
+            high: axis_high,
+            ticks,
+        }
+    }
+    /// A value's position on the axis, 0..1.
+    pub fn at(&self, v: f64) -> f64 {
+        (v - self.low) / (self.high - self.low)
+    }
+}
+
 // ------------------------------------------------------------------- PDF
 
 fn s(text: impl Into<String>) -> Value {
@@ -290,8 +380,9 @@ fn obj<const N: usize>(pairs: [(&str, Value); N]) -> Value {
     Value::Dict(pairs.into_iter().map(|(k, v)| (k.into(), v)).collect())
 }
 
-fn pdf_block(block: &Block) -> Value {
+fn pdf_block(block: &Block, lang: Lang) -> Value {
     match block {
+        // One typeface per key/value block: values are DM Sans throughout.
         Block::Facts(rows) => obj([
             ("t", s("facts")),
             (
@@ -299,17 +390,12 @@ fn pdf_block(block: &Block) -> Value {
                 Value::List(
                     rows.iter()
                         .map(|f| {
-                            let mono = match &f.value {
-                                Cell::Text(_) | Cell::Empty => false,
-                                _ => f.display.is_none(),
-                            };
                             obj([
                                 ("label", s(f.label.as_str())),
                                 (
                                     "value",
-                                    s(f.display.clone().unwrap_or_else(|| f.value.display())),
+                                    s(f.display.clone().unwrap_or_else(|| f.value.display(lang))),
                                 ),
-                                ("mono", Value::Bool(mono)),
                                 ("tone", s(if f.accent { "accent" } else { "ink" })),
                             ])
                         })
@@ -327,7 +413,7 @@ fn pdf_block(block: &Block) -> Value {
                         .map(|k| {
                             obj([
                                 ("label", s(k.label.as_str())),
-                                ("value", s(k.value.display())),
+                                ("value", s(k.value.display(lang))),
                                 ("detail", s(k.detail.as_str())),
                                 ("tone", s(if k.accent { "accent" } else { "ink" })),
                             ])
@@ -337,11 +423,9 @@ fn pdf_block(block: &Block) -> Value {
             ),
         ]),
         Block::Table(t) => {
-            let shown: Vec<usize> = (0..t.columns.len())
-                .filter(|i| t.columns[*i].kind != Kind::Msat)
-                .collect();
+            let shown = t.shown();
             let row = |cells: &Vec<Cell>| {
-                Value::List(shown.iter().map(|i| s(cells[*i].display())).collect())
+                Value::List(t.display_row(cells, lang).into_iter().map(s).collect())
             };
             obj([
                 ("t", s("table")),
@@ -453,16 +537,8 @@ fn pdf_block(block: &Block) -> Value {
     }
 }
 
-/// `2026-01-02 03:04 UTC` from an ISO timestamp.
-pub fn display_time(iso: &str) -> String {
-    if iso.len() >= 16 {
-        format!("{} {} UTC", &iso[..10], &iso[11..16])
-    } else {
-        iso.to_owned()
-    }
-}
-
 fn pdf_data(doc: &Document, stamp: kassiber_pdf::engine::Stamp) -> Value {
+    let lang = doc.lang;
     obj([
         (
             "meta",
@@ -472,9 +548,22 @@ fn pdf_data(doc: &Document, stamp: kassiber_pdf::engine::Stamp) -> Value {
                 ("running_title", s(format!("Kassiber  ·  {}", doc.title))),
                 ("book", s(doc.book.as_str())),
                 ("period", s(doc.period.as_str())),
-                ("generated", s(display_time(&doc.generated_at))),
-                ("input_version", s(doc.input_version.to_string())),
-                ("lang", s("en")),
+                (
+                    "footer",
+                    s(format!(
+                        "{}  ·  {}",
+                        lang.tf(
+                            "doc.generated",
+                            &[("at", &lang.date_time(&doc.generated_at))]
+                        ),
+                        lang.tf(
+                            "doc.input_version",
+                            &[("version", &doc.input_version.to_string())]
+                        )
+                    )),
+                ),
+                ("page_format", s(lang.t("doc.page"))),
+                ("lang", s(lang.code())),
                 (
                     "keywords",
                     Value::List(vec![s("kassiber"), s(doc.kind), s(doc.country.as_str())]),
@@ -510,7 +599,9 @@ fn pdf_data(doc: &Document, stamp: kassiber_pdf::engine::Stamp) -> Value {
                             ("page_break", Value::Bool(section.page_break)),
                             (
                                 "blocks",
-                                Value::List(section.blocks.iter().map(pdf_block).collect()),
+                                Value::List(
+                                    section.blocks.iter().map(|b| pdf_block(b, lang)).collect(),
+                                ),
                             ),
                         ])
                     })
@@ -538,7 +629,11 @@ pub fn pdf(doc: &Document) -> Result<(Vec<u8>, usize)> {
 
 use kassiber_xlsx::{Cell as XCell, Operation, Sheet, Style};
 
-fn styles() -> Vec<Style> {
+fn styles(lang: Lang) -> Vec<Style> {
+    let (date, month) = match lang {
+        Lang::En => ("yyyy-mm-dd", "yyyy-mm"),
+        Lang::De => ("dd.mm.yyyy", "mm.yyyy"),
+    };
     let make = |format: Option<&str>, bold: bool, bottom: bool, color: Option<&str>| Style {
         bold,
         font_color: color.map(str::to_owned),
@@ -555,11 +650,11 @@ fn styles() -> Vec<Style> {
         make(Some("#,##0.00000000"), false, false, None),
         make(Some("#,##0"), false, false, None),
         make(Some("0.0\"%\""), false, false, None),
-        make(Some("yyyy-mm-dd"), false, false, None),
+        make(Some(date), false, false, None),
         make(None, false, false, Some("#5B6169")),
         make(Some("#,##0.00"), true, false, None),
         make(Some("#,##0.00000000"), true, false, None),
-        make(Some("yyyy-mm"), false, false, None),
+        make(Some(month), false, false, None),
     ]
 }
 const TEXT: usize = 0;
@@ -731,9 +826,12 @@ pub fn xlsx(doc: &Document) -> Result<Vec<u8>> {
         title: doc.title.clone(),
         subject: format!("{} · {}", doc.book, doc.period),
         author: "Kassiber".into(),
-        comments: format!("journal input v{}", doc.input_version),
+        comments: doc.lang.tf(
+            "doc.input_version",
+            &[("version", &doc.input_version.to_string())],
+        ),
         created: doc.generated_at.clone(),
-        formats: styles(),
+        formats: styles(doc.lang),
         sheets: all,
         names: vec![],
     })
@@ -824,22 +922,20 @@ fn csv_table(header: &[&str], rows: impl Iterator<Item = Vec<String>>) -> Vec<u8
 }
 
 /// The CSV bundle: `summary.csv` for facts, one file per table, then
-/// `manifest.json` describing and hashing them.
+/// `manifest.json` describing and hashing them. CSV is a machine format in
+/// every language: snake_case keys, plain decimals, ISO dates, no labels.
 pub fn csv(doc: &Document) -> Result<Vec<(String, Vec<u8>)>> {
     let mut facts = Vec::new();
     let mut files: Vec<(String, Vec<u8>, Vec<&str>, usize)> = Vec::new();
     for section in &doc.sections {
         for block in &section.blocks {
             match block {
-                Block::Facts(rows) => facts.extend(
-                    rows.iter()
-                        .map(|f| (section.id, f.key, f.label.clone(), f.value.clone())),
-                ),
-                Block::Kpis(items) => facts.extend(
-                    items
-                        .iter()
-                        .map(|k| (section.id, k.key, k.label.clone(), k.value.clone())),
-                ),
+                Block::Facts(rows) => {
+                    facts.extend(rows.iter().map(|f| (section.id, f.key, f.value.clone())))
+                }
+                Block::Kpis(items) => {
+                    facts.extend(items.iter().map(|k| (section.id, k.key, k.value.clone())))
+                }
                 Block::Table(table) => {
                     let header: Vec<&str> = table.columns.iter().map(|c| c.key).collect();
                     let bytes = csv_table(
@@ -859,14 +955,13 @@ pub fn csv(doc: &Document) -> Result<Vec<(String, Vec<u8>)>> {
         Cell::Percent(_) => "percent".into(),
         _ => String::new(),
     };
-    let summary_header = ["section", "key", "label", "value", "unit"];
+    let summary_header = ["section", "key", "value", "unit"];
     let summary = csv_table(
         &summary_header,
-        facts.iter().map(|(section, key, label, value)| {
+        facts.iter().map(|(section, key, value)| {
             vec![
                 section.to_string(),
                 key.to_string(),
-                label.clone(),
                 value.csv(),
                 unit(value),
             ]
@@ -900,7 +995,6 @@ pub fn csv(doc: &Document) -> Result<Vec<(String, Vec<u8>)>> {
     let manifest = obj([
         ("schema", s(CSV_SCHEMA)),
         ("report", s(doc.kind)),
-        ("title", s(doc.title.as_str())),
         ("book", s(doc.book.as_str())),
         (
             "period",

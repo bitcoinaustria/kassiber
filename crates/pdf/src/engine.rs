@@ -15,13 +15,12 @@ use typst::utils::LazyHash;
 use typst::{Library, LibraryExt, World, WorldExt};
 use typst_layout::PagedDocument;
 
-/// DM Sans and JetBrains Mono, with Liberation only as glyph fallback.
-const FONTS: [&[u8]; 5] = [
+/// DM Sans and JetBrains Mono, with Liberation Sans only as glyph fallback.
+const FONTS: [&[u8]; 4] = [
     include_bytes!("../fonts/DMSans-Regular.ttf"),
     include_bytes!("../fonts/DMSans-Medium.ttf"),
     include_bytes!("../fonts/JetBrainsMono-Regular.ttf"),
     include_bytes!("../fonts/LiberationSans-Regular.ttf"),
-    include_bytes!("../fonts/LiberationMono-Regular.ttf"),
 ];
 /// The shared report design every report template imports.
 const DESIGN: &str = include_str!("../templates/report.typ");
@@ -124,7 +123,11 @@ fn typst_value(v: &kassiber_pyjson::Value) -> Value {
         Py::Decimal(d) => Value::Str(d.to_canonical().into()),
         Py::Str(text) => Value::Str(
             text.code_points()
-                .map(|c| char::from_u32(c).unwrap_or('\u{fffd}'))
+                .map(|c| {
+                    char::from_u32(c)
+                        .filter(|c| covered(*c))
+                        .unwrap_or('\u{fffd}')
+                })
                 .collect::<String>()
                 .into(),
         ),
@@ -145,6 +148,17 @@ fn typst_value(v: &kassiber_pyjson::Value) -> Value {
             Value::Dict(dict)
         }
     }
+}
+
+/// Whether a bundled font draws `c`. Anything else becomes U+FFFD (which
+/// JetBrains Mono draws), so a label in an unbundled script never renders as
+/// a missing glyph. Line breaks and tabs are layout, not glyphs.
+pub fn covered(c: char) -> bool {
+    matches!(c, '\n' | '\t' | '\r')
+        || BOOK
+            .0
+            .iter()
+            .any(|font| font.info().coverage.contains(c as u32))
 }
 
 fn file_id(name: &str) -> FileId {

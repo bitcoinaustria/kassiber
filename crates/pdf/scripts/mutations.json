@@ -110,5 +110,15 @@
       "full_pdf_model_and_bytes_match_python"
     ],
     "rule": "A history limit of zero keeps the whole balance history."
+  },
+  {
+    "id": "engine-glyph-coverage",
+    "file": "crates/pdf/src/engine.rs",
+    "find": "        || BOOK.0.iter().any(|font| font.info().coverage.contains(c as u32))",
+    "replace": "        || true",
+    "expect_failing": [
+      "labels_in_other_scripts_never_render_as_missing_glyphs"
+    ],
+    "rule": "Characters no bundled font draws become U+FFFD before layout."
   }
 ]

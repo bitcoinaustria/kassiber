@@ -20,6 +20,7 @@ pub const COMMANDS: &[&str] = &[
     "reports.balance-history",
     "reports.export-csv",
     "reports.export-pdf",
+    "reports.export-summary-pdf",
     "reports.export-exit-tax-pdf",
     "reports.export-xlsx",
     "reports.exit-tax",
@@ -135,6 +136,7 @@ pub fn execute(book: &mut dyn Book, command: &str, args: &Namespace) -> Result<V
         command,
         "reports.export-csv"
             | "reports.export-pdf"
+            | "reports.export-summary-pdf"
             | "reports.export-exit-tax-pdf"
             | "reports.export-xlsx"
             | "reports.export-exit-tax-xlsx"
@@ -343,6 +345,9 @@ fn export_request(args: &Namespace) -> Value {
             "timezone",
             "departure_date",
             "destination",
+            "start",
+            "end",
+            "include_snapshot",
         ]
         .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null))),
     )
