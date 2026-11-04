@@ -15926,3 +15926,151 @@ Documented differences from Python:
 - The live GitHub fetch has no process oracle, since the tests must not
   contact GitHub. Parsing, selection, ordering and rendering are covered by
   Python vectors and unit tests.
+
+## Desktop projections (R5, completion)
+
+`t3code/r5-desktop-projections-3` continues `t3code/r5-desktop-projections-2`
+(`3d36e8909`) and serves four more of the requested desktop kinds natively,
+plus `ui.maintenance.run` and report-read wallet refresh, with no Python
+fallback, new external dependency, schema change or Python product change.
+Fourteen of the fifteen requested kinds are now native;
+`ui.review.request_input` stays with the review workflow slice.
+
+| Kind | Native service | Parity suite |
+| --- | --- | --- |
+| `ui.report.blockers` | `kassiber-journals` report blockers over the reused workspace health | `test_rust_report_blockers.py` |
+| `ui.maintenance.run` | daemon settings, report-read refresh, journal processing, blockers | `test_rust_maintenance_run.py`, `test_rust_report_read_sync.py` |
+| `ui.transactions.review_context` | daemon composition of the native section reads | `test_rust_transaction_review_context.py` |
+| `ui.audit.evidence.summary` | `kassiber-journals` evidence summary | `test_rust_evidence_summary.py` |
+| `ui.transactions.graph` | `kassiber-journals` transaction graph and owned index | `test_rust_transaction_graph.py` |
+
+**Reused slices.** Report blockers embed Python's workspace health snapshot.
+The `kassiber-workspace` library is taken unchanged from the workspace-shell
+slice (`3cb940f75`, formatted as in `b65802ebc`); its kinds stay registered
+only on that slice. `ui.maintenance.settings`, `.configure` and the freshness
+status/configure kinds come from the settings slice (`d419fc213`).
+
+**Report blockers.** The barrier keeps every Python refusal: no active book,
+source refresh failures, incomplete authored-active custody components, no
+sources or transactions, Silent Payments scans, overlapping finite scripts
+(with the 20-group duplicate preview), stale journals with their edit
+history, quarantines, unresolved custody quantity, cached ownership review
+counts, unreviewed swap candidates and missing prices. An overlap or a swap
+candidate is a reason to review, never ownership or a booked transfer. A
+failed automatic refresh adds Python's `sync_failed` blocker first.
+
+**Report-read refresh.** A book whose freshness policy enables report-read
+sync refreshes its wallet sources before report-like reads and
+`ui.maintenance.run sync=if_enabled`, as Python does; `sync=always` is the
+explicit maintenance action. The enabled policy is the consent: each fetch is
+a narrowly scoped `kassiber-net` consent, and the handler re-checks the policy
+and the source class before every request and batch, so disabling either
+stops further traffic. Source classes the policy leaves off are not
+enqueued. A second automatic attempt within 60 seconds reuses the last result
+(`auto_sync_rate_limited`), and a busy execution slot answers Python's
+`project_operation_in_progress` payload. Sources the native refresh cannot run
+(rates, BTCPay, Lightning, Silent Payments) and a runtime with no configured
+backend refuse with `not_implemented` before any job runs. Report-read
+refreshes collect no graph follow-up grant.
+
+**Review context.** Python dispatches `ui.transactions.review_context` before
+its report-read prelude, so the Rust daemon no longer maintains journals for
+it. Each section uses the same native read as its desktop kind; typed refusals
+read as `unavailable`, and paths and URL targets are redacted as the AI
+projection does. The journal section reads stored entries through a focused
+port of the journal events list; `ui.journals.events.list` itself stays with
+the journals slice.
+
+**Evidence summary.** Observed transactions, direct evidence, reviewed
+source-of-funds links, journal state, custody quantity status, authored
+evidence hashes, review history, filed reports, AI assistance hashes and
+review receipts stay separate sections. Unreviewed links keep their details
+redacted; bounded scopes exclude profile-wide totals and filed-report
+payloads unless every selected review boundary is complete. Managed files are
+only checked for existence and URL references are parsed for redaction,
+never fetched. The PDF/package export stays unported.
+
+**Graph.** The graph is a local read: stored observations, the owned index
+(with branch labels for exact change), the current custody projection,
+local spends, funding rows and block heights, local transaction references
+and the stored lookup cache. A graph connection grants no ownership. An
+explicit `allowPublicLookup` that would reach a backend refuses with
+`not_implemented` before any backend is chosen.
+
+**Harness.** `change()` in `tests/rust_desktop_parity.py` now closes every
+Python connection it opens and reopens once, so open-time backfills settle
+before a baseline is taken; the Rust-binary check is unchanged.
+
+Python reference bug kept and recorded: a list or object `sync` argument
+escapes `ui.maintenance.run` as an unhandled `TypeError`
+(`tests/rust_port/repro_maintenance_unhashable_sync.py`); Rust answers the same
+envelope without the traceback.
+
+A second reference bug: with two or more linked transfer groups, Python's
+graph annotation order follows `PYTHONHASHSEED` because the group ids pass
+through a set (`tests/rust_port/repro_graph_group_order_hashseed.py`, four
+orders across four seeds). Rust sorts the ids; the parity fixtures link at most
+one group per owned destination.
+
+**Placement.** The domain reads live in `kassiber-journals`, the highest
+domain crate that reaches the owned index, custody components, transfer
+matching and the workspace health without a dependency cycle. The daemon only
+validates arguments, composes the review context and applies the AI redaction.
+
+**Verification.** Every suite compares raw response JSONL and the 112-table
+snapshot with the unchanged Python daemon, on plaintext and SQLCipher books.
+Mutating sessions (stale-journal rebuilds, maintenance, report-read refresh)
+run Rust on a copy taken before Python and compare the resulting books with
+generated ids, clocks and retry delays masked. With `KASSIBER_DESKTOP_COUNTS`
+the seven suites (36 tests) record **178 Rust-served requests**, with zero
+fallbacks and zero `not_implemented`:
+
+| Kind | Served by Rust | Success envelopes | Typed refusals |
+| --- | ---: | ---: | ---: |
+| `ui.report.blockers` | 34 | 32 | 2 |
+| `ui.maintenance.run` | 36 | 22 | 14 |
+| `ui.audit.evidence.summary` | 42 | 21 | 21 |
+| `ui.transactions.graph` | 36 | 24 | 12 |
+| `ui.transactions.review_context` | 30 | 15 | 15 |
+
+Refusals are Python's `validation`, `not_found`, `app_error`,
+`snapshot_integrity_error` and `book_network_review_required` envelopes. The
+egress suite's direct Rust sessions (the public lookup refusal and the
+policy-enabled refresh) are not counted.
+
+`test_rust_desktop_projections_egress.py` arms the strict socket guard with
+product egress on, saves loopback and `.invalid` backends, and shows that every
+projection read, `ui.maintenance.run sync=never|if_enabled` with the policy
+off, and a saved wallet backend open no connection. Only after the policy
+enables report-read refresh does the Rust refresh reach the gate, where the
+strict guard aborts it before a socket opens.
+
+`crates/daemon/scripts/desktop_projection_mutation_check.py` runs the
+21-entry catalog `desktop_projection_mutations.json` in a scratch copy under
+`target/`, with the Cargo build cache inside that copy so deleting it removes
+both. Test children get a disposable `XDG_DATA_HOME`. The named tests pass
+unmutated, and every entry is killed:
+
+| Entries | Rule | Killed by |
+| --- | --- | --- |
+| `blockers-registration`, `-freshness-failure`, `-component-integrity`, `-journals-stale`, `-ownership-total`, `-missing-price-route` | registration, source failures, component integrity, stale journals, ownership counts, missing-price routing | `test_rust_report_blockers.py` |
+| `blockers-sync-failure-first` | a refresh that failed without a blocking source state leads the blockers | `report_blockers::tests::sync_failure_leads_existing_blockers` |
+| `maintenance-unknown-arguments`, `-never-syncs`, `-journals` | argument validation, `sync=never`, journal processing | `test_rust_maintenance_run.py`, `test_rust_report_read_sync.py` |
+| `evidence-url-credentials`, `-review-redaction`, `-pricing` | URL credential redaction, unreviewed-link redaction, missing pricing evidence | `test_rust_evidence_summary.py` |
+| `graph-change-branch`, `-coinbase`, `-public-lookup`, `-quarantine-detail` | exact change, coinbase inputs, local-only without explicit lookup, quarantine details without descriptor keys | `test_rust_transaction_graph.py` |
+| `review-context-redaction`, `-loans` | URL targets redacted, loan marks matching the direction | `test_rust_transaction_review_context.py` |
+| `sync-rate-limit`, `sync-source-classes` | the 60-second limit, policy source classes | `test_rust_report_read_sync.py` |
+
+The first full run left two survivors, and their tests were strengthened. The
+review-context fixture redacted only paths, so a loan note that is a URL was
+added. A failed wallet job always writes a blocking source state, so the
+snapshot already leads with `sync_failed`. The insert ordering only matters
+for refreshes that fail before any job runs (an `AppError` or a busy slot),
+which a daemon session cannot reach, so a unit test now covers it.
+
+**Not covered here.** Graph public lookups, report-read refresh of rates,
+BTCPay, Lightning and Silent Payments sources, and the no-backend refresh path
+refuse with `not_implemented`. `ui.review.request_input` remains. The
+`kassiber-journals` `process_native` vector test fails on this branch's base
+(`3d36e8909`) with a custody `i128` overflow panic; `3defac865` (custody,
+outside this slice) fixes it on `t3code/rust-backend-r10b`.

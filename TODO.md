@@ -89,22 +89,19 @@ ordered compatibility, hidden-home cutover and legacy project migration through
 
 ## Rust backend R5 desktop projections
 
-The [desktop projection checkpoint](docs/reference/rust-shell.md#desktop-projections-r5-continuation)
-serves **10/15** requested unassigned desktop kinds natively, plus Python's
-report-read journal rebuild for every report-like read. Remaining:
+The [completion checkpoint](docs/reference/rust-shell.md#desktop-projections-r5-completion)
+serves **14/15** requested unassigned desktop kinds natively, plus
+`ui.maintenance.run` and report-read wallet refresh behind the book's
+freshness policy. Remaining:
 
-- [ ] Port `ui.transactions.graph` (local graph, owned index, consented public
-  lookups through `kassiber-net`), then `ui.transactions.review_context`, which
-  embeds the graph and evidence summary.
-- [ ] Port `ui.audit.evidence.summary` (no PDF package export).
-- [ ] Port `ui.report.blockers` once the workspace-health snapshot is native
-  (workspace-shell slice); keep the sync-failure blocker.
+- [ ] Serve `ui.transactions.graph` public reference lookups through
+  `kassiber-net` with exact-action consent; an explicit `allowPublicLookup` that
+  reaches a backend refuses with `not_implemented`.
+- [ ] Extend report-read refresh to rates, BTCPay, Lightning and Silent
+  Payments sources and the no-backend `ui.wallets.sync` path; these refuse with
+  `not_implemented` before any job runs.
 - [ ] Port `ui.review.request_input` once the native review loader is accepted
-  for production routes.
-- [ ] Serve report-read wallet sync natively; the prelude now refuses with
-  `not_implemented` when a book enables it.
-- [ ] Add named Rust mutation kills for the new projections; current evidence
-  is the Python-oracle parity suites listed in the checkpoint.
+  for production routes (review workflow slice).
 
 ## Rust backend R5 desktop settings and sync status
 

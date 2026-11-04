@@ -4579,3 +4579,21 @@ the `update`/`verify-download` CLI leaves are native too. The new
 Python does, and contacts GitHub only after an explicit `update --check`. The
 round-5h redaction-scanner delta (`a12f3ad85`) is still unmerged on both
 runtimes.
+
+### R5 unassigned desktop projections: completion
+
+`t3code/r5-desktop-projections-3` brings the requested desktop kinds to
+**14/15** native: `ui.report.blockers`, `ui.transactions.review_context`,
+`ui.audit.evidence.summary` and `ui.transactions.graph`, plus
+`ui.maintenance.run`, with report-read wallet refresh behind the book's
+freshness policy and narrowly scoped `kassiber-net` consent; see the
+[completion checkpoint](../reference/rust-shell.md#desktop-projections-r5-completion).
+It reuses the workspace-shell readiness library and the settings slice's
+maintenance state instead of porting them twice, and keeps
+`ui.review.request_input` with the review workflow slice. The domain reads
+live in `kassiber-journals`, the highest domain crate that can reach the
+owned index, custody components, transfer matching and the workspace health
+without a dependency cycle. Graph public lookups, report-read refresh of
+rates/BTCPay/Lightning/Silent Payments sources and the no-backend refresh path
+refuse with `not_implemented`. All 21 mutation entries are killed by named
+tests. Python product code is unchanged.

@@ -2513,6 +2513,9 @@
     "tests/test_rust_document_services.py": {
       "RustDocumentServicesTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "compares document CLI and daemon refusals, evidence storage and prior-report archives, stored matching and commercial context against Python on disposable books", "reviewed": true, "tests": 4}
     },
+    "tests/test_rust_evidence_summary.py": {
+      "RustEvidenceSummaryTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares the native audit evidence summary raw JSONL and all 112 tables with Python for whole-book, bounded and case scopes, options and refusals", "reviewed": true, "tests": 4}
+    },
     "tests/test_rust_exit_tax.py": {
       "test_exit_service_content_errors_and_all_database_tables": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "subprocess"], "group": "reports", "reason": "compares native exit-tax projections, wire bytes, XLSX content and all database tables with Python, including refusal gates, estimate disclosures and the reference no-snapshot boundary; requires zero CLI and daemon fallbacks", "reviewed": true, "tests": 1},
       "test_exit_cli_wire_workbooks_database_and_zero_fallbacks": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares native exit-tax projections, wire bytes, XLSX content and all database tables with Python, including refusal gates, estimate disclosures and the reference no-snapshot boundary; requires zero CLI and daemon fallbacks", "reviewed": true, "tests": 1},
@@ -2793,6 +2796,10 @@
       "test_lightning_product_errors_preserve_category_and_discard_node_bodies": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares real native CLI/daemon report bytes, CSV artifacts, request order and all 112 database tables with unchanged Python on owned loopback nodes; proves zero hybrid fallbacks, inert configuration/display reads, mid-acquisition scope refusals, TLS/proxy parity and explicit privacy differences", "reviewed": true, "tests": 1},
       "test_lightning_product_backend_capability_and_scope_refusals_match_python": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares real native CLI/daemon report bytes, CSV artifacts, request order and all 112 database tables with unchanged Python on owned loopback nodes; proves zero hybrid fallbacks, inert configuration/display reads, mid-acquisition scope refusals, TLS/proxy parity and explicit privacy differences", "reviewed": true, "tests": 1}
     },
+    "tests/test_rust_maintenance_run.py": {
+      "RustMaintenanceRunTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares the native maintenance run raw JSONL and all 112 tables with Python, including refusals, sync modes without refresh and journal processing", "reviewed": true, "tests": 5},
+      "RustMaintenanceStaleBookTest": {"disposition": "oracle", "flags": ["sql", "subprocess"], "group": "reports", "reason": "compares the native maintenance run raw JSONL and all 112 tables with Python, including refusals, sync modes without refresh and journal processing", "reviewed": true, "tests": 2}
+    },
     "tests/test_rust_metadata_services.py": {
       "RustMetadataServicesTest": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.db", "reviewed": false, "tests": 7}
     },
@@ -2862,7 +2869,7 @@
       "test_verify_download_matches_python_for_success_and_every_refusal": {"disposition": "oracle", "flags": ["subprocess"], "group": "cli-shell", "reason": "compares native update preference/refusal and verify-download outputs with Python in JSON, table and plain formats under the strict socket guard, including every signature, manifest and artifact refusal", "reviewed": true, "tests": 1}
     },
     "tests/test_rust_report_capital_gains.py": {
-      "RustReportCapitalGainsTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares native desktop capital gains raw JSONL and all tables with Python, including the stale-journal rebuild prelude and the report-read sync refusal", "reviewed": true, "tests": 4}
+      "RustReportCapitalGainsTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares native desktop capital gains raw JSONL and all tables with Python, including the stale-journal rebuild prelude and the report-read refresh before the read", "reviewed": true, "tests": 4}
     },
     "tests/test_rust_report_exports.py": {
       "test_commercial_subledger_read_csv_bytes_database_and_routing": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares commercial CLI JSON/table/plain/CSV bytes, explicit CSV publication and path errors with Python; proves unchanged whole-database state and Rust-only hybrid routing", "reviewed": true, "tests": 1},
@@ -2871,6 +2878,9 @@
       "test_cli_stale_admission_and_transaction_drafts": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares complete native CLI/daemon CSV export sequences, literal artifact bytes and normalized whole-database state with Python; declares generated identity mappings and proves Rust-only hybrid routing", "reviewed": true, "tests": 1},
       "test_cli_csv_export_rendering_formats": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares complete native CLI/daemon CSV export sequences, literal artifact bytes and normalized whole-database state with Python; declares generated identity mappings and proves Rust-only hybrid routing", "reviewed": true, "tests": 1},
       "test_cli_csv_export_filesystem_refusals": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares complete native CLI/daemon CSV export sequences, literal artifact bytes and normalized whole-database state with Python; declares generated identity mappings and proves Rust-only hybrid routing", "reviewed": true, "tests": 1}
+    },
+    "tests/test_rust_report_read_sync.py": {
+      "RustReportReadSyncTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "network-egress", "reason": "compares native report-read wallet refresh with Python, including source-class filtering, failed refresh blockers, the rate limit and maintenance sync modes", "reviewed": true, "tests": 6}
     },
     "tests/test_rust_reports.py": {
       "test_reports_match_reference_bytes_and_run_in_rust": {"disposition": "oracle", "flags": ["sql", "subprocess"], "group": "reports", "reason": "compares stored-journal report JSON/table/plain and daemon bytes with Python on disposable FIFO/HIFO/Austrian books, including 3000 transactions, blockers and saved snapshots; asserts native report routing", "reviewed": true, "tests": 1},
@@ -3114,11 +3124,17 @@
     "tests/test_rust_transaction_desktop.py": {
       "RustTransactionDesktopTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "compares desktop list/search/extremes raw daemon JSONL, all filters, grouped totals, queue scope, cursor pages and typed refusals with Python on disposable books", "reviewed": true, "tests": 3}
     },
+    "tests/test_rust_transaction_graph.py": {
+      "RustTransactionGraphTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "compares the native transaction graph raw JSONL and all 112 tables with Python, including ownership, Liquid legs, local links, custody annotations and the public-lookup refusal", "reviewed": true, "tests": 5}
+    },
     "tests/test_rust_transaction_listing.py": {
       "RustTransactionListingTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "compares observed Rust CLI pages, all filters, sort and cursor bytes, exact msat values and fail-closed export/desktop barriers with Python on disposable books", "reviewed": true, "tests": 5}
     },
     "tests/test_rust_transaction_resolve.py": {
       "RustTransactionResolveTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "compares native desktop resolution raw JSONL and all 112 tables with Python, including aliases, focused pair amounts, stale journals and reviewed fingerprints", "reviewed": true, "tests": 4}
+    },
+    "tests/test_rust_transaction_review_context.py": {
+      "RustTransactionReviewContextTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "compares the native transaction review context raw JSONL and all 112 tables with Python, including redaction, sections, refusals and the absent read prelude", "reviewed": true, "tests": 5}
     },
     "tests/test_rust_transaction_services.py": {
       "RustTransactionServicesTest": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.db", "reviewed": false, "tests": 4}

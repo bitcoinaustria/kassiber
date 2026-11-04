@@ -769,6 +769,24 @@ product paths. The complete product oracle records per-invocation hybrid
 decisions and rejects any served-shape reference fallback. Default refresh
 remains dependent on native R4-13 journal processing; no Python journal bridge,
 new AI allowlist entry or disk logging is introduced.
+
+## Report-read wallet refresh (R5)
+
+The [completion checkpoint](rust-shell.md#desktop-projections-r5-completion)
+serves Python's report-read refresh natively. Only a book whose freshness
+policy enables `report_read_sync` refreshes before report-like reads and
+`ui.maintenance.run sync=if_enabled`; that enabled policy is the consent, so
+each fetch uses a narrowly scoped `kassiber-net` consent on the captured gate.
+The handler re-reads the policy and the onchain source class before each
+request, batch and publication, and stops with `cancelled` once either is off.
+`sync=always` is the explicit maintenance action and keeps the exact-action
+consent. Report-read refreshes collect no graph follow-up grant. Saved
+backends, a disabled policy, launch and display reads initiate nothing;
+`test_rust_desktop_projections_egress.py` proves no connection before the
+policy is enabled, with the strict socket guard armed and product egress on.
+Graph reads stay local: an explicit public lookup that would reach a backend
+refuses with `not_implemented` before any backend is chosen.
+
 ## CLN profitability subprocess acquisition (R5 preparation)
 
 `kassiber_chain::lightning::ClnReportClient` serves the profitability read/CSV
