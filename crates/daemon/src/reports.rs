@@ -17,11 +17,13 @@ pub const KINDS: &[&str] = &[
     "ui.reports.privacy_hygiene",
     "ui.reports.psbt_privacy",
     "ui.reports.exit_tax_preview",
+    "ui.reports.export_pdf",
     "ui.reports.export_csv",
     "ui.reports.export_xlsx",
     "ui.reports.export_capital_gains_csv",
     "ui.reports.export_austrian_e1kv_xlsx",
     "ui.reports.export_austrian_e1kv_csv",
+    "ui.reports.export_exit_tax_pdf",
     "ui.reports.export_exit_tax_xlsx",
     "ui.reports.export_year_handoff",
     "ui.reports.export_cross_check",
@@ -91,6 +93,8 @@ pub fn execute(book: &mut dyn Book, kind: &str, raw: Option<&Value>) -> Result<V
         kind,
         "ui.reports.export_csv"
             | "ui.reports.export_xlsx"
+            | "ui.reports.export_pdf"
+            | "ui.reports.export_exit_tax_pdf"
             | "ui.reports.export_exit_tax_xlsx"
             | "ui.reports.exit_tax_preview"
             | "ui.reports.export_capital_gains_csv"
@@ -865,11 +869,13 @@ mod tests {
                 "ui.reports.privacy_hygiene",
                 "ui.reports.psbt_privacy",
                 "ui.reports.exit_tax_preview",
+                "ui.reports.export_pdf",
                 "ui.reports.export_csv",
                 "ui.reports.export_xlsx",
                 "ui.reports.export_capital_gains_csv",
                 "ui.reports.export_austrian_e1kv_xlsx",
                 "ui.reports.export_austrian_e1kv_csv",
+                "ui.reports.export_exit_tax_pdf",
                 "ui.reports.export_exit_tax_xlsx",
                 "ui.reports.export_year_handoff",
                 "ui.reports.export_cross_check",

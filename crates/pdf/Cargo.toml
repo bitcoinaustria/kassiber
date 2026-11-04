@@ -1,0 +1,19 @@
+[package]
+name = "kassiber-pdf"
+description = "Deterministic in-memory rendering of Kassiber's PDF reports"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[dependencies]
+kassiber-pytext = { path = "../pytext" }
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[dev-dependencies]
+# Reads the Python vectors; already locked for the workspace.
+serde_json = "1"

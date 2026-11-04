@@ -52,7 +52,7 @@ pub fn prepare(
         .map_err(sql_error)?;
     let result = (|| {
         let mut args = args.clone();
-        if command == "reports.export-csv" {
+        if matches!(command, "reports.export-csv" | "reports.export-pdf") {
             let limit = history_limit(value(&args, "history_limit"))?;
             replace(&mut args, "history_limit", limit);
         }
@@ -66,10 +66,14 @@ pub fn prepare(
         if command == "reports.export-platform-csv" {
             return platform_csv::prepare(conn, &profile, &args);
         }
+        if command == "reports.export-exit-tax-pdf" {
+            return exit_pdf::prepare(conn, &args, sources);
+        }
         require_context(conn, &profile, false)?;
         match command {
             "reports.export-capital-gains-csv" => capital_csv::prepare(conn, &profile, &args),
             "reports.export-csv" => full_csv::prepare(conn, &workspace, &profile, &args, sources),
+            "reports.export-pdf" => full_pdf::prepare(conn, &workspace, &profile, &args, sources),
             "reports.export-austrian-e1kv-csv" => {
                 austrian_csv::prepare(conn, &workspace, &profile, &args)
             }

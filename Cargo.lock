@@ -1868,6 +1868,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "kassiber-pdf"
+version = "0.1.0"
+dependencies = [
+ "kassiber-pytext",
+ "serde_json",
+]
+
+[[package]]
 name = "kassiber-pydecimal"
 version = "0.1.0"
 dependencies = [
@@ -1932,6 +1940,7 @@ version = "0.1.0"
 dependencies = [
  "kassiber-custody",
  "kassiber-envelope",
+ "kassiber-pdf",
  "kassiber-pydecimal",
  "kassiber-pyjson",
  "kassiber-pytext",

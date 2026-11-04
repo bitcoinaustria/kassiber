@@ -23,6 +23,7 @@ required-features = ["test-harness"]
 kassiber-rates = { path = "../rates" }
 kassiber-custody = { path = "../custody" }
 kassiber-envelope = { path = "../envelope" }
+kassiber-pdf = { path = "../pdf" }
 kassiber-pydecimal = { path = "../pydecimal" }
 kassiber-pyjson = { path = "../pyjson" }
 kassiber-pytext = { path = "../pytext" }

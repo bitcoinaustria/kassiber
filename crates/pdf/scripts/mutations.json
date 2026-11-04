@@ -1,0 +1,124 @@
+[
+  {
+    "id": "text-wrap-fit",
+    "file": "crates/pdf/src/text.rs",
+    "find": "if line.len() + chunk.len() > width {",
+    "replace": "if line.len() + chunk.len() >= width {",
+    "expect_failing": [
+      "wrapping_matches_python_textwrap"
+    ],
+    "rule": "A chunk that exactly fills the remaining width stays on the line, as in textwrap."
+  },
+  {
+    "id": "text-wrap-long-word",
+    "file": "crates/pdf/src/text.rs",
+    "find": "let end = width - line.len();",
+    "replace": "let end = width;",
+    "expect_failing": [
+      "wrapping_matches_python_textwrap"
+    ],
+    "rule": "A word longer than a line is split at the space left on the current line."
+  },
+  {
+    "id": "text-expand-tabs",
+    "file": "crates/pdf/src/text.rs",
+    "find": "let spaces = 8 - column % 8;",
+    "replace": "let spaces = 8;",
+    "expect_failing": [
+      "wrapping_matches_python_textwrap"
+    ],
+    "rule": "Tabs expand to the next multiple of eight columns before wrapping."
+  },
+  {
+    "id": "text-transliteration",
+    "file": "crates/pdf/src/text.rs",
+    "find": "'€' => \"EUR\",",
+    "replace": "'€' => \"E\",",
+    "expect_failing": [
+      "wrapping_matches_python_textwrap",
+      "documents_match_python_bytes_and_pages"
+    ],
+    "rule": "Characters outside Latin-1 are transliterated with Python's table before replacement."
+  },
+  {
+    "id": "text-table-rstrip",
+    "file": "crates/pdf/src/text.rs",
+    "find": "rstrip(&cells.join(\"  \")).to_owned()",
+    "replace": "cells.join(\"  \")",
+    "expect_failing": [
+      "tables_match_python_format_table"
+    ],
+    "rule": "Table lines drop trailing whitespace like str.rstrip()."
+  },
+  {
+    "id": "text-escape-parenthesis",
+    "file": "crates/pdf/src/text.rs",
+    "find": ".replace('(', \"\\\\(\")",
+    "replace": "",
+    "expect_failing": [
+      "documents_match_python_bytes_and_pages"
+    ],
+    "rule": "PDF string literals escape parentheses."
+  },
+  {
+    "id": "text-page-capacity",
+    "file": "crates/pdf/src/text.rs",
+    "find": "let mut pages: Vec<&[String]> = wrapped.chunks(LINES_PER_PAGE).collect();",
+    "replace": "let mut pages: Vec<&[String]> = wrapped.chunks(LINES_PER_PAGE + 1).collect();",
+    "expect_failing": [
+      "documents_match_python_bytes_and_pages",
+      "full_pdf_model_and_bytes_match_python"
+    ],
+    "rule": "A page holds exactly 46 wrapped lines."
+  },
+  {
+    "id": "full-pdf-label-width",
+    "file": "crates/reports/src/full_pdf.rs",
+    "find": "let padding = \" \".repeat(28usize.saturating_sub(label.chars().count()));",
+    "replace": "let padding = \" \".repeat(27usize.saturating_sub(label.chars().count()));",
+    "expect_failing": [
+      "full_pdf_model_and_bytes_match_python"
+    ],
+    "rule": "Key-value labels pad to Python's 28 columns."
+  },
+  {
+    "id": "full-pdf-wallet-count",
+    "file": "crates/reports/src/full_pdf.rs",
+    "find": "grouped(&context.inventory.len().to_string()),",
+    "replace": "count(value(metrics, \"wallets_in_scope\")),",
+    "expect_failing": [
+      "full_pdf_model_and_bytes_match_python"
+    ],
+    "rule": "Wallets in scope count the listed wallets, after Python's inventory validation."
+  },
+  {
+    "id": "full-pdf-capital-order",
+    "file": "crates/reports/src/full_pdf.rs",
+    "find": "let summary_rows = buckets",
+    "replace": "buckets.sort_by_key(|((w, a), _, _)| (py_str(a), py_str(w)));\n        let summary_rows = buckets",
+    "expect_failing": [
+      "full_pdf_model_and_bytes_match_python"
+    ],
+    "rule": "Capital-gain buckets keep their first-seen order instead of being sorted."
+  },
+  {
+    "id": "full-pdf-direction",
+    "file": "crates/reports/src/full_pdf.rs",
+    "find": "text(row, \"direction\").chars().take(3).collect(),",
+    "replace": "text(row, \"direction\"),",
+    "expect_failing": [
+      "full_pdf_model_and_bytes_match_python"
+    ],
+    "rule": "The transaction table shows a three-character direction."
+  },
+  {
+    "id": "full-pdf-flow-amount",
+    "file": "crates/reports/src/full_pdf.rs",
+    "find": "            \"outbound_amount_msat\",\n            \"fee_amount_msat\",",
+    "replace": "            \"inbound_amount_msat\",\n            \"fee_amount_msat\",",
+    "expect_failing": [
+      "full_pdf_model_and_bytes_match_python"
+    ],
+    "rule": "Flow tables show inbound, outbound and fee amounts from their own sums."
+  }
+]

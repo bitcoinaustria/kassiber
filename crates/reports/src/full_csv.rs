@@ -5,7 +5,7 @@ use artifact_csv::{list, File, Prepared, Section};
 fn number(row: &Value, key: &str) -> f64 {
     py_str(value(row, key)).parse().unwrap_or(0.0)
 }
-fn aggregate(portfolio: &[Value]) -> Result<Vec<Value>> {
+pub(super) fn aggregate(portfolio: &[Value]) -> Result<Vec<Value>> {
     let mut grouped: Vec<Value> = Vec::new();
     for row in portfolio {
         let index = grouped.iter().position(|r| {
@@ -50,7 +50,24 @@ fn aggregate(portfolio: &[Value]) -> Result<Vec<Value>> {
     Ok(grouped)
 }
 
-fn inventory(conn: &Connection, profile: &str, wallet: Option<&str>) -> Result<Vec<Value>> {
+pub(super) fn inventory(
+    conn: &Connection,
+    profile: &str,
+    wallet: Option<&str>,
+) -> Result<Vec<Value>> {
+    Ok(listed(conn, profile, wallet)?
+        .into_iter()
+        .map(|(_, row)| row)
+        .collect())
+}
+
+/// `list_wallets` with each row's id, validating every wallet's configuration
+/// before a scope applies, as Python does.
+pub(super) fn listed(
+    conn: &Connection,
+    profile: &str,
+    wallet: Option<&str>,
+) -> Result<Vec<(String, Value)>> {
     let mut result = Vec::new();
     for row in rows(
         conn,
@@ -141,26 +158,29 @@ fn inventory(conn: &Connection, profile: &str, wallet: Option<&str>) -> Result<V
         if wallet.is_some_and(|id| text(&row, "id") != id) {
             continue;
         }
-        result.push(dict([
-            ("wallet", value(&row, "label").clone()),
-            ("kind", value(&row, "kind").clone()),
-            ("chain", s(chain)),
-            ("network", s(network)),
-            (
-                "backend",
-                get(&config, "backend").cloned().unwrap_or_else(|| s("")),
-            ),
-            (
-                "gap_limit",
-                get(&config, "gap_limit").cloned().unwrap_or_else(|| {
-                    if descriptor {
-                        Value::Int(100.into())
-                    } else {
-                        s("")
-                    }
-                }),
-            ),
-        ]));
+        result.push((
+            text(&row, "id"),
+            dict([
+                ("wallet", value(&row, "label").clone()),
+                ("kind", value(&row, "kind").clone()),
+                ("chain", s(chain)),
+                ("network", s(network)),
+                (
+                    "backend",
+                    get(&config, "backend").cloned().unwrap_or_else(|| s("")),
+                ),
+                (
+                    "gap_limit",
+                    get(&config, "gap_limit").cloned().unwrap_or_else(|| {
+                        if descriptor {
+                            Value::Int(100.into())
+                        } else {
+                            s("")
+                        }
+                    }),
+                ),
+            ]),
+        ));
     }
     Ok(result)
 }
@@ -184,13 +204,26 @@ pub(super) fn prepare(
     project(conn, workspace, profile, args, sources).map(|(_, prepared)| prepared)
 }
 
-pub(super) fn project(
+/// The full report's stored inputs, read in Python's order so the first
+/// failing read is the one Python reports. Shared by the CSV, XLSX and PDF.
+pub(super) struct Context {
+    pub wallet: Option<kassiber_wallets::Wallet>,
+    pub inventory: Vec<Value>,
+    pub summary: Value,
+    pub portfolio: Vec<Value>,
+    pub capital: Vec<Value>,
+    pub balances: Vec<Value>,
+    pub generated_at: String,
+    pub history: Vec<Value>,
+}
+
+pub(super) fn context(
     conn: &Connection,
     workspace: &Value,
     profile: &Value,
     args: &Value,
     sources: &dyn kassiber_setup::Sources,
-) -> Result<(Vec<Section>, Prepared)> {
+) -> Result<Context> {
     let id = text(profile, "id");
     let wallet = if truthy(value(args, "wallet")) {
         Some(kassiber_wallets::resolve(conn, &id, &text(args, "wallet"))?)
@@ -225,6 +258,37 @@ pub(super) fn project(
             );
         }
     }
+    Ok(Context {
+        wallet,
+        inventory,
+        summary,
+        portfolio,
+        capital,
+        balances,
+        generated_at,
+        history,
+    })
+}
+
+pub(super) fn project(
+    conn: &Connection,
+    workspace: &Value,
+    profile: &Value,
+    args: &Value,
+    sources: &dyn kassiber_setup::Sources,
+) -> Result<(Vec<Section>, Prepared)> {
+    let id = text(profile, "id");
+    let Context {
+        wallet,
+        inventory,
+        summary,
+        portfolio,
+        capital,
+        balances,
+        generated_at,
+        history,
+    } = context(conn, workspace, profile, args, sources)?;
+    let wallet_id = wallet.as_ref().map(|w| w.id.as_str());
     let mut overview = Vec::new();
     let mut add = |group: &str, field: &str, v: Value| {
         overview.push(dict([

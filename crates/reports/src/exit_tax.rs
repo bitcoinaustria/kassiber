@@ -668,6 +668,11 @@ fn add_optional(a: Option<Decimal>, b: Option<&Decimal>) -> Result<Option<Decima
 }
 
 pub(super) fn render(report: &Value) -> Result<String> {
+    Ok(lines(report)?.join("\n"))
+}
+
+/// `format_exit_tax_lines`: the report's text lines.
+pub(super) fn lines(report: &Value) -> Result<Vec<String>> {
     let totals = value(report, "totals");
     let ccy = text(report, "fiatCurrency");
     let money = |key| {
@@ -776,7 +781,7 @@ pub(super) fn render(report: &Value) -> Result<String> {
     }
     lines.push(String::new());
     lines.push(text(report, "reviewGate"));
-    Ok(lines.join("\n"))
+    Ok(lines)
 }
 
 #[cfg(test)]

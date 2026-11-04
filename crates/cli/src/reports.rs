@@ -19,6 +19,8 @@ pub const COMMANDS: &[&str] = &[
     "reports.austrian-tax-summary",
     "reports.balance-history",
     "reports.export-csv",
+    "reports.export-pdf",
+    "reports.export-exit-tax-pdf",
     "reports.export-xlsx",
     "reports.exit-tax",
     "reports.export-exit-tax-xlsx",
@@ -132,6 +134,8 @@ pub fn execute(book: &mut dyn Book, command: &str, args: &Namespace) -> Result<V
     if matches!(
         command,
         "reports.export-csv"
+            | "reports.export-pdf"
+            | "reports.export-exit-tax-pdf"
             | "reports.export-xlsx"
             | "reports.export-exit-tax-xlsx"
             | "reports.export-austrian-e1kv-csv"

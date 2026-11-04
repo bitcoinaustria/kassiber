@@ -129,10 +129,12 @@ fn complete(
                 .unwrap_or(Path::new(".")),
         )?;
         let published = artifact_publication::file(&prepared, target).map_err(failed)?;
-        result = dict([
-            ("file", path_text(&published.path)),
-            ("bytes", Value::Int(published.bytes.into())),
-        ]);
+        result = dict([("file", path_text(&published.path))]);
+        // PDF writers report their page count between the path and size.
+        if let Some(pages) = get(&prepared.metadata, "pages") {
+            replace(&mut result, "pages", pages.clone());
+        }
+        replace(&mut result, "bytes", Value::Int(published.bytes.into()));
         vec![target.to_owned()]
     };
     let Value::Dict(metadata) = &prepared.metadata else {

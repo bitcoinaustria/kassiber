@@ -9,6 +9,8 @@ pub fn handles(command: &str) -> bool {
         "reports.cross-check"
             | "ui.reports.export_cross_check"
             | "reports.export-csv"
+            | "reports.export-pdf"
+            | "reports.export-exit-tax-pdf"
             | "reports.export-xlsx"
             | "reports.export-exit-tax-xlsx"
             | "reports.export-commercial-subledger-csv"
@@ -19,6 +21,8 @@ pub fn handles(command: &str) -> bool {
             | "ui.transactions.export_xlsx"
             | "ui.transactions.export_platform_csv"
             | "ui.reports.export_xlsx"
+            | "ui.reports.export_pdf"
+            | "ui.reports.export_exit_tax_pdf"
             | "reports.export-year-handoff"
             | "ui.reports.export_year_handoff"
             | "ui.reports.export_exit_tax_xlsx"
@@ -151,7 +155,12 @@ fn execute_admitted(
         || (command == "transactions.export" && text(raw, "export_format") == "xlsx")
         || command == "ui.reports.export_year_handoff";
     if !desktop && command != "transactions.export" {
-        if command == "reports.export-year-handoff" {
+        // The CLI admits final accounting exports against source freshness
+        // before it reads anything else, as Python's command handler does.
+        if matches!(
+            command,
+            "reports.export-year-handoff" | "reports.export-pdf" | "reports.export-exit-tax-pdf"
+        ) {
             let (_, profile) = kassiber_setup::references::scope(conn, raw)?;
             freshness(conn, &profile)?;
         }
@@ -194,7 +203,10 @@ fn execute_admitted(
         freshness(conn, &profile)?;
     }
     let (native, stem, suffix, scope) = match command {
-        "reports.export-csv" | "ui.reports.export_csv" | "ui.reports.export_xlsx" => {
+        "reports.export-csv"
+        | "ui.reports.export_csv"
+        | "ui.reports.export_xlsx"
+        | "ui.reports.export_pdf" => {
             if desktop {
                 if get(raw, "year").is_some() || get(raw, "tax_year").is_some() {
                     return Err(validation(format!(
@@ -216,11 +228,19 @@ fn execute_admitted(
             (
                 if xlsx {
                     "reports.export-xlsx"
+                } else if command == "ui.reports.export_pdf" {
+                    "reports.export-pdf"
                 } else {
                     "reports.export-csv"
                 },
                 "kassiber-report".into(),
-                if xlsx { ".xlsx" } else { ".csv" },
+                if xlsx {
+                    ".xlsx"
+                } else if command == "ui.reports.export_pdf" {
+                    ".pdf"
+                } else {
+                    ".csv"
+                },
                 "report",
             )
         }
@@ -258,14 +278,19 @@ fn execute_admitted(
                 "year_handoff",
             )
         }
-        "ui.reports.export_exit_tax_xlsx" => {
+        "ui.reports.export_exit_tax_xlsx" | "ui.reports.export_exit_tax_pdf" => {
             let report = execute_with_sources(conn, "reports.exit-tax", &args, sources)?;
             let departure = value(&report, "departureDate").clone();
             replace(&mut args, "departure_date", departure.clone());
+            let pdf = command == "ui.reports.export_exit_tax_pdf";
             (
-                "reports.export-exit-tax-xlsx",
+                if pdf {
+                    "reports.export-exit-tax-pdf"
+                } else {
+                    "reports.export-exit-tax-xlsx"
+                },
                 format!("kassiber-exit-tax-{}", py_str(&departure)),
-                ".xlsx",
+                if pdf { ".pdf" } else { ".xlsx" },
                 "exit_tax",
             )
         }
@@ -443,7 +468,14 @@ fn execute_admitted(
     };
     let mut result = export::export(conn, native, &args, &target, sources)?;
     if desktop {
-        replace(&mut result, "format", s(if xlsx { "xlsx" } else { "csv" }));
+        let format = if xlsx {
+            "xlsx"
+        } else if native.ends_with("-pdf") {
+            "pdf"
+        } else {
+            "csv"
+        };
+        replace(&mut result, "format", s(format));
         replace(&mut result, "scope", s(scope));
         if scope == "capital_gains" {
             replace(&mut result, "tax_year", value(raw, "year").clone());

@@ -851,9 +851,11 @@ registers them; exit-tax preserves its reference no-registration boundary.
   links the disposable repro; keep current parity until that change is accepted.
 - [x] Port explicit saved/filed markers and filing a captured local export,
   preserving sealed identity, frozen dependency copies and existing impact history.
-- [x] Keep PDF rendering and PDF-containing source-funds bundles in Python by
-  the owner's decision. Keep unsupported commands disabled and AI projections
-  in Python.
+- [x] Port the hand-written text PDF writer and register `reports export-pdf`,
+  `reports export-exit-tax-pdf` and their desktop kinds natively (byte parity).
+- [ ] Port the summary, Austrian E 1kv and source-of-funds PDFs and the
+  PDF-containing bundles in the shared report design once the owner approves
+  [the design](docs/reference/report-design.md).
 
 ## Rust backend R4
 

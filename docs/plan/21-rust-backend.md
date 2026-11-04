@@ -4841,3 +4841,17 @@ freshness) are fixed. See the
 [checkpoint](../reference/rust-shell.md#ai-tool-writes-previews-and-projections-r6-5b)
 for evidence, reviewed differences and what chat still needs. No new external
 dependency and no Python product change.
+
+### R5 PDF: text reports and the shared report design
+
+On 2026-11-02 the owner brought PDF into scope with Typst as the engine, and
+on 2026-11-04 asked for one minimalist report format shared by every country
+and by PDF, XLSX and CSV instead of reproducing ReportLab's layouts. Python
+stays the reference for report data, not for layout.
+
+The hand-written PDF 1.4 writer ports directly with byte parity; the full
+report and exit-tax PDFs are registered natively for CLI and desktop (see
+[the checkpoint](../reference/rust-shell.md#text-pdf-reports-r5-partial)). The
+[report design](../reference/report-design.md) is proposed with a prototype of
+the summary report; the other ReportLab reports and the PDF-containing bundles
+wait for the owner's review of that design.

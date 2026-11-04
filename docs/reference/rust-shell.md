@@ -17754,3 +17754,30 @@ books as needing the direct-sync path.
 registration; and, before chat can match Python for every tool, the refusals
 above (node snapshot, PDF and audit-package exports, commercial evidence
 review, direct-sync wallet refresh).
+
+## Text PDF reports (R5, partial)
+
+The owner brought PDF into scope on 2026-11-02. The hand-written PDF 1.4
+writer (`kassiber/pdf_report.py`) is ported directly to `crates/pdf` (`text`):
+Latin-1 transliteration, `textwrap` wrapping with the writer's options, the
+46-line pages and the object layout without dates or identifiers. Two reports
+use it and are registered natively:
+
+- `reports export-pdf` and `ui.reports.export_pdf`: the full report's lines
+  (`build_pdf_report_lines`) from the same stored inputs as the full CSV, with
+  the saved `full-report.pdf` marker;
+- `reports export-exit-tax-pdf` and `ui.reports.export_exit_tax_pdf`: the
+  exit-tax estimate's lines; like Python, no saved marker.
+
+Both CLI leaves admit source freshness first, as Python's final-export gate
+does. The envelope inserts `pages` between `file` and `bytes`.
+
+Evidence: `crates/pdf/tests/text.rs` (Python's wrapping, table and document
+vectors), `crates/reports/tests/full_pdf.rs` (90 cases: Python's report lines
+and PDF bytes, refusals included) and `tests/test_rust_pdf_exports.py` (CLI
+and daemon sessions against Python: identical stdout, PDF bytes, saved and
+filed markers and every table; all served by Rust). Twelve mutation entries
+in `crates/pdf/scripts/mutations.json` are each killed by named tests.
+
+The summary, Austrian and source-of-funds PDFs wait for the shared report
+design (`docs/reference/report-design.md`), which replaces ReportLab's layouts.
