@@ -67,7 +67,9 @@ class RustTransactionResolveTest(unittest.TestCase):
         self.assertEqual((candidate.returncode, candidate.stderr), (0, b""), candidate.stdout)
         actual, expected = candidate.stdout.splitlines(), reference.stdout.splitlines()
         ready = json.loads(actual[0])["data"]["supported_kinds"]
-        self.assertEqual(ready[0], "status", "candidate must be the Rust daemon")
+        # The native daemon advertises a strict subset of Python's kinds.
+        self.assertNotEqual(ready, json.loads(expected[0])["data"]["supported_kinds"],
+                            "candidate must be the Rust daemon")
         self.assertIn(KIND, ready)
         self.assertEqual(len(actual), len(expected))
         for request, got, wanted in zip(requests, actual[1:], expected[1:]):

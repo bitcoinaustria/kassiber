@@ -5,6 +5,7 @@ to the Rust candidate, requires identical response bytes, and checks that all
 112 logical tables are unchanged by both. Served-by evidence is appended to
 ``KASSIBER_DESKTOP_COUNTS`` when set.
 """
+from contextlib import closing
 import json
 import os
 import shutil
@@ -63,7 +64,7 @@ class DesktopParity:
         self.seed()
 
     def seed(self):
-        with open_db(self.root, passphrase=self.passphrase) as conn:
+        with closing(open_db(self.root, passphrase=self.passphrase)) as conn, conn:
             if self.SEED is not None:
                 conn.executescript(Path(self.SEED).read_text())
         self.change("")
@@ -74,7 +75,9 @@ class DesktopParity:
         self.seed()
 
     def change(self, sql):
-        with open_db(self.root, passphrase=self.passphrase) as conn:
+        # Close as well as commit: a connection left open in this process
+        # loses its POSIX locks when another one here closes the same file.
+        with closing(open_db(self.root, passphrase=self.passphrase)) as conn, conn:
             conn.executescript(sql)
 
     def snapshot(self, root=None):
@@ -129,7 +132,9 @@ class DesktopParity:
         self.assertEqual((candidate.returncode, candidate.stderr), (0, b""), candidate.stdout)
         actual, expected = candidate.stdout.splitlines(), reference.stdout.splitlines()
         ready = json.loads(actual[0])["data"]["supported_kinds"]
-        self.assertEqual(ready[0], "status", "candidate must be the Rust daemon")
+        # The native daemon advertises a strict subset of Python's kinds.
+        self.assertNotEqual(ready, json.loads(expected[0])["data"]["supported_kinds"],
+                            "candidate must be the Rust daemon")
         self.assertIn(kind or self.KIND, ready)
         self.assertEqual(len(actual), len(expected))
         normalize = mask or (lambda line: line)
