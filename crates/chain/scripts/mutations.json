@@ -732,12 +732,12 @@
   {
     "id": "chain-lnd-report-ancillary-peer-count",
     "file": "crates/chain/src/lightning.rs",
-    "find": "integer(field(&info, \"num_peers\"))?;",
-    "replace": "let _ = field(&info, \"num_peers\");",
+    "find": "peer_count: integer(field(&info, \"num_peers\"))?,",
+    "replace": "peer_count: {\n                let _ = field(&info, \"num_peers\");\n                BigInt::from(0)\n            },",
     "expect_failing": [
       "lnd_report_python_vectors_pin_projection_and_exact_requests"
     ],
-    "rule": "Unused node peer counts still propagate reference coercion failures."
+    "rule": "Node peer counts keep reference coercion failures."
   },
   {
     "id": "chain-lnd-report-ancillary-onchain",

@@ -3066,8 +3066,8 @@
   {
     "id": "R2c-audit-recorded-raw-type",
     "file": "crates/custody/src/interpretation/recorded.rs",
-    "find": "return Err(\"TypeError\".into());",
-    "replace": "return Ok(false);",
+    "find": "            return Err(format!(\n                \"TypeError: '>' not supported between instances of '{kind}' and 'int'\"\n            ));",
+    "replace": "            let _ = kind;\n            return Ok(false);",
     "expect_failing": [
       "recorded_cpython_transfer_predicates"
     ],

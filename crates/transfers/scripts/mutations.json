@@ -442,8 +442,8 @@
   {
     "id": "desktop-expiry-integer",
     "file": "crates/daemon/src/transfers.rs",
-    "find": "Value::Float(n) if n.is_finite() =>",
-    "replace": "Value::Float(n) if false =>",
+    "find": "Value::Float(n) if n.is_finite() => Ok(format!(\"{:.0}\", n.trunc())",
+    "replace": "Value::Float(n) if false => Ok(format!(\"{:.0}\", n.trunc())",
     "expect_failing": [
       "desktop_dismissal_expiry_uses_python_integer_coercion"
     ],

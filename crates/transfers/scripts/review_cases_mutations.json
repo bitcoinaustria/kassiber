@@ -101,7 +101,7 @@
   },
   {
     "id": "RVC-allocation-fingerprint",
-    "file": "crates/transfers/src/review_cases.rs",
+    "file": "crates/transfers/src/review_reading.rs",
     "find": "Value::List(keyed.into_iter().map(|(_, row)| row).collect()),",
     "replace": "Value::List(vec![]),",
     "expect_failing": [

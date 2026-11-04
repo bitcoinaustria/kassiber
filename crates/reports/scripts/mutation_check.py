@@ -9,7 +9,7 @@ spec = importlib.util.spec_from_file_location("report_mutation_check", ROOT / "t
 checker = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = checker
 spec.loader.exec_module(checker)
-checker.ENGINE_PACKAGES = ("-p", "kassiber-reports", "-p", "kassiber-daemon", "-p", "kassiber-cli", "-p", "kassiber-store", "--offline")
+checker.ENGINE_PACKAGES = ("-p", "kassiber-reports", "-p", "kassiber-pytext", "-p", "kassiber-daemon", "-p", "kassiber-cli", "-p", "kassiber-store", "--offline")
 checker.MUTATIONS = Path(__file__).with_name("mutations.json")
 
 if __name__ == "__main__":

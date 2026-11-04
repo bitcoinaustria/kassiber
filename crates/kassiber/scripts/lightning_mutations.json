@@ -182,8 +182,8 @@
   {
     "id": "lightning-daemon-registration",
     "file": "crates/daemon/src/reports.rs",
-    "find": "    \"ui.reports.lightning_profitability\",\n    \"ui.reports.cross_check\",\n];",
-    "replace": "    \"ui.reports.cross_check\",\n];",
+    "find": "    \"ui.reports.lightning_profitability\",\n    \"ui.exports.preview\",\n    \"ui.reports.cross_check\",\n];",
+    "replace": "    \"ui.exports.preview\",\n    \"ui.reports.cross_check\",\n];",
     "expect_failing": [
       "lightning_daemon_preserves_alias_scope_window_and_registration"
     ],

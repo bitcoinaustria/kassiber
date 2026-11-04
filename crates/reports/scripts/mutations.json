@@ -5002,9 +5002,9 @@
   },
   {
     "id": "zone-fold-larger-offset",
-    "file": "crates/reports/src/zone.rs",
-    "find": "            trans_local[i] += utcoff[trans_idx[i - 1]].max(utcoff[trans_idx[i]]);",
-    "replace": "            trans_local[i] += utcoff[trans_idx[i - 1]].min(utcoff[trans_idx[i]]);",
+    "file": "crates/pytext/src/zone.rs",
+    "find": "            trans_local[i] += a.max(b);",
+    "replace": "            trans_local[i] += a.min(b);",
     "expect_failing": [
       "zone_offsets_match_cpython"
     ],
@@ -5012,7 +5012,7 @@
   },
   {
     "id": "zone-before-standard",
-    "file": "crates/reports/src/zone.rs",
+    "file": "crates/pytext/src/zone.rs",
     "find": "        .position(|dst| !dst)",
     "replace": "        .position(|dst| *dst)",
     "expect_failing": [
@@ -5022,9 +5022,9 @@
   },
   {
     "id": "zone-local-bisect",
-    "file": "crates/reports/src/zone.rs",
-    "find": "let idx = lt.partition_point(|t| *t <= local) - 1;",
-    "replace": "let idx = lt.partition_point(|t| *t < local).max(1) - 1;",
+    "file": "crates/pytext/src/zone.rs",
+    "find": "rule.local(local, year_of(local)),\n            });\n        }\n        let idx = lt.partition_point(|t| *t <= local) - 1;",
+    "replace": "rule.local(local, year_of(local)),\n            });\n        }\n        let idx = lt.partition_point(|t| *t < local).max(1) - 1;",
     "expect_failing": [
       "zone_offsets_match_cpython"
     ],
@@ -5032,9 +5032,9 @@
   },
   {
     "id": "zone-rule-gap-side",
-    "file": "crates/reports/src/zone.rs",
-    "find": "        if self.diff() < 0 {",
-    "replace": "        if self.diff() >= 0 {",
+    "file": "crates/pytext/src/zone.rs",
+    "find": "        if fold == (self.diff() >= 0) {",
+    "replace": "        if fold != (self.diff() >= 0) {",
     "expect_failing": [
       "zone_offsets_match_cpython"
     ],
@@ -5042,9 +5042,9 @@
   },
   {
     "id": "zone-rule-utc-start",
-    "file": "crates/reports/src/zone.rs",
-    "find": "        let start = self.start.year_to_epoch(year) - self.std;",
-    "replace": "        let start = self.start.year_to_epoch(year) - self.dst;",
+    "file": "crates/pytext/src/zone.rs",
+    "find": "    fn utc(&self, ts: i64, year: i64) -> i64 {\n        let start = self.start.year_to_epoch(year) - self.std;",
+    "replace": "    fn utc(&self, ts: i64, year: i64) -> i64 {\n        let start = self.start.year_to_epoch(year) - self.dst;",
     "expect_failing": [
       "zone_offsets_match_cpython"
     ],
@@ -5052,7 +5052,7 @@
   },
   {
     "id": "zone-rule-last-week",
-    "file": "crates/reports/src/zone.rs",
+    "file": "crates/pytext/src/zone.rs",
     "find": "                    month_day -= 7;",
     "replace": "                    month_day -= 0;",
     "expect_failing": [
@@ -5062,7 +5062,7 @@
   },
   {
     "id": "zone-delta-sign",
-    "file": "crates/reports/src/zone.rs",
+    "file": "crates/pytext/src/zone.rs",
     "find": "    Some(if negative { total } else { -total })",
     "replace": "    Some(if negative { -total } else { total })",
     "expect_failing": [
@@ -5072,7 +5072,7 @@
   },
   {
     "id": "zone-default-dst",
-    "file": "crates/reports/src/zone.rs",
+    "file": "crates/pytext/src/zone.rs",
     "find": "        std + 3600\n",
     "replace": "        std + 1800\n",
     "expect_failing": [
@@ -5082,7 +5082,7 @@
   },
   {
     "id": "zone-key-normalized",
-    "file": "crates/reports/src/zone.rs",
+    "file": "crates/pytext/src/zone.rs",
     "find": "    if normalized.chars().count() != key.chars().count() {",
     "replace": "    if false {",
     "expect_failing": [
@@ -5092,7 +5092,7 @@
   },
   {
     "id": "zone-key-escape",
-    "file": "crates/reports/src/zone.rs",
+    "file": "crates/pytext/src/zone.rs",
     "find": "    normpath(&format!(\"_/{normalized}\")).starts_with(\"_/\")",
     "replace": "    true",
     "expect_failing": [
@@ -5102,7 +5102,7 @@
   },
   {
     "id": "zone-tzpath-absolute",
-    "file": "crates/reports/src/zone.rs",
+    "file": "crates/pytext/src/zone.rs",
     "find": "            .filter(|p| p.is_absolute())",
     "replace": "            .filter(|_| true)",
     "expect_failing": [
