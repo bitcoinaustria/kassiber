@@ -74,7 +74,7 @@ the classifier's `summary` output and is checked by preflight.
 | secrets/backup | 7 | 18 | 81 | 53 | 0 | 159 |
 | daemon runtime | 8 | 25 | 222 | 101 | 1 | 357 |
 | AI/MCP/operator | 64 | 134 | 604 | 0 | 0 | 802 |
-| CLI shell | 20 | 0 | 30 | 164 | 3 | 217 |
+| CLI shell | 20 | 0 | 30 | 166 | 3 | 219 |
 | packaging/CI | 0 | 2 | 166 | 10 | 29 | 207 |
 | **Total** | **370** | **545** | **4321** | **1086** | **52** | **6374** |
 <!-- disposition-counts:end -->

@@ -4545,5 +4545,12 @@ daemon and CLI bytes with all 112 tables (SQLite and SQLCipher), mutation
 entries in `crates/daemon/scripts/shell_mutations.json`, and two recorded
 Python reference bugs. The
 [Rust shell reference](../reference/rust-shell.md#workspace-shell-r5) owns the
-served-by counts and limits. Still Python: `ui.logs.snapshot`,
-`ui.egress.snapshot`, `update` and `verify-download`.
+served-by counts and limits.
+
+The daemon's diagnostics (`ui.logs.snapshot` over a bounded, redacted RAM log
+ring and `ui.egress.snapshot` over the process-wide `kassiber-net` ledger) and
+the `update`/`verify-download` CLI leaves are native too. The new
+`kassiber-release` crate verifies release signatures with `ssh-keygen` as
+Python does, and contacts GitHub only after an explicit `update --check`. The
+round-5h redaction-scanner delta (`a12f3ad85`) is still unmerged on both
+runtimes.

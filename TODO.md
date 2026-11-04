@@ -158,15 +158,20 @@ through the shared setup crate.
 
 The [workspace shell](docs/reference/rust-shell.md#workspace-shell-r5) serves
 projects, overviews, health, next actions, badges, onboarding and desktop
-encryption setup natively; generic `cancel` keeps Python's refusal.
+encryption setup, diagnostics snapshots, `update` and `verify-download`
+natively; generic `cancel` keeps Python's refusal.
 
-- [ ] Port `ui.logs.snapshot` with a bounded, redacted RAM log ring that mirrors
-  the base's shared redaction scanner; record the unmerged round-5h scanner
-  delta (`a12f3ad85`) as a separate follow-up.
-- [ ] Port `ui.egress.snapshot`: the ledger projection, runtime/AI allowlist and
+- [x] Port `ui.logs.snapshot` with a bounded, redacted RAM log ring that mirrors
+  the base's shared redaction scanner.
+- [x] Port `ui.egress.snapshot`: the ledger projection, runtime/AI allowlist and
   database-header proof over `kassiber-net`'s ledger.
-- [ ] Port `update` and `verify-download` with Python's signature verification;
+- [x] Port `update` and `verify-download` with Python's signature verification;
   fetch only after the explicit update action, through `kassiber-net`.
+- [ ] Merge the round-5h redaction-scanner delta (`a12f3ad85`) into both the
+  Python scanner and `kassiber-envelope`'s mirror, with shared vectors.
+- [ ] Add a loopback release-server oracle for `update --check` so the fetch,
+  cache write and rendering are proven against Python without contacting
+  GitHub.
 - [ ] Decide whether naive timestamps in overview relative labels should follow
   Python's local-zone interpretation.
 

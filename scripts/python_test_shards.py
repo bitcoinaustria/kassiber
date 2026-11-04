@@ -103,6 +103,8 @@ _DAEMON_SERIAL_MODULES = frozenset(
         "test_rust_desktop_utxos",
         "test_rust_project_desktop",
         "test_rust_workspace_shell",
+        "test_rust_daemon_diagnostics",
+        "test_rust_release_cli",
         "test_rust_document_services",
         "test_rust_document_ingestion",
         "test_rust_document_cli",

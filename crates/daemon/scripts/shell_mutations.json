@@ -248,5 +248,168 @@
       "tests/test_rust_workspace_shell.py::test_secrets_init_matches_python_and_migrates_dotenv_credentials"
     ],
     "rule": "Re-initializing an encrypted book only verifies and unlocks it."
+  },
+  {
+    "id": "diag-sensitive-field",
+    "file": "crates/daemon/src/diagnostics.rs",
+    "find": "    if is_sensitive_key(name) {",
+    "replace": "    if false && is_sensitive_key(name) {",
+    "expect_failing": [
+      "ring_floors_secrets_and_sensitive_fields_and_evicts_with_gap"
+    ],
+    "rule": "Log fields with sensitive names are stored as [redacted]."
+  },
+  {
+    "id": "diag-ring-bound",
+    "file": "crates/daemon/src/diagnostics.rs",
+    "find": "            && (self.records.len() > MAX_RECORDS || self.buffer_bytes > MAX_BYTES)",
+    "replace": "            && (self.records.len() > MAX_RECORDS + 1 || self.buffer_bytes > MAX_BYTES)",
+    "expect_failing": [
+      "ring_floors_secrets_and_sensitive_fields_and_evicts_with_gap"
+    ],
+    "rule": "The log ring keeps at most 5,000 records."
+  },
+  {
+    "id": "diag-endpoint-port-zero",
+    "file": "crates/daemon/src/diagnostics.rs",
+    "find": "        port.filter(|p| *p != 0).or(default),",
+    "replace": "        port.or(default),",
+    "expect_failing": [
+      "endpoint_matches_urlsplit_hosts_ports_and_errors"
+    ],
+    "rule": "Port 0 falls back to the scheme default, as Python's `parsed.port or default`."
+  },
+  {
+    "id": "wire-logs-skip-snapshots",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "                !matches!(kind, Some(Value::Str(k)) if diagnostics::KINDS.iter().any(|d| k.is(d)));",
+    "replace": "                { let _ = &kind; true };",
+    "expect_failing": [
+      "tests/test_rust_daemon_diagnostics.py::test_snapshots_match_python_on_plaintext_book"
+    ],
+    "rule": "The two snapshot kinds are not logged."
+  },
+  {
+    "id": "wire-egress-complete",
+    "file": "crates/daemon/src/diagnostics.rs",
+    "find": "    let complete = inputs.ai_providers.is_some();",
+    "replace": "    let complete = true;",
+    "expect_failing": [
+      "tests/test_rust_daemon_diagnostics.py::test_snapshots_match_python_on_plaintext_book"
+    ],
+    "rule": "The allowlist is complete only while a book is open."
+  },
+  {
+    "id": "wire-egress-locked-view",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "            None => match &self.egress_backends {",
+    "replace": "            None => match &None::<Value> {",
+    "expect_failing": [
+      "tests/test_rust_daemon_diagnostics.py::test_snapshots_match_python_on_plaintext_book"
+    ],
+    "rule": "A locked daemon keeps reporting the last merged backend view."
+  },
+  {
+    "id": "wire-update-disable-env",
+    "file": "crates/release/src/update.rs",
+    "find": ".is_some_and(|v| [\"1\", \"true\", \"yes\"].contains(&strip(&v)));",
+    "replace": ".is_some_and(|v| [\"1\", \"true\"].contains(&strip(&v)));",
+    "expect_failing": [
+      "tests/test_rust_release_cli.py::test_update_preferences_and_refusals_match_python_without_contacting_github"
+    ],
+    "rule": "KASSIBER_DISABLE_UPDATE_CHECK accepts 1, true and yes."
+  },
+  {
+    "id": "wire-update-schema-exact",
+    "file": "crates/release/src/update.rs",
+    "find": "        && get(&payload, \"schema_version\") == Some(&Value::Int(1.into()))",
+    "replace": "        && get(&payload, \"schema_version\").is_some_and(truthy)",
+    "expect_failing": [
+      "tests/test_rust_release_cli.py::test_update_preferences_and_refusals_match_python_without_contacting_github"
+    ],
+    "rule": "Update consent requires an integer schema_version of exactly 1."
+  },
+  {
+    "id": "wire-update-offline-first",
+    "file": "crates/release/src/update.rs",
+    "find": "    if offline_enabled(context)? {",
+    "replace": "    if false && offline_enabled(context)? {",
+    "expect_failing": [
+      "tests/test_rust_release_cli.py::test_update_preferences_and_refusals_match_python_without_contacting_github"
+    ],
+    "rule": "Offline mode refuses an update check before the consent check."
+  },
+  {
+    "id": "wire-verify-pinned-key",
+    "file": "crates/release/src/verify.rs",
+    "find": "    if fingerprint(&blob) != expected {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "tests/test_rust_release_cli.py::test_verify_download_matches_python_for_success_and_every_refusal"
+    ],
+    "rule": "The supplied public key must hash to the pinned fingerprint before ssh-keygen runs."
+  },
+  {
+    "id": "wire-verify-artifact-hash",
+    "file": "crates/release/src/verify.rs",
+    "find": "    if actual != *digest {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "tests/test_rust_release_cli.py::test_verify_download_matches_python_for_success_and_every_refusal"
+    ],
+    "rule": "A tampered artifact fails its manifest digest."
+  },
+  {
+    "id": "wire-verify-signed-version",
+    "file": "crates/release/src/verify.rs",
+    "find": "    if lines[1] != format!(\"{MANIFEST_VERSION_PREFIX}{expected}\") {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "tests/test_rust_release_cli.py::test_verify_download_matches_python_for_success_and_every_refusal"
+    ],
+    "rule": "The signed version must match the manifest filename."
+  },
+  {
+    "id": "wire-verify-nofollow",
+    "file": "crates/release/src/verify.rs",
+    "find": "        options.custom_flags(nix::libc::O_NOFOLLOW);",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_release_cli.py::test_verify_download_matches_python_for_success_and_every_refusal"
+    ],
+    "rule": "Release inputs are never read through a final symlink."
+  },
+  {
+    "id": "release-prerelease-zero",
+    "file": "crates/release/src/update.rs",
+    "find": ".any(|p| p.bytes().all(|b| b.is_ascii_digit()) && p.len() > 1 && p.starts_with('0'))",
+    "replace": ".any(|p| p.bytes().all(|b| b.is_ascii_digit()) && p.len() > 2 && p.starts_with('0'))",
+    "expect_failing": [
+      "version_parsing_and_ordering_match_python",
+      "versions_order_like_semver_and_python"
+    ],
+    "rule": "Numeric prerelease identifiers may not have leading zeros."
+  },
+  {
+    "id": "release-numeric-order",
+    "file": "crates/release/src/update.rs",
+    "find": "    left.len().cmp(&right.len()).then_with(|| left.cmp(right))",
+    "replace": "    left.cmp(right)",
+    "expect_failing": [
+      "version_parsing_and_ordering_match_python",
+      "versions_order_like_semver_and_python"
+    ],
+    "rule": "Version numbers compare numerically, not as text."
+  },
+  {
+    "id": "release-skip-drafts",
+    "file": "crates/release/src/update.rs",
+    "find": "        if !matches!(item, Value::Dict(_)) || get(item, \"draft\").is_some_and(truthy) {",
+    "replace": "        if !matches!(item, Value::Dict(_)) {",
+    "expect_failing": [
+      "release_selection_and_status_text_match_python",
+      "release_selection_skips_drafts_and_keeps_the_first_highest"
+    ],
+    "rule": "Draft releases are never offered."
   }
 ]

@@ -28,7 +28,7 @@ checker.MUTATIONS = Path(__file__).with_name("shell_mutations.json")
 checker.ENGINE_PACKAGES = (
     "--offline", "-p", "kassiber-daemon", "-p", "kassiber-setup", "-p", "kassiber-store",
     "-p", "kassiber-transactions", "-p", "kassiber-diagnostics", "-p", "kassiber-secrets",
-    "-p", "kassiber-workspace",
+    "-p", "kassiber-workspace", "-p", "kassiber-release",
     "-p", "kassiber", "--features", "kassiber/test-harness",
 )
 checker.Mutation.runner = property(lambda m: "pytest" if m.id.startswith("wire-") else "cargo")

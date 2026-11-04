@@ -15650,6 +15650,8 @@ reused, both regenerated against current freshness semantics.
 | Workspace | `health`, `next-actions`, `ui.overview.snapshot`, `ui.workspace.overview.snapshot`, `ui.workspace.health`, `ui.next_actions`, `ui.review.badges`, `ui.onboarding.complete` | 55 frozen Python books in `crates/workspace/tests/data/vectors.json`; `tests/test_rust_workspace_shell.py` daemon/CLI bytes (JSON, table, plain), SQLite and SQLCipher, unchanged tables for reads, all tables after onboarding |
 | Secrets | `ui.secrets.init` | plaintext and missing-database books, dotenv credential migration, verify-only re-initialization; files, wire and all tables |
 | Cancellation | generic `cancel` | refusal oracle: unclassified in both runtimes, `unsupported_kind` before any handler |
+| Diagnostics | `ui.logs.snapshot`, `ui.egress.snapshot` | `tests/test_rust_daemon_diagnostics.py`: plaintext and locked/unlocked SQLCipher sessions, paging and argument refusals, all tables unchanged |
+| Update | `update` (status, enable, disable, check refusals), `verify-download` | `tests/test_rust_release_cli.py`: JSON, table and plain bytes, 21 signature/manifest/artifact cases; frozen Python vectors in `crates/release/tests/data/vectors.json` |
 
 Project creation and selection follow `_select_project_payload`: the desktop
 role is acquired before any passphrase probe, the target book opens before
@@ -15730,10 +15732,66 @@ Python's recursion limit fail closed with an internal error on both sides but
 at a different depth. In-product AI projections of these kinds remain in
 Python.
 
-Not yet native in this group set: `ui.logs.snapshot` and
-`ui.egress.snapshot` (they need a Rust RAM log ring and the egress ledger
-projection with allowlist and database-header proof; the shared redaction
-scanner should mirror the base's version and record the unmerged round-5h
-delta, `a12f3ad85`, as a follow-up), and the `update` and `verify-download`
-CLI leaves.
+### Diagnostics (group 4)
 
+The daemon keeps its own RAM log ring in `crates/daemon/src/diagnostics.rs`
+with Python's bounds: 5,000 records or 4 MiB, oldest first out, ids never
+reused, and `after_id` paging that reports an eviction gap. Records carry
+Python's request lifecycle messages (`request started`, `request finished`,
+`request failed`, `request crashed`) and field shapes. Every string passes the
+shared redaction scanner, and a field whose name is sensitive is stored as
+`[redacted]`. The scanner is the base's version; the unmerged round-5h delta
+(`a12f3ad85`) is a follow-up for both runtimes. Nothing is written to disk.
+The two snapshot kinds are not logged themselves and stay answerable while a
+refresh runs.
+
+`ui.egress.snapshot` projects the process-wide `kassiber-net` ledger
+(`Ledger::process()`; every product gate now records there) with Python's
+allowlist: the two built-in services, then the effective backends (dotenv,
+database, defaults, in Python's dictionary order), then enabled AI providers
+when a book is open. `allowlist_complete` is true only with an open book; a
+locked daemon reports the last merged backend view, as Python does. The
+database-header proof classifies the first 16 bytes without opening the
+book.
+
+### Update and release verification (group 6)
+
+The new `kassiber-release` crate holds the update preference, version
+ordering, release selection and `ssh-keygen -Y verify` flow. `update
+--status/--enable/--disable` and every refusal (offline mode first, then
+consent, which `KASSIBER_DISABLE_UPDATE_CHECK` withdraws) contact nothing; the process
+oracle runs them with the strict socket guard armed. `update --check` fetches
+only after that explicit action, through the `kassiber-net` gate with
+`Consent::explicit_trigger`, a 5-second timeout and a 2 MiB cap.
+`verify-download` checks the pinned fingerprint before running `ssh-keygen`
+(found on `PATH`, run in a temporary directory with a 30-second limit), then
+the signed manifest name and version, then the artifact digest. Inputs are
+opened without following a final symlink. Error codes, messages and hints
+match `release_verification.py`.
+
+| Surface | Rust requests in the oracles | Python fallback |
+| --- | ---: | ---: |
+| `ui.logs.snapshot` | 39 | 0 |
+| `ui.egress.snapshot` | 19 | 0 |
+| `update` CLI | 39 | 0 |
+| `verify-download` CLI | 21 | 0 |
+
+The diagnostics counts are the requests of one clean run of
+`tests/test_rust_daemon_diagnostics.py` (each session asserts the Rust
+daemon); the CLI counts come from its `KASSIBER_RELEASE_COUNTS` witness.
+
+Documented differences from Python:
+
+- Rust log records name `crates/daemon/src/lib.rs` and its line; the oracle
+  normalizes file, line, timestamps and durations.
+- A `request crashed` record carries the panic message, not a Python
+  traceback.
+- Native egress rows use socket-level operations (`dns.resolve`,
+  `socket.connect`, `proxy.connect`, `http.request`, `socket.write`,
+  `process.spawn`).
+- `update --check` is recorded in the process egress ledger (subsystem
+  `update`); Python's fetch does not record. Both leave it outside
+  `KASSIBER_NO_EGRESS` and refuse it in offline mode, as designed.
+- The live GitHub fetch has no process oracle, since the tests must not
+  contact GitHub. Parsing, selection, ordering and rendering are covered by
+  Python vectors and unit tests.
