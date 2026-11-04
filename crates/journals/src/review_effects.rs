@@ -5,7 +5,8 @@ use kassiber_envelope::{dict, get, s, set, AppError};
 use kassiber_pydecimal::{Context, Decimal};
 use kassiber_pyjson::Value;
 use kassiber_store::rusqlite::Connection;
-use kassiber_transfers::{review_operations, sql, Scope};
+use kassiber_transfers::review_support::sql;
+use kassiber_transfers::{review_operations, Scope};
 use std::collections::{BTreeMap, BTreeSet};
 
 type Result<T> = std::result::Result<T, AppError>;

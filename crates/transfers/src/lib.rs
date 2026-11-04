@@ -18,12 +18,9 @@ mod pairing_commands;
 mod payout_create;
 mod payout_delete;
 mod records;
-#[cfg(feature = "test-harness")]
 pub mod review_artifact;
-#[cfg(any(test, feature = "test-harness"))]
 pub mod review_cases;
 mod review_context;
-#[cfg(feature = "test-harness")]
 pub mod review_operations;
 pub mod review_reading;
 mod rules;
@@ -169,9 +166,12 @@ fn integer(value: &Value) -> Result<kassiber_pyjson::BigInt> {
     }
 }
 
-#[cfg(feature = "test-harness")]
 #[doc(hidden)]
 pub mod review_support {
+    /// The review workflow's row and binding helpers, without exposing the module.
+    pub mod sql {
+        pub use crate::sql::{bind, error, rows};
+    }
     pub fn parse_json(text: &str) -> super::Result<super::Value> {
         super::parse_json(text)
     }

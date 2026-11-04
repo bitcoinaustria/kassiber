@@ -972,7 +972,12 @@ impl Daemon {
             if let Some(locked) = self.open_lazily(&request_id)? {
                 return Ok((Some(locked), false));
             }
-            let payload = review::execute(self.book_mut()?.as_mut(), &kind_text, args.as_ref())?;
+            // A non-AppError reference failure (`internal_error`) is unhandled there too.
+            let payload = review::execute(self.book_mut()?.as_mut(), &kind_text, args.as_ref())
+                .map_err(|error| match error.code.as_str() {
+                    "internal_error" => Failure::Unhandled(error),
+                    _ => Failure::App(error),
+                })?;
             return Ok((
                 Some(with_request_id(success(&kind_text, payload), &request_id)),
                 false,

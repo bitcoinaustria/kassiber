@@ -415,6 +415,17 @@ pub trait Book: Send {
     fn transfers(&mut self, operation: &str, _args: &Value) -> Result<Value, AppError> {
         Err(not_implemented("transfers", operation))
     }
+    /// The review workflow: current cases, input requests, RAM-only plans,
+    /// atomic application and stored receipts. `args` carries the optional
+    /// `workspace`/`profile` selectors; `authored_source` labels applied history.
+    fn review(
+        &mut self,
+        operation: &str,
+        _args: &Value,
+        _authored_source: &str,
+    ) -> Result<Value, AppError> {
+        Err(not_implemented("review", operation))
+    }
     /// Local metadata edits and append-only history state.
     fn metadata(
         &mut self,

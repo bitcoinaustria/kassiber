@@ -5,8 +5,9 @@ use kassiber_envelope::{dict, get, s, set, AppError};
 use kassiber_pyjson::{PyStr, Value};
 use kassiber_store::rusqlite::Connection;
 use kassiber_transactions::metadata::{self, Command, GroupedUpdate, PricingUpdate};
+use kassiber_transfers::review_support::sql;
 use kassiber_transfers::review_support::{text, value};
-use kassiber_transfers::{review_cases, review_support, sql, Scope, Sources};
+use kassiber_transfers::{review_cases, review_support, Scope, Sources};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Default)]
@@ -357,7 +358,7 @@ mod tests {
             &conn,
             &scope,
             &operations,
-            &sql::SystemSources,
+            &kassiber_transfers::SystemSources,
             "user",
             cases,
             |_| {

@@ -1645,6 +1645,38 @@ impl Book for RealBook {
             args,
         )
     }
+    fn review(
+        &mut self,
+        operation: &str,
+        args: &Value,
+        authored_source: &str,
+    ) -> Result<Value, AppError> {
+        let (workspace_id, profile_id) = self.resolve_scope(
+            kassiber_envelope::get(args, "workspace"),
+            kassiber_envelope::get(args, "profile"),
+        )?;
+        #[cfg(feature = "test-harness")]
+        let sources = journals::Sources;
+        #[cfg(not(feature = "test-harness"))]
+        let sources = kassiber_transfers::SystemSources;
+        kassiber_journals::review_workflow::execute(
+            self.conn()?,
+            &kassiber_transfers::Scope {
+                workspace_id: &workspace_id,
+                profile_id: &profile_id,
+            },
+            operation,
+            args,
+            authored_source,
+            &sources,
+        )
+        .map_err(|error| match error {
+            kassiber_journals::review_workflow::Error::Service(error) => error,
+            kassiber_journals::review_workflow::Error::Build(refusal) => {
+                kassiber_journals::service::application_error(refusal)
+            }
+        })
+    }
     fn metadata(
         &mut self,
         workspace: Option<&Value>,

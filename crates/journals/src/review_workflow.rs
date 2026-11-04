@@ -1,15 +1,18 @@
-//! Unregistered native review composition. Loader acceptance still gates routes.
+//! Native review composition behind `review` and `ui.review.*`: current cases,
+//! input requests, RAM-only plans, atomic application and stored receipts.
 pub use crate::review_apply::{apply, Apply};
 use crate::{
     pipeline::{self, Prepared},
     review_effects, review_simulation, Refusal,
 };
-use kassiber_envelope::{dict, s, AppError};
-use kassiber_pyjson::Value;
+use kassiber_envelope::{dict, get, s, set, AppError};
+use kassiber_pyjson::{PyStr, Value};
 use kassiber_store::rusqlite::Connection;
+use kassiber_transfers::review_support::sql;
 use kassiber_transfers::review_support::value;
 use kassiber_transfers::{review_artifact, review_operations, review_support, Sources};
-use kassiber_transfers::{review_cases, sql, Scope};
+use kassiber_transfers::{review_cases, Scope};
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Keep reference exception families and attributes intact through composition.
 #[derive(Debug)]
@@ -204,4 +207,172 @@ pub fn cases(
             })
             .collect()
     })
+}
+
+fn invalid_input(message: &str) -> Error {
+    AppError::new("validation", message).into()
+}
+
+/// Describe missing user input for current canonical cases. The packet is a
+/// stable correlation ID for the interface; it grants no authority and writes
+/// nothing, so a stale case refuses rather than becoming a resolution.
+pub fn request_input(
+    conn: &Connection,
+    scope: &Scope<'_>,
+    args: &Value,
+    as_of: &str,
+) -> Result<Value, Error> {
+    let action = value(args, "action");
+    if !matches!(&action, Value::Str(action) if ["connect_wallet", "import_history", "attach_evidence"].iter().any(|known| action.is(known)))
+    {
+        return Err(invalid_input("Unsupported review input action"));
+    }
+    let case_ids = match get(args, "case_ids") {
+        Some(Value::List(ids)) => ids.as_slice(),
+        _ => &[],
+    };
+    let prefix: Vec<u32> = "quarantine:".chars().map(u32::from).collect();
+    let ids: Vec<PyStr> = case_ids
+        .iter()
+        .filter_map(|id| match id {
+            Value::Str(id) => Some(id.clone()),
+            _ => None,
+        })
+        .filter(|id| {
+            let points: Vec<u32> = id.code_points().collect();
+            points.starts_with(&prefix) && points.len() <= 300
+        })
+        .collect();
+    let distinct: BTreeSet<&PyStr> = ids.iter().collect();
+    if !(1..=20).contains(&case_ids.len())
+        || ids.len() != case_ids.len()
+        || distinct.len() != ids.len()
+    {
+        return Err(invalid_input(
+            "Review input requires 1 to 20 distinct canonical case IDs",
+        ));
+    }
+    if action == s("attach_evidence") && ids.len() != 1 {
+        return Err(invalid_input(
+            "Attach evidence requires exactly one review case",
+        ));
+    }
+    let explanation = match get(args, "explanation") {
+        None | Some(Value::Null) => Value::Null,
+        Some(Value::Str(text))
+            if (1..=1000).contains(&kassiber_pytext::strip_py(text).code_points().count())
+                && !text
+                    .code_points()
+                    .any(|point| point < 32 && point != 10 && point != 9) =>
+        {
+            Value::Str(kassiber_pytext::strip_py(text))
+        }
+        Some(_) => {
+            return Err(invalid_input(
+                "Review input explanation must be bounded plain text",
+            ))
+        }
+    };
+    let expected = value(args, "expected_input_version");
+    let _read = if conn.is_autocommit() {
+        Some(conn.unchecked_transaction().map_err(sql::error)?)
+    } else {
+        None
+    };
+    let current = profile(conn, scope)?;
+    review_support::require_input_version(conn, scope, &expected)?;
+    let prepared = prepare(conn, scope, as_of)?;
+    let state = prepared.review_state(conn, derived_ids())?;
+    let reasons: BTreeMap<PyStr, String> = state
+        .quarantines
+        .iter()
+        .map(|row| {
+            (
+                PyStr::from(kassiber_custody::codec::pystr(&row.transaction_id).as_str()),
+                row.reason.clone(),
+            )
+        })
+        .collect();
+    let mut sorted = ids;
+    sorted.sort();
+    let mut cases = Vec::new();
+    for case_id in sorted {
+        let transaction_id = PyStr::from_code_points(case_id.code_points().skip(prefix.len()))
+            .expect("code points of a valid string");
+        let row = sql::rows(
+            conn,
+            "SELECT id AS transaction_id, wallet_id, direction, asset, occurred_at FROM transactions WHERE id = ? AND profile_id = ?",
+            kassiber_store::rusqlite::params![
+                review_support::reference_bind(&Value::Str(transaction_id.clone()), 1)?,
+                scope.profile_id
+            ],
+        )?
+        .into_iter()
+        .next();
+        let (Some(mut row), Some(reason)) = (row, reasons.get(&transaction_id)) else {
+            return Err(AppError::new(
+                "review_case_stale",
+                "Requested review case is no longer current",
+            )
+            .into());
+        };
+        set(&mut row, "case_id", Value::Str(case_id));
+        set(&mut row, "reason", s(reason.as_str()));
+        cases.push(row);
+    }
+    let mut packet = dict([
+        ("schema_version", 1.into()),
+        ("workspace_id", value(&current, "workspace_id")),
+        ("profile_id", value(&current, "id")),
+        ("input_version", expected),
+        ("action", action),
+        ("cases", Value::List(cases)),
+        ("explanation", explanation),
+    ]);
+    let digest = review_operations::digest(&packet)?;
+    set(&mut packet, "request_id", s(digest));
+    Ok(packet)
+}
+
+/// The production composition root shared by the CLI and the daemon. Callers
+/// admit their own argument shapes; `authored_source` labels applied history.
+/// Every build samples the clock once per request; nothing here reaches the
+/// network, and only `review.apply` writes.
+pub fn execute(
+    conn: &Connection,
+    scope: &Scope<'_>,
+    operation: &str,
+    args: &Value,
+    authored_source: &str,
+    sources: &dyn Sources,
+) -> Result<Value, Error> {
+    if operation == "review.receipt" {
+        return Ok(kassiber_transfers::execute(conn, scope, operation, args)?);
+    }
+    let as_of = sources.now_precise(conn)?;
+    match operation {
+        "review.cases" => cases(conn, scope, args, &as_of, derived_ids()),
+        "review.request_input" => request_input(conn, scope, args, &as_of),
+        "review.plan" => plan(
+            conn,
+            scope,
+            &value(args, "operations"),
+            &value(args, "expected_input_version"),
+            &as_of,
+            sources,
+        ),
+        "review.apply" => apply(
+            conn,
+            scope,
+            Apply {
+                artifact: &value(args, "artifact"),
+                idempotency_key: &value(args, "idempotency_key"),
+                authored_source,
+                commit: true,
+            },
+            &as_of,
+            sources,
+        ),
+        _ => Err(AppError::new("validation", "Unsupported review command").into()),
+    }
 }

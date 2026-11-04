@@ -9,19 +9,14 @@ pub mod loader;
 mod model;
 pub mod native;
 pub mod persistence;
-#[cfg(any(test, feature = "test-harness"))]
 pub mod pipeline;
 pub mod prebuild;
 pub mod process;
 mod quarantine;
 mod render;
-#[cfg(feature = "test-harness")]
 mod review_apply;
-#[cfg(feature = "test-harness")]
 pub mod review_effects;
-#[cfg(feature = "test-harness")]
 mod review_simulation;
-#[cfg(feature = "test-harness")]
 pub mod review_workflow;
 pub mod scalar;
 pub mod service;
