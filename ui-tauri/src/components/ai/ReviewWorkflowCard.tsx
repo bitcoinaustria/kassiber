@@ -59,6 +59,7 @@ const OPERATION_TITLES = {
   price_override: "review.op.price_override", exclude: "review.op.exclude", unpair: "review.op.unpair",
   pair: "review.op.pair", dismiss_pair: "review.op.dismiss_pair", custody_gap: "review.op.custody_gap",
   kind_override: "review.op.kind_override", custody_component: "review.op.custody_component",
+  undismiss_pair: "review.op.undismiss_pair", accept_coarse_prices: "review.op.accept_coarse_prices",
 } as const;
 
 function ReviewOperation({ operation }: { operation: ReviewRecord }) {
@@ -70,6 +71,8 @@ function ReviewOperation({ operation }: { operation: ReviewRecord }) {
   const reason = reviewText(operation.reason ?? request?.reason);
   const detail = operation.type === "custody_gap" ? [operation.action, operation.classification]
     : operation.type === "kind_override" ? [operation.kind ?? t("review.op.kindCleared")]
+    : operation.type === "accept_coarse_prices" ? [Array.isArray(operation.transaction_ids)
+      ? t("review.op.transactions", { count: operation.transaction_ids.length }) : t("review.op.allCoarse")]
       : [operation.pair_kind, operation.policy, operation.expires_in_days !== undefined
         ? t("review.op.expiresDays", { count: Number(operation.expires_in_days) }) : undefined];
   const detailText = detail.filter((value) => value !== undefined && value !== null).map(reviewText).join(" · ");
@@ -160,7 +163,7 @@ export function ReviewReceiptCard({ receipt }: { receipt: ReviewReceipt }) {
     <ReviewEffectsView before={receipt.before} after={receipt.verification} />
     <ReviewTaxDeltaView artifact={receipt} />
     <RemainingIssues effects={receipt.verification} />
-    <Button asChild variant="ghost" size="sm"><Link to="/quarantine"><ArrowUpRight className="size-3.5" aria-hidden="true" />{t("review.receipt.openQuarantine")}</Link></Button>
+    <Button asChild variant="ghost" size="sm"><Link to="/review"><ArrowUpRight className="size-3.5" aria-hidden="true" />{t("review.receipt.openQuarantine")}</Link></Button>
     <RawReview value={receipt} />
   </section>;
 }

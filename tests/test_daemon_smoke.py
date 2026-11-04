@@ -7209,7 +7209,10 @@ class DaemonSmokeTest(unittest.TestCase):
             ),
             mock.patch(
                 "kassiber.daemon.build_journal_events_list_snapshot",
-                return_value={"events": [], "summary": {"count": 0}},
+                return_value={
+                    "events": [{"id": "je-1", "explanationReference": {"entry_id": "je-1"}}],
+                    "summary": {"count": 1},
+                },
             ) as payload_mock,
         ):
             thread = threading.Thread(
@@ -7228,6 +7231,8 @@ class DaemonSmokeTest(unittest.TestCase):
         )
         self.assertTrue(results[0]["ok"])
         self.assertEqual(results[0]["envelope"]["kind"], "ui.journals.events.list")
+        # The calculation view's reference is a desktop affordance.
+        self.assertEqual(results[0]["envelope"]["data"]["events"], [{"id": "je-1"}])
 
     def test_transaction_graph_ai_tool_rejects_public_lookup_and_extra_arguments(self):
         runtime = AiToolRuntime(
@@ -7673,6 +7678,8 @@ class DaemonSmokeTest(unittest.TestCase):
                 )
                 self.assertTrue(data["safety"]["local_only_reads"])
                 self.assertFalse(data["safety"]["network_contacted"])
+                # The desktop's calculation references stay off the AI path.
+                self.assertNotIn("explanationReference", json.dumps(data))
 
                 _write_payload(
                     proc,
@@ -9033,6 +9040,25 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(processed["data"]["processed_transactions"], 1)
             self.assertEqual(processed["data"]["quarantined"], 0)
 
+            # The Review screen recalculates without automatic pairing; the
+            # open candidate count is cached all the same.
+            _write_payload(
+                proc,
+                {"request_id": "process-2", "kind": "ui.journals.process", "args": {"auto_pair": False}},
+            )
+            manual = _read_until_kind(proc, "ui.journals.process")
+            self.assertNotIn("auto_pair", manual["data"])
+            _write_payload(proc, {"request_id": "badges-1", "kind": "ui.review.badges"})
+            badges = _read_payload_timeout(proc)
+            self.assertEqual(badges["data"]["swaps"], 0)
+            for bad_args in ({"auto_pair": "no"}, {"rebuild": True}):
+                _write_payload(
+                    proc,
+                    {"request_id": "process-bad", "kind": "ui.journals.process", "args": bad_args},
+                )
+                rejected = _read_until_kind(proc, "error")
+                self.assertEqual(rejected["error"]["code"], "validation")
+
             _write_payload(proc, {"request_id": "journals-1", "kind": "ui.journals.snapshot"})
             journals = _read_payload_timeout(proc)
             self.assertEqual(journals["kind"], "ui.journals.snapshot")
@@ -9057,6 +9083,8 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(journal_events["kind"], "ui.journals.events.list")
             self.assertEqual(journal_events["data"]["summary"]["count"], 1)
             self.assertEqual(journal_events["data"]["events"][0]["wallet"], "Cold")
+            # An acquisition has no gain to explain.
+            self.assertIsNone(journal_events["data"]["events"][0]["explanationReference"])
             self.assertEqual(
                 journal_events["data"]["events"][0]["quantityMsat"],
                 10_000_000_000,

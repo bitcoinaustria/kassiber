@@ -111,33 +111,22 @@
     "openStat": "Open {{title}}",
     "bitcoinBalance": "Bitcoin balance",
     "title": {
-      "portfolioValue": "Portfolio value",
-      "transactions": "Transactions",
-      "reviewedEvents": "Reviewed events",
-      "openReview": "Open review",
-      "connections": "Connections"
+      "portfolioValue": "Portfolio value"
     },
     "comparison": {
-      "vsLastMonth": "vs Last Month",
-      "bitcoinBalance": "Bitcoin balance",
       "vsCostBasis": "vs cost basis",
-      "fromLoadedRows": "from loaded rows",
-      "loadedRows": "loaded rows",
-      "configured": "configured",
-      "journalQuarantine": "journal quarantine"
+      "fromLoadedRows": "from loaded rows"
     },
     "status": {
-      "current": "Current",
       "clear": "Clear",
       "estimate": "Estimate",
-      "loaded": "Loaded",
-      "configured": "Configured",
       "needsJournals": "Needs journals",
       "reviewQuarantines_one": "{{count}} quarantine",
-      "reviewQuarantines_other": "{{count}} quarantines",
-      "reviewRequired": "Review required",
-      "open": "Open"
-    }
+      "reviewQuarantines_other": "{{count}} quarantines"
+    },
+    "heldIn_zero": "No wallet holds bitcoin yet",
+    "heldIn_one": "in {{count}} wallet",
+    "heldIn_other": "in {{count}} wallets"
   },
   "welcome": {
     "reprocessingJournals": "Reprocessing journals",
@@ -184,97 +173,17 @@
       "detail_other": "{{count}} transactions without a price"
     }
   },
-  "health": {
-    "title": "Book readiness",
-    "subtitle": "Reports, review, and sources",
-    "panelAria": "Books health",
-    "journals": {
-      "title": "Journal state",
-      "reprocess": "Reprocess",
-      "current": "Current",
-      "reprocessing": "Reprocessing",
-      "detailReprocess": "Reports should wait for a fresh journal run.",
-      "detailCurrent": "Reports are ready from the current journal state."
-    },
-    "review": {
-      "title": "Review queue",
-      "open_one": "{{count}} open",
-      "open_other": "{{count}} open",
-      "clear": "Clear",
-      "detailOpen": "Resolve quarantined rows before tax reporting.",
-      "detailClear": "No quarantined transactions in this book."
-    },
-    "connections": {
-      "title": "Connections",
-      "issues_one": "{{count}} issue",
-      "issues_other": "{{count}} issues",
-      "refreshing": "{{count}} refreshing",
-      "current": "{{synced}}/{{total}} current",
-      "none": "None yet",
-      "detail_one": "{{count}} configured source",
-      "detail_other": "{{count}} configured sources",
-      "detailEmpty": "Add a watch-only source, exchange, or import source."
-    },
-    "primary": {
-      "reviewQuarantines": {
-        "title": "Review quarantines",
-        "detail": "Clear missing prices or unsupported semantics first."
-      },
-      "checkConnections": {
-        "title": "Check connections",
-        "detail": "One or more sources need attention before the next sync."
-      },
-      "openReports": {
-        "title": "Open reports",
-        "detail": "Move from overview into the report package for the current book."
-      },
-      "addConnection": {
-        "title": "Add a connection",
-        "detail": "Connect a source or import rows to start the book."
-      }
-    },
-    "basis": {
-      "title": "Cost basis",
-      "custody": "Custody gaps open",
-      "missingPrices_one": "{{count}} missing price",
-      "missingPrices_other": "{{count}} missing prices",
-      "detail": "Cost basis and reports stay incomplete until resolved."
-    }
-  },
-  "drivers": {
-    "title": "Balance Drivers",
-    "aria": "Balance drivers",
-    "latestTransactions_one": "Latest {{count}} transaction",
-    "latestTransactions_other": "Latest {{count}} transactions",
-    "viewTransactions": "View {{label}} transactions",
-    "incoming": "Incoming",
-    "outgoing": "Outgoing",
-    "swapVolume": "Swap volume",
-    "fees": "Fees"
-  },
   "holdings": {
     "title": "Holdings by Source",
     "aria": "Holdings by source",
-    "btcAllocation": "BTC allocation",
     "vsCostBasis": "vs cost basis",
-    "viewConnections": "View connections",
-    "moreOptions": "More options",
-    "onlyActiveSource": "Only active source",
-    "total": "Total",
-    "rail": {
-      "onchain": "On-chain",
-      "lightning": "Lightning",
-      "liquid": "Liquid",
-      "other": "Other"
-    },
-    "otherSources": "Other sources"
+    "viewConnections": "View wallets",
+    "otherSources": "Other sources",
+    "empty": "No wallet holds bitcoin yet."
   },
   "recentTx": {
     "title": "Recent Transactions",
     "showAll": "Show all",
-    "filter": "Filter",
-    "filterByStatus": "Filter by Status",
-    "allStatuses": "All Statuses",
     "empty": "No transactions found.",
     "unassigned": "Unassigned"
   },
@@ -337,7 +246,7 @@
       "custody": "Custody gaps open",
       "missingPrices_one": "{{count}} transaction without a price",
       "missingPrices_other": "{{count}} transactions without a price",
-      "openQuarantine": "Quarantine",
+      "openQuarantine": "Review",
       "openJournals": "Journals"
     },
     "series": {

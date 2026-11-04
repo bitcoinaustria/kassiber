@@ -449,8 +449,8 @@
       "clearFlow": "Filter {{label}} entfernen",
       "clearPayment": "Filter {{label}} entfernen",
       "clearWithFees": "Filter „Mit Gebühren“ entfernen",
-      "transactionSet": "Cluster-Ereignisse: {{count}}",
-      "clearTransactionSet": "Cluster-Ereignisfilter entfernen"
+      "transactionSet": "{{count}} ausgewählt",
+      "clearTransactionSet": "Auswahl aufheben"
     },
     "empty": "Keine Transaktionen gefunden, die deinen Filtern entsprechen.",
     "value": {
@@ -920,6 +920,9 @@
     "gainLossPending": "Journallauf ausstehend",
     "gainLossHint": "Realisierter Gewinn/Verlust aus der Steuer-Engine nach verarbeiteten Journalen.",
     "priceEvidence": "Preisbeleg",
+    "calculation": "Berechnung",
+    "calculationHint": "Kurse, Bestände und Anschaffungskosten hinter diesem Ergebnis, wie die Steuerberechnung sie festgehalten hat.",
+    "explainCalculation": "{{label}} erklären",
     "sourceMissing": "Quelle fehlt",
     "narrative": {
       "received": "erhalten",

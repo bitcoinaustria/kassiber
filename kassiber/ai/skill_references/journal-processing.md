@@ -89,7 +89,8 @@ array of typed operations, for example after verifying the stated invoice:
 ```
 
 A price operation requires exactly one of `fiat_rate` or `fiat_value`, as an exact
-decimal string, plus an audit reason. `exclude` requires `transaction_id` and a
+decimal string in the book's fiat currency (the cases' `fiat_currency`), plus an
+audit reason. Convert a receipt in another currency first and say so in the reason. `exclude` requires `transaction_id` and a
 reason establishing why the row belongs outside accounting. Never use exclusion
 to hide missing evidence, a custody gap, or a transfer. `unpair` takes the
 case's `pair.pair_id`, its `pair.pair_fingerprint` as `expected_fingerprint`,
@@ -119,6 +120,13 @@ covers everything the user agreed to:
   `classify_residual` with `classification`), `gap_id`, and a reason.
 - `kind_override`: an inbound kind (or null) for a non-quarantined inbound
   transaction outside an active custody review.
+- `accept_coarse_prices`: a reason and optional `transaction_ids`. It accepts
+  the daily or coarser price of `pricing_review_required` cases as it stands,
+  bound to that exact price; a changed price is held again. Without ids the
+  plan names every such case; a chat plan holds about 1000, so name batches
+  of ids in a larger book. Propose it only after the user said the
+  approximate prices are acceptable, and offer `price_override` for any price
+  they want corrected instead.
 
 Each operation runs against the book as the previous ones left it. Plan is the
 what-if path: `before`/`after` carry per-year `tax` figures (realized gain/loss,

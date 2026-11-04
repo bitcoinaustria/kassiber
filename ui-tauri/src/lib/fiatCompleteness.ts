@@ -150,10 +150,10 @@ export function isBasisIncompleteAt(
 /** Where the user resolves the gap: journals when stale, else the quarantine. */
 export function completenessHref(
   completeness: FiatCompleteness,
-): "/journals" | "/quarantine" {
+): "/journals" | "/review" {
   return completeness.state === "stale" ||
     (completeness.quarantineCount === 0 &&
       completeness.reasons.includes("custody_unresolved"))
     ? "/journals"
-    : "/quarantine";
+    : "/review";
 }

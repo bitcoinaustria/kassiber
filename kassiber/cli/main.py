@@ -5164,7 +5164,12 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
     if args.command == "journals":
         if args.journals_command == "process":
             if not args.auto_pair:
-                return emit(args, process_journals(conn, args.workspace, args.profile))
+                processed = process_journals(conn, args.workspace, args.profile)
+                _, journal_profile = resolve_scope(conn, args.workspace, args.profile)
+                # A pair or dismissal made since the last run leaves the
+                # shared review count's cached moves behind otherwise.
+                daemon_freshness.recount_transfer_candidates(conn, str(journal_profile["id"]))
+                return emit(args, processed)
             _, journal_profile = resolve_scope(conn, args.workspace, args.profile)
             return emit(
                 args,

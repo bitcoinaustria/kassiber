@@ -27,7 +27,7 @@ export function notificationRouteFor(title: string): AppRoutePath | undefined {
     normalized.includes("quarantäne") ||
     normalized.includes("quarantaene")
   ) {
-    return "/quarantine";
+    return "/review";
   }
   if (normalized.includes("sync") || normalized.includes("wallet")) {
     return "/connections";

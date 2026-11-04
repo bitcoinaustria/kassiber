@@ -10,7 +10,7 @@ export function openLocalReference(reference: {
 }
 
 /** App pages an assistant visual may link to; anything else is not opened. */
-const APP_ROUTES = new Set(["/overview", "/reports", "/transactions", "/quarantine"]);
+const APP_ROUTES = new Set(["/overview", "/reports", "/transactions", "/review"]);
 
 export function openAppRoute(route: string) {
   if (typeof window === "undefined" || !APP_ROUTES.has(route)) return;

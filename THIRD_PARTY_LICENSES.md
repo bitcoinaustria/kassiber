@@ -118,10 +118,36 @@ a dependency. Each adapted file names its origin in a header comment.
 
 | Project | Files | Role | License |
 | --- | --- | --- | --- |
-| [T3 Code](https://github.com/pingdotgg/t3code) | `ui-tauri/src/components/ai/modelPickerSearch.ts`, `modelPickerKeys.ts`, `composerPromptHistory.ts`, `ModelPickerContent.tsx`, `ModelPickerSidebar.tsx`, `ModelListRow.tsx`, `ComposerControl.tsx`, `PendingApprovalRow.tsx`, `ComposerModePickers.tsx`, `providerIdentity.ts` (provider initials), the send/stop marks and action-button styles in `ui-tauri/src/components/ai-02.tsx`, `ui-tauri/src/components/kb/settings/AiProviderCard.tsx` and `aiProviderStatus.ts`, the add-provider wizard in `ui-tauri/src/components/kb/AiProviderForm.tsx`, the setup wizard's `ui-tauri/src/components/kb/Onboarding/stepper.tsx`, `frame.tsx` and the option card in `fields.tsx`, the right panel, its tabs and surface launcher in `ui-tauri/src/components/kb/assistant-panel/RightPanel.tsx` and its surfaces' frame in `surfaces/SurfaceLayout.tsx` and the sheet surface in `ui-tauri/src/components/ui/sheet.tsx`, the Settings modal in `ui-tauri/src/components/kb/settings/SettingsModal.tsx` and its rail in `SettingsNavigation.tsx`, and the composer surface, message surface, scrollbar and light-theme colour tokens in `ui-tauri/src/styles/globals.css` | Provider/model picker layout, ranked model search, keyboard navigation, favorites, composer controls, composer action buttons, ArrowUp prompt recall, the inline tool-approval row and the permission-mode picker (after T3 Code's pending-approval row, approval actions and runtime-mode select), the Settings → Assistant provider rows (row layout and the provider status vocabulary, after T3 Code's provider instance cards and `providerStatus.ts`), the setup wizard's layout (after T3 Code's welcome wizard, wizard step track and settings rows), the docked right panel with its tab strip, `+` menu, surface launcher and maximize control, surface toolbars, the diff-style change list and the log tail (after T3 Code's diff and terminal panels), a sheet on narrow windows (after T3 Code's `RightPanelTabs`, `PreviewPanelShell`, `PanelLayoutControls`, `RightPanelSheet` and sheet popup), Settings as a large modal over the page with a grouped category rail (after T3 Code's `AppRouteModal` and `SettingsSidebarNav`), the redesigned composer outline, sent-message surface, inline code and thin scrollbars, and the light theme's zinc palette (after T3 Code's default light theme). Copyright (c) 2026 T3 Tools Inc. | MIT |
+| [T3 Code](https://github.com/pingdotgg/t3code) | `ui-tauri/src/components/ai/modelPickerSearch.ts`, `modelPickerKeys.ts`, `composerPromptHistory.ts`, `ModelPickerContent.tsx`, `ModelPickerSidebar.tsx`, `ModelListRow.tsx`, `ComposerControl.tsx`, `PendingApprovalRow.tsx`, `ComposerModelTraits.tsx`, `ProviderModelPicker.tsx` (the trigger's trait marks, focusing the reasoning levels and the docked layout), `providerIdentity.ts` (provider initials), the send/stop marks and action-button styles in `ui-tauri/src/components/ai-02.tsx`, `ui-tauri/src/components/kb/settings/AiProviderCard.tsx` and `aiProviderStatus.ts`, the add-provider wizard in `ui-tauri/src/components/kb/AiProviderForm.tsx`, the setup wizard's `ui-tauri/src/components/kb/Onboarding/stepper.tsx`, `frame.tsx` and the option card in `fields.tsx`, the right panel, its tabs and surface launcher in `ui-tauri/src/components/kb/assistant-panel/RightPanel.tsx` and its surfaces' frame in `surfaces/SurfaceLayout.tsx` and the sheet surface in `ui-tauri/src/components/ui/sheet.tsx`, the Settings modal in `ui-tauri/src/components/kb/settings/SettingsModal.tsx` and its rail in `SettingsNavigation.tsx`, and the composer surface, message surface, scrollbar and light-theme colour tokens in `ui-tauri/src/styles/globals.css` | Provider/model picker layout, ranked model search, keyboard navigation, favorites, composer controls, composer action buttons, ArrowUp prompt recall, the inline tool-approval row, and the model picker's docked reasoning column, speed toggle and permission-mode menu (after T3 Code's pending-approval row, approval actions, runtime-mode select and `ComposerModelEffort.tsx`), the Settings → Assistant provider rows (row layout and the provider status vocabulary, after T3 Code's provider instance cards and `providerStatus.ts`), the setup wizard's layout (after T3 Code's welcome wizard, wizard step track and settings rows), the docked right panel with its tab strip, `+` menu, surface launcher and maximize control, surface toolbars, the diff-style change list and the log tail (after T3 Code's diff and terminal panels), a sheet on narrow windows (after T3 Code's `RightPanelTabs`, `PreviewPanelShell`, `PanelLayoutControls`, `RightPanelSheet` and sheet popup), Settings as a large modal over the page with a grouped category rail (after T3 Code's `AppRouteModal` and `SettingsSidebarNav`), the redesigned composer outline, sent-message surface, inline code and thin scrollbars, and the light theme's zinc palette (after T3 Code's default light theme). Copyright (c) 2026 T3 Tools Inc. | MIT |
 | [Simple Icons](https://simpleicons.org) | The Ollama mark in `ui-tauri/src/components/ai/providerBrandIcons.tsx` | Brand mark for Ollama providers in the model picker; the mark itself remains Ollama's trademark | CC0-1.0 |
 | [RP2](https://github.com/eprbell/rp2), through the [Kassiber-maintained fork](https://github.com/bitcoinaustria/rp2) | `tax-engine/core/src/austria.rs`, `swaps.rs`, and `pool.rs` | Rust translations of the fork's Austrian and moving-average plugins (`plugin/country/at.py`, `plugin/country/at_native_tax_engine.py`, `plugin/accounting_method/moving_average.py`, and `moving_average_at.py`, at the pinned `rp2` commit above): Austrian markers and regimes, swap pairing and the multi-asset runner, and the pool methods. Copyright 2026 bitcoinaustria | Apache-2.0 |
 | [oMLX](https://github.com/jundot/omlx) | The oMLX mark in `ui-tauri/src/components/ai/providerBrandIcons.tsx` | Brand mark for oMLX providers in the model picker, from the project's own icon | Apache-2.0 |
+
+### T3 Code license
+
+```text
+MIT License
+
+Copyright (c) 2026 T3 Tools Inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
 
 ## Practical notes
 

@@ -449,8 +449,8 @@
       "clearFlow": "Clear {{label}} filter",
       "clearPayment": "Clear {{label}} filter",
       "clearWithFees": "Clear with fees filter",
-      "transactionSet": "Cluster events: {{count}}",
-      "clearTransactionSet": "Clear cluster events filter"
+      "transactionSet": "{{count}} selected",
+      "clearTransactionSet": "Clear selection"
     },
     "empty": "No transactions found matching your filters.",
     "value": {
@@ -901,6 +901,9 @@
     "gainLossPending": "Pending journal run",
     "gainLossHint": "Realized gain/loss from the tax engine after journals are processed.",
     "priceEvidence": "Price evidence",
+    "calculation": "Calculation",
+    "calculationHint": "The prices, holdings, and cost basis behind this gain, as the tax engine recorded them.",
+    "explainCalculation": "Explain {{label}}",
     "sourceMissing": "Source missing",
     "narrative": {
       "received": "received",

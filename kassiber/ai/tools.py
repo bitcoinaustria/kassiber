@@ -1159,10 +1159,12 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ToolEntry(
         name="ui.reports.capital_gains",
         description=(
-            "Read realized gains for one tax year: full-year totals, Austrian "
-            "Kennzahl rows, and the newest disposal/income rows with transaction "
-            "id, asset, msat, cost, proceeds, gain and Austrian category. Rows are "
-            "journal entries, not acquisition lots. Defaults to the latest year."
+            "Read realized gains for one tax year: full-year totals, a breakdown "
+            "by Austrian field or holding period, Austrian Kennzahl rows, and the "
+            "newest disposal/income rows with transaction id, asset, msat, cost, "
+            "proceeds, gain and Austrian category. Rows are journal entries, not "
+            "acquisition lots. With an asset, totals, breakdown and rows cover that "
+            "asset; Kennzahl rows stay book-wide. Defaults to the latest year."
         ),
         parameters={
             "type": "object",
@@ -1325,7 +1327,8 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
             "and income such as mining or staking), with proceeds, cost basis and "
             "gain/loss, provisional while report blockers exist. Austrian EUR "
             "books also get indicative_tax: the core's "
-            "27.5% estimate, withheld while report blockers exist. Quote it with "
+            "27.5% estimate, withheld while report blockers exist and "
+            "not_applicable (no rate) for years before 2022. Quote it with "
             "its notes; never apply a tax rate yourself."
         ),
         parameters={
@@ -3301,7 +3304,7 @@ _EXPANDED_TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ),
     ToolEntry(
         name="ui.review.badges",
-        description="Read cheap unresolved quarantine, stale-journal, and transfer-review counts.",
+        description="Read cheap unresolved quarantine, stale-journal, and transfer-review counts, and the Review screen's total.",
         parameters=_EMPTY_OBJECT_SCHEMA,
         kind_class="read_only",
         wire_name="ui_review_badges",
@@ -3984,12 +3987,13 @@ _REVIEW_OPERATIONS_SCHEMA = {
     "items": {
         "type": "object", "additionalProperties": False, "required": ["type"],
         "properties": {
-            "type": {"type": "string", "enum": ["price_override", "exclude", "custody_component", "unpair", "pair", "dismiss_pair", "undismiss_pair", "custody_gap", "kind_override"]},
+            "type": {"type": "string", "enum": ["price_override", "exclude", "custody_component", "unpair", "pair", "dismiss_pair", "undismiss_pair", "custody_gap", "kind_override", "accept_coarse_prices"]},
             "transaction_id": {"type": "string", "minLength": 1},
+            "transaction_ids": {"type": "array", "minItems": 1, "maxItems": 1000, "items": {"type": "string", "minLength": 1}, "description": "accept_coarse_prices only: cases with reason pricing_review_required whose coarse price the user accepted as it stands. Omit to accept every such case; the plan names them. A plan for chat holds about 1000 ids; name batches for larger books. Propose it only after the user said the approximate prices are acceptable."},
             "pair_id": {"type": "string", "minLength": 1, "description": "For unpair only: the case's pair.pair_id. Propose it only after the user explicitly confirmed this pair is not one movement. pair_txids_differ is a hint, not proof: a hop through a wallet the book does not track also has two txids, and unpairing it books a disposal plus a new acquisition. Never unpair to clear a hold."},
             "expected_fingerprint": {"type": "string", "minLength": 1, "description": "For unpair only: the case's pair.pair_fingerprint, unchanged, as the user confirmed it. A pair revised or replaced since is refused with review_case_changed; read the case again and ask the user again."},
-            "fiat_rate": {"type": "string", "description": "Exact positive decimal; use this OR fiat_value."},
-            "fiat_value": {"type": "string", "description": "Exact nonnegative decimal; use this OR fiat_rate."},
+            "fiat_rate": {"type": "string", "description": "Exact positive decimal per unit, in the book's fiat currency (the cases' fiat_currency) whatever the row was imported in; use this OR fiat_value."},
+            "fiat_value": {"type": "string", "description": "Exact nonnegative decimal total, in the book's fiat currency (the cases' fiat_currency) whatever the row was imported in; use this OR fiat_rate."},
             "out_transaction_id": {"type": "string", "minLength": 1, "description": "pair/dismiss_pair/undismiss_pair: outbound leg."},
             "in_transaction_id": {"type": "string", "minLength": 1, "description": "pair/dismiss_pair/undismiss_pair: inbound leg."},
             "pair_kind": {"type": "string", "description": "pair: a ui_transfers_pair kind (default manual)."},
@@ -4360,7 +4364,7 @@ def select_tool_capabilities(
         selected.update(str(item) for item in requested if str(item) in TOOL_CAPABILITY_NAMES)
 
     haystack = f"{route} {' '.join(recent_user_messages)}"
-    if _continues_review_checkpoint(messages, latest) or any(
+    if route == "/review" or _continues_review_checkpoint(messages, latest) or any(
         word in haystack for word in ("quarantine", "quarantäne", "quarantaene", "review cases", "review receipt", "accounting review")
     ):
         # Evidence, wallet and report words within a repair request should not

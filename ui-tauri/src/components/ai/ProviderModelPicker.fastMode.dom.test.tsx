@@ -1,10 +1,10 @@
 // @vitest-environment happy-dom
 //
-// The Fast mode toggle in the composer's traits menu: shown only for a model
-// that advertises fast mode, worded from the model, marked on the trigger when
-// on, and never a reason to contact a provider.
+// The Standard | Fast toggle in the model picker's footer: shown only for a
+// model that advertises fast mode, worded from the model, marked on the
+// trigger when on, and never a reason to contact a provider.
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -110,6 +110,7 @@ function mount(
         showThinkingEffort
         fastMode={false}
         onFastModeChange={onFastModeChange}
+        open
         {...props}
       />
     </QueryClientProvider>,
@@ -117,12 +118,12 @@ function mount(
   return { onFastModeChange };
 }
 
-async function openTraits(name: RegExp) {
-  const trigger = screen.getByRole("button", { name });
-  await act(async () => {
-    fireEvent.pointerDown(trigger, { button: 0, pointerType: "mouse" });
-  });
-  return trigger;
+function speedToggle(): HTMLElement | null {
+  return screen.queryByRole("radiogroup", { name: "Speed" });
+}
+
+function trigger(): HTMLElement {
+  return document.querySelector<HTMLElement>("[data-chat-provider-model-picker]")!;
 }
 
 describe("Fast mode toggle", () => {
@@ -131,40 +132,74 @@ describe("Fast mode toggle", () => {
 
   it("offers fast mode with the model's own wording and reports the choice", async () => {
     const { onFastModeChange } = mount({ provider: "codex", model: "gpt-5.4" });
-    await openTraits(/Reasoning effort/);
-    const toggle = screen.getByRole("menuitemcheckbox", { name: /Fast mode/ });
-    expect(toggle.textContent).toContain("2x speed, increased usage");
-    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    const toggle = speedToggle()!;
+    const standard = within(toggle).getByRole("radio", { name: "Standard" });
+    const fast = within(toggle).getByRole("radio", { name: "Fast" });
+    expect(standard.getAttribute("aria-checked")).toBe("true");
+    expect(fast.getAttribute("aria-checked")).toBe("false");
+    expect(fast.getAttribute("title")).toBe("2x speed, increased usage");
     await act(async () => {
-      fireEvent.click(toggle);
+      fireEvent.click(fast);
     });
     expect(onFastModeChange).toHaveBeenCalledWith(true);
     expect(mocks.invoke).not.toHaveBeenCalled();
   });
 
-  it("marks the trigger when fast mode is on", () => {
+  it("keeps the billing note in sight while Fast is on", () => {
+    mount({ provider: "codex", model: "gpt-5.4" });
+    const note = document.querySelector<HTMLElement>("[data-fast-mode-hint]")!;
+    expect(note.hidden).toBe(true);
+    const fast = within(speedToggle()!).getByRole("radio", { name: "Fast" });
+    expect(fast.getAttribute("aria-describedby")).toBe(note.id);
+    cleanup();
+
     mount({ provider: "codex", model: "gpt-5.4" }, { fastMode: true });
-    const trigger = screen.getByRole("button", { name: /Reasoning effort: Auto, Fast/ });
-    expect(trigger.querySelector("[data-fast-mode-indicator]")).not.toBeNull();
+    const shown = document.querySelector<HTMLElement>("[data-fast-mode-hint]")!;
+    expect(shown.hidden).toBe(false);
+    expect(shown.textContent).toBe("2x speed, increased usage");
   });
 
-  it("hides the toggle for a model without fast mode, even if asked on", async () => {
+  it("is one tab stop whose arrow keys switch the speed", () => {
+    const { onFastModeChange } = mount({ provider: "codex", model: "gpt-5.4" });
+    const toggle = speedToggle()!;
+    const standard = within(toggle).getByRole("radio", { name: "Standard" });
+    const fast = within(toggle).getByRole("radio", { name: "Fast" });
+    expect(standard.tabIndex).toBe(0);
+    expect(fast.tabIndex).toBe(-1);
+    standard.focus();
+    fireEvent.keyDown(standard, { key: "ArrowRight" });
+    expect(onFastModeChange).toHaveBeenCalledWith(true);
+    expect(document.activeElement).toBe(fast);
+  });
+
+  it("marks the trigger when fast mode is on", () => {
+    mount({ provider: "codex", model: "gpt-5.4" }, { fastMode: true, open: false });
+    expect(trigger().getAttribute("aria-label")).toMatch(/Models: Codex · gpt-5\.4.*, Fast$/);
+    expect(trigger().querySelector("[data-fast-mode-indicator]")).not.toBeNull();
+  });
+
+  it("hides the toggle for a model without fast mode, even if asked on", () => {
     mount({ provider: "codex", model: "gpt-5.4-mini" }, { fastMode: true });
-    const trigger = await openTraits(/Reasoning effort/);
-    expect(screen.queryByRole("menuitemcheckbox")).toBeNull();
-    expect(trigger.querySelector("[data-fast-mode-indicator]")).toBeNull();
+    expect(speedToggle()).toBeNull();
+    expect(trigger().querySelector("[data-fast-mode-indicator]")).toBeNull();
   });
 
-  it("uses Claude's own wording on a checked Opus and offers nothing on other aliases or Copilot", async () => {
+  it("locks the toggle while a reply streams", () => {
+    mount({ provider: "codex", model: "gpt-5.4" }, { onFastModeChange: undefined });
+    for (const radio of within(speedToggle()!).getAllByRole("radio")) {
+      expect((radio as HTMLButtonElement).disabled).toBe(true);
+    }
+  });
+
+  it("uses Claude's own wording on a checked Opus and offers nothing on other aliases or Copilot", () => {
     const checked = [
       { id: "opus", reasoning_efforts: ["low", "high"], supports_fast_mode: true },
       { id: "sonnet", reasoning_efforts: ["low", "high"] },
     ];
     mount({ provider: "claude", model: "opus" }, {}, checked);
-    await openTraits(/Reasoning effort/);
     expect(
-      screen.getByRole("menuitemcheckbox", { name: /Fast mode/ }).textContent,
-    ).toContain("Faster Opus output, billed at a higher rate");
+      within(speedToggle()!).getByRole("radio", { name: "Fast" }).getAttribute("title"),
+    ).toBe("Faster Opus output, billed at a higher rate");
     cleanup();
 
     for (const value of [
@@ -172,43 +207,40 @@ describe("Fast mode toggle", () => {
       { provider: "copilot", model: "default" },
     ]) {
       mount(value, {}, checked);
-      await openTraits(/Reasoning effort/);
-      expect(screen.queryByRole("menuitemcheckbox")).toBeNull();
+      expect(speedToggle()).toBeNull();
       cleanup();
     }
     expect(mocks.invoke).not.toHaveBeenCalled();
   });
 
-  it("offers no Claude fast mode before Check models, or on a CLI too old for it", async () => {
+  it("offers no Claude fast mode before Check models, or on a CLI too old for it", () => {
     // Before a check the installed CLI's version is unknown; an older CLI's
     // checked Opus row carries no fast flag.
     for (const claudeModels of [undefined, [{ id: "opus", reasoning_efforts: ["low", "high"] }]]) {
       mount({ provider: "claude", model: "opus" }, { fastMode: true }, claudeModels);
-      const trigger = await openTraits(/Reasoning effort/);
-      expect(screen.queryByRole("menuitemcheckbox")).toBeNull();
-      expect(trigger.querySelector("[data-fast-mode-indicator]")).toBeNull();
+      expect(speedToggle()).toBeNull();
+      expect(trigger().querySelector("[data-fast-mode-indicator]")).toBeNull();
       cleanup();
     }
     expect(mocks.invoke).not.toHaveBeenCalled();
   });
 
-  it("shows the control for fast mode alone when the model has no effort levels", async () => {
+  it("shows the speed toggle alone when the model takes no reasoning effort", async () => {
     const { onFastModeChange } = mount(
       { provider: "codex", model: "gpt-5.4" },
       { showThinkingEffort: false, onThinkingEffortChange: undefined },
     );
-    await openTraits(/Fast mode: Standard/);
-    expect(screen.queryByRole("menuitemradio")).toBeNull();
+    expect(document.querySelector("[data-model-picker-effort]")).toBeNull();
     await act(async () => {
-      fireEvent.click(screen.getByRole("menuitemcheckbox", { name: /Fast mode/ }));
+      fireEvent.click(within(speedToggle()!).getByRole("radio", { name: "Fast" }));
     });
     expect(onFastModeChange).toHaveBeenCalledWith(true);
   });
 
-  it("limits Copilot's undiscovered default to its published effort levels", async () => {
+  it("limits Copilot's undiscovered default to its published effort levels", () => {
     mount({ provider: "copilot", model: "default" });
-    await openTraits(/Reasoning effort/);
-    const levels = screen.getAllByRole("menuitemradio").map((item) => item.textContent ?? "");
+    const column = document.querySelector<HTMLElement>("[data-model-picker-effort]")!;
+    const levels = within(column).getAllByRole("radio").map((item) => item.textContent ?? "");
     expect(levels.some((label) => label.includes("Ultra"))).toBe(false);
     expect(levels.some((label) => label.includes("Max"))).toBe(true);
     expect(mocks.invoke).not.toHaveBeenCalled();

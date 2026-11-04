@@ -240,6 +240,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.transfers.update",
   "ui.transfers.bulk_pair",
   "ui.transfers.dismiss",
+  "ui.transfers.dismissals.delete",
   "ui.transfers.components.list",
   "ui.transfers.components.plan",
   "ui.transfers.components.apply",

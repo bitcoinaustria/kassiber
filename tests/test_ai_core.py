@@ -694,6 +694,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
             ("Bitte hilf mir, die Quarantäne zu lösen", None),
             ("Bitte hilf mir mit der Quarantaene", None),
             ("Help me resolve these", {"route": "/quarantine"}),
+            ("Help me resolve these", {"route": "/review"}),
         ):
             with self.subTest(message=message, screen_context=screen_context):
                 names = {

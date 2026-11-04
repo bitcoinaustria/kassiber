@@ -530,7 +530,7 @@
     "signIn": "Sign-in",
     "signInCli": "Uses the CLI's own login; Kassiber never reads or stores it.",
     "noKey": "No key",
-    "fastModeNote": "Fast mode is available for some models. It is billed at a higher rate, so it is chosen per chat in the reasoning menu and never saved as a default.",
+    "fastModeNote": "Fast mode is available for some models. It is billed at a higher rate, so it is chosen per chat in the model picker and never saved as a default.",
     "keyStorage": "Key storage",
     "setAsDefault": "Set as default",
     "moveKeyToNative": "Move key to {{store}}",

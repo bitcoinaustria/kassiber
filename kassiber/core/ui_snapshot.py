@@ -53,6 +53,7 @@ from . import sync_backends as core_sync_backends
 from . import source_overlap as core_source_overlap
 from . import transfer_matching as core_transfer_matching
 from . import reports as report_builders
+from . import tax_estimate as core_tax_estimate
 from .austrian import vienna_local_date
 from .samourai import samourai_metadata_from_wallet_config
 from . import transaction_history
@@ -1538,6 +1539,7 @@ REVIEW_BADGE_DEFINITIONS = {
     "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
     "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
     "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+    "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted.",
 }
 WORKSPACE_HEALTH_COUNT_DEFINITIONS = {
     "wallets": "Wallets in the active book.",
@@ -1592,6 +1594,8 @@ def build_review_badges_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         "quarantine_attention": attention,
         "journals_needs_processing": bool(freshness["needs_processing"]),
         "swaps": swaps,
+        # One number for every surface that says how much is left to review.
+        "review": attention + (swaps or 0),
         "definitions": dict(REVIEW_BADGE_DEFINITIONS),
     }
 
@@ -6079,6 +6083,57 @@ def _austrian_kennzahl_snapshot_rows(
     ]
 
 
+def _austrian_old_rule_rows(
+    conn: sqlite3.Connection,
+    profile: sqlite3.Row,
+    tax_year: int,
+) -> int:
+    """Book-wide rows of the year dated before the crypto Kennzahlen."""
+
+    return report_builders.austrian_rows_before_crypto_kennzahlen(conn, profile, tax_year)
+
+
+def _capital_gains_indicative_tax(
+    conn: sqlite3.Connection,
+    profile: sqlite3.Row,
+    tax_year: int,
+    kennzahl_rows: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    """The core's indicative tax for an Austrian EUR book, or ``None``.
+
+    Reports shows it next to gain/loss and marks both provisional while a
+    blocker stands, so it is computed here without blockers. The assistant
+    reads the withheld variant from ``ui.reports.tax_summary`` instead.
+    """
+
+    if (
+        str(profile["tax_country"] or "").lower() != "at"
+        or str(profile["fiat_currency"] or "").upper() != "EUR"
+    ):
+        return None
+    estimate = core_tax_estimate.austrian_indicative_tax(
+        tax_year=tax_year,
+        kennzahl_rows=[
+            {"kennzahl": row["code"], "amount_eur_cents": row["amountEurCents"]}
+            for row in kennzahl_rows
+        ],
+        # Book-wide like the Kennzahl rows: January-February 2022 rows withhold it.
+        rows_before_crypto_kennzahlen=_austrian_old_rule_rows(conn, profile, tax_year),
+    )
+    if estimate["status"] == "not_applicable":
+        # Before the E 1kv there is no 27.5 % figure to show.
+        return None
+    return {
+        "estimatedTaxEurCents": estimate["estimated_tax_eur_cents"],
+        "rate": estimate["rate"],
+        "basis": estimate["basis"],
+        "progressiveRateAmountsEurCents": estimate[
+            "progressive_rate_amounts_eur_cents"
+        ],
+        "notes": estimate["notes"],
+    }
+
+
 def _capital_gains_neutral_swap_rows(
     conn: sqlite3.Connection,
     profile_id: str,
@@ -6106,7 +6161,10 @@ def _capital_gains_neutral_swap_rows(
     rows = conn.execute(
         f"""
         SELECT
+            je.id AS entry_id,
             je.occurred_at,
+            je.transaction_id,
+            je.asset AS entry_asset,
             je.quantity,
             je.cost_basis,
             je.proceeds,
@@ -6158,6 +6216,9 @@ def _capital_gains_neutral_swap_rows(
                     else (row["occurred_at"] or "")[:10]
                 ),
                 "pairId": row["pair_id"],
+                "journalEntryId": row["entry_id"],
+                "transactionId": row["transaction_id"],
+                "asset": row["entry_asset"] or "",
                 "kind": row["kind"],
                 "policy": row["policy"],
                 "outWallet": row["out_wallet"] or "",
@@ -6193,6 +6254,104 @@ def _sum_eur(values: Iterable[Any]) -> float:
     return float(total.quantize(Decimal("0.01")))
 
 
+# Exact transaction links stop at the Transactions read's ``txids`` cap; a
+# larger group opens the whole year instead.
+_BREAKDOWN_LINK_LIMIT = MAX_UI_TRANSACTION_IDS
+_BREAKDOWN_ORDER = (
+    "172", "174", "176", "801", "tax_free", "unassigned", "swaps",
+    "short_term", "long_term", "income",
+)
+
+
+def _capital_gains_breakdown(
+    rows: list[sqlite3.Row],
+    swaps: list[dict[str, Any]],
+    *,
+    use_vienna_year: bool,
+) -> list[dict[str, Any]]:
+    """Group the year's rows the way the report states them.
+
+    Austrian rows group by E 1 / E 1kv field, with tax-free Altbestand and
+    tax-neutral swaps beside them; generic rows by holding period and income.
+    Each group names its transactions while they fit an exact link.
+    """
+    from .austrian import kennzahl_for_event
+
+    def bucket_key(row: sqlite3.Row) -> str:
+        if use_vienna_year:
+            category = row["at_category"] or ""
+            if category == "alt_taxfree":
+                return "tax_free"
+            # A crypto Kennzahl before 1 March 2022 is no field: unassigned.
+            kennzahl = (
+                kennzahl_for_event(category, str(row["occurred_at"])) if category else None
+            )
+            return str(kennzahl) if kennzahl else "unassigned"
+        if row["entry_type"] == "income":
+            return "income"
+        if str(row["capital_gains_type"] or "").lower() == "long":
+            return "long_term"
+        return "short_term"
+
+    grouped: dict[str, list[sqlite3.Row]] = defaultdict(list)
+    for row in rows:
+        grouped[bucket_key(row)].append(row)
+
+    def link_ids(ids: Iterable[Any]) -> tuple[int, list[str] | None]:
+        unique = sorted({str(value) for value in ids if value})
+        return len(unique), (unique if len(unique) <= _BREAKDOWN_LINK_LIMIT else None)
+
+    breakdown = []
+    for key, members in grouped.items():
+        count, ids = link_ids(row["transaction_id"] for row in members)
+        breakdown.append(
+            {
+                "key": key,
+                "rowCount": len(members),
+                "transactionCount": count,
+                "transactionIds": ids,
+                "costEur": _sum_eur(row["cost_basis"] for row in members),
+                "proceedsEur": _sum_eur(
+                    row["proceeds"] for row in members if row["entry_type"] != "income"
+                ),
+                "incomeEur": _sum_eur(
+                    row["gain_loss"] or row["proceeds"]
+                    for row in members
+                    if row["entry_type"] == "income"
+                ),
+                "gainLossEur": _sum_eur(row["gain_loss"] for row in members),
+            }
+        )
+    if swaps:
+        count, ids = link_ids(swap.get("transactionId") for swap in swaps)
+        # A swap split across several conversions lists its journal entry once
+        # per conversion; its amounts count once.
+        entries = list(
+            {str(swap["journalEntryId"]): swap for swap in swaps}.values()
+        )
+        breakdown.append(
+            {
+                "key": "swaps",
+                "rowCount": len(entries),
+                "transactionCount": count,
+                "transactionIds": ids,
+                "costEur": _sum_eur(swap["costEur"] for swap in entries),
+                "proceedsEur": _sum_eur(swap["proceedsEur"] for swap in entries),
+                "incomeEur": 0.0,
+                "gainLossEur": 0.0,
+            }
+        )
+    # A fixed order, so every book states its groups the same way.
+    return sorted(
+        breakdown,
+        key=lambda bucket: (
+            _BREAKDOWN_ORDER.index(bucket["key"])
+            if bucket["key"] in _BREAKDOWN_ORDER
+            else len(_BREAKDOWN_ORDER)
+        ),
+    )
+
+
 def build_capital_gains_snapshot(
     conn: sqlite3.Connection,
     tax_year: int | str | None = None,
@@ -6202,7 +6361,7 @@ def build_capital_gains_snapshot(
     context = current_context_snapshot(conn)
     if not context["workspace_id"] or not context["profile_id"]:
         return {
-            "jurisdictionCode": "AT",
+            "jurisdictionCode": "GENERIC",
             "year": datetime.now(timezone.utc).year,
             "availableYears": [datetime.now(timezone.utc).year],
             "method": "fifo",
@@ -6220,7 +6379,7 @@ def build_capital_gains_snapshot(
     ).fetchone()
     if profile is None:
         return {
-            "jurisdictionCode": "AT",
+            "jurisdictionCode": "GENERIC",
             "year": datetime.now(timezone.utc).year,
             "availableYears": [datetime.now(timezone.utc).year],
             "method": "fifo",
@@ -6325,8 +6484,25 @@ def build_capital_gains_snapshot(
         ),
         "gainLossEur": _sum_eur(row["gain_loss"] for row in rows),
     }
+    neutral_swaps = _capital_gains_neutral_swap_rows(
+        conn,
+        profile["id"],
+        latest_year,
+        use_vienna_year=use_vienna_year,
+    )
+    if asset:
+        # Like the rows and totals, an asset-scoped read keeps that asset's
+        # swaps: the ones that gave it up.
+        neutral_swaps = [
+            swap
+            for swap in neutral_swaps
+            if str(swap["asset"] or "").upper() == str(asset).upper()
+        ]
+    breakdown = _capital_gains_breakdown(
+        rows, neutral_swaps, use_vienna_year=use_vienna_year
+    )
     rows = rows[:200]
-    from .austrian import kennzahl_for_disposal_category
+    from .austrian import e1kv_applies, kennzahl_for_event
     from .report_explanation import result_reference
     lots = [
         {
@@ -6356,28 +6532,44 @@ def build_capital_gains_snapshot(
             "gainLossEur": float(row["gain_loss"] or 0),
             "atCategory": row["at_category"] or None,
             "kennzahl": (
-                kennzahl_for_disposal_category(row["at_category"])
+                kennzahl_for_event(row["at_category"], str(row["occurred_at"]))
                 if use_vienna_year and row["at_category"]
                 else None
             ),
         }
         for row in reversed(rows)
     ]
+    kennzahl_rows = _austrian_kennzahl_snapshot_rows(conn, profile, latest_year)
     return {
-        "jurisdictionCode": (profile["tax_country"] or "AT").upper(),
+        "jurisdictionCode": (profile["tax_country"] or "generic").upper(),
+        "fiatCurrency": str(profile["fiat_currency"] or "EUR").upper(),
+        # Austria has no single holding period: only Altbestand held over a
+        # year is tax-free, which its rules copy says instead.
+        "longTermDays": (
+            None if use_vienna_year else build_tax_policy(profile).long_term_days
+        ),
         "year": latest_year,
         "availableYears": available_years,
         "method": _profile_policy_method(profile),
         "asset": str(asset).upper() if asset else None,
         "lots": lots,
         "totals": totals,
-        "neutralSwapLots": _capital_gains_neutral_swap_rows(
-            conn,
-            profile["id"],
-            latest_year,
-            use_vienna_year=use_vienna_year,
+        "breakdown": breakdown,
+        "neutralSwapLots": neutral_swaps,
+        "kennzahlRows": kennzahl_rows,
+        # An Austrian year before the crypto Kennzahlen: none, no estimate.
+        "e1kvApplies": bool(use_vienna_year and e1kv_applies(latest_year)),
+        "indicativeTax": _capital_gains_indicative_tax(
+            conn, profile, latest_year, kennzahl_rows
         ),
-        "kennzahlRows": _austrian_kennzahl_snapshot_rows(conn, profile, latest_year),
+        # Rows the E 1kv export refuses: classified for a crypto Kennzahl but
+        # dated before 1 March 2022.
+        "rowsBeforeCryptoKennzahlen": (
+            _austrian_old_rule_rows(conn, profile, latest_year)
+            if use_vienna_year and str(profile["fiat_currency"] or "").upper() == "EUR"
+            and e1kv_applies(latest_year)
+            else 0
+        ),
         "status": {
             "needsJournals": needs_journals,
             "quarantines": int(quarantines or 0),
@@ -6964,6 +7156,7 @@ def build_journal_events_list_snapshot(
             COALESCE(a.label, '') AS account_label,
             t.external_id AS transaction_external_id,
             t.direction AS transaction_direction,
+            t.taxability_override AS taxability_override,
             {_JOURNAL_PAIR_ID_SQL} AS pair_id,
             {_JOURNAL_PAIR_KIND_SQL} AS pair_kind,
             {_JOURNAL_PAIR_POLICY_SQL} AS pair_policy,
@@ -6993,6 +7186,20 @@ def build_journal_events_list_snapshot(
         """,
         [*params, limit],
     ).fetchall()
+    from .report_explanation import result_reference
+
+    def explanation_reference(row: sqlite3.Row) -> dict[str, Any] | None:
+        # The rows ui.reports.explain_capital_gain accepts: realized disposals
+        # and income that count for tax, from a current journal.
+        if (
+            freshness["needs_processing"]
+            or row["entry_type"] not in ("disposal", "income")
+            or row["at_category"] == "neu_swap"
+            or row["taxability_override"] == 0
+        ):
+            return None
+        return result_reference(conn, profile, row["id"])
+
     return {
         "summary": {
             "workspace": context["workspace_label"] or None,
@@ -7070,6 +7277,7 @@ def build_journal_events_list_snapshot(
                 "atCategory": row["at_category"],
                 "atKennzahl": row["at_kennzahl"],
                 "pair": _journal_pair_payload(row),
+                "explanationReference": explanation_reference(row),
             }
             for row in rows
         ],
@@ -7833,6 +8041,8 @@ def build_journals_quarantine_snapshot(
             # is bound to it, never applied to a book switched to meanwhile.
             "workspace_id": str(profile["workspace_id"]),
             "profile_id": str(profile["id"]),
+            # A price entered for a held row is in this currency.
+            "fiat_currency": str(profile["fiat_currency"] or "").upper() or None,
             "count": total,
             "by_reason": [
                 {"reason": row["reason"], "count": int(row["count"] or 0)}

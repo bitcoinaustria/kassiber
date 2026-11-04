@@ -40,7 +40,19 @@ from . import report_context as core_report_context
 from . import custody_journal
 from . import rates as core_rates
 from .journal_markers import MARKER_REGIME, parse_marker
-from .austrian import infer_regime_from_timestamp, kennzahl_for_disposal_category
+from .austrian import (
+    AT_CATEGORY_TO_KENNZAHL,
+    CRYPTO_KENNZAHLEN_FROM,
+    E1KV_KENNZAHLEN,
+    infer_regime_from_timestamp,
+    kennzahl_for_disposal_category,
+)
+
+# Categories stated in a crypto Kennzahl, which a departure before March 2022
+# does not have.
+_CRYPTO_CATEGORIES = frozenset(
+    category for category, kennzahl in AT_CATEGORY_TO_KENNZAHL.items() if kennzahl in E1KV_KENNZAHLEN
+)
 from ..msat import dec
 
 # Austrian capital-gains special rate (§ 27a Abs 1 Z 2 EStG). Headline-estimate
@@ -126,6 +138,11 @@ _ASSUMPTION_GENERIC = (
     "EXIT: Non-Austrian profile — no Altbestand grandfathering or special rate is "
     "applied; this shows the total unrealized gain only. Have a local adviser set "
     "the applicable exit-tax treatment."
+)
+_ASSUMPTION_OLD_RULES = (
+    "EXIT-011: The 27.5% rate and KZ 174 cover realisations from 1 March 2022. "
+    "A departure before it followed the old rules, so no tax is estimated; a "
+    "Steuerberater states it."
 )
 
 
@@ -300,6 +317,9 @@ def compute_deemed_disposal(
     is_at = jurisdiction == "at"
     fiat_currency = str(profile.get("fiat_currency") or "EUR").upper()
     day, cutoff = _resolve_departure(departure_date)
+    # The departure day as the owner names it, not its UTC end (which is
+    # already 1 March in Vienna for 28 February).
+    old_rules = is_at and day < CRYPTO_KENNZAHLEN_FROM.date().isoformat()
     dest = _normalize_destination(destination)
     method = build_tax_policy(profile).default_accounting_method
 
@@ -409,7 +429,11 @@ def compute_deemed_disposal(
                     "gain": _eur(gain),
                     "taxable": taxable,
                     "category": category if is_at else "unrealized",
-                    "kennzahl": kennzahl_for_disposal_category(category) if is_at else None,
+                    "kennzahl": (
+                        None
+                        if not is_at or (old_rules and category in _CRYPTO_CATEGORIES)
+                        else kennzahl_for_disposal_category(category)
+                    ),
                 }
             )
 
@@ -422,7 +446,9 @@ def compute_deemed_disposal(
     taxable_gain = (
         max(Decimal("0"), neu_gain_total) if neu_gain_total is not None else None
     )
-    rate = AT_SONDERSTEUERSATZ if is_at else None
+    # The 27.5 % rate covers realisations from 1 March 2022; a departure
+    # before it is not estimated.
+    rate = AT_SONDERSTEUERSATZ if is_at and not old_rules else None
     estimated_tax = (
         (taxable_gain * rate)
         if rate is not None and taxable_gain is not None
@@ -463,6 +489,8 @@ def compute_deemed_disposal(
             assumptions.append(_ASSUMPTION_DERIVED_TOKENS)
         if has_untagged_disposal:
             assumptions.append(_ASSUMPTION_UNTAGGED_DISPOSAL)
+        if old_rules:
+            assumptions.append(_ASSUMPTION_OLD_RULES)
     else:
         assumptions.append(_ASSUMPTION_GENERIC)
         assumptions.append(_ASSUMPTION_FMV)

@@ -159,7 +159,7 @@ vi.mock("@/components/transactions", async (importOriginal) => {
 
 import { useUiStore } from "@/store/ui";
 
-import { Quarantine } from "./Quarantine";
+import { QuarantineSection } from "./QuarantineSection";
 
 function row(transactionId: string, overrides: Partial<QuarantineItem> = {}): QuarantineItem {
   return {
@@ -208,7 +208,7 @@ function mount() {
   });
   render(
     <QueryClientProvider client={client}>
-      <Quarantine />
+      <QuarantineSection />
     </QueryClientProvider>,
   );
 }
@@ -244,12 +244,12 @@ beforeEach(() => {
   daemon.failAttentionPage = false;
   daemon.sheetFingerprint = "fp-1";
   daemon.calls = [];
-  window.history.replaceState(null, "", "/quarantine");
+  window.history.replaceState(null, "", "/review");
 });
 
 afterEach(cleanup);
 
-describe("quarantine route", () => {
+describe("quarantine section", () => {
   it("shows a failed waiting list as an error with retry, not an empty queue", async () => {
     daemon.items = [row("root"), waitingRow("w1")];
     daemon.failWaiting = true;
@@ -323,12 +323,14 @@ describe("quarantine route", () => {
     daemon.groups = [cause("price", roots)];
     daemon.items = roots;
     mount();
-    const card = (await screen.findByText("50 more transactions of this cause are not loaded yet.")).closest("li")!;
+    const card = (await screen.findByText("3 of 150 shown")).closest("li")!;
+    // The rest of the loaded page first, then the next page, from one button.
+    fireEvent.click(within(card).getByRole("button", { name: /^Show more of “/ }));
+    expect(within(card).getByText("100 of 150 shown")).toBeTruthy();
     await act(async () => {
-      fireEvent.click(within(card).getByRole("button", { name: "Load more" }));
+      fireEvent.click(within(card).getByRole("button", { name: /^Show more of “/ }));
     });
-    await waitFor(() => expect(screen.queryByText(/not loaded yet/)).toBeNull());
-    fireEvent.click(screen.getByRole("button", { name: "Show all 150 transactions" }));
+    await waitFor(() => expect(screen.queryByText(/of 150 shown/)).toBeNull());
     // Row 120 sits on the second page and opens like any other.
     fireEvent.click(screen.getByText(/Wallet r-120/).closest("button")!);
     await waitFor(() =>
@@ -345,7 +347,7 @@ describe("quarantine route", () => {
     daemon.groups = [cause("price", roots)];
     daemon.items = roots;
     mount();
-    fireEvent.click(await screen.findByRole("button", { name: "Show all 30 transactions" }));
+    fireEvent.click(await screen.findByRole("button", { name: /^Show more of “/ }));
     fireEvent.click(screen.getByText(/Wallet r-026/).closest("button")!);
     await screen.findByText("Save and open next");
     await act(async () => {

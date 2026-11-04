@@ -72,6 +72,7 @@
     "modelContext": "Model context",
     "thinking": "Thinking",
     "reasoningEffort": "Reasoning effort",
+    "reasoning": "Reasoning",
     "effort": {
       "auto": "Auto",
       "low": "Low",
@@ -83,9 +84,9 @@
     },
     "effortDefault": "Default",
     "effortAutoHint": "Let the model decide",
+    "effortLevelsUnknown": "Use Check models to see this model's levels.",
     "newLine": "New line",
     "fastMode": {
-      "label": "Fast mode",
       "fast": "Fast",
       "standard": "Standard",
       "speed": "Speed",
@@ -433,9 +434,6 @@
     "searchModels": "Search models…",
     "checkingProvider": "Checking local provider status…",
     "staleModels": "Showing last known models · {{error}}",
-    "privacyFilter": "Model privacy filter",
-    "allModels": "All",
-    "localModels": "Local",
     "unusableModelsHidden_one": "{{count}} model hidden that can't use tools or answer in text.",
     "unusableModelsHidden_other": "{{count}} models hidden that can't use tools or answer in text.",
     "unusableModelsShown_one": "Showing {{count}} model that can't use tools or answer in text.",
@@ -515,7 +513,12 @@
       "kind_override": "Classify acquisition",
       "kindCleared": "imported classification",
       "expiresDays_one": "for {{count}} day",
-      "expiresDays_other": "for {{count}} days"
+      "expiresDays_other": "for {{count}} days",
+      "undismiss_pair": "Restore pair suggestion",
+      "accept_coarse_prices": "Accept approximate prices",
+      "transactions_one": "{{count}} transaction",
+      "transactions_other": "{{count}} transactions",
+      "allCoarse": "every transaction waiting on its approximate price"
     },
     "tax": {
       "title": "Tax change by year",
@@ -530,7 +533,7 @@
       "title": "Verified review receipt",
       "verified_one": "{{count}} correction applied; the resulting journal was rebuilt and verified.",
       "verified_other": "{{count}} corrections applied; the resulting journal was rebuilt and verified.",
-      "openQuarantine": "Open quarantine"
+      "openQuarantine": "Open Review"
     },
     "cases": {
       "more": "{{count}} cases inspected; more cases are available.",
@@ -725,11 +728,9 @@
       "transfers_other": "{{count}} transfers to match",
       "journals": "Journals need processing",
       "process": "Process",
-      "summary_one": "{{count}} cause needs you",
-      "summary_other": "{{count}} causes need you",
       "waiting_one": "{{count}} waiting",
       "waiting_other": "{{count}} waiting",
-      "openPage": "Open Quarantine"
+      "openPage": "Open Review"
     },
     "changes": {
       "loading": "Loading recent changes",

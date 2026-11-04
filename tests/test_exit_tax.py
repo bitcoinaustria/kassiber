@@ -129,6 +129,29 @@ class ExitTaxComputeTests(unittest.TestCase):
         self.assertEqual(totals["estimatedTaxRate"], 0.275)
         self.assertEqual(totals["estimatedTax"], 2200.0)
 
+    def test_a_departure_before_march_2022_is_not_estimated(self):
+        conn = _conn_with_rate(Decimal("60000"))
+        report = exit_tax.compute_deemed_disposal(
+            conn, _profile("at"), _state(), departure_date="2022-02-15"
+        )
+        totals = report["totals"]
+        # The base is still valued; the 27.5 % rate and KZ 174 did not apply yet.
+        self.assertIsNone(totals["estimatedTaxRate"])
+        self.assertIsNone(totals["estimatedTax"])
+        self.assertTrue(all(lot["kennzahl"] in (None, 801) for lot in report["lots"]))
+        self.assertTrue(any("EXIT-011" in str(item) for item in report["assumptions"]))
+
+    def test_the_last_day_of_february_2022_is_still_the_old_rules(self):
+        conn = _conn_with_rate(Decimal("60000"))
+        last_day = exit_tax.compute_deemed_disposal(
+            conn, _profile("at"), _state(), departure_date="2022-02-28"
+        )
+        first_day = exit_tax.compute_deemed_disposal(
+            conn, _profile("at"), _state(), departure_date="2022-03-01"
+        )
+        self.assertIsNone(last_day["totals"]["estimatedTaxRate"])
+        self.assertEqual(first_day["totals"]["estimatedTaxRate"], 0.275)
+
     def test_lots_classification(self):
         conn = _conn_with_rate(Decimal("60000"))
         report = exit_tax.compute_deemed_disposal(

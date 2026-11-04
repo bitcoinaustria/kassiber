@@ -11,6 +11,7 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
   within,
 } from "@testing-library/react";
 import type * as React from "react";
@@ -163,6 +164,19 @@ describe("ProviderModelPicker (mounted)", () => {
     expect(highlighted()).toContain("qwen3:8b");
     expect(highlighted()).toContain("local");
     expect(mocks.invoke).not.toHaveBeenCalled();
+  });
+
+  it("shows a saved local inventory after launch without model discovery", async () => {
+    mocks.providers[0].last_checked_at = "2026-11-01T12:00:00Z";
+    mocks.invoke.mockResolvedValue({ kind: "ai.list_models", schema_version: 1, data: {
+      provider: "ollama", checked_at: "2026-11-01T12:00:00Z",
+      models: [{ id: "restored-local-model" }],
+    } });
+    mount();
+    await waitFor(() => expect(optionNames().join(" ")).toContain("restored-local-model"));
+    expect(mocks.invoke.mock.calls).toEqual([[{ kind: "ai.list_models", args: {
+      provider: "ollama", base_url: PROVIDERS[0].base_url, cached_only: true,
+    } }]]);
   });
 
   it("keeps the provider name and posture on the trigger", () => {
@@ -318,19 +332,6 @@ describe("ProviderModelPicker (mounted)", () => {
     expect(optionNames()[0]).toContain("qwen3:8b");
     expect(optionNames()[0]).toContain("Ollama");
     expect(mocks.invoke).not.toHaveBeenCalled();
-  });
-
-  it("filters to proven-local models", () => {
-    const { search } = mount();
-    fireEvent.click(screen.getByRole("button", { name: "Local" }));
-    // Remote providers leave the rail; only Ollama is left beside Favorites.
-    expect(
-      screen.getAllByRole("button", { name: /· (remote|local)$/ }).map(
-        (button) => button.getAttribute("aria-label"),
-      ),
-    ).toEqual(["Ollama · local"]);
-    fireEvent.change(search, { target: { value: "gpt" } });
-    expect(screen.getByText("No matching models")).toBeTruthy();
   });
 
   it("checks only the active provider after the explicit click", async () => {

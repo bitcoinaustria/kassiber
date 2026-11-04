@@ -9,6 +9,7 @@ export type BrokerModel = {
   privacy_reason?: string;
   supports_reasoning_effort?: boolean;
   reasoning_efforts?: string[];
+  supports_tools?: boolean;
   /** The model offers a faster, higher-cost serving mode (Codex "Fast" tier, Claude Opus fast mode). */
   supports_fast_mode?: boolean;
   /** Provider wording for that mode, e.g. "2x speed, increased usage". */

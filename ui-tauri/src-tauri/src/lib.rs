@@ -101,7 +101,7 @@ const MENU_NAV_BOOKS: &str = "kassiber:navigate:books";
 const MENU_NAV_REPORTS: &str = "kassiber:navigate:reports";
 const MENU_NAV_SOURCE_FUNDS: &str = "kassiber:navigate:source-funds";
 const MENU_NAV_JOURNALS: &str = "kassiber:navigate:journals";
-const MENU_NAV_QUARANTINE: &str = "kassiber:navigate:quarantine";
+const MENU_NAV_REVIEW: &str = "kassiber:navigate:review";
 const MENU_NAV_ASSISTANT: &str = "kassiber:navigate:assistant";
 const MENU_NAV_LOGS: &str = "kassiber:navigate:logs";
 const DOCS_URL: &str = "https://github.com/bitcoinaustria/kassiber#readme";
@@ -138,7 +138,9 @@ const DEEP_LINK_ROUTE_HOSTS: &[(&str, &str)] = &[
     ("source-of-funds", "/source-of-funds"),
     ("journals", "/journals"),
     ("tax-events", "/journals"),
-    ("quarantine", "/quarantine"),
+    ("review", "/review"),
+    // The Review screen replaced Quarantine; old links still land there.
+    ("quarantine", "/review"),
     ("assistant", "/assistant"),
     ("logs", "/logs"),
     ("diagnostics", "/logs"),
@@ -313,6 +315,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.transfers.update",
     "ui.transfers.bulk_pair",
     "ui.transfers.dismiss",
+    "ui.transfers.dismissals.delete",
     "ui.transfers.components.list",
     "ui.transfers.components.plan",
     "ui.transfers.components.apply",
@@ -3802,7 +3805,7 @@ fn build_app_menu(
         Some("CmdOrCtrl+6"),
     )?;
     let journals_item = menu_item(app, MENU_NAV_JOURNALS, "Journals", Some("CmdOrCtrl+7"))?;
-    let quarantine_item = menu_item(app, MENU_NAV_QUARANTINE, "Quarantine", Some("CmdOrCtrl+8"))?;
+    let review_item = menu_item(app, MENU_NAV_REVIEW, "Review", Some("CmdOrCtrl+8"))?;
     let assistant_item = menu_item(app, MENU_NAV_ASSISTANT, "Assistant", Some("CmdOrCtrl+9"))?;
 
     #[cfg(target_os = "macos")]
@@ -3858,7 +3861,7 @@ fn build_app_menu(
         .item(&source_funds_item)
         .separator()
         .item(&journals_item)
-        .item(&quarantine_item)
+        .item(&review_item)
         .item(&assistant_item)
         .separator()
         .item(&toggle_sensitive)
@@ -3949,7 +3952,7 @@ fn build_app_menu(
         reports_item.clone(),
         source_funds_item.clone(),
         journals_item.clone(),
-        quarantine_item.clone(),
+        review_item.clone(),
     ];
 
     let handles = AppMenuHandles {
@@ -4077,7 +4080,7 @@ fn menu_action_for_id(id: &str) -> Option<MenuActionPayload> {
         MENU_NAV_REPORTS => Some(navigate_action("/reports")),
         MENU_NAV_SOURCE_FUNDS => Some(navigate_action("/source-of-funds")),
         MENU_NAV_JOURNALS => Some(navigate_action("/journals")),
-        MENU_NAV_QUARANTINE => Some(navigate_action("/quarantine")),
+        MENU_NAV_REVIEW => Some(navigate_action("/review")),
         MENU_NAV_ASSISTANT => Some(navigate_action("/assistant")),
         MENU_NAV_LOGS => Some(navigate_action("/logs")),
         _ => None,
@@ -5367,7 +5370,7 @@ mod tests {
 
     #[test]
     fn swap_matching_daemon_kinds_are_in_allowlist() {
-        // SwapMatching.tsx drives candidate review through these explicit
+        // SwapMatching.tsx and the Review screen drive candidate review through these explicit
         // daemon kinds. The packaged desktop shell blocks any kind not listed
         // in ALLOWED_DAEMON_KINDS, so keep this surface pinned.
         let required: &[&str] = &[
@@ -5381,6 +5384,7 @@ mod tests {
             "ui.transfers.update",
             "ui.transfers.bulk_pair",
             "ui.transfers.dismiss",
+            "ui.transfers.dismissals.delete",
             "ui.transfers.components.list",
             "ui.transfers.components.plan",
             "ui.transfers.components.apply",
@@ -5607,6 +5611,12 @@ mod tests {
         assert_eq!(
             parse("kassiber://source-of-funds"),
             Some(navigate_action("/source-of-funds"))
+        );
+        // Review replaced Quarantine; links to either open it.
+        assert_eq!(parse("kassiber://review"), Some(navigate_action("/review")));
+        assert_eq!(
+            parse("kassiber://quarantine"),
+            Some(navigate_action("/review"))
         );
         assert_eq!(
             parse("kassiber://settings"),

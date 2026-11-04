@@ -11,7 +11,7 @@ Preferred defaults:
 - `--format plain reports balance-sheet` for current balances by account, bucket, asset, or wallet
 - `--machine reports summary` for exact rollups that should be quoted back without hand math
 - `--machine reports tax-summary` for exact yearly gain/loss buckets and totals from the tax engine
-- `--machine reports austrian-e1kv --year <YYYY>` for the Austrian E 1kv handoff envelope
+- `--machine reports austrian-e1kv --year <YYYY>` for the Austrian E 1kv handoff envelope (crypto Kennzahlen cover realisations from 1 March 2022: an earlier year, or a 2022 with January-February rows, is refused, and a year before 2022 has no indicative tax)
 - `reports export-pdf`, `reports export-csv`, or `reports export-xlsx` when the user explicitly asks for a complete report file
 - `reports export-year-handoff --year <YYYY>` when the user does bookkeeping (EA, Jahresabschluss) outside Kassiber and needs one year's Bitcoin rows
 - `--machine reports cross-check --tool cointracking|blockpit --file <csv> [--year <YYYY>]` when the user asks whether CoinTracking or Blockpit agrees with Kassiber
@@ -328,7 +328,7 @@ the dialog writes the days its preview resolved. It previews each file before
 it is written (`ui.exports.preview`): the real column headers, the first rows,
 the row count, the resolved days and any warnings, such as a draft list. A
 quarantine block shows there, with the blocking rows and a link to the
-Quarantine screen, before export. The year handoff is on the Reports screen
+Review screen, before export. The year handoff is on the Reports screen
 and the CoinTracking/Blockpit comparison on Reconcile, not in this dialog.
 It exports the chosen scope, not the screen's
 transient view filters. Fiat columns reflect the currency each transaction was

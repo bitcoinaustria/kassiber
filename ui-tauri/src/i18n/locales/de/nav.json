@@ -3,7 +3,6 @@
     "overview": "Übersicht",
     "transactions": "Transaktionen",
     "ledger": "Journale",
-    "quarantine": "Quarantäne",
     "wallets": "Wallets",
     "reports": "Berichte",
     "privacyMirror": "Privacy Mirror",
@@ -17,16 +16,15 @@
     "logs": "Protokoll",
     "exitTax": "Wegzugsbesteuerung",
     "settings": "Einstellungen",
-    "chainAnalysis": "Chain-Analyse"
+    "chainAnalysis": "Chain-Analyse",
+    "review": "Prüfen"
   },
   "section": {
-    "main": "Allgemein",
-    "review": "Prüfung"
+    "main": "Allgemein"
   },
   "badge": {
-    "quarantine": "Quarantäne: {{count}} zu klären",
-    "swaps": "Swaps & Übertragungen: {{count}} zu prüfen",
-    "journals": "Journale müssen verarbeitet werden"
+    "journals": "Journale müssen verarbeitet werden",
+    "review": "{{count}} offen zu prüfen"
   },
   "openBook": {
     "title": "Aktives Buch geändert",

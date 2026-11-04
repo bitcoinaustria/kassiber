@@ -47,7 +47,7 @@ import {
   RotateCcw,
   Route,
   Settings,
-  ShieldAlert,
+  Inbox,
   Sun,
   SunMoon,
   TerminalSquare,
@@ -170,6 +170,7 @@ import { safeTauriUnlisten } from "@/lib/tauriUnlisten";
 import { useAgentAccessMasterSync } from "@/lib/agentAccess";
 import { dataModeForActiveBackend } from "@/components/kb/dataMode";
 import { isTypingTarget } from "@/lib/keymap";
+import { reviewTotal, type ReviewBadges } from "@/lib/reviewCount";
 import { shellReveal, shellRevealPlayed } from "@/lib/shellReveal";
 import { FirstSyncCard } from "./FirstSyncCard";
 import { AlphaNotice } from "./AlphaNotice";
@@ -232,13 +233,7 @@ type NavGroup = {
 
 // Cheap unresolved-item counts for the active book, surfaced as side-nav hints
 // (ui.review.badges). `swaps` is null until the transfer matcher has run once.
-type ReviewBadgesSnapshot = {
-  quarantine: number;
-  /** Root causes: what needs the user. Older daemons send only the row count. */
-  quarantine_attention?: number;
-  journals_needs_processing: boolean;
-  swaps: number | null;
-};
+type ReviewBadgesSnapshot = ReviewBadges;
 
 type ProjectCatalogEntry = {
   id: string;
@@ -396,21 +391,21 @@ const NAV_GROUPS: NavGroup[] = [
       { labelKey: "book.overview", icon: Gauge, href: "/overview" },
       { labelKey: "book.transactions", icon: ClipboardList, href: "/transactions" },
       { labelKey: "book.wallets", icon: WalletCards, href: "/connections" },
+      { labelKey: "book.review", icon: Inbox, href: "/review" },
       { labelKey: "book.reports", icon: BarChart3, href: "/reports" },
       { labelKey: "book.assistant", icon: MessageSquareText, href: "/assistant" },
     ],
   },
-  {
-    titleKey: "section.review",
-    items: [
-      { labelKey: "book.quarantine", icon: ShieldAlert, href: "/quarantine" },
-      { labelKey: "book.reconcile", icon: Fingerprint, href: "/reconcile" },
-      { labelKey: "book.sourceFunds", icon: BadgeCheck, href: "/source-of-funds" },
-      { labelKey: "book.swaps", icon: ArrowLeftRight, href: "/swaps" },
-      { labelKey: "book.ledger", icon: BookOpen, href: "/journals" },
-    ],
-  },
 ];
+
+// Pages for occasional, deeper work. Review lists every decision; these keep
+// the full tools behind it, under Extras with the calculators.
+const EXTRA_BOOK_PAGES = [
+  { labelKey: "book.swaps", icon: ArrowLeftRight, href: "/swaps" },
+  { labelKey: "book.ledger", icon: BookOpen, href: "/journals" },
+  { labelKey: "book.reconcile", icon: Fingerprint, href: "/reconcile" },
+  { labelKey: "book.sourceFunds", icon: BadgeCheck, href: "/source-of-funds" },
+] as const;
 
 // `titleKey` is a fully-qualified i18n key (nav:* for breadcrumb titles that
 // reuse the sidebar names, chrome:routeMeta.* for shell-only titles).
@@ -533,11 +528,11 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
     },
   ],
   [
-    "/quarantine",
+    "/review",
     {
-      titleKey: "nav:book.quarantine",
-      icon: ShieldAlert,
-      searchKey: "routeMeta.quarantine",
+      titleKey: "nav:book.review",
+      icon: Inbox,
+      searchKey: "routeMeta.review",
     },
   ],
   [
@@ -2052,24 +2047,19 @@ function AppSidebar({
     if (!badges) return map;
     // Signal, not reassurance: only surface a hint when there is something to
     // act on — never a "0" or an all-clear marker.
-    if (badges.quarantine > 0) {
-      // Quarantine blocks correct reports — same red as the bell's quarantine alert.
-      // It counts the causes to fix, not every row that only waits on one.
-      map["/quarantine"] = {
-        count: badges.quarantine_attention || badges.quarantine,
-        tone: "blocker",
-        labelKey: "badge.quarantine",
+    // One number for everything left to decide, the same the Review screen,
+    // the bell and the assistant show. Red while a quarantine holds rows
+    // back from the reports, amber for transfers alone; stale journals alone
+    // show a dot.
+    const total = reviewTotal(badges);
+    if (total > 0) {
+      map["/review"] = {
+        count: total,
+        tone: badges.quarantine > 0 ? "blocker" : "review",
+        labelKey: "badge.review",
       };
-    }
-    if (typeof badges.swaps === "number" && badges.swaps > 0) {
-      map["/swaps"] = {
-        count: badges.swaps,
-        tone: "review",
-        labelKey: "badge.swaps",
-      };
-    }
-    if (badges.journals_needs_processing) {
-      map["/journals"] = {
+    } else if (badges.journals_needs_processing) {
+      map["/review"] = {
         count: null,
         tone: "review",
         labelKey: "badge.journals",
@@ -2310,7 +2300,23 @@ function SidebarActions({
     devLockProps(rowLocked(route), `${label} — ${t("nav:devLocked")}`);
   const activityLocked = rowLocked("/activity");
   const [supportOpen, setSupportOpen] = React.useState(supportActive);
-  const [extrasOpen, setExtrasOpen] = React.useState(false);
+  // Open on a page that lives there, so the current page shows in the nav.
+  const extrasActive = [
+    ...EXTRA_BOOK_PAGES.map((page) => page.href),
+    "/exit-tax",
+    "/privacy-mirror",
+    "/chain-analysis",
+    "/egress",
+  ].some((route) => pathname === route || pathname.startsWith(`${route}/`));
+  const [extrasOpen, setExtrasOpen] = React.useState(extrasActive);
+  // Arriving on one of its pages from elsewhere (a pill, a link on Reports)
+  // opens the fold too, not only on first load.
+  React.useEffect(() => {
+    if (extrasActive) setExtrasOpen(true);
+  }, [extrasActive]);
+  React.useEffect(() => {
+    if (supportActive) setSupportOpen(true);
+  }, [supportActive]);
   const onSupportClick = useRailSubmenuTrigger(setSupportOpen);
   const onExtrasClick = useRailSubmenuTrigger(setExtrasOpen);
 
@@ -2408,6 +2414,7 @@ function SidebarActions({
           <div>
             <CollapsibleTrigger asChild>
               <SidebarMenuButton
+                isActive={extrasActive}
                 tooltip={t("shell.extras.title")}
                 className={navRowClassName}
                 onClick={onExtrasClick}
@@ -2419,6 +2426,26 @@ function SidebarActions({
             </CollapsibleTrigger>
             <CollapsibleContent>
               <SidebarMenuSub>
+                {EXTRA_BOOK_PAGES.map((page) => {
+                  const label = t(`nav:${page.labelKey}`);
+                  const Icon = page.icon;
+                  return (
+                    <SidebarMenuSubItem key={page.href}>
+                      <SidebarMenuSubButton
+                        asChild
+                        className={cn(navSubRowClassName, rowLocked(page.href) && navLockClassName)}
+                        isActive={pathname === page.href}
+                      >
+                        <Link to={page.href} {...lockRow(page.href, label)}>
+                          <Icon className="size-3.5" aria-hidden="true" />
+                          <span>{label}</span>
+                        </Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                  );
+                })}
+                {/* The book's review tools above, the calculators below. */}
+                <li role="separator" aria-hidden="true" className="mx-2 my-1 h-px bg-sidebar-border" />
                 <SidebarMenuSubItem>
                   <SidebarMenuSubButton
                     asChild
@@ -3034,37 +3061,39 @@ function ShellTitlebarControls({
   const headerBookKey = bookIdentityKey(identity);
   const { runJournalProcessing, isProcessingJournals } =
     useJournalProcessingAction();
-  const { data } = useDaemon<OverviewSnapshot>(
-    "ui.overview.snapshot",
+  // The same counts as the sidebar's Review badge, from the same read.
+  const { data } = useDaemon<ReviewBadges>(
+    "ui.review.badges",
     undefined,
     { enabled: daemonEnabled },
   );
-  const snapshot = data?.data;
+  const badges = data?.data;
+  const reviewCount = reviewTotal(badges);
+  const needsJournals = Boolean(badges?.journals_needs_processing);
+  const blocksReports = (badges?.quarantine ?? 0) > 0;
 
   const systemNotificationItems: NotificationItem[] = [
-    ...(snapshot?.status?.needsJournals
+    ...(needsJournals
       ? [
           {
             id: "journals-stale",
             title: t("notifications.ledgerStale.title"),
             body: t("notifications.ledgerStale.body"),
             tone: "warning" as const,
-            to: "/journals" as const,
+            to: "/review" as const,
             action: "process-journals" as const,
             actionLabel: t("notifications.ledgerStale.action"),
           },
         ]
       : []),
-    ...((snapshot?.status?.quarantines ?? 0) > 0
+    ...(reviewCount > 0
       ? [
           {
-            id: "quarantines",
-            title: t("notifications.quarantined.title"),
-            body: t("notifications.quarantined.body", {
-              count: snapshot?.status?.quarantines ?? 0,
-            }),
+            id: "review",
+            title: t("notifications.review.title"),
+            body: t("notifications.review.body", { count: reviewCount }),
             tone: "warning" as const,
-            to: "/quarantine" as const,
+            to: "/review" as const,
           },
         ]
       : []),
@@ -3084,12 +3113,10 @@ function ShellTitlebarControls({
   const notificationCount = notificationItems.filter(
     (item) => item.tone !== "info" || item.title.toLowerCase().includes("sync"),
   ).length;
-  const reviewCount = snapshot?.status?.quarantines ?? 0;
-  const needsJournals = Boolean(snapshot?.status?.needsJournals);
   const notificationAlertClassName =
-    reviewCount > 0
+    blocksReports
       ? "border border-red-500/35 bg-red-500/10 text-red-700 hover:bg-red-500/15 hover:text-red-700 dark:text-red-300 dark:hover:text-red-300"
-      : needsJournals
+      : needsJournals || reviewCount > 0
         ? "border border-amber-500/35 bg-amber-500/10 text-amber-700 hover:bg-amber-500/15 hover:text-amber-700 dark:text-amber-300 dark:hover:text-amber-300"
         : "";
   const notificationLabel =

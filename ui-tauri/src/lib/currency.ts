@@ -18,7 +18,7 @@ export const MISSING_FIAT_LABEL = "Unpriced";
 /**
  * Number-formatting locale for each supported fiat. Austrian EUR groups with
  * dots and a comma decimal (`€ 1.234,56`); the others follow their home
- * convention. Keep in sync with the report locales in mocks/reports.ts.
+ * convention.
  */
 const FIAT_LOCALES: Record<string, string> = {
   EUR: "de-AT",
@@ -34,6 +34,7 @@ export function localeForFiat(code: string): string {
 
 const fiatFormatterCache = new Map<string, Intl.NumberFormat>();
 const compactFiatFormatterCache = new Map<string, Intl.NumberFormat>();
+const wholeFiatFormatterCache = new Map<string, Intl.NumberFormat>();
 const fiatNumberFormatterCache = new Map<string, Intl.NumberFormat>();
 
 /**
@@ -58,6 +59,26 @@ export function fiatFormatter(code: string): Intl.NumberFormat {
 export function formatFiatAmount(value: number, code: string): string {
   if (!Number.isFinite(value)) return MISSING_FIAT_LABEL;
   return fiatFormatter(code).format(value);
+}
+
+/**
+ * Format an amount already denominated in `code` to the whole unit, e.g.
+ * `€ 2.013.456`: exact enough to compare sources where compact notation
+ * would round two of them to the same "2 Mio. €".
+ */
+export function formatWholeFiatAmount(value: number, code: string): string {
+  if (!Number.isFinite(value)) return MISSING_FIAT_LABEL;
+  const key = code.trim().toUpperCase();
+  let formatter = wholeFiatFormatterCache.get(key);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat(localeForFiat(key), {
+      style: "currency",
+      currency: key,
+      maximumFractionDigits: 0,
+    });
+    wholeFiatFormatterCache.set(key, formatter);
+  }
+  return formatter.format(value);
 }
 
 /** Format an amount already denominated in `code` with compact notation. */

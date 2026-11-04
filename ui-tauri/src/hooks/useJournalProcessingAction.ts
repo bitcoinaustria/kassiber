@@ -90,6 +90,11 @@ type JournalProcessingActionOptions = {
   notifyStart?: boolean;
   notifyAlreadyRunning?: boolean;
   beforeRun?: () => boolean;
+  /**
+   * False recalculates without pairing exact matches automatically, for a
+   * run that follows the owner's own decisions.
+   */
+  autoPair?: boolean;
 };
 
 function journalProcessBody(
@@ -123,6 +128,7 @@ export function useJournalProcessingAction(
     notifyStart = false,
     notifyAlreadyRunning = false,
     beforeRun,
+    autoPair = true,
   } = options;
   const dataMode = useUiStore((s) => s.dataMode);
   const addNotification = useUiStore((s) => s.addNotification);
@@ -197,7 +203,7 @@ export function useJournalProcessingAction(
       startedAt,
       updatedAt: startedAt,
     });
-    processJournals.mutate(undefined, {
+    processJournals.mutate(autoPair ? undefined : { auto_pair: false }, {
       onSuccess: (envelope) => {
         const { body, tone } = journalProcessOutcome(envelope.data, entryLabel);
         addNotification({
@@ -224,6 +230,7 @@ export function useJournalProcessingAction(
   }, [
     activeJournalRuns,
     addNotification,
+    autoPair,
     beforeRun,
     clearActiveMaintenanceProgress,
     entryLabel,

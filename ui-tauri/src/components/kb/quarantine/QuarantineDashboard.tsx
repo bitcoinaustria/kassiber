@@ -35,16 +35,10 @@ import {
   type DaemonEnvelope,
 } from "@/daemon/transport";
 import { useCurrency } from "@/lib/currency";
-import {
-  pageDescriptionClassName,
-  pageHeaderClassName,
-  screenShellClassName,
-} from "@/lib/screen-layout";
 import type {
   HistoryRevertTarget,
   TransactionHistoryList,
 } from "@/lib/transactionHistory";
-import { cn } from "@/lib/utils";
 import type { Tx } from "@/mocks/seed";
 import { useUiStore } from "@/store/ui";
 
@@ -532,16 +526,7 @@ export function QuarantineDashboard({
     });
 
   return (
-    <div className={cn(screenShellClassName)}>
-      {/* With nothing held, the empty state says what the page is for. */}
-      {summary.count ? (
-        <div className={pageHeaderClassName}>
-          <p className={cn(pageDescriptionClassName, "self-center")}>
-            {t("quarantine.page.description")}
-          </p>
-        </div>
-      ) : null}
-
+    <div className="space-y-(--kb-page-gap)">
       <QuarantineCausePanel
         snapshot={attention}
         isProcessingJournals={isProcessingJournals}
@@ -584,12 +569,7 @@ export function QuarantineDashboard({
           onOpenTransaction={openFromWaiting}
           onHide={() => onWaitingShownChange(false)}
         />
-      ) : summary.count ? null : (
-        <div className="kb-surface space-y-1 p-(--kb-card-padding)" data-testid="quarantine-empty">
-          <p className="text-base font-semibold">{t("quarantine.emptyTitle")}</p>
-          <p className="text-sm text-muted-foreground">{t("quarantine.emptyBody")}</p>
-        </div>
-      )}
+      ) : null}
 
       {dialog ? (
         <AddConnectionDialog

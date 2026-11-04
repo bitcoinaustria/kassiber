@@ -267,7 +267,7 @@ function ExitTaxBody({
                 ? "Journals are not processed yet."
                 : `${report.status.quarantines} quarantined transaction(s) are excluded.`}{" "}
               Resolve them in the{" "}
-              <Link to="/quarantine" className="underline underline-offset-2">
+              <Link to="/review" className="underline underline-offset-2">
                 quarantine queue
               </Link>{" "}
               before relying on the number.
