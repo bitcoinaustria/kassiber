@@ -590,3 +590,65 @@ fn csv_raw_split_collapses_delimiter_runs_like_re_split() {
     assert_eq!(raw_split(",a; b\t"), ["", "a", "b", ""]);
     assert_eq!(raw_split(""), [""]);
 }
+
+#[test]
+fn verification_lookups_warn_refuse_and_stop_when_cancelled() {
+    let conn = book(&[("hot", "Hot", "descriptor", descriptor("wpkh"))]);
+    let txids: Vec<String> = ["1", "2", "3"].map(|c| c.repeat(64)).to_vec();
+    let plan = || {
+        prepare(
+            &conn,
+            "p",
+            &Inputs {
+                txids: txids.clone(),
+                ..candidates(&[])
+            },
+            true,
+        )
+        .unwrap()
+    };
+    assert_eq!(plan().pending.len(), 3);
+    let mut calls = vec![];
+    let mut progress = vec![];
+    let mut lookup = |txid: &str, _: &str| -> std::result::Result<Option<Legs>, LookupError> {
+        calls.push(txid.to_owned());
+        Err(LookupError::Missed("HTTP 404".into()))
+    };
+    let stop = std::cell::Cell::new(false);
+    let report = plan()
+        .finish(
+            Some(&mut lookup),
+            &mut |checked, total| {
+                progress.push((checked, total));
+                stop.set(checked == 1);
+                Ok(())
+            },
+            &|| stop.get(),
+        )
+        .unwrap();
+    assert_eq!(calls.len(), 1);
+    assert_eq!(progress, [(1, 3)]);
+    assert_eq!(
+        get(&report, "warnings"),
+        Some(&Value::List(vec![
+            s("On-chain verify for 111111111111…: HTTP 404"),
+            s("Stopped after 1 of 3 on-chain lookups; the rest stay unknown."),
+        ]))
+    );
+    let rows = results(&report);
+    assert_eq!(rows.len(), 3);
+    assert_eq!(
+        get(get(&report, "summary").unwrap(), "verified_on_chain"),
+        Some(&Value::Bool(true))
+    );
+    let mut refused = |_: &str, _: &str| -> std::result::Result<Option<Legs>, LookupError> {
+        Err(LookupError::Refused(AppError::new(
+            "validation",
+            "broken backend",
+        )))
+    };
+    let error = plan()
+        .finish(Some(&mut refused), &mut |_, _| Ok(()), &|| false)
+        .unwrap_err();
+    assert_eq!(error.message, "broken backend");
+}

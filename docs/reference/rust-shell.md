@@ -16123,3 +16123,41 @@ Served by Rust in the parity run, with zero fallbacks: `ui.wallets.identify`
 27 requests (23 successes, 4 refusals), `ui.wallets.ledger_preview` 29 (14
 successes, 15 refusals) and `ui.wallets.detect_script_types` 27 (16 fallback
 reports, 11 refusals).
+
+### On-chain identification
+
+`ui.wallets.identify_onchain` and `ui.wallets.identify_onchain.cancel` are
+native. The request thread does all book work: inputs, the verification
+backend (Esplora or Electrum only, resolved like Python, before the local
+tiers), and the same local classification as `ui.wallets.identify`. Txids
+local data cannot settle are left pending; without any, the report is
+answered at once. Otherwise a worker that never touches the book writes
+`ui.wallets.identify_onchain.progress` records and the terminal report.
+
+The request is the user's explicit "Verify on chain" action, so the worker's
+lookups go only through `kassiber-net`, under a grant minted for that request
+and spent by its one run. Offline mode and `KASSIBER_NO_EGRESS` refuse at the
+transport gate exactly where Python's do: per txid for Esplora (a warning, the
+txid stays unknown) and for the Electrum session as a whole (a terminal
+error). Electrum without a configured chain refuses the run, as in Python.
+
+Cancellation matches Python's registry. A cancel is checked before each
+lookup, never mid-request: the lookup in flight finishes and is classified,
+and the report then says how far it got. A cancel that arrives before its run
+registers is held for 30 seconds, at most 32 at a time, and stops that run
+before its first lookup. Request ids without a string form cannot be
+cancelled; a finished run never unregisters a newer run with the same id.
+
+`tests/test_rust_wallet_identify_onchain.py` drives both daemons step by step
+against loopback Esplora and Electrum fixtures and compares every record and
+the recorded backend traffic, including a cancel while a lookup is held open,
+an early cancel, 404 and Electrum errors, offline refusals and an encrypted
+book. Local identification is shown to send nothing. The catalog gains 13
+entries for this group. Encrypted sessions now unlock first, including the
+group-1 encrypted tests, so they compare real results rather than the unlock
+prompt.
+
+Served by Rust in the parity run, with zero fallbacks:
+`ui.wallets.identify_onchain` 18 terminal records (11 reports, 7 errors and
+refusals) and `ui.wallets.identify_onchain.cancel` 7 (3 acknowledgements, 4
+refusals).

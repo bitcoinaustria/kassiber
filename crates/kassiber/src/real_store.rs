@@ -2374,6 +2374,12 @@ impl Book for RealBook {
         let identity = None;
         kassiber_wallets::file_import::samourai::execute(self.conn()?, request, identity.as_ref())
     }
+    fn identify_onchain(
+        &mut self,
+        args: &Value,
+    ) -> Result<kassiber_wallets::identify::onchain::Start, AppError> {
+        self.prepare_identify_onchain(args)
+    }
     fn wallets(&mut self, operation: kassiber_wallets::Operation) -> Result<Value, AppError> {
         #[cfg(feature = "test-harness")]
         if let (Ok(id), Ok(created_at)) = (

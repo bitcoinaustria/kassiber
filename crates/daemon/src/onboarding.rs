@@ -6,15 +6,199 @@ use crate::{
     output::{with_request_id, RequestId},
     Daemon, Handled,
 };
-use kassiber_envelope::{dict, get, s, success, type_name, AppError};
+use kassiber_envelope::redaction::redact_secret_text;
+use kassiber_envelope::{build_error_envelope, dict, get, py_str, s, success, type_name, AppError};
 use kassiber_pyjson::{BigInt, Value};
-use kassiber_wallets::{catalog_detection, file_import::ledger};
+use kassiber_wallets::{catalog_detection, file_import::ledger, identify::onchain::Start};
+use std::collections::HashMap;
+use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 pub const KINDS: &[&str] = &[
     "ui.wallets.identify",
+    "ui.wallets.identify_onchain",
+    "ui.wallets.identify_onchain.cancel",
     "ui.wallets.ledger_preview",
     "ui.wallets.detect_script_types",
 ];
+
+const ONCHAIN: &str = "ui.wallets.identify_onchain";
+const ONCHAIN_CANCEL: &str = "ui.wallets.identify_onchain.cancel";
+const ONCHAIN_PROGRESS: &str = "ui.wallets.identify_onchain.progress";
+/// A cancel can race ahead of the request it names; it is held this long.
+const PENDING_CANCEL_TTL: Duration = Duration::from_secs(30);
+const MAX_PENDING_CANCELS: usize = 32;
+
+/// `ActiveVerifications`: cancel flags for running on-chain verifications,
+/// keyed by request id, plus cancels that arrived first.
+#[derive(Default)]
+pub(crate) struct Verifications {
+    state: Mutex<Registry>,
+}
+
+#[derive(Default)]
+struct Registry {
+    running: HashMap<String, Arc<AtomicBool>>,
+    /// Cancels for runs not registered yet, oldest first, with their expiry.
+    pending: Vec<(String, Instant)>,
+}
+
+impl Verifications {
+    fn register(&self, key: Option<&str>) -> Arc<AtomicBool> {
+        let flag = Arc::new(AtomicBool::new(false));
+        let Some(key) = key else {
+            return flag;
+        };
+        let now = Instant::now();
+        let mut state = self.state.lock().expect("verification registry");
+        state.pending.retain(|(_, deadline)| *deadline >= now);
+        if let Some(at) = state.pending.iter().position(|(pending, _)| pending == key) {
+            state.pending.remove(at);
+            flag.store(true, Ordering::SeqCst);
+        }
+        state.running.insert(key.to_owned(), flag.clone());
+        flag
+    }
+
+    fn unregister(&self, key: Option<&str>, flag: &Arc<AtomicBool>) {
+        let Some(key) = key else {
+            return;
+        };
+        let mut state = self.state.lock().expect("verification registry");
+        if state
+            .running
+            .get(key)
+            .is_some_and(|running| Arc::ptr_eq(running, flag))
+        {
+            state.running.remove(key);
+        }
+    }
+
+    fn cancel(&self, key: &str) -> bool {
+        let mut state = self.state.lock().expect("verification registry");
+        if let Some(flag) = state.running.get(key) {
+            flag.store(true, Ordering::SeqCst);
+            return true;
+        }
+        let deadline = Instant::now() + PENDING_CANCEL_TTL;
+        match state.pending.iter_mut().find(|(pending, _)| pending == key) {
+            Some(entry) => entry.1 = deadline,
+            None => {
+                if state.pending.len() >= MAX_PENDING_CANCELS {
+                    state.pending.remove(0);
+                }
+                state.pending.push((key.to_owned(), deadline));
+            }
+        }
+        false
+    }
+}
+
+/// `_request_id_registry_key`.
+fn registry_key(request_id: &RequestId) -> Option<String> {
+    match request_id {
+        RequestId::Missing | RequestId::Value(Value::Null) => None,
+        RequestId::Value(id @ Value::Str(_)) => Some(py_str(id)).filter(|key| !key.is_empty()),
+        RequestId::Value(id) => Some(py_str(id)),
+    }
+}
+
+/// `daemon_ownership_verify._error`: no details, redacted text.
+fn worker_error(error: &AppError) -> Value {
+    let hint = error.hint.as_deref().map(redact_secret_text);
+    build_error_envelope(
+        &error.code,
+        &redact_secret_text(&error.message),
+        None,
+        hint.as_deref(),
+        error.retryable,
+        None,
+    )
+}
+
+/// `daemon_ownership_verify.start`: answer now, or stream from a worker that
+/// never touches the book.
+fn identify_onchain(daemon: &mut Daemon, args: Option<&Value>, request_id: &RequestId) -> Handled {
+    let start = daemon
+        .book_mut()?
+        .identify_onchain(args.unwrap_or(&Value::Null))?;
+    let verification = match start {
+        Start::Report(report) => {
+            return Ok((
+                Some(with_request_id(success(ONCHAIN, report), request_id)),
+                false,
+            ));
+        }
+        Start::Verify(verification) => verification,
+    };
+    let key = registry_key(request_id);
+    let registry = daemon.verifications.clone();
+    let cancelled = registry.register(key.as_deref());
+    let output = daemon.output.clone();
+    let request_id = request_id.clone();
+    let spawned = std::thread::Builder::new()
+        .name("kassiber-identify-onchain".into())
+        .spawn(move || {
+            let progress = |checked: usize, total: usize| {
+                let data = dict([
+                    ("checked", Value::from(checked as i64)),
+                    ("total", Value::from(total as i64)),
+                ]);
+                output
+                    .write(&with_request_id(
+                        success(ONCHAIN_PROGRESS, data),
+                        &request_id,
+                    ))
+                    .map_err(|_| AppError::new("cancelled", "Daemon output closed"))
+            };
+            let total = verification.pending();
+            let result = progress(0, total).and_then(|()| {
+                catch_unwind(AssertUnwindSafe(|| {
+                    verification.run(&mut |checked, total| progress(checked, total), &|| {
+                        cancelled.load(Ordering::SeqCst)
+                    })
+                }))
+                .unwrap_or_else(|_| Err(AppError::new("internal", "On-chain verification failed")))
+            });
+            let record = match result {
+                Ok(report) => success(ONCHAIN, report),
+                Err(error) => worker_error(&error),
+            };
+            let _ = output.write(&with_request_id(record, &request_id));
+            registry.unregister(key.as_deref(), &cancelled);
+        });
+    if spawned.is_err() {
+        return Err(
+            AppError::new("internal_error", "Could not start on-chain verification").into(),
+        );
+    }
+    Ok((None, false))
+}
+
+/// `daemon_ownership_verify.cancel`.
+fn cancel_onchain(daemon: &Daemon, args: &Value) -> Result<Value, AppError> {
+    let target = match get(args, "target_request_id") {
+        Some(Value::Str(target)) if target.code_points().next().is_some() => {
+            py_str(&Value::Str(target.clone()))
+        }
+        _ => {
+            return Err(AppError::new(
+                "validation",
+                format!("{ONCHAIN_CANCEL} requires target_request_id"),
+            )
+            .with_hint(format!(
+                "Pass {{target_request_id: '<active {ONCHAIN} request_id>'}}."
+            )))
+        }
+    };
+    let running = daemon.verifications.cancel(&target);
+    Ok(dict([
+        ("cancelled", Value::Bool(true)),
+        ("running", Value::Bool(running)),
+    ]))
+}
 
 pub(super) fn handle(
     daemon: &mut Daemon,
@@ -25,7 +209,11 @@ pub(super) fn handle(
     if let Some(locked) = daemon.open_lazily(request_id)? {
         return Ok((Some(locked), false));
     }
+    if kind == ONCHAIN {
+        return identify_onchain(daemon, args, request_id);
+    }
     let payload = match kind {
+        ONCHAIN_CANCEL => cancel_onchain(daemon, &object(args)?)?,
         // Python hands the raw args to the snapshot, which checks them itself.
         "ui.wallets.identify" => daemon
             .book_mut()?
@@ -200,6 +388,47 @@ fn strict_base64(text: &str) -> Option<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn verification_registry_keys_follow_python() {
+        assert_eq!(registry_key(&RequestId::Missing), None);
+        assert_eq!(registry_key(&RequestId::Value(Value::Null)), None);
+        assert_eq!(registry_key(&RequestId::Value(s(""))), None);
+        assert_eq!(registry_key(&RequestId::Value(s("v"))), Some("v".into()));
+        assert_eq!(
+            registry_key(&RequestId::Value(Value::from(7))),
+            Some("7".into())
+        );
+        assert_eq!(
+            registry_key(&RequestId::Value(Value::Bool(true))),
+            Some("True".into())
+        );
+    }
+
+    #[test]
+    fn verification_cancels_reach_running_and_later_runs() {
+        let registry = Verifications::default();
+        let running = registry.register(Some("run"));
+        assert!(registry.cancel("run"));
+        assert!(running.load(Ordering::SeqCst));
+        // A cancel that arrives first is held for the run it names.
+        assert!(!registry.cancel("later"));
+        assert!(registry.register(Some("later")).load(Ordering::SeqCst));
+        assert!(!registry.register(Some("fresh")).load(Ordering::SeqCst));
+        // A finished run never unregisters a newer one with the same key.
+        let newer = registry.register(Some("run"));
+        registry.unregister(Some("run"), &running);
+        assert!(registry.cancel("run"));
+        assert!(newer.load(Ordering::SeqCst));
+        // Only the newest pending cancels are kept.
+        for index in 0..=MAX_PENDING_CANCELS {
+            assert!(!registry.cancel(&format!("pending-{index}")));
+        }
+        assert!(!registry.register(Some("pending-0")).load(Ordering::SeqCst));
+        assert!(registry.register(Some("pending-1")).load(Ordering::SeqCst));
+        // Without a request id a run can never be cancelled.
+        assert!(!registry.register(None).load(Ordering::SeqCst));
+    }
 
     #[test]
     fn strict_base64_matches_cpython_validate_mode() {

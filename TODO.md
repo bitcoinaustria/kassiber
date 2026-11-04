@@ -457,6 +457,9 @@ projections stay Python. Progress and remaining work for this slice:
   consent-bound script-type detection with raw-JSONL/all-table parity, a
   no-traffic regression and named mutation killers. See
   [desktop wallet onboarding](docs/reference/rust-shell.md#desktop-wallet-onboarding-r5).
+- [x] Port on-chain identification with streamed progress, Python's
+  cancellation registry and consent-bound lookups, compared step by step
+  against loopback Esplora/Electrum fixtures.
 - [ ] Complete the [shared file-import daemon parity follow-up](docs/reference/rust-shell.md#shared-file-import-daemon-parity-pending)
   after its native prerequisites land.
 - [ ] Port the remaining wallet commands after file-ingestion acceptance,

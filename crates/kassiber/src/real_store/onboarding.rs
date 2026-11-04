@@ -6,7 +6,10 @@ use kassiber_envelope::{dict, get, py_str, s, set, AppError};
 use kassiber_pyjson::Value;
 use kassiber_runtime::store::Book;
 use kassiber_wallets::catalog_detection::{self, Detection, Grant};
-use kassiber_wallets::identify;
+use kassiber_wallets::identify::{
+    self,
+    onchain::{Start, Verification, Verifier},
+};
 use std::time::{Duration, Instant};
 
 impl RealBook {
@@ -34,6 +37,37 @@ impl RealBook {
             ]),
         );
         Ok(payload)
+    }
+
+    /// `prepare_wallet_identify_onchain`: inputs, then the verification
+    /// backend, then the local tiers; txids local data cannot settle stay
+    /// pending for the worker.
+    pub(super) fn prepare_identify_onchain(&self, args: &Value) -> Result<Start, AppError> {
+        let context = self.context()?;
+        if context.workspace_id.is_empty() || context.profile_id.is_empty() {
+            return Ok(Start::Report(identify::empty()));
+        }
+        let inputs = identify::Inputs::from_args(Some(args))?;
+        let name = get(args, "backend")
+            .filter(|value| !matches!(value, Value::Null))
+            .map(py_str);
+        let backend = self
+            .backends
+            .resolve_configured(self.conn()?, name.as_deref())?;
+        let verifier = Verifier::new(&backend)?;
+        let plan = identify::prepare(self.conn()?, &context.profile_id, &inputs, true)?;
+        let label = |text: &str| {
+            if text.is_empty() {
+                Value::Null
+            } else {
+                s(text)
+            }
+        };
+        let scope = dict([
+            ("workspace", label(&context.workspace_label)),
+            ("profile", label(&context.profile_label)),
+        ]);
+        Ok(Verification::start(plan, verifier, network_gate(), scope))
     }
 
     /// The daemon has already validated the material and argument types.

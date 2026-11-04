@@ -9,6 +9,7 @@
 //! A match is ownership evidence for display; it grants no custody, basis or
 //! tax fact.
 mod codec;
+pub mod onchain;
 mod silent;
 
 use crate::{database_error, descriptors};

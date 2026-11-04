@@ -504,6 +504,14 @@ pub trait Book: Send {
     fn wallets(&mut self, _operation: kassiber_wallets::Operation) -> Result<Value, AppError> {
         Err(not_implemented("wallets", "wallet lifecycle"))
     }
+    /// `ui.wallets.identify_onchain` preparation: the book work, done on the
+    /// request thread. The returned verification holds no database handle.
+    fn identify_onchain(
+        &mut self,
+        _args: &Value,
+    ) -> Result<kassiber_wallets::identify::onchain::Start, AppError> {
+        Err(not_implemented("wallets", "on-chain identification"))
+    }
     fn wallet_sync_supported(
         &self,
         _profile_id: &str,

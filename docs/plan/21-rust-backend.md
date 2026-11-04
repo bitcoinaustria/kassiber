@@ -2705,6 +2705,10 @@ the preview make no network calls. Raw JSONL and all 112 tables match Python
 on SQLite and SQLCipher; 34 mutation entries are killed by named tests. See
 [the shell reference](../reference/rust-shell.md#desktop-wallet-onboarding-r5).
 
+On-chain identification streams from a worker that never touches the book;
+its lookups are the explicit "Verify on chain" action through `kassiber-net`,
+and cancellation follows Python's registry, between lookups only.
+
 ## Risks
 
 - **Scale.** About 218,000 lines of Python, 313 CLI leaves, 303 daemon kinds,

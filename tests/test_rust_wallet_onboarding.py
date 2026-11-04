@@ -59,8 +59,19 @@ def tx_graph(txid, inputs, outputs):
     })
 
 
+class UnlockingParity(DesktopParity):
+    """Sessions on an encrypted book unlock first, as the desktop does."""
+
+    def requests(self, args, kind=None):
+        requests = super().requests(args, kind)
+        if self.passphrase:
+            requests.insert(0, dict(request_id="unlock", kind="daemon.unlock",
+                                    args={"auth_response": {"passphrase_secret": self.passphrase}}))
+        return requests
+
+
 @unittest.skipUnless(RUST_BIN, "set KASSIBER_RUST_BIN to the harness build")
-class RustWalletIdentifyTest(DesktopParity, unittest.TestCase):
+class RustWalletIdentifyTest(UnlockingParity, unittest.TestCase):
     KIND = "ui.wallets.identify"
 
     def seed(self):
@@ -189,7 +200,7 @@ class RustWalletIdentifyTest(DesktopParity, unittest.TestCase):
 
 
 @unittest.skipUnless(RUST_BIN, "set KASSIBER_RUST_BIN to the harness build")
-class RustLedgerPreviewTest(DesktopParity, unittest.TestCase):
+class RustLedgerPreviewTest(UnlockingParity, unittest.TestCase):
     KIND = "ui.wallets.ledger_preview"
 
     def upload(self, text, **extra):
@@ -218,7 +229,7 @@ class RustLedgerPreviewTest(DesktopParity, unittest.TestCase):
 
 
 @unittest.skipUnless(RUST_BIN, "set KASSIBER_RUST_BIN to the harness build")
-class RustScriptTypeDetectionTest(DesktopParity, unittest.TestCase):
+class RustScriptTypeDetectionTest(UnlockingParity, unittest.TestCase):
     KIND = "ui.wallets.detect_script_types"
 
     def test_fallbacks_and_refusals_match_wire_bytes(self):

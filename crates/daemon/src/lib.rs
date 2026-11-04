@@ -128,6 +128,8 @@ pub fn supported_kinds() -> Vec<&'static str> {
     );
     kinds.push("ui.privacy_hygiene.snapshot");
     kinds.push("ui.wallets.identify");
+    kinds.push("ui.wallets.identify_onchain");
+    kinds.push("ui.wallets.identify_onchain.cancel");
     kinds.extend(loans::KINDS);
     kinds.extend(services::kinds().filter(|k| {
         backends::KINDS.contains(k)
@@ -473,6 +475,8 @@ pub(crate) struct Daemon {
     /// The last merged runtime backend view, kept after the book closes
     /// as Python keeps `ctx.runtime_config`.
     egress_backends: Option<Value>,
+    /// Running "Verify on chain" workers, by request id.
+    verifications: Arc<onboarding::Verifications>,
 }
 
 impl Daemon {
@@ -498,6 +502,7 @@ impl Daemon {
             watch_worker: None,
             log_ring: Default::default(),
             egress_backends: None,
+            verifications: Default::default(),
         }
     }
 

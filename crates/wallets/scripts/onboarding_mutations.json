@@ -338,5 +338,135 @@
       "tests/test_rust_wallet_onboarding.py::RustScriptTypeDetectionTest::test_fallbacks_and_refusals_match_wire_bytes"
     ],
     "rule": "The daemon advertises native detection."
+  },
+  {
+    "id": "OC-cancel-before-lookup",
+    "file": "crates/wallets/src/identify.rs",
+    "find": "            if cancelled() {",
+    "replace": "            if false {",
+    "expect_failing": [
+      "verification_lookups_warn_refuse_and_stop_when_cancelled"
+    ],
+    "rule": "A cancelled verification stops before its next lookup and leaves the rest unknown."
+  },
+  {
+    "id": "OC-refused-lookup",
+    "file": "crates/wallets/src/identify.rs",
+    "find": "Err(LookupError::Refused(error)) => return Err(error),",
+    "replace": "Err(LookupError::Refused(_)) => {}",
+    "expect_failing": [
+      "verification_lookups_warn_refuse_and_stop_when_cancelled"
+    ],
+    "rule": "A broken backend configuration fails the run instead of marking every txid unknown."
+  },
+  {
+    "id": "OC-warning-prefix",
+    "file": "crates/wallets/src/identify.rs",
+    "find": "token.txid.chars().take(12).collect()",
+    "replace": "token.txid.chars().take(13).collect()",
+    "expect_failing": [
+      "verification_lookups_warn_refuse_and_stop_when_cancelled"
+    ],
+    "rule": "A per-txid miss names the first twelve txid characters."
+  },
+  {
+    "id": "OC-pending-cancel",
+    "file": "crates/daemon/src/onboarding.rs",
+    "find": "            state.pending.remove(at);\n            flag.store(true, Ordering::SeqCst);",
+    "replace": "            state.pending.remove(at);",
+    "expect_failing": [
+      "verification_cancels_reach_running_and_later_runs"
+    ],
+    "rule": "A cancel that arrives first stops the run it names."
+  },
+  {
+    "id": "OC-unregister-identity",
+    "file": "crates/daemon/src/onboarding.rs",
+    "find": "Arc::ptr_eq(running, flag)",
+    "replace": "true",
+    "expect_failing": [
+      "verification_cancels_reach_running_and_later_runs"
+    ],
+    "rule": "A finished run never unregisters a newer run with the same request id."
+  },
+  {
+    "id": "OC-pending-cap",
+    "file": "crates/daemon/src/onboarding.rs",
+    "find": "state.pending.remove(0);",
+    "replace": "state.pending.pop();",
+    "expect_failing": [
+      "verification_cancels_reach_running_and_later_runs"
+    ],
+    "rule": "Only the newest pending cancels are kept."
+  },
+  {
+    "id": "OC-raw-txid-order",
+    "file": "crates/wallets/src/identify/onchain.rs",
+    "find": "    let little = |bytes: &[u8]| {\n        bytes\n            .iter()\n            .rev()",
+    "replace": "    let little = |bytes: &[u8]| {\n        bytes\n            .iter()",
+    "expect_failing": [
+      "raw_bitcoin_transactions_reduce_to_outpoints_and_scripts"
+    ],
+    "rule": "Raw transaction integers are little-endian."
+  },
+  {
+    "id": "OC-esplora-prevout",
+    "file": "crates/wallets/src/identify/onchain.rs",
+    "find": "py(prevout.get(\"scriptpubkey\").unwrap_or(&Json::Null))",
+    "replace": "Value::Null",
+    "expect_failing": [
+      "esplora_transactions_keep_prevout_scripts"
+    ],
+    "rule": "Esplora inputs carry their prevout scripts."
+  },
+  {
+    "id": "OC-electrum-chain",
+    "file": "crates/wallets/src/identify/onchain.rs",
+    "find": "if ![\"bitcoin\", \"liquid\"].contains(&chain.as_str()) {",
+    "replace": "if chain.as_str() == \"never\" {",
+    "expect_failing": [
+      "tests/test_rust_wallet_identify_onchain.py::RustIdentifyOnchainTest::test_local_answers_refusals_and_lookups_match_python"
+    ],
+    "rule": "Electrum verification refuses a backend without a chain."
+  },
+  {
+    "id": "OC-cancelled-flag",
+    "file": "crates/wallets/src/identify/onchain.rs",
+    "find": "\"cancelled\", Value::Bool(cancelled())",
+    "replace": "\"cancelled\", Value::Bool(false)",
+    "expect_failing": [
+      "tests/test_rust_wallet_identify_onchain.py::RustIdentifyOnchainTest::test_cancel_mid_request_and_before_registration_match_python"
+    ],
+    "rule": "The streamed report says whether it was cancelled."
+  },
+  {
+    "id": "OC-first-progress",
+    "file": "crates/daemon/src/onboarding.rs",
+    "find": "let result = progress(0, total).and_then(",
+    "replace": "let result = Ok(()).and_then(",
+    "expect_failing": [
+      "tests/test_rust_wallet_identify_onchain.py::RustIdentifyOnchainTest::test_cancel_mid_request_and_before_registration_match_python"
+    ],
+    "rule": "The worker announces zero of N before its first lookup."
+  },
+  {
+    "id": "OC-kind-check",
+    "file": "crates/wallets/src/identify/onchain.rs",
+    "find": "if ![\"esplora\", \"electrum\"].contains(&kind.as_str()) {",
+    "replace": "if kind.is_empty() {",
+    "expect_failing": [
+      "verification_needs_an_esplora_or_electrum_backend"
+    ],
+    "rule": "Verification needs an Esplora or Electrum backend."
+  },
+  {
+    "id": "REG-identify-onchain",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "    kinds.push(\"ui.wallets.identify_onchain\");\n",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_wallet_identify_onchain.py::RustIdentifyOnchainTest::test_sqlcipher_lookup_matches_python"
+    ],
+    "rule": "The daemon advertises native on-chain identification."
   }
 ]

@@ -52,9 +52,11 @@ class Runner(BaseRunner):
 
 def main():
     target = (ROOT / "target").resolve()
-    scratch = target / "onboarding-mutation-scratch"
-    build = target / "onboarding-mutation-build"
-    scratch.mkdir(parents=True, exist_ok=True)
+    # One private tree per run, so a concurrent `--check` cannot remove it.
+    run = Path(tempfile.mkdtemp(prefix="onboarding-mutation-", dir=target))
+    scratch = run / "scratch"
+    build = run / "build"
+    scratch.mkdir()
     tempfile.tempdir = str(scratch)
     os.environ["TMPDIR"] = str(scratch)
     os.environ["CARGO_TARGET_DIR"] = str(build)
@@ -64,8 +66,7 @@ def main():
     try:
         return checker.main()
     finally:
-        shutil.rmtree(build, ignore_errors=True)
-        shutil.rmtree(scratch, ignore_errors=True)
+        shutil.rmtree(run, ignore_errors=True)
 
 
 if __name__ == "__main__":
