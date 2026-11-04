@@ -18,6 +18,7 @@ mod backends;
 mod backup;
 mod chain_analysis_reads;
 pub mod control;
+mod diagnostics;
 mod documents;
 mod freshness;
 mod imports;
@@ -88,6 +89,7 @@ pub struct DaemonConfig {
 /// Every kind `daemon.ready` advertises.
 pub fn supported_kinds() -> Vec<&'static str> {
     let mut kinds = vec![SUPPORTED_KINDS[0]];
+    kinds.extend(diagnostics::KINDS);
     kinds.extend(services::kinds().filter(|k| offline::KINDS.contains(k)));
     kinds.extend(workspace_reads::OVERVIEW_KINDS);
     kinds.extend(transactions::KINDS);
@@ -451,6 +453,11 @@ pub(crate) struct Daemon {
     analysis: Arc<kassiber_wallets::analysis_index::runtime::Runtime>,
     /// The local-evidence worker (`daemon_chain_analysis_watches`).
     watch_worker: Option<watches::Thread>,
+    /// `get_log_ring()`: request lifecycle records, RAM only.
+    log_ring: diagnostics::LogRing,
+    /// The last merged runtime backend view, kept after the book closes
+    /// as Python keeps `ctx.runtime_config`.
+    egress_backends: Option<Value>,
 }
 
 impl Daemon {
@@ -474,6 +481,8 @@ impl Daemon {
             backup_sessions: Default::default(),
             analysis: Default::default(),
             watch_worker: None,
+            log_ring: Default::default(),
+            egress_backends: None,
         }
     }
 
@@ -584,16 +593,88 @@ impl Daemon {
             {
                 continue;
             }
+            // `_REQUEST_LOGGER`: every request except the two snapshots.
+            let kind = get(&request, "kind");
+            let logged =
+                !matches!(kind, Some(Value::Str(k)) if diagnostics::KINDS.iter().any(|d| k.is(d)));
+            let rid = diagnostics::request_key(&request);
+            let started = std::time::Instant::now();
+            if logged {
+                self.log_ring.append(
+                    "debug",
+                    line!(),
+                    "request started",
+                    vec![("kind", diagnostics::kind_field(kind))],
+                    rid.as_deref(),
+                );
+            }
             let outcome = catch_unwind(AssertUnwindSafe(|| self.handle(&request, input)));
+            let failed = |ring: &mut diagnostics::LogRing, level: &str, line, msg: &str, extra| {
+                if logged {
+                    let mut fields = vec![
+                        ("kind", diagnostics::kind_field(kind)),
+                        ("duration_ms", diagnostics::duration_field(started)),
+                    ];
+                    fields.push(extra);
+                    ring.append(level, line, msg, fields, rid.as_deref());
+                }
+            };
+            let text = |value: String| dict([("type", s("text")), ("value", s(value))]);
             let (response, shutdown) = match outcome {
-                Ok(Ok(handled)) => handled,
+                Ok(Ok(handled)) => {
+                    if logged {
+                        let mut fields = vec![
+                            ("kind", diagnostics::kind_field(kind)),
+                            ("duration_ms", diagnostics::duration_field(started)),
+                        ];
+                        if let Some(Value::Str(response_kind)) =
+                            handled.0.as_ref().and_then(|r| get(r, "kind"))
+                        {
+                            fields.push((
+                                "response_kind",
+                                text(kassiber_envelope::py_str(&Value::Str(
+                                    response_kind.clone(),
+                                ))),
+                            ));
+                        }
+                        self.log_ring.append(
+                            "debug",
+                            line!(),
+                            "request finished",
+                            fields,
+                            rid.as_deref(),
+                        );
+                    }
+                    handled
+                }
                 Ok(Err(Failure::Closed)) => return 1,
                 Ok(Err(Failure::App(error))) => {
                     self.rollback();
+                    let code = if error.code.is_empty() {
+                        "app_error".to_owned()
+                    } else {
+                        error.code.clone()
+                    };
+                    failed(
+                        &mut self.log_ring,
+                        "warning",
+                        line!(),
+                        "request failed",
+                        ("error_code", text(code)),
+                    );
                     (Some(request_error_envelope(&error, &request)), false)
                 }
                 Ok(Err(Failure::Unhandled(error))) => {
                     self.rollback();
+                    // Native code has no Python traceback; record the
+                    // floored error text in its place.
+                    failed(
+                        &mut self.log_ring,
+                        "error",
+                        line!(),
+                        "request crashed",
+                        ("traceback", text(error.message.to_string())),
+                    );
                     (
                         Some(unhandled_error_envelope(
                             &error,
@@ -609,6 +690,13 @@ impl Daemon {
                         .map(|m| (*m).to_owned())
                         .or_else(|| panic.downcast_ref::<String>().cloned())
                         .unwrap_or_else(|| "panic".to_owned());
+                    failed(
+                        &mut self.log_ring,
+                        "error",
+                        line!(),
+                        "request crashed",
+                        ("traceback", text(message.clone())),
+                    );
                     // Not eprintln!: a closed stderr must not panic again
                     // outside catch_unwind.
                     let _ = writeln!(
@@ -626,6 +714,7 @@ impl Daemon {
                     (Some(record), false)
                 }
             };
+            self.remember_egress_backends();
             if let Some(response) = response {
                 if self.write(&response).is_err() {
                     return 1;
@@ -731,6 +820,17 @@ impl Daemon {
             }
         }
         self.backup_sessions.expire();
+        if diagnostics::KINDS.contains(&kind_text.as_str()) {
+            let payload = if kind_text == "ui.logs.snapshot" {
+                diagnostics::logs(&self.log_ring, args.as_ref())?
+            } else {
+                self.egress_snapshot(args.as_ref())?
+            };
+            return Ok((
+                Some(with_request_id(success(&kind_text, payload), &request_id)),
+                false,
+            ));
+        }
         self.freshness_before_request(&kind_text)?;
         if kind_text == "ui.review.worklist" {
             // Python advertises the worklist but its direct dispatch has no
@@ -1315,6 +1415,52 @@ impl Daemon {
         }
         self.remember_passphrase(passphrase);
         Ok(())
+    }
+
+    /// `_egress_snapshot_payload(ctx, request)`. Never opens the book.
+    fn egress_snapshot(&mut self, args: Option<&Value>) -> Result<Value, AppError> {
+        let root = dict([("data_root", s(self.data_root.as_str()))]);
+        let inputs = match self.book.as_mut() {
+            Some(book) => book.service("ui.egress.allowlist", &dict::<&str>([]))?,
+            None => match &self.egress_backends {
+                Some(backends) => dict([("backends", backends.clone())]),
+                None => self.store.local_service("ui.egress.allowlist", &root)?,
+            },
+        };
+        let list = |key: &str| -> Option<Vec<(String, Value, Value)>> {
+            match get(&inputs, key) {
+                Some(Value::List(items)) => Some(
+                    items
+                        .iter()
+                        .filter_map(|item| match item {
+                            Value::List(v) if v.len() == 3 => {
+                                Some((kassiber_envelope::py_str(&v[0]), v[1].clone(), v[2].clone()))
+                            }
+                            _ => None,
+                        })
+                        .collect(),
+                ),
+                _ => None,
+            }
+        };
+        let database = self.store.local_service("ui.egress.database", &root)?;
+        diagnostics::egress(
+            args,
+            std::path::Path::new(&kassiber_envelope::py_str(&database)),
+            &diagnostics::EgressInputs {
+                backends: list("backends").unwrap_or_default(),
+                ai_providers: list("ai_providers"),
+            },
+        )
+    }
+
+    /// Keep the merged backend view a later locked snapshot reports.
+    fn remember_egress_backends(&mut self) {
+        if let Some(book) = self.book.as_mut() {
+            if let Ok(inputs) = book.service("ui.egress.allowlist", &dict::<&str>([])) {
+                self.egress_backends = get(&inputs, "backends").cloned();
+            }
+        }
     }
 
     /// `_close_current_project_for_switch(ctx)`: stop workers, close the

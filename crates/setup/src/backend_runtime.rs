@@ -430,6 +430,68 @@ impl Config {
             default_backend,
         })
     }
+    /// `runtime_config["backends"]` as `(name, url, source)` in Python's dict
+    /// order: bootstrap and dotenv names in load order, then process-only
+    /// overrides, then rows the book added in `SELECT * FROM backends` order.
+    /// Before the first merge (`merged == false`) this is the bootstrap view.
+    pub fn egress_backends(
+        &self,
+        conn: Option<&Connection>,
+    ) -> Result<Vec<(String, kassiber_pyjson::Value, kassiber_pyjson::Value)>, AppError> {
+        use kassiber_pyjson::Value as Py;
+        let text = |v: Option<&String>| v.map_or(Py::Null, |v| Py::Str(v.as_str().into()));
+        let Some(conn) = conn.filter(|_| !self.view.is_empty()) else {
+            let mut names: Vec<&String> = self
+                .seed_order
+                .iter()
+                .filter(|n| self.runtime.contains_key(*n))
+                .collect();
+            names.extend(self.runtime.keys().filter(|n| !self.seed_order.contains(n)));
+            return Ok(names
+                .into_iter()
+                .map(|n| {
+                    let b = &self.runtime[n];
+                    (n.clone(), text(b.get("url")), text(b.get("source")))
+                })
+                .collect());
+        };
+        let mut names: Vec<String> = self
+            .seed_order
+            .iter()
+            .filter(|n| self.runtime.contains_key(*n) && self.view.contains_key(*n))
+            .cloned()
+            .collect();
+        for name in self.runtime.keys() {
+            if !names.contains(name) && self.view.contains_key(name) {
+                names.push(name.clone());
+            }
+        }
+        let mut statement = conn
+            .prepare("SELECT name FROM backends")
+            .map_err(map_sqlite_error)
+            .map_err(error)?;
+        let stored = statement
+            .query_map([], |r| r.get::<_, String>(0))
+            .map_err(map_sqlite_error)
+            .map_err(error)?;
+        for name in stored {
+            let name = name
+                .map_err(map_sqlite_error)
+                .map_err(error)?
+                .to_lowercase();
+            if !names.contains(&name) && self.view.contains_key(&name) {
+                names.push(name);
+            }
+        }
+        Ok(names
+            .into_iter()
+            .map(|n| {
+                let b = &self.view[&n];
+                let field = |k| kassiber_envelope::get(b, k).cloned().unwrap_or(Py::Null);
+                (n.clone(), field("url"), field("source"))
+            })
+            .collect())
+    }
     /// `runtime_config["bootstrap_default_backend"]`.
     pub(crate) fn bootstrap_default(&self) -> &str {
         &self.bootstrap_default

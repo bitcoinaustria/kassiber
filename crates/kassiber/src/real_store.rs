@@ -331,6 +331,24 @@ impl BookStore for RealStore {
         )
     }
     fn local_service(&self, operation: &str, args: &Value) -> Result<Value, AppError> {
+        if operation == "ui.egress.allowlist" {
+            // The bootstrap runtime view a locked desktop daemon holds.
+            let root = kassiber_envelope::py_str(
+                kassiber_envelope::get(args, "data_root").unwrap_or(&Value::Null),
+            );
+            let config =
+                backends::Config::load(Path::new(&self.runtime_config_for(&root)?.env_file))?;
+            return egress_inputs(&config, None);
+        }
+        if operation == "ui.egress.database" {
+            let root = kassiber_envelope::py_str(
+                kassiber_envelope::get(args, "data_root").unwrap_or(&Value::Null),
+            );
+            let effective = context()?
+                .effective_data_root(Path::new(&root))
+                .map_err(error)?;
+            return Ok(s(path(&kassiber_paths::resolve_database_path(&effective))));
+        }
         if operation.starts_with("secrets.") || operation.starts_with("backup.") {
             let text = |field| {
                 kassiber_envelope::get(args, field).and_then(|v| match v {
@@ -1205,6 +1223,14 @@ impl Book for RealBook {
             self.backends = config;
             return Ok(result);
         }
+        if operation == "ui.egress.allowlist" {
+            let conn = self
+                .book
+                .as_ref()
+                .ok_or_else(|| AppError::new("internal_error", "book is closed"))?
+                .connection();
+            return egress_inputs(&self.backends, Some(conn));
+        }
         if operation == "ui.onboarding.complete" {
             let conn = self
                 .book
@@ -1237,7 +1263,7 @@ impl Book for RealBook {
                     Some(_) => Offline::Online,
                     None => Offline::Unavailable,
                 },
-                Ledger::default(),
+                Ledger::process(),
             );
             // This branch is reached only for one explicit registered daemon
             // request, after expected_scope and database unlock checks.
@@ -2076,7 +2102,7 @@ impl Book for RealBook {
                 Some(_) => Offline::Online,
                 None => Offline::Unavailable,
             },
-            Ledger::default(),
+            Ledger::process(),
         );
         let backends = &self.backends;
         let conn = self
@@ -2127,7 +2153,7 @@ impl Book for RealBook {
                 Some(_) => Offline::Online,
                 None => Offline::Unavailable,
             },
-            Ledger::default(),
+            Ledger::process(),
         );
         let backends = &self.backends;
         let conn = self
@@ -2168,7 +2194,7 @@ impl Book for RealBook {
                 Some(_) => Offline::Online,
                 None => Offline::Unavailable,
             },
-            Ledger::default(),
+            Ledger::process(),
         );
         let backends = &self.backends;
         let conn = self
@@ -2308,6 +2334,35 @@ impl Book for RealBook {
         self.db_passphrase = None;
         Ok(())
     }
+}
+
+/// `_egress_allowlist(ctx)` inputs: runtime backends as `[name, url,
+/// source]` in Python's dict order, and, for an open book, AI providers as
+/// `[name, base_url, kind]` (an unreadable table reads as none).
+fn egress_inputs(config: &backends::Config, conn: Option<&Connection>) -> Result<Value, AppError> {
+    let triple = |(a, b, c): (String, Value, Value)| Value::List(vec![s(a), b, c]);
+    let backends = config
+        .egress_backends(conn)?
+        .into_iter()
+        .map(triple)
+        .collect();
+    let mut result = vec![("backends", Value::List(backends))];
+    if let Some(conn) = conn {
+        let providers = conn
+            .prepare("SELECT name, base_url, kind FROM ai_providers ORDER BY name")
+            .and_then(|mut statement| {
+                let rows = statement.query_map([], |r| {
+                    let text = |i| -> kassiber_store::rusqlite::Result<Value> {
+                        Ok(r.get::<_, Option<String>>(i)?.map_or(Value::Null, s))
+                    };
+                    Ok(Value::List(vec![text(0)?, text(1)?, text(2)?]))
+                })?;
+                rows.collect::<Result<Vec<_>, _>>()
+            })
+            .unwrap_or_default();
+        result.push(("ai_providers", Value::List(providers)));
+    }
+    Ok(dict(result))
 }
 
 #[cfg(test)]

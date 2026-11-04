@@ -46,7 +46,7 @@ fn store() -> Arc<dyn BookStore> {
 fn main() -> ExitCode {
     // Arm the process-wide attempt observer before dispatch. Service clients
     // supply their own fresh offline preference reader and exact-action grant.
-    let _gate = Gate::new(|| Offline::Unavailable, Ledger::default());
+    let _gate = Gate::new(|| Offline::Unavailable, Ledger::process());
 
     let mut argv = Vec::new();
     for argument in std::env::args_os().skip(1) {

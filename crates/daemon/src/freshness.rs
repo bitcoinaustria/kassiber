@@ -370,6 +370,8 @@ impl Daemon {
             && !matches!(
                 kind,
                 "status"
+                    | "ui.logs.snapshot"
+                    | "ui.egress.snapshot"
                     | "ui.network.offline"
                     | "ui.network.offline.set"
                     | "ui.freshness.cancel"

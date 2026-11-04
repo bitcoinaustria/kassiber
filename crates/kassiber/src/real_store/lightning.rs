@@ -21,7 +21,7 @@ pub(super) fn network_gate() -> Gate {
             Some(_) => Offline::Online,
             None => Offline::Unavailable,
         },
-        Ledger::default(),
+        Ledger::process(),
     );
     #[cfg(feature = "test-harness")]
     let gate = match std::env::var_os("KASSIBER_RUST_TEST_CLN_FIXTURE") {

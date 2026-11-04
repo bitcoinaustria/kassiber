@@ -78,6 +78,7 @@ kassiber-transactions
 kassiber-transfers test-harness
 kassiber-imports
 kassiber-wallets test-harness
+kassiber-workspace
 # Stored-journal reports: SQLite/Decimal/JSON only; no transport or process API.
 kassiber-reports
 # Journal composition and review probes reuse existing local services only.

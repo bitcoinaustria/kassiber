@@ -1642,6 +1642,7 @@ dependencies = [
  "kassiber-backup",
  "kassiber-envelope",
  "kassiber-imports",
+ "kassiber-net",
  "kassiber-paths",
  "kassiber-pyjson",
  "kassiber-pytext",

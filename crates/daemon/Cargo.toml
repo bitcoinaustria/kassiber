@@ -25,6 +25,7 @@ kassiber-wallets = { path = "../wallets" }
 serde_json = "1"
 kassiber-envelope = { path = "../envelope" }
 kassiber-paths = { path = "../paths" }
+kassiber-net = { path = "../net" }
 kassiber-pyjson = { path = "../pyjson" }
 kassiber-pytext = { path = "../pytext" }
 kassiber-runtime = { path = "../runtime" }

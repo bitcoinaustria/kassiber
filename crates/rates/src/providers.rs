@@ -125,10 +125,10 @@ impl Providers {
     }
     #[cfg(test)]
     pub(crate) fn gate_for_test(&mut self, offline: Offline) {
-        self.gate = Gate::new(move || offline, Ledger::default());
+        self.gate = Gate::new(move || offline, Ledger::process());
     }
     pub fn system(version: &str) -> Self {
-        Self::new(Gate::new(offline_preference, Ledger::default()), version)
+        Self::new(Gate::new(offline_preference, Ledger::process()), version)
     }
     fn json(
         &self,
