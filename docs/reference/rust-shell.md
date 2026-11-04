@@ -15504,6 +15504,14 @@ on a rolled-back read snapshot, so it refuses exactly where the export does
 and never writes a file. Display text follows Python's `_text` formatting,
 including `Decimal` cells and grouped money/integer columns.
 
+Verification at this checkpoint: the eleven desktop parity modules (the eight
+listed above plus the existing desktop list/search, listing and rates
+suites) pass 48 tests and 57 subtests against a fresh harness build. The
+`kassiber-reports`, `-transactions`, `-pytext` and `-transfers` crate suites pass.
+The existing desktop page fixture gains the journal semantics marker that the
+r10b freshness gate requires; without it, pairs stayed ungrouped on both
+Python and Rust.
+
 Not yet native: `ui.transactions.graph`, `ui.transactions.review_context`
 (embeds the graph and evidence summary), `ui.audit.evidence.summary`, `ui.report.blockers` (needs the workspace-health
 snapshot from the workspace-shell slice) and `ui.review.request_input` (needs
