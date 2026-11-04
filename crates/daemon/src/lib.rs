@@ -209,6 +209,9 @@ pub fn supported_kinds() -> Vec<&'static str> {
             .filter(|k| ["ui.wallets.create"].contains(k)),
     );
     kinds.push("ui.wallets.import_file");
+    kinds.push("internal.document_import.stage");
+    kinds.push("ui.wallets.document_import.preview");
+    kinds.push("ui.wallets.document_import.import");
     kinds.push("ui.wallets.import_samourai");
     kinds.push("ui.wallets.ledger_preview");
     kinds.push("ui.wallets.analyze_file");
@@ -1132,6 +1135,9 @@ impl Daemon {
                 false,
             ));
         }
+        if documents_import::KINDS.contains(&kind_text.as_str()) {
+            return documents_import::handle(self, &kind_text, args.as_ref(), &request_id);
+        }
         if onboarding::KINDS.contains(&kind_text.as_str()) {
             return onboarding::handle(self, &kind_text, args.as_ref(), &request_id);
         }
@@ -1189,6 +1195,8 @@ impl Daemon {
                     services::execute(self.book_mut()?.as_mut(), &kind_text, args.as_ref())?;
                 if kind_text == "ui.profiles.switch" {
                     self.analysis.clear();
+                    // Document grants are bound to the book they were staged in.
+                    self.document_sessions.clear();
                 }
                 Ok((
                     Some(with_request_id(success(&kind_text, payload), &request_id)),
@@ -1593,6 +1601,7 @@ impl Daemon {
         self.release_owner()?;
         self.unlocked_passphrase = None;
         self.backup_sessions.clear();
+        self.document_sessions.clear();
         Ok(())
     }
 

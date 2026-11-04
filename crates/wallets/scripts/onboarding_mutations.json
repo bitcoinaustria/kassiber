@@ -578,5 +578,115 @@
       "tests/test_rust_wallet_import_desktop.py::RustAnalyzeFileTest::test_sqlcipher_analysis_matches_python"
     ],
     "rule": "The daemon advertises native file analysis."
+  },
+  {
+    "id": "DI-scope-bound",
+    "file": "crates/daemon/src/documents_import.rs",
+    "find": "                if session.workspace_id == scope.workspace_id",
+    "replace": "                if true",
+    "expect_failing": [
+      "document_grants_stay_bound_to_their_book_and_preview"
+    ],
+    "rule": "A document grant works only in the book it was staged in."
+  },
+  {
+    "id": "DI-preview-required",
+    "file": "crates/daemon/src/documents_import.rs",
+    "find": "        if session.draft.is_none() {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "document_grants_stay_bound_to_their_book_and_preview"
+    ],
+    "rule": "Only a previewed grant can import rows."
+  },
+  {
+    "id": "DI-eviction",
+    "file": "crates/daemon/src/documents_import.rs",
+    "find": "        while self.sessions.len() > MAX_SESSIONS {",
+    "replace": "        while self.sessions.len() > MAX_SESSIONS + 1 {",
+    "expect_failing": [
+      "document_grants_keep_only_the_most_recently_used"
+    ],
+    "rule": "At most eight grants are kept, the most recently used."
+  },
+  {
+    "id": "DI-import-fields",
+    "file": "crates/daemon/src/documents_import.rs",
+    "find": "    if importing {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "document_requests_refuse_renderer_authority"
+    ],
+    "rule": "Imports also refuse renderer-chosen quarantine, evidence and row fields."
+  },
+  {
+    "id": "DI-row-dedupe",
+    "file": "crates/daemon/src/documents_import.rs",
+    "find": "                if !selected.contains(&text) {",
+    "replace": "                if true {",
+    "expect_failing": [
+      "document_requests_refuse_renderer_authority"
+    ],
+    "rule": "Selected rows are unique, in first-seen order."
+  },
+  {
+    "id": "DI-ready-only",
+    "file": "crates/daemon/src/documents_import.rs",
+    "find": "                    && get(row, \"status\") == Some(&s(\"ready\"))",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_wallet_document_import.py::RustDocumentImportTest::test_grants_previews_and_refusals_match_python"
+    ],
+    "rule": "Only ready preview rows are importable."
+  },
+  {
+    "id": "DI-preview-path",
+    "file": "crates/daemon/src/documents_import.rs",
+    "find": "        let mut public = draft;\n        if let Some(source) = field_mut(&mut public, \"source\") {\n            drop_key(source, \"path\");\n        }",
+    "replace": "        let mut public = draft;",
+    "expect_failing": [
+      "tests/test_rust_wallet_document_import.py::RustDocumentImportTest::test_grants_previews_and_refusals_match_python"
+    ],
+    "rule": "The preview never hands the source path to the renderer."
+  },
+  {
+    "id": "DI-journal-step",
+    "file": "crates/daemon/src/documents_import.rs",
+    "find": "            let payload = daemon\n                .book_mut()?\n                .import_journal_step(outcome, &profile_id)?;",
+    "replace": "            let _ = &profile_id;\n            let payload = outcome;",
+    "expect_failing": [
+      "tests/test_rust_wallet_document_import.py::RustDocumentImportTest::test_reviewed_rows_import_and_end_the_session"
+    ],
+    "rule": "A document import reports its local journal step."
+  },
+  {
+    "id": "DI-lock-clear",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "        self.backup_sessions.clear();\n        self.document_sessions.clear();\n        Ok(())",
+    "replace": "        self.backup_sessions.clear();\n        Ok(())",
+    "expect_failing": [
+      "tests/test_rust_wallet_document_import.py::RustDocumentImportTest::test_grants_previews_and_refusals_match_python"
+    ],
+    "rule": "Locking the book withdraws every document grant."
+  },
+  {
+    "id": "DI-switch-clear",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "                    // Document grants are bound to the book they were staged in.\n                    self.document_sessions.clear();",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_wallet_document_import.py::RustDocumentImportTest::test_profile_switch_withdraws_grants"
+    ],
+    "rule": "Switching books withdraws every document grant."
+  },
+  {
+    "id": "REG-document-import",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "    kinds.push(\"ui.wallets.document_import.import\");\n",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_wallet_document_import.py::RustDocumentImportTest::test_sqlcipher_import_matches_python"
+    ],
+    "rule": "The daemon advertises the native document import."
   }
 ]

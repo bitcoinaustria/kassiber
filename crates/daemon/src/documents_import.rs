@@ -1,20 +1,49 @@
-//! `DocumentImportSessions`: process-local grants for native-picker files.
+//! Desktop document import: `internal.document_import.stage`,
+//! `ui.wallets.document_import.preview` and `ui.wallets.document_import.import`.
 //!
+//! `DocumentImportSessions` are process-local grants for native-picker files.
 //! The renderer holds only an opaque token. Source paths and reviewed draft
 //! rows stay inside the daemon until the import succeeds, the bounded session
-//! expires, or the book is locked, switched or restored.
-use kassiber_envelope::AppError;
+//! expires, or the book is locked, switched or restored. A document grants no
+//! ownership, basis or tax fact; its rows are observations like any import.
+use crate::{
+    imports::optional_string,
+    output::{with_request_id, RequestId},
+    Daemon, Handled,
+};
+use kassiber_envelope::{dict, get, py_str, s, success, truthy, AppError};
+use kassiber_pyjson::{Key, Value};
+use kassiber_runtime::store::ReviewedDocument;
+use kassiber_wallets::file_import::document::{staged_source, DocumentPreview};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-const SESSION_TTL: Duration = Duration::from_secs(30 * 60);
+pub const KINDS: &[&str] = &[
+    "internal.document_import.stage",
+    "ui.wallets.document_import.preview",
+    "ui.wallets.document_import.import",
+];
 
+const SESSION_TTL: Duration = Duration::from_secs(30 * 60);
+const MAX_SESSIONS: usize = 8;
+const RENDERER_FIELDS: [&str; 6] = [
+    "source_file",
+    "file",
+    "file_path",
+    "draft",
+    "rows",
+    "expected_source_sha256",
+];
+
+#[derive(Clone)]
 pub(crate) struct Session {
     pub source_file: String,
     workspace_id: String,
     profile_id: String,
     data_root: String,
     last_accessed: Instant,
+    /// The reviewed preview a preview token stands for.
+    draft: Option<Value>,
 }
 
 /// The book a session is bound to.
@@ -45,10 +74,41 @@ pub(crate) fn source_unavailable() -> AppError {
     .with_hint("Choose the document again and create a new preview.")
 }
 
+/// `secrets.token_urlsafe(32)`.
+fn token() -> Result<String, AppError> {
+    use std::io::Read;
+    let mut bytes = [0u8; 32];
+    std::fs::File::open("/dev/urandom")
+        .and_then(|mut file| file.read_exact(&mut bytes))
+        .map_err(|_| AppError::new("internal_error", "Could not create a document session"))?;
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    let mut out = String::with_capacity(43);
+    for chunk in bytes.chunks(3) {
+        let n =
+            chunk.iter().fold(0u32, |acc, b| acc << 8 | u32::from(*b)) << (8 * (3 - chunk.len()));
+        for index in 0..=chunk.len() {
+            out.push(ALPHABET[(n >> (18 - 6 * index) & 63) as usize] as char);
+        }
+    }
+    Ok(out)
+}
+
 impl Sessions {
     fn prune(&mut self, now: Instant) {
         self.sessions
             .retain(|_, session| now.duration_since(session.last_accessed) < SESSION_TTL);
+    }
+
+    fn evict(&mut self) {
+        while self.sessions.len() > MAX_SESSIONS {
+            let oldest = self
+                .sessions
+                .iter()
+                .min_by_key(|(_, session)| session.last_accessed)
+                .map(|(token, _)| token.clone())
+                .expect("sessions");
+            self.sessions.remove(&oldest);
+        }
     }
 
     fn require(&mut self, token: &str, scope: &Scope<'_>) -> Result<&mut Session, AppError> {
@@ -65,6 +125,25 @@ impl Sessions {
         }
     }
 
+    fn stage(&mut self, source_file: String, scope: &Scope<'_>) -> Result<String, AppError> {
+        let now = Instant::now();
+        let token = token()?;
+        self.prune(now);
+        self.sessions.insert(
+            token.clone(),
+            Session {
+                source_file,
+                workspace_id: scope.workspace_id.into(),
+                profile_id: scope.profile_id.into(),
+                data_root: scope.data_root.into(),
+                last_accessed: now,
+                draft: None,
+            },
+        );
+        self.evict();
+        Ok(token)
+    }
+
     pub(crate) fn source_for_preview(
         &mut self,
         token: &str,
@@ -73,5 +152,545 @@ impl Sessions {
         let session = self.require(token, scope)?;
         session.last_accessed = Instant::now();
         Ok(session.source_file.clone())
+    }
+
+    fn create_preview(
+        &mut self,
+        token: &str,
+        draft: Value,
+        scope: &Scope<'_>,
+    ) -> Result<String, AppError> {
+        let source = self.require(token, scope)?;
+        let now = Instant::now();
+        source.last_accessed = now;
+        let preview = Session {
+            last_accessed: now,
+            draft: Some(draft),
+            ..source.clone()
+        };
+        let token = self::token()?;
+        self.sessions.insert(token.clone(), preview);
+        self.evict();
+        Ok(token)
+    }
+
+    fn preview_for_import(&mut self, token: &str, scope: &Scope<'_>) -> Result<Session, AppError> {
+        let session = self.require(token, scope)?;
+        if session.draft.is_none() {
+            return Err(AppError::new(
+                "document_import_preview_required",
+                "Document import must be previewed before it can be imported",
+            )
+            .with_hint("Preview the selected document, then import the reviewed rows."));
+        }
+        session.last_accessed = Instant::now();
+        Ok(session.clone())
+    }
+
+    fn consume(&mut self, token: &str) {
+        self.sessions.remove(token);
+    }
+
+    pub(crate) fn clear(&mut self) {
+        self.sessions.clear();
+    }
+}
+
+fn object(args: Option<&Value>) -> Result<Value, AppError> {
+    match args {
+        None | Some(Value::Null) => Ok(dict::<&str>([])),
+        Some(value @ Value::Dict(_)) => Ok(value.clone()),
+        Some(value) => Err(AppError::new("validation", "daemon args must be an object")
+            .with_details(dict([("type", s(kassiber_envelope::type_name(value)))]))),
+    }
+}
+
+fn required(args: &Value, key: &str, label: &str) -> Result<String, AppError> {
+    optional_string(args, key)?.ok_or_else(|| {
+        AppError::new("validation", format!("{label} is required."))
+            .with_hint(format!("Enter {}.", label.to_lowercase()))
+    })
+}
+
+fn has(args: &Value, key: &str) -> bool {
+    get(args, key).is_some()
+}
+
+/// `_reject_document_import_renderer_fields`: the renderer never names paths,
+/// rows or digests; the session holds them.
+fn reject_renderer_fields(args: &Value, importing: bool) -> Result<(), AppError> {
+    let mut forbidden: Vec<&str> = RENDERER_FIELDS.to_vec();
+    if importing {
+        forbidden.extend(["include_quarantined", "attach_evidence", "row_ids"]);
+    }
+    let mut supplied: Vec<&str> = forbidden.into_iter().filter(|key| has(args, key)).collect();
+    supplied.sort_unstable();
+    if supplied.is_empty() {
+        return Ok(());
+    }
+    Err(AppError::new(
+        "validation",
+        "Document import accepts only a trusted document session",
+    )
+    .with_hint("Choose the document again and use the reviewed preview.")
+    .with_details(dict([(
+        "forbidden_fields",
+        Value::List(supplied.into_iter().map(s).collect()),
+    )])))
+}
+
+/// `_document_import_token`.
+fn document_token(args: &Value) -> Result<String, AppError> {
+    if let Some(Value::Str(text)) = get(args, "document_token") {
+        let token = kassiber_pytext::strip(&py_str(&Value::Str(text.clone()))).to_owned();
+        if !token.is_empty() {
+            return Ok(token);
+        }
+    }
+    Err(AppError::new("validation", "document_token is required")
+        .with_hint("Choose the local document before previewing or importing it."))
+}
+
+/// `_document_import_selected_row_ids`: unique, in first-seen order.
+fn selected_row_ids(args: &Value) -> Result<Option<Vec<String>>, AppError> {
+    let items = match get(args, "selected_row_ids") {
+        None | Some(Value::Null) => return Ok(None),
+        Some(Value::List(items)) => items,
+        Some(_) => {
+            return Err(AppError::new(
+                "validation",
+                "selected_row_ids must be a list",
+            ))
+        }
+    };
+    let mut selected: Vec<String> = vec![];
+    for item in items {
+        match item {
+            Value::Str(text) if text.code_points().next().is_some() => {
+                let text = py_str(item);
+                if !selected.contains(&text) {
+                    selected.push(text);
+                }
+            }
+            _ => {
+                return Err(AppError::new(
+                    "validation",
+                    "selected_row_ids must contain non-empty strings",
+                ))
+            }
+        }
+    }
+    Ok(Some(selected))
+}
+
+/// A local-source failure that names the selected file means the user must
+/// choose it again.
+fn source_error(error: AppError, source: &str) -> AppError {
+    if error.code == "not_found" && error.message.contains(source) {
+        source_unavailable()
+    } else {
+        error
+    }
+}
+
+fn drop_key(value: &mut Value, key: &str) {
+    if let Value::Dict(pairs) = value {
+        pairs.retain(|(name, _)| *name != Key::from(key));
+    }
+}
+
+fn field_mut<'a>(value: &'a mut Value, key: &str) -> Option<&'a mut Value> {
+    match value {
+        Value::Dict(pairs) => pairs
+            .iter_mut()
+            .find(|(name, _)| *name == Key::from(key))
+            .map(|(_, value)| value),
+        _ => None,
+    }
+}
+
+impl Daemon {
+    fn document_scope(&mut self) -> Result<(String, String), AppError> {
+        self.book_mut()?.resolve_scope(None, None)
+    }
+
+    /// The staged file behind a picker token, for this book only.
+    pub(crate) fn document_source(&mut self, token: &str) -> Result<String, AppError> {
+        let (workspace_id, profile_id) = self.document_scope()?;
+        let data_root = self.data_root.clone();
+        self.document_sessions.source_for_preview(
+            token,
+            &Scope {
+                workspace_id: &workspace_id,
+                profile_id: &profile_id,
+                data_root: &data_root,
+            },
+        )
+    }
+
+    /// `_document_import_stage_payload`.
+    fn stage_document(&mut self, args: &Value) -> Result<Value, AppError> {
+        let source = required(args, "source_file", "Selected document")?;
+        let (path, size, media_type) = staged_source(&source).map_err(|_| source_unavailable())?;
+        let (workspace_id, profile_id) = self.document_scope()?;
+        if !has(args, "review_case_id")
+            && (has(args, "review_recipe") || has(args, "expected_review_fingerprint"))
+        {
+            return Err(AppError::new(
+                "validation",
+                "Review recipe requires a source-funds case ID",
+            ));
+        }
+        if has(args, "review_case_id") {
+            let case_id = required(args, "review_case_id", "Review case")?;
+            if case_id.starts_with("source_funds:") {
+                if !has(args, "review_recipe") || !has(args, "expected_review_fingerprint") {
+                    return Err(AppError::new(
+                        "validation",
+                        "Source-funds attachment requires its reviewed recipe and fingerprint",
+                    ));
+                }
+            } else if has(args, "review_recipe") || has(args, "expected_review_fingerprint") {
+                return Err(AppError::new(
+                    "validation",
+                    "Only source-funds evidence accepts a review recipe",
+                ));
+            }
+            // Attaching the document to a review case is not native yet.
+            return Err(kassiber_runtime::store::not_implemented(
+                "documents",
+                "review-case document staging",
+            ));
+        }
+        let data_root = self.data_root.clone();
+        let source_file = path.to_string_lossy().into_owned();
+        let token = self.document_sessions.stage(
+            source_file,
+            &Scope {
+                workspace_id: &workspace_id,
+                profile_id: &profile_id,
+                data_root: &data_root,
+            },
+        )?;
+        let pdf = path
+            .extension()
+            .is_some_and(|ext| ext.to_string_lossy().to_lowercase() == "pdf");
+        Ok(dict([
+            ("document_token", s(token)),
+            (
+                "source",
+                dict([
+                    (
+                        "filename",
+                        s(path
+                            .file_name()
+                            .unwrap_or_default()
+                            .to_string_lossy()
+                            .as_ref()),
+                    ),
+                    ("media_type", s(media_type)),
+                    ("size_bytes", Value::from(size as i64)),
+                    ("kind", s(if pdf { "pdf" } else { "image" })),
+                ]),
+            ),
+        ]))
+    }
+
+    /// `_document_import_preview_payload`: local OCR through the native
+    /// provider service, then a preview grant for the reviewed rows.
+    fn preview_document(&mut self, args: &Value) -> Result<Value, AppError> {
+        reject_renderer_fields(args, false)?;
+        let token = document_token(args)?;
+        let (workspace_id, profile_id) = self.document_scope()?;
+        let data_root = self.data_root.clone();
+        let scope = Scope {
+            workspace_id: &workspace_id,
+            profile_id: &profile_id,
+            data_root: &data_root,
+        };
+        let source = self.document_sessions.source_for_preview(&token, &scope)?;
+        let provider_name = optional_string(args, "provider")?;
+        let model = optional_string(args, "model")?;
+        let raw = |key| get(args, key).cloned().unwrap_or(Value::Null);
+        let fiat = self
+            .book_mut()?
+            .document_target(&profile_id, None)?
+            .fiat_currency;
+        let draft = self
+            .book_mut()?
+            .preview_document(DocumentPreview {
+                source_file: source.clone(),
+                provider_name,
+                model,
+                confidence_threshold: raw("confidence_threshold"),
+                max_pages: raw("max_pages"),
+                pages: raw("pages"),
+                expected_fiat_currency: Some(fiat),
+            })
+            .map_err(|error| source_error(error, &source))?;
+        let preview_token = self
+            .document_sessions
+            .create_preview(&token, draft.clone(), &scope)?;
+        let mut public = draft;
+        if let Some(source) = field_mut(&mut public, "source") {
+            drop_key(source, "path");
+        }
+        kassiber_envelope::set(&mut public, "document_token", s(preview_token));
+        Ok(public)
+    }
+
+    /// `_document_import_import_payload` (without the journal step).
+    fn import_document(&mut self, args: &Value) -> Result<Value, AppError> {
+        reject_renderer_fields(args, true)?;
+        let token = document_token(args)?;
+        let wallet = required(args, "wallet", "Wallet")?;
+        let (workspace_id, profile_id) = self.document_scope()?;
+        let data_root = self.data_root.clone();
+        let session = self.document_sessions.preview_for_import(
+            &token,
+            &Scope {
+                workspace_id: &workspace_id,
+                profile_id: &profile_id,
+                data_root: &data_root,
+            },
+        )?;
+        let draft = session.draft.clone().unwrap_or(Value::Null);
+        let rows = match get(&draft, "rows") {
+            Some(Value::List(rows)) => Some(rows.clone()),
+            _ => None,
+        };
+        let digest = match get(&draft, "source").and_then(|source| get(source, "sha256")) {
+            Some(Value::Str(text)) => Some(py_str(&Value::Str(text.clone()))),
+            _ => None,
+        };
+        let (Some(rows), Some(digest)) = (rows, digest) else {
+            return Err(AppError::new(
+                "document_import_preview_required",
+                "Document import preview is incomplete",
+            )
+            .with_hint("Preview the local document again before importing selected rows."));
+        };
+        let Some(selected) = selected_row_ids(args)? else {
+            return Err(AppError::new("validation", "selected_row_ids is required")
+                .with_hint("Select one or more reviewed rows to import."));
+        };
+        let ready: Vec<String> = rows
+            .iter()
+            .filter(|row| {
+                matches!(row, Value::Dict(_))
+                    && get(row, "status") == Some(&s("ready"))
+                    && get(row, "id").is_some_and(truthy)
+            })
+            .map(|row| py_str(get(row, "id").expect("ready id")))
+            .collect();
+        let invalid = selected.iter().filter(|id| !ready.contains(id)).count();
+        if invalid > 0 {
+            return Err(
+                AppError::new("validation", "Selected document rows are not importable")
+                    .with_hint("Select only ready rows from the current preview.")
+                    .with_details(dict([("invalid_row_count", Value::from(invalid as i64))])),
+            );
+        }
+        // Python resolves the wallet before reading the document again.
+        self.book_mut()?
+            .document_target(&profile_id, Some(&wallet))?;
+        let rows: Vec<Value> = rows
+            .into_iter()
+            .filter(|row| matches!(row, Value::Dict(_)))
+            .collect();
+        let threshold = get(&draft, "confidence_threshold")
+            .cloned()
+            .unwrap_or(Value::Null);
+        let mut outcome = self
+            .book_mut()?
+            .import_document(ReviewedDocument {
+                source_file: &session.source_file,
+                profile_id: &profile_id,
+                wallet: &wallet,
+                rows: &rows,
+                selected_row_ids: &selected,
+                source_sha256: &digest,
+                include_quarantined: false,
+                confidence_threshold: &threshold,
+            })
+            .map_err(|error| source_error(error, &session.source_file))?;
+        self.document_sessions.consume(&token);
+        if let Some(source) = field_mut(&mut outcome, "source") {
+            drop_key(source, "path");
+        }
+        if let Some(Value::List(attachments)) = field_mut(&mut outcome, "attached_evidence") {
+            for attachment in attachments {
+                drop_key(attachment, "stored_relpath");
+            }
+        }
+        Ok(outcome)
+    }
+}
+
+pub(super) fn handle(
+    daemon: &mut Daemon,
+    kind: &str,
+    args: Option<&Value>,
+    request_id: &RequestId,
+) -> Handled {
+    if let Some(locked) = daemon.open_lazily(request_id)? {
+        return Ok((Some(locked), false));
+    }
+    let args = object(args)?;
+    match kind {
+        "internal.document_import.stage" => {
+            let payload = daemon.stage_document(&args)?;
+            Ok((
+                Some(with_request_id(success(kind, payload), request_id)),
+                false,
+            ))
+        }
+        "ui.wallets.document_import.preview" => {
+            let payload = daemon.preview_document(&args)?;
+            Ok((
+                Some(with_request_id(success(kind, payload), request_id)),
+                false,
+            ))
+        }
+        _ => {
+            // The book is captured before the import, as Python does.
+            let profile_id = daemon.book_mut()?.context()?.profile_id;
+            let outcome = daemon.import_document(&args)?;
+            let payload = daemon
+                .book_mut()?
+                .import_journal_step(outcome, &profile_id)?;
+            // Python ends the session after a committed desktop import.
+            Ok((
+                Some(with_request_id(success(kind, payload), request_id)),
+                true,
+            ))
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn scope(profile: &str) -> Scope<'_> {
+        Scope {
+            workspace_id: "w",
+            profile_id: profile,
+            data_root: "/books/a",
+        }
+    }
+
+    #[test]
+    fn document_grants_stay_bound_to_their_book_and_preview() {
+        let mut sessions = Sessions::default();
+        let token = sessions
+            .stage("/files/receipt.png".into(), &scope("p"))
+            .unwrap();
+        assert_eq!(token.len(), 43);
+        assert!(token
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_'));
+        assert_eq!(
+            sessions.source_for_preview(&token, &scope("p")).unwrap(),
+            "/files/receipt.png"
+        );
+        assert_eq!(
+            sessions
+                .source_for_preview(&token, &scope("q"))
+                .unwrap_err()
+                .code,
+            "document_import_session_expired"
+        );
+        for other in [
+            Scope {
+                workspace_id: "x",
+                ..scope("p")
+            },
+            Scope {
+                data_root: "/books/b",
+                ..scope("p")
+            },
+        ] {
+            assert!(sessions.source_for_preview(&token, &other).is_err());
+        }
+        assert_eq!(
+            sessions
+                .preview_for_import(&token, &scope("p"))
+                .err()
+                .unwrap()
+                .code,
+            "document_import_preview_required"
+        );
+        let preview = sessions
+            .create_preview(&token, dict([("rows", Value::List(vec![]))]), &scope("p"))
+            .unwrap();
+        assert_ne!(preview, token);
+        assert!(sessions
+            .preview_for_import(&preview, &scope("p"))
+            .unwrap()
+            .draft
+            .is_some());
+        sessions.consume(&preview);
+        assert!(sessions.preview_for_import(&preview, &scope("p")).is_err());
+        sessions.clear();
+        assert!(sessions.source_for_preview(&token, &scope("p")).is_err());
+    }
+
+    #[test]
+    fn document_grants_keep_only_the_most_recently_used() {
+        let mut sessions = Sessions::default();
+        let tokens: Vec<String> = (0..=MAX_SESSIONS)
+            .map(|index| {
+                sessions
+                    .stage(format!("/files/{index}.png"), &scope("p"))
+                    .unwrap()
+            })
+            .collect();
+        assert!(sessions
+            .source_for_preview(&tokens[0], &scope("p"))
+            .is_err());
+        assert!(sessions
+            .source_for_preview(&tokens[MAX_SESSIONS], &scope("p"))
+            .is_ok());
+    }
+
+    #[test]
+    fn document_requests_refuse_renderer_authority() {
+        let args = dict([
+            ("rows", Value::List(vec![])),
+            ("draft", Value::Null),
+            ("row_ids", Value::Null),
+        ]);
+        let error = reject_renderer_fields(&args, false).unwrap_err();
+        assert_eq!(
+            error.details,
+            Some(dict([(
+                "forbidden_fields",
+                Value::List(vec![s("draft"), s("rows")])
+            )]))
+        );
+        let error =
+            reject_renderer_fields(&dict([("include_quarantined", Value::Bool(false))]), true)
+                .unwrap_err();
+        assert_eq!(error.code, "validation");
+        assert!(reject_renderer_fields(
+            &dict([("include_quarantined", Value::Bool(false))]),
+            false
+        )
+        .is_ok());
+        assert_eq!(
+            document_token(&dict([("document_token", s(" t "))])).unwrap(),
+            "t"
+        );
+        assert!(document_token(&dict([("document_token", s(" "))])).is_err());
+        let rows =
+            |items: Vec<Value>| selected_row_ids(&dict([("selected_row_ids", Value::List(items))]));
+        assert_eq!(
+            rows(vec![s("b"), s("a"), s("b")]).unwrap(),
+            Some(vec!["b".into(), "a".into()])
+        );
+        assert!(rows(vec![s("")]).is_err());
+        assert!(rows(vec![Value::from(1)]).is_err());
+        assert_eq!(selected_row_ids(&dict::<&str>([])).unwrap(), None);
     }
 }

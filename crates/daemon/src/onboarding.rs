@@ -512,22 +512,6 @@ fn analyze_file(daemon: &mut Daemon, args: &Value) -> Result<Value, AppError> {
     Ok(result)
 }
 
-impl Daemon {
-    /// The staged file behind a picker token, for this book only.
-    pub(crate) fn document_source(&mut self, token: &str) -> Result<String, AppError> {
-        let (workspace_id, profile_id) = self.book_mut()?.resolve_scope(None, None)?;
-        let data_root = self.data_root.clone();
-        self.document_sessions.source_for_preview(
-            token,
-            &crate::documents_import::Scope {
-                workspace_id: &workspace_id,
-                profile_id: &profile_id,
-                data_root: &data_root,
-            },
-        )
-    }
-}
-
 /// `_coerce_args_dict`.
 fn object(args: Option<&Value>) -> Result<Value, AppError> {
     match args {

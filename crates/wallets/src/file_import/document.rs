@@ -12,6 +12,15 @@ mod rows;
 pub use coordinator::{import_draft, reviewed_records, ImportDraft};
 pub use provider::{DocumentConsent, DocumentPreview, Providers};
 
+/// `_document_import_stage_payload`'s source checks: the canonical local
+/// file, its size and its media type. Callers treat any failure as an
+/// unavailable document.
+pub fn staged_source(raw: &str) -> Result<(std::path::PathBuf, u64, &'static str), AppError> {
+    let path = files::source_path(raw)?.canonicalize().map_err(files::io)?;
+    let size = std::fs::metadata(&path).map_err(files::io)?.len();
+    Ok((path.clone(), size, files::mime(&path)))
+}
+
 fn s(v: impl AsRef<str>) -> Py {
     kassiber_envelope::s(v.as_ref())
 }

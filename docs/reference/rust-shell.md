@@ -16189,3 +16189,37 @@ Served by Rust in the parity run, with zero fallbacks: `ui.wallets.import_file`
 25 requests (6 imports, 19 refusals), `ui.wallets.import_samourai` 16 (1
 import, 15 refusals) and `ui.wallets.analyze_file` 26 (12 analyses, 14
 refusals).
+
+### Document import
+
+`internal.document_import.stage`, `ui.wallets.document_import.preview` and
+`ui.wallets.document_import.import` are native, and so is the staged-token
+path of `ui.wallets.analyze_file`.
+
+- Staging resolves the picked file with the native document source checks and
+  issues a random URL-safe token bound to the book and data root. The daemon
+  keeps at most eight grants, the most recently used, for 30 minutes after
+  last use, and withdraws all of them on lock, book switch and restore.
+- The preview refuses renderer-chosen paths, rows and digests, runs local OCR
+  through the existing native provider service under its exact-action consent,
+  keeps the reviewed draft in the daemon behind a new preview token, and never
+  returns the source path.
+- The import accepts only ready rows from that preview, resolves the wallet
+  first, imports through the native reviewed-document core with managed
+  evidence, consumes the grant, strips local paths, and then runs the local
+  journal step. Like Python, the session then ends. A document grants no
+  ownership, basis or tax fact; its rows are observations like any import.
+
+Staging a document straight into a review case (`review_case_id`) is not
+native yet: after Python's argument checks it answers `not_implemented`.
+
+`tests/test_rust_wallet_document_import.py` drives both daemons through
+staging, analysis, refusals, previews against a loopback OCR provider and
+imports, comparing every record, every provider request and all 112 tables
+on SQLite and SQLCipher, with the product no-egress switch armed. Staging and
+analysis are shown not to reach the provider. The catalog gains 11 entries.
+
+Served by Rust in the parity run, with zero fallbacks:
+`internal.document_import.stage` 12 requests (4 grants, 8 refusals),
+`ui.wallets.document_import.preview` 12 (3 previews, 9 refusals) and
+`ui.wallets.document_import.import` 11 (2 imports, 9 refusals).

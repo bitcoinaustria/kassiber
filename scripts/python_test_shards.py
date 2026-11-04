@@ -118,6 +118,7 @@ _DAEMON_SERIAL_MODULES = frozenset(
         "test_rust_wallet_onboarding",
         "test_rust_wallet_identify_onchain",
         "test_rust_wallet_import_desktop",
+        "test_rust_wallet_document_import",
         "test_rust_document_ingestion",
         "test_rust_document_cli",
         "test_rust_chain_analysis_reads",

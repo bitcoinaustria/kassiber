@@ -512,6 +512,14 @@ pub trait Book: Send {
     ) -> Result<Value, AppError> {
         Err(not_implemented("wallets", "desktop import"))
     }
+    /// `_with_local_journal_refresh` around an import that already committed.
+    fn import_journal_step(
+        &mut self,
+        _payload: Value,
+        _profile_id: &str,
+    ) -> Result<Value, AppError> {
+        Err(not_implemented("wallets", "import journal step"))
+    }
     /// `ui.wallets.identify_onchain` preparation: the book work, done on the
     /// request thread. The returned verification holds no database handle.
     fn identify_onchain(

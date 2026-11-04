@@ -2710,7 +2710,9 @@ its lookups are the explicit "Verify on chain" action through `kassiber-net`,
 and cancellation follows Python's registry, between lookups only. Desktop file
 imports, Samourai source sets and file analysis are native; each import ends
 with the native local journal step. The Bull Bitcoin wallet-history format
-still refuses with `not_implemented`.
+still refuses with `not_implemented`. Document staging, local-OCR previews and
+reviewed imports run natively behind daemon-held grants; a document grants no
+ownership, basis or tax fact. Staging into a review case stays refused.
 
 ## Risks
 

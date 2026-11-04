@@ -2395,6 +2395,9 @@ impl Book for RealBook {
     ) -> Result<kassiber_wallets::identify::onchain::Start, AppError> {
         self.prepare_identify_onchain(args)
     }
+    fn import_journal_step(&mut self, payload: Value, profile_id: &str) -> Result<Value, AppError> {
+        self.finish_import(payload, profile_id)
+    }
     fn desktop_import(
         &mut self,
         import: kassiber_wallets::file_import::DesktopImport,
