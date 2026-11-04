@@ -1080,6 +1080,14 @@ impl Book for RealBook {
                 .join("attachments");
             return kassiber_setup::profile_reset::execute(self.conn()?, args, &attachments);
         }
+        if kassiber_wallets::freshness::settings::KINDS.contains(&operation) {
+            return kassiber_wallets::freshness::settings::execute(
+                self.conn()?,
+                operation,
+                args,
+                &SetupSources,
+            );
+        }
         if operation.starts_with("backends.") || operation.starts_with("ui.backends.") {
             let conn = self
                 .book

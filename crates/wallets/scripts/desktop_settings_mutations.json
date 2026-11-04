@@ -1,0 +1,152 @@
+[
+  {
+    "id": "settings-registration",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "    kinds.extend(settings::KINDS);\n",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_desktop_settings.py::RustFreshnessSettingsTest::test_status_reads_match_wire_bytes_across_policies"
+    ],
+    "rule": "Freshness and maintenance settings kinds are advertised and served by the Rust daemon."
+  },
+  {
+    "id": "settings-read-args-ignored",
+    "file": "crates/daemon/src/settings.rs",
+    "find": "if kind.ends_with(\".configure\") {",
+    "replace": "if true {",
+    "expect_failing": [
+      "tests/test_rust_desktop_settings.py::RustFreshnessSettingsTest::test_status_reads_match_wire_bytes_across_policies"
+    ],
+    "rule": "Status and settings reads ignore their arguments as Python's handlers do."
+  },
+  {
+    "id": "settings-unknown-arguments",
+    "file": "crates/wallets/src/freshness/settings.rs",
+    "find": "    if unknown.is_empty() {\n        return Ok(());",
+    "replace": "    if true || unknown.is_empty() {\n        return Ok(());",
+    "expect_failing": [
+      "tests/test_rust_desktop_settings.py::RustFreshnessSettingsTest::test_configure_refusals_leave_every_table_unchanged"
+    ],
+    "rule": "Configure refuses unsupported arguments before any write."
+  },
+  {
+    "id": "settings-source-classes-type",
+    "file": "crates/wallets/src/freshness/settings.rs",
+    "find": "if !matches!(value, Value::Dict(_)) {\n            return Err(type_error(KIND, \"source_classes\"",
+    "replace": "if false {\n            return Err(type_error(KIND, \"source_classes\"",
+    "expect_failing": [
+      "tests/test_rust_desktop_settings.py::RustFreshnessSettingsTest::test_configure_refusals_leave_every_table_unchanged"
+    ],
+    "rule": "Configure refuses non-object source_classes."
+  },
+  {
+    "id": "settings-provider-type",
+    "file": "crates/wallets/src/freshness/settings.rs",
+    "find": "Some(value) => return Err(type_error(KIND, \"market_rate_provider\", \"a string\", value)),",
+    "replace": "Some(_) => None,",
+    "expect_failing": [
+      "tests/test_rust_desktop_settings.py::RustFreshnessSettingsTest::test_configure_refusals_leave_every_table_unchanged"
+    ],
+    "rule": "Configure refuses a non-string market-rate provider instead of ignoring it."
+  },
+  {
+    "id": "settings-provider-surrogates",
+    "file": "crates/wallets/src/freshness/settings.rs",
+    "find": "        .with_python_message(message)\n",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_desktop_settings.py::RustFreshnessSettingsTest::test_configure_refusals_leave_every_table_unchanged"
+    ],
+    "rule": "Unsupported provider text keeps Python's code points in the refusal."
+  },
+  {
+    "id": "daemon-error-codepoints",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "if let Some(message) = &error.message_codepoints {",
+    "replace": "if let (Some(message), false) = (&error.message_codepoints, true) {",
+    "expect_failing": [
+      "tests/test_rust_desktop_settings.py::RustFreshnessSettingsTest::test_configure_refusals_leave_every_table_unchanged"
+    ],
+    "rule": "Daemon error envelopes carry Python's message code points."
+  },
+  {
+    "id": "settings-legacy-report-read",
+    "file": "crates/wallets/src/freshness/settings.rs",
+    "find": "        report_read_sync = Some(legacy.clone());\n",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_desktop_settings.py::RustFreshnessSettingsTest::test_configure_writes_match_bytes_and_tables"
+    ],
+    "rule": "The legacy report-read flag overrides report_read_sync and the wallet source classes."
+  },
+  {
+    "id": "settings-profile-flags",
+    "file": "crates/wallets/src/freshness/settings.rs",
+    "find": "    if !updates.is_empty() {",
+    "replace": "    if false && !updates.is_empty() {",
+    "expect_failing": [
+      "tests/test_rust_desktop_settings.py::RustFreshnessSettingsTest::test_maintenance_profile_flags_commit_before_policy_validation"
+    ],
+    "rule": "Maintenance configure writes the profile review and carrying-value flags."
+  },
+  {
+    "id": "settings-profile-flags-commit-first",
+    "file": "crates/wallets/src/freshness/settings.rs",
+    "find": "        extend(&mut request, updates);\n        kassiber_setup::execute(conn, \"profiles.set\", &request, setup)?;\n",
+    "replace": "        extend(&mut request, updates);\n        if get(args, \"market_rate_provider\").is_none() && get(args, \"source_classes\").is_none() {\n            kassiber_setup::execute(conn, \"profiles.set\", &request, setup)?;\n        }\n",
+    "expect_failing": [
+      "tests/test_rust_desktop_settings.py::RustFreshnessSettingsTest::test_maintenance_profile_flags_commit_before_policy_validation"
+    ],
+    "rule": "A profile flag change is written even when the policy write that follows is refused."
+  },
+  {
+    "id": "settings-default-journals",
+    "file": "crates/wallets/src/freshness/settings.rs",
+    "find": "                (\"journals\", Value::Bool(true)),",
+    "replace": "                (\"journals\", Value::Bool(false)),",
+    "expect_failing": [
+      "tests/test_rust_desktop_settings.py::RustFreshnessSettingsTest::test_status_without_or_with_mismatched_context"
+    ],
+    "rule": "Without an active profile the default policy enables journal freshness only."
+  },
+  {
+    "id": "settings-snapshot-redaction",
+    "file": "crates/wallets/src/freshness/settings.rs",
+    "find": "    Ok(ui::payload(\n        &Queue::new(conn, &mut sources).snapshot(profile)?,\n    ))\n",
+    "replace": "    Queue::new(conn, &mut sources).snapshot(profile)\n",
+    "expect_failing": [
+      "tests/test_rust_desktop_settings.py::RustFreshnessSettingsTest::test_status_reads_match_wire_bytes_across_policies"
+    ],
+    "rule": "Snapshots pass through the UI redaction of secrets, URLs and checkpoints."
+  },
+  {
+    "id": "settings-coarse-excluded",
+    "file": "crates/wallets/src/freshness/settings.rs",
+    "find": "WHERE profile_id=? AND excluded=0 \\\n",
+    "replace": "WHERE profile_id=? \\\n",
+    "expect_failing": [
+      "tests/test_rust_desktop_settings.py::RustFreshnessSettingsTest::test_status_reads_match_wire_bytes_across_policies"
+    ],
+    "rule": "The coarse-priced count ignores excluded transactions."
+  },
+  {
+    "id": "settings-empty-workspace-label",
+    "file": "crates/wallets/src/freshness/settings.rs",
+    "find": "Value::Str(label) if label.code_points().next().is_some() =>",
+    "replace": "Value::Str(label) =>",
+    "expect_failing": [
+      "tests/test_rust_desktop_settings.py::RustFreshnessSettingsTest::test_status_without_or_with_mismatched_context"
+    ],
+    "rule": "An empty workspace label is reported as null."
+  },
+  {
+    "id": "settings-active-profile",
+    "file": "crates/wallets/src/freshness/settings.rs",
+    "find": "    let id = or_text(field(&context, \"profile_id\"));\n",
+    "replace": "    let _ = &context;\n    let raw = first(conn, \"SELECT value AS profile_id FROM settings WHERE key='context_profile'\", kassiber_store::rusqlite::params![])?.unwrap_or(Value::Null);\n    let id = or_text(field(&raw, \"profile_id\"));\n",
+    "expect_failing": [
+      "tests/test_rust_desktop_settings.py::RustFreshnessSettingsTest::test_status_without_or_with_mismatched_context"
+    ],
+    "rule": "The active profile comes from the context snapshot, so a profile outside the active workspace is not active."
+  }
+]

@@ -83,6 +83,8 @@ kassiber-custody = { path = "../custody" }
 kassiber-paths = { path = "../paths" }
 kassiber-store = { path = "../store" }
 kassiber-setup = { path = "../setup" }
+# Market-rate provider settings for the desktop freshness settings kinds.
+kassiber-rates = { path = "../rates" }
 # Reuse managed evidence storage and its validator; do not add a blob store.
 kassiber-transactions = { path = "../transactions" }
 # Audited descriptor grammars, BIP32, script construction and confidential

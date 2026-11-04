@@ -88,12 +88,11 @@ pub fn transaction_rate_pair(asset: &str, fiat: &str) -> Option<String> {
     PAIRS.contains(&pair.as_str()).then_some(pair)
 }
 pub fn normalize_market_provider(source: &str) -> Result<String> {
-    let normalized = if source.is_empty() {
+    let normalized = kassiber_pytext::strip(if source.is_empty() {
         "coinbase-exchange"
     } else {
         source
-    }
-    .trim()
+    })
     .to_lowercase();
     if !LIVE_SOURCES.contains(&normalized.as_str()) {
         return Err(validation(format!(

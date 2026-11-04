@@ -10,6 +10,7 @@ pub mod execution;
 pub mod graph;
 pub mod native;
 pub mod planning;
+pub mod settings;
 pub mod sources;
 pub mod ui;
 

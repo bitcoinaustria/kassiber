@@ -31,6 +31,7 @@ mod reports;
 pub use reports::execute as fixture_reports;
 mod review;
 mod secrets;
+mod settings;
 #[cfg(feature = "test-kinds")]
 mod test_kinds;
 mod transactions;
@@ -160,6 +161,7 @@ pub fn supported_kinds() -> Vec<&'static str> {
     kinds.extend(transactions::AUDIT_KINDS);
     kinds.push("ui.review.worklist");
     kinds.extend(review::KINDS);
+    kinds.extend(settings::KINDS);
     kinds.push("ui.freshness.run");
     kinds.extend(freshness::product::CONTROL_KINDS);
     kinds.push("ui.workspace.freshness.run");
@@ -340,6 +342,16 @@ fn app_error_envelope(error: &AppError, request_id: &RequestId, kind: Option<&st
         error.hint.as_deref(),
         error.retryable,
     );
+    if let Some(message) = &error.message_codepoints {
+        // Python's message keeps lone surrogates; the UTF-8 text escapes them.
+        let mut fields = get(&envelope, "error").unwrap().clone();
+        kassiber_envelope::set(
+            &mut fields,
+            "message",
+            Value::Str(kassiber_envelope::redaction::redact_secret_py(message)),
+        );
+        kassiber_envelope::set(&mut envelope, "error", fields);
+    }
     if error.code == "internal_error"
         && kind.is_some_and(|kind| {
             kind.starts_with("ui.source_funds.") && reports::KINDS.contains(&kind)
@@ -883,6 +895,16 @@ impl Daemon {
         }
         if wallets::KINDS.contains(&kind_text.as_str()) {
             return wallets::handle(self, &kind_text, args.as_ref(), &request_id);
+        }
+        if settings::KINDS.contains(&kind_text.as_str()) {
+            if let Some(locked) = self.open_lazily(&request_id)? {
+                return Ok((Some(locked), false));
+            }
+            let payload = settings::execute(self.book_mut()?.as_mut(), &kind_text, args.as_ref())?;
+            return Ok((
+                Some(with_request_id(success(&kind_text, payload), &request_id)),
+                false,
+            ));
         }
         if imports::KINDS.contains(&kind_text.as_str()) {
             return imports::handle(self, &kind_text, args.as_ref(), &request_id);
