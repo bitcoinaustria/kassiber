@@ -52,3 +52,11 @@ def test_review_atomic_apply_receipts_and_complete_rows_match_current_python():
         cwd=ROOT, text=True, capture_output=True, timeout=120,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_review_input_requests_match_current_python():
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "crates/transfers/scripts/export_review_inputs.py"), "--check"],
+        cwd=ROOT, text=True, capture_output=True, timeout=120,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

@@ -5,7 +5,12 @@ use kassiber_envelope::{dict, s, type_name, AppError};
 use kassiber_pyjson::Value;
 use kassiber_runtime::store::Book;
 
-pub const KINDS: &[&str] = &["ui.review.cases", "ui.review.receipt"];
+pub const KINDS: &[&str] = &[
+    "ui.review.cases",
+    "ui.review.request_input",
+    "ui.review.plan",
+    "ui.review.receipt",
+];
 
 fn fields(kind: &str) -> (&'static [&'static str], &'static [&'static str]) {
     match kind {

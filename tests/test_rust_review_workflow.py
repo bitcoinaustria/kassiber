@@ -177,14 +177,167 @@ class ReviewReadParity(ReviewParity, unittest.TestCase):
         self.compare([{}, {"limit": 2}])
 
 
+def component_spec():
+    return {
+        "component_type": "manual_bridge", "evidence_kind": "manual_claim",
+        "evidence_grade": "reviewed", "notes": "migration",
+        "legs": [
+            {"role": "source", "transaction": "external-out", "amount_msat": 100_000},
+            {"role": "destination", "transaction": "external-in", "amount_msat": 99_000},
+            {"role": "fee", "transaction": "external-out", "amount_msat": 1_000},
+        ],
+    }
+
+
+def price(tx="buy", **fields):
+    return {"type": "price_override", "transaction_id": tx, "reason": "Verified exchange rate",
+            **(fields or {"fiat_rate": "45000"})}
+
+
+class ReviewPlanParity(ReviewParity, unittest.TestCase):
+    KIND = "ui.review.plan"
+
+    def request_inputs(self, version):
+        return [
+            {"action": "connect_wallet", "case_ids": ["quarantine:out", "quarantine:buy"],
+             "expected_input_version": version},
+            {"action": "import_history", "case_ids": ["quarantine:sell"], "expected_input_version": version,
+             "explanation": "  Older exchange history\n\tis missing  "},
+            {"action": "attach_evidence", "case_ids": ["quarantine:buy"], "expected_input_version": version,
+             "explanation": None},
+            {"action": "attach_evidence", "case_ids": ["quarantine:buy", "quarantine:out"],
+             "expected_input_version": version},
+            {"action": "export", "case_ids": ["quarantine:buy"], "expected_input_version": version},
+            {"action": ["connect_wallet"], "case_ids": ["quarantine:buy"], "expected_input_version": version},
+            {"action": "connect_wallet", "case_ids": "quarantine:buy", "expected_input_version": version},
+            {"action": "connect_wallet", "case_ids": [], "expected_input_version": version},
+            {"action": "connect_wallet", "case_ids": [f"quarantine:{i}" for i in range(21)],
+             "expected_input_version": version},
+            {"action": "connect_wallet", "case_ids": ["quarantine:buy", "quarantine:buy"],
+             "expected_input_version": version},
+            {"action": "connect_wallet", "case_ids": ["buy"], "expected_input_version": version},
+            {"action": "connect_wallet", "case_ids": ["quarantine:" + "x" * 290], "expected_input_version": version},
+            {"action": "connect_wallet", "case_ids": [7], "expected_input_version": version},
+            {"action": "connect_wallet", "case_ids": ["quarantine:buy"], "expected_input_version": version,
+             "explanation": "   "},
+            {"action": "connect_wallet", "case_ids": ["quarantine:buy"], "expected_input_version": version,
+             "explanation": "bell\x07"},
+            {"action": "connect_wallet", "case_ids": ["quarantine:buy"], "expected_input_version": version,
+             "explanation": "y" * 1001},
+            {"action": "connect_wallet", "case_ids": ["quarantine:buy"], "expected_input_version": version,
+             "explanation": 5},
+            {"action": "connect_wallet", "case_ids": ["quarantine:buy"], "expected_input_version": version + 1},
+            {"action": "connect_wallet", "case_ids": ["quarantine:buy"], "expected_input_version": str(version)},
+            {"action": "connect_wallet", "case_ids": ["quarantine:buy"], "expected_input_version": True},
+            {"action": "connect_wallet", "case_ids": ["quarantine:buy"], "expected_input_version": -1},
+            {"action": "connect_wallet", "case_ids": ["quarantine:gift"], "expected_input_version": version},
+            {"action": "connect_wallet", "case_ids": ["quarantine:missing"], "expected_input_version": version},
+            {"action": "connect_wallet", "case_ids": ["quarantine:buy"]},
+            {"action": "connect_wallet", "case_ids": ["quarantine:buy"], "expected_input_version": version,
+             "extra": True},
+        ]
+
+    def plans(self, version):
+        return [
+            {"operations": [price()], "expected_input_version": version},
+            {"operations": [price(fiat_value="12.50")], "expected_input_version": version},
+            {"operations": [price(fiat_rate="4.5E+4")], "expected_input_version": version},
+            {"operations": [{"type": "exclude", "transaction_id": " sell ", "reason": " Duplicate import "}],
+             "expected_input_version": version},
+            {"operations": [{"type": "kind_override", "transaction_id": "buy", "kind": "income",
+                             "reason": "Mining payout"}], "expected_input_version": version},
+            {"operations": [{"type": "kind_override", "transaction_id": "gift", "kind": None,
+                             "valuation_mode": "market_value", "reason": "Not income"}],
+             "expected_input_version": version},
+            {"operations": [{"type": "custody_component",
+                             "request": {"action": "create", "components": [component_spec()]}}],
+             "expected_input_version": version},
+            {"operations": [price("out", fiat_rate="50000"), price("in", fiat_rate="50000"),
+                            {"type": "custody_component",
+                             "request": {"action": "create", "components": [component_spec()]}},
+                            {"type": "exclude", "transaction_id": "sell", "reason": "Duplicate"}],
+             "expected_input_version": version},
+            {"operations": [], "expected_input_version": version},
+            {"operations": [price()] * 51, "expected_input_version": version},
+            {"operations": "nope", "expected_input_version": version},
+            {"operations": [price(fiat_rate="1", fiat_value="2")], "expected_input_version": version},
+            {"operations": [price(fiat_rate="0")], "expected_input_version": version},
+            {"operations": [price(fiat_value="-1")], "expected_input_version": version},
+            {"operations": [price(fiat_rate="NaN")], "expected_input_version": version},
+            {"operations": [price(fiat_rate=45000)], "expected_input_version": version},
+            {"operations": [{"type": "transfer", "transaction_id": "buy", "reason": "x"}],
+             "expected_input_version": version},
+            {"operations": [{"type": "exclude", "transaction_id": "buy", "reason": "x", "note": 1}],
+             "expected_input_version": version},
+            {"operations": [{"type": "exclude", "transaction_id": "buy", "reason": "x" * 2001}],
+             "expected_input_version": version},
+            {"operations": [{"type": "exclude", "transaction_id": "gift", "reason": "Not a case"}],
+             "expected_input_version": version},
+            {"operations": [{"type": "exclude", "transaction_id": "missing", "reason": "Gone"}],
+             "expected_input_version": version},
+            {"operations": [{"type": "kind_override", "transaction_id": "sell", "kind": "income",
+                             "reason": "Wrong direction"}], "expected_input_version": version},
+            {"operations": [{"type": "kind_override", "transaction_id": "buy", "kind": "sell",
+                             "reason": "Outbound kind"}], "expected_input_version": version},
+            {"operations": [{"type": "kind_override", "transaction_id": "buy", "kind": "income",
+                             "valuation_mode": "zero_basis", "reason": "x"}], "expected_input_version": version},
+            {"operations": [{"type": "custody_component", "request": {"action": "explode"}}],
+             "expected_input_version": version},
+            {"operations": [{"type": "custody_component",
+                             "request": {"action": "create", "components": [component_spec()], "x": 1}}],
+             "expected_input_version": version},
+            {"operations": [{"type": "unpair", "pair_id": "p", "expected_fingerprint": "f"}],
+             "expected_input_version": version},
+            {"operations": [price()], "expected_input_version": version + 1},
+            {"operations": [price()], "expected_input_version": 1.0},
+            {"operations": [price()]},
+            {"operations": [price()], "expected_input_version": version, "workspace": "ws"},
+        ]
+
+    def test_input_requests_bind_current_cases_and_version(self):
+        self.compare(self.request_inputs(self.profile_scope()[1]), kind="ui.review.request_input")
+
+    def test_plans_are_read_only_previews_matching_python(self):
+        self.compare(self.plans(self.profile_scope()[1]))
+
+    def test_processed_book_plans_and_requests_match_python(self):
+        self.python("journals", "process")
+        version = self.profile_scope()[1]
+        self.compare(self.plans(version)[:9] + self.plans(version)[-3:])
+        self.compare(self.request_inputs(version)[:4], kind="ui.review.request_input")
+
+    def test_encrypted_book_plans_in_ram_like_python(self):
+        self.encrypt("correct horse battery staple")
+        version = self.profile_scope()[1]
+        self.compare(self.plans(version)[:8])
+        self.compare(self.request_inputs(version)[:3], kind="ui.review.request_input")
+
+
 class ReviewPairParity(ReviewParity, unittest.TestCase):
     KIND = "ui.review.cases"
     PAIR = True
+
+    def unpair(self, **changes):
+        pair = next(case["pair"] for case in self.python_cases()["cases"] if "pair" in case)
+        return {"type": "unpair", "pair_id": pair["pair_id"],
+                "expected_fingerprint": pair["pair_fingerprint"], "reason": "Two separate payments", **changes}
 
     def test_pair_residual_cases_name_their_pair(self):
         self.compare([{}, {"limit": 1}])
         self.python("journals", "process")
         self.compare([{}])
+
+    def test_unpair_plans_check_the_confirmed_fingerprint(self):
+        version = self.profile_scope()[1]
+        self.compare([
+            {"operations": [self.unpair()], "expected_input_version": version},
+            {"operations": [self.unpair(pair_id=" " + self.unpair()["pair_id"] + " ")],
+             "expected_input_version": version},
+            {"operations": [self.unpair(expected_fingerprint="stale")], "expected_input_version": version},
+            {"operations": [self.unpair(pair_id="missing")], "expected_input_version": version},
+            {"operations": [price(), self.unpair()], "expected_input_version": version},
+            {"operations": [self.unpair(), self.unpair()], "expected_input_version": version},
+        ], kind="ui.review.plan")
 
 
 if __name__ == "__main__":
