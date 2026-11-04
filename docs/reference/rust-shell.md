@@ -28,6 +28,7 @@ verification, including per-command Rust routing counts.
 | `crates/journals` | native plain journal processing over the admitted book; pairing, desktop/AI routing and full acceptance remain open |
 | `crates/transactions` | local loan marks, managed attachment evidence, metadata edits, BIP329 labels, append-only history and CLI/desktop transaction pages shared by both transports |
 | `crates/secrets` | zeroized unlock, Python-compatible native credential lifecycle, encryption maintenance, dotenv credential migration and explicit initialization/inspection/verification |
+| `crates/workspace` | workspace health, next actions, review badges and the book/book-set overviews shared by the CLI and desktop |
 | `crates/backup` | encrypted archive export, staging/install import and Python-compatible tar/manifest validation |
 | `crates/transfers` | pair/payout authoring, shared automatic pairing, component/gap reads and plans, matching rules, advisory dismissals and historical receipts |
 | `crates/transactions` | local loan marks, managed attachment evidence, metadata edits and append-only history shared by both transports |
@@ -15635,3 +15636,104 @@ report-blocker snapshot (`ui.report.blockers`, ported on
 snapshot), the report-read journal prelude from that slice, and native
 report-read wallet sync for `sync=always|if_enabled`. Its only desktop callers
 are the AI chat cards. AI projections of these kinds stay in Python.
+
+## Workspace shell (R5)
+
+`t3code/r5-workspace-shell-2`, based on `4844ba8b8`, serves the desktop's
+first screens natively. It supersedes the unverified draft on
+`t3code/r5-workspace-shell`; only its vector generator and scope repro were
+reused, both regenerated against current freshness semantics.
+
+| Group | Native surface | Evidence |
+| --- | --- | --- |
+| Projects | `ui.projects.list/create/select` (the `projects` CLI leaves were already native) | `tests/test_rust_project_desktop.py`: four process oracles, catalog bytes and all 112 tables of every project book |
+| Workspace | `health`, `next-actions`, `ui.overview.snapshot`, `ui.workspace.overview.snapshot`, `ui.workspace.health`, `ui.next_actions`, `ui.review.badges`, `ui.onboarding.complete` | 55 frozen Python books in `crates/workspace/tests/data/vectors.json`; `tests/test_rust_workspace_shell.py` daemon/CLI bytes (JSON, table, plain), SQLite and SQLCipher, unchanged tables for reads, all tables after onboarding |
+| Secrets | `ui.secrets.init` | plaintext and missing-database books, dotenv credential migration, verify-only re-initialization; files, wire and all tables |
+| Cancellation | generic `cancel` | refusal oracle: unclassified in both runtimes, `unsupported_kind` before any handler |
+
+Project creation and selection follow `_select_project_payload`: the desktop
+role is acquired before any passphrase probe, the target book opens before
+the daemon swaps its book, owner, runtime configuration and passphrase, and
+a failed switch closes the target before releasing its lease. Staged backup
+sessions survive a switch, as in Python. A running refresh is stopped before
+a project request, as for `ui.profiles.switch`. Catalog text containing
+unpaired surrogates is refused with a typed error; Python would escape it.
+
+Three shared fixes landed with the project group. The project clock now
+writes Python's whole-second `now_iso` stamps (the fractional SQLite form
+also reached `last_opened_at`, migration markers and legacy backup
+directory names). `status` resolves paths without requiring a settings file,
+which a project created by the desktop does not have. Requiring an existing
+project now refuses a missing database or an unrelated SQLite/SQLCipher file
+with Python's `invalid_project_database` error instead of `not_initialized`
+or a migration of the foreign file.
+
+Workspace reads live in the new `kassiber-workspace` crate. They read the
+canonical projection freshness (including calculation semantics), counts,
+grouped review queues, cached swap counts, quarantine root dependencies,
+chain inventory, journal balances, daily rates and the exit-tax inventory
+walk (reused from `kassiber-reports` without holdings or fallback quotes, as
+the overview passes it). None processes journals, runs the matcher, infers
+custody, writes the book or opens a network client; the overview's
+`ui.rates.coverage` read is the cached local projection. Floats follow
+CPython's operation order, BTC quantities stay integer msat until the final
+`float(Decimal)` conversion, and `sum()` of no floats keeps Python's integer
+zero where the wire shows it.
+
+`ui.onboarding.complete` creates the first book set, book and backend policy
+in one `BEGIN IMMEDIATE` transaction through the existing setup services;
+choosing bundled presets configures them and grants no consent to contact
+them. `ui.secrets.init` acquires exclusive maintenance before retiring the
+open connection, encrypts or creates the book with the desktop role retained,
+reopens it and migrates dotenv credentials unless `migrate_credentials` is
+`false`. The passphrase stays inside the secret seam.
+
+Served-by evidence: every daemon session in the new oracles reports
+`{"command": "daemon", "served_by": "rust"}` through the hybrid launcher with
+`KASSIBER_HYBRID_RUST_DAEMON=1`, and every CLI `health`/`next-actions` call is
+logged as Rust-served. No response in these sessions is `not_implemented`.
+
+| Surface | Rust requests in the oracles | Python fallback |
+| --- | ---: | ---: |
+| `ui.projects.list` | 10 | 0 |
+| `ui.projects.create` | 16 | 0 |
+| `ui.projects.select` | 23 | 0 |
+| `ui.overview.snapshot` | 25 | 0 |
+| `ui.workspace.overview.snapshot` | 72 | 0 |
+| `ui.workspace.health` | 28 | 0 |
+| `ui.next_actions` | 12 | 0 |
+| `ui.review.badges` | 12 | 0 |
+| `ui.onboarding.complete` | 57 | 0 |
+| `ui.secrets.init` | 12 | 0 |
+| `cancel` (refusal) | 3 | 0 |
+| `health` / `next-actions` CLI | 12 / 9 | 0 |
+
+These counts come from the `KASSIBER_WORKSPACE_COUNTS` and
+`KASSIBER_PROJECT_COUNTS` witnesses of one clean run of
+`tests/test_rust_project_desktop.py` and `tests/test_rust_workspace_shell.py`
+(30 tests with `tests/test_rust_setup_desktop.py`).
+
+Mutation entries for all four groups live in
+`crates/daemon/scripts/shell_mutations.json`; entries with a `wire-` prefix
+rebuild the test-harness binary in the scratch tree and run the named process
+oracle. Two Python reference bugs are preserved and reproduced:
+`tests/rust_port/repro_workspace_scope_coverage.py` (scoped `next-actions`
+reads the active book's price coverage) and
+`tests/rust_port/repro_onboarding_tax_country.py` (an unknown onboarding tax
+country escapes as an unhandled `ValueError`; Rust returns the same
+`internal_error` envelope with an empty `debug` instead of a traceback).
+
+Known gaps: `_relative_last` interprets naive timestamps in the machine's
+local zone in Python and in UTC here; `date.fromisoformat` week-date spellings
+are not accepted by the overview's day parser; root chains deeper than
+Python's recursion limit fail closed with an internal error on both sides but
+at a different depth. In-product AI projections of these kinds remain in
+Python.
+
+Not yet native in this group set: `ui.logs.snapshot` and
+`ui.egress.snapshot` (they need a Rust RAM log ring and the egress ledger
+projection with allowlist and database-header proof; the shared redaction
+scanner should mirror the base's version and record the unmerged round-5h
+delta, `a12f3ad85`, as a follow-up), and the `update` and `verify-download`
+CLI leaves.
+

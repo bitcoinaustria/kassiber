@@ -134,6 +134,11 @@ PAIRS = RELATION + (
     "('t1','w','p','c','exchange','2025-02-01T00:00:00Z','transfer_out','BTC',-100001,0,1,0.02,'Move','2025'),"
     "('t2','w','p','b','ln','2025-02-01T00:00:00Z','transfer_in','BTC',100001,0.02,1,NULL,'Move','2025');"
 )
+ALT_MOVED = (
+    "INSERT INTO journal_entries(id,workspace_id,profile_id,transaction_id,wallet_id,occurred_at,entry_type,asset,quantity,fiat_value,unit_cost,cost_basis,description,created_at) VALUES"
+    "('j9','w','p','b','ln','2020-06-01T00:00:00Z','acquisition','BTC',5000,1,1,NULL,'at_regime=alt','2025'),"
+    "('j10','w','p','b','ln','2025-03-01T00:00:00Z','transfer_out','BTC',-5000,0,1,0.1,'at_alt_out=5000 at_regime=alt','2025');"
+)
 IMPORTS = "INSERT INTO import_batches(id,workspace_id,profile_id,wallet_id,source_format,imported_at,rows_inserted,rows_updated,rows_skipped) VALUES('ib1','w','p','exchange','kraken_csv','2024-01-01T00:00:00Z',1,0,0),('ib2','w','p','exchange','kraken_ledger','2024-02-01T00:00:00Z',1,0,0);"
 
 
@@ -151,6 +156,8 @@ def overview_cases():
         ("ov_books", EXTRA_BOOKS + RATES),
         ("ov_books_current", CURRENT + JOURNAL + EXTRA_BOOKS + PAIRS + INVENTORY),
         ("ov_generic", CURRENT + JOURNAL + RATES + "UPDATE profiles SET tax_country='generic',fiat_currency='' WHERE id='p';"),
+        ("ov_issue_unknown_start", CURRENT + JOURNAL + CANONICAL + ISSUES.replace("'2025-01-05T00:00:00Z','2025');", "NULL,'2025');")),
+        ("ov_alt_moved_out", CURRENT + JOURNAL + RATES + ALT_MOVED),
         ("ov_semantics_stale", CURRENT + JOURNAL + "UPDATE profiles SET required_journal_semantics_version=1,journal_semantics_version=1 WHERE id='p';"),
     ):
         yield "overview", name, BASE + sql

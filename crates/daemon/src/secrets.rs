@@ -218,7 +218,10 @@ fn init(daemon: &mut Daemon, args: Option<&Value>, request_id: &RequestId) -> Ha
         result
     };
     Ok((
-        Some(with_request_id(success("ui.secrets.init", result), request_id)),
+        Some(with_request_id(
+            success("ui.secrets.init", result),
+            request_id,
+        )),
         false,
     ))
 }

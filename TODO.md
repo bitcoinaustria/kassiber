@@ -154,6 +154,22 @@ through the shared setup crate.
 - [ ] Run the remaining setup disposition modules and mixed daemon sessions
   outside the sandbox; a focused setup pass is not complete slice acceptance.
 
+## Rust backend R5 workspace shell (partial)
+
+The [workspace shell](docs/reference/rust-shell.md#workspace-shell-r5) serves
+projects, overviews, health, next actions, badges, onboarding and desktop
+encryption setup natively; generic `cancel` keeps Python's refusal.
+
+- [ ] Port `ui.logs.snapshot` with a bounded, redacted RAM log ring that mirrors
+  the base's shared redaction scanner; record the unmerged round-5h scanner
+  delta (`a12f3ad85`) as a separate follow-up.
+- [ ] Port `ui.egress.snapshot`: the ledger projection, runtime/AI allowlist and
+  database-header proof over `kassiber-net`'s ledger.
+- [ ] Port `update` and `verify-download` with Python's signature verification;
+  fetch only after the explicit update action, through `kassiber-net`.
+- [ ] Decide whether naive timestamps in overview relative labels should follow
+  Python's local-zone interpretation.
+
 ## Rust backend R5 chain clients (partial)
 
 - [x] Add consent-bound Esplora/mempool, Electrum TCP/TLS and Core RPC clients,

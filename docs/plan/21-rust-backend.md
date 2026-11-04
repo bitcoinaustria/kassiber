@@ -4528,3 +4528,22 @@ test is the one explicit egress, granted per request through `kassiber-net`.
 `ui.maintenance.run` stays `not_implemented` until report blockers, the
 report-read journal prelude and report-read wallet sync are native. Python
 product code is unchanged; one reference crash is recorded with a repro.
+
+### R5 workspace shell
+
+The desktop's first screens no longer need the Python daemon. Native
+`ui.projects.list/create/select`, both overview snapshots, health, next
+actions, review badges, `ui.onboarding.complete`, `ui.secrets.init` and the
+`health`/`next-actions` CLI leaves run through `kassiber-setup`, the new
+`kassiber-workspace` crate and the daemon's project, workspace-read and
+secrets modules. The generic `cancel` control keeps Python's unclassified
+refusal. Every read is local and egress-free; project switching preserves
+Python's ownership-before-probe and close-before-release order.
+
+Evidence: 55 frozen Python books replayed byte for byte, process oracles over
+daemon and CLI bytes with all 112 tables (SQLite and SQLCipher), mutation
+entries in `crates/daemon/scripts/shell_mutations.json`, and two recorded
+Python reference bugs. The
+[Rust shell reference](../reference/rust-shell.md#workspace-shell-r5) owns the
+served-by counts and limits. Still Python: `ui.logs.snapshot`,
+`ui.egress.snapshot`, `update` and `verify-download`.

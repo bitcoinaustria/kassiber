@@ -88,5 +88,165 @@
       "project_clock_matches_python_now_iso"
     ],
     "rule": "Project catalog and layout stamps use Python's whole-second Z format."
+  },
+  {
+    "id": "workspace-ready-quarantine",
+    "file": "crates/workspace/src/readiness.rs",
+    "find": "        && text(freshness, \"status\") == \"current\"\n        && quarantines == 0;",
+    "replace": "        && text(freshness, \"status\") == \"current\";",
+    "expect_failing": [
+      "workspace_health_matches_python_scopes_freshness_semantics_and_queue"
+    ],
+    "rule": "Quarantined rows keep a current book from being reported ready."
+  },
+  {
+    "id": "workspace-semantics-required",
+    "file": "crates/workspace/src/readiness.rs",
+    "find": "!truthy(&required) || (built == version && ge(&built, &required))",
+    "replace": "truthy(&required) || (built == version && ge(&built, &required))",
+    "expect_failing": [
+      "workspace_health_matches_python_scopes_freshness_semantics_and_queue"
+    ],
+    "rule": "A required calculation-semantics stamp must match the current version before journals count as current."
+  },
+  {
+    "id": "workspace-price-choice",
+    "file": "crates/workspace/src/readiness.rs",
+    "find": "let uncovered = truthy(&val(&summary, \"cache_uncovered_missing\"));",
+    "replace": "let uncovered = !truthy(&val(&summary, \"cache_uncovered_missing\"));",
+    "expect_failing": [
+      "workspace_next_actions_matches_python_priority_prices_and_reports"
+    ],
+    "rule": "Cached and uncovered missing prices suggest different actions."
+  },
+  {
+    "id": "workspace-root-unique-basis",
+    "file": "crates/workspace/src/readiness.rs",
+    "find": "                if matches.len() == 1 {",
+    "replace": "                if !matches.is_empty() {",
+    "expect_failing": [
+      "workspace_badges_match_python_roots_chains_cycles_and_cached_swaps"
+    ],
+    "rule": "A basis timestamp names a root only when one root row of that asset sits there."
+  },
+  {
+    "id": "workspace-root-chains",
+    "file": "crates/workspace/src/readiness.rs",
+    "find": "        if roots.is_empty() {\n            for candidate in &candidates {",
+    "replace": "        if false {\n            for candidate in &candidates {",
+    "expect_failing": [
+      "workspace_badges_match_python_roots_chains_cycles_and_cached_swaps"
+    ],
+    "rule": "A downstream row whose candidates are themselves downstream follows the chain to its root."
+  },
+  {
+    "id": "workspace-group-bool-key",
+    "file": "crates/workspace/src/readiness.rs",
+    "find": "        Value::Bool(b) => Some(GroupKey::Integer(u8::from(*b).into())),",
+    "replace": "        Value::Bool(_) => None,",
+    "expect_failing": [
+      "workspace_badges_match_python_roots_chains_cycles_and_cached_swaps"
+    ],
+    "rule": "A boolean transfer group id is Python's integer dict key."
+  },
+  {
+    "id": "overview-duplicate-outpoints",
+    "file": "crates/workspace/src/overview.rs",
+    "find": "duplicate += (sum - list.iter().max().unwrap()).max(0);",
+    "replace": "duplicate += 0 * (sum - list.iter().max().unwrap()).max(0);",
+    "expect_failing": [
+      "book_overview_matches_python_balances_series_valuation_and_rows"
+    ],
+    "rule": "An outpoint watched by several chain wallets counts once in the displayed total."
+  },
+  {
+    "id": "overview-daily-cutoff",
+    "file": "crates/workspace/src/overview.rs",
+    "find": "while tx_index < days.len() && days[tx_index] <= rate_day {",
+    "replace": "while tx_index < days.len() && days[tx_index] < rate_day {",
+    "expect_failing": [
+      "book_overview_matches_python_balances_series_valuation_and_rows"
+    ],
+    "rule": "A day's portfolio point includes that day's quantity changes."
+  },
+  {
+    "id": "overview-incomplete-start",
+    "file": "crates/workspace/src/overview.rs",
+    "find": "if !starts.is_empty() && starts.iter().all(|s| truthy(s)) {",
+    "replace": "if !starts.is_empty() && starts.iter().any(|s| truthy(s)) {",
+    "expect_failing": [
+      "book_overview_matches_python_balances_series_valuation_and_rows"
+    ],
+    "rule": "A blocker without a known start keeps the incomplete start unknown."
+  },
+  {
+    "id": "overview-alt-out-sign",
+    "file": "crates/workspace/src/overview.rs",
+    "find": "delta = Some(if kind == \"transfer_out\" { -alt } else { alt });",
+    "replace": "delta = Some(alt);",
+    "expect_failing": [
+      "book_overview_matches_python_balances_series_valuation_and_rows"
+    ],
+    "rule": "A transfer's Altbestand split leaves the sending wallet."
+  },
+  {
+    "id": "overview-mixed-fiat",
+    "file": "crates/workspace/src/overview.rs",
+    "find": "    if currencies.len() == 1 {\n        return dict([\n            (\"mode\", s(\"single\")),",
+    "replace": "    if !currencies.is_empty() {\n        return dict([\n            (\"mode\", s(\"single\")),",
+    "expect_failing": [
+      "book_set_overview_matches_python_rollups_and_book_boundaries"
+    ],
+    "rule": "Book sets with several fiat currencies are never summed into one currency."
+  },
+  {
+    "id": "wire-onboarding-liquid",
+    "file": "crates/setup/src/onboarding.rs",
+    "find": "                if include_liquid {",
+    "replace": "                if false {",
+    "expect_failing": [
+      "tests/test_rust_workspace_shell.py::test_onboarding_matches_python_wire_and_all_tables"
+    ],
+    "rule": "Choosing Liquid presets during onboarding restores them instead of omitting them."
+  },
+  {
+    "id": "wire-onboarding-manual-tombstones",
+    "file": "crates/setup/src/onboarding.rs",
+    "find": "                removed.extend(BUILTINS.iter().map(|n| (*n).to_owned()));",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_workspace_shell.py::test_onboarding_matches_python_wire_and_all_tables"
+    ],
+    "rule": "Custom and skipped backend setup tombstones every bundled preset."
+  },
+  {
+    "id": "wire-overview-unknown-args",
+    "file": "crates/workspace/src/overview.rs",
+    "find": "kassiber_pyjson::Key::Str(key) if !key.is(\"workspace_id\") => Some(key.clone()),",
+    "replace": "kassiber_pyjson::Key::Str(key) if false && !key.is(\"workspace_id\") => Some(key.clone()),",
+    "expect_failing": [
+      "tests/test_rust_workspace_shell.py::test_workspace_reads_match_python_bytes_and_leave_books_unchanged"
+    ],
+    "rule": "The book-set overview refuses arguments other than workspace_id."
+  },
+  {
+    "id": "wire-secrets-migrate-flag",
+    "file": "crates/daemon/src/secrets.rs",
+    "find": "if get(&args, \"migrate_credentials\") != Some(&Value::Bool(false)) {",
+    "replace": "if get(&args, \"migrate_credentials\") == Some(&Value::Bool(true)) {",
+    "expect_failing": [
+      "tests/test_rust_workspace_shell.py::test_secrets_init_matches_python_and_migrates_dotenv_credentials"
+    ],
+    "rule": "Desktop encryption migrates dotenv credentials unless the request opts out with false."
+  },
+  {
+    "id": "wire-secrets-already-encrypted",
+    "file": "crates/daemon/src/secrets.rs",
+    "find": "            (\"already_encrypted\", Value::Bool(true)),",
+    "replace": "            (\"already_encrypted\", Value::Bool(false)),",
+    "expect_failing": [
+      "tests/test_rust_workspace_shell.py::test_secrets_init_matches_python_and_migrates_dotenv_credentials"
+    ],
+    "rule": "Re-initializing an encrypted book only verifies and unlocks it."
   }
 ]

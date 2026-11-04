@@ -63,6 +63,10 @@ def session(tmp_path, root, requests, *, reference, unlock=None, traceback=False
     assert result.returncode == 0, result.stderr
     # Python prints a traceback for an unhandled reference exception.
     assert result.stderr == b"" or (traceback and reference), result.stderr
+    if not reference and (witness := os.environ.get("KASSIBER_WORKSPACE_COUNTS")):
+        with Path(witness).open("a") as handle:
+            for kind, _ in requests:
+                handle.write(json.dumps({"command": kind, "served_by": "rust"}) + "\n")
     return result.stdout.splitlines(keepends=True)[1:]
 
 
@@ -109,10 +113,6 @@ def compare_session(tmp_path, root, requests, key=None, traceback=False):
     assert dump(database, key) == expected_rows
     responses = [json.loads(line) for line in actual]
     assert all(r.get("error", {}).get("code") != "not_implemented" for r in responses)
-    if witness := os.environ.get("KASSIBER_WORKSPACE_COUNTS"):
-        with Path(witness).open("a") as handle:
-            for kind, _ in requests:
-                handle.write(json.dumps({"command": kind, "served_by": "rust"}) + "\n")
     return initial, expected_rows, responses
 
 
@@ -169,6 +169,10 @@ def test_health_and_next_actions_cli_match_python(tmp_path, fmt):
         assert database.read_bytes() == before
     records = [json.loads(line) for line in (tmp_path / "served.jsonl").read_text().splitlines()]
     assert records and all(r["served_by"] == "rust" for r in records), records
+    if witness := os.environ.get("KASSIBER_WORKSPACE_COUNTS"):
+        with Path(witness).open("a") as handle:
+            for record in records:
+                handle.write(json.dumps(record) + "\n")
 
 
 ONBOARDING = [

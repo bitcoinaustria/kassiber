@@ -2580,7 +2580,7 @@ pub fn workspace_overview(
         )
     };
     let newest = |mut items: Vec<Value>| {
-        items.sort_by(|a, b| recent_key(b).cmp(&recent_key(a)));
+        items.sort_by_key(|a| std::cmp::Reverse(recent_key(a)));
         items.truncate(20);
         items
     };

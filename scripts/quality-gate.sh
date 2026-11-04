@@ -51,6 +51,7 @@ run cargo test --workspace --features kassiber-journals/test-harness --locked
 run py crates/custody/scripts/mutation_check.py --check
 run py crates/secrets/scripts/mutation_check.py --check
 run py crates/backup/scripts/mutation_check.py --check
+run py crates/daemon/scripts/shell_mutation_check.py --check
 run py crates/custody/scripts/check_ledger_features.py
 run cargo test -p kassiber-net --features test-observer --locked
 run cargo clippy -p kassiber -p kassiber-daemon -p kassiber-runtime --all-targets --features kassiber/test-harness --locked -- -D warnings

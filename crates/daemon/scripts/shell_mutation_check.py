@@ -28,6 +28,7 @@ checker.MUTATIONS = Path(__file__).with_name("shell_mutations.json")
 checker.ENGINE_PACKAGES = (
     "--offline", "-p", "kassiber-daemon", "-p", "kassiber-setup", "-p", "kassiber-store",
     "-p", "kassiber-transactions", "-p", "kassiber-diagnostics", "-p", "kassiber-secrets",
+    "-p", "kassiber-workspace",
     "-p", "kassiber", "--features", "kassiber/test-harness",
 )
 checker.Mutation.runner = property(lambda m: "pytest" if m.id.startswith("wire-") else "cargo")
@@ -52,8 +53,9 @@ class Runner(BaseRunner):
 def main():
     if "--check" in sys.argv[1:]:
         return checker.main()
-    scratch = ROOT / "target/shell-mutation-scratch"
-    build = ROOT / "target/shell-mutation-build"
+    # Disposable data roots must not contain a symlink; resolve target/.
+    scratch = (ROOT / "target").resolve() / "shell-mutation-scratch"
+    build = (ROOT / "target").resolve() / "shell-mutation-build"
     scratch.mkdir(parents=True, exist_ok=True)
     tempfile.tempdir = str(scratch)
     os.environ.update(

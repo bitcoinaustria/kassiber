@@ -82,6 +82,10 @@ def exchange(tmp_path, requests, *, reference, argv=("daemon",)):
                                 capture_output=True, timeout=180)
     assert result.returncode == 0, result.stderr
     assert result.stderr == b""
+    if not reference and (witness := os.environ.get("KASSIBER_PROJECT_COUNTS")):
+        with Path(witness).open("a") as handle:
+            for kind, _ in requests:
+                handle.write(json.dumps({"command": kind, "served_by": "rust"}) + "\n")
     return result.stdout.splitlines(keepends=True)
 
 
@@ -145,10 +149,6 @@ def compare(tmp_path, requests, *, encrypted=(), argv=("daemon",)):
     assert records == [{"command": "daemon", "served_by": "rust"}]
     responses = [json.loads(line) for line in actual[1:-1]]
     assert all(r.get("error", {}).get("code") != "not_implemented" for r in responses)
-    if witness := os.environ.get("KASSIBER_PROJECT_COUNTS"):
-        with Path(witness).open("a") as handle:
-            for kind, _ in requests:
-                handle.write(json.dumps({"command": kind, "served_by": "rust"}) + "\n")
     return responses
 
 
