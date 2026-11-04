@@ -3,7 +3,7 @@
 //! The book work happens in `prepare`; a `Verification` then only looks the
 //! pending txids up on one Esplora or Electrum backend and classifies them
 //! against the in-memory index, so it can run off the request thread. Every
-//! lookup goes through `kassiber-net` under a grant minted for this one
+//! lookup goes through `kassiber_net` under a grant minted for this one
 //! request; the desktop's "Verify on chain" action is that consent. It is
 //! never an AI tool.
 use super::{Legs, LookupError, Plan};

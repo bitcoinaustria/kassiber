@@ -1,7 +1,7 @@
 //! `ui.wallets.detect_script_types`: which script types a bare xpub has used.
 //!
 //! The probe is the user's explicit "detect" action. It checks receive index
-//! 0 of each script type against one backend through `kassiber-net`, under a
+//! 0 of each script type against one backend through `kassiber_net`, under a
 //! once-only consent bound to that action, like Python's
 //! `detect_active_script_types`. Every backend or probe failure falls back to
 //! a manual `p2wpkh` choice with the failure as the reason.

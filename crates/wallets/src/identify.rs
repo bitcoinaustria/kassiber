@@ -1072,7 +1072,7 @@ fn raw_split(text: &str) -> Vec<&str> {
 }
 
 /// `extract_candidates_from_csv`: recognized columns first, then every cell,
-/// then a raw delimiter split as a safety net; strictly validated and
+/// then a raw delimiter split as a fallback; strictly validated and
 /// de-duplicated in first-seen order, stopping past the harvest cap.
 pub fn harvest_csv(text: &str) -> Vec<String> {
     const ADDRESS_HEADERS: [&str; 13] = [
