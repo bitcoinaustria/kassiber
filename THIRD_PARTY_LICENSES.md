@@ -97,6 +97,8 @@ third-party package or runtime requirement is added.
 | `zlib-rs` / `zopfli` | locked transitive `0.6.8` / `0.8.4` | Writer's pure Rust DEFLATE backends; no system zlib dependency | Zlib / Apache-2.0 |
 | `typed-path` / `nix` | locked transitive `0.13.0` / `0.31.3` | ZIP path types and platform support; renderer uses only RAM buffers | MIT OR Apache-2.0 / MIT |
 | `crc32fast` / `simd-adler32` | locked transitive `1.5.3` / `0.3.10` | ZIP/compression checksums; updates required by the cached Zopfli dependency | MIT OR Apache-2.0 / MIT |
+| `typst` / `typst-layout` / `typst-pdf` | `=0.15.1` (exact, default features off) | Layout and PDF output for the shared report design (plan 21). A sealed in-memory world: embedded templates and fonts, no package resolver, system font scan, file access or network; the standard library has no layout or PDF engine | Apache-2.0 |
+| Typst's transitive crates (`krilla`, `hayro-*`, `rustybuzz`/`ttf-parser`, `icu_*`, `image`, `tiny-skia`, `wasmi`/`wasmparser` and others; 216 locked packages) | locked transitive | Text shaping, Unicode segmentation, image decoding and PDF writing inside the engine; Kassiber exposes no plugin, image-file or font-file input | mostly MIT OR Apache-2.0; also Apache-2.0, MIT, Unicode-3.0 (`icu_*`, `zerovec`, `yoke`, `litemap`), BSD-2-Clause (`arrayref`, `kamadak-exif`, `mutate_once`), BSD-3-Clause (`tiny-skia`), Zlib (`slotmap`), Apache-2.0 WITH LLVM-exception (`wasmparser`, `ar_archive_writer`), 0BSD OR CC0-1.0 (`roman-numerals-rs`), Unlicense OR MIT (`csv`, `byteorder-lite`) |
 | `openpyxl` | `>=3.1,<4` | Reads filled-in `.xlsx` files for the generic-ledger manual importer | MIT |
 | `reportlab` | `>=4.4,<5` | Styled PDF rendering for Austrian and source-of-funds report exports | BSD |
 | `sqlcipher3` | `>=0.6.2,<1` | Python binding around SQLCipher 4; wheels bundle a SQLCipher community build for at-rest database encryption | Zlib (binding) + BSD-style (SQLCipher community) |
@@ -187,6 +189,7 @@ daily OHLCVT values used as local fallback pricing data.
 | Data | Files | Role | License / redistribution status |
 | --- | --- | --- | --- |
 | Kraken BTC daily OHLCVT history | `kassiber/data/rates/kraken/btc_daily/*.csv` | Offline fallback rates for `BTC-EUR` and `BTC-USD` | Unknown / not specified in the local export; review before public release redistribution |
+| Report fonts | `crates/pdf/fonts/*.ttf` | DM Sans and JetBrains Mono (the `@fontsource` Latin subsets, converted losslessly from WOFF) and Liberation Sans/Mono as glyph fallback, embedded in Rust PDF reports; provenance and hashes in `crates/pdf/fonts/README.md` | SIL OFL 1.1 |
 
 ## Development and test infrastructure
 

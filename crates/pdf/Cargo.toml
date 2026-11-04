@@ -9,7 +9,15 @@ authors.workspace = true
 publish.workspace = true
 
 [dependencies]
+kassiber-pyjson = { path = "../pyjson" }
 kassiber-pytext = { path = "../pytext" }
+# The shared report design needs a layout and PDF engine; neither std nor the
+# workspace has one (plan 21: Typst as a library). The engine is sealed:
+# embedded templates, bundled fonts and in-memory images only, with no
+# package resolver, system font scan, file access or network.
+typst = { version = "=0.15.1", default-features = false }
+typst-layout = { version = "=0.15.1", default-features = false }
+typst-pdf = { version = "=0.15.1", default-features = false }
 
 [lints.rust]
 unsafe_code = "forbid"
