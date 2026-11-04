@@ -892,6 +892,17 @@ pub fn wide(v: &Value) -> i128 {
         .parse()
         .expect("converted integer exceeds custody arithmetic range")
 }
+/// `wide` when the converted integer fits, else `None` for an exact fallback.
+pub fn checked_wide(v: &Value) -> Option<i128> {
+    v.to_string().parse().ok()
+}
+/// Exact form of a converted integer Python admits beyond `i128`.
+pub fn big(v: &Value) -> BigInt {
+    BigInt::from_str(&v.to_string()).expect("unconverted integer fact")
+}
+pub fn number(n: &BigInt) -> Value {
+    Value::Number(n.to_string().parse().expect("integer literal"))
+}
 
 #[cfg(test)]
 mod byte_tests {

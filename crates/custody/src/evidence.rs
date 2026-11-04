@@ -507,8 +507,13 @@ pub fn enriched_rows<R: RowRecord>(rows: &[R]) -> Result<Vec<Value>, Error> {
             if i != keeper {
                 let fee = int(&result[i]["fee"]);
                 if !truth(&result[i]["amount_includes_fee"]) {
-                    result[i]["amount"] =
-                        json!(wide(&integer_or_zero(&result[i]["amount"])?) + i128::from(fee));
+                    let amount = integer_or_zero(&result[i]["amount"])?;
+                    result[i]["amount"] = match codec::checked_wide(&amount)
+                        .and_then(|amount| amount.checked_add(i128::from(fee)))
+                    {
+                        Some(sum) => json!(sum),
+                        None => codec::number(&(codec::big(&amount) + fee)),
+                    };
                 }
                 result[i]["fee"] = json!(0);
                 result[i]["custody_duplicate_event_fee_normalized"] = json!(true);
@@ -531,21 +536,39 @@ fn validate_observation(observation: &Value) -> Result<(), Error> {
     if !truth(&observation["asset"]) {
         return Err("quantity observations require an asset".into());
     }
-    let amount = wide(&observation["amount_msat"]);
-    let fee = wide(&observation["fee_msat"]);
-    if amount < 0 {
+    let includes_fee = truth(&observation["amount_includes_fee"]);
+    let (amount, fee) = (&observation["amount_msat"], &observation["fee_msat"]);
+    // Python admits reviewed amounts up to its integer-string limit, beyond i128.
+    match (codec::checked_wide(amount), codec::checked_wide(fee)) {
+        (Some(amount), Some(fee)) => validate_quantity(&direction, includes_fee, amount, fee),
+        _ => validate_quantity(
+            &direction,
+            includes_fee,
+            codec::big(amount),
+            codec::big(fee),
+        ),
+    }
+}
+fn validate_quantity<T: Ord + From<i8>>(
+    direction: &str,
+    includes_fee: bool,
+    amount: T,
+    fee: T,
+) -> Result<(), Error> {
+    let zero = || T::from(0);
+    if amount < zero() {
         return Err("quantity observation amount_msat must be non-negative".into());
     }
-    if fee < 0 {
+    if fee < zero() {
         return Err("quantity observation fee_msat must be non-negative".into());
     }
-    if direction == "inbound" && truth(&observation["amount_includes_fee"]) {
+    if direction == "inbound" && includes_fee {
         return Err("inbound quantity cannot use amount_includes_fee".into());
     }
-    if amount == 0 && !(direction == "outbound" && fee > 0) {
+    if amount == zero() && !(direction == "outbound" && fee > zero()) {
         return Err("zero quantity is valid only for a fee-only outbound".into());
     }
-    if truth(&observation["amount_includes_fee"]) && fee > amount {
+    if includes_fee && fee > amount {
         return Err("an included fee cannot exceed the observed amount".into());
     }
     Ok(())
@@ -735,16 +758,37 @@ fn canonical_event(
     }
     let mut contradictions = Vec::new();
     for ((wallet, direction, asset), items) in &slots {
-        let semantics: BTreeSet<(i128, i128, bool)> = items
-            .iter()
-            .map(|i| {
-                (
-                    wide(&i["amount_msat"]),
-                    wide(&i["fee_msat"]),
-                    truth(&i["amount_includes_fee"]),
-                )
-            })
-            .collect();
+        let fits = items.iter().all(|i| {
+            codec::checked_wide(&i["amount_msat"]).is_some()
+                && codec::checked_wide(&i["fee_msat"]).is_some()
+        });
+        let semantics: Vec<Value> = if fits {
+            let set: BTreeSet<(i128, i128, bool)> = items
+                .iter()
+                .map(|i| {
+                    (
+                        wide(&i["amount_msat"]),
+                        wide(&i["fee_msat"]),
+                        truth(&i["amount_includes_fee"]),
+                    )
+                })
+                .collect();
+            set.into_iter().map(|t| json!(t)).collect()
+        } else {
+            // Python orders reviewed amounts beyond i128 exactly.
+            let set: BTreeMap<_, Value> = items
+                .iter()
+                .map(|i| {
+                    let flag = truth(&i["amount_includes_fee"]);
+                    let (amount, fee) = (&i["amount_msat"], &i["fee_msat"]);
+                    (
+                        (codec::big(amount), codec::big(fee), flag),
+                        json!([amount, fee, flag]),
+                    )
+                })
+                .collect();
+            set.into_values().collect()
+        };
         if semantics.len() > 1 {
             contradictions.push(json!({"wallet_id":wallet,"direction":direction,"asset":asset,"semantics":semantics}));
         }

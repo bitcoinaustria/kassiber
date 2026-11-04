@@ -52,10 +52,14 @@ impl Refusal {
         }
     }
 
-    /// A refusal whose message is its code.
+    /// A refusal whose message is its code, unless the code carries one.
     fn code(stage: &'static str, code: impl Into<String>) -> Self {
         let code = code.into();
-        Refusal::new(stage, code.clone(), code)
+        // A `TypeError: message` code carries Python's exception text.
+        match code.split_once(": ") {
+            Some((family @ "TypeError", message)) => Refusal::new(stage, family, message),
+            _ => Refusal::new(stage, code.clone(), code),
+        }
     }
 
     /// The operation's refusal document.

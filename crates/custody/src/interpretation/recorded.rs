@@ -127,7 +127,15 @@ fn append_groups(
             return Ok(false);
         }
         if !value.is_number() && !value.is_boolean() {
-            return Err("TypeError".into());
+            let kind = match value {
+                _ if crate::codec::raw_bytes(value).is_some() => "bytes",
+                Value::String(_) => "str",
+                Value::Array(_) => "list",
+                _ => "dict",
+            };
+            return Err(format!(
+                "TypeError: '>' not supported between instances of '{kind}' and 'int'"
+            ));
         }
         Ok(value.as_bool().unwrap_or_else(|| {
             value
@@ -302,7 +310,13 @@ mod tests {
         for v in vectors {
             let rows = super::super::array(&v["rows"]);
             if !v["error_code"].is_null() {
-                assert_eq!(detect(rows).unwrap_err(), v["error_code"], "{}", v["case"]);
+                let error = detect(rows).unwrap_err();
+                assert_eq!(
+                    error.split(": ").next().unwrap(),
+                    v["error_code"],
+                    "{}",
+                    v["case"]
+                );
                 continue;
             }
             assert_eq!(
