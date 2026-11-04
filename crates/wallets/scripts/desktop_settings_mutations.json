@@ -368,5 +368,125 @@
       "tests/test_rust_desktop_utxos.py::RustWalletUtxosTest::test_every_support_branch_and_inventory_matches_wire_bytes"
     ],
     "rule": "Descriptor and address wallets without an explicit backend use the default backend."
+  },
+  {
+    "id": "lightning-test-registration",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "                \"ui.backends.lightning.test\",\n",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_desktop_lightning_test.py::RustLightningBackendTest::test_refusals_and_non_lightning_backends_make_no_node_traffic"
+    ],
+    "rule": "The Lightning backend test is advertised and served by the Rust daemon."
+  },
+  {
+    "id": "lightning-test-kind-gate",
+    "file": "crates/kassiber/src/real_store/lightning.rs",
+    "find": "    if ![\"coreln\", \"lnd\", \"nwc\"].contains(&kind.as_str()) {",
+    "replace": "    if kind.is_empty() {",
+    "expect_failing": [
+      "tests/test_rust_desktop_lightning_test.py::RustLightningBackendTest::test_refusals_and_non_lightning_backends_make_no_node_traffic"
+    ],
+    "rule": "A non-Lightning backend is refused without building a client or making a request."
+  },
+  {
+    "id": "lightning-test-backend-type",
+    "file": "crates/kassiber/src/real_store/lightning.rs",
+    "find": "        Some(value) => {\n            return Err(\n                AppError::new(\"validation\", \"backend must be a string\")",
+    "replace": "        Some(_) if true => None,\n        Some(value) => {\n            return Err(\n                AppError::new(\"validation\", \"backend must be a string\")",
+    "expect_failing": [
+      "tests/test_rust_desktop_lightning_test.py::RustLightningBackendTest::test_refusals_and_non_lightning_backends_make_no_node_traffic"
+    ],
+    "rule": "A non-string backend argument is a typed validation error."
+  },
+  {
+    "id": "lightning-test-name-case",
+    "file": "crates/setup/src/backend_runtime.rs",
+    "find": "        let name = kassiber_pytext::strip(name).to_lowercase();\n        self.view",
+    "replace": "        let name = kassiber_pytext::strip(name).to_owned();\n        self.view",
+    "expect_failing": [
+      "tests/test_rust_desktop_lightning_test.py::RustLightningBackendTest::test_refusals_and_non_lightning_backends_make_no_node_traffic"
+    ],
+    "rule": "Backend references resolve case-insensitively like Python's resolve_backend."
+  },
+  {
+    "id": "lightning-test-failure-log",
+    "file": "crates/kassiber/src/real_store/lightning.rs",
+    "find": "logs.push(s(format!(\"Connection failed: {}\", error.message)));",
+    "replace": "logs.push(s(format!(\"Connection error: {}\", error.message)));",
+    "expect_failing": [
+      "tests/test_rust_desktop_lightning_test.py::RustLightningBackendTest::test_failures_report_ok_false_with_the_reference_message"
+    ],
+    "rule": "Client failures answer ok:false with Python's log line and message."
+  },
+  {
+    "id": "lightning-test-block-height-log",
+    "file": "crates/kassiber/src/real_store/lightning.rs",
+    "find": "    if let Some(height) = &node.block_height {",
+    "replace": "    if let Some(height) = None::<&kassiber_pyjson::BigInt> {",
+    "expect_failing": [
+      "tests/test_rust_desktop_lightning_test.py::RustLightningBackendTest::test_cln_snapshot_matches_bytes_and_commands"
+    ],
+    "rule": "A known block height is logged."
+  },
+  {
+    "id": "lightning-lnd-alias",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "            alias: optional_text(field(&info, \"alias\")).unwrap_or_default(),",
+    "replace": "            alias: PyStr::default(),",
+    "expect_failing": [
+      "tests/test_rust_desktop_lightning_test.py::RustLightningBackendTest::test_lnd_node_fields_follow_the_reference_coercions"
+    ],
+    "rule": "The LND alias comes from getinfo."
+  },
+  {
+    "id": "lightning-lnd-network",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "            network: lnd_network(&info),",
+    "replace": "            network: \"mainnet\".into(),",
+    "expect_failing": [
+      "tests/test_rust_desktop_lightning_test.py::RustLightningBackendTest::test_lnd_node_fields_follow_the_reference_coercions"
+    ],
+    "rule": "The LND network follows the chains entry or the legacy testnet flag."
+  },
+  {
+    "id": "lightning-lnd-zero-height",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "                .filter(|height| *height != BigInt::from(0)),",
+    "replace": "                .filter(|_| true),",
+    "expect_failing": [
+      "tests/test_rust_desktop_lightning_test.py::RustLightningBackendTest::test_lnd_node_fields_follow_the_reference_coercions"
+    ],
+    "rule": "A zero LND block height is reported as unknown."
+  },
+  {
+    "id": "lightning-lnd-peers",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "            peer_count: integer(field(&info, \"num_peers\"))?,",
+    "replace": "            peer_count: 0.into(),",
+    "expect_failing": [
+      "tests/test_rust_desktop_lightning_test.py::RustLightningBackendTest::test_lnd_node_fields_follow_the_reference_coercions"
+    ],
+    "rule": "The LND peer count is the reference's lenient integer of num_peers."
+  },
+  {
+    "id": "lightning-cln-alias",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "        alias: text(\"alias\"),",
+    "replace": "        alias: PyStr::default(),",
+    "expect_failing": [
+      "tests/test_rust_desktop_lightning_test.py::RustLightningBackendTest::test_cln_snapshot_matches_bytes_and_commands"
+    ],
+    "rule": "The CLN alias comes from getinfo."
+  },
+  {
+    "id": "lightning-cln-peers",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "        peer_count: peers.unwrap_or_else(|| 0.into()),",
+    "replace": "        peer_count: 0.into(),",
+    "expect_failing": [
+      "tests/test_rust_desktop_lightning_test.py::RustLightningBackendTest::test_cln_snapshot_matches_bytes_and_commands"
+    ],
+    "rule": "The CLN peer count comes from getinfo."
   }
 ]

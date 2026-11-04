@@ -69,10 +69,21 @@ pub struct Routing {
     pub rebalance_count: usize,
 }
 
+/// The node fields `NodeSnapshot` keeps from `getinfo`, as the reference
+/// coerces them; nothing else from the node response is retained.
+#[derive(Debug, Default, PartialEq)]
+pub struct NodeInfo {
+    pub alias: PyStr,
+    pub network: PyStr,
+    pub block_height: Option<BigInt>,
+    pub peer_count: BigInt,
+}
+
 #[derive(Debug, PartialEq)]
 pub struct ProfitabilitySnapshot {
     pub channels: Vec<Channel>,
     pub routing: Option<Routing>,
+    pub node: NodeInfo,
 }
 
 pub struct LndReportClient {
@@ -396,8 +407,13 @@ impl LndReportClient {
             })?;
         }
         lnd_rows(&info, "chains")?;
-        integer(field(&info, "num_peers"))?;
-        integer(field(&info, "block_height"))?;
+        let node = NodeInfo {
+            alias: optional_text(field(&info, "alias")).unwrap_or_default(),
+            network: lnd_network(&info),
+            block_height: Some(integer(field(&info, "block_height"))?)
+                .filter(|height| *height != BigInt::from(0)),
+            peer_count: integer(field(&info, "num_peers"))?,
+        };
         integer(field(&onchain, "confirmed_balance"))?;
         for row in &forwards {
             timestamp(field(row, "timestamp"))?;
@@ -435,6 +451,7 @@ impl LndReportClient {
             .authorize(self.request().clone(), consent.cloned())
             .map_err(|e| e.app_error())?;
         Ok(ProfitabilitySnapshot {
+            node,
             channels,
             routing: Some(Routing {
                 window_label: format!("Last {} days", self.window_days),
@@ -540,6 +557,36 @@ fn text(value: &Value) -> PyStr {
 }
 fn optional_text(value: &Value) -> Option<PyStr> {
     truthy(value).then(|| text(value))
+}
+/// `_normalize_network(value)`.
+fn normalize_network(value: &Value) -> PyStr {
+    let raw = if truthy(value) {
+        kassiber_pytext::lower(kassiber_pytext::strip(&py_str(value)))
+    } else {
+        String::new()
+    };
+    match raw.as_str() {
+        "" | "main" | "mainnet" => "mainnet".into(),
+        "test" | "testnet" => "testnet".into(),
+        "sig" | "signet" => "signet".into(),
+        "reg" | "regtest" => "regtest".into(),
+        _ => raw.into(),
+    }
+}
+/// `_chains_to_network(info)`.
+fn lnd_network(info: &Value) -> PyStr {
+    if let Value::List(chains) = field(info, "chains") {
+        for entry in chains {
+            if matches!(entry, Value::Dict(_)) && truthy(field(entry, "network")) {
+                return normalize_network(field(entry, "network"));
+            }
+        }
+    }
+    match field(info, "testnet") {
+        Value::Bool(true) => "testnet".into(),
+        Value::Bool(false) => "mainnet".into(),
+        legacy => normalize_network(legacy),
+    }
 }
 fn lnd_truthy(value: &Value) -> bool {
     if let Value::Str(s) = value {

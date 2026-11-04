@@ -186,14 +186,35 @@ fn acquire(
     window: u16,
 ) -> Result<ProfitabilitySnapshot> {
     let info = read(ClnMethod::GetInfo)?;
-    for key in ["blockheight", "num_peers"] {
+    let mut numbers = [None, None];
+    for (slot, key) in numbers.iter_mut().zip(["blockheight", "num_peers"]) {
         if matches!(
             field(&info, key),
             Value::Int(_) | Value::Float(_) | Value::Bool(_)
         ) {
-            strict_int(field(&info, key))?;
+            *slot = Some(strict_int(field(&info, key))?);
         }
     }
+    // `fetch_core_lightning_snapshot` then `build_node_snapshot`.
+    let [block_height, peers] = numbers;
+    let text = |key: &str| match field(&info, key) {
+        Value::Null => PyStr::default(),
+        value => kassiber_pytext::strip_py(&match value {
+            Value::Str(text) => text.clone(),
+            other => py_str(other).into(),
+        }),
+    };
+    let network = text("network");
+    let node = super::NodeInfo {
+        alias: text("alias"),
+        network: if network.code_points().next().is_none() {
+            "mainnet".into()
+        } else {
+            network
+        },
+        block_height,
+        peer_count: peers.unwrap_or_else(|| 0.into()),
+    };
     drop(info);
     let funds = read_rows(
         &mut read,
@@ -262,7 +283,9 @@ fn acquire(
     )?;
     read_rows(&mut read, ClnMethod::ListBalances, "accounts", &[])?;
     read_rows(&mut read, ClnMethod::ListAccountEvents, "events", &[])?;
-    project(channels, funds, forwards, pays, income, window)
+    let mut snapshot = project(channels, funds, forwards, pays, income, window)?;
+    snapshot.node = node;
+    Ok(snapshot)
 }
 
 fn stripped(value: &Value) -> Option<PyStr> {
@@ -615,6 +638,7 @@ fn project(
     Ok(ProfitabilitySnapshot {
         channels: output,
         routing,
+        node: super::NodeInfo::default(),
     })
 }
 

@@ -265,6 +265,169 @@ impl<'a> Prepared<'a> {
     }
 }
 
+/// `ui.backends.lightning.test` (`_test_lightning_backend_payload`): the
+/// user's explicit test of one configured Lightning backend. Its only egress
+/// is that node's snapshot through the gate, granted for this request alone;
+/// node responses are reduced to the alias, network, height and counts.
+pub(super) fn backend_test(
+    conn: &Connection,
+    config: &Config,
+    args: &Value,
+    gate: Gate,
+    version: &str,
+) -> Result<Value> {
+    let reference = match get(args, "backend") {
+        None | Some(Value::Null) => None,
+        Some(Value::Str(text)) => {
+            Some(kassiber_pytext::strip_py(text)).filter(|text| text.code_points().next().is_some())
+        }
+        Some(value) => {
+            return Err(
+                AppError::new("validation", "backend must be a string").with_details(dict([(
+                    "type",
+                    kassiber_envelope::s(kassiber_envelope::type_name(value)),
+                )])),
+            )
+        }
+    };
+    let reference = reference.ok_or_else(|| {
+        AppError::new("validation", "Lightning backend is required.")
+            .with_hint("Enter lightning backend.")
+    })?;
+    let reference = reference
+        .as_str()
+        .ok_or_else(|| AppError::new("app_error", "Invalid backend name encoding"))?
+        .to_owned();
+    let backend = config.resolve_runtime(&reference)?;
+    let name = match get(&backend, "name").filter(|v| kassiber_envelope::truthy(v)) {
+        Some(value) => kassiber_pytext::strip(&py_str(value)).to_owned(),
+        None => kassiber_pytext::strip(&reference).to_owned(),
+    };
+    let name = if name.is_empty() {
+        reference.clone()
+    } else {
+        name
+    };
+    let kind = match get(&backend, "kind").filter(|v| kassiber_envelope::truthy(v)) {
+        Some(value) => kassiber_pytext::lower(&py_str(value)),
+        None => String::new(),
+    };
+    fn s(value: impl AsRef<str>) -> Value {
+        kassiber_envelope::s(value.as_ref())
+    }
+    let mut logs = vec![s(format!(
+        "Opening Lightning connection to backend '{name}'"
+    ))];
+    let refusal = |kind: Value, logs: Vec<Value>, error: Option<Value>| {
+        let mut payload = dict([
+            ("ok", Value::Bool(false)),
+            ("backend", s(&name)),
+            ("kind", kind),
+            ("logs", Value::List(logs)),
+        ]);
+        if let Some(error) = error {
+            set(&mut payload, "error", error);
+        }
+        payload
+    };
+    if !["coreln", "lnd", "nwc"].contains(&kind.as_str()) {
+        logs.push(s(format!(
+            "Backend kind '{}' is not a Lightning node backend.",
+            if kind.is_empty() { "unknown" } else { &kind }
+        )));
+        let shown = if kind.is_empty() {
+            Value::Null
+        } else {
+            s(&kind)
+        };
+        return Ok(refusal(shown, logs, None));
+    }
+    let capabilities = match capabilities(&kind, true) {
+        Ok(capabilities) => capabilities,
+        Err(error) => {
+            logs.push(s(error.hint.as_deref().unwrap_or(&error.message)));
+            let hint = error.hint.as_deref().map_or(Value::Null, s);
+            let details = dict([
+                ("code", s(&error.code)),
+                ("message", s(&error.message)),
+                ("hint", hint),
+            ]);
+            return Ok(refusal(s(&kind), logs, Some(details)));
+        }
+    };
+    let fetched = (|| {
+        let raw = config.resolve_lightning(conn, &reference)?;
+        let raw = kassiber_pyjson::dumps(&raw, &Default::default())
+            .map_err(|_| AppError::new("config_error", "Invalid backend configuration"))?;
+        let raw = serde_json::from_str(&raw)
+            .map_err(|_| AppError::new("config_error", "Invalid backend configuration"))?;
+        let book_id = setting(conn, "database_instance_id")?
+            .filter(|id| !id.is_empty())
+            .ok_or_else(|| AppError::new("validation", "Book identity is unavailable"))?;
+        let action = ReportAction {
+            operation: "ui.backends.lightning.test".into(),
+            book_id,
+            profile_id: "backend-test".into(),
+            connection_id: name.clone(),
+            window_days: 1,
+            export_file: None,
+        };
+        let client = match kind.as_str() {
+            "coreln" => Client::Cln(ClnReportClient::new(&raw, gate.clone(), action)?),
+            _ => Client::Lnd(LndReportClient::new(&raw, gate.clone(), version, action)?),
+        };
+        let grant = Grant(Consent::explicit_trigger(client.request()));
+        let deadline = Instant::now() + Duration::from_secs(300);
+        let snapshot = match &client {
+            Client::Cln(c) => c.fetch(Some(&grant.0), deadline)?,
+            Client::Lnd(c) => c.fetch(Some(&grant.0), deadline)?,
+        };
+        gate.authorize(client.request().clone(), Some(grant.0.clone()))
+            .map_err(|e| e.app_error())?;
+        Ok::<_, AppError>(snapshot)
+    })();
+    let snapshot = match fetched {
+        Ok(snapshot) => snapshot,
+        Err(error) => {
+            logs.push(s(format!("Connection failed: {}", error.message)));
+            return Ok(refusal(
+                s(&kind),
+                logs,
+                Some(dict([("message", s(&error.message))])),
+            ));
+        }
+    };
+    let node = snapshot.node;
+    let channels = snapshot.channels.len();
+    let alias = if node.alias.code_points().next().is_some() {
+        py_str(&Value::Str(node.alias.clone()))
+    } else {
+        name.clone()
+    };
+    logs.push(s(format!(
+        "Connected to {alias}: {channels} channels, {} peers",
+        node.peer_count
+    )));
+    if let Some(height) = &node.block_height {
+        logs.push(s(format!("Block height: {height}")));
+    }
+    Ok(dict([
+        ("ok", Value::Bool(true)),
+        ("backend", s(&name)),
+        ("kind", s(&kind)),
+        ("lightningCapabilities", capabilities),
+        ("alias", Value::Str(node.alias)),
+        ("network", Value::Str(node.network)),
+        (
+            "block_height",
+            node.block_height.map_or(Value::Null, Value::Int),
+        ),
+        ("peer_count", Value::Int(node.peer_count)),
+        ("channel_count", Value::from(channels)),
+        ("logs", Value::List(logs)),
+    ]))
+}
+
 pub(super) fn execute(
     conn: &Connection,
     config: &Config,

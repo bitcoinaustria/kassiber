@@ -249,6 +249,22 @@ impl Config {
         self.view.get(name)
     }
 
+    /// `resolve_backend(runtime_config, name)` for an explicit name: the
+    /// merged backend, or Python's refusal naming the configuration file.
+    pub fn resolve_runtime(&self, name: &str) -> Result<kassiber_pyjson::Value, AppError> {
+        let name = kassiber_pytext::strip(name).to_lowercase();
+        self.view
+            .get(&name)
+            .filter(|backend| kassiber_envelope::truthy(backend))
+            .cloned()
+            .ok_or_else(|| {
+                AppError::new(
+                    "app_error",
+                    format!("Backend '{name}' is not configured in {}", self.env_file),
+                )
+            })
+    }
+
     pub fn kinds(&self) -> BTreeMap<String, String> {
         self.runtime
             .iter()

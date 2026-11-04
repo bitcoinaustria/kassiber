@@ -1080,6 +1080,16 @@ impl Book for RealBook {
                 .join("attachments");
             return kassiber_setup::profile_reset::execute(self.conn()?, args, &attachments);
         }
+        if operation == "ui.backends.lightning.test" {
+            // One explicit desktop request for one configured backend.
+            return lightning::backend_test(
+                self.conn()?,
+                &self.backends,
+                args,
+                self.lightning_gate.clone(),
+                env!("CARGO_PKG_VERSION"),
+            );
+        }
         if kassiber_wallets::freshness::settings::KINDS.contains(&operation) {
             return kassiber_wallets::freshness::settings::execute(
                 self.conn()?,
