@@ -64,10 +64,7 @@ class DesktopParity:
         self.seed()
 
     def seed(self):
-        with closing(open_db(self.root, passphrase=self.passphrase)) as conn, conn:
-            if self.SEED is not None:
-                conn.executescript(Path(self.SEED).read_text())
-        self.change("")
+        self.change(Path(self.SEED).read_text() if self.SEED is not None else "")
 
     def encrypt(self, passphrase):
         self.root = self.base / "encrypted" / "data"
@@ -75,10 +72,14 @@ class DesktopParity:
         self.seed()
 
     def change(self, sql):
-        # Close as well as commit: a connection left open in this process
-        # loses its POSIX locks when another one here closes the same file.
-        with closing(open_db(self.root, passphrase=self.passphrase)) as conn, conn:
-            conn.executescript(sql)
+        """Apply ``sql`` and close every connection, so no reader sees one held open.
+
+        Open-time backfills only see rows that existed when the book opened, so
+        reopen once to settle them before a baseline is taken.
+        """
+        for script in (sql, ""):
+            with closing(open_db(self.root, passphrase=self.passphrase)) as conn, conn:
+                conn.executescript(script)
 
     def snapshot(self, root=None):
         path = (root or self.root) / "kassiber.sqlite3"
