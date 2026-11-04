@@ -1221,9 +1221,26 @@ write; the other 201 relaxed operands are migrated and match. Neither is a
 journal parity defect, but both remain native refusals of books Python
 processes.
 
-The automatic-pairing, desktop and assistant routes, the census and a plain
-rerun on the current binary have not completed; machine crashes interrupted
-the first attempt.
+### Registered-route campaigns: desktop and assistant routes
+
+The second run uses the binary built at `f3cbf364c`, with every journal desktop
+kind native, and the corrected assistant-step reference from `34e643869`. All
+**318 recorded** operands match natively on the desktop, assistant, automatic
+pairing and plain routes. On the **25,030 generated** operands, the desktop
+`ui.journals.process` daemon route and the assistant's no-pairing step each
+serve **24,952** natively. That is 23,544 successes and 1,408 typed refusals,
+the latter now answered natively rather than replayed: 1,032
+`book_network_review_required`, 201 `custody_schema_migration_failed` and 175
+validations. Every row, envelope and table matches Python. The remaining 78
+operands are the same store-admission refusals as on the plain route: 64
+`gaps/blocked_competitor` books with unresolved legacy custody migration, and
+14 relaxed adapter schemas. The [evidence record](r4-journal-route-campaign.json)
+keeps the manifests and counts under the `v2-` runs.
+
+The first assistant-route attempt found a harness defect, not a native one.
+The reference opened the book outside its error handler, so Python crashed
+where native returned the same typed refusal the chat tool reports. The
+corrected reference reruns both assistant runs from scratch.
 
 ### Desktop journal reads and quarantine resolution
 

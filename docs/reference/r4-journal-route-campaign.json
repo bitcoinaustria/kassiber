@@ -88,6 +88,198 @@
    "mismatch_scenarios": {},
    "python_refusals": [],
    "relaxed_schema": 0
+  },
+  "v2-generated-ai": {
+   "manifest": {
+    "adapter": "Stored columns materialized into a freshly created book; omitted derived fields are counted. Synthetic rate cache; no inferred ownership or legacy pair links.",
+    "binary": "b3eab60ebeb2db709973f5f65ffd5ae63e7e1f9589d7fe80319c437017bf0c07",
+    "census": false,
+    "operands": 25030,
+    "python_hash_seed": null,
+    "route": "ai",
+    "schema": "kassiber.r4-route-campaign.v1",
+    "seeds": 2000,
+    "shard_size": 250,
+    "sources": "9ac118018b70557fffee6620afd2fa8232c91a4cb8b083143f07ef6ab9c0658c"
+   },
+   "operands": 25030,
+   "books": 24000,
+   "permutations": 1030,
+   "outcomes": {
+    "mismatch": 64,
+    "native-refusal": 1408,
+    "native-success": 23544,
+    "schema-admission": 14
+   },
+   "mismatch_causes": {
+    "store-open:unsupported_schema_layout:legacy_authored_custody": 64
+   },
+   "mismatch_scenarios": {
+    "gaps/blocked_competitor": 64
+   },
+   "python_refusals": [
+    {
+     "code": "book_network_review_required",
+     "count": 1032,
+     "outcome": "native-refusal"
+    },
+    {
+     "code": "custody_schema_migration_failed",
+     "count": 201,
+     "outcome": "native-refusal"
+    },
+    {
+     "code": "validation",
+     "count": 175,
+     "outcome": "native-refusal"
+    }
+   ],
+   "relaxed_schema": 215
+  },
+  "v2-generated-desktop": {
+   "manifest": {
+    "adapter": "Stored columns materialized into a freshly created book; omitted derived fields are counted. Synthetic rate cache; no inferred ownership or legacy pair links.",
+    "binary": "b3eab60ebeb2db709973f5f65ffd5ae63e7e1f9589d7fe80319c437017bf0c07",
+    "census": false,
+    "operands": 25030,
+    "python_hash_seed": null,
+    "route": "desktop",
+    "schema": "kassiber.r4-route-campaign.v1",
+    "seeds": 2000,
+    "shard_size": 250,
+    "sources": "b6d41d2c6b457787cb7fe2a5605b862d2a4ba3fdbe05956645b52572197d672d"
+   },
+   "operands": 25030,
+   "books": 24000,
+   "permutations": 1030,
+   "outcomes": {
+    "mismatch": 64,
+    "native-refusal": 1408,
+    "native-success": 23544,
+    "schema-admission": 14
+   },
+   "mismatch_causes": {
+    "store-open:unsupported_schema_layout:legacy_authored_custody": 64
+   },
+   "mismatch_scenarios": {
+    "gaps/blocked_competitor": 64
+   },
+   "python_refusals": [
+    {
+     "code": "book_network_review_required",
+     "count": 1032,
+     "outcome": "native-refusal"
+    },
+    {
+     "code": "custody_schema_migration_failed",
+     "count": 201,
+     "outcome": "native-refusal"
+    },
+    {
+     "code": "validation",
+     "count": 175,
+     "outcome": "native-refusal"
+    }
+   ],
+   "relaxed_schema": 215
+  },
+  "v2-recorded-ai": {
+   "manifest": {
+    "adapter": "Stored columns materialized into a freshly created book; omitted derived fields are counted. Synthetic rate cache; no inferred ownership or legacy pair links.",
+    "binary": "b3eab60ebeb2db709973f5f65ffd5ae63e7e1f9589d7fe80319c437017bf0c07",
+    "census": false,
+    "operands": 318,
+    "python_hash_seed": null,
+    "route": "ai",
+    "schema": "kassiber.r4-route-campaign.v1",
+    "seeds": 2000,
+    "shard_size": 250,
+    "sources": "c711ca18517c4bc5cb4dd31029486db4960514c289979d2bedb2ea3844a19611"
+   },
+   "operands": 318,
+   "books": 159,
+   "permutations": 159,
+   "outcomes": {
+    "native-success": 318
+   },
+   "mismatch_causes": {},
+   "mismatch_scenarios": {},
+   "python_refusals": [],
+   "relaxed_schema": 0
+  },
+  "v2-recorded-auto": {
+   "manifest": {
+    "adapter": "Stored columns materialized into a freshly created book; omitted derived fields are counted. Synthetic rate cache; no inferred ownership or legacy pair links.",
+    "binary": "b3eab60ebeb2db709973f5f65ffd5ae63e7e1f9589d7fe80319c437017bf0c07",
+    "census": false,
+    "operands": 318,
+    "python_hash_seed": null,
+    "route": "auto",
+    "schema": "kassiber.r4-route-campaign.v1",
+    "seeds": 2000,
+    "shard_size": 250,
+    "sources": "14359e21b0e2214f2c667fe76a2adfd31886974ef237c267462ce40d49093856"
+   },
+   "operands": 318,
+   "books": 159,
+   "permutations": 159,
+   "outcomes": {
+    "native-success": 318
+   },
+   "mismatch_causes": {},
+   "mismatch_scenarios": {},
+   "python_refusals": [],
+   "relaxed_schema": 0
+  },
+  "v2-recorded-desktop": {
+   "manifest": {
+    "adapter": "Stored columns materialized into a freshly created book; omitted derived fields are counted. Synthetic rate cache; no inferred ownership or legacy pair links.",
+    "binary": "b3eab60ebeb2db709973f5f65ffd5ae63e7e1f9589d7fe80319c437017bf0c07",
+    "census": false,
+    "operands": 318,
+    "python_hash_seed": null,
+    "route": "desktop",
+    "schema": "kassiber.r4-route-campaign.v1",
+    "seeds": 2000,
+    "shard_size": 250,
+    "sources": "14359e21b0e2214f2c667fe76a2adfd31886974ef237c267462ce40d49093856"
+   },
+   "operands": 318,
+   "books": 159,
+   "permutations": 159,
+   "outcomes": {
+    "native-success": 318
+   },
+   "mismatch_causes": {},
+   "mismatch_scenarios": {},
+   "python_refusals": [],
+   "relaxed_schema": 0
+  },
+  "v2-recorded-plain": {
+   "manifest": {
+    "adapter": "Stored columns materialized into a freshly created book; omitted derived fields are counted. Synthetic rate cache; no inferred ownership or legacy pair links.",
+    "binary": "b3eab60ebeb2db709973f5f65ffd5ae63e7e1f9589d7fe80319c437017bf0c07",
+    "census": false,
+    "operands": 318,
+    "python_hash_seed": null,
+    "route": "plain",
+    "schema": "kassiber.r4-route-campaign.v1",
+    "seeds": 2000,
+    "shard_size": 250,
+    "sources": "14359e21b0e2214f2c667fe76a2adfd31886974ef237c267462ce40d49093856"
+   },
+   "operands": 318,
+   "books": 159,
+   "permutations": 159,
+   "outcomes": {
+    "native-success": 318
+   },
+   "mismatch_causes": {},
+   "mismatch_scenarios": {},
+   "python_refusals": [],
+   "relaxed_schema": 0
   }
- }
+ },
+ "v2_source_commit": "34e643869",
+ "v2_entry": "registered CLI (plain, --auto-pair), desktop ui.journals.process daemon session and the assistant no-pairing step through the test-harness binary"
 }
