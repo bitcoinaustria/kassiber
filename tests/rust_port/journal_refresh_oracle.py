@@ -126,7 +126,9 @@ def vectors():
             conn = book('exact')
             try:
                 conn.execute("UPDATE profiles SET last_processed_at=?,last_processed_tx_count=2,last_processed_input_version=journal_input_version WHERE id='p'", (CLOCK if current else None,))
-                conn.execute("UPDATE profiles SET journal_semantics_version=2 WHERE id='p'")
+                if current:
+                    # Seed exactly like the exact case, whose book recovery reuses.
+                    conn.execute("UPDATE profiles SET journal_semantics_version=2 WHERE id='p'")
                 conn.execute(trigger)
                 conn.commit()
                 cases.append(run(conn, f'{failure}-current{int(current)}', schema_sql=(trigger,)))
