@@ -258,6 +258,16 @@ pub trait Book: Send {
         Err(not_implemented("journals", "process").into())
     }
 
+    /// Cache the open transfer-candidate count after `journals process`
+    /// without automatic pairing; a failed recount keeps the previous count.
+    fn recount_transfer_candidates(
+        &mut self,
+        _workspace: Option<&Value>,
+        _profile: Option<&Value>,
+    ) -> Result<(), AppError> {
+        Ok(())
+    }
+
     fn chain_analysis_reads(
         &mut self,
         _workspace: Option<&Value>,

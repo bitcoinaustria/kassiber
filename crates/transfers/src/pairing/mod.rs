@@ -10,7 +10,7 @@ pub use matcher::{
 };
 pub use service::{
     apply_rules, auto_pair_before_journals, auto_pair_before_journals_captured, bulk_pair,
-    suggestions, AutomaticPairingError, PairingOptions, ProjectionGuards,
+    recount_candidates, suggestions, AutomaticPairingError, PairingOptions, ProjectionGuards,
 };
 
 use super::*;

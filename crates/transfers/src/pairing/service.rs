@@ -710,18 +710,22 @@ pub fn auto_pair_before_journals(
         let bulk = mutate(c, scope, &pop, &o, &guards, false, sources)?;
         o.matching.now = sources.now_precise(c)?;
         let remaining = suggestion_counts(c, scope, &pop, &o)?;
-        c.execute(
-            "UPDATE profiles SET swap_candidate_count=? WHERE id=?",
-            params![n(&value(&remaining, "total"))? as i64, scope.profile_id],
-        )
-        .map_err(sql::error)?;
+        // Pairs applied here make the projection stale; the refresh counts
+        // again after its rebuild.
+        cache_move_count(c, scope, &remaining)?;
         let a = value(&rules, "summary");
         let b = value(&bulk, "summary");
-        // Freshness' public count projection omits the ownership subcount.
         let public_counts = |v: &Value| {
             project(
                 v,
-                &["total", "exact", "strong", "conflicts", "rule_matches"],
+                &[
+                    "total",
+                    "exact",
+                    "strong",
+                    "conflicts",
+                    "rule_matches",
+                    "ownership",
+                ],
             )
         };
         Ok(dict([
@@ -741,6 +745,37 @@ pub fn auto_pair_before_journals(
             ("remaining", public_counts(&remaining)),
         ]))
     })
+}
+
+/// Moves left to review, each decision once. An ownership-graph move is
+/// proposed for a held transaction that already counts as a quarantine root,
+/// so the shared review total leaves it out.
+fn cache_move_count(c: &Connection, scope: &Scope<'_>, counts: &Value) -> Result<()> {
+    let moves = (n(&value(counts, "total"))? - n(&value(counts, "ownership"))?).max(0);
+    c.execute(
+        "UPDATE profiles SET swap_candidate_count=? WHERE id=?",
+        params![moves as i64, scope.profile_id],
+    )
+    .map_err(sql::error)?;
+    Ok(())
+}
+
+/// `recount_transfer_candidates`: cache the open candidate count after a
+/// rebuild, pair, unpair or dismissal, so the review badge follows decisions
+/// made outside an automatic run. The caller is idle; this commits on its
+/// own, and a failed recount keeps the previous count.
+pub fn recount_candidates(c: &Connection, scope: &Scope<'_>, sources: &dyn Sources) {
+    let result = pending(c, || {
+        let pop = load(c, scope)?;
+        let mut o = PairingOptions::default();
+        o.matching.now = sources.now_precise(c)?;
+        let remaining = suggestion_counts(c, scope, &pop, &o)?;
+        cache_move_count(c, scope, &remaining)
+    })
+    .and_then(|()| c.execute_batch("COMMIT").map_err(sql::error));
+    if result.is_err() && !c.is_autocommit() {
+        let _ = c.execute_batch("ROLLBACK");
+    }
 }
 
 pub use crate::sql::CapturedError as AutomaticPairingError;

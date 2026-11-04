@@ -1156,6 +1156,24 @@ impl Book for RealBook {
         }
         kassiber_journals::views::execute(self.conn()?, kind, args)
     }
+    fn recount_transfer_candidates(
+        &mut self,
+        workspace: Option<&Value>,
+        profile: Option<&Value>,
+    ) -> Result<(), AppError> {
+        #[cfg(feature = "test-harness")]
+        let sources = journals::Sources;
+        #[cfg(not(feature = "test-harness"))]
+        let sources = kassiber_transfers::SystemSources;
+        kassiber_journals::service::recount_transfer_candidates(
+            self.conn()?,
+            workspace,
+            profile,
+            &sources,
+        )
+        .map_err(kassiber_journals::service::application_error)
+    }
+
     fn process_journals(
         &mut self,
         workspace: Option<&Value>,

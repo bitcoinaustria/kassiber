@@ -75,20 +75,6 @@ def coarse_book(root, cipher, shape):
     return root
 
 
-def without_recount(dump):
-    """Python's rebuild recounts transfer candidates since #707 (main-sync
-    slice S4, not ported yet): one cached count on the profile, whose write
-    bumps the chain-index clock. Mask exactly those two effects."""
-    profiles = dump["profiles"]
-    index = profiles["columns"].index("swap_candidate_count")
-    profiles["rows"] = [[*row[:index], None, *row[index + 1:]] for row in profiles["rows"]]
-    for name in ("chain_index_clock", "chain_index_dirty"):
-        table = dump[name]
-        index = table["columns"].index("revision")
-        table["rows"] = [[*row[:index], None, *row[index + 1:]] for row in table["rows"]]
-    return dump
-
-
 def held(root, cipher):
     conn = open_db(root, passphrase=KEY if cipher else None)
     try:
@@ -111,7 +97,7 @@ def test_journals_process_holds_only_unaccepted_or_changed_coarse_prices(tmp_pat
     actual = invoke(native, environment, cipher=cipher, native=True)
     assert expected.returncode == actual.returncode == 0, (expected, actual)
     assert (actual.stdout, actual.stderr) == (expected.stdout, expected.stderr)
-    assert scalar_exact(without_recount(book_dump(native, cipher)), without_recount(book_dump(reference, cipher)))
+    assert scalar_exact(book_dump(native, cipher), book_dump(reference, cipher))
     assert held(native, cipher) == SHAPES[shape]
 
 

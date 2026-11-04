@@ -114,6 +114,32 @@ pub fn process_with_sources<'a>(
     )
 }
 
+/// `recount_transfer_candidates` for the profile a `journals process` without
+/// automatic pairing just rebuilt: a pair or dismissal made since the last
+/// run would otherwise leave the shared review count's cached moves behind.
+pub fn recount_transfer_candidates(
+    conn: &Connection,
+    workspace: Option<&Value>,
+    selected_profile: Option<&Value>,
+    sources: &impl Sources,
+) -> Result<(), Refusal> {
+    let resolved = profile(conn, workspace, selected_profile)?;
+    let (Some(workspace_id), Some(profile_id)) =
+        (resolved["workspace_id"].as_str(), resolved["id"].as_str())
+    else {
+        return Ok(());
+    };
+    kassiber_transfers::pairing::recount_candidates(
+        conn,
+        &kassiber_transfers::Scope {
+            workspace_id,
+            profile_id,
+        },
+        sources,
+    );
+    Ok(())
+}
+
 pub fn refresh<'a>(
     conn: &'a Connection,
     workspace: Option<&Value>,
