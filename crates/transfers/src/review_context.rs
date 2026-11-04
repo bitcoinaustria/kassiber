@@ -168,16 +168,14 @@ fn summaries(conn: &Connection, ids: &[String]) -> Result<Vec<(String, Value)>> 
     )?;
     for tag in tags {
         let id = text(&tag, "transaction_id");
-        if let Some((_, summary)) = output.iter_mut().find(|(k, _)| *k == id) {
-            if let Value::Dict(fields) = summary {
-                if let Some((_, Value::List(list))) =
-                    fields.iter_mut().find(|(k, _)| *k == "tags".into())
-                {
-                    list.push(dict([
-                        ("code", value(&tag, "code")),
-                        ("label", value(&tag, "label")),
-                    ]));
-                }
+        if let Some((_, Value::Dict(fields))) = output.iter_mut().find(|(k, _)| *k == id) {
+            if let Some((_, Value::List(list))) =
+                fields.iter_mut().find(|(k, _)| *k == "tags".into())
+            {
+                list.push(dict([
+                    ("code", value(&tag, "code")),
+                    ("label", value(&tag, "label")),
+                ]));
             }
         }
     }

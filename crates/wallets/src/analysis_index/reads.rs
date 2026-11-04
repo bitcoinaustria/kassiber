@@ -89,11 +89,14 @@ fn start(
         Box::new(move |worker| {
             let mut progress = |v| worker.progress(v);
             let mut cancelled = || worker.cancelled();
-            Ok(compute(engine::entropy::Hooks {
+            // Harness builds add hook fields; product builds have only these two.
+            #[allow(clippy::needless_update)]
+            let hooks = engine::entropy::Hooks {
                 progress: Some(&mut progress),
                 cancelled: Some(&mut cancelled),
                 ..Default::default()
-            }))
+            };
+            Ok(compute(hooks))
         }),
     )
 }
