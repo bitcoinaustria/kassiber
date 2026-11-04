@@ -9,7 +9,9 @@ spec = importlib.util.spec_from_file_location("tax_mutation_check", ROOT / "tax-
 checker = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = checker
 spec.loader.exec_module(checker)
-checker.ENGINE_PACKAGES = ("--offline", "-p", "kassiber-transfers", "--features", "test-harness",
+# The decision-refresh witness is a unit test of the journals simulation.
+checker.ENGINE_PACKAGES = ("--offline", "-p", "kassiber-transfers", "-p", "kassiber-journals",
+                           "--features", "kassiber-transfers/test-harness",
                            "--lib", "--test", "review_plans")
 checker.MUTATIONS = Path(__file__).with_name("review_plan_mutations.json")
 os.environ["RUST_TEST_THREADS"] = "1"

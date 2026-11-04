@@ -1114,10 +1114,11 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
 The [partial checkpoint](docs/reference/rust-shell.md#transfers-and-review-classification-r5)
 serves all five stored reads, fourteen authoring commands (rule CRUD/toggles,
 dismissals, pair/unpair/update, payout create/delete, component and gap plan/apply),
-suggestions/bulk pairing/rule application, component list/show, and gap list/review:
-**26/29 CLI leaves and 25/28 desktop kinds**. Full
-normalized authoring row parity is pinned for that subset; AI projections remain
-Python.
+suggestions/bulk pairing/rule application, component list/show, and gap list/review.
+The [review routes checkpoint](docs/reference/rust-shell.md#review-workflow-routes-r5-review-1)
+adds review cases/plan/apply and their desktop kinds plus `ui.review.request_input`:
+**29/29 CLI leaves and 28/28 desktop kinds**, with full normalized row parity.
+AI projections remain Python.
 
 - [x] Port pair/unpair/update using the shared custody stage, including native
   residual/conflict validation, append-only revisions, immutable rows, Python
@@ -1139,41 +1140,25 @@ Python.
   safe desktop projection, exact filters/pagination and read-only DB parity.
 - [x] Port gaps list/review with their desktop kinds, version-bound cursor pages,
   canonical freshness/blockers, historical reviews and unchanged database parity.
-- [ ] Port review cases/plan/apply through the shared journal service. The
-  `b5eb38ea8` base contains the native SQL snapshot/ownership loader and journal
-  writer checkpoints. Transfers-10 joins loading, custody, fusion and rendering
-  behind `test-harness`, with complete build-state comparisons and RAM-only
-  SQLite/SQLCipher planning snapshots. Transfers-11 adds the tested case-reader
-  library, cursor freshness, waiting roots and pair evidence/fingerprints.
-  Transfers-12 joins it directly to the native assembler on the live connection,
-  preserving pending caller edits and complete assembler refusals, and pins
-  operation normalization/content digests against 216 Python vectors. Transfers-13
-  adds complete economic/policy effects on the live native build and portable
-  artifact construction/pre-transaction admission primitives; these do not
-  simulate ordered operations or validate/apply a plan. Production counts
-  remain **26/29 CLI leaves and 25/28 daemon kinds**. Transfers-14 integrates
-  accepted loader-9 and BLOB work, including their missing prerequisites;
-  transfers-16 integrates the deterministic refusal fix, closing all forty
-  former seed-dependent message exceptions.
-  Transfers-15 adds ordered mixed simulation, initial fingerprint prechecks,
-  sibling-unpair baselines, refresh after intervening operations, RAM-only
-  SQLite/SQLCipher planning and whole-artifact recomputing validation. These
-  services remain behind `test-harness`. Transfers-16 adds writer-locked atomic
-  apply, historical retries, canonical journals, filed-impact resolutions and
-  receipts, with complete logical-row/authorship comparisons and late rollback
-  on SQLite/SQLCipher. The caller's commit choice and connection cache are
-  preserved. Transfers-17 composes the accepted raw loader directly through
-  custody, fusion and rendering, preserving downstream byte/scalar handling,
-  authoring-string refusals and metadata no-op ordering. Finish product
-  CLI/daemon envelopes, AI once-only consent and zero-fallback proofs before
-  registering all six routes. See the
+- [x] Port review cases/plan/apply and `ui.review.request_input` through the
+  shared journal service, registering all six routes plus the input request with
+  byte/all-table parity against Python's daemon and CLI, zero fallbacks and named
+  mutation kills; see the
+  [review routes checkpoint](docs/reference/rust-shell.md#review-workflow-routes-r5-review-1).
+  The library history (transfers-10 to transfers-17) is in the
   [raw-composition checkpoint](docs/reference/rust-shell.md#raw-review-composition-and-authoring-refusals-r5-transfers-17-partial).
-  Retain readiness barriers rather than reading stale journals; see the
-  [review adapter handoff](docs/reference/rust-shell.md#review-integration-handoff).
-  The [R4-14 pairing library](docs/reference/rust-pairing.md) now supplies the
-  matcher/rules/bulk implementation and its oracle/mutation evidence. R4-15 now
-  binds its atomic journal boundary for freshness; standalone desktop/scoped-AI
-  journal registration remains on R4-13.
+- [ ] Bring the review build to the R4 speed targets. On `book-2000`, native
+  `review cases` and `review plan` take 1.8× and 1.6× less process CPU than
+  Python, short of ≥4× end to end until the custody performance work lands.
+- [ ] Move the AI review tools and their once-only consent to Rust with R6; they
+  still call Python's `_review_workflow_payload`.
+
+Retain readiness barriers rather than reading stale journals; see the
+[review adapter handoff](docs/reference/rust-shell.md#review-integration-handoff).
+The [R4-14 pairing library](docs/reference/rust-pairing.md) now supplies the
+matcher/rules/bulk implementation and its oracle/mutation evidence. R4-15 now
+binds its atomic journal boundary for freshness; standalone desktop/scoped-AI
+journal registration remains on R4-13.
 
 ## Accounting correctness and custody
 

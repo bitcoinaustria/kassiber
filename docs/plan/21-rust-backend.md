@@ -3577,6 +3577,23 @@ zero-fallback workloads and all six registrations remain pending. Counts remain
 residual-fee refusal remain unchanged. No dependencies or Python product code
 change at this boundary.
 
+### R5 review workflow routes
+
+`t3code/r5-review-1` registers the review routes over the transfers-10 to
+transfers-17 library, now built in production. `review cases`, `review plan`,
+`review apply` and `review receipt`, with `ui.review.cases`,
+`ui.review.request_input`, `ui.review.plan`, `ui.review.apply` and
+`ui.review.receipt`, share one composition root behind `Book::review`. Counts
+reach **29/29 CLI leaves and 28/28 daemon kinds**, plus the input request.
+Plans stay bound to the input version and run on an in-RAM copy. Apply records
+operations, journals and the receipt atomically, under the stored idempotency
+key and authored `cli` or `gui`.
+Daemon and CLI sessions match Python byte for byte on all 112 tables,
+including refused applies and repeated keys, with zero fallbacks. All 19
+route mutations are killed. Process comparison also fixed the receipt key
+order. The AI tools and their once-only consent stay in Python until R6. See the
+[checkpoint](../reference/rust-shell.md#review-workflow-routes-r5-review-1).
+
 ### R5 Bitcoin sync: native fetch assembly checkpoint
 
 The unregistered `wallets::fetch::Fetch` captures the supported single-wallet

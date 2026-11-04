@@ -10530,6 +10530,137 @@ should the six review routes be registered. Counts remain **26/29 CLI leaves
 and 25/28 daemon kinds**. No route, AI authority, third-party dependency or
 Python product code changes occur here.
 
+### Review workflow routes (R5 review-1)
+
+Branch `t3code/r5-review-1` starts at `4844ba8b8` with the test-isolation fix
+`47a58f4c4`. It brings in the shared desktop parity harness
+`tests/rust_desktop_parity.py` from `3d36e8909` as a file, without that branch's
+product changes. The review library from transfers-10 to transfers-17 is now
+compiled in production builds; `pipeline`, `review_*` and the transfer review
+modules are no longer behind `test-harness`. One composition root,
+`kassiber_journals::review_workflow::execute`, serves the CLI and the daemon
+through the new `Book::review` seam. No Python product code, AI projection,
+consent path or dependency changes.
+
+| Route | CLI leaf | Daemon kind | Writes |
+| --- | --- | --- | --- |
+| Current cases | `review cases` | `ui.review.cases` | none; one read snapshot |
+| Input request | — | `ui.review.request_input` | none; one read snapshot |
+| Plan | `review plan` | `ui.review.plan` | none; RAM copy only |
+| Apply | `review apply` | `ui.review.apply` | one savepoint, authored `cli` / `gui` |
+| Receipt | `review receipt` | `ui.review.receipt` | none |
+
+`ui.review.request_input` is new native code. It checks action, case IDs,
+explanation and the bound input version in Python's order. Inside one read
+snapshot it requires each case to be current, then returns the sorted packet and
+its content digest. The digest is a correlation ID and grants nothing. The
+daemon adapter keeps `_review_workflow_payload`'s allowlists: unknown fields
+refuse before missing required ones, and both refuse before the book is touched.
+The CLI resolves the scope before reading an input file, as Python does. It keeps
+the one-million-byte bound, CPython's JSON encoding detection, the
+operations-object and plan-envelope unwrapping, and the unhashable-kind
+`internal_error`. Non-AppError reference failures map to the daemon's unhandled
+envelope.
+
+Plans stay bound to the book's input version and simulate on an in-RAM copy, so
+stale plans refuse. Apply admits the stored artifact before taking the writer.
+A repeated idempotency key with the same digest returns the stored receipt; a
+different digest refuses. Otherwise apply revalidates version and effects,
+applies the operations, stores journals and inserts the receipt in one
+savepoint, so any refusal or failure leaves every table unchanged. Observed
+transactions, reviewed custody and tax facts stay separate; an unresolved
+custody case refuses instead of becoming a guessed taxable event.
+
+The process comparisons found one transport difference, now fixed: native
+receipts listed `transaction_ids` before `operations`. The library corpus had
+compared sorted JSON, so it missed this.
+`review_apply_receipts_keep_python_transport_key_order` pins the order.
+
+**Clock.** Each request samples the build clock once (`now_precise`); Python
+samples it at each `_build`. Within one request, the two can differ only when a
+time-dependent review state, such as a dismissal expiry, falls between two
+builds of the same request.
+
+#### Verification
+
+`tests/test_rust_review_workflow.py` (24 tests) sends each session to the
+unchanged Python daemon or CLI and to the Rust binary on copies of one
+disposable book. It requires identical response bytes, or identical stdout,
+stderr and exit code, and identical rows in all 112 tables. Read and plan
+sessions also require both books to be unchanged. Applied sessions mask only
+generated UUIDs, through one bijection per side built from response order and
+masked row text, and clocks sampled after the test started. Books cover price,
+exclusion, acquisition, component, mixed and unpair batches, a processed book,
+SQLCipher, refused artifacts, stale versions and effects, retries, conflicting
+and historical keys. A refused apply additionally keeps the Python book equal
+to its baseline.
+
+All requests below were served by Rust; no request fell back to Python:
+
+| Route | Daemon requests (ok / refused) | CLI calls (ok / refused) |
+| --- | ---: | ---: |
+| cases | 36 (23 / 13) | 9 (5 / 4) |
+| request input | 32 (9 / 23) | — |
+| plan | 57 (27 / 30) | 18 (6 / 12) |
+| apply | 38 (16 / 22) | 10 (3 / 7) |
+| receipt | 14 (8 / 6) | 5 (2 / 3) |
+
+The hybrid candidate (`KASSIBER_HYBRID_RUST_DAEMON=1`) ran
+`tests/test_review_cli_ai.py` and `tests/test_review_input_handoff.py`: 41 tests
+pass. Its log records 9 `review` CLI calls and the daemon session, all served
+by Rust.
+
+`crates/transfers/scripts/export_review_inputs.py` freezes 112 Python request
+outcomes (43 packets) over the 14 review-case books into `review_inputs.json`.
+`review_inputs.rs` replays them byte for byte, without writes, and checks
+caller-transaction visibility.
+
+The new route catalogue
+[`review_route_mutations.json`](../../crates/transfers/scripts/review_route_mutations.json)
+has 19 entries for daemon admission and authorship, CLI scope order, file
+bounds and envelopes, request-input version/currency/validation/digest,
+service commit and author, and receipt order. All 19 are killed by named Rust
+tests after their eight witnesses pass unmutated. The inherited apply
+catalogue's receipt-anchor recipe was retargeted after the order fix. All 19 apply, 15 plan, 13 case, 19
+closure and 9 effects/artifact entries apply to this tree. Fresh campaigns on the
+production build kill all 19 apply entries (including `RVA-version`,
+`RVA-caller-rollback`, `RVA-late-commit-rollback` and `RVA-receipt-durability`)
+and all 15 planning entries (including `RVP-input-version`). The planning
+runner now also builds `kassiber-journals`. Its decision-refresh witness is a
+unit test there; before this fix, the baseline selected no test. The case,
+closure and effects catalogues pass applicability only; they are not fresh
+campaigns.
+
+Timing (release build, `book-2000` benchmark, best of three alternating, process
+CPU): `review cases` 1.67 s Python vs 0.95 s Rust (1.8×); an acquisition
+`review plan` 3.04 s vs 1.91 s (1.6×). Output bytes are identical. This base
+lacks the custody performance branch, so end-to-end review speed is below the
+≥4× target.
+
+Workspace formatting, whitespace and all-target clippy with warnings denied
+pass (`--features kassiber-cli/test-probe`; the CLI integration tests need
+it). The workspace test run passes 2,145 Rust tests with one failure,
+`native_process_real_prebuild_matches_complete_python_books_and_lifecycle_tapes`
+(`kassiber-journals`, `test-harness`). It panics in `custody::codec::wide` on an
+out-of-range integer and fails identically on the base `4844ba8b8`; this branch
+leaves it unchanged. The required classifier update records 6,295 tests, and
+the CI preflight passes all 57 checks. The real app-data root was untouched.
+Mutation scratch trees and their build directories are removed.
+
+Reproduce with the pinned toolchain, eight build jobs, offline Cargo and
+`TMPDIR` under the worktree's `target/`:
+
+```sh
+cargo build --offline --locked -p kassiber --features test-harness
+KASSIBER_RUST_BIN=$PWD/target/debug/kassiber uv run --locked python -m pytest -q tests/test_rust_review_workflow.py tests/test_rust_review_cases.py
+cargo test --offline --locked -p kassiber-transfers --features test-harness --test review_inputs --test review_apply
+uv run --locked python crates/transfers/scripts/review_route_mutation_check.py
+```
+
+Remaining: AI chat, tool consent and the AI review projections stay in Python
+until R6. `ui.review.worklist` keeps its direct refusal; `ui.review.badges`
+belongs to the workspace-shell slice.
+
 ### Bitcoin native fetch assembly (R5)
 
 Branch `t3code/r5-sync-11` starts at `6af84154`. This checkpoint implements
