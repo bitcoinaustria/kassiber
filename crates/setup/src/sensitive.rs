@@ -5,6 +5,7 @@ pub const KINDS: &[&str] = &[
     "ui.workspace.delete",
     "ui.profiles.reset_data",
     "backends.reveal_token",
+    "wallets.reveal_descriptor",
 ];
 pub struct Authorization {
     pub scope: &'static str,
@@ -16,7 +17,14 @@ pub struct Authorization {
 
 /// Context comes from the currently owned book, never from renderer arguments.
 pub fn prepare(kind: &str, args: &Value, context: &Value) -> Result<Authorization> {
-    let (scope, label, reveal) = if kind == "backends.reveal_token" {
+    let (scope, label, reveal) = if ["backends.reveal_token", "wallets.reveal_descriptor"]
+        .contains(&kind)
+    {
+        let noun = if kind == "wallets.reveal_descriptor" {
+            "wallet"
+        } else {
+            "backend"
+        };
         let target = ["name", "wallet", "backend"]
             .into_iter()
             .filter_map(|k| get(args, k))
@@ -24,13 +32,17 @@ pub fn prepare(kind: &str, args: &Value, context: &Value) -> Result<Authorizatio
         let Some(Value::Str(target)) = target.filter(|v| matches!(v, Value::Str(_))) else {
             return Err(AppError::new(
                 "validation",
-                "backend reveal request requires a string `name` (or `wallet`/`backend`)",
+                format!("{noun} reveal request requires a string `name` (or `wallet`/`backend`)"),
             ));
         };
         (
-            "reveal_token",
+            if noun == "wallet" {
+                "reveal_descriptor"
+            } else {
+                "reveal_token"
+            },
             format!(
-                "Re-enter database passphrase to reveal backend {}",
+                "Re-enter database passphrase to reveal {noun} {}",
                 kassiber_pytext::repr_py(target)
             ),
             true,

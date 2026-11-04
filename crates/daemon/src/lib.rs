@@ -242,6 +242,7 @@ pub fn supported_kinds() -> Vec<&'static str> {
     );
     kinds.push("ui.wallets.sync");
     kinds.extend_from_slice(&SUPPORTED_KINDS[1..3]);
+    kinds.push("wallets.reveal_descriptor");
     kinds.extend(
         services::kinds()
             .filter(|k| backends::KINDS.contains(k) && ["backends.reveal_token"].contains(k)),
@@ -1217,7 +1218,9 @@ impl Daemon {
         let args = match args {
             None | Some(Value::Null) => &empty,
             Some(v @ Value::Dict(_)) => v,
-            Some(other) if kind == "backends.reveal_token" => {
+            Some(other)
+                if ["backends.reveal_token", "wallets.reveal_descriptor"].contains(&kind) =>
+            {
                 // The Python reveal handler uses `request.get("args") or {}`
                 // rather than the desktop argument coercion helper.
                 if !truthy(other) {

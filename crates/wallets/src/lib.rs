@@ -148,6 +148,52 @@ pub fn resolve(conn: &Connection, profile_id: &str, reference: &str) -> Result<W
     }
 }
 
+/// `reveal_wallet_descriptor_material`: the pasteable stored descriptor
+/// material of one wallet in the profile, for the desktop copy flow. Callers
+/// require fresh local authentication first; no other configuration leaves.
+pub fn descriptor_material(
+    conn: &Connection,
+    profile_id: &str,
+    reference: &str,
+) -> Result<Value, AppError> {
+    let wallet = resolve(conn, profile_id, reference)?;
+    let (kind, raw): (String, Option<String>) = conn
+        .query_row(
+            "SELECT kind,config_json FROM wallets WHERE id=?",
+            [&wallet.id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(database_error)?;
+    let config = match raw.as_deref().filter(|text| !text.is_empty()) {
+        Some(text) => kassiber_pytext::loads(text)
+            .map_err(|error| AppError::new("internal_error", error.to_string()))?,
+        None => dict::<&str>([]),
+    };
+    if !matches!(config, Value::Dict(_)) {
+        return Err(AppError::new(
+            "internal_error",
+            format!(
+                "'{}' object has no attribute 'get'",
+                kassiber_envelope::type_name(&config)
+            ),
+        ));
+    }
+    let material = ["descriptor", "change_descriptor", "sp_descriptor"]
+        .into_iter()
+        .filter_map(|key| kassiber_envelope::get(&config, key))
+        .filter(|value| !matches!(value, Value::Null))
+        .map(|value| kassiber_pytext::strip(&kassiber_envelope::py_str(value)).to_owned())
+        .filter(|text| !text.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n");
+    Ok(dict([
+        ("id", s(wallet.id)),
+        ("label", s(wallet.label)),
+        ("kind", s(kind)),
+        ("wallet_material", s(material)),
+    ]))
+}
+
 /// Shared journal readiness invalidation. Never permit cached report delivery
 /// after removing observations or their source.
 pub fn invalidate_journals(conn: &Connection, profile_id: &str) -> Result<(), AppError> {

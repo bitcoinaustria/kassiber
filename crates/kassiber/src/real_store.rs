@@ -2395,6 +2395,15 @@ impl Book for RealBook {
     ) -> Result<kassiber_wallets::identify::onchain::Start, AppError> {
         self.prepare_identify_onchain(args)
     }
+    fn reveal_descriptor(
+        &self,
+        workspace: Option<&Value>,
+        profile: Option<&Value>,
+        wallet: &str,
+    ) -> Result<Value, AppError> {
+        let (_, profile_id) = self.resolve_scope(workspace, profile)?;
+        kassiber_wallets::descriptor_material(self.conn()?, &profile_id, wallet)
+    }
     fn import_journal_step(&mut self, payload: Value, profile_id: &str) -> Result<Value, AppError> {
         self.finish_import(payload, profile_id)
     }

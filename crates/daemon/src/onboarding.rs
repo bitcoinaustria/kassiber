@@ -29,6 +29,7 @@ pub const KINDS: &[&str] = &[
     "ui.wallets.ledger_preview",
     "ui.wallets.analyze_file",
     "ui.wallets.detect_script_types",
+    "wallets.reveal_descriptor",
 ];
 
 const ONCHAIN: &str = "ui.wallets.identify_onchain";
@@ -218,6 +219,9 @@ pub(super) fn handle(
     }
     if kind == ONCHAIN {
         return identify_onchain(daemon, args, request_id);
+    }
+    if kind == "wallets.reveal_descriptor" {
+        return reveal_descriptor(daemon, args, request_id);
     }
     if ["ui.wallets.import_file", "ui.wallets.import_samourai"].contains(&kind) {
         let args = object(args)?;
@@ -510,6 +514,39 @@ fn analyze_file(daemon: &mut Daemon, args: &Value) -> Result<Value, AppError> {
         }
     }
     Ok(result)
+}
+
+/// `_handle_reveal_request` for wallets: fresh local authentication on every
+/// request, then only the pasteable descriptor material. No AI tool or other
+/// projection reaches this kind.
+fn reveal_descriptor(daemon: &mut Daemon, args: Option<&Value>, request_id: &RequestId) -> Handled {
+    if let Some(response) =
+        daemon.authorize_sensitive("wallets.reveal_descriptor", args, request_id)?
+    {
+        return Ok((Some(response), false));
+    }
+    let empty = dict::<&str>([]);
+    let args = args
+        .filter(|value| matches!(value, Value::Dict(_)))
+        .unwrap_or(&empty);
+    let target = ["name", "wallet", "backend"]
+        .into_iter()
+        .filter_map(|key| get(args, key))
+        .find(|value| kassiber_envelope::truthy(value))
+        .map(py_str)
+        .expect("authorization validated the target");
+    let payload = daemon.book_mut()?.reveal_descriptor(
+        get(args, "workspace"),
+        get(args, "profile"),
+        &target,
+    )?;
+    Ok((
+        Some(with_request_id(
+            success("wallets.reveal_descriptor", payload),
+            request_id,
+        )),
+        false,
+    ))
 }
 
 /// `_coerce_args_dict`.

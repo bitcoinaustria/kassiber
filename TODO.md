@@ -465,6 +465,8 @@ projections stay Python. Progress and remaining work for this slice:
   file analysis, with raw-JSONL/all-table parity.
 - [x] Port desktop document staging, local-OCR previews and reviewed imports
   with daemon-held grants and raw-JSONL/all-table/provider-request parity.
+- [x] Port the desktop descriptor reveal with Python's fresh-authentication
+  guard and pasteable-material projection.
 - [ ] Port document staging into review cases (`review_case_id`), including
   source-funds evidence; it answers `not_implemented` until then.
 - [ ] Port the Bull Bitcoin wallet-history importer (`bullbitcoin_wallet_csv`);

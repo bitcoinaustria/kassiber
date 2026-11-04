@@ -520,6 +520,16 @@ pub trait Book: Send {
     ) -> Result<Value, AppError> {
         Err(not_implemented("wallets", "import journal step"))
     }
+    /// `wallets.reveal_descriptor` after fresh authentication: the stored
+    /// descriptor material of one wallet, nothing else of its configuration.
+    fn reveal_descriptor(
+        &self,
+        _workspace: Option<&Value>,
+        _profile: Option<&Value>,
+        _wallet: &str,
+    ) -> Result<Value, AppError> {
+        Err(not_implemented("wallets", "descriptor reveal"))
+    }
     /// `ui.wallets.identify_onchain` preparation: the book work, done on the
     /// request thread. The returned verification holds no database handle.
     fn identify_onchain(

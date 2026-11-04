@@ -688,5 +688,45 @@
       "tests/test_rust_wallet_document_import.py::RustDocumentImportTest::test_sqlcipher_import_matches_python"
     ],
     "rule": "The daemon advertises the native document import."
+  },
+  {
+    "id": "RV-fresh-auth",
+    "file": "crates/daemon/src/onboarding.rs",
+    "find": "    if let Some(response) =\n        daemon.authorize_sensitive(\"wallets.reveal_descriptor\", args, request_id)?\n    {\n        return Ok((Some(response), false));\n    }\n",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_wallet_reveal.py::RustDescriptorRevealTest::test_encrypted_books_require_a_fresh_passphrase"
+    ],
+    "rule": "Every reveal needs fresh local authentication, even on an unlocked book."
+  },
+  {
+    "id": "RV-scope",
+    "file": "crates/setup/src/sensitive.rs",
+    "find": "            if noun == \"wallet\" {\n                \"reveal_descriptor\"",
+    "replace": "            if noun == \"wallet\" {\n                \"reveal_token\"",
+    "expect_failing": [
+      "tests/test_rust_wallet_reveal.py::RustDescriptorRevealTest::test_encrypted_books_require_a_fresh_passphrase"
+    ],
+    "rule": "The reveal asks for the descriptor-reveal scope."
+  },
+  {
+    "id": "RV-material-fields",
+    "file": "crates/wallets/src/lib.rs",
+    "find": "[\"descriptor\", \"change_descriptor\", \"sp_descriptor\"]\n        .into_iter()\n        .filter_map(|key| kassiber_envelope::get(&config, key))",
+    "replace": "[\"descriptor\", \"change_descriptor\"]\n        .into_iter()\n        .filter_map(|key| kassiber_envelope::get(&config, key))",
+    "expect_failing": [
+      "tests/test_rust_wallet_reveal.py::RustDescriptorRevealTest::test_plaintext_acknowledgement_and_material_match_python"
+    ],
+    "rule": "The reveal includes the silent-payment descriptor."
+  },
+  {
+    "id": "REG-reveal-descriptor",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "    kinds.push(\"wallets.reveal_descriptor\");\n",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_wallet_reveal.py::RustDescriptorRevealTest::test_plaintext_acknowledgement_and_material_match_python"
+    ],
+    "rule": "The daemon advertises the native descriptor reveal."
   }
 ]

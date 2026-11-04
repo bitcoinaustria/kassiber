@@ -2713,6 +2713,8 @@ with the native local journal step. The Bull Bitcoin wallet-history format
 still refuses with `not_implemented`. Document staging, local-OCR previews and
 reviewed imports run natively behind daemon-held grants; a document grants no
 ownership, basis or tax fact. Staging into a review case stays refused.
+The descriptor reveal keeps Python's fresh-authentication guard on every
+request and returns only pasteable material; no AI tool reaches it.
 
 ## Risks
 

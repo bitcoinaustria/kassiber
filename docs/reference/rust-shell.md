@@ -16223,3 +16223,22 @@ Served by Rust in the parity run, with zero fallbacks:
 `internal.document_import.stage` 12 requests (4 grants, 8 refusals),
 `ui.wallets.document_import.preview` 12 (3 previews, 9 refusals) and
 `ui.wallets.document_import.import` 11 (2 imports, 9 refusals).
+
+### Descriptor reveal
+
+`wallets.reveal_descriptor` is native. Like Python's `_handle_reveal_request`,
+it validates the target first, then asks for fresh local authentication on
+every request, even on an unlocked book: the SQLCipher passphrase (scope
+`reveal_descriptor`, under the shared attempt backoff) or, for plaintext
+books, the typed `COPY LOCAL SECRET` acknowledgement. Only the pasteable
+descriptor, change and silent-payment descriptor material is returned, never
+blinding keys or other configuration. No AI tool or other projection reaches
+the kind; the in-product AI's catalog is checked for it.
+
+`tests/test_rust_wallet_reveal.py` compares raw JSONL and all 112 tables with
+Python for refusals, acknowledgements, wallet and book selection and encrypted
+books. The catalog gains 4 entries; with this group the catalog holds 73
+entries, all killed by their named tests.
+
+Served by Rust in the parity run, with zero fallbacks:
+`wallets.reveal_descriptor` 25.
