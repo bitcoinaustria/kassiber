@@ -63,6 +63,8 @@ def specs():
         ('backend-values', "UPDATE wallets SET config_json='{\"backend\":null,\"gap_limit\":true}' WHERE id='cold'; "
          "UPDATE wallets SET config_json='{\"backend\":{\"a\":[1,2.5]},\"gap_limit\":\"7\"}' WHERE id='hot';", {}),
         ('no-processing', "UPDATE profiles SET last_processed_at=NULL,last_processed_tx_count=0 WHERE id='p';", {}),
+        # Three capital buckets whose first-seen order differs from sorted order.
+        ('capital-buckets', "UPDATE transactions SET taxability_override=NULL WHERE id='no-tax';", {}),
         ('label-width', "UPDATE wallets SET label='" + 'W' * 40 + "' WHERE id='cold';"
          "UPDATE journal_quarantines SET reason='" + 'r' * 40 + "';", {}),
     ]

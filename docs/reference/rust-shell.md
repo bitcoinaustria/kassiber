@@ -17773,10 +17773,10 @@ Both CLI leaves admit source freshness first, as Python's final-export gate
 does. The envelope inserts `pages` between `file` and `bytes`.
 
 Evidence: `crates/pdf/tests/text.rs` (Python's wrapping, table and document
-vectors), `crates/reports/tests/full_pdf.rs` (90 cases: Python's report lines
+vectors), `crates/reports/tests/full_pdf.rs` (91 cases: Python's report lines
 and PDF bytes, refusals included) and `tests/test_rust_pdf_exports.py` (CLI
 and daemon sessions against Python: identical stdout, PDF bytes, saved and
-filed markers and every table; all served by Rust). Twelve mutation entries
+filed markers and every table; all served by Rust). Eleven mutation entries
 in `crates/pdf/scripts/mutations.json` are each killed by named tests.
 
 The summary, Austrian and source-of-funds PDFs wait for the shared report
