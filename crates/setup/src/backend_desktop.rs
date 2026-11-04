@@ -189,6 +189,156 @@ fn summary(conn: &Connection, config: &Config, count: usize, mode: bool) -> Resu
     }
     Ok(result)
 }
+/// `_string_or_empty(value)`: only strings count, stripped.
+fn string_or_empty(v: &Value) -> String {
+    match v {
+        Value::Str(_) => string(v).unwrap_or_default(),
+        _ => String::new(),
+    }
+}
+/// The backend name `_wallet_backend_summary` reports for one wallet: its
+/// explicit backend, or the default for descriptor and address syncs.
+fn wallet_backend(kind: &str, config: &Value, default_backend: &str) -> String {
+    let explicit = string_or_empty(value(config, "backend"));
+    if !explicit.is_empty() {
+        return explicit;
+    }
+    let descriptor = string(value(config, "descriptor")).is_some()
+        || (string(value(config, "xpub")).is_some() && truthy(value(config, "script_types")));
+    let uses_default = if string_or_empty(value(config, "sync_source")) == "btcpay"
+        || !string_or_empty(value(config, "source_file")).is_empty()
+            && !string_or_empty(value(config, "source_format")).is_empty()
+        || string(value(config, "sp_descriptor")).is_some() && kind == "silent-payment"
+    {
+        false
+    } else {
+        descriptor && ["descriptor", "xpub", "address"].contains(&kind)
+            || truthy(value(config, "addresses")) && kind == "address"
+    };
+    if uses_default {
+        string_or_empty(&s(default_backend))
+    } else {
+        String::new()
+    }
+}
+/// `build_backends_list_snapshot`: only backends the active profile's wallets
+/// use, reduced to an allowlist. It reads configuration and never probes.
+fn list(conn: &Connection, config: &Config) -> Result<Value> {
+    const ALLOWED: &[&str] = &[
+        "name",
+        "kind",
+        "chain",
+        "network",
+        "batch_size",
+        "timeout",
+        "insecure",
+        "has_auth_header",
+        "has_token",
+        "has_cookiefile",
+        "has_username",
+        "has_password",
+    ];
+    let context = crate::context::snapshot(conn)?;
+    let label = |key: &str| match value(&context, key) {
+        Value::Str(v) if v.code_points().next().is_some() => Value::Str(v.clone()),
+        _ => Value::Null,
+    };
+    let default_backend = config.default_backend.clone();
+    let mut referenced = BTreeSet::new();
+    if !text(&context, "workspace_id").is_empty() && !text(&context, "profile_id").is_empty() {
+        let profile = rows(
+            conn,
+            "SELECT id FROM profiles WHERE id=?",
+            [text(&context, "profile_id")],
+        )?;
+        if let Some(profile) = profile.first() {
+            for wallet in rows(
+                conn,
+                "SELECT kind,config_json FROM wallets WHERE profile_id=? ORDER BY label ASC",
+                [text(profile, "id")],
+            )? {
+                let raw = match value(&wallet, "config_json") {
+                    Value::Str(v) if v.code_points().next().is_some() => {
+                        v.as_str().map(str::to_owned)
+                    }
+                    Value::Null | Value::Str(_) => Some("{}".to_owned()),
+                    _ => None,
+                };
+                let config = raw
+                    .and_then(|raw| kassiber_pytext::loads(&raw).ok())
+                    .filter(|v| matches!(v, Value::Dict(_)))
+                    .unwrap_or_else(|| dict::<&str>([]));
+                let name = wallet_backend(&text(&wallet, "kind"), &config, &default_backend);
+                if !name.is_empty() {
+                    referenced.insert(name);
+                }
+            }
+        }
+    }
+    let mut backends = vec![];
+    for (name, b) in &config.view {
+        if !referenced.contains(name) || !matches!(b, Value::Dict(_)) {
+            continue;
+        }
+        let mut row = dict([("name", s(name))]);
+        for k in [
+            "kind",
+            "chain",
+            "network",
+            "url",
+            "batch_size",
+            "source",
+            "auth_header",
+            "token",
+            "cookiefile",
+            "username",
+            "password",
+            "config_json",
+        ] {
+            replace(&mut row, k, get(b, k).cloned().unwrap_or_else(|| s("")));
+        }
+        let mut safe = output::redact(&row)?;
+        if let Value::Dict(fields) = &mut safe {
+            fields.retain(|(k, _)| k.as_str().is_some_and(|k| ALLOWED.contains(&k)));
+        }
+        replace(
+            &mut safe,
+            "has_url",
+            Value::Bool(!string_or_empty(value(b, "url")).is_empty()),
+        );
+        replace(
+            &mut safe,
+            "is_default",
+            Value::Bool(*name == default_backend),
+        );
+        let kind = string(value(b, "kind")).map_or_else(String::new, |_| py_str(value(b, "kind")));
+        if ["coreln", "lnd", "nwc"].contains(&kind.as_str()) {
+            replace(&mut safe, "lightningCapabilities", capabilities(&kind));
+        }
+        backends.push(safe);
+    }
+    let count = backends.len();
+    Ok(dict([
+        ("backends", Value::List(backends)),
+        (
+            "summary",
+            dict([
+                ("workspace", label("workspace_label")),
+                ("profile", label("profile_label")),
+                ("count", Value::Int(count.into())),
+                (
+                    "default_backend",
+                    if referenced.contains(&default_backend) {
+                        s(&default_backend)
+                    } else {
+                        Value::Null
+                    },
+                ),
+                ("scope", s("active_profile")),
+            ]),
+        ),
+    ]))
+}
 pub(super) fn execute(
     conn: &Connection,
     op: &str,
@@ -295,6 +445,7 @@ pub(super) fn execute(
             }
             Ok(result)
         }
+        "ui.backends.list" => list(conn, config),
         "ui.backends.public_defaults" => {
             let mut backends = vec![];
             let names = config.seed_order.clone();

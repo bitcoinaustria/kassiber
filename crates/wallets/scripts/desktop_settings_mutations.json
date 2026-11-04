@@ -148,5 +148,75 @@
       "tests/test_rust_desktop_settings.py::RustFreshnessSettingsTest::test_status_without_or_with_mismatched_context"
     ],
     "rule": "The active profile comes from the context snapshot, so a profile outside the active workspace is not active."
+  },
+  {
+    "id": "backends-list-registration",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "                \"ui.backends.list\",\n",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_desktop_backends.py::RustBackendsListTest::test_list_without_backends_or_profile"
+    ],
+    "rule": "The active-profile backend list is advertised and served by the Rust daemon."
+  },
+  {
+    "id": "backends-list-args-ignored",
+    "file": "crates/daemon/src/services.rs",
+    "find": " || kind == \"ui.backends.list\" {",
+    "replace": " {",
+    "expect_failing": [
+      "tests/test_rust_desktop_backends.py::RustBackendsListTest::test_list_without_backends_or_profile"
+    ],
+    "rule": "The backend list ignores its arguments as Python's handler does."
+  },
+  {
+    "id": "backends-list-profile-scope",
+    "file": "crates/setup/src/backend_desktop.rs",
+    "find": "        if !referenced.contains(name) || !matches!(b, Value::Dict(_)) {",
+    "replace": "        if !matches!(b, Value::Dict(_)) {",
+    "expect_failing": [
+      "tests/test_rust_desktop_backends.py::RustBackendsListTest::test_list_redacts_and_scopes_to_active_profile_wallets"
+    ],
+    "rule": "Only backends the active profile's wallets use are listed."
+  },
+  {
+    "id": "backends-list-allowlist",
+    "file": "crates/setup/src/backend_desktop.rs",
+    "find": "            fields.retain(|(k, _)| k.as_str().is_some_and(|k| ALLOWED.contains(&k)));\n",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_desktop_backends.py::RustBackendsListTest::test_list_redacts_and_scopes_to_active_profile_wallets"
+    ],
+    "rule": "Listed backends keep only the allowlisted, presence-only fields."
+  },
+  {
+    "id": "backends-list-default-wallets",
+    "file": "crates/setup/src/backend_desktop.rs",
+    "find": "    if uses_default {",
+    "replace": "    if false && uses_default {",
+    "expect_failing": [
+      "tests/test_rust_desktop_backends.py::RustBackendsListTest::test_list_redacts_and_scopes_to_active_profile_wallets"
+    ],
+    "rule": "Descriptor and address wallets without an explicit backend reference the default backend."
+  },
+  {
+    "id": "backends-list-summary-default",
+    "file": "crates/setup/src/backend_desktop.rs",
+    "find": "                    if referenced.contains(&default_backend) {",
+    "replace": "                    if !default_backend.is_empty() {",
+    "expect_failing": [
+      "tests/test_rust_desktop_backends.py::RustBackendsListTest::test_list_redacts_and_scopes_to_active_profile_wallets"
+    ],
+    "rule": "The summary names the default backend only when an active wallet uses it."
+  },
+  {
+    "id": "backends-list-lightning-capabilities",
+    "file": "crates/setup/src/backend_desktop.rs",
+    "find": "        let kind = string(value(b, \"kind\")).map_or_else(String::new, |_| py_str(value(b, \"kind\")));\n        if [\"coreln\", \"lnd\", \"nwc\"].contains(&kind.as_str()) {",
+    "replace": "        let kind = string(value(b, \"kind\")).map_or_else(String::new, |_| py_str(value(b, \"kind\")));\n        if [\"lnd\", \"nwc\"].contains(&kind.as_str()) {",
+    "expect_failing": [
+      "tests/test_rust_desktop_backends.py::RustBackendsListTest::test_list_redacts_and_scopes_to_active_profile_wallets"
+    ],
+    "rule": "Lightning backends carry their registered capabilities."
   }
 ]

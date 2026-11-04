@@ -1,5 +1,6 @@
 //! Local configuration and explicitly requested consent-bound probes.
 pub const KINDS: &[&str] = &[
+    "ui.backends.list",
     "ui.backends.options",
     "ui.backends.public_defaults",
     "ui.backends.settings.list",

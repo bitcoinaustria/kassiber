@@ -117,6 +117,7 @@ pub fn supported_kinds() -> Vec<&'static str> {
     kinds.extend(services::kinds().filter(|k| {
         backends::KINDS.contains(k)
             && [
+                "ui.backends.list",
                 "ui.backends.options",
                 "ui.backends.public_defaults",
                 "ui.backends.settings.list",

@@ -15,7 +15,8 @@ pub fn kinds() -> impl Iterator<Item = &'static str> {
 }
 pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<Value, AppError> {
     let empty = dict::<&str>([]);
-    if kind == "ui.profiles.snapshot" {
+    // These reads ignore their arguments, as Python's handlers do.
+    if kind == "ui.profiles.snapshot" || kind == "ui.backends.list" {
         return book.service(kind, &empty);
     }
     let args = match args {
