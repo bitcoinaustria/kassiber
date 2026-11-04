@@ -105,7 +105,18 @@ fn scope_of<F: Fields + ?Sized>(row: &F) -> Result<(String, String), Error> {
 }
 
 pub(crate) fn scope_fields<'a>(row: impl Fn(&str) -> &'a Value) -> Result<(String, String), Error> {
-    scope_with(&row, crate::graph::transfer_object_ref(row("raw_json")))
+    let raw = row("raw_json");
+    // Scopes read only the raw object's chain and network; a text naming
+    // neither, without escapes, has neither field whatever it holds.
+    let unnamed = raw.as_str().is_some_and(|text| {
+        !text.contains('\\') && !text.contains("chain") && !text.contains("network")
+    });
+    let raw = if unnamed {
+        crate::graph::TransferValue::Empty
+    } else {
+        crate::graph::transfer_object_ref(raw)
+    };
+    scope_with(&row, raw)
 }
 
 /// `scope_fields` of a row whose `raw_json` object is `raw`.
@@ -1237,6 +1248,32 @@ pub fn compute(snapshot: &Snapshot) -> Result<Value, Error> {
 #[cfg(test)]
 mod semantic_tests {
     use super::*;
+    #[test]
+    fn unnamed_raw_texts_scope_as_loaded() {
+        for raw in [
+            r#"{"x":1}"#,
+            "not json",
+            "[1]",
+            "",
+            r#"{"ch\u0061in":"liquid","network":"liquidv1"}"#,
+            r#"{"chain":"liquid","network":"liquidtestnet"}"#,
+            r#"{"network":"testnet"}"#,
+        ] {
+            for kind in ["descriptor", "lnd"] {
+                let row =
+                    json!({"raw_json":raw,"wallet_kind":kind,"asset":"BTC","network":"regtest"});
+                let loaded = scope_with(
+                    |key| &row[key],
+                    crate::graph::transfer_object_ref(&row["raw_json"]),
+                );
+                assert_eq!(
+                    format!("{:?}", scope(&row)),
+                    format!("{loaded:?}"),
+                    "{raw} {kind}"
+                );
+            }
+        }
+    }
     #[test]
     fn canonical_events_follow_key_order_with_unique_sources() {
         let row = |id: &str, event: &str| json!({"id":id,"profile_id":"p","wallet_id":"w","wallet_kind":"descriptor","direction":"inbound","asset":"BTC","amount":1000,"fee":0,"occurred_at":"2024-01-01T00:00:00+00:00","source_ref":"src","external_id":event,"raw_json":"{}","network":"regtest"});

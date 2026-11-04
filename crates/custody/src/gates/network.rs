@@ -9,7 +9,7 @@ use serde_json::json;
 use std::collections::BTreeSet;
 
 type Evidence = (Option<String>, Option<String>, bool);
-#[derive(Clone, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
 #[serde(default)]
 struct Payload {
     chain: SqlValue,
@@ -18,6 +18,23 @@ struct Payload {
     chain_network: SqlValue,
     chain_instance_id: SqlValue,
     source: SqlValue,
+}
+/// Whether `Payload::parse` reads `value` as the empty payload without
+/// parsing it.
+fn empty_payload(value: &SqlValue) -> bool {
+    match value {
+        SqlValue::Text(s) => {
+            s.as_ref() == "{}"
+                || s.is_empty()
+                || !s.trim_start().starts_with('{')
+                || !s.contains('\\')
+                    && !["chain", "network", "source"]
+                        .iter()
+                        .any(|name| s.contains(name))
+        }
+        SqlValue::Object(_) => false,
+        _ => true,
+    }
 }
 impl Payload {
     fn parse(value: &SqlValue) -> Self {
@@ -185,6 +202,43 @@ fn evidence_with(row: &NetworkRow, configs: &mut Configs) -> Evidence {
         valid && instances.len() <= 1,
     )
 }
+/// The evidence of observations whose payload is empty, by the columns it
+/// then depends on. Evidence is a pure function of those columns, and the
+/// gate only collects it into sets, so a repeated row adds nothing new.
+#[derive(Default)]
+struct Remembered<'a> {
+    seen: Vec<([&'a SqlValue; 9], Evidence)>,
+}
+impl<'a> Remembered<'a> {
+    /// Distinct column sets beyond this are computed without remembering.
+    const LIMIT: usize = 64;
+
+    fn evidence(&mut self, row: &'a NetworkRow, configs: &mut Configs) -> Evidence {
+        if !empty_payload(row.raw_json.value()) {
+            return evidence_with(row, configs);
+        }
+        let key = [
+            row.config_json.value(),
+            row.wallet_config_json.value(),
+            row.wallet_kind.value(),
+            row.asset.value(),
+            row.chain.value(),
+            row.network.value(),
+            row.bitcoin_network.value(),
+            row.chain_network.value(),
+            row.chain_instance_id.value(),
+        ];
+        if let Some((_, evidence)) = self.seen.iter().find(|(known, _)| *known == key) {
+            return evidence.clone();
+        }
+        let evidence = evidence_with(row, configs);
+        if self.seen.len() < Self::LIMIT {
+            self.seen.push((key, evidence.clone()));
+        }
+        evidence
+    }
+}
+
 pub(super) fn require(
     book_network: &Option<NetworkObject<NetworkFacts>>,
     wallets: &[WalletRef],
@@ -231,6 +285,8 @@ pub(super) fn require(
         }
     };
     let mut configs = Configs::default();
+    let empty_row = NetworkRow::default();
+    let mut remembered = Remembered::default();
     for wallet in wallets {
         let wallet_id = wallet.id.json();
         // Text identifiers compare as the strings their JSON holds.
@@ -242,7 +298,6 @@ pub(super) fn require(
             _ => column.json() == wallet_id,
         };
         let mut found = false;
-        let empty_row = NetworkRow::default();
         for observation in observations {
             let row = match observation {
                 NetworkObject::Object(row) => row,
@@ -250,7 +305,7 @@ pub(super) fn require(
             };
             if same(&row.wallet_id) {
                 found = true;
-                add(evidence_with(row, &mut configs), false);
+                add(remembered.evidence(row, &mut configs), false);
             }
         }
         if !found {
@@ -309,6 +364,55 @@ fn review_refusal(message: &str, details: serde_json::Value) -> crate::Refusal {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn remembered_evidence_matches_each_row() {
+        let rows: Vec<NetworkRow> = [
+            json!({"wallet_id":"a","config_json":"{\"chain\":\"bitcoin\",\"network\":\"regtest\"}","raw_json":"{}"}),
+            json!({"wallet_id":"b","config_json":"{\"chain\":\"liquid\",\"network\":\"liquidv1\"}","raw_json":"{}"}),
+            json!({"wallet_id":"a","config_json":"{\"chain\":\"bitcoin\",\"network\":\"regtest\"}","raw_json":"{\"x\":1}"}),
+            json!({"wallet_id":"c","config_json":"{}","raw_json":"{\"network\":\"testnet\"}"}),
+            json!({"wallet_id":"c","config_json":"{}","raw_json":"{}","network":"main"}),
+            json!({"wallet_id":"b","config_json":"{\"chain\":\"liquid\",\"network\":\"liquidv1\"}","raw_json":"{}","chain_instance_id":"i"}),
+        ]
+        .into_iter()
+        .map(|row| serde_json::from_value(row).unwrap())
+        .collect();
+        let mut remembered = Remembered::default();
+        let mut configs = Configs::default();
+        for _ in 0..2 {
+            for row in &rows {
+                assert_eq!(remembered.evidence(row, &mut configs), evidence(row));
+            }
+        }
+    }
+    #[test]
+    fn empty_payloads_parse_empty() {
+        let texts = [
+            "{}",
+            "",
+            "[1]",
+            "  {\"a\":1}",
+            "{\"chain\":\"bitcoin\"}",
+            "{\"ch\\u0061in\":\"bitcoin\"}",
+            "{\"network\":\"regtest\",\"source\":\"x\"}",
+            "{\"chained\":1}",
+            "not json",
+        ];
+        let mut values: Vec<SqlValue> = texts.iter().map(|t| SqlValue::Text((*t).into())).collect();
+        values.extend([
+            SqlValue::Null,
+            SqlValue::Int(3),
+            SqlValue::Object(vec![("chain".into(), SqlValue::Text("liquid".into()))]),
+        ]);
+        let mut empty = 0;
+        for value in &values {
+            if empty_payload(value) {
+                empty += 1;
+                assert_eq!(Payload::parse(value), Payload::default(), "{value:?}");
+            }
+        }
+        assert_eq!(empty, 7);
+    }
     #[test]
     fn network_config_cache_reads_as_parse() {
         let row: NetworkRow = serde_json::from_value(json!({

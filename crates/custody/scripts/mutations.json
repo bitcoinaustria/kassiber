@@ -24450,6 +24450,36 @@
     "rule": "An external slice row covers its decision's source bounds."
   },
   {
+    "id": "network-empty-object-payload",
+    "file": "crates/custody/src/gates/network.rs",
+    "find": "        SqlValue::Object(_) => false,",
+    "replace": "        SqlValue::Object(_) => true,",
+    "expect_failing": [
+      "empty_payloads_parse_empty"
+    ],
+    "rule": "An object payload is parsed, never assumed empty."
+  },
+  {
+    "id": "network-remembered-key",
+    "file": "crates/custody/src/gates/network.rs",
+    "find": "self.seen.iter().find(|(known, _)| *known == key)",
+    "replace": "self.seen.iter().find(|_| true)",
+    "expect_failing": [
+      "remembered_evidence_matches_each_row"
+    ],
+    "rule": "Remembered network evidence answers only its own columns."
+  },
+  {
+    "id": "scope-unnamed-network",
+    "file": "crates/custody/src/evidence.rs",
+    "find": "        !text.contains('\\\\') && !text.contains(\"chain\") && !text.contains(\"network\")",
+    "replace": "        !text.contains('\\\\') && !text.contains(\"chain\")",
+    "expect_failing": [
+      "unnamed_raw_texts_scope_as_loaded"
+    ],
+    "rule": "Only raw texts naming neither chain nor network skip loading."
+  },
+  {
     "id": "R4-evidence-alias-slot-index",
     "file": "crates/custody/src/evidence.rs",
     "find": "selected[*index] = keeper;",
