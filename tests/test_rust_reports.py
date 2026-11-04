@@ -10,7 +10,7 @@ import sys
 
 import pytest
 
-from kassiber.db import open_db
+from kassiber.db import JOURNAL_CALCULATION_SEMANTICS_VERSION, open_db
 from tests import cli_runner
 from tests.test_rust_shell_parity import _environment
 
@@ -180,6 +180,8 @@ def test_tabular_csv_refusals_leave_existing_artifacts_and_snapshots(tmp_path, m
         assert rust.returncode == 1
         assert output.read_bytes() == b"previous artifact\r\n"
     conn.execute("UPDATE profiles SET last_processed_input_version=journal_input_version")
+    # The marker write clears the semantics stamp; restore it to stay current.
+    conn.execute("UPDATE profiles SET journal_semantics_version=?", (JOURNAL_CALCULATION_SEMANTICS_VERSION,))
     for table in ("journal_entries", "journal_tax_summary", "journal_account_holdings", "journal_wallet_holdings"):
         conn.execute(f"DELETE FROM {table}")
     conn.commit()
