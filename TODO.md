@@ -207,6 +207,11 @@ compared the Rust backend's hand-written code with plan 21's named crates.
 - [ ] Revisit the HTTP client if `ureq` stabilises its transport API without a
   built-in TCP connector or environment proxy, or if the backend adopts async
   I/O.
+- [ ] From the hand-written-code survey: read Kraken ZIP archives and the
+  Ledger XLSX container through the locked `zip` crate, share one UUIDv5
+  helper (or `uuid`'s `v5`), and move the `zoneinfo` port to `jiff` with
+  bundled tzdata under the existing vectors. The Electrum, SOCKS, PSBT and
+  reference-compatible base64 code stays hand-written.
 
 ## Rust backend R5 Bitcoin wallet sync (CLI and no-refresh daemon registered)
 

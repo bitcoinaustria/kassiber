@@ -16335,3 +16335,17 @@ to that slice, where a Rust consumer exists to compare against.
 
 **HTTP client.** Evaluated in [Rust HTTP client](rust-http-client.md); the
 current `kassiber-net` client stays.
+
+**Other hand-written code (survey only, nothing changed).**
+
+| Area | Today | Recommendation |
+| --- | --- | --- |
+| Electrum client (`crates/chain/src/electrum.rs`, 274 lines) | Newline-delimited JSON-RPC over a `kassiber-net` `Connection`, batch as request lines | Keep. `electrum-client` opens its own sockets and proxies (banned by the chokepoint tests); the protocol layer is small and every byte passes the gate |
+| SOCKS5 (`crates/net/src/socks.rs`, 127 lines) | Greeting, user/password, CONNECT with remote DNS over the guarded transport | Keep. `socks`/`tokio-socks` dial their own TCP stream; the handshake here records each write in the ledger |
+| PSBT v0/v2 reader (`crates/wallets/src/psbt.rs`, 856 lines) | Bounded transient parser matching Python's framing checks | Keep, as plan 21 decided. `bitcoin` 0.32's `psbt` module reads v0 only |
+| Time zones (`crates/reports/src/zone.rs`, 659 lines; `crates/custody/src/ledger_request/vienna.rs`, 143 lines) | CPython `zoneinfo` port reading the system TZif files; a frozen Vienna table | Move `zone.rs` to `jiff` with its bundled database when the desktop bundles tzdata anyway (plan 21 names `jiff`). It removes the TZPATH dependency on the host. Keep exact CPython offset selection under the existing vectors. Fold `vienna.rs` into it |
+| ZIP central directory (`crates/rates/src/csv.rs`, `zip_members`) | Hand-written EOCD/ZIP64/central-directory reader for Kraken archives | Replace with the already-locked `zip` =9.1.3 (`crates/xlsx`) read API, keeping the member and ratio limits; less parser code on untrusted archives |
+| XLSX reading (`crates/wallets/src/file_import/ledger/xlsx.rs`, 1,189 lines) | Hand-written ZIP container reader (over `flate2`) and OOXML/shared-strings reader with budgets | First move the container to the locked `zip` crate (as for Kraken). Then evaluate `calamine` (plan 21's choice) against the openpyxl vectors, keeping the budgets as a wrapper. Not a drop-in: openpyxl's cell typing must match |
+| UUIDv5 (`crates/transfers/src/component_review.rs`, `crates/journals/src/persistence/filed.rs`) | Two copies over `bitcoin_hashes` SHA-1 | Use `uuid` (already locked, `v5` feature) or one shared helper |
+| Base64 decoders (`crates/wallets/src/psbt.rs`, `crates/release/src/verify.rs`) | Python-`b64decode` and OpenBSD-`b64_pton` compatible decoders | Keep. Each mirrors a reference's exact accept/refuse rules that `base64` does not offer |
+| Python-compatible JSON, decimal and text (`pyjson`, `pydecimal`, `pytext`) | CPython ports | Keep; byte parity is their purpose |
