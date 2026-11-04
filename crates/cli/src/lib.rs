@@ -24,6 +24,7 @@ pub mod render;
 mod run;
 pub mod spec;
 mod transactions;
+mod update;
 mod wallets;
 #[rustfmt::skip]
 mod spec_data;

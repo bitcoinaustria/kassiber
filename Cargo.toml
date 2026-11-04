@@ -19,6 +19,7 @@ members = [
   "crates/journals",
   "crates/net",
   "crates/rates",
+  "crates/release",
   "crates/paths",
   "crates/ownership",
   "crates/store",

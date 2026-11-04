@@ -20,6 +20,7 @@ kassiber-pydecimal
 kassiber-pyjson
 kassiber-pytext
 kassiber-rates
+kassiber-release
 kassiber-runtime fake
 kassiber-secrets native-keyring test-hooks
 kassiber-store test-hooks

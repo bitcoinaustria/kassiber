@@ -1554,6 +1554,7 @@ dependencies = [
  "kassiber-pyjson",
  "kassiber-pytext",
  "kassiber-rates",
+ "kassiber-release",
  "kassiber-reports",
  "kassiber-runtime",
  "kassiber-secrets",
@@ -1613,6 +1614,7 @@ dependencies = [
  "kassiber-imports",
  "kassiber-pyjson",
  "kassiber-pytext",
+ "kassiber-release",
  "kassiber-runtime",
  "kassiber-secrets",
  "kassiber-store",
@@ -1789,6 +1791,23 @@ dependencies = [
  "kassiber-pyjson",
  "kassiber-pytext",
  "kassiber-store",
+ "tempfile",
+]
+
+[[package]]
+name = "kassiber-release"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "kassiber-envelope",
+ "kassiber-net",
+ "kassiber-paths",
+ "kassiber-pyjson",
+ "kassiber-pytext",
+ "kassiber-setup",
+ "kassiber-store",
+ "nix 0.30.1",
+ "sha2 0.11.1",
  "tempfile",
 ]
 

@@ -331,6 +331,41 @@ impl BookStore for RealStore {
         )
     }
     fn local_service(&self, operation: &str, args: &Value) -> Result<Value, AppError> {
+        if operation == "verify-download" {
+            let field = |key| {
+                kassiber_envelope::py_str(kassiber_envelope::get(args, key).unwrap_or(&Value::Null))
+            };
+            return kassiber_release::verify::verify_download(
+                &field("artifact"),
+                &field("manifest"),
+                &field("signature"),
+                &field("public_key"),
+                &field("fingerprint"),
+            );
+        }
+        if let Some(action) = operation.strip_prefix("update.") {
+            use kassiber_release::update;
+            let context = context()?;
+            let version = kassiber_envelope::py_str(
+                kassiber_envelope::get(args, "version").unwrap_or(&Value::Null),
+            );
+            let channel = match kassiber_envelope::get(args, "channel") {
+                Some(Value::Str(text)) => text.as_str().map(str::to_owned),
+                _ => None,
+            };
+            let build = update::Build {
+                version: &version,
+                channel: channel.as_deref(),
+            };
+            return match action {
+                "disable" | "enable" => {
+                    update::set_enabled(&context, action == "enable").map(|_| Value::Null)
+                }
+                "status" => update::preference(&context),
+                "check" => update::check(&context, &build),
+                _ => Err(not_implemented("update", operation)),
+            };
+        }
         if operation == "ui.egress.allowlist" {
             // The bootstrap runtime view a locked desktop daemon holds.
             let root = kassiber_envelope::py_str(

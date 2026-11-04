@@ -14,6 +14,8 @@ use crate::spec::{parsers, ActionKind, Help, Nargs, ParserId};
 
 /// The leaves this binary implements, as dotted command paths.
 pub const IMPLEMENTED: &[&str] = &[
+    "update",
+    "verify-download",
     "health",
     "next-actions",
     "wallets.sync",

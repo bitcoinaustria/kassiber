@@ -21,6 +21,7 @@ kassiber-envelope = { path = "../envelope" }
 kassiber-pyjson = { path = "../pyjson" }
 kassiber-pytext = { path = "../pytext" }
 kassiber-runtime = { path = "../runtime" }
+kassiber-release = { path = "../release" }
 kassiber-secrets = { path = "../secrets" }
 kassiber-store = { path = "../store" }
 # argparse's usage formatter and textwrap split text with lookaround

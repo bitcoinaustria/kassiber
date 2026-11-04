@@ -27,3 +27,5 @@ crates/wallets/src/file_import/document/pdf.rs|run|let mut child = Command::new(
 crates/kassiber/src/real_store/journals/hybrid.rs|replay|Command::new(std::env::var_os("KASSIBER_RUST_TEST_JOURNAL_PYTHON").ok_or_else(failed)?)
 crates/kassiber/tests/psbt_privacy.rs|reference|let output = std::process::Command::new(python)
 crates/kassiber/tests/legacy_privacy_transport.rs|reference|let result = Command::new(python)
+# Release verification: fixed argv, no shell, pinned allowed-signers entry.
+crates/release/src/verify.rs|verify_signature|let mut child = Command::new(&program)

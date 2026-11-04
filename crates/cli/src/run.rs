@@ -415,6 +415,29 @@ pub fn run(
                 crate::offline::execute(store.as_ref(), command, &namespace)
             })
             .and_then(|payload| emit(&mut sink, format, command, payload)),
+        command if crate::update::COMMANDS.contains(&command) => {
+            let table = format == crate::render::Format::Table && output.is_none();
+            crate::update::execute(store.as_ref(), command, &namespace, &build, table).and_then(
+                |outcome| match outcome {
+                    crate::update::Outcome::Emit(kind, payload) => {
+                        emit(&mut sink, format, kind, payload)
+                    }
+                    crate::update::Outcome::Text(result) => {
+                        // `supports_color(sys.stdout)`.
+                        use std::io::IsTerminal;
+                        let color = std::io::stdout().is_terminal()
+                            && std::env::var("TERM").as_deref() != Ok("dumb")
+                            && std::env::var_os("NO_COLOR").is_none()
+                            && std::env::var("CLICOLOR").as_deref() != Ok("0");
+                        let text = kassiber_release::update::render(&result, color);
+                        sink.stdout
+                            .write_all(text.as_bytes())
+                            .and_then(|_| sink.stdout.flush())
+                            .map_err(|e| AppError::new("internal_error", e.to_string()))
+                    }
+                },
+            )
+        }
         command if crate::projects::COMMANDS.contains(&command) => {
             crate::projects::execute(store.as_ref(), command, &namespace)
                 .and_then(|payload| emit(&mut sink, format, command, payload))
