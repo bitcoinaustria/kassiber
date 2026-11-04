@@ -28,8 +28,8 @@ least 480px), and carries a tab per open thing: the assistant, the panel's own
 surfaces, and open transactions' details, which open as tabs instead of a
 second sheet. The surfaces are the review queue (the causes the journals hold
 transactions for, transfers still to match, and journals waiting to be
-processed, read with the same daemon calls as the Quarantine page and the
-side nav's hints), Changes (recent edit history as a diff, with undo, from
+processed, read with the same daemon calls as the Review screen and the
+sidebar's Review badge), Changes (recent edit history as a diff, with undo, from
 the Activity page's history read) and Logs (a live tail of the redacted
 in-memory log). Changes and Logs open only while developer tools are on,
 like their pages, and close when they are turned off. A surface reads
@@ -44,8 +44,10 @@ closed shows a launcher of them instead. Each launcher row answers to a
 single key (A for the assistant, Q for the review queue, H for Changes, L for
 Logs, D for the latest detail) while no field, dialog or menu has the
 keyboard; a row that cannot open says why. The title-bar toggle shows and
-hides the panel and keeps its tabs, except details, which close with it; a
-detail that opened the panel closes it again. Mod+I shows the panel with the
+hides the panel and keeps all its tabs, including transaction details and
+their unsaved edits, for when it reopens; explicitly closing a detail that
+opened the panel closes it again. Reopening does not repeat a public graph
+lookup: it needs another explicit ask. Mod+I shows the panel with the
 assistant in front, brings it forward from another tab, or hides the panel
 while the assistant is in view. The tab bar's maximize button gives the
 panel the whole page column; the page stays mounted underneath. Details
@@ -70,6 +72,10 @@ started in, so opening another book starts a fresh one. "Ask about this" on a tr
 Details tab while the assistant comes forward), or a quarantine cause pins
 that record as typed screen context and prefills a question without
 sending it; see [AI](ai.md) for the screen-context contract.
+The composer's toolbar holds the attach button, one model picker and send.
+The picker carries the model, its reasoning level, the speed toggle and the
+chat's permission mode in one popover (see
+[AI](ai.md#in-app-surface)).
 
 Current development modes:
 
@@ -422,11 +428,27 @@ Unsupported file/BTCPay/Lightning-style sources show an unsupported state, and
 Liquid sources show an unblind blocker unless Kassiber has descriptor material
 that can unblind outputs locally.
 
+Overview leads with one readiness pill that names what holds the book back
+(sources, stale journals, open review, custody gaps, missing prices) and opens
+where that is dealt with; stale journals it reprocesses in place. Then three
+tiles: BTC price, the bitcoin held and in how many wallets (observed, so it
+carries no status and opens Wallets), and what it is worth with its change
+against cost basis, both shown whichever currency the app displays. The
+latest transactions sit beside the activity chart once the page is about
+64rem wide (measured on the page, so a docked assistant counts), as many whole
+rows as fit the chart's height, and under it otherwise; the list never
+scrolls inside the page, and Show all opens Transactions. A row names its
+status only when it asks for something. Holdings by Source runs across the
+page below as a ranked list, largest first: each source with its rail's logo,
+its value (whole currency units in fiat) and its share of the bitcoin held.
+Past eight, the smallest fold into one Other sources row. Its header leaves an
+incomplete cost basis to the tile and the chart.
+
 Overview, Wallets, the book-set overview, and the Reports metric strip read the
 daemon's `fiat.completeness` block (see [the daemon reference](daemon.md)) instead of
 trusting cost basis as-is. While it is incomplete, the fiat portfolio card turns amber
 and shows an Incomplete or Outdated badge instead of the "vs cost basis"
-percentage. It names the BTC without cost basis and links to Quarantine, or to
+percentage. It names the BTC without cost basis and links to Review, or to
 Journals when stale. The holdings header and chart summary drop their unrealized
 percentage. Chart points from the first gap on show cost basis, average cost, and
 unrealized as "—" with an explanation, the average-cost line stops there, and
@@ -438,11 +460,118 @@ each cause (stale journals, quarantine, custody gaps, missing prices) links to
 the page that resolves it.
 Without a market rate, fiat values show "—"
 instead of €0 or -100 %. Custody gaps and missing prices also show in the
-readiness pill and Book readiness panel. Book-set rows get a per-book badge, and
+readiness pill. Book-set rows get a per-book badge, and
 the fiat total says how many books are incomplete. Reports marks cost basis,
-gain/loss, and estimated tax as Provisional while journals are stale or
-quarantines, custody gaps, or missing prices exist. Reports copy stays English
-under the deferred reporting-language policy in [i18n.md](i18n.md).
+gain/loss, and indicative tax as Provisional while journals are stale or
+quarantines, custody gaps, or missing prices exist, and names the cause with a
+link to the page that resolves it. Reports copy stays English under the
+deferred reporting-language policy in [i18n.md](i18n.md).
+
+Review sits in the main nav and collects what waits on the owner, each item
+decided where it is listed. The pages with the full tools behind it
+(Transfers & Custody, Journals, Reconcile and Source Funds) sit under
+Extras above the calculators; the fold opens and is marked whenever one of
+its pages is open, however you got there.
+**Moves between your wallets** comes first, because pairing a move often
+clears a quarantine cause with it. **Can't be booked yet** holds the
+quarantine causes, as [custody resolution](custody-resolution.md#why-a-transaction-is-quarantined)
+describes, with the journal freshness warning above them. Each cause card
+keeps the full instruction behind its info button where its buttons already
+say what to do. Each card lists its
+transactions folded to three, with one Show more that shows the rest of the
+loaded page and then loads the next. A cause of approximate prices held for
+review offers **Accept these prices**, which accepts all of them in one
+previewed step (`accept_coarse_prices`). A price cause also offers **Enter
+prices**: a field per row for the receipt's total value or the price per
+unit, in the book currency (`summary.fiat_currency` of
+`ui.journals.quarantine`). Input is read in the owner's number format; a
+leading zero always starts a decimal, and the preview lists each price as it
+was read. Rate fields and their confirmation name each transaction's own
+asset, including when a cause holds several assets. Up to 50 typed prices go
+through one previewed step as
+`price_override` operations, each saved as exact and revertible from the
+transaction's history. **Moves between your wallets** lists the transfer
+and swap candidates from `ui.transfers.suggest` as table rows with the same
+edges in every row: the date, the route between the two wallets with their
+rails' logos (chain, Lightning, Liquid), one amount with the fee under it
+(instead of the fee, what arrived, for a swap into another asset or when no
+positive fee is left, as when more came in than left), and what pairing records:
+a plain transfer quietly, a Bitcoin swap or swap as a chip with its default
+treatment (tax-neutral carrying value or taxable), with how sure the match is.
+The rows size themselves by the list's width, not the window's, so a docked
+assistant gets the narrow layout: two lines, with the route and amount above
+the date, kind and buttons. A long wallet name is cut short with the full name
+on hover.
+The decision status masks wallet names while sensitive details are hidden.
+Each has Pair, which pairs it with its default kind and policy, and two icon
+buttons: Not a transfer, which dismisses it, and Details, which opens it in
+Transfers & Custody. Exact candidates with carrying-value policy, no competing
+match and no ownership proof can be paired in groups of up to 50.
+`ui.review.plan` binds their exact transaction IDs, policies, input version and
+book to the confirmation; `ui.review.apply` refuses stale confirmations and
+applies the preview atomically. Taxable and ownership-graph candidates stay
+one at a time. A decision can be undone for 20 seconds
+(`ui.transfers.unpair`, or `ui.transfers.dismissals.delete` for a dismissal).
+Once the owner stops deciding, the journals recalculate. That is local and
+makes no network request. The queued refresh survives navigation, including a
+decision response received after leaving Review. It carries the originating
+book scope and is abandoned after a book switch, leaving that book visibly
+stale until it is processed. Until it finishes, the list keeps its earlier
+reading less what was decided, because a read of stale journals lists more
+candidates than are open. One number counts what is left: `ui.review.badges`
+`review`, which is `quarantine_attention` plus the cached transfer candidates
+(an ownership-graph move counts once, under its held transaction).
+The sidebar's Review badge, the bell and search show it, in red while a
+quarantine holds rows back from the reports, and so does Overview's readiness
+pill while a quarantine is open and nothing more pressing is. Stale journals
+with nothing else open show a dot. The side panel's Review queue counts
+causes and transactions as the screen does and opens Review; a dismissal is
+stored with an English reason whatever the app's language, like accepted and
+entered prices. `/quarantine` and `kassiber://quarantine`
+open Review, and the native menu's Review item keeps Quarantine's shortcut.
+
+Reports shows one tax year from `ui.reports.capital_gains`: whether it can be
+filed, its result and how that result is built, and the files that carry it.
+It lists no rows; those stay on Transactions. Proceeds, cost basis, and
+gain/loss come from the payload's full-year `totals`; the gain/loss tile names
+the income and the tax-free Altbestand gain (from the breakdown's `tax_free`
+group) it includes. For an Austrian EUR book the payload carries the core's
+indicative tax (`indicativeTax`: 27.5 % of KZ 172 + 174 − 176, with KZ 801
+listed and never estimated) and the screen shows it with the core's caveats
+behind the tile's info icon. A year before 2022 has no crypto Kennzahlen
+(`e1kvApplies: false`): the screen states only KZ 801, shows no estimate,
+says so in the readiness notice and Rules, and offers no E 1kv tax report.
+Rows dated before 1 March 2022 have no crypto field in any year; a 2022 with
+such rows (`rowsBeforeCryptoKennzahlen`) says so before export, withholds the
+estimate and offers no E 1kv tax report. Generic books get no estimate, and a region the
+screen does not recognise reads as generic, never as Austrian. While the
+completeness read is still loading, the readiness pill says so and nothing is
+marked Provisional; a failed read or one without completeness stays
+"Completeness unknown". When a readiness notice names a blocker, the header
+pill is hidden rather than repeating it.
+
+The breakdown card states the result the way the report does. An Austrian book
+lists its E 1kv fields and KZ 801 on the E 1 with the core's amounts, then what
+stays off the return: tax-free Altbestand, tax-neutral swaps, and rows without
+a field. Rows without a field may still be taxable, so they show in amber, mark
+the figures Provisional and keep the year from "Ready for export". A generic book lists short-term gains, long-term gains, and income.
+Each row's transaction count links to Transactions filtered to exactly those
+transactions (`txids`, from the payload's `breakdown`); a group of more than 128
+opens the whole year instead, since the Transactions filter takes no more. How
+a single gain was calculated opens from the Calculation row on the
+transaction's Tax tab, which `ui.journals.events.list` feeds with an
+`explanationReference` for realized disposals and income.
+
+A Rules card lists the region, the book's stored gains algorithm, the core's
+rate (none when the core gives none), the Altbestand rule for an Austrian book
+or the "Long-term after" holding period for a generic one, and the tax-year
+boundary, and links to Books, where they change. The Files panel writes the
+tax report as PDF, XLSX, or CSV (the year's E 1kv for an Austrian book, the
+complete history for a generic one), the bookkeeping handoff, the summary PDF,
+and the audit package; the ledger's own exports stay on Transactions. The
+summary's wallet scope and cover page and the audit package's scope and
+contents fold under their rows. The outcome of the last export stays at the
+top of the panel.
 
 Privacy Mirror is the dedicated desktop page for local privacy linkage. It
 reads `ui.reports.privacy_mirror` and shows exposure summary, adversary cards,

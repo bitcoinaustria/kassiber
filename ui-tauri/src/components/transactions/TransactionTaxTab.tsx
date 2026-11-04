@@ -2,6 +2,7 @@ import type { ParseKeys } from "i18next";
 import { AlertTriangle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+import { CapitalGainExplanation } from "@/components/reports/CapitalGainExplanation";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -18,7 +19,12 @@ import {
 } from "@/lib/transactionTypeLabel";
 
 import { AcquisitionReview } from "./AcquisitionReview";
-import { DirtyDot, InfoHint, LedgerRow } from "./TransactionDetailSheetParts";
+import {
+  DirtyDot,
+  InfoHint,
+  LedgerRow,
+  type JournalEventItem,
+} from "./TransactionDetailSheetParts";
 import {
   austrianSelectionValue,
   austrianTaxClassificationForValue,
@@ -269,10 +275,54 @@ export function TransactionTaxTab({ ctx }: { ctx: TransactionDetailTabContext })
                           muted
                         />
                       ) : null}
+                      <TaxCalculationRows
+                        events={journalEvents}
+                        hideSensitive={hideSensitive}
+                      />
                     </div>
                   </TabsContent>
 
 
     </>
   );
+}
+
+/**
+ * One row per realized disposal or income the transaction books, opening the
+ * tax engine's calculation for it. Reports links here rather than listing
+ * every gain itself.
+ */
+export function TaxCalculationRows({
+  events,
+  hideSensitive,
+}: {
+  events: JournalEventItem[];
+  hideSensitive: boolean;
+}) {
+  const { t } = useTranslation(["transactions"]);
+  const references = events.flatMap((event) =>
+    event.explanationReference ? [event.explanationReference] : [],
+  );
+  return references.map((reference, index) => {
+    const label =
+      references.length > 1
+        ? `${t("tax.calculation")} ${index + 1}`
+        : t("tax.calculation");
+    return (
+      <LedgerRow
+        key={reference.entry_id}
+        label={label}
+        value={
+          <CapitalGainExplanation
+            reference={reference}
+            hideSensitive={hideSensitive}
+            triggerClassName="-my-1 h-7 px-2 text-xs"
+            triggerAriaLabel={t("tax.explainCalculation", { label })}
+          />
+        }
+        align="right"
+        hint={t("tax.calculationHint")}
+      />
+    );
+  });
 }

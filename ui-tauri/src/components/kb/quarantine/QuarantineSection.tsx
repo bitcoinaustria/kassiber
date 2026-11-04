@@ -1,16 +1,14 @@
 import * as React from "react";
 
-import {
-  QuarantineDashboard,
-  QuarantineUnavailable,
-  type QuarantineRefreshed,
-  type QuarantineSnapshot,
-} from "@/components/kb/quarantine";
-import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useDaemon, useDaemonInfinite } from "@/daemon/client";
 import type { DaemonEnvelope } from "@/daemon/transport";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import { normalizeQuarantineSnapshot } from "@/lib/normalizeUiSnapshots";
+
+import { QuarantineDashboard, type QuarantineRefreshed } from "./QuarantineDashboard";
+import { QuarantineUnavailable } from "./QuarantineUnavailable";
+import type { QuarantineSnapshot } from "./types";
 
 // The daemon serves at most this many rows per request; both lists page
 // through the rest in the daemon's order.
@@ -41,7 +39,18 @@ function mergeAttentionPages(
   return { ...normalizeQuarantineSnapshot(first), items };
 }
 
-export function Quarantine() {
+/**
+ * What Kassiber could not book, as the Review screen lists it: the causes
+ * that need the user, each with its fix, and on request the transactions
+ * that only wait on one. Renders nothing while nothing is held and the
+ * journals are current.
+ */
+export function QuarantineSection({
+  onFailedRunChange,
+}: {
+  /** Told whether the last journal run failed, which the section shows. */
+  onFailedRunChange?: (failed: boolean) => void;
+} = {}) {
   const [waitingShown, setWaitingShown] = React.useState(false);
   const [offset, setOffset] = React.useState(0);
   // What needs the user is always read: it drives the summary and the causes.
@@ -97,13 +106,23 @@ export function Quarantine() {
     return { attention: attentionPage, list: normalizeQuarantineSnapshot(freshWaiting.data.data) };
   }, [refetchAttention, refetchWaiting, waitingShown]);
 
+  const failedRun = Boolean(attention?.summary.freshness?.last_error);
+  React.useEffect(() => {
+    onFailedRunChange?.(failedRun);
+  }, [failedRun, onFailedRunChange]);
+
   React.useEffect(() => {
     // A rebuild can shrink the list below the current page.
     if (offset > 0 && waitingTotal > 0 && offset >= waitingTotal) setOffset(0);
   }, [offset, waitingTotal]);
 
   if (isLoading) {
-    return <ScreenSkeleton titleWidth="w-40" />;
+    return (
+      <div className="space-y-2" aria-busy="true">
+        <Skeleton className="h-4 w-48" />
+        <Skeleton className="h-28 w-full rounded-lg" />
+      </div>
+    );
   }
 
   if (!attention || (attentionQuery.isError && !moreFailed)) {

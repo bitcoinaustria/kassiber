@@ -149,7 +149,7 @@ replay out, once; a refusal naming neither drops the effort first. The answer th
 `notices` (and so `kassiber chat --machine`), stored history, and the
 desktop's notice under the answer.
 
-Model listings feed the effort menu. A model whose `supported_parameters`
+Model listings feed the picker's reasoning column. A model whose `supported_parameters`
 include `reasoning`, `include_reasoning`, or `reasoning_effort` (OpenRouter
 lists them) reports `supports_reasoning_effort: true` and `reasoning_efforts`
 with the HTTP levels it takes, narrowed by OpenRouter's
@@ -158,7 +158,7 @@ same list, or `null` when a listing says nothing, as OpenAI's does.
 `input_modalities` and `output_modalities` come from OpenRouter's
 `architecture`, as bounded lowercase lists.
 
-The desktop's effort menu offers an HTTP model only the levels in its
+The desktop's reasoning column offers an HTTP model only the levels in its
 `reasoning_efforts`, all three when it takes an effort without naming any, and
 none when its listing does not say it takes one (as OpenAI's never does) or
 before **Check models** has listed it. Levels a listing names elsewhere, such
@@ -317,8 +317,8 @@ If in doubt, keep inference local, or restrict the provider's agent access.
 Each provider has an `agent_access` setting, `full` by default. With full
 access the assistant gets every tool and unprojected result: custody-gap,
 coverage and lineage reads and `ui.custody.review.apply`; review batches
-with pairs, dismissals, component revisions, custody-gap actions and
-acquisition kinds; chain-analysis
+with pairs, dismissals, component revisions, custody-gap actions,
+acquisition kinds and coarse-price acceptance; chain-analysis
 sources, acquisition and dataset tools; chain-analysis results with their
 txids, outpoints and labels instead of opaque references; and an attached
 file's cell values and name. `restricted` keeps an off-device provider to the
@@ -378,8 +378,9 @@ Codex, Claude, OpenCode, and GitHub Copilot CLI providers are
 supported for convenience, but they are not a local-privacy guarantee. The
 broker denies provider-native tools in layers — Claude loads no
 user/project/local settings, empties its built-in tool set, disables slash
-commands, and accepts only its temporary Kassiber MCP server; OpenCode serves
-with `--pure` and a deny-all session permission plus exact Kassiber MCP allows;
+commands, and accepts only its temporary Kassiber MCP server; OpenCode 1 serves
+with `--pure`, while OpenCode 2 receives isolated provider-only configuration.
+Both use deny-all permissions plus exact Kassiber MCP allows;
 Codex runs a read-only sandbox with network access off; the
 [Agent Client Protocol agent](#agent-client-protocol-agents) starts with its
 built-in tools removed — and any tool outside the advertised Kassiber catalog
@@ -398,8 +399,11 @@ choose them deliberately.
 Codex exposes no tool-free profile, so a local read there can begin before the
 abort lands; with its network disabled that content can only surface through
 assistant text on a turn Kassiber is already failing. Kassiber reuses their normal local
-authentication/config, telemetry, and model-provider routing without reading,
-copying, persisting, or displaying provider credentials. Treat them as
+authentication/config, telemetry, and model-provider routing. OpenCode 2 reads
+provider configuration into RAM; private turns also transfer only the selected
+integration's active key credential between authenticated local servers in RAM.
+These values never enter Kassiber's database, diagnostics, or renderer. Other
+CLI adapters do not read or copy provider credentials. Treat CLI providers as
 off-device unless the underlying configuration proves local or confidential
 inference.
 
@@ -550,6 +554,14 @@ deletes it; a later check that fails reports it marked stale. `cached_only`
 with `refresh` is refused. `ai.providers.list` also reports each provider's
 `last_checked_at` and `set_up`.
 
+The model picker restores these saved checks too, including local HTTP model
+lists and CLI runtime inventories. When both kinds exist, the newer check
+wins; a newer not-ready runtime clears an older model list. The picker keeps
+its checked inventory in memory for the app session and restores it from the
+book after a restart, scoped to the provider and checked endpoint. Restoring
+uses only `cached_only` reads; it never launches a CLI or contacts a provider.
+Fresh discovery still requires an explicit check.
+
 Built-in providers the user has not used yet are folded into a collapsed
 **N more providers** line at the end of the list: a built-in row still at its built-in address and name
 that is not the default, was never checked, and (off-device) was never
@@ -634,7 +646,7 @@ Each row also carries:
   HTTP](#reasoning-effort-over-http)).
 - **A fast mode note** where one of the provider's models offers fast mode.
   Fast mode has no stored default: it is billed at a higher rate, so it stays
-  a per-session choice in the reasoning menu.
+  a per-session choice in the model picker's speed toggle.
 
 If Kassiber itself is running inside a container and Ollama is running on the
 host, seed the provider with the Docker host alias instead:
@@ -679,10 +691,45 @@ executables, reports `ready`, `missing executable`, or `authentication
 required`, and tells the user to run the provider's normal login command
 outside Kassiber when necessary. It uses Codex `app-server`, the Claude
 executable's `--output-format stream-json` event stream with strict MCP config,
-and the OpenCode SDK v2 against an ephemeral loopback OpenCode server, and the
+the OpenCode 1 SDK or OpenCode 2 HTTP API against a temporary loopback server, and the
 Agent Client Protocol for GitHub Copilot. A local Node.js executable
 meeting the [broker package requirements](../../ui-tauri/package.json) is
 required to run the bundled broker.
+
+OpenCode discovery and chat support the 1.x CLI (tested with 1.18.10) and stable
+2.x (tested with 2.2.0). Version 2 uses its current model/provider HTTP endpoints
+and a random-password-authenticated loopback server. Its provider settings are
+read into RAM from the user's JSON/JSONC configuration; user plugins, MCP
+servers, instructions, and project configuration are excluded. Native tools
+are denied, and only the advertised `kassiber_<tool>` MCP names are allowed,
+with MCP Code Mode disabled. The broker waits for its own MCP handshake and
+tool listing before prompting, then allows 250 ms for v2.2's 100 ms debounced
+tool-catalog reconciliation. That delay is a compatibility workaround: the
+API does not expose a registry-readiness barrier, so severe child-process
+event-loop delays can still postpone tool availability.
+
+Every OpenCode 2 turn starts a new native session from the visible transcript,
+with Kassiber's system instructions; no native session cursor is resumed or
+returned. Ordinary sessions remain in OpenCode's own database. Private turns
+use an in-memory database and transfer only the chosen integration's active
+key credential into it over authenticated loopback APIs, without sending a
+prompt to the persistent database. OAuth-backed private turns are refused:
+refreshing a copied OAuth token could invalidate the persistent login.
+Ordinary OAuth chats continue to use the native credential store.
+
+All OpenCode 2 process logs are redirected to a preinstalled null-device sink.
+Version 2 is refused on Windows, with system-managed configuration that cannot
+be isolated, and on prerelease/custom-channel builds whose log destination is
+not audited. Unknown future major versions are refused. A failed model-list
+command is a check error, not evidence that the user needs to log in. None of
+these processes starts merely by opening the picker or restoring cached models.
+
+Codex error notifications with `willRetry: true` leave the turn running so
+its own connection retries can complete. Terminal failures report only known
+protocol categories (such as authentication, usage limit, model or context)
+and bounded HTTP status codes; provider error text and additional details
+stay out of the response. `AI_REQUEST_INVALID` alone is the broker's fallback
+error code and does not establish that the user's prompt was invalid.
 
 ### Agent Client Protocol agents
 
@@ -797,7 +844,7 @@ HTTP](#reasoning-effort-over-http)). Copilot, OpenCode
 and HTTP providers have no fast mode, and no provider stores it as a default.
 The option (`options.fast_mode`, a boolean) crosses to the provider broker only
 when it is `true` and is never put in an HTTP request body. The desktop offers
-the toggle in the reasoning menu only for a model whose checked row advertises
+the Standard | Fast toggle in the model picker's footer only for a model whose checked row advertises
 it; that row depends on the installed CLI's version, so nothing is offered
 before Check models (which never runs on its own). It drops the toggle when the
 selected model changes to one that does not offer it;
@@ -846,16 +893,49 @@ from the composer, the arrow keys and Enter pick a row, Mod+1…9 pick the nth
 row, Mod+D stars or unstars the highlighted row, and Mod+Shift+Up/Down switch
 provider. Keys that confirm an input-method composition never pick or star a
 model. The collapsed trigger shows the provider name, model and privacy
-posture.
+posture, then the chosen reasoning level (none for Auto), a bolt while fast
+mode is on, and an open lock while the chat runs in Full access.
 
-The **All / Local** control filters the inventory by the posture Kassiber can
-prove. Model rows show both their source namespace and privacy posture.
+The picker is also where the model's traits live, laid out after T3 Code's
+composer picker: there are no separate effort or permission menus in the
+composer toolbar.
+
+- **Reasoning column.** Beside the list, under the selected model's name:
+  **Auto** (the default, which sends no level) and only the levels the
+  model advertises in its capability data (Kassiber's known levels low through
+  ultra, nothing made up). A model that takes no effort has no column,
+  including a native agent's model whose checked row says so, and a stored
+  level drops back to Auto. A native agent whose model is not checked yet
+  lists only Auto and a stored choice, with a hint that Check models names
+  the rest; Claude and Copilot list their published fixed levels. While an
+  answer streams the column is shown locked.
+- **Footer.** A **Standard | Fast** toggle, only for a model whose checked
+  row offers fast mode, with the higher-rate billing note shown beside it
+  while Fast is on, and the chat's permission mode as a menu of the
+  three modes with their descriptions. Changing the mode there behaves as
+  described under [Permission modes](#permission-modes).
+
+Picking a model with reasoning levels keeps the picker open and moves focus to
+those levels; picking one without levels closes it. Escape or a click outside
+closes it too. ArrowRight at the end of the search text picks a model the
+arrow keys highlighted and moves to its levels; when the highlight was left by
+the pointer or a provider switch, ArrowRight moves to the selected model's
+levels instead and Enter picks the highlighted one. In the column the arrow
+keys, Home and End move between levels and choose the one they land on, and
+ArrowLeft goes back to the search field; the arrow keys also switch the speed
+toggle. Mod+Shift+K opens the picker on the levels, or the search field when
+the model takes no effort, and moves there when it is open. Opening the picker or
+any of its sections reads only the provider list and cached check results; it
+never contacts a provider.
+
+Model rows show both their source namespace and privacy posture.
 OpenCode model IDs identify their source provider (`omlx/...`, `ollama/...`,
-`opencode/...`). OpenCode's model list carries no endpoint — `api.url` is empty
-for locally served models — so the route is judged by that source provider's
+`opencode/...`). For OpenCode 1, the route is judged by that source provider's
 resolved endpoint from `opencode debug config`, reading
-`provider.<id>.options.baseURL` and nothing else (the same options block can
-hold an `apiKey`, which never leaves the broker). A loopback endpoint (`127.0.0.0/8` matched as a literal IPv4
+`provider.<id>.options.baseURL`. OpenCode 2 uses the selected model's or
+provider's `settings.baseURL` from its HTTP API. Only the resulting posture
+leaves the broker; the same settings can hold an `apiKey` that is never exposed.
+A loopback endpoint (`127.0.0.0/8` matched as a literal IPv4
 address, `localhost`, `::1`) is labelled local, because the model cannot leave
 the machine. A loopback address that fronts a reverse proxy is the known
 limit of this check: it reports local while the proxy may forward inference
@@ -956,7 +1036,9 @@ daemon turns `persist: false` into the broker option `stateless_session:
 true`. The broker starts an ephemeral Codex thread (also with history
 persistence off), runs Claude with `--no-session-persistence`, and points
 OpenCode's database at memory and its data and state homes at the turn's
-directory. If the CLI cannot comply (Codex does not report the thread as
+directory. Legacy OpenCode selected-data isolation requires the audited 1.18.4
+runtime; version 2 uses the isolated configuration described above and refuses
+OAuth-backed private turns. If the CLI cannot comply (Codex does not report the thread as
 ephemeral, Claude's help lacks the flag, or OpenCode reports a database on
 disk), the turn fails before the prompt is sent. On Windows, OpenCode
 Incognito turns are refused before OpenCode starts. Keeping OpenCode's log
@@ -1373,7 +1455,7 @@ network access and anything permanent. **Full access** never asks, syncs and
 other network actions included. New chats start in the mode set at Settings →
 Assistant → **New chats start in** (Auto unless changed). A saved chat reopens in the mode it
 last used, which the UI preferences keep by session id. Switching the mode in
-the composer while an answer streams sends `ai.chat.permission_mode` for that
+the model picker's footer while an answer streams sends `ai.chat.permission_mode` for that
 turn, and the daemon releases waiting approvals the new mode covers.
 
 Live chats advertise capability packs selected from the latest question and
@@ -1391,8 +1473,8 @@ The desktop sends `tool_profile` with every turn: the provider's tool set
 from Settings → Assistant, **All tools** (`full`), **Focused** (`scoped`)
 or **Minimal** (`core`), kept with the UI preferences by provider name. Every
 provider starts with all tools; Kassiber does not judge a model's strength.
-The set follows the provider, not the chat, so the composer offers only the
-permission mode.
+The set follows the provider, not the chat, so the composer's picker offers
+only the permission mode.
 
 Small local models are the reason `scoped` and `core` exist: every schema
 together is about 36k tokens, more than many local context windows. Instead,
@@ -1418,16 +1500,30 @@ Tax figures come from the core, never from the model's recall of tax law:
   and the newest disposal and income rows. Each row carries its transaction id,
   asset, exact msat, Austrian category, and Kennzahl. The rows are journal
   entries, not acquisition lots: Austrian Neubestand uses one moving-average
-  pool, and the payload says so.
+  pool, and the payload says so. Its `breakdown` sums the year by Austrian
+  field (with tax-free Altbestand and tax-neutral swaps beside them) or, for a
+  generic book, by holding period and income; the desktop's transaction id
+  lists for those groups are dropped. With `asset`, the totals, breakdown and
+  rows cover that asset while the Kennzahl rows stay book-wide. Journal event
+  reads likewise drop the explanation references that open the desktop's
+  calculation view.
 - For an Austrian EUR book, `ui.reports.tax_summary` adds `indicative_tax` for
   the requested year, or the latest year. It is 27.5% of KZ 172 + KZ 174 −
   KZ 176 as reported, from `kassiber/core/tax_estimate.py`, and is zero when
   that base is negative. Any report blocker withholds the figure
-  (`status: "withheld"`, `estimated_tax_eur_cents: null`). KZ 801 Altbestand
+  (`status: "withheld"`, `estimated_tax_eur_cents: null`). A year before 2022
+  has no crypto Kennzahlen: `status: "not_applicable"` with no rate, basis or
+  base, and a note that a Steuerberater states that year. A 2022 with rows
+  from January or February is withheld (`crypto_rows_before_2022_03`), since
+  those rows have no field. KZ 801 Altbestand
   speculation is listed as an amount and never estimated, because it is taxed
   at the progressive rate. The notes say the figure covers this book only and
   does not deduct KESt an Austrian provider withheld. The desktop's own tax
-  summary read skips this check.
+  summary read skips this check. The Reports screen reads the same core figure
+  as `indicativeTax` from `ui.reports.capital_gains`, computed without the
+  blocker check. Reports marks it Provisional only for stale journals,
+  quarantines, custody gaps, missing prices, and rows in no field, fewer causes
+  than withhold it here, so the assistant's projection of that read drops it.
 
 The authoritative tool names, schemas, effects, and daemon mappings live in
 [TOOL_CATALOG and get_tool](../../kassiber/ai/tools.py), with capability selection
@@ -1700,8 +1796,8 @@ income and, for Austrian EUR books, Kennzahlen and the core's indicative tax
 change. The model answers "what does this change do to my taxes?" from that,
 not from its own arithmetic. With full agent access a batch may also create
 pairs, dismiss candidates, revise/undo/activate/supersede components, run
-custody-gap actions and declare acquisition kinds; a restricted provider keeps
-prices, exclusions, unpairs and component creation. Conversion components
+custody-gap actions, declare acquisition kinds and accept coarse prices; a
+restricted provider keeps prices, exclusions, unpairs and component creation. Conversion components
 stay drafts for the owner in either mode. Operation shapes and the tax fields
 are in [custody resolution](custody-resolution.md#resolve-with-the-cli-or-chat).
 

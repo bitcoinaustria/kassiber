@@ -132,7 +132,10 @@ EUR value as acquisition basis, keeps the raw transaction kind and attachments
 as provenance, and leaves wage-tax reporting outside the product. It does not
 create a separate employment-income journal or E 1kv row.
 
-`kassiber reports austrian-e1kv` is the canonical annual export. The
+`kassiber reports austrian-e1kv` is the canonical annual export, for tax
+years with the crypto Kennzahlen (realisations and income from 1 March
+2022). A year before 2022, or a 2022 with rows from January or February, is
+refused rather than stated in fields that did not apply to them. The
 friendlier `reports austrian-tax-summary` and `reports export-austrian`
 aliases use the same builder and data. The structured output includes
 Steuerbericht-style sections 1.1-4.5, with unsupported areas rendered

@@ -23,7 +23,7 @@ export type AssistantReturnPath =
   | "/journals"
   | "/swaps"
   | "/custody-gaps"
-  | "/quarantine"
+  | "/review"
   | "/reconcile"
   | "/egress"
   | "/imports"
@@ -138,6 +138,16 @@ export type AssistantThinkingEffort =
   | "xhigh"
   | "max"
   | "ultra";
+
+/** Every level Kassiber can label and send, lowest first. */
+export const KNOWN_EFFORTS: readonly AssistantThinkingEffort[] = [
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+  "ultra",
+];
 
 export interface AssistantAttachment {
   /** Opaque daemon staging grant; expires with the daemon's staging TTL. */

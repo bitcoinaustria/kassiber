@@ -221,12 +221,17 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
   own basis is their market value, but the pool timeline is cut at the
   barrier. Done when the policy is written down in the tax reference and the
   barrier follows it.
-- [ ] Show journal staleness and quarantine once in the shell: the bell keeps
-  standing "needs processing"/"quarantined" items that repeat the side-nav
-  hints, staleness has several verbs ("Process", "Reprocess", "Recalculate",
-  "Process ledger"), and a book with any quarantine shows the first-sync card
-  on every refresh. Done when the bell carries events only and one verb is
-  used everywhere.
+- [ ] Show journal staleness once in the shell: the bell and the sidebar now
+  share the Review count, but the bell still keeps standing "needs processing"
+  and "to review" items, staleness has several verbs ("Process", "Reprocess",
+  "Recalculate", "Process ledger"), and a book with any quarantine shows the
+  first-sync card on every refresh. Done when the bell carries events only and
+  one verb is used everywhere.
+- [ ] Finish folding the old review pages into Review and its neighbours: the
+  sidebar's Tools group is gone (its pages sit under Extras), but paired-transfer
+  history still lives on Transfers & Custody rather than as a Transactions
+  filter, matching rules are not in book settings yet, and the address/txid
+  ownership lookup is not reachable from Search.
 
 ## Imports, source evidence, and wallet workflows
 
@@ -302,6 +307,12 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
 
 ## Daemon, contracts, and performance
 
+- [ ] Support OpenCode 2 OAuth-backed private turns once credentials can be
+  refreshed safely without persisting the session or invalidating the original
+  login. Key-backed private turns and ordinary sessions use the 2.x API now.
+- [ ] Replace OpenCode 2's tool-catalog settlement delay with an explicit
+  readiness barrier when its API provides one; the awaited MCP handshake and
+  listing do not await its separate debounced tool-registry reload.
 - [ ] Enforce AI consent, advertisement, and scope in one daemon-owned
   `authorize_and_execute` path shared by chat and MCP. MCP now runs within the
   user's External agents grant (per-call checks against the broker registry,

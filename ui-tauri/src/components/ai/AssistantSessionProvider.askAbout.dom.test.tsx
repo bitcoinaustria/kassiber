@@ -309,7 +309,7 @@ describe("Ask about this", () => {
     expect(mocks.send).not.toHaveBeenCalled();
 
     // Before it runs, the user moves on and pins a quarantine cause.
-    window.history.replaceState(null, "", "/quarantine");
+    window.history.replaceState(null, "", "/review");
     act(() => ask!({ kind: "quarantine", transactionId: "tx-held" }));
     mocks.streaming = false;
     act(() => view.rerender(provider()));
@@ -426,7 +426,7 @@ describe("Ask about this", () => {
 
     // Later, on another page, the user edits the draft, picks a model and
     // sends it.
-    window.history.replaceState(null, "", "/quarantine");
+    window.history.replaceState(null, "", "/review");
     act(() =>
       useAssistantDraftStore.getState().setDraft("Analyze this PSBT, please."),
     );
@@ -443,7 +443,7 @@ describe("Ask about this", () => {
 
     // It is used once: the next prompt belongs to the page on screen.
     act(() => session.sendPrompt("And this cause?"));
-    expect(lastScreenContext()).toMatchObject({ route: "/quarantine" });
+    expect(lastScreenContext()).toMatchObject({ route: "/review" });
   });
 
   it("drops a parked handoff when its draft is cleared or replaced", () => {
@@ -451,7 +451,7 @@ describe("Ask about this", () => {
     mount();
     window.history.replaceState(null, "", "/chain-analysis");
     act(() => handOffToAssistant(session, "Analyze this PSBT."));
-    window.history.replaceState(null, "", "/quarantine");
+    window.history.replaceState(null, "", "/review");
     act(() =>
       useUiStore.setState({
         assistantModelSelection: { provider: "copilot", model: "default" },
@@ -461,13 +461,13 @@ describe("Ask about this", () => {
     // Cleared, then retyped: an ordinary question about this page.
     act(() => useAssistantDraftStore.getState().setDraft(""));
     act(() => session.sendPrompt("What is held here?"));
-    expect(lastScreenContext()).toMatchObject({ route: "/quarantine" });
+    expect(lastScreenContext()).toMatchObject({ route: "/review" });
 
     // Replaced by Ask about this: the pin applies, not the old handoff.
     act(() => useUiStore.setState({ assistantModelSelection: null }));
     window.history.replaceState(null, "", "/chain-analysis");
     act(() => handOffToAssistant(session, "Analyze this PSBT."));
-    window.history.replaceState(null, "", "/quarantine");
+    window.history.replaceState(null, "", "/review");
     act(() => ask!({ kind: "quarantine", transactionId: "tx-held" }));
     act(() =>
       useUiStore.setState({
@@ -476,7 +476,7 @@ describe("Ask about this", () => {
     );
     act(() => session.sendPrompt(useAssistantDraftStore.getState().draft));
     expect(lastScreenContext()).toMatchObject({
-      route: "/quarantine",
+      route: "/review",
       entityId: "tx-held",
     });
   });
@@ -775,7 +775,7 @@ describe("Ask about this", () => {
     mount();
     act(() => ask!({ kind: "quarantine", transactionId: "tx-held" }));
     expect(session.focus?.context).toMatchObject({
-      route: "/quarantine",
+      route: "/review",
       capabilities: ["review"],
     });
     act(() => session.reset());

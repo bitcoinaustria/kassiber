@@ -58,11 +58,35 @@ class AustrianIndicativeTaxTest(unittest.TestCase):
 
     def test_altbestand_speculation_is_reported_but_never_estimated(self):
         result = austrian_indicative_tax(
-            tax_year=2021, kennzahl_rows=_rows(kz174=0, kz801=40_000)
+            tax_year=2025, kennzahl_rows=_rows(kz174=0, kz801=40_000)
         )
         self.assertEqual(result["estimated_tax_eur_cents"], 0)
         self.assertEqual(result["progressive_rate_amounts_eur_cents"], {"801": 40_000})
         self.assertTrue(any("progressive" in note for note in result["notes"]))
+
+    def test_a_year_before_the_e1kv_gets_no_estimate(self):
+        result = austrian_indicative_tax(
+            tax_year=2021, kennzahl_rows=_rows(kz174=150_000, kz801=40_000)
+        )
+        self.assertEqual(result["status"], "not_applicable")
+        self.assertIsNone(result["estimated_tax_eur_cents"])
+        # No rate or base to quote for a year without the crypto Kennzahlen.
+        self.assertIsNone(result["rate"])
+        self.assertIsNone(result["special_rate_base_eur_cents"])
+        self.assertTrue(any("from tax year 2022" in note for note in result["notes"]))
+        # KZ 801 is an E 1 field in any year and stays reported.
+        self.assertEqual(result["progressive_rate_amounts_eur_cents"], {"801": 40_000})
+        in_2022 = austrian_indicative_tax(tax_year=2022, kennzahl_rows=_rows(kz174=100))
+        self.assertEqual(in_2022["status"], "indicative")
+
+    def test_rows_before_march_2022_withhold_that_years_figure(self):
+        result = austrian_indicative_tax(
+            tax_year=2022, kennzahl_rows=_rows(kz174=100_000), rows_before_crypto_kennzahlen=2,
+        )
+        self.assertEqual(result["status"], "withheld")
+        self.assertEqual(result["withheld_by"], ["crypto_rows_before_2022_03"])
+        self.assertIsNone(result["estimated_tax_eur_cents"])
+        self.assertTrue(any("1 March 2022" in note for note in result["notes"]))
 
     def test_notes_say_what_the_figure_leaves_out(self):
         notes = " ".join(austrian_indicative_tax(tax_year=2025, kennzahl_rows=[])["notes"])

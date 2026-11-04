@@ -144,10 +144,6 @@
       "label": "Search source of funds",
       "placeholder": "Search sources, wallets..."
     },
-    "quarantine": {
-      "label": "Search quarantine",
-      "placeholder": "Search issue, account, source..."
-    },
     "reconcile": {
       "label": "Search reconcile",
       "placeholder": "Paste addresses or transaction ids..."
@@ -175,6 +171,10 @@
     "chainAnalysis": {
       "label": "Chain analysis",
       "placeholder": "Search transaction, outpoint, address…"
+    },
+    "review": {
+      "label": "Search review",
+      "placeholder": "Search cause, wallet, transfer..."
     }
   },
   "search": {
@@ -204,15 +204,15 @@
       "body": "Reports are not trusted until journal processing runs.",
       "action": "Process now"
     },
-    "quarantined": {
-      "title": "Transactions quarantined",
-      "body_one": "{{count}} transaction needs review.",
-      "body_other": "{{count}} transactions need review."
-    },
     "processing": "Processing...",
     "bookRefreshRunning": {
       "title": "Book refresh already running",
       "body": "Kassiber is already refreshing sources, rates, or journals."
+    },
+    "review": {
+      "title": "Waiting for your review",
+      "body_one": "{{count}} decision left.",
+      "body_other": "{{count}} decisions left."
     }
   },
   "currencyToggle": {

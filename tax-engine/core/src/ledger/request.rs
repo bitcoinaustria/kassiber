@@ -255,7 +255,8 @@ pub struct Row {
     /// `fiat_value_exact`, else `fiat_value`.
     #[serde(deserialize_with = "nullable")]
     pub value: Option<DecimalText>,
-    /// Priced from a coarse fallback (`pricing_quality == coarse_fallback`).
+    /// Priced from a coarse fallback (`pricing_quality == coarse_fallback`)
+    /// that the owner has not accepted at this exact price.
     pub coarse: bool,
     /// `normalized_transaction_kind(row)`.
     pub kind: String,

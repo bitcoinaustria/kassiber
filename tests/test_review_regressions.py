@@ -4298,6 +4298,99 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(record["fee"], Decimal("0"))
         self.assertEqual(record["pricing_pair"], "BTC-USD")
 
+    def test_journal_events_reference_only_explainable_gains(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        now = "2026-01-01T00:00:00Z"
+        conn.execute(
+            "INSERT INTO workspaces(id, label, created_at) VALUES(?, ?, ?)",
+            ("ws-explain", "Main", now),
+        )
+        conn.execute(
+            """
+            INSERT INTO profiles(
+                id, workspace_id, label, fiat_currency, tax_country,
+                tax_long_term_days, gains_algorithm, last_processed_at,
+                last_processed_tx_count, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("pf-explain", "ws-explain", "Default", "EUR", "generic", 365, "fifo",
+             "2026-01-01T01:00:00Z", 3, now),
+        )
+        conn.execute(
+            """
+            INSERT INTO wallets(
+                id, workspace_id, profile_id, label, kind, config_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("wal-explain", "ws-explain", "pf-explain", "Cold", "address", "{}", now),
+        )
+        cases = ("sale", "swap", "untaxed")
+        conn.executemany(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, confirmed_at, direction, asset, amount, fee,
+                fiat_currency, fiat_rate, fiat_value, fiat_price_source, kind,
+                description, counterparty, note, excluded, raw_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (f"tx-{case}", "ws-explain", "pf-explain", "wal-explain", case,
+                 f"fp-{case}", "2025-06-01T12:00:00Z", "2025-06-01T12:05:00Z",
+                 "outbound", "BTC", -btc_to_msat("0.1"), 0, "EUR", 1_400, 140,
+                 "import", "sell", case, None, None, 0, "{}", "2025-06-01T12:00:00Z")
+                for case in cases
+            ],
+        )
+        conn.execute(
+            "UPDATE transactions SET taxability_override = 0 WHERE id = 'tx-untaxed'"
+        )
+        conn.executemany(
+            """
+            INSERT INTO journal_entries(
+                id, workspace_id, profile_id, transaction_id, wallet_id,
+                occurred_at, entry_type, asset, quantity, fiat_value, unit_cost,
+                cost_basis, proceeds, gain_loss, description, at_category,
+                at_kennzahl, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (f"je-{case}", "ws-explain", "pf-explain", f"tx-{case}", "wal-explain",
+                 "2025-06-01T12:00:00Z", "disposal", "BTC", -btc_to_msat("0.1"),
+                 -140, 1_000, 100, 140, 40, case,
+                 "neu_swap" if case == "swap" else None, None,
+                 "2025-06-01T12:00:00Z")
+                for case in cases
+            ],
+        )
+        set_setting(conn, "context_workspace", "ws-explain")
+        set_setting(conn, "context_profile", "pf-explain")
+        conn.commit()
+
+        def references():
+            events = build_journal_events_list_snapshot(conn, {})["events"]
+            return {
+                event["transactionId"]: (event["explanationReference"] or {}).get("entry_id")
+                for event in events
+            }
+
+        # Only a realized gain that counts for tax has a calculation to open:
+        # not a tax-neutral swap, not a transaction excluded from tax.
+        self.assertEqual(
+            references(),
+            {"tx-sale": "je-sale", "tx-swap": None, "tx-untaxed": None},
+        )
+        # A stale journal explains nothing until it is processed again.
+        with patch(
+            "kassiber.core.ui_snapshot._journal_freshness",
+            return_value={"needs_processing": True, "status": "stale", "reason": "test"},
+        ):
+            self.assertEqual(
+                references(),
+                {"tx-sale": None, "tx-swap": None, "tx-untaxed": None},
+            )
+
     def test_capital_gains_snapshot_uses_latest_reportable_year_and_forms(self):
         conn = open_db(self.data_root)
         self.addCleanup(conn.close)
@@ -4494,6 +4587,27 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(snapshot_rows["801"]["amountEurCents"], 4_000)
         self.assertEqual(snapshot_rows["801"]["form"], "E 1")
         self.assertEqual(snapshot_rows["801"]["formSection"], "E 1 Spekulationsgeschaefte")
+        # The core's estimate covers KZ 172 + 174 - 176 only; KZ 801 is taxed
+        # at the progressive rate and listed, never estimated.
+        self.assertEqual(snapshot["fiatCurrency"], "EUR")
+        self.assertIsNone(snapshot["longTermDays"])
+        self.assertEqual(snapshot["indicativeTax"]["estimatedTaxEurCents"], 0)
+        self.assertEqual(
+            snapshot["indicativeTax"]["progressiveRateAmountsEurCents"], {"801": 4_000}
+        )
+        # The breakdown groups the year by field and names its transactions
+        # for the desktop's Transactions link.
+        self.assertEqual(
+            [(bucket["key"], bucket["rowCount"], bucket["transactionIds"])
+             for bucket in snapshot["breakdown"]],
+            [("801", 1, ["tx-alt-sale"])],
+        )
+        events = build_journal_events_list_snapshot(
+            conn, {"transaction": "tx-alt-sale"}
+        )["events"]
+        self.assertEqual(
+            events[0]["explanationReference"]["entry_id"], "je-alt-sale"
+        )
 
         payload, result = self._run_json(
             "reports",
@@ -5025,6 +5139,12 @@ class ReviewRegressionTest(unittest.TestCase):
             e1kv["sections"]["1.1"]["totals"]["gain_loss_eur_cents"],
             -68_141,
         )
+        # No E 1kv before 2022: the report refuses rather than state fields
+        # that did not exist that year.
+        with self.assertRaises(AppError) as raised:
+            report_austrian_e1kv(conn, "ws-neutral-swap", "pf-neutral-swap", hooks, tax_year=2021)
+        self.assertEqual(raised.exception.code, "validation")
+        self.assertEqual(raised.exception.details["first_tax_year"], 2022)
 
     def _bootstrap_runtime_state(self, *, env_file=None, persist_bootstrap=False):
         args = Namespace(
@@ -13684,6 +13804,28 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(partner["reason"], "pricing_review_required")
         self.assertTrue(json.loads(partner["detail_json"])["paired_leg"])
 
+        # Accepting the used leg's coarse price releases both legs.
+        unpriced_out = {
+            "fiat_rate": None,
+            "fiat_value": None,
+            "pricing_source_kind": None,
+            "pricing_quality": None,
+        }
+        accepted_coarse_in = {
+            **unused_coarse_in,
+            "pricing_review_accepted_price": pricing.reviewed_price(
+                {**in_row, **unused_coarse_in}
+            ),
+        }
+        state = run(unpriced_out, accepted_coarse_in)
+        self.assertEqual(state.quarantines, [])
+        self.assertEqual(len(state.intra_audit), 1)
+
+        # A price changed since the acceptance is held for review again.
+        stale_coarse_in = {**accepted_coarse_in, "pricing_review_accepted_price": "rate:1"}
+        state = run(unpriced_out, stale_coarse_in)
+        self.assertEqual(len(state.quarantines), 2)
+
     def test_missing_spot_price_snapshot_matches_fixture(self):
         self._bootstrap_wallet(label="MissingPrice")
         self._insert_transaction(
@@ -15889,7 +16031,10 @@ class ReviewBadgesSnapshotTest(unittest.TestCase):
         self._seed_book(conn, with_transactions=True, processed=True)
         cache_swap_candidate_count(conn, "ws-b", "pf-b", 4)
         conn.commit()
-        self.assertEqual(build_review_badges_snapshot(conn)["swaps"], 4)
+        snapshot = build_review_badges_snapshot(conn)
+        self.assertEqual(snapshot["swaps"], 4)
+        # The Review total is what needs the user plus the candidates.
+        self.assertEqual(snapshot["review"], snapshot["quarantine_attention"] + 4)
         # A matched count of 0 reports 0 (UI hides it), distinct from the
         # never-computed None on a fresh book.
         cache_swap_candidate_count(conn, "ws-b", "pf-b", 0)

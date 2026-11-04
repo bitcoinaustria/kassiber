@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 //
 // Mounted: a pair-made suspense is unpaired as the owner picks, previewed by the daemon.
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.hoisted(() => {
@@ -340,10 +340,11 @@ describe("unpairing pairs that leave a suspense", () => {
   it("folds a long list of pairs", () => {
     mount(snapshotOf(many(8)));
     expect(screen.getAllByText("Sent")).toHaveLength(3);
-    fireEvent.click(screen.getByRole("button", { name: "Show all 8 pairs" }));
+    expect(screen.getByText("3 of 8 shown")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /^Show more of “/ }));
     expect(screen.getAllByText("Sent")).toHaveLength(8);
     expect(screen.getAllByRole("button", { name: "Unpair" })).toHaveLength(8);
-    fireEvent.click(screen.getByRole("button", { name: "Show fewer" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Show fewer of “/ }));
     expect(screen.getAllByText("Sent")).toHaveLength(3);
   });
 
@@ -355,7 +356,7 @@ describe("unpairing pairs that leave a suspense", () => {
 
   it("says when the cause holds more pairs than this page lists", () => {
     mount(snapshotOf(many(3), 120));
-    expect(screen.getByText("117 more pairs of this cause are not loaded yet.")).toBeTruthy();
+    expect(screen.getByText("3 of 120 shown")).toBeTruthy();
   });
 });
 
@@ -372,9 +373,10 @@ describe("a cause's transactions", () => {
   it("lists them on the card, folded, and opens one by clicking it", () => {
     const { onOpenTransaction } = mount(snapshotOf(rows, 120));
     expect(screen.getAllByText(/ · Merchant · tx-/)).toHaveLength(3);
-    fireEvent.click(screen.getByRole("button", { name: "Show all 5 transactions" }));
+    expect(screen.getByText("3 of 120 shown")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /^Show more of “/ }));
     expect(screen.getAllByText(/ · Merchant · tx-/)).toHaveLength(5);
-    expect(screen.getByText("115 more transactions of this cause are not loaded yet.")).toBeTruthy();
+    expect(screen.getByText("5 of 120 shown")).toBeTruthy();
     fireEvent.click(screen.getByText("2023-02-02 · Merchant · tx-1"));
     expect(onOpenTransaction).toHaveBeenCalledWith("tx-1", expect.any(String), expect.objectContaining({ reason: "custody_quantity_unresolved" }), GROUP_KEY);
     // The rows open themselves; no separate button for the first one.
@@ -418,5 +420,134 @@ describe("a cause's transactions", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Unpair" })[0]);
     expect((await screen.findByRole("alert")).textContent).toContain("Another book is open now");
     expect(daemon.plan).not.toHaveBeenCalled();
+  });
+});
+
+describe("entering prices on a cause's rows", () => {
+  const PRICE_KEY = "missing_spot_price:";
+  const priceRow = (id: string): QuarantineItem => ({
+    ...root(id, ""),
+    external_id: id,
+    direction: "inbound",
+    reason: "missing_spot_price",
+    category: "missing_price",
+    blocks_reports: false,
+    evidence: {},
+    actions: [{ kind: "set_price", transaction_id: id }],
+    group_key: PRICE_KEY,
+  });
+  const priceSnapshot = (rows: QuarantineItem[], reason = "missing_spot_price"): QuarantineSnapshot => {
+    const base = snapshotOf(rows);
+    return {
+      ...base,
+      summary: {
+        ...base.summary,
+        fiat_currency: "EUR",
+        groups: [
+          {
+            ...base.summary.groups![0],
+            key: PRICE_KEY,
+            category: "missing_price",
+            reason,
+            evidence: {},
+            actions: rows[0].actions!,
+            downstream_count: 0,
+            blocks_reports: false,
+          },
+        ],
+      },
+    };
+  };
+  // The label names what is typed: a total value unless switched to a rate.
+  const inputs = () => screen.queryAllByRole("textbox", { name: /^Total value for .*, in EUR$/ });
+
+  it("labels mixed-asset rate inputs and their confirmation with each row's asset", async () => {
+    mount(priceSnapshot([priceRow("btc"), { ...priceRow("usdt"), asset: "USDT" }]));
+    fireEvent.click(screen.getByRole("button", { name: "Enter prices" }));
+    fireEvent.keyDown(screen.getByRole("combobox", { name: "What you enter" }), { key: "Enter" });
+    fireEvent.click(await screen.findByRole("option", { name: "Price per unit" }));
+    const btc = screen.getByRole("textbox", { name: /^Price per BTC for .*btc, in EUR$/ });
+    const usdt = screen.getByRole("textbox", { name: /^Price per USDT for .*usdt, in EUR$/ });
+    expect(within(btc.closest("li")!).getByText("Price per BTC")).toBeTruthy();
+    expect(within(usdt.closest("li")!).getByText("Price per USDT")).toBeTruthy();
+    fireEvent.change(btc, { target: { value: "31,234.50" } });
+    fireEvent.change(usdt, { target: { value: "0.92" } });
+    fireEvent.click(screen.getByRole("button", { name: "Check 2 prices" }));
+    await screen.findByText("In quarantine: 11 → 0");
+    const preview = screen.getByTestId("entered-prices");
+    expect(preview.textContent).toContain("31,234.50 EUR per BTC");
+    expect(preview.textContent).toContain("0.92 EUR per USDT");
+    expect(planned().operations).toEqual([
+      expect.objectContaining({ transaction_id: "btc", fiat_rate: "31234.50" }),
+      expect.objectContaining({ transaction_id: "usdt", fiat_rate: "0.92" }),
+    ]);
+    expect(daemon.apply).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Save 2 prices" }));
+    await waitFor(() => expect(daemon.apply).toHaveBeenCalledOnce());
+    expect(daemon.apply.mock.calls[0][0]).toMatchObject({ artifact: { operations: planned().operations } });
+  });
+
+  it("saves exactly the prices typed on the rows, through one preview", async () => {
+    mount(priceSnapshot([priceRow("p-1"), priceRow("p-2")]));
+    // Typing replaces opening the first row's pricing tab.
+    expect(screen.queryByRole("button", { name: "Enter price" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Enter prices" }));
+    expect(inputs()).toHaveLength(2);
+    fireEvent.change(inputs()[0], { target: { value: "2,800.50" } });
+    fireEvent.click(screen.getByRole("button", { name: "Check 1 price" }));
+
+    await screen.findByText("In quarantine: 11 → 0");
+    // The price is shown back as it was read, before anything is saved.
+    expect(screen.getByTestId("entered-prices").textContent).toContain("2,800.50 EUR total");
+    expect(daemon.plan.mock.calls[0][0]).toMatchObject({ expected_scope: BOOK, expected_input_version: 7 });
+    expect(planned().operations).toEqual([
+      {
+        type: "price_override",
+        transaction_id: "p-1",
+        reason: "The owner entered the price on the Review screen.",
+        fiat_value: "2800.50",
+      },
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Save 1 price" }));
+    await waitFor(() => expect(daemon.apply).toHaveBeenCalledTimes(1));
+    expect(daemon.apply.mock.calls[0][0]).toMatchObject({ expected_scope: BOOK, artifact: { operations: planned().operations } });
+    await waitFor(() => expect(inputs()).toHaveLength(0));
+    expect(useUiStore.getState().notifications.some((entry) => entry.title === "1 price saved")).toBe(true);
+  });
+
+  it("holds back a price that is not a number, and Cancel leaves nothing typed", () => {
+    mount(priceSnapshot([priceRow("p-1"), priceRow("p-2")]));
+    fireEvent.click(screen.getByRole("button", { name: "Enter prices" }));
+    fireEvent.change(inputs()[0], { target: { value: "12 EUR" } });
+    fireEvent.change(inputs()[1], { target: { value: "31000" } });
+    fireEvent.click(screen.getByRole("button", { name: "Check 2 prices" }));
+    expect(screen.getByRole("alert").textContent).toBe("1 price is not a number above zero. Fix or clear it.");
+    expect(inputs()[0].getAttribute("aria-invalid")).toBe("true");
+    expect(inputs()[1].getAttribute("aria-invalid")).toBeNull();
+    expect(daemon.cases).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(inputs()).toHaveLength(0);
+    expect(daemon.cases).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Enter prices" }));
+    expect(inputs().map((input) => (input as HTMLInputElement).value)).toEqual(["", ""]);
+  });
+
+  it("keeps a row with a typed price in view when the list folds", () => {
+    mount(priceSnapshot(Array.from({ length: 5 }, (_, index) => priceRow(`p-${index}`))));
+    fireEvent.click(screen.getByRole("button", { name: "Enter prices" }));
+    expect(inputs()).toHaveLength(3);
+    fireEvent.click(screen.getByRole("button", { name: /^Show more of “/ }));
+    fireEvent.change(inputs()[4], { target: { value: "abc" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Show fewer of “/ }));
+    expect(inputs()).toHaveLength(4);
+    expect((inputs()[3] as HTMLInputElement).value).toBe("abc");
+  });
+
+  it("offers exact prices next to accepting the approximate ones", () => {
+    mount(priceSnapshot([priceRow("p-1")], "pricing_review_required"));
+    const accept = screen.getByRole("button", { name: "Accept this price" });
+    const exact = screen.getByRole("button", { name: "Enter exact prices" });
+    expect(accept.compareDocumentPosition(exact) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

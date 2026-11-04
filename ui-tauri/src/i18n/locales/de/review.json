@@ -549,7 +549,6 @@
       "categoryNavigation": "Navigation",
       "categoryActions": "Aktionen"
     },
-    "dismissReason": "vom Benutzer aus der Prüfungs-Warteschlange verworfen",
     "loadMore": "Mehr laden"
   },
   "reconcile": {
@@ -938,5 +937,71 @@
     "actionConfigure": "Konfigurieren",
     "actionSetup": "Einrichten",
     "actionPlanned": "Geplant"
+  },
+  "inbox": {
+    "updating": "Bücher werden aktualisiert…",
+    "clear": {
+      "title": "Nichts zu prüfen",
+      "body": "Jede Transaktion ist gebucht und jede vorgeschlagene Übertragung entschieden."
+    },
+    "transfers": {
+      "title": "Übertragungen zwischen deinen Wallets",
+      "count_one": "{{count}} zu bestätigen",
+      "count_other": "{{count}} zu bestätigen",
+      "why": "Eine gepaarte Übertragung ist kein Verkauf. Ungepaart zählt jede Seite für sich.",
+      "pairExact_one": "{{count}} exakten Treffer paaren",
+      "pairExact_other": "Alle {{count}} exakten Treffer paaren",
+      "tools": "Abgleichswerkzeuge",
+      "route": "{{from}} nach {{to}}",
+      "to": "nach",
+      "fee": "Gebühr {{amount}}",
+      "competing_one": "{{count}} weiterer möglicher Treffer",
+      "competing_other": "{{count}} weitere mögliche Treffer",
+      "pair": "Paaren",
+      "pairLabel": "{{route}} paaren",
+      "dismiss": "Keine Übertragung",
+      "dismissLabel": "Keine Übertragung: {{route}}",
+      "details": "Details",
+      "detailsLabel": "Details zu {{route}}",
+      "paired": "{{route}} gepaart.",
+      "pairedMany_one": "{{count}} Übertragung gepaart.",
+      "pairedMany_other": "{{count}} Übertragungen gepaart.",
+      "dismissed": "{{route}} beiseitegelegt.",
+      "undo": "Rückgängig",
+      "showFewer": "Weniger Übertragungen anzeigen",
+      "failed": "Das hat nicht geklappt. Es wurde nichts geändert.",
+      "unavailable": "Übertragungsvorschläge konnten nicht geladen werden.",
+      "bulk": {
+        "title_one": "{{count}} exakten Treffer paaren?",
+        "title_other": "{{count}} exakte Treffer paaren?",
+        "body": "Jeder Treffer wird zum Buchwert zwischen deinen eigenen Wallets übertragen. Steuerpflichtige Treffer, konkurrierende Kandidaten und Eigentumsnachweise bleiben zur Einzelprüfung. Ein Schritt umfasst bis zu 50 Treffer. Du kannst ihn gleich danach rückgängig machen.",
+        "cancel": "Abbrechen",
+        "confirm_one": "{{count}} paaren",
+        "confirm_other": "{{count}} paaren",
+        "reason": "Geprüfte exakte Übertragungen paaren",
+        "none": "Nichts wurde gepaart: Die exakten Treffer haben sich geändert. Die Liste ist wieder aktuell."
+      },
+      "saving": "Wird gespeichert…",
+      "aboutLabel": "Über Übertragungen zwischen deinen Wallets",
+      "policyNote": "Ein Swap, der die Anschaffungskosten weiterführt, ist steuerneutral; ein steuerpflichtiger Swap zählt als Verkauf und Kauf zum Marktwert. Ändern unter Details.",
+      "type": {
+        "transfer": "Übertragung",
+        "bitcoinSwap": "Bitcoin-Swap",
+        "swap": "Swap"
+      },
+      "policy": {
+        "carrying": "Steuerneutral",
+        "taxable": "Steuerpflichtig",
+        "carryingHint": "Die Anschaffungskosten laufen weiter; nur die Gebühr wird gebucht.",
+        "taxableHint": "Zählt als Verkauf und Kauf zum Marktwert."
+      },
+      "evidenceShort": {
+        "exact": "Exakt",
+        "likely": "Wahrscheinlich",
+        "ownership": "Eigene Wallets"
+      },
+      "showMore_one": "{{count}} weitere Übertragung anzeigen",
+      "showMore_other": "{{count}} weitere Übertragungen anzeigen"
+    }
   }
 }

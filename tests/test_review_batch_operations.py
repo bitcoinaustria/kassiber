@@ -9,8 +9,12 @@ answer before anything is written.
 from __future__ import annotations
 
 import copy
+import json
+from argparse import Namespace
+from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from kassiber.cli.handlers import _metadata_hooks
 from kassiber.core import custody_components, custody_gaps, review_workflow as review
@@ -190,6 +194,37 @@ class PairBatchTest(_Book):
 
     def pairs(self):
         return self.conn.execute("SELECT count(*) FROM transaction_pairs").fetchone()[0]
+
+    def test_cli_desktop_and_ai_apply_recount_transfer_candidates(self):
+        from kassiber.cli.review import dispatch_review
+        from kassiber.daemon import _review_workflow_payload
+        from kassiber.daemon_freshness import recount_transfer_candidates
+
+        operations = [
+            ("cli", {"type": "dismiss_pair", "out_transaction_id": "out", "in_transaction_id": "in",
+                     "reason": "User says these are unrelated"}),
+            ("gui", {"type": "undismiss_pair", "out_transaction_id": "out", "in_transaction_id": "in",
+                     "reason": "User wants the match reviewed again"}),
+            ("ai_tool", self.pair(policy="carrying-value")),
+        ]
+        for source, operation in operations:
+            with self.subTest(source=source):
+                artifact = self.plan([operation])
+                target = "kassiber.daemon_freshness.recount_transfer_candidates" if source == "cli" else "kassiber.daemon.recount_transfer_candidates"
+                with patch(target, wraps=recount_transfer_candidates) as recount:
+                    if source == "cli":
+                        path = Path(self.tmp.name) / "review.json"
+                        path.write_text(json.dumps(artifact))
+                        receipt = dispatch_review(self.conn, Namespace(
+                            workspace="w", profile="p", review_command="apply",
+                            artifact_file=str(path), idempotency_key=source,
+                        ))
+                    else:
+                        receipt = _review_workflow_payload(self.conn, "ui.review.apply", {
+                            "artifact": artifact, "idempotency_key": source,
+                        }, authored_source=source, full_access=True)
+                    self.assertEqual(receipt["status"], "verified")
+                    recount.assert_called_once_with(self.conn, "p")
 
     def test_pair_plans_on_a_copy_then_applies_and_rejects_stale_versions(self):
         before_pairs = self.pairs()

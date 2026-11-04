@@ -76,10 +76,7 @@ const SwapMatching = lazyRouteComponent(
   () => import("./routes/SwapMatching"),
   "SwapMatching",
 );
-const Quarantine = lazyRouteComponent(
-  () => import("./routes/Quarantine"),
-  "Quarantine",
-);
+const Review = lazyRouteComponent(() => import("./routes/Review"), "Review");
 const Reconcile = lazyRouteComponent(
   () => import("./routes/Reconcile"),
   "Reconcile",
@@ -257,10 +254,20 @@ const transferMatchingRoute = createRoute({
   },
 });
 
+const reviewRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/review",
+  component: Review,
+});
+
+// Quarantine became the Review screen; old links and bookmarks land there,
+// with an open transaction's sheet parameters kept.
 const quarantineRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/quarantine",
-  component: Quarantine,
+  beforeLoad: ({ search }) => {
+    throw redirect({ to: "/review", search: search as never, replace: true });
+  },
 });
 
 const reconcileRoute = createRoute({
@@ -484,6 +491,7 @@ const routeTree = rootRoute.addChildren([
     custodyGapsRoute,
     transferMatchingRoute,
     taxEventsRoute,
+    reviewRoute,
     quarantineRoute,
     reconcileRoute,
     egressRoute,

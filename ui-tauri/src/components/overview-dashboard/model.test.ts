@@ -9,7 +9,6 @@ import {
   activeMarketFiatRate,
   autoFitDomain,
   brushedActivityMarkers,
-  buildBalanceRailItems,
   buildHoldingsBySource,
   bucketActivityMarkers,
   enrichTreasuryChartData,
@@ -182,7 +181,6 @@ describe("overview market rate display", () => {
         ["Cold Storage", 140_000],
         ["Home Node", 35_000],
       ]);
-    expect(buildBalanceRailItems(snapshot).total).toBe(175_000);
   });
 
   it("prefers the real display valuation over journal balance fallback", () => {

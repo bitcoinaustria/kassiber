@@ -9,10 +9,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Suggestion, Suggestions } from "@/components/ai-elements";
 import { ProviderModelPicker } from "@/components/ai/ProviderModelPicker";
-import {
-  PermissionModePicker,
-} from "@/components/ai/ComposerModePickers";
-import { ComposerControlSeparator } from "@/components/ai/ComposerControl";
+import { markOpenToEffort } from "@/components/ai/modelPickerKeys";
 import { ChatAttachmentCard } from "@/components/ai/ChatAttachmentCard";
 import type { ChatAttachmentView } from "@/components/ai/chatAttachments";
 import { useChatFileDrop } from "@/components/ai/useChatFileDrop";
@@ -203,7 +200,7 @@ export default function Ai02({
   const { t } = useTranslation("assistant");
   const [internalValue, setInternalValue] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
-  // While the model picker or effort menu is open, focus sits in its portal,
+  // While the model picker is open, focus sits in its portal,
   // outside this composer; a compact composer would otherwise fold its
   // toolbar away under the open menu.
   const [overlayOpen, setOverlayOpen] = useState(false);
@@ -367,6 +364,25 @@ export default function Ai02({
       // A held shortcut would flip the picker on every key repeat.
       if (event.repeat) return;
       setPickerOpen((open) => !open);
+      return;
+    }
+    // Mod+Shift+K opens the picker on its reasoning levels, or moves there
+    // when it is open (T3 Code's composer.effort).
+    if (
+      (event.metaKey || event.ctrlKey) &&
+      event.shiftKey &&
+      !event.altKey &&
+      event.key.toLowerCase() === "k"
+    ) {
+      if (!modelPickerEnabled) return;
+      const trigger = surfaceRef.current?.querySelector<HTMLButtonElement>(
+        "[data-chat-provider-model-picker]",
+      );
+      if (!trigger) return;
+      event.preventDefault();
+      if (event.repeat) return;
+      markOpenToEffort(trigger);
+      trigger.click();
     }
   };
 
@@ -581,7 +597,7 @@ export default function Ai02({
               </TooltipTrigger>
               <TooltipContent side="top">{t("composer.attach")}</TooltipContent>
             </Tooltip>
-            {/* T3Code-style provider/model picker plus adjacent reasoning menu. */}
+            {/* T3 Code-style picker: model, reasoning, speed and permission mode. */}
             <div className="flex min-w-0 flex-1 items-center gap-0.5">
               <ProviderModelPicker
                 value={selection}
@@ -597,20 +613,9 @@ export default function Ai02({
                 showThinkingEffort={showThinkingEffort}
                 fastMode={fastMode}
                 onFastModeChange={isStreaming ? undefined : onFastModeChange}
+                permissionMode={permissionMode}
+                onPermissionModeChange={onPermissionModeChange}
               />
-              {onPermissionModeChange ? (
-                <>
-                  <ComposerControlSeparator />
-                  <PermissionModePicker
-                    value={permissionMode}
-                    onChange={onPermissionModeChange}
-                    onOpenChange={handleOverlayOpenChange}
-                    // Icon only where the toolbar is narrow (the side panel);
-                    // the tooltip and accessible name still give the mode.
-                    labelClassName="hidden @sm/composer-toolbar:inline"
-                  />
-                </>
-              ) : null}
             </div>
 
             <div className="ml-auto flex shrink-0 items-center gap-2">

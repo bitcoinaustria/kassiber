@@ -332,6 +332,7 @@ from .daemon_freshness import (
     _journals_process_payload,
     _journals_refresh_payload,
     journal_step_summary,
+    recount_transfer_candidates,
     run_local_journal_refresh,
     _maintenance_configure_payload,
     _maintenance_run_payload,
@@ -782,6 +783,7 @@ _AI_SCREEN_ROUTES = frozenset(
         "/swaps",
         "/transfers",
         "/custody-gaps",
+        "/review",
         "/quarantine",
         "/reconcile",
         "/egress",
@@ -5941,6 +5943,9 @@ def _indicative_tax_for_ai(
             for item in blockers
             if isinstance(item, dict)
         ],
+        rows_before_crypto_kennzahlen=core_reports.austrian_rows_before_crypto_kennzahlen(
+            conn, profile, year
+        ),
     )
 
 
@@ -5974,6 +5979,12 @@ def _capital_gains_payload_for_ai(
             lot.pop(key, None)
         rows.append(lot)
     payload.pop("lots", None)
+    # The desktop's estimate ignores blockers; the model reads the withheld
+    # one from ui.reports.tax_summary.
+    payload.pop("indicativeTax", None)
+    # The breakdown's id lists only feed the desktop's Transactions links.
+    for bucket in payload.get("breakdown") or []:
+        bucket.pop("transactionIds", None)
     payload["rows"] = rows[-limit:]
     payload["rows_shown"] = len(payload["rows"])
     payload["rows_truncated"] = len(payload["rows"]) < int(
@@ -6673,6 +6684,13 @@ def _review_worklist_payload(
     }
 
 
+def _journal_events_for_ai(payload: dict[str, Any]) -> dict[str, Any]:
+    """Drop the explanation references that open the desktop's calculation view."""
+    for event in payload.get("events") or []:
+        event.pop("explanationReference", None)
+    return payload
+
+
 def _transaction_review_context_payload(
     conn: sqlite3.Connection,
     runtime: AiToolRuntime,
@@ -6746,9 +6764,11 @@ def _transaction_review_context_payload(
         )
     )
     journal = section(
-        lambda: build_journal_events_list_snapshot(
-            conn,
-            {"transaction": canonical_id, "limit": 25},
+        lambda: _journal_events_for_ai(
+            build_journal_events_list_snapshot(
+                conn,
+                {"transaction": canonical_id, "limit": 25},
+            )
         )
     )
     commercial = section(
@@ -6863,7 +6883,7 @@ def _transaction_review_context_payload(
             {
                 "code": "review_quarantine",
                 "label": "Review the transaction's quarantine blocker",
-                "route": "/quarantine",
+                "route": "/review",
                 "transaction": canonical_id,
                 "requires_consent": False,
             }
@@ -7500,7 +7520,9 @@ def _execute_read_only_ai_tool(
             elif entry.daemon_kind == "ui.journals.snapshot":
                 payload = build_journals_snapshot(conn)
             elif entry.daemon_kind == "ui.journals.events.list":
-                payload = build_journal_events_list_snapshot(conn, call.arguments)
+                payload = _journal_events_for_ai(
+                    build_journal_events_list_snapshot(conn, call.arguments)
+                )
             elif entry.daemon_kind == "ui.journals.quarantine":
                 payload = build_journals_quarantine_snapshot(conn, call.arguments)
             elif entry.daemon_kind == "ui.journals.quarantine.groups":
@@ -7952,8 +7974,9 @@ def _run_scoped_ai_mutation(
 
 
 # Review operations any provider may batch. Every other type (component
-# revisions and state changes, pairs, dismissals, custody-gap actions and
-# acquisition kind overrides) needs full agent access; see docs/reference/ai.md.
+# revisions and state changes, pairs, dismissals, custody-gap actions,
+# acquisition kind overrides and coarse-price acceptance) needs full agent
+# access; see docs/reference/ai.md.
 _AI_RESTRICTED_REVIEW_OPERATION_TYPES = frozenset(
     {"price_override", "exclude", "unpair", "custody_component"}
 )
@@ -8108,7 +8131,11 @@ def _review_workflow_payload(
         )) > 65_536:
             raise AppError(
                 "Review artifact exceeds the AI tool argument limit",
-                code="validation", hint="Plan fewer operations in each review batch.",
+                code="validation",
+                hint=(
+                    "Plan fewer operations in each review batch, or name fewer "
+                    "transaction_ids in accept_coarse_prices."
+                ),
             )
         if authored_source == "ai_tool" and redact_ai_tool_result(payload) != payload:
             raise AppError(
@@ -8117,9 +8144,13 @@ def _review_workflow_payload(
                 hint="Its private fields cannot be sent unchanged to an AI provider.",
             )
         return payload
-    return core_review_workflow.apply_review(
+    receipt = core_review_workflow.apply_review(
         conn, profile, hooks=hooks, authored_source=authored_source, **args,
     )
+    if core_review_workflow.changes_transfer_candidates(args["artifact"]):
+        # The shared review count caches open moves; keep it with the book.
+        recount_transfer_candidates(conn, str(profile["id"]))
+    return receipt
 
 
 def _ai_review_consent_preview(
@@ -20099,21 +20130,30 @@ def handle_request(
 
     if kind == "ui.journals.process":
         args = request.get("args")
-        if args is not None and args != {}:
+        if args is None:
+            args = {}
+        # Only `auto_pair` may be turned off: the Review screen recalculates
+        # after the owner's own decisions and must not pair anything else.
+        if (
+            not isinstance(args, dict)
+            or set(args) - {"auto_pair"}
+            or not isinstance(args.get("auto_pair", True), bool)
+        ):
             if not isinstance(args, dict):
                 details: dict[str, Any] = {"type": type(args).__name__}
             else:
-                details = {"unknown": sorted(args)}
+                details = {"unknown": sorted(set(args) - {"auto_pair"})}
             return (
                 _error_envelope(
                     "validation",
-                    "ui.journals.process does not accept arguments",
+                    "ui.journals.process accepts only a boolean auto_pair",
                     request_id=request_id,
                     details=details,
                     retryable=False,
                 ),
                 False,
             )
+        auto_pair = bool(args.get("auto_pair", True))
         def _emit_journal_progress(payload: Mapping[str, Any]) -> None:
             out.write(
                 _with_request_id(
@@ -20128,6 +20168,7 @@ def handle_request(
                     "ui.journals.process",
                     _journals_refresh_payload(
                         ctx.conn,
+                        auto_pair=auto_pair,
                         progress_observer=_emit_journal_progress,
                     ),
                 ),

@@ -21,7 +21,12 @@ from . import pricing
 from . import rates as core_rates
 from . import report_context as core_report_context
 from .austrian import (
+    E1KV_FIRST_TAX_YEAR,
+    E1KV_KENNZAHLEN,
+    e1kv_applies,
     kennzahl_for_disposal_category,
+    kennzahl_for_event,
+    stated_kennzahl,
     tax_year_in_vienna,
     vienna_local_date,
     vienna_tax_year_utc_window,
@@ -1604,6 +1609,7 @@ def report_capital_gains(
         entry["quantity"] = float(msat_to_btc(entry["quantity"]))
         if entry.get("at_category") is None:
             entry.pop("at_category", None)
+        entry["at_kennzahl"] = stated_kennzahl(entry.get("at_kennzahl"), str(row["occurred_at"]))
         if entry.get("at_kennzahl") is None:
             entry.pop("at_kennzahl", None)
         results.append(entry)
@@ -4123,7 +4129,8 @@ def _austrian_e1kv_detail_row(row):
             hint="Re-run `journals process` with the current Kassiber version.",
             details={"at_category": category},
         )
-    kennzahl = kennzahl_for_disposal_category(category)
+    # Before 1 March 2022 a crypto Kennzahl is no field.
+    kennzahl = kennzahl_for_event(category, str(row["occurred_at"]))
     quantity_msat = abs(int(row["quantity"] or 0))
     quantity = msat_to_btc(quantity_msat)
     proceeds = dec(row["proceeds"] or 0)
@@ -4346,12 +4353,35 @@ def _austrian_e1kv_kennzahl_totals(summary_rows):
     }
 
 
+def austrian_rows_before_crypto_kennzahlen(conn, profile, tax_year):
+    """Rows of ``tax_year`` classified for a crypto Kennzahl but dated before
+    1 March 2022, so stated in no field."""
+    _require_austrian_e1kv_profile(profile)
+    return _count_rows_before_crypto_kennzahlen(
+        _austrian_e1kv_rows(conn, profile, _normalize_tax_year(tax_year))
+    )
+
+
+def _count_rows_before_crypto_kennzahlen(rows):
+    return sum(
+        1
+        for row in rows
+        if row["kennzahl"] is None
+        and kennzahl_for_disposal_category(row["at_category"]) in E1KV_KENNZAHLEN
+    )
+
+
 def build_austrian_kennzahl_summary(conn, profile, tax_year):
     _require_austrian_e1kv_profile(profile)
     normalized_year = _normalize_tax_year(tax_year)
-    return _austrian_e1kv_summary_rows(
+    # Rows dated before the crypto Kennzahlen carry none, so a year before
+    # 2022 states only the E 1's KZ 801.
+    rows = _austrian_e1kv_summary_rows(
         _austrian_e1kv_rows(conn, profile, normalized_year)
     )
+    if e1kv_applies(normalized_year):
+        return rows
+    return [row for row in rows if int(row["kennzahl"]) not in E1KV_KENNZAHLEN]
 
 
 def _austrian_tax_empty_section(section_id):
@@ -4611,7 +4641,37 @@ def report_austrian_e1kv(
     workspace = report_context.workspace
     profile = report_context.profile
     normalized_year = _normalize_tax_year(tax_year)
+    if not e1kv_applies(normalized_year):
+        # Fail closed: the crypto Kennzahlen did not exist that year.
+        raise AppError(
+            f"The Austrian crypto Kennzahlen (KZ 172, 174, 176) start with tax year {E1KV_FIRST_TAX_YEAR}",
+            code="validation",
+            hint=(
+                "Earlier years followed the old rules (Spekulationsgeschäfte on the E 1). "
+                "Export the bookkeeping handoff and have a Steuerberater state that year."
+            ),
+            details={"tax_year": normalized_year, "first_tax_year": E1KV_FIRST_TAX_YEAR},
+            retryable=False,
+        )
     rows = _austrian_e1kv_rows(conn, profile, normalized_year)
+    old_rule_rows = _count_rows_before_crypto_kennzahlen(rows)
+    if old_rule_rows:
+        # Jan-Feb 2022: the old rules applied unless the taxpayer opted for
+        # the new ones, which Kassiber cannot know.
+        raise AppError(
+            f"{old_rule_rows} row(s) of {normalized_year} predate the crypto Kennzahlen (1 March 2022)",
+            code="validation",
+            hint=(
+                "They followed the old rules unless you opted for the new ones. "
+                "Have a Steuerberater state them; the bookkeeping handoff lists every row."
+            ),
+            details={
+                "tax_year": normalized_year,
+                "rows": old_rule_rows,
+                "from": "2022-03-01",
+            },
+            retryable=False,
+        )
     quarantines = _austrian_e1kv_quarantines(conn, profile, normalized_year)
     summary_rows = _austrian_e1kv_summary_rows(rows)
     cost_basis_pool_scope = (

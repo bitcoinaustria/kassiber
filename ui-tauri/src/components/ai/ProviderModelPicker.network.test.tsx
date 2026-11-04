@@ -1,11 +1,15 @@
 import type { ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToStaticMarkup as renderStatic } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AiProvidersSettingsPanel } from "@/components/kb/settings/AiProvidersSettingsPanel";
 import { ProviderModelPicker } from "./ProviderModelPicker";
 import { useReasoningEffortSupport } from "./useReasoningEffortSupport";
+
+function renderToStaticMarkup(node: ReactNode) {
+  return renderStatic(<QueryClientProvider client={new QueryClient()}>{node}</QueryClientProvider>);
+}
 
 const mocks = vi.hoisted(() => ({
   invoke: vi.fn(),

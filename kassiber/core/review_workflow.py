@@ -24,12 +24,27 @@ from ..time_utils import now_iso
 from .custody_quantity import CUSTODY_SUSPENSE
 from . import (
     custody_component_planner, custody_components, custody_gap_reviews, custody_gaps,
-    custody_journal, custody_review_terms, metadata, quarantine_resolution, quarantine_review,
-    tax_events,
+    custody_journal, custody_review_terms, metadata, pricing, quarantine_resolution,
+    quarantine_review, tax_events,
 )
 
 MAX_OPERATIONS = 50
+# Operations that change which transfer candidates are open.
+PAIRING_OPERATION_TYPES = frozenset({"pair", "unpair", "dismiss_pair", "undismiss_pair"})
+
+
+def changes_transfer_candidates(artifact: Mapping[str, Any]) -> bool:
+    """Whether an applied review artifact paired, unpaired or dismissed a move."""
+    operations = artifact.get("operations") if isinstance(artifact, Mapping) else None
+    return any(
+        isinstance(operation, Mapping) and operation.get("type") in PAIRING_OPERATION_TYPES
+        for operation in operations or ()
+    )
 MAX_ARTIFACT_BYTES = 1_000_000
+# Transactions one accept_coarse_prices operation may name; the artifact
+# stays well inside its size limit with this many ids.
+MAX_ACCEPTED_PRICES = 5000
+COARSE_PRICE_REASON = "pricing_review_required"
 
 
 @dataclass(frozen=True)
@@ -126,6 +141,7 @@ def _inspect_cases(conn, profile, *, limit, cursor):
     for root_id in waits_on.values():
         waiting_by_case[root_id] = waiting_by_case.get(root_id, 0) + 1
     ids = sorted(tx for tx in reasons if tx > after and tx not in waits_on)
+    coarse = _coarse_priced(conn, profile)
     cases = []
     for transaction_id in ids[:limit]:
         row = conn.execute(
@@ -138,7 +154,10 @@ def _inspect_cases(conn, profile, *, limit, cursor):
             **dict(row), "reason": reasons[transaction_id],
             "case_id": "quarantine:" + transaction_id,
             "missing_evidence": [{"code": reasons[transaction_id], "status": "unresolved"}],
-            "supported_operations": (["price_override"] if "price" in reasons[transaction_id]
+            "supported_operations": (["accept_coarse_prices", "price_override"]
+                                     if reasons[transaction_id] == COARSE_PRICE_REASON
+                                     and transaction_id in coarse
+                                     else ["price_override"] if "price" in reasons[transaction_id]
                                      else ["custody_component"] if any(word in reasons[transaction_id]
                                           for word in ("custody", "privacy", "transfer", "swap")) else []),
             "waiting_count": waiting_by_case.get(transaction_id, 0),
@@ -158,6 +177,8 @@ def _inspect_cases(conn, profile, *, limit, cursor):
     return {
         "schema_version": 1, "workspace_id": profile["workspace_id"],
         "profile_id": profile["id"], "input_version": version,
+        # What price_override's fiat_rate and fiat_value are stated in.
+        "fiat_currency": str(profile["fiat_currency"] or "").strip().upper(),
         "freshness": custody_journal.projection_freshness(conn, profile),
         "cases": cases, "next_cursor": next_cursor, "waiting_count": len(waits_on),
         "recent_receipts": _recent_receipts(conn, profile) if cursor is None else [],
@@ -232,6 +253,10 @@ def request_input(
 
 
 def _operation_summary(operation):
+    if operation["type"] == "accept_coarse_prices":
+        # The receipt lists the transactions; the summary only counts them.
+        return {"type": operation["type"], "reason": operation["reason"],
+                "transaction_count": len(operation["transaction_ids"])}
     if operation["type"] != "custody_component":
         return dict(operation)
     request = operation["request"]
@@ -379,6 +404,9 @@ def _operations(operations):
         if kind in _TERM_OPERATION_FIELDS:
             _normalize_term_operation(operation)
             continue
+        if kind == "accept_coarse_prices":
+            _normalize_accept_operation(operation)
+            continue
         allowed = {"type", "transaction_id", "reason"}
         if kind == "price_override":
             allowed |= {"fiat_rate", "fiat_value"}
@@ -418,6 +446,67 @@ def _operations(operations):
         if len(operation["reason"]) > 2000:
             raise _error("Review reason exceeds 2000 characters")
     return normalized
+
+
+def _normalize_accept_operation(operation):
+    """`transaction_ids` may be left out only when planning, for every case.
+
+    A plan fills in the cases it accepts, so the artifact names each one.
+    """
+    if set(operation) - {"type", "reason", "transaction_ids"}:
+        raise _error("accept_coarse_prices takes reason and transaction_ids")
+    reason = operation.get("reason")
+    if not isinstance(reason, str) or not reason.strip():
+        raise _error("Review operation requires reason")
+    operation["reason"] = reason.strip()
+    if len(operation["reason"]) > 2000:
+        raise _error("Review reason exceeds 2000 characters")
+    if "transaction_ids" not in operation:
+        return
+    ids = operation["transaction_ids"]
+    if (not isinstance(ids, list) or not 1 <= len(ids) <= MAX_ACCEPTED_PRICES
+            or not all(isinstance(value, str) and value.strip() for value in ids)):
+        raise _error(f"accept_coarse_prices takes 1 to {MAX_ACCEPTED_PRICES} transaction ids")
+    cleaned = sorted({value.strip() for value in ids})
+    if len(cleaned) != len(ids):
+        raise _error("accept_coarse_prices names each transaction once")
+    operation["transaction_ids"] = cleaned
+
+
+def _coarse_priced(conn, profile) -> set[str]:
+    """Transactions whose own stored price is coarse."""
+    return {str(row[0]) for row in conn.execute(
+        "SELECT id FROM transactions WHERE profile_id = ? AND pricing_quality = ?",
+        (profile["id"], pricing.QUALITY_COARSE_FALLBACK),
+    )}
+
+
+def _coarse_price_cases(conn, profile, state) -> list[str]:
+    """Held transactions whose own coarse price waits for the owner.
+
+    A transfer's other leg is held for the same reason when the journals
+    price both legs from this one; it has no coarse price of its own to
+    accept, and clears when the priced leg is accepted.
+    """
+    coarse = _coarse_priced(conn, profile)
+    return sorted({str(q["transaction_id"]) for q in state["quarantines"]
+                   if str(q["reason"]) == COARSE_PRICE_REASON
+                   and str(q["transaction_id"]) in coarse})
+
+
+def _with_accepted_cases(conn, profile, operations, state):
+    """Name the current coarse-price cases in an operation that names none."""
+    filled = []
+    for operation in operations:
+        if operation["type"] == "accept_coarse_prices" and "transaction_ids" not in operation:
+            ids = _coarse_price_cases(conn, profile, state)
+            if not ids:
+                raise _error("No transaction waits on a coarse price review", "review_case_changed")
+            if len(ids) > MAX_ACCEPTED_PRICES:
+                raise _error(f"More than {MAX_ACCEPTED_PRICES} coarse prices wait; name them in batches")
+            operation = {**operation, "transaction_ids": ids}
+        filled.append(operation)
+    return filled
 
 
 @contextmanager
@@ -529,6 +618,9 @@ def _tax_effects(conn, profile, state) -> dict[str, Any]:
                 rows = reports.build_austrian_kennzahl_summary(conn, stored, year)
                 estimate = tax_estimate.austrian_indicative_tax(
                     tax_year=year, kennzahl_rows=rows, blocker_ids=blocker_ids,
+                    rows_before_crypto_kennzahlen=reports.austrian_rows_before_crypto_kennzahlen(
+                        conn, stored, year,
+                    ),
                 )
                 item["kennzahlen"] = {str(row["kennzahl"]): int(row["amount_eur_cents"])
                                       for row in rows if int(row["amount_eur_cents"] or 0)}
@@ -614,7 +706,7 @@ def _holds_residual_suspense(state, pair) -> bool:
     )
 
 
-def _apply_operations(conn, profile, operations, hooks, authored_source, state):
+def _apply_operations(conn, profile, operations, hooks, authored_source, state, *, resolve_acceptance=False):
     results = []
     case_ids = _cases(state)
     # Each unpair is judged against a baseline: the book before the batch, or
@@ -648,7 +740,7 @@ def _apply_operations(conn, profile, operations, hooks, authored_source, state):
         if operation["type"] == "unpair" and operation["pair_id"] in baseline_pairs:
             confirmed(operation)
     changed = False
-    for operation in operations:
+    for index, operation in enumerate(operations):
         kind = operation["type"]
         if kind == "custody_component":
             result = custody_component_planner.apply_component_review(
@@ -682,6 +774,29 @@ def _apply_operations(conn, profile, operations, hooks, authored_source, state):
             }
         elif kind in _TERM_OPERATION_FIELDS:
             result = _apply_term_operation(conn, profile, operation, authored_source)
+        elif kind == "accept_coarse_prices":
+            # Earlier operations can expose or clear coarse-price holds. Both
+            # target expansion and validation use this position in the batch.
+            if index:
+                state = _build(conn, profile)
+            if resolve_acceptance:
+                operation.update(_with_accepted_cases(conn, profile, [operation], state)[0])
+            if "transaction_ids" not in operation:
+                raise _error("accept_coarse_prices must name its transactions", "review_artifact_invalid")
+            coarse = set(_coarse_price_cases(conn, profile, state))
+            missing = [tx_id for tx_id in operation["transaction_ids"] if tx_id not in coarse]
+            if missing:
+                raise _error("A named transaction no longer waits on a coarse price review",
+                             "review_case_changed", transaction_ids=missing[:20])
+            for tx_id in operation["transaction_ids"]:
+                metadata.update_transaction_metadata(
+                    conn, profile["workspace_id"], profile["id"], tx_id, hooks.metadata,
+                    accept_coarse_price=True,
+                    source="gui" if authored_source == "user" else authored_source,
+                    reason=operation["reason"], commit=False,
+                )
+            result = {"transaction_ids": list(operation["transaction_ids"]),
+                      "accepted": len(operation["transaction_ids"])}
         else:
             tx = conn.execute("SELECT * FROM transactions WHERE id = ? AND profile_id = ?",
                               (operation["transaction_id"], profile["id"])).fetchone()
@@ -745,7 +860,7 @@ def plan_review(conn, profile, *, operations, expected_input_version, hooks):
         )
         before_state = _build(clone, current)
         before = _effects(before_state, clone, current, operations)
-        _apply_operations(clone, current, operations, hooks, "user", before_state)
+        _apply_operations(clone, current, operations, hooks, "user", before_state, resolve_acceptance=True)
         after = _effects(_build(clone, current), clone, current, operations)
         artifact = {
             "schema_version": 1, "workspace_id": current["workspace_id"], "profile_id": current["id"],

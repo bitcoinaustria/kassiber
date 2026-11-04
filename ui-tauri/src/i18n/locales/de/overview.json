@@ -111,33 +111,22 @@
     "openStat": "{{title}} öffnen",
     "bitcoinBalance": "Bitcoin-Guthaben",
     "title": {
-      "portfolioValue": "Portfoliowert",
-      "transactions": "Transaktionen",
-      "reviewedEvents": "Geprüfte Ereignisse",
-      "openReview": "Offene Prüfung",
-      "connections": "Verbindungen"
+      "portfolioValue": "Portfoliowert"
     },
     "comparison": {
-      "vsLastMonth": "vs. letzter Monat",
-      "bitcoinBalance": "Bitcoin-Guthaben",
       "vsCostBasis": "vs. Anschaffungskosten",
-      "fromLoadedRows": "aus geladenen Zeilen",
-      "loadedRows": "geladene Zeilen",
-      "configured": "konfiguriert",
-      "journalQuarantine": "Journal-Quarantäne"
+      "fromLoadedRows": "aus geladenen Zeilen"
     },
     "status": {
-      "current": "Aktuell",
       "clear": "Leer",
       "estimate": "Schätzung",
-      "loaded": "Geladen",
-      "configured": "Konfiguriert",
       "needsJournals": "Journale nötig",
       "reviewQuarantines_one": "{{count}} Quarantäne",
-      "reviewQuarantines_other": "{{count}} Quarantänen",
-      "reviewRequired": "Prüfung nötig",
-      "open": "Offen"
-    }
+      "reviewQuarantines_other": "{{count}} Quarantänen"
+    },
+    "heldIn_zero": "Noch keine Wallet hält Bitcoin",
+    "heldIn_one": "in {{count}} Wallet",
+    "heldIn_other": "in {{count}} Wallets"
   },
   "welcome": {
     "reprocessingJournals": "Journale werden neu verarbeitet…",
@@ -184,97 +173,17 @@
       "detail_other": "{{count}} Transaktionen ohne Kurs"
     }
   },
-  "health": {
-    "title": "Buch-Bereitschaft",
-    "subtitle": "Berichte, Prüfung und Quellen",
-    "panelAria": "Bücher-Zustand",
-    "journals": {
-      "title": "Journalstand",
-      "reprocess": "Neu verarbeiten",
-      "current": "Aktuell",
-      "reprocessing": "Wird neu verarbeitet…",
-      "detailReprocess": "Berichte sollten auf einen frischen Journallauf warten.",
-      "detailCurrent": "Berichte sind aus dem aktuellen Journalstand bereit."
-    },
-    "review": {
-      "title": "Prüfwarteschlange",
-      "open_one": "{{count}} offen",
-      "open_other": "{{count}} offen",
-      "clear": "Leer",
-      "detailOpen": "Löse Zeilen in Quarantäne vor der Steuerberichterstattung auf.",
-      "detailClear": "Keine Transaktionen in Quarantäne in diesem Buch."
-    },
-    "connections": {
-      "title": "Verbindungen",
-      "issues_one": "{{count}} Problem",
-      "issues_other": "{{count}} Probleme",
-      "refreshing": "{{count}} werden aktualisiert",
-      "current": "{{synced}}/{{total}} aktuell",
-      "none": "Noch keine",
-      "detail_one": "{{count}} konfigurierte Quelle",
-      "detail_other": "{{count}} konfigurierte Quellen",
-      "detailEmpty": "Füge eine Watch-only-Quelle, eine Exchange oder eine Importquelle hinzu."
-    },
-    "primary": {
-      "reviewQuarantines": {
-        "title": "Quarantäne prüfen",
-        "detail": "Behebe zuerst fehlende Kurse oder nicht unterstützte Semantik."
-      },
-      "checkConnections": {
-        "title": "Verbindungen prüfen",
-        "detail": "Eine oder mehrere Quellen brauchen vor dem nächsten Sync Aufmerksamkeit."
-      },
-      "openReports": {
-        "title": "Berichte öffnen",
-        "detail": "Wechsle von der Übersicht ins Berichtspaket für das aktuelle Buch."
-      },
-      "addConnection": {
-        "title": "Verbindung hinzufügen",
-        "detail": "Verbinde eine Quelle oder importiere Zeilen, um das Buch zu starten."
-      }
-    },
-    "basis": {
-      "title": "Anschaffungskosten",
-      "custody": "Verwahrungslücken offen",
-      "missingPrices_one": "{{count}} fehlender Kurs",
-      "missingPrices_other": "{{count}} fehlende Kurse",
-      "detail": "Anschaffungskosten und Berichte bleiben bis zur Klärung unvollständig."
-    }
-  },
-  "drivers": {
-    "title": "Guthaben-Treiber",
-    "aria": "Guthaben-Treiber",
-    "latestTransactions_one": "Letzte {{count}} Transaktion",
-    "latestTransactions_other": "Letzte {{count}} Transaktionen",
-    "viewTransactions": "{{label}}-Transaktionen anzeigen",
-    "incoming": "Eingehend",
-    "outgoing": "Ausgehend",
-    "swapVolume": "Swap-Volumen",
-    "fees": "Gebühren"
-  },
   "holdings": {
     "title": "Bestände nach Quelle",
     "aria": "Bestände nach Quelle",
-    "btcAllocation": "BTC-Aufteilung",
     "vsCostBasis": "vs. Anschaffungskosten",
-    "viewConnections": "Verbindungen anzeigen",
-    "moreOptions": "Weitere Optionen",
-    "onlyActiveSource": "Einzige aktive Quelle",
-    "total": "Gesamt",
-    "rail": {
-      "onchain": "On-chain",
-      "lightning": "Lightning",
-      "liquid": "Liquid",
-      "other": "Sonstige"
-    },
-    "otherSources": "Sonstige Quellen"
+    "viewConnections": "Wallets anzeigen",
+    "otherSources": "Sonstige Quellen",
+    "empty": "Noch keine Wallet hält Bitcoin."
   },
   "recentTx": {
     "title": "Letzte Transaktionen",
     "showAll": "Alle anzeigen",
-    "filter": "Filtern",
-    "filterByStatus": "Nach Status filtern",
-    "allStatuses": "Alle Status",
     "empty": "Keine Transaktionen gefunden.",
     "unassigned": "Nicht zugeordnet"
   },
@@ -337,7 +246,7 @@
       "custody": "Verwahrungslücken offen",
       "missingPrices_one": "{{count}} Transaktion ohne Kurs",
       "missingPrices_other": "{{count}} Transaktionen ohne Kurs",
-      "openQuarantine": "Quarantäne",
+      "openQuarantine": "Prüfen",
       "openJournals": "Journale"
     },
     "series": {

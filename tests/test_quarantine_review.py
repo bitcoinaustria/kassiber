@@ -196,6 +196,8 @@ class QuarantineReviewTest(unittest.TestCase):
 
         self.assertTrue(page["summary"]["freshness"]["needs_processing"])
         self.assertEqual(page["summary"]["offset"], 1)
+        # Prices entered for held rows are read in the book's currency.
+        self.assertEqual(page["summary"]["fiat_currency"], "EUR")
         self.assertEqual([item["transaction_id"] for item in page["items"]], ["later-sale"])
 
 
@@ -541,6 +543,39 @@ class QuarantineReviewTest(unittest.TestCase):
 
         self.assertEqual(raised.exception.code, "review_case_changed")
         self.assertIn(pair["id"], pairs_after)
+
+    def test_accepting_prices_uses_the_state_after_the_preceding_unpair(self):
+        for explicit in (False, True):
+            with self.subTest(explicit=explicit), tempfile.TemporaryDirectory() as root:
+                conn = self._open(root)
+                conn.execute("UPDATE profiles SET require_coarse_review = 1 WHERE id = 'profile'")
+                conn.execute(
+                    "UPDATE transactions SET pricing_quality = 'coarse_fallback', "
+                    "pricing_source_kind = 'fmv_provider' WHERE id IN ('out', 'in')"
+                )
+                conn.commit()
+                pair = _unrelated_pair(conn)
+                profile, hooks = self._profile_and_hooks(conn)
+                version = review_workflow.inspect_cases(conn, profile, limit=100)["input_version"]
+                unpair = _unpair(pair["id"], _fingerprint(conn, pair["id"]))
+                accept = {"type": "accept_coarse_prices", "reason": "Reviewed daily prices"}
+                if explicit:
+                    accept["transaction_ids"] = ["in", "out"]
+                artifact = review_workflow.plan_review(
+                    conn, profile, operations=[unpair, accept],
+                    expected_input_version=version, hooks=hooks,
+                )
+                self.assertEqual(artifact["operations"][1]["transaction_ids"], ["in", "out"])
+                self.assertNotIn("pricing_review_required", {q["reason"] for q in artifact["after"]["quarantines"]})
+                receipt = review_workflow.apply_review(
+                    conn, profile, artifact=artifact, idempotency_key="unpair-and-accept", hooks=hooks,
+                )
+                self.assertEqual(receipt["status"], "verified")
+                self.assertEqual(
+                    [row[0] for row in conn.execute(
+                        "SELECT id FROM transactions WHERE pricing_review_accepted_price IS NOT NULL ORDER BY id"
+                    )], ["in", "out"],
+                )
 
     def test_a_batch_judges_an_unpair_after_the_operations_before_it(self):
         with tempfile.TemporaryDirectory() as root:

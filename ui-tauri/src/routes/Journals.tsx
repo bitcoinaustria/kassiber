@@ -164,9 +164,9 @@ export function Journals() {
             <div className={pageHeaderActionsClassName}>
               {status.quarantines ? (
                 <Button asChild variant="outline" className={pageHeaderActionClassName}>
-                  <Link to="/quarantine">
+                  <Link to="/review">
                     <ShieldAlert className="size-4" aria-hidden="true" />
-                    {t("nav:book.quarantine")}
+                    {t("nav:book.review")}
                   </Link>
                 </Button>
               ) : null}

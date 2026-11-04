@@ -72,6 +72,7 @@
     "modelContext": "Modell-Kontext",
     "thinking": "Nachdenken",
     "reasoningEffort": "Denkaufwand",
+    "reasoning": "Denkaufwand",
     "effort": {
       "auto": "Auto",
       "low": "Niedrig",
@@ -83,9 +84,9 @@
     },
     "effortDefault": "Standard",
     "effortAutoHint": "Das Modell entscheidet",
+    "effortLevelsUnknown": "Mit „Modelle prüfen“ siehst du die Stufen dieses Modells.",
     "newLine": "Neue Zeile",
     "fastMode": {
-      "label": "Schnellmodus",
       "fast": "Schnell",
       "standard": "Standard",
       "speed": "Tempo",
@@ -433,9 +434,6 @@
     "searchModels": "Modelle suchen…",
     "checkingProvider": "Status des lokalen Providers wird geprüft…",
     "staleModels": "Letzte bekannte Modelle werden angezeigt · {{error}}",
-    "privacyFilter": "Modell-Datenschutzfilter",
-    "allModels": "Alle",
-    "localModels": "Lokal",
     "unusableModelsHidden_one": "{{count}} Modell ausgeblendet, das keine Tools nutzen oder nicht in Text antworten kann.",
     "unusableModelsHidden_other": "{{count}} Modelle ausgeblendet, die keine Tools nutzen oder nicht in Text antworten können.",
     "unusableModelsShown_one": "{{count}} Modell wird angezeigt, das keine Tools nutzen oder nicht in Text antworten kann.",
@@ -515,7 +513,12 @@
       "kind_override": "Zugang einordnen",
       "kindCleared": "importierte Einordnung",
       "expiresDays_one": "für {{count}} Tag",
-      "expiresDays_other": "für {{count}} Tage"
+      "expiresDays_other": "für {{count}} Tage",
+      "undismiss_pair": "Paar-Vorschlag wiederherstellen",
+      "accept_coarse_prices": "Ungefähre Kurse übernehmen",
+      "transactions_one": "{{count}} Transaktion",
+      "transactions_other": "{{count}} Transaktionen",
+      "allCoarse": "jede Transaktion, die auf ihren ungefähren Kurs wartet"
     },
     "tax": {
       "title": "Steuerliche Änderung je Jahr",
@@ -530,7 +533,7 @@
       "title": "Geprüfter Review-Beleg",
       "verified_one": "{{count}} Korrektur angewendet; das resultierende Journal wurde neu berechnet und geprüft.",
       "verified_other": "{{count}} Korrekturen angewendet; das resultierende Journal wurde neu berechnet und geprüft.",
-      "openQuarantine": "Quarantäne öffnen"
+      "openQuarantine": "Prüfen öffnen"
     },
     "cases": {
       "more": "{{count}} Fälle geprüft; weitere Fälle sind verfügbar.",
@@ -725,11 +728,9 @@
       "transfers_other": "{{count}} Transfers zuzuordnen",
       "journals": "Journale müssen verarbeitet werden",
       "process": "Verarbeiten",
-      "summary_one": "{{count}} Ursache braucht Sie",
-      "summary_other": "{{count}} Ursachen brauchen Sie",
       "waiting_one": "{{count}} wartet",
       "waiting_other": "{{count}} warten",
-      "openPage": "Quarantäne öffnen"
+      "openPage": "Review öffnen"
     },
     "changes": {
       "loading": "Letzte Änderungen werden geladen",

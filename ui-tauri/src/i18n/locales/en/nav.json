@@ -3,7 +3,6 @@
     "overview": "Overview",
     "transactions": "Transactions",
     "ledger": "Journals",
-    "quarantine": "Quarantine",
     "wallets": "Wallets",
     "reports": "Reports",
     "privacyMirror": "Privacy Mirror",
@@ -17,16 +16,15 @@
     "logs": "Logs",
     "exitTax": "Exit Tax",
     "settings": "Settings",
-    "chainAnalysis": "Chain Analysis"
-  },
-  "section": {
-    "main": "Main",
+    "chainAnalysis": "Chain Analysis",
     "review": "Review"
   },
+  "section": {
+    "main": "Main"
+  },
   "badge": {
-    "quarantine": "Quarantine: {{count}} to fix",
-    "swaps": "Swaps & transfers: {{count}} to review",
-    "journals": "Journals need processing"
+    "journals": "Journals need processing",
+    "review": "{{count}} left to review"
   },
   "openBook": {
     "title": "Active book changed",

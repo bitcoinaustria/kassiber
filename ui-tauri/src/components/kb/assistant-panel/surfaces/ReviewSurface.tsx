@@ -83,7 +83,7 @@ export function ReviewSurface() {
   const openCause = (group: QuarantineGroup) => {
     const root = group.root_transaction_id ?? group.root_transaction_ids[0];
     if (!root) {
-      void navigate({ to: "/quarantine" });
+      void navigate({ to: "/review" });
       return;
     }
     openTransaction(root, sheetTabForCause(group.reason, group.category, group.evidence));
@@ -147,7 +147,7 @@ export function ReviewSurface() {
                   <button
                     type="button"
                     className={surfaceRowClassName}
-                    onClick={() => void navigate({ to: "/swaps" })}
+                    onClick={() => void navigate({ to: "/review" })}
                   >
                     <ArrowLeftRight className="size-3.5 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
                     <span className="min-w-0 flex-1 truncate text-sm">
@@ -194,7 +194,10 @@ export function ReviewSurface() {
         snapshot && !nothingOpen ? (
           <>
             <span className="min-w-0 flex-1 truncate text-muted-foreground">
-              {t("assistant:panel.review.summary", { count: groups.length })}
+              {/* Counted as the Review screen counts it. */}
+              {t("journals:quarantine.summary.needsYou", {
+                count: summary?.attention_count ?? summary?.count ?? groups.length,
+              })}
               {waiting > 0 ? ` · ${t("assistant:panel.review.waiting", { count: waiting })}` : ""}
             </span>
             {quarantineQuery.isFetching ? (
@@ -209,7 +212,7 @@ export function ReviewSurface() {
           variant="ghost"
           size="xs"
           className="ml-auto gap-1 text-muted-foreground"
-          onClick={() => void navigate({ to: "/quarantine" })}
+          onClick={() => void navigate({ to: "/review" })}
         >
           {t("assistant:panel.review.openPage")}
           <ArrowUpRight className="size-3" aria-hidden="true" />
@@ -263,7 +266,9 @@ function CauseRow({
         </span>
       </span>
       <span className="flex h-5 shrink-0 items-center gap-1 text-xs tabular-nums text-muted-foreground">
-        {group.count}
+        {/* Its roots, as the cause's card counts them; rows that wait on
+            them clear with them. */}
+        {group.root_count ?? group.count}
         <ChevronRight className="size-3.5" aria-hidden="true" />
       </span>
     </button>
