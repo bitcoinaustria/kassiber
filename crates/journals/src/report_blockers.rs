@@ -943,3 +943,50 @@ pub fn apply_sync_failure(mut payload: Value, sync: Option<&Value>) -> Value {
     set(&mut payload, "ready", Value::Bool(false));
     payload
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ids(payload: &Value) -> Vec<String> {
+        match get(payload, "blockers") {
+            Some(Value::List(items)) => items.iter().map(|b| py_str(&val(b, "id"))).collect(),
+            _ => Vec::new(),
+        }
+    }
+
+    #[test]
+    fn sync_failure_leads_existing_blockers() {
+        // A refresh that failed before any job ran (an AppError or a busy slot)
+        // left no blocking source state, so the snapshot has no sync blocker.
+        let payload = dict([
+            ("ready", Value::Bool(true)),
+            (
+                "blockers",
+                Value::List(vec![blocker(
+                    "no_transactions",
+                    "blocking",
+                    "t",
+                    s("d"),
+                    "k",
+                )]),
+            ),
+        ]);
+        let failed = dict([
+            ("ok", Value::Bool(false)),
+            ("reason", s("project_operation_in_progress")),
+        ]);
+        let applied = apply_sync_failure(payload.clone(), Some(&failed));
+        assert_eq!(ids(&applied), ["sync_failed", "no_transactions"]);
+        assert_eq!(get(&applied, "ready"), Some(&Value::Bool(false)));
+        // An existing snapshot sync blocker is kept, not duplicated.
+        assert_eq!(
+            ids(&apply_sync_failure(applied, Some(&failed))),
+            ["sync_failed", "no_transactions"]
+        );
+        // A refresh without errors, or none at all, leaves the snapshot alone.
+        let fine = dict([("ok", Value::Bool(true)), ("results", Value::List(vec![]))]);
+        assert_eq!(apply_sync_failure(payload.clone(), Some(&fine)), payload);
+        assert_eq!(apply_sync_failure(payload.clone(), None), payload);
+    }
+}

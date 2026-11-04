@@ -54,6 +54,16 @@ class RustReportReadSyncTest(DesktopParity, unittest.TestCase):
         responses = self.session([{}, {}, None])
         self.assertEqual(responses[0]["data"]["blockers"][0]["id"], "sync_failed")
 
+    def test_failed_refresh_joins_existing_source_failures(self):
+        # The failed wallet job and the earlier rates failure are one blocker.
+        self.change(POLICY % '{"report_read_sync": true, "source_classes": {"onchain_wallet": true}}'
+                    + "INSERT INTO freshness_source_states(profile_id,source_key,source_type,source_label,status,"
+                      "stale_reason,blocking_reports,last_error_code,checkpoint_json,updated_at) VALUES"
+                      "('p','rates:p','rates','Rates','blocking_reports','provider_failed',1,'http_error','{}','2025');")
+        blockers = self.session([{}])[0]["data"]["blockers"]
+        self.assertEqual([b["id"] for b in blockers], ["sync_failed", "no_transactions"])
+        self.assertEqual(blockers[0]["counts"]["sources"], 2)
+
     def test_maintenance_runs_sync_modes(self):
         self.change(POLICY % '{"report_read_sync": true, "source_classes": {"onchain_wallet": true}}')
         responses = self.session([{"sync": "if_enabled"}, {"sync": "if_enabled"}, {"sync": "always"},
