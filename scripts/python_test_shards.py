@@ -76,6 +76,8 @@ _NETWORK_SERIAL_MODULES = frozenset(
         "test_rust_cln_acquisition",
         "test_rust_lightning_acquisition",
         "test_rust_lightning_service",
+        "test_rust_desktop_lightning_test",
+        "test_rust_desktop_settings_egress",
         "test_sync_backends",
         "test_freshness_prefetch_cancellation",
     }
@@ -96,6 +98,9 @@ _DAEMON_SERIAL_MODULES = frozenset(
         "test_rust_custody_projections",
         "test_rust_transfer_review_context",
         "test_rust_export_preview",
+        "test_rust_desktop_settings",
+        "test_rust_desktop_backends",
+        "test_rust_desktop_utxos",
         "test_rust_document_services",
         "test_rust_document_ingestion",
         "test_rust_document_cli",

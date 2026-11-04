@@ -1037,8 +1037,11 @@ BTCPay and local Core-detection tests through the reviewed network gate.
 Its action grant binds the exact daemon kind, form arguments and book; backend
 configuration and display reads grant nothing. Offline refuses these paths,
 including loopback. Core credentials remain bound to the effective probe
-endpoint when form configuration changes. Lightning's node-snapshot probe
-remains on the Python reference until its adapters are ported. The current
+endpoint when form configuration changes. The native Lightning backend test
+(`ui.backends.lightning.test`) reuses the LND/CLN report clients below: one
+explicit request grants one node snapshot for the named backend only, and only
+the alias, network, block height and counts leave the client. Non-Lightning
+and unregistered kinds answer without a request. The current
 implementation/verification boundary is recorded in
 [Rust egress paths](rust-port-egress.md#chain-client-paths-r5-partial).
 

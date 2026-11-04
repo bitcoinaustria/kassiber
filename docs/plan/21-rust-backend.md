@@ -4515,3 +4515,16 @@ It corrects the resolver acceptance, which had compared Python with Python, and
 adds Python's report-read journal rebuild to the daemon for all report-like
 reads. Graph, transaction review context, evidence summary,
 report blockers and review input requests remain.
+
+### R5 desktop settings and sync status (partial)
+
+`t3code/r5-desktop-settings-1` starts at the r10b integration tip `4844ba8b8`
+and serves seven more desktop kinds natively: freshness status/configure,
+maintenance settings/configure, the active-profile backend list, the Lightning
+backend test and the wallet UTXO inventory. See the
+[checkpoint](../reference/rust-shell.md#desktop-settings-and-sync-status-r5).
+Reads and configuration writes start no job, probe or connection; the Lightning
+test is the one explicit egress, granted per request through `kassiber-net`.
+`ui.maintenance.run` stays `not_implemented` until report blockers, the
+report-read journal prelude and report-read wallet sync are native. Python
+product code is unchanged; one reference crash is recorded with a repro.

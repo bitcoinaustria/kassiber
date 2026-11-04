@@ -531,8 +531,12 @@ example is not registered as a product or AI command. HTTP responses now expose
 the bounded, untrusted reason phrase for explicit probe output, never transport
 errors or the ledger. No disk logging or additional network permission is added.
 
-Outstanding: `ui.backends.lightning.test` and its LND/CLN snapshot adapters,
-complete cross-language TLS/proxy/failure tapes, and full wallet sync. The
+`ui.backends.lightning.test` is native (see
+[desktop settings](rust-shell.md#desktop-settings-and-sync-status-r5)): it
+builds the LND/CLN report client for the one named backend, grants it for that
+request, and keeps only the node alias, network, height and counts.
+Outstanding: complete cross-language TLS/proxy/failure tapes and full wallet
+sync. The
 existing net suite exercises pinned LND/self-signed certificates and SOCKS;
 that inherited proof is not claimed as new end-to-end Lightning migration.
 Native HTTP probing currently buffers the bounded response before sampling
@@ -810,8 +814,8 @@ TLS and explicit proxy routes without redirects or direct retry around a proxy.
 Only curated open channels and routing aggregates reach the report renderer;
 raw snapshots, credentials, invoice/payment data and node bodies are not returned
 or persisted. The full operator report/CSV is not an AI or diagnostics projection.
-Node-snapshot and backend-test product routes and AI projections remain separately
-unported. The [service checkpoint](rust-shell.md#lightning-profitability-product-wiring-r5)
+The desktop backend test reuses these clients with its own request-local grant;
+the AI node-snapshot routes remain unported. The [service checkpoint](rust-shell.md#lightning-profitability-product-wiring-r5)
 records actual wire/CSV/database and served-by verification.
 
 ## Chain-analysis acquisition apply (R5)

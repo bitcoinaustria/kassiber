@@ -15518,3 +15518,120 @@ snapshot from the workspace-shell slice) and `ui.review.request_input` (needs
 the native review loader accepted for production routes). Named Rust mutation
 kills for these projections are still to be added; the parity suites are the
 current evidence.
+
+## Desktop settings and sync status (R5)
+
+`t3code/r5-desktop-settings-1` starts at the r10b integration tip `4844ba8b8`.
+The desktop polls these kinds while it runs, and the Rust daemon used to
+answer them with `not_implemented`. Seven of the eight requested request
+kinds are now native, with no new
+dependency, schema change or Python product change:
+
+| Kind | Native service | Parity suite |
+| --- | --- | --- |
+| `ui.freshness.status` | wallets freshness settings over the existing queue snapshot | `test_rust_desktop_settings.py` |
+| `ui.freshness.configure` | wallets freshness settings, rates provider | `test_rust_desktop_settings.py` |
+| `ui.maintenance.settings` | wallets freshness settings | `test_rust_desktop_settings.py` |
+| `ui.maintenance.configure` | freshness settings plus the setup profile update | `test_rust_desktop_settings.py` |
+| `ui.backends.list` | setup backend view | `test_rust_desktop_backends.py` |
+| `ui.backends.lightning.test` | chain LND/CLN report clients | `test_rust_desktop_lightning_test.py` |
+| `ui.wallets.utxos` | wallets UTXO inventory | `test_rust_desktop_utxos.py` |
+
+`ui.freshness.run.progress` and `ui.wallets.sync.progress` are progress events
+of the already-native `ui.freshness.run` and `ui.wallets.sync`, not request
+kinds. `test_rust_freshness_product.py` compares them byte for byte, and it
+passes on this tip.
+
+**Freshness and maintenance.** Status and settings read the native queue
+snapshot through the UI redaction (secret keys, URLs, checkpoints, txids) and
+ignore their arguments, as Python's handlers do. Configure keeps Python's
+refusal order and its commit points: a maintenance profile flag commits through
+the setup profile update before the freshness policy is validated, so a later
+refusal keeps the flag. Market-provider text is stripped the way Python strips
+it. Daemon error envelopes now keep Python's lone-surrogate code points.
+Nothing here enqueues a job or starts a source run, and saved policy grants
+nothing.
+
+**Backends.** The list reads the merged runtime backend view the other backend
+kinds use. It keeps only backends that the active profile's wallets reference
+(explicitly, or as the default for descriptor and address syncs), applies
+Python's allowlist and presence flags, and never probes. The Lightning backend
+test is the one egress path in this slice. It is the user's explicit action for
+one named backend: the daemon builds that backend's LND or CLN report client
+and grants it for this request through `kassiber-net`. Only the node alias,
+network, block height, peer count and channel count leave the client, under the
+[Lightning discard policy](lightning-opsec.md). Non-Lightning and unregistered
+kinds answer without a request. Offline and `KASSIBER_NO_EGRESS` refuse before
+any node is contacted. Failure messages follow the recorded native transport
+wording; the suite's configuration and switch failures match Python's bytes.
+
+**UTXO inventory.** The snapshot classifies the wallet the way Python does
+(Wasabi bundles, chain-backed modes, backend kinds, Silent Payments capability,
+Liquid unblinding through the native descriptor plan). It then reads
+`wallet_utxos` through Python's backend, kind, chain and network source filter,
+with the 500-row limit. It never refreshes or contacts the backend, and
+descriptors and xpubs are only classified. Reference bug: Python crashes with an
+unhandled `UnicodeEncodeError` when the wallet reference has a lone surrogate,
+because SQLite cannot bind it (`tests/rust_port/repro_wallet_utxos_surrogate.py`).
+Rust returns the same code and message, but cannot reproduce the traceback in
+`debug`.
+
+**Evidence.** Every suite compares raw daemon JSONL with the unchanged Python
+daemon on plaintext and SQLCipher books, through the shared harness
+`tests/rust_desktop_parity.py`. That harness launches the Rust binary directly
+and checks that the ready record is Rust's. Mutating sessions compare all 112
+tables. The Lightning suite also compares the fake node's requests.
+`test_rust_desktop_settings_egress.py` is the privacy regression. It leaves
+product egress enabled, points every backend at an owned loopback listener or a
+`.invalid` host, enables report-read sync, and arms the strict socket guard.
+Status, settings, list and inventory reads (before and after configure) then
+match Python's bytes, and the listener sees no connection. With
+`KASSIBER_DESKTOP_COUNTS`, the suites record **320 Rust-served requests**, with
+zero fallbacks and zero `not_implemented`:
+
+| Kind | Served by Rust | Success envelopes | Typed refusals |
+| --- | ---: | ---: | ---: |
+| `ui.freshness.status` | 71 | 69 | 2 |
+| `ui.freshness.configure` | 33 | 16 | 17 |
+| `ui.maintenance.settings` | 64 | 64 | 0 |
+| `ui.maintenance.configure` | 39 | 17 | 22 |
+| `ui.backends.list` | 28 | 27 | 1 |
+| `ui.backends.lightning.test` | 28 | 19 | 9 |
+| `ui.wallets.utxos` | 57 | 42 | 15 |
+
+The two status refusals are the `expected_scope` checks. Lightning success
+envelopes include Python's `ok: false` payloads.
+
+`crates/wallets/scripts/desktop_settings_mutation_check.py` runs the 49-entry
+catalog `desktop_settings_mutations.json` in a scratch copy under `target/`.
+Its test children get a disposable `XDG_DATA_HOME`. Every named unmutated test
+passes first, and all 49 mutants build and are killed: 15 settings, 7 backend
+list, 15 UTXO and 12 Lightning entries.
+`DesktopSettingsMutationCatalogTest` keeps the catalog applicable in CI.
+
+**Verification.** Local Linux verification uses Rust 1.99.1, locked Python
+3.11 and offline Cargo with eight jobs. It covers formatting, both gate clippy
+invocations with warnings denied, the five desktop suites, the 239-case
+freshness product suite (progress events), the classifier update and the
+57-test CI preflight. The workspace Rust tests pass except one. Two gate
+problems predate this branch and fail identically at `4844ba8b8`:
+
+- The gate's workspace clippy and test commands do not compile
+  `crates/cli/tests/run.rs`, because it needs `kassiber-cli/test-probe`, which
+  only `kassiber/test-harness` enables. Adding `kassiber/test-harness` to those
+  commands compiles everything.
+- `kassiber-journals`
+  `process_native::native_process_real_prebuild_matches_complete_python_books_and_lifecycle_tapes`
+  panics with "converted integer exceeds custody arithmetic range".
+
+With both features, the workspace passes 2164 tests and fails only that one.
+Every desktop test child gets a disposable `XDG_DATA_HOME`, state root and data
+root. A guard data home set on the test process stayed empty throughout, and
+the account's default project was never opened.
+
+**Remaining.** `ui.maintenance.run` stays `not_implemented`. It needs the
+report-blocker snapshot (`ui.report.blockers`, ported on
+`t3code/r5-desktop-projections-2`, which in turn needs the workspace-health
+snapshot), the report-read journal prelude from that slice, and native
+report-read wallet sync for `sync=always|if_enabled`. Its only desktop callers
+are the AI chat cards. AI projections of these kinds stay in Python.

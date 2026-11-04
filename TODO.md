@@ -106,6 +106,23 @@ report-read journal rebuild for every report-like read. Remaining:
 - [ ] Add named Rust mutation kills for the new projections; current evidence
   is the Python-oracle parity suites listed in the checkpoint.
 
+## Rust backend R5 desktop settings and sync status
+
+The [desktop settings checkpoint](docs/reference/rust-shell.md#desktop-settings-and-sync-status-r5)
+serves 7 of the 8 requested desktop request kinds natively; the two progress
+events were already native.
+
+- [x] Freshness: `ui.freshness.status` and `ui.freshness.configure`.
+- [x] Maintenance: `ui.maintenance.settings` and `ui.maintenance.configure`.
+- [ ] Maintenance: `ui.maintenance.run`. It needs the native report-blocker
+  snapshot (`ui.report.blockers`, which needs workspace health), the report-read
+  journal prelude from the desktop-projection slice, and native report-read
+  wallet sync for `sync=always|if_enabled`. Until then it answers
+  `not_implemented`.
+- [x] Backends: `ui.backends.list` and `ui.backends.lightning.test`.
+- [x] Wallet sync status: `ui.wallets.utxos`; `ui.wallets.sync.progress` and
+  `ui.freshness.run.progress` events stay covered by the freshness product suite.
+
 ## Rust backend R5 rates
 
 The partial [rates checkpoint](docs/reference/rust-shell.md#rates-service-checkpoint-r5-partial)
@@ -141,9 +158,10 @@ through the shared setup crate.
 
 - [x] Add consent-bound Esplora/mempool, Electrum TCP/TLS and Core RPC clients,
   plus HTTP, Electrum, Core, BTCPay and local Core-detection probes.
-- [ ] Port the Lightning node-snapshot adapters and `ui.backends.lightning.test`.
-  Native LND and CLN profitability acquisition now have unregistered
-  preparation boundaries; full snapshot adapters and product wiring remain open.
+- [x] Port `ui.backends.lightning.test` over the native LND/CLN report clients,
+  which now keep the node alias, network, height and peer count.
+- [ ] Port the remaining Lightning node-snapshot routes (`ui.connections.node.snapshot`
+  and the AI node projections) over the same clients.
 - [ ] Complete failure-path/TLS/proxy differential fixtures across all backend
   forms, including HTTP probe prefix-only/large-body reads, before declaring
   full chain-client parity.

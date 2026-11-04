@@ -3,9 +3,16 @@
 Every session is compared byte for byte with the unchanged Python daemon in a
 disposable root; mutating sessions compare all 112 tables afterwards.
 """
+import json
+from pathlib import Path
+import subprocess
+import sys
 import unittest
 
 from tests.rust_desktop_parity import RUST_BIN, DesktopParity
+
+ROOT = Path(__file__).resolve().parents[1]
+CATALOG = ROOT / "crates/wallets/scripts/desktop_settings_mutations.json"
 
 FRESHNESS = """
 INSERT INTO freshness_source_states(profile_id,source_key,source_type,source_label,status,state,stale_reason,
@@ -140,6 +147,18 @@ class RustFreshnessSettingsTest(DesktopParity, unittest.TestCase):
         self.compare([{"report_read_sync": True}, {"market_rate_provider": "coingecko"}],
                      kind="ui.freshness.configure", mutates=True)
         self.compare([{"require_coarse_review": True}], kind="ui.maintenance.configure", mutates=True)
+
+
+class DesktopSettingsMutationCatalogTest(unittest.TestCase):
+    def test_catalog_applies_and_names_existing_tests(self):
+        entries = json.loads(CATALOG.read_text())
+        result = subprocess.run(
+            [sys.executable, str(ROOT / "crates/wallets/scripts/desktop_settings_mutation_check.py"), "--check"],
+            cwd=ROOT, capture_output=True, timeout=60, check=True,
+        )
+        self.assertEqual(result.stdout, f"{len(entries)} entries apply\n".encode())
+        self.assertTrue(all(test.startswith("tests/test_rust_desktop_") for entry in entries
+                            for test in entry["expect_failing"]))
 
 
 if __name__ == "__main__":
