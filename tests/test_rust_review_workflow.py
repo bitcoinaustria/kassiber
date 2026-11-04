@@ -11,11 +11,12 @@ from datetime import datetime, timedelta, timezone
 import json
 import os
 import re
+import shutil
 import unittest
 
 from kassiber.db import open_db
 from tests import cli_runner
-from tests.rust_desktop_parity import DesktopParity
+from tests.rust_desktop_parity import DesktopParity, run_candidate
 
 RUST_BIN = os.environ.get("KASSIBER_RUST_BIN")
 REQUIRE_RUST = os.environ.get("KASSIBER_REQUIRE_RUST_PARITY") == "1"
@@ -75,11 +76,12 @@ class Masker:
             return ids.setdefault(match.group(0), f"<uuid:{len(ids)}>")
         return _STAMP.sub(self._clock, _UUID.sub(identity, text))
 
-    def text(self, line):
-        return self._text(self._side(), line.decode() if isinstance(line, bytes) else line)
+    def text(self, line, side=None):
+        ids = self._side() if side is None else self.maps[side]
+        return self._text(ids, line.decode() if isinstance(line, bytes) else line)
 
-    def tables(self, snapshot):
-        ids = self._side()
+    def tables(self, snapshot, side=None):
+        ids = self._side() if side is None else self.maps[side]
         result = {}
         for table in sorted(snapshot):
             rows = sorted(snapshot[table], key=lambda row: repr(tuple(
@@ -466,6 +468,121 @@ class ReviewPairParity(ReviewParity, unittest.TestCase):
     def test_unpair_after_metadata_apply_matches_python(self):
         artifact = planned(self, [price(), self.unpair()])
         self.masked([{"artifact": artifact, "idempotency_key": "batch"}], kind="ui.review.apply")
+
+
+class ReviewCliParity(ReviewParity, unittest.TestCase):
+    """The `review` leaves run in Rust on a copy of the book Python uses."""
+
+    def cli(self, commands):
+        """Run each argv on Python and on the candidate copy, in order."""
+        candidate = self.base / "cli-candidate" / "data"
+        shutil.copytree(self.root, candidate)
+        masker = Masker(self.started)
+        for argv in commands:
+            results = []
+            for side, root in ((0, candidate), (1, self.root)):
+                args = ["--machine", "--data-root", str(root)]
+                if self.passphrase:
+                    args.extend(["--db-passphrase-fd", cli_runner.InputFd(self.passphrase.encode())])
+                args.extend(argv)
+                if side == 0:
+                    result = run_candidate(args, env=self.env, input=b"")
+                else:
+                    result = cli_runner.run(args, reference=True, env=self.env, input=b"",
+                                            capture_output=True, timeout=300)
+                results.append((result.returncode, masker.text(result.stdout, side),
+                                masker.text(result.stderr, side)))
+            self.assertEqual(results[0], results[1], argv)
+            if os.environ.get("KASSIBER_DESKTOP_COUNTS"):
+                with open(os.environ["KASSIBER_DESKTOP_COUNTS"], "a", encoding="utf-8") as handle:
+                    handle.write(json.dumps(dict(
+                        kind=".".join(argv[:2]), served_by="rust", cli=True,
+                        ok=results[0][0] == 0, error_code=None if results[0][0] == 0 else
+                        json.loads(results[0][1] or "{}").get("error", {}).get("code"))) + "\n")
+        self.assertEqual(masker.tables(self.snapshot(candidate), 0), masker.tables(self.snapshot(), 1))
+
+    def write(self, name, payload):
+        path = self.base / "inputs" / name
+        path.parent.mkdir(exist_ok=True)
+        path.write_bytes(payload if isinstance(payload, bytes) else json.dumps(payload).encode())
+        return str(path)
+
+    def test_cases_and_receipt_commands_match_python(self):
+        scope = self.profile_scope()
+        self.cli([
+            ["review", "cases"], ["review", "cases", "--limit", "1"],
+            ["review", "cases", "--cursor", cursor(scope, "buy")], ["review", "cases", "--limit", "0"],
+            ["review", "cases", "--limit", "x"], ["review", "cases", "--cursor", "bad"],
+            ["review", "cases", "--workspace", "ws", "--profile", "profile"],
+            ["review", "cases", "--profile", "missing"],
+            ["review", "receipt", "--idempotency-key", "none"], ["review", "receipt"],
+            ["review", "receipt", "--receipt-id", "a", "--idempotency-key", "b"],
+        ])
+
+    def test_plan_files_and_refusals_match_python(self):
+        version = str(self.profile_scope()[1])
+        operations = [price(), {"type": "exclude", "transaction_id": "sell", "reason": "Duplicate"}]
+        array = self.write("array.json", operations)
+        self.cli([
+            ["review", "plan", "--operations-file", array, "--expected-input-version", version],
+            ["review", "plan", "--operations-file", self.write("object.json", {"operations": operations}),
+             "--expected-input-version", version],
+            ["review", "plan", "--operations-file", self.write("bom.json", b"\xef\xbb\xbf" + json.dumps(operations).encode()),
+             "--expected-input-version", version],
+            ["review", "plan", "--operations-file", self.write("utf16.json", json.dumps(operations).encode("utf-16")),
+             "--expected-input-version", version],
+            ["review", "plan", "--operations-file", self.write("other.json", {"ops": operations}),
+             "--expected-input-version", version],
+            ["review", "plan", "--operations-file", self.write("text.json", "text"), "--expected-input-version", version],
+            ["review", "plan", "--operations-file", self.write("bad.json", b"[1,"), "--expected-input-version", version],
+            ["review", "plan", "--operations-file", self.write("binary.json", b"\xff\xfe\x00"),
+             "--expected-input-version", version],
+            ["review", "plan", "--operations-file", self.write("empty.json", b""), "--expected-input-version", version],
+            ["review", "plan", "--operations-file", self.write("large.json", b" " * 1_000_001),
+             "--expected-input-version", version],
+            ["review", "plan", "--operations-file", self.write("exact.json", json.dumps(operations).encode().ljust(1_000_000)),
+             "--expected-input-version", version],
+            ["review", "plan", "--operations-file", str(self.base / "inputs" / "missing.json"),
+             "--expected-input-version", version],
+            ["review", "plan", "--operations-file", str(self.base / "inputs"), "--expected-input-version", version],
+            ["review", "plan", "--operations-file", array, "--expected-input-version", "9"],
+            ["review", "plan", "--operations-file", array, "--expected-input-version", "x"],
+            ["review", "plan", "--operations-file", array],
+            ["review", "plan", "--operations-file", array, "--expected-input-version", version, "--profile", "missing"],
+        ])
+
+    def test_apply_artifacts_envelopes_and_retries_match_python(self):
+        artifact = planned(self, [price(), {"type": "exclude", "transaction_id": "sell", "reason": "Duplicate"}])
+        other = planned(self, [{"type": "exclude", "transaction_id": "buy", "reason": "Not mine"}])
+        raw = self.write("artifact.json", artifact)
+        self.cli([
+            ["review", "apply", "--artifact-file", self.write("list.json", [artifact]), "--idempotency-key", "k"],
+            ["review", "apply", "--artifact-file", self.write("unhashable.json", {"kind": ["review.plan"], "data": artifact}),
+             "--idempotency-key", "k"],
+            ["review", "apply", "--artifact-file", self.write("empty-envelope.json", {"kind": "review.plan"}),
+             "--idempotency-key", "k"],
+            ["review", "apply", "--artifact-file", self.write("tampered.json", {**artifact, "digest": "0" * 64}),
+             "--idempotency-key", "k"],
+            ["review", "apply", "--artifact-file", raw, "--idempotency-key", " "],
+            ["review", "apply", "--artifact-file", raw, "--idempotency-key", "cli-key"],
+            ["review", "apply", "--artifact-file", self.write("envelope.json", {"kind": "review.plan", "data": artifact}),
+             "--idempotency-key", "cli-key"],
+            ["review", "apply", "--artifact-file", self.write("desktop.json", {"kind": "ui.review.plan", "data": other}),
+             "--idempotency-key", "cli-key"],
+            ["review", "apply", "--artifact-file", self.write("other.json", other), "--idempotency-key", "second"],
+            ["review", "receipt", "--idempotency-key", "cli-key"],
+            ["review", "cases"],
+        ])
+
+    def test_encrypted_cli_plan_and_apply_match_python(self):
+        self.encrypt("correct horse battery staple")
+        artifact = planned(self, [price()])
+        self.cli([
+            ["review", "plan", "--operations-file", self.write("ops.json", [price()]),
+             "--expected-input-version", str(self.profile_scope()[1])],
+            ["review", "apply", "--artifact-file", self.write("artifact.json", artifact), "--idempotency-key", "e"],
+            ["review", "receipt", "--idempotency-key", "e"],
+        ])
 
 
 if __name__ == "__main__":
