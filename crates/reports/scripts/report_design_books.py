@@ -53,11 +53,11 @@ WALLETS = {
 
 
 def price(t: datetime.datetime) -> int:
-    """A smooth, seed-free EUR price path from 8k (2020) to about 95k (2025)."""
+    """A seed-free EUR price path from about 8k (2020) to about 90k (2025)."""
     months = (t.year - 2020) * 12 + t.month - 1
-    base = 8000 * (1.045 ** months)
+    base = 8000 * (1.035 ** months)
     wobble = 1 + 0.08 * ((months * 37) % 11 - 5) / 5
-    return int(min(base * wobble, 98000))
+    return int(base * wobble)
 
 
 def rows(seed: int, start: tuple[int, int]) -> dict[str, list[str]]:
