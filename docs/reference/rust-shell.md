@@ -16332,3 +16332,6 @@ to that slice, where a Rust consumer exists to compare against.
 **Release signatures and `ssh-key`.** Done on
 `t3code/r5-deps-1-release` (based on the workspace-shell branch, which owns
 `crates/release`); see the workspace-shell section there.
+
+**HTTP client.** Evaluated in [Rust HTTP client](rust-http-client.md); the
+current `kassiber-net` client stays.

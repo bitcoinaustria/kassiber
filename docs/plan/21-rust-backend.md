@@ -141,6 +141,8 @@ Replacements for today's dependencies, decided per stage:
 | `pyrage`, `age`/`rage` binary | the `age` crate |
 | `keyring` | the same keyring stores the desktop shell uses, with the item formats Python wrote |
 | `urllib`, the SOCKS5 client, the Electrum client | one transport layer (`reqwest` or `ureq` with no environment proxy and no redirects, SOCKS with remote DNS) |
+
+| `urllib`, the SOCKS5 client, the Electrum client | one transport layer with no environment proxy and no redirects, SOCKS with remote DNS: `kassiber-net`'s own HTTP/1.1 client over `rustls` and `httparse`, kept after evaluating `ureq` and `hyper` ([Rust HTTP client](../reference/rust-http-client.md)) |
 | `ssh-keygen -Y verify` | the `ssh-key` crate (done: in process, over OpenSSH's own armour and field parsing) |
 | `zoneinfo`, `tzdata` | `jiff` with its bundled database |
 | `Decimal` | `crates/pydecimal`, never `rust_decimal` |

@@ -202,6 +202,11 @@ compared the Rust backend's hand-written code with plan 21's named crates.
   `lwk`) with default features off, feed it through the `kassiber-net`
   Electrum client, and freeze Python `lwk` vectors for confidential and
   explicit outputs, non-L-BTC assets and wrong or missing blinding keys.
+- [x] Evaluate `ureq` and `hyper` against `kassiber-net`'s HTTP client; keep
+  the current client ([Rust HTTP client](docs/reference/rust-http-client.md)).
+- [ ] Revisit the HTTP client if `ureq` stabilises its transport API without a
+  built-in TCP connector or environment proxy, or if the backend adopts async
+  I/O.
 
 ## Rust backend R5 Bitcoin wallet sync (CLI and no-refresh daemon registered)
 
