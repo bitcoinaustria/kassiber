@@ -9,9 +9,11 @@
 use super::*;
 use sha2::{Digest, Sha256};
 
+mod full;
 mod locale;
 mod strings;
 mod summary;
+pub use full::full;
 pub use locale::Lang;
 pub(crate) use summary::prepare as prepare_summary;
 pub use summary::{summary, summary_model};
@@ -365,6 +367,166 @@ impl Axis {
     /// A value's position on the axis, 0..1.
     pub fn at(&self, v: f64) -> f64 {
         (v - self.low) / (self.high - self.low)
+    }
+}
+
+// --------------------------------------------------------------- builders
+//
+// Shared by every report builder: cells from model values (`None` is
+// `Empty`, never zero), columns, facts and the balance chart.
+
+fn list<'a>(v: &'a Value, key: &str) -> &'a [Value] {
+    artifact_csv::list(value(v, key))
+}
+fn fiat(v: &Value, key: &str) -> Cell {
+    match value(v, key) {
+        Value::Null => Cell::Empty,
+        raw => Cell::Fiat(from_float(raw)),
+    }
+}
+fn btc(v: &Value, key: &str) -> Cell {
+    match value(v, key) {
+        Value::Null => Cell::Empty,
+        raw => Cell::Btc(from_float(raw)),
+    }
+}
+fn msat(cell: &Cell) -> Cell {
+    match cell {
+        Cell::Btc(d) => msat_of(d),
+        _ => Cell::Empty,
+    }
+}
+fn txt(v: &Value, key: &str) -> Cell {
+    match value(v, key) {
+        Value::Null => Cell::Empty,
+        raw => Cell::Text(py_str(raw)),
+    }
+}
+fn day(v: &Value, key: &str) -> Cell {
+    match value(v, key) {
+        Value::Null => Cell::Empty,
+        raw => Cell::Date(py_str(raw).chars().take(10).collect()),
+    }
+}
+fn count(v: &Value, key: &str) -> Cell {
+    match value(v, key) {
+        Value::Int(n) => Cell::Count(i64::try_from(n.clone()).unwrap_or(0)),
+        _ => Cell::Empty,
+    }
+}
+fn col(key: &'static str, label: impl Into<String>, kind: Kind, width: f64) -> Column {
+    Column::new(key, label, kind, width)
+}
+fn fact(key: &'static str, label: &str, value: Cell) -> Fact {
+    Fact {
+        key,
+        label: label.into(),
+        value,
+        display: None,
+        accent: false,
+    }
+}
+fn method_name(lang: Lang, algorithm: &str) -> String {
+    lang.get(&format!("method.{algorithm}"))
+        .map(str::to_owned)
+        .unwrap_or_else(|| algorithm.to_owned())
+}
+fn status_name(lang: Lang, status: &str) -> String {
+    lang.get(&format!("status.{status}"))
+        .map(str::to_owned)
+        .unwrap_or_else(|| status.replace('_', " "))
+}
+
+/// At most about eight month labels; the last month is always labelled and
+/// replaces a regular label too close to it.
+fn month_labels(lang: Lang, months: &[String]) -> Vec<(f64, String)> {
+    let total = months.len();
+    let step = total.div_ceil(8).max(1);
+    months
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| (i % step == 0 && *i + step < total) || *i + 1 == total)
+        .map(|(i, m)| ((i as f64 + 0.5) / total as f64, lang.month_short(m)))
+        .collect()
+}
+fn float(row: &Value, key: &str) -> f64 {
+    from_float(value(row, key))
+        .to_canonical()
+        .parse()
+        .unwrap_or(0.0)
+}
+
+/// Market value (solid, red), cost basis (dashed) and, when the quantity is
+/// one asset's, the quantity on a second axis, by month.
+fn balance_chart(
+    lang: Lang,
+    title: &str,
+    months: &[String],
+    market: &[f64],
+    basis: &[f64],
+    quantity: Option<&[f64]>,
+    currency: &str,
+) -> Chart {
+    let axis = Axis::new(&[market, basis].concat(), 4, lang, true);
+    let total = months.len();
+    let x = |i: usize| (i as f64 + 0.5) / total as f64;
+    let line = |values: &[f64], axis: &Axis| {
+        values
+            .iter()
+            .enumerate()
+            .map(|(i, v)| (x(i), axis.at(*v)))
+            .collect()
+    };
+    let fiat = [("fiat", currency)];
+    let mut series = Vec::new();
+    let mut legend = vec![
+        Legend {
+            label: lang.tf("legend.market_value", &fiat),
+            mark: "line",
+            tone: "accent",
+        },
+        Legend {
+            label: lang.tf("legend.cost_basis", &fiat),
+            mark: "dashed",
+            tone: "ink",
+        },
+    ];
+    let mut y2_labels = Vec::new();
+    if let Some(quantity) = quantity {
+        let qaxis = Axis::new(quantity, 4, lang, false);
+        series.push(Series::Line {
+            points: line(quantity, &qaxis),
+            weight: 0.6,
+            dashed: false,
+            tone: "muted",
+        });
+        legend.push(Legend {
+            label: lang.t("legend.quantity").into(),
+            mark: "thin",
+            tone: "muted",
+        });
+        y2_labels = qaxis.ticks;
+    }
+    series.push(Series::Line {
+        points: line(basis, &axis),
+        weight: 0.8,
+        dashed: true,
+        tone: "ink",
+    });
+    series.push(Series::Line {
+        points: line(market, &axis),
+        weight: 1.4,
+        dashed: false,
+        tone: "accent",
+    });
+    Chart {
+        title: title.into(),
+        height: 120.0,
+        x_labels: month_labels(lang, months),
+        series,
+        legend,
+        y_labels: axis.ticks,
+        y2_labels,
     }
 }
 

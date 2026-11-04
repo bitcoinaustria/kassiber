@@ -66,38 +66,27 @@
     "find": "let mut pages: Vec<&[String]> = wrapped.chunks(LINES_PER_PAGE).collect();",
     "replace": "let mut pages: Vec<&[String]> = wrapped.chunks(LINES_PER_PAGE + 1).collect();",
     "expect_failing": [
-      "documents_match_python_bytes_and_pages",
-      "full_pdf_model_and_bytes_match_python"
+      "documents_match_python_bytes_and_pages"
     ],
     "rule": "A page holds exactly 46 wrapped lines."
   },
   {
-    "id": "full-pdf-label-width",
-    "file": "crates/reports/src/full_pdf.rs",
-    "find": "let padding = \" \".repeat(28usize.saturating_sub(label.chars().count()));",
-    "replace": "let padding = \" \".repeat(27usize.saturating_sub(label.chars().count()));",
-    "expect_failing": [
-      "full_pdf_model_and_bytes_match_python"
-    ],
-    "rule": "Key-value labels pad to Python's 28 columns."
-  },
-  {
     "id": "full-pdf-capital-order",
-    "file": "crates/reports/src/full_pdf.rs",
-    "find": "let summary_rows = buckets",
-    "replace": "buckets.sort_by_key(|((w, a), _, _)| (py_str(a), py_str(w)));\n        let summary_rows = buckets",
+    "file": "crates/reports/src/report_design/full.rs",
+    "find": "        let mut summary = table(\n            \"disposals_by_wallet\",",
+    "replace": "        groups.sort_by(|a, b| a.0.cmp(&b.0));\n        let mut summary = table(\n            \"disposals_by_wallet\",",
     "expect_failing": [
-      "full_pdf_model_and_bytes_match_python"
+      "full_report_model_matches_python_and_renders_deterministically"
     ],
     "rule": "Capital-gain buckets keep their first-seen order instead of being sorted."
   },
   {
     "id": "full-pdf-flow-amount",
     "file": "crates/reports/src/full_pdf.rs",
-    "find": "            \"outbound_amount_msat\",\n            \"fee_amount_msat\",",
-    "replace": "            \"inbound_amount_msat\",\n            \"fee_amount_msat\",",
+    "find": "(\"outbound_msat\", \"outbound_amount_msat\"),",
+    "replace": "(\"outbound_msat\", \"inbound_amount_msat\"),",
     "expect_failing": [
-      "full_pdf_model_and_bytes_match_python"
+      "full_report_model_matches_python_and_renders_deterministically"
     ],
     "rule": "Flow tables show inbound, outbound and fee amounts from their own sums."
   },
@@ -107,15 +96,15 @@
     "find": "if limit > &0.into() {",
     "replace": "if limit >= &0.into() {",
     "expect_failing": [
-      "full_pdf_model_and_bytes_match_python"
+      "full_report_model_matches_python_and_renders_deterministically"
     ],
     "rule": "A history limit of zero keeps the whole balance history."
   },
   {
     "id": "engine-glyph-coverage",
     "file": "crates/pdf/src/engine.rs",
-    "find": "        || BOOK.0.iter().any(|font| font.info().coverage.contains(c as u32))",
-    "replace": "        || true",
+    "find": "            .any(|font| font.info().coverage.contains(c as u32))",
+    "replace": "            .any(|_| true)",
     "expect_failing": [
       "labels_in_other_scripts_never_render_as_missing_glyphs"
     ],

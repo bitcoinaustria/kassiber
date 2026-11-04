@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Freeze Python's full text-PDF report model and document bytes.
+"""Freeze Python's full report model for the shared report design.
 
-Each case captures the exact ``(title, lines)`` that ``export_pdf_report``
-hands to ``write_text_pdf`` and the bytes that writer produces, so the Rust
-port is checked on both the report model and the hand-written PDF 1.4 file.
+``model`` holds the values ``export_pdf_report`` prints, read from the same
+context (``_build_full_report_context``): exact, unformatted, in Python's
+order. ``title`` is the envelope's title; refusals are kept as errors.
 """
 from dataclasses import replace
 from datetime import datetime, timezone
@@ -20,7 +20,6 @@ from kassiber.cli.handlers import _report_hooks
 from kassiber.core import reports
 from kassiber.db import open_db
 from kassiber.errors import AppError
-from kassiber.pdf_report import write_text_pdf
 
 OUT = ROOT / 'crates/reports/tests/data/full_pdf.json'
 STAMP = '2026-01-02T03:04:05Z'
@@ -71,6 +70,73 @@ def specs():
     return result
 
 
+def text(value):
+    """The report's text for a stored value, as its tables print it."""
+    return str(value)
+
+
+def counted(value):
+    return int(value or 0)
+
+
+def flows(rows, prefix):
+    return [dict(**{key: text(row[key]) for key in prefix}, tx_count=counted(row['tx_count']),
+                 inbound_count=counted(row['inbound_count']), outbound_count=counted(row['outbound_count']),
+                 inbound_msat=counted(row['inbound_amount']), outbound_msat=counted(row['outbound_amount']),
+                 fee_msat=counted(row['fee_amount'])) for row in rows]
+
+
+def full_model(context):
+    """The full report's values for the shared design."""
+    profile, summary, query = context['profile'], context['summary'], context['query_rows']
+    pick = lambda row, keys: {key: row[key] for key in keys}
+    return dict(
+        title=context['pdf_title'],
+        generated_at=context['generated_at'],
+        workspace=context['workspace']['label'],
+        profile=pick(profile, ('label', 'fiat_currency', 'tax_country', 'tax_long_term_days', 'gains_algorithm',
+                               'last_processed_at')) | dict(
+            last_processed_tx_count=counted(profile['last_processed_tx_count']),
+            journal_input_version=counted(profile['journal_input_version'])),
+        wallet=context['wallet']['label'] if context['wallet'] else None,
+        metrics=dict(wallets_in_scope=len(context['scope_wallets']), assets_in_scope=counted(summary['asset_count']),
+                     active_transactions=counted(summary['active_transactions']),
+                     excluded_transactions=counted(summary['excluded_transactions']),
+                     inbound_transactions=counted(summary['inbound_transactions']),
+                     outbound_transactions=counted(summary['outbound_transactions']),
+                     journal_entries=counted(query['journal_entries']), quarantines=counted(query['quarantines']),
+                     priced_transactions=counted(summary['priced_transactions']),
+                     transactions_with_notes=counted(summary['noted_transactions']),
+                     transactions_with_tags=counted(query['tagged_transactions']),
+                     first_transaction_at=summary['first_transaction_at'] or '',
+                     last_transaction_at=summary['last_transaction_at'] or ''),
+        rollups=context['rollups'],
+        wallets=[{key: text(row[key]) for key in ('label', 'kind', 'chain', 'network', 'backend', 'gap_limit')}
+                 for row in context['scope_wallets']],
+        asset_flow=flows(query['flow_by_asset'], ('asset',)),
+        wallet_flow=flows(query['flow_by_wallet'], ('wallet', 'asset')),
+        balances=[dict(account=text(row['account']), asset=text(row['asset']))
+                  | pick(row, ('quantity', 'cost_basis', 'market_value', 'unrealized_pnl'))
+                  for row in context['balance_rows']],
+        portfolio=[dict(wallet=text(row['wallet']), account=text(row['account']), asset=text(row['asset']))
+                   | pick(row, ('quantity', 'avg_cost', 'cost_basis', 'market_value', 'unrealized_pnl'))
+                   for row in context['portfolio_rows']],
+        capital=[dict(occurred_at=text(row['occurred_at']), wallet=text(row['wallet']), asset=text(row['asset']))
+                 | pick(row, ('quantity', 'proceeds', 'cost_basis', 'gain_loss'))
+                 for row in context['capital_rows']],
+        history=[dict(period_start=text(row['period_start']), asset=text(row['asset']))
+                 | pick(row, ('quantity', 'cumulative_cost_basis', 'market_value'))
+                 for row in context['history_rows']],
+        quarantines=[dict(reason=text(row['reason']), count=counted(row['count']))
+                     for row in query['quarantine_rows']],
+        transactions=[dict(occurred_at=text(row['occurred_at']), wallet=text(row['wallet']),
+                           direction=text(row['direction']), asset=text(row['asset']),
+                           amount_msat=counted(row['amount']), fee_msat=counted(row['fee']),
+                           description=text(row['description']))
+                      for row in query['transactions']],
+    )
+
+
 def build():
     cases = []
     for name, sql, args in specs():
@@ -83,13 +149,13 @@ def build():
                 if history_limit is not None and int(history_limit) < 0:
                     raise AppError('--history-limit must be zero or positive', code='validation')
                 context = reports._require_report_context(conn, None, None, hooks)
-                title, lines = reports.build_pdf_report_lines(
+                model = json.loads(json.dumps(full_model(reports._build_full_report_context(
+                    conn, None, None, hooks, wallet_ref=args.get('wallet'), history_limit=history_limit,
+                    report_context=context))))
+                title, _ = reports.build_pdf_report_lines(
                     conn, None, None, hooks, wallet_ref=args.get('wallet'),
                     history_limit=history_limit, report_context=context)
-                written = write_text_pdf(Path(root) / 'report.pdf', title, lines)
-                pdf = (Path(root) / 'report.pdf').read_bytes()
-                expected = dict(ok=dict(title=title, lines=lines, pages=written['pages'],
-                                        pdf=pdf.decode('latin-1')))
+                expected = dict(ok=dict(title=title, model=model))
             except AppError as exc:
                 expected = dict(error=dict(code=exc.code, message=str(exc), hint=exc.hint,
                                            details=exc.details, retryable=exc.retryable))

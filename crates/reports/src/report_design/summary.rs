@@ -3,71 +3,10 @@
 //! Austria, the E 1kv Kennzahl totals of each tax year in the period.
 use super::*;
 use crate::report_design::{
-    from_float, msat_of, Axis, Block, Cell, Chart, Column, Document, Fact, Kind, Kpi, Lang, Legend,
-    Section, Series, Table,
+    balance_chart, btc, col, count, day, fact, fiat, float, from_float, list, method_name,
+    month_labels, msat, status_name, txt, Axis, Block, Cell, Chart, Document, Fact, Kind, Kpi,
+    Lang, Legend, Section, Series, Table,
 };
-
-fn list<'a>(v: &'a Value, key: &str) -> &'a [Value] {
-    artifact_csv::list(value(v, key))
-}
-fn fiat(v: &Value, key: &str) -> Cell {
-    match value(v, key) {
-        Value::Null => Cell::Empty,
-        raw => Cell::Fiat(from_float(raw)),
-    }
-}
-fn btc(v: &Value, key: &str) -> Cell {
-    match value(v, key) {
-        Value::Null => Cell::Empty,
-        raw => Cell::Btc(from_float(raw)),
-    }
-}
-fn msat(cell: &Cell) -> Cell {
-    match cell {
-        Cell::Btc(d) => msat_of(d),
-        _ => Cell::Empty,
-    }
-}
-fn txt(v: &Value, key: &str) -> Cell {
-    match value(v, key) {
-        Value::Null => Cell::Empty,
-        raw => Cell::Text(py_str(raw)),
-    }
-}
-fn day(v: &Value, key: &str) -> Cell {
-    match value(v, key) {
-        Value::Null => Cell::Empty,
-        raw => Cell::Date(py_str(raw).chars().take(10).collect()),
-    }
-}
-fn count(v: &Value, key: &str) -> Cell {
-    match value(v, key) {
-        Value::Int(n) => Cell::Count(i64::try_from(n.clone()).unwrap_or(0)),
-        _ => Cell::Empty,
-    }
-}
-fn col(key: &'static str, label: impl Into<String>, kind: Kind, width: f64) -> Column {
-    Column::new(key, label, kind, width)
-}
-fn fact(key: &'static str, label: &str, value: Cell) -> Fact {
-    Fact {
-        key,
-        label: label.into(),
-        value,
-        display: None,
-        accent: false,
-    }
-}
-fn method_name(lang: Lang, algorithm: &str) -> String {
-    lang.get(&format!("method.{algorithm}"))
-        .map(str::to_owned)
-        .unwrap_or_else(|| algorithm.to_owned())
-}
-fn status_name(lang: Lang, status: &str) -> String {
-    lang.get(&format!("status.{status}"))
-        .map(str::to_owned)
-        .unwrap_or_else(|| status.replace('_', " "))
-}
 
 /// The E 1kv form wording of each Kennzahl the report fills, as Kassiber's
 /// Austrian PDF prints it for FinanzOnline.
@@ -80,94 +19,6 @@ const KENNZAHLEN: [(&str, &str); 4] = [
     ("176", "Ausländische Verluste"),
     ("801", "Einkünfte aus Spekulationsgeschäften (§ 31)"),
 ];
-
-/// At most about eight month labels; the last month is always labelled and
-/// replaces a regular label too close to it.
-fn month_labels(lang: Lang, months: &[String]) -> Vec<(f64, String)> {
-    let total = months.len();
-    let step = total.div_ceil(8).max(1);
-    months
-        .iter()
-        .enumerate()
-        .filter(|(i, _)| (i % step == 0 && *i + step < total) || *i + 1 == total)
-        .map(|(i, m)| ((i as f64 + 0.5) / total as f64, lang.month_short(m)))
-        .collect()
-}
-fn float(row: &Value, key: &str) -> f64 {
-    from_float(value(row, key))
-        .to_canonical()
-        .parse()
-        .unwrap_or(0.0)
-}
-
-fn balance_chart(lang: Lang, history: &[Value], currency: &str) -> Option<Chart> {
-    if history.is_empty() {
-        return None;
-    }
-    let market: Vec<f64> = history.iter().map(|r| float(r, "market_value")).collect();
-    let basis: Vec<f64> = history
-        .iter()
-        .map(|r| float(r, "cumulative_cost_basis"))
-        .collect();
-    let quantity: Vec<f64> = history.iter().map(|r| float(r, "quantity")).collect();
-    let axis = Axis::new(&[market.clone(), basis.clone()].concat(), 4, lang, true);
-    let qaxis = Axis::new(&quantity, 4, lang, false);
-    let total = history.len();
-    let x = |i: usize| (i as f64 + 0.5) / total as f64;
-    let line = |values: &[f64], axis: &Axis| {
-        values
-            .iter()
-            .enumerate()
-            .map(|(i, v)| (x(i), axis.at(*v)))
-            .collect()
-    };
-    let months: Vec<String> = history.iter().map(|r| text(r, "period")).collect();
-    let fiat = [("fiat", currency)];
-    Some(Chart {
-        title: lang.t("activity.balance_chart").into(),
-        height: 120.0,
-        x_labels: month_labels(lang, &months),
-        series: vec![
-            Series::Line {
-                points: line(&quantity, &qaxis),
-                weight: 0.6,
-                dashed: false,
-                tone: "muted",
-            },
-            Series::Line {
-                points: line(&basis, &axis),
-                weight: 0.8,
-                dashed: true,
-                tone: "ink",
-            },
-            Series::Line {
-                points: line(&market, &axis),
-                weight: 1.4,
-                dashed: false,
-                tone: "accent",
-            },
-        ],
-        legend: vec![
-            Legend {
-                label: lang.tf("legend.market_value", &fiat),
-                mark: "line",
-                tone: "accent",
-            },
-            Legend {
-                label: lang.tf("legend.cost_basis", &fiat),
-                mark: "dashed",
-                tone: "ink",
-            },
-            Legend {
-                label: lang.t("legend.quantity").into(),
-                mark: "thin",
-                tone: "muted",
-            },
-        ],
-        y_labels: axis.ticks,
-        y2_labels: qaxis.ticks,
-    })
-}
 
 fn flow_chart(lang: Lang, flows: &[Value], currency: &str) -> Option<Chart> {
     if flows.is_empty() {
@@ -532,8 +383,18 @@ pub fn summary(model: &Value) -> Document {
     let flows = list(report, "flow_periods");
     let realized = list(report, "realized_pnl_periods");
     let mut blocks = Vec::new();
-    if let Some(chart) = balance_chart(lang, history, &currency) {
-        blocks.push(Block::Chart(chart));
+    if !history.is_empty() {
+        let months: Vec<String> = history.iter().map(|r| text(r, "period")).collect();
+        let series = |key: &str| history.iter().map(|r| float(r, key)).collect::<Vec<_>>();
+        blocks.push(Block::Chart(balance_chart(
+            lang,
+            t("activity.balance_chart"),
+            &months,
+            &series("market_value"),
+            &series("cumulative_cost_basis"),
+            Some(&series("quantity")),
+            &currency,
+        )));
     }
     if let Some(chart) = flow_chart(lang, flows, &currency) {
         blocks.push(Block::Chart(chart));
@@ -899,7 +760,12 @@ pub fn summary(model: &Value) -> Document {
     Document {
         kind: "summary",
         title: t("summary.title").into(),
-        kicker: t("summary.kicker").into(),
+        kicker: t(if austria {
+            "doc.kicker.at"
+        } else {
+            "doc.kicker"
+        })
+        .into(),
         book: format!(
             "{} / {}",
             text(report, "workspace"),

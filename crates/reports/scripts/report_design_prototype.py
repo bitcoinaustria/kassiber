@@ -6,10 +6,11 @@
 
 Needs the books from ``report_design_books.py`` under ``--out/books``. For each
 book it runs the Rust renderer twice in separate processes and requires
-identical bytes, requires the model handed to the renderers (``model.json``)
-to equal Python's data for the same book (``python-model.json``) exactly,
-then keeps one run's PDF, XLSX and CSV bundle and renders every PDF page to
-PNG with ``pdftoppm``.
+identical bytes, requires each report's model handed to the renderers
+(``<report>/model.json``) to equal Python's data for the same book
+(``python-model.json``) exactly, then keeps one run's PDF, XLSX and CSV
+bundle per report under ``--out/<book>/<report>/`` and renders every PDF page
+to PNG with ``pdftoppm``.
 """
 
 from __future__ import annotations
@@ -26,10 +27,6 @@ from pathlib import Path
 def digest(root: Path) -> dict[str, str]:
     return {str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest()
             for p in sorted(root.rglob("*")) if p.is_file()}
-
-
-def canonical(path: Path) -> str:
-    return json.dumps(json.loads(path.read_text()), sort_keys=True, ensure_ascii=False)
 
 
 def main() -> int:
@@ -52,19 +49,22 @@ def main() -> int:
         if runs[0] != runs[1]:
             failures.append(f"{book}: two runs differ")
         first = out / "runs" / book / "run-1"
-        model_equal = canonical(first / "model.json") == canonical(out / "books" / book / "python-model.json")
-        if not model_equal:
-            failures.append(f"{book}: the Rust model differs from Python's")
+        python = json.loads((out / "books" / book / "python-model.json").read_text())
         final = out / book
         shutil.rmtree(final, ignore_errors=True)
         shutil.copytree(first, final)
-        subprocess.run(["pdftoppm", "-r", "110", "-png", str(final / "summary.pdf"), str(final / "page")], check=True)
-        report[book] = {
-            "deterministic": runs[0] == runs[1],
-            "model_equals_python": model_equal,
-            "files": runs[0],
-            "pages": sorted(p.name for p in final.glob("page-*.png")),
-        }
+        report[book] = {"deterministic": runs[0] == runs[1], "files": runs[0]}
+        for name in sorted(p.name for p in first.iterdir() if p.is_dir()):
+            rust = json.loads((first / name / "model.json").read_text())
+            model_equal = json.dumps(rust, sort_keys=True) == json.dumps(python.get(name), sort_keys=True)
+            if not model_equal:
+                failures.append(f"{book}/{name}: the Rust model differs from Python's")
+            subprocess.run(["pdftoppm", "-r", "110", "-png", str(final / name / f"{name}.pdf"),
+                            str(final / name / "page")], check=True)
+            report[book][name] = {
+                "model_equals_python": model_equal,
+                "pages": sorted(p.name for p in (final / name).glob("page-*.png")),
+            }
     shutil.rmtree(out / "runs", ignore_errors=True)
     (out / "prototype-check.json").write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps({book: {k: v for k, v in data.items() if k != "files"} for book, data in report.items()}, indent=2))

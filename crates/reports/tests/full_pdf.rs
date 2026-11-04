@@ -1,6 +1,8 @@
-//! The full text PDF: Python's report model and its PDF 1.4 bytes.
+//! The full report in the shared design: Python's report model, refusals
+//! and a deterministic rendering.
 use kassiber_envelope::{dict, s};
 use kassiber_pyjson::Value;
+use kassiber_reports::report_design;
 use kassiber_store::{rusqlite::Connection, Book};
 
 struct Fixed;
@@ -28,13 +30,13 @@ fn error(e: kassiber_envelope::AppError) -> serde_json::Value {
 }
 
 #[test]
-fn full_pdf_model_and_bytes_match_python() {
+fn full_report_model_matches_python_and_renders_deterministically() {
     let cases: Vec<serde_json::Value> =
         serde_json::from_str(include_str!("data/full_pdf.json")).unwrap();
     let root = tempfile::tempdir().unwrap();
     let book = Book::create(&root.path().join("data"), None).unwrap();
     let conn = book.connection();
-    let mut pages = std::collections::BTreeSet::new();
+    let mut rendered = 0;
     for case in &cases {
         let name = case["name"].as_str().unwrap();
         conn.execute_batch("SAVEPOINT oracle_fixture").unwrap();
@@ -46,43 +48,88 @@ fn full_pdf_model_and_bytes_match_python() {
             Ok(prepared) => {
                 let ok = &expected["ok"];
                 assert!(ok.is_object(), "{name}: Python failed with {expected}");
+                let limited = prepared_args(&args);
+                let (workspace, profile) =
+                    kassiber_setup::references::scope(conn, &limited).unwrap();
+                let model =
+                    kassiber_reports::full_pdf::model(conn, &workspace, &profile, &limited, &Fixed)
+                        .unwrap();
+                let document = kassiber_reports::report_design::full(&model);
+                let model: serde_json::Value = serde_json::from_str(
+                    &kassiber_pyjson::dumps(&model, &Default::default()).unwrap(),
+                )
+                .unwrap();
+                assert_eq!(model, ok["model"], "{name}: report model");
+                assert_eq!(
+                    disposal_groups(&document),
+                    python_groups(&ok["model"]),
+                    "{name}: disposals per wallet and asset"
+                );
                 let [file] = prepared.files.as_slice() else {
                     panic!("{name}: one PDF")
                 };
-                let pdf: Vec<u8> = ok["pdf"]
-                    .as_str()
-                    .unwrap()
-                    .chars()
-                    .map(|c| c as u8)
-                    .collect();
-                assert!(file.bytes == pdf, "{name}: PDF bytes differ");
+                assert!(file.bytes.starts_with(b"%PDF-"), "{name}");
+                let again = kassiber_reports::artifact_csv::prepare(
+                    conn,
+                    "reports.export-pdf",
+                    &args,
+                    &Fixed,
+                )
+                .unwrap();
+                assert!(
+                    again.files[0].bytes == file.bytes,
+                    "{name}: PDF bytes repeat"
+                );
                 let metadata =
                     kassiber_pyjson::dumps(&prepared.metadata, &Default::default()).unwrap();
                 let metadata: serde_json::Value = serde_json::from_str(&metadata).unwrap();
-                assert_eq!(metadata["pages"], ok["pages"], "{name}");
                 assert_eq!(metadata["title"], ok["title"], "{name}");
-                let args = prepared_args(&args);
-                let (workspace, profile) = kassiber_setup::references::scope(conn, &args).unwrap();
-                let (title, lines) =
-                    kassiber_reports::full_pdf::model(conn, &workspace, &profile, &args, &Fixed)
-                        .unwrap();
-                assert_eq!(title, ok["title"].as_str().unwrap(), "{name}");
-                let expected_lines: Vec<&str> = ok["lines"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|l| l.as_str().unwrap())
-                    .collect();
-                assert_eq!(lines, expected_lines, "{name}: report model");
-                pages.insert(ok["pages"].as_u64().unwrap());
+                rendered += 1;
             }
             Err(e) => assert_eq!(error(e), *expected, "{name}"),
         }
         conn.execute_batch("ROLLBACK TO oracle_fixture; RELEASE oracle_fixture")
             .unwrap();
     }
-    // The fixtures reach single and multi-page documents.
-    assert!(pages.len() >= 3, "{pages:?}");
+    assert!(rendered >= 40, "{rendered}");
+}
+
+/// Python's capital-gain buckets: first-seen (wallet, asset) order and row
+/// counts.
+fn python_groups(model: &serde_json::Value) -> Vec<(String, String, i64)> {
+    let mut groups: Vec<(String, String, i64)> = Vec::new();
+    for row in model["capital"].as_array().unwrap() {
+        let key = (
+            row["wallet"].as_str().unwrap(),
+            row["asset"].as_str().unwrap(),
+        );
+        match groups
+            .iter_mut()
+            .find(|g| (g.0.as_str(), g.1.as_str()) == key)
+        {
+            Some(group) => group.2 += 1,
+            None => groups.push((key.0.into(), key.1.into(), 1)),
+        }
+    }
+    groups
+}
+fn disposal_groups(document: &report_design::Document) -> Vec<(String, String, i64)> {
+    use report_design::{Block, Cell};
+    let rows = document
+        .sections
+        .iter()
+        .flat_map(|s| &s.blocks)
+        .find_map(|b| match b {
+            Block::Table(t) if t.id == "disposals_by_wallet" => Some(t.rows.clone()),
+            _ => None,
+        })
+        .unwrap_or_default();
+    rows.iter()
+        .map(|row| match (&row[0], &row[1], &row[2]) {
+            (Cell::Text(w), Cell::Text(a), Cell::Count(n)) => (w.clone(), a.clone(), *n),
+            other => panic!("{other:?}"),
+        })
+        .collect()
 }
 
 /// The history limit after the export's own `int()` admission.

@@ -12,10 +12,12 @@ with ``journals process`` like a user's book:
 
 Both hold a hot and a cold Bitcoin wallet and a Liquid wallet with monthly
 buys, sells, interest income, fee-paying transfers between owned wallets and
-a few spends. For each book ``python-model.json`` records exactly what
-Python's reports produce for the sample period: the summary report model, the
-profile's tax settings and, for Austria, the E 1kv Kennzahl totals of each
-tax year. The Rust prototype must reproduce these values.
+a few spends. For each book ``python-model.json`` records, per report, exactly
+what Python's reports produce: ``summary`` (the summary model for the sample
+period, the profile's tax settings and, for Austria, the E 1kv Kennzahl totals
+of each tax year) and ``full`` (the full report's model). The Rust renderers
+must reproduce these values. ``--capture-only`` re-records them for books
+built earlier.
 
 Runs offline on the disposable ``--out`` only. Every CLI child gets its own
 XDG directories so nothing resolves the account's real app-data root.
@@ -142,10 +144,16 @@ def capture(root: Path, country: str) -> dict:
     from kassiber.core import reports
     from kassiber.db import open_db
 
+    from unittest.mock import patch
+    from gen_full_pdf_vectors import FixedDateTime, full_model
+
     conn = open_db(str(root))
     hooks = replace(_report_hooks(), now_iso=lambda: STAMP)
     context = reports._require_report_context(conn, None, None, hooks)
     profile = dict(context.profile)
+    # The full report's history ends at the report clock, as in its oracle.
+    with patch.object(reports, "datetime", FixedDateTime):
+        full = full_model(reports._build_full_report_context(conn, None, None, hooks, report_context=context))
     summary = reports.build_summary_pdf_report_data(
         conn, None, None, hooks, start=PERIOD["start"], end=PERIOD["end"],
         include_snapshot=True, report_context=context)
@@ -160,18 +168,20 @@ def capture(root: Path, country: str) -> dict:
             report = reports.report_austrian_e1kv(conn, None, None, hooks, tax_year=year, report_context=context)
             model["kennzahlen"][str(year)] = report["kennzahl_totals"]
     conn.close()
-    return json.loads(json.dumps(model))
+    return json.loads(json.dumps({"summary": model, "full": full}))
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--out", required=True)
+    parser.add_argument("--capture-only", action="store_true",
+                        help="record Python's models for books built earlier")
     args = parser.parse_args()
     out = Path(args.out).resolve()
     for key in ("XDG_DATA_HOME", "XDG_CONFIG_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME"):
         os.environ[key] = str(out / "xdg" / key.lower())
     for name, spec in BOOKS.items():
-        root = build(name, spec, out)
+        root = out / "books" / name / "data" if args.capture_only else build(name, spec, out)
         model = capture(root, spec["country"])
         (out / "books" / name / "python-model.json").write_text(
             json.dumps(model, ensure_ascii=False, indent=1, sort_keys=True) + "\n")

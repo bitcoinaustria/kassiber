@@ -17760,24 +17760,17 @@ review, direct-sync wallet refresh).
 The owner brought PDF into scope on 2026-11-02. The hand-written PDF 1.4
 writer (`kassiber/pdf_report.py`) is ported directly to `crates/pdf` (`text`):
 Latin-1 transliteration, `textwrap` wrapping with the writer's options, the
-46-line pages and the object layout without dates or identifiers. Two reports
-use it and are registered natively:
-
-- `reports export-pdf` and `ui.reports.export_pdf`: the full report's lines
-  (`build_pdf_report_lines`) from the same stored inputs as the full CSV, with
-  the saved `full-report.pdf` marker;
-- `reports export-exit-tax-pdf` and `ui.reports.export_exit_tax_pdf`: the
-  exit-tax estimate's lines; like Python, no saved marker.
-
-Both CLI leaves admit source freshness first, as Python's final-export gate
-does. The envelope inserts `pages` between `file` and `bytes`.
+46-line pages and the object layout without dates or identifiers.
+`reports export-exit-tax-pdf` and `ui.reports.export_exit_tax_pdf` use it
+natively: the exit-tax estimate's lines; like Python, no saved marker. The CLI
+leaf admits source freshness first, as Python's final-export gate does. The
+envelope inserts `pages` between `file` and `bytes`.
 
 Evidence: `crates/pdf/tests/text.rs` (Python's wrapping, table and document
-vectors), `crates/reports/tests/full_pdf.rs` (91 cases: Python's report lines
-and PDF bytes, refusals included) and `tests/test_rust_pdf_exports.py` (CLI
-and daemon sessions against Python: identical stdout, PDF bytes, saved and
-filed markers and every table; all served by Rust). Eleven mutation entries
-in `crates/pdf/scripts/mutations.json` are each killed by named tests.
+vectors) and `tests/test_rust_pdf_exports.py` (CLI and daemon sessions against
+Python: identical stdout, PDF bytes and every table; all served by Rust).
+Mutation entries in `crates/pdf/scripts/mutations.json` are each killed by
+named tests.
 
 The owner approved the shared report design
 (`docs/reference/report-design.md`) on 2026-11-04; it replaces ReportLab's
@@ -17788,5 +17781,11 @@ daemon kind admits only `start`, `end`, `wallets` and `include_snapshot` with
 Python's messages, the managed name is `kassiber-summary-report-…pdf`, both
 admit source freshness first and register the saved `summary.pdf` marker over
 the period's years and wallets. The envelope keeps Python's keys and title;
-`pages`, `bytes` and the content hash are the new PDF's. The rollout table in
-the design document tracks the remaining reports.
+`pages`, `bytes` and the content hash are the new PDF's.
+
+`reports export-pdf` and `ui.reports.export_pdf` (the full report) are in the
+shared design too, replacing the byte-ported text PDF: the model is Python's
+`_build_full_report_context` read from the same stored inputs as the full CSV
+(`full_pdf::model`, exact parity for 89 fixture cases, refusals included),
+with the saved `full-report.pdf` marker as before. The rollout table in the
+design document tracks the remaining reports.

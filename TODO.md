@@ -855,9 +855,10 @@ registers them; exit-tax preserves its reference no-registration boundary.
   `reports export-exit-tax-pdf` and their desktop kinds natively (byte parity).
 - [x] Register the summary report (`reports export-summary-pdf`,
   `ui.reports.export_summary_pdf`) natively in the approved
-  [shared report design](docs/reference/report-design.md).
+  [shared report design](docs/reference/report-design.md) and move the full
+  report PDF onto it.
 - [ ] Roll out the rest of the [report design](docs/reference/report-design.md#rollout)
-  one report per commit: the full report, the Austrian E 1kv and exit-tax
+  one report per commit: the Austrian E 1kv and exit-tax
   reports, source of funds, the XLSX and CSV exports, the bundles, and native
   registration of every report leaf and kind.
 

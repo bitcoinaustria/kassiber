@@ -233,7 +233,7 @@ column names except the unit suffixes above, and every `_msat` column.
 
 `crates/reports/src/report_design/` holds the document types and the three
 renderers (`mod.rs`), the language rules (`locale.rs`), the string tables
-(`strings.rs`) and one builder per report kind (`summary.rs`, …). Builders
+(`strings.rs`) and one builder per report kind (`summary.rs`, `full.rs`, …). Builders
 take the data Python's reports produce and decide nothing a tax, journal or
 custody decision depends on. The PDF template is
 `crates/pdf/templates/report.typ`; the engine is sealed (`crates/pdf/src/engine.rs`).
@@ -241,7 +241,9 @@ custody decision depends on. The PDF template is
 Evidence for every rolled-out report:
 
 - a data-parity test: the model handed to the renderers equals Python's for
-  fixture cases, refusals included (`crates/reports/tests/report_design.rs`);
+  fixture cases, refusals included (`crates/reports/tests/report_design.rs`
+  for the summary's 23 cases, `crates/reports/tests/full_pdf.rs` for the full
+  report's 89: Python's `_build_full_report_context` values, exact);
 - whole-process tests (`tests/test_rust_pdf_exports.py`) run each CLI leaf and
   daemon kind against Python and require identical envelopes, errors, files,
   saved and filed markers and database effects, except where this document
@@ -262,7 +264,7 @@ One report per commit, each with data parity against Python's model.
 | # | Report | Commands | State |
 | --- | --- | --- | --- |
 | 1 | Summary | `reports export-summary-pdf`, `ui.reports.export_summary_pdf` | native, shared design |
-| 2 | Full report | `reports export-pdf`, `ui.reports.export_pdf` | text PDF (byte port), pending |
+| 2 | Full report | `reports export-pdf`, `ui.reports.export_pdf` | native, shared design |
 | 3 | Austrian E 1kv and exit tax | `reports export-austrian-e1kv-pdf`, `reports export-austrian`, `reports export-exit-tax-pdf` and their kinds | pending |
 | 4 | Source of funds | `reports export-source-funds-pdf`, `ui.source_funds.export_pdf` | pending |
 | 5 | XLSX | full, Austrian, exit tax, cross-check, verification, year handoff | pending |
@@ -278,6 +280,7 @@ keep byte parity with Python except where the new format changes them:
 | Report | Field | Difference |
 | --- | --- | --- |
 | Summary | `pages`, `bytes`, `report_snapshot.content_sha256` | the new PDF's; `title` stays Python's (`Kassiber Summary Report`) while the PDF's own title follows the book's language |
+| Full report | `pages`, `bytes`, `report_snapshot.content_sha256` | the new PDF's; `title` stays Python's (`Kassiber PDF Report - <scope>`) |
 
 ## Owner decisions (2026-11-04)
 
