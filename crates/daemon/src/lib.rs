@@ -33,6 +33,7 @@ mod reports;
 #[cfg(feature = "test-kinds")]
 pub use reports::execute as fixture_reports;
 mod review;
+mod review_context;
 mod secrets;
 mod settings;
 #[cfg(feature = "test-kinds")]
@@ -65,6 +66,8 @@ use crate::output::{with_request_id, Output, OutputClosed, RequestId};
 pub const SUPPORTED_KINDS: &[&str] = &["status", "daemon.lock", "daemon.unlock", "daemon.shutdown"];
 
 /// `_DIRECT_AUTO_JOURNAL_REFRESH_KINDS`: reads that rebuild stale journals first.
+/// `ui.transactions.review_context` is in Python's set, but its direct handler
+/// returns before the prelude runs, so it is not maintained here either.
 const MAINTAINED_READS: &[&str] = &[
     "ui.reports.capital_gains",
     "ui.reports.summary",
@@ -74,9 +77,11 @@ const MAINTAINED_READS: &[&str] = &[
     "ui.reports.balance_history",
     "ui.reports.exit_tax_preview",
     "ui.transfers.review_context",
-    "ui.transactions.review_context",
     "ui.report.blockers",
 ];
+
+/// The audit package's evidence surface; its PDF/package export stays unported.
+const EVIDENCE_SUMMARY: &str = "ui.audit.evidence.summary";
 
 const UNLOCK_SCOPE: &str = "unlock_database";
 const UNLOCK_LABEL: &str = "Enter the SQLCipher database passphrase to unlock Kassiber.";
@@ -95,6 +100,8 @@ pub fn supported_kinds() -> Vec<&'static str> {
     kinds.extend(services::kinds().filter(|k| offline::KINDS.contains(k)));
     kinds.extend(workspace_reads::OVERVIEW_KINDS);
     kinds.extend(transactions::KINDS);
+    kinds.push(transactions::GRAPH_KIND);
+    kinds.push(review_context::KIND);
     kinds.extend(
         reports::KINDS
             .iter()
@@ -169,10 +176,14 @@ pub fn supported_kinds() -> Vec<&'static str> {
             .contains(k)
     }));
     kinds.extend(rates::KINDS);
+    kinds.push("ui.report.blockers");
     kinds.extend(transactions::AUDIT_KINDS);
+    kinds.push(EVIDENCE_SUMMARY);
     kinds.push("ui.review.worklist");
     kinds.extend(review::KINDS);
-    kinds.extend(settings::KINDS);
+    kinds.extend(&settings::KINDS[..2]);
+    kinds.push(settings::RUN_KIND);
+    kinds.extend(&settings::KINDS[2..]);
     kinds.push("ui.freshness.run");
     kinds.extend(freshness::product::CONTROL_KINDS);
     kinds.push(workspace_reads::HEALTH_KIND);
@@ -287,6 +298,16 @@ fn report_failure(kind: &str, error: AppError) -> Failure {
         "ui.reports.privacy_hygiene" | "ui.reports.psbt_privacy"
     ) && error.code == "internal_error"
     {
+        Failure::Unhandled(error)
+    } else {
+        Failure::App(error)
+    }
+}
+
+/// A handler whose Python reference lets a bare exception escape answers
+/// `internal_error` without the reference traceback.
+fn python_exception(error: AppError) -> Failure {
+    if error.code == "internal_error" {
         Failure::Unhandled(error)
     } else {
         Failure::App(error)
@@ -847,7 +868,15 @@ impl Daemon {
             if let Some(locked) = self.open_lazily(&request_id)? {
                 return Ok((Some(locked), false));
             }
-            self.book_mut()?.maintain_for_read()?;
+            let auto_sync = self.book_mut()?.maintain_for_read()?;
+            if kind_text == "ui.report.blockers" {
+                // Python's handler ignores its arguments.
+                let payload = self.book_mut()?.report_blockers(auto_sync.as_ref())?;
+                return Ok((
+                    Some(with_request_id(success(&kind_text, payload), &request_id)),
+                    false,
+                ));
+            }
         }
         if freshness::product::RUN_KINDS.contains(&kind_text.as_str())
             || freshness::product::CONTROL_KINDS.contains(&kind_text.as_str())
@@ -882,6 +911,7 @@ impl Daemon {
             ));
         }
         if transactions::KINDS.contains(&kind_text.as_str())
+            || kind_text == transactions::GRAPH_KIND
             || transactions::AUDIT_KINDS.contains(&kind_text.as_str())
         {
             if let Some(locked) = self.open_lazily(&request_id)? {
@@ -1030,6 +1060,51 @@ impl Daemon {
         }
         if wallets::KINDS.contains(&kind_text.as_str()) {
             return wallets::handle(self, &kind_text, args.as_ref(), &request_id);
+        }
+        if kind_text == review_context::KIND {
+            if let Some(locked) = self.open_lazily(&request_id)? {
+                return Ok((Some(locked), false));
+            }
+            let payload = review_context::execute(self.book_mut()?.as_mut(), args.as_ref())
+                .map_err(python_exception)?;
+            return Ok((
+                Some(with_request_id(success(&kind_text, payload), &request_id)),
+                false,
+            ));
+        }
+        if kind_text == EVIDENCE_SUMMARY {
+            if let Some(locked) = self.open_lazily(&request_id)? {
+                return Ok((Some(locked), false));
+            }
+            let empty = dict::<&str>([]);
+            let args = match args.as_ref() {
+                None | Some(Value::Null) => &empty,
+                Some(v @ Value::Dict(_)) => v,
+                Some(v) => {
+                    return Err(AppError::new("validation", "daemon args must be an object")
+                        .with_details(dict([("type", s(type_name(v)))]))
+                        .into())
+                }
+            };
+            let payload = self
+                .book_mut()?
+                .evidence_summary(args)
+                .map_err(python_exception)?;
+            return Ok((
+                Some(with_request_id(success(&kind_text, payload), &request_id)),
+                false,
+            ));
+        }
+        if kind_text == settings::RUN_KIND {
+            if let Some(locked) = self.open_lazily(&request_id)? {
+                return Ok((Some(locked), false));
+            }
+            let payload = settings::run(self.book_mut()?.as_mut(), args.as_ref())
+                .map_err(python_exception)?;
+            return Ok((
+                Some(with_request_id(success(&kind_text, payload), &request_id)),
+                false,
+            ));
         }
         if settings::KINDS.contains(&kind_text.as_str()) {
             if let Some(locked) = self.open_lazily(&request_id)? {

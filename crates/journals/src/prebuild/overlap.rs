@@ -90,6 +90,17 @@ fn fingerprint_integer(v: &Value) -> Result<Value, Refusal> {
 }
 
 fn preview(conn: &Connection, profile: &str, idx: &Index) -> Result<Value, Refusal> {
+    limited_preview(conn, profile, idx, None)
+}
+
+/// `duplicate_transaction_preview(..., limit=limit)`: groups past the limit are
+/// counted but neither shown nor recommended for exclusion.
+fn limited_preview(
+    conn: &Connection,
+    profile: &str,
+    idx: &Index,
+    limit: Option<usize>,
+) -> Result<Value, Refusal> {
     let overlaps = idx.overlaps();
     let mut wallet_ids = BTreeSet::new();
     let mut canonical_ids = BTreeSet::new();
@@ -147,6 +158,7 @@ fn preview(conn: &Connection, profile: &str, idx: &Index) -> Result<Value, Refus
     }
     let mut duplicates = Vec::new();
     let mut exclusions = Vec::new();
+    let mut duplicate_groups = 0;
     for (key, group) in groups {
         if group
             .iter()
@@ -171,11 +183,15 @@ fn preview(conn: &Connection, profile: &str, idx: &Index) -> Result<Value, Refus
         if exclude.is_empty() {
             continue;
         }
+        duplicate_groups += 1;
+        if limit.is_some_and(|limit| duplicates.len() >= limit) {
+            continue;
+        }
         duplicates.push(json!({"external_id":key[0],"occurred_at":group.iter().map(|r| text(&r["occurred_at"])).min().unwrap(),"direction":key[1],"asset":key[2],"transaction_count":group.len(),"recommended_keep_transaction_id":keep["id"],"recommended_exclude_transaction_ids":exclude}));
         exclusions.extend(exclude);
     }
     Ok(
-        json!({"duplicate_groups":duplicates,"recommended_exclusions":exclusions,"limited":false,"repair_policy":"Preview only. Exclude duplicate transaction rows through the audited metadata exclusion path after user review; do not delete wallets or cascade-delete transactions automatically."}),
+        json!({"duplicate_groups":duplicates,"recommended_exclusions":exclusions,"limited":limit.is_some_and(|limit| duplicate_groups > limit),"repair_policy":"Preview only. Exclude duplicate transaction rows through the audited metadata exclusion path after user review; do not delete wallets or cascade-delete transactions automatically."}),
     )
 }
 
@@ -405,6 +421,36 @@ pub fn source_overlap_warning(
         details["repair_attempt"] = repair.clone();
     }
     Ok(Some(details))
+}
+
+/// The report blocker's `detect_profile_source_overlaps` result and its
+/// 20-group duplicate preview, or `None` when no finite script overlaps.
+pub fn source_overlap_blocker(
+    conn: &Connection,
+    profile_id: &str,
+) -> Result<Option<(kassiber_pyjson::Value, kassiber_pyjson::Value)>, Refusal> {
+    let idx = index(conn, profile_id)?;
+    let overlap = idx.projection();
+    if array(&overlap["overlaps"]).is_empty() {
+        return Ok(None);
+    }
+    let preview = limited_preview(conn, profile_id, &idx, Some(20))?;
+    let fields = source_overlap_result_fields(
+        None,
+        Some(
+            &json!({"overlap_count":overlap["overlap_count"],"overlap":overlap,"repair_preview":preview}),
+        ),
+    )?;
+    let kassiber_pyjson::Value::Dict(mut fields) = fields else {
+        unreachable!("source overlap fields are a mapping")
+    };
+    let (_, warning) = fields.remove(0);
+    let field = |key: &str| {
+        kassiber_envelope::get(&warning, key)
+            .cloned()
+            .unwrap_or(kassiber_pyjson::Value::Null)
+    };
+    Ok(Some((field("overlap"), field("repair_preview"))))
 }
 
 /// Append these fields to the process result after its ordinary journal fields.

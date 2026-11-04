@@ -95,6 +95,19 @@ pub(super) fn snapshot(c: &Connection, scope: &Scope<'_>) -> Result<Snapshot> {
     snapshot.channel_records = records(c,"SELECT r.txid,r.outpoint,r.tag,r.wallet_id,r.channel_id,r.amount_msat,r.raw_json,w.config_json,b.chain,b.network FROM lightning_node_records r JOIN wallets w ON w.id=r.wallet_id LEFT JOIN backends b ON b.name=r.backend_name WHERE r.profile_id=? AND r.record_type='channel'",[scope.profile_id])?;
     Ok(snapshot)
 }
+/// `iter_authored_active_components(include_local_evidence=False)`: every
+/// authored-active component with its validation and effective state.
+pub fn authored_active_components(
+    c: &Connection,
+    scope: &Scope<'_>,
+) -> Result<Vec<serde_json::Value>> {
+    let computed =
+        kassiber_custody::components::compute(&snapshot(c, scope)?).map_err(convert_error)?;
+    Ok(computed["components"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default())
+}
 pub(super) fn invalidate(c: &Connection, profile: &str) -> Result<()> {
     c.execute("UPDATE profiles SET last_processed_at=NULL,last_processed_tx_count=0,journal_input_version=journal_input_version+1,ownership_review_counts_json=NULL WHERE id=?",[profile]).map_err(error)?;
     Ok(())

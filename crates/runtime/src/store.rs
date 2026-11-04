@@ -381,9 +381,46 @@ pub trait Book: Send {
     }
 
     /// `_auto_maintain_for_read`: rebuild stale journals of the active book
-    /// before a report-like read. Stores without journals have nothing to do.
-    fn maintain_for_read(&mut self) -> Result<(), AppError> {
-        Ok(())
+    /// before a report-like read, and return the automatic wallet refresh
+    /// payload when the book's policy ran one. Stores without journals have
+    /// nothing to do.
+    fn maintain_for_read(&mut self) -> Result<Option<Value>, AppError> {
+        let auto_sync = self.report_read_sync(false)?;
+        self.auto_process_journals()?;
+        Ok(auto_sync)
+    }
+    /// `_auto_sync_wallets_if_enabled`: the automatic watch-only refresh a
+    /// book's report-read policy enables, or every source when `force`d by an
+    /// explicit maintenance run. `None` when nothing was attempted.
+    fn report_read_sync(&mut self, _force: bool) -> Result<Option<Value>, AppError> {
+        Ok(None)
+    }
+    /// `_auto_process_journals_if_needed`: the local journal rebuild payload
+    /// when the active book's journals are stale.
+    fn auto_process_journals(&mut self) -> Result<Option<Value>, AppError> {
+        Ok(None)
+    }
+    /// The stored journal entries of one transaction, as the journal events
+    /// list shows them; no journal processing.
+    fn journal_events(&mut self, _transaction: &str, _limit: i64) -> Result<Value, AppError> {
+        Err(not_implemented("journals", "journal events"))
+    }
+    /// `SELECT direction FROM transactions WHERE id = ?`, `""` when absent.
+    fn transaction_direction(&mut self, _transaction: &str) -> Result<String, AppError> {
+        Err(not_implemented("transactions", "transaction direction"))
+    }
+    /// `ui.transactions.graph`: the local transaction-flow graph.
+    fn transaction_graph(&mut self, _args: Option<&Value>) -> Result<Value, AppError> {
+        Err(not_implemented("transactions", "transaction graph"))
+    }
+    /// `ui.audit.evidence.summary`: the audit package's evidence surface for
+    /// the active book, without copying files or writing an export.
+    fn evidence_summary(&mut self, _args: &Value) -> Result<Value, AppError> {
+        Err(not_implemented("audit", "evidence summary"))
+    }
+    /// `ui.report.blockers` with the read prelude's automatic refresh result.
+    fn report_blockers(&mut self, _auto_sync: Option<&Value>) -> Result<Value, AppError> {
+        Err(not_implemented("reports", "report blockers"))
     }
     /// `ui.transactions.dashboard` over the caller's suggestion candidates.
     fn transaction_dashboard(

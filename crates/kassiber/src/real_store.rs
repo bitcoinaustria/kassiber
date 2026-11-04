@@ -1552,24 +1552,35 @@ impl Book for RealBook {
         )
     }
 
-    fn maintain_for_read(&mut self) -> Result<(), AppError> {
+    fn report_read_sync(&mut self, force: bool) -> Result<Option<Value>, AppError> {
         let context = self.context()?;
         if context.profile_id.is_empty() {
-            return Ok(());
+            return Ok(None);
         }
         let conn = self.conn()?;
         let mut sources = sync_sources().0;
         let policy = kassiber_wallets::freshness::Queue::new(conn, sources.as_mut())
             .policy(&context.profile_id)?;
-        if kassiber_envelope::truthy(
-            kassiber_envelope::get(&policy, "report_read_sync").unwrap_or(&Value::Null),
-        ) {
-            // Report-read wallet sync is network work; refuse rather than skip it.
-            return Err(AppError::new(
-                "not_implemented",
-                "Report-read wallet sync is not implemented in the Rust daemon yet",
-            ));
+        if !force
+            && !kassiber_envelope::truthy(
+                kassiber_envelope::get(&policy, "report_read_sync").unwrap_or(&Value::Null),
+            )
+        {
+            return Ok(None);
         }
+        // Report-read wallet sync is network work; refuse rather than skip it.
+        Err(AppError::new(
+            "not_implemented",
+            "Report-read wallet sync is not implemented in the Rust daemon yet",
+        ))
+    }
+
+    fn auto_process_journals(&mut self) -> Result<Option<Value>, AppError> {
+        let context = self.context()?;
+        if context.profile_id.is_empty() {
+            return Ok(None);
+        }
+        let conn = self.conn()?;
         let stale: bool = conn
             .query_row(
                 "SELECT (SELECT COUNT(*) FROM transactions WHERE profile_id=p.id AND excluded=0) AS active, \
@@ -1583,12 +1594,67 @@ impl Book for RealBook {
             .map_err(error)?
             .unwrap_or(false);
         if !stale {
-            return Ok(());
+            return Ok(None);
         }
         let reply = self
             .process_journals(None, None, false, &mut |_| {})
             .map_err(|failure| *failure.error)?;
-        reply.after_reply()
+        let payload = reply.payload().clone();
+        reply.after_reply()?;
+        Ok(Some(payload))
+    }
+
+    fn journal_events(&mut self, transaction: &str, limit: i64) -> Result<Value, AppError> {
+        kassiber_journals::journal_events::for_transaction(self.conn()?, transaction, limit)
+    }
+
+    fn transaction_direction(&mut self, transaction: &str) -> Result<String, AppError> {
+        let direction: Option<Option<String>> = self
+            .conn()?
+            .query_row(
+                "SELECT direction FROM transactions WHERE id = ?",
+                [transaction],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(map_sqlite_error)
+            .map_err(error)?;
+        Ok(direction.flatten().unwrap_or_default())
+    }
+
+    fn transaction_graph(&mut self, args: Option<&Value>) -> Result<Value, AppError> {
+        kassiber_journals::transaction_graph::snapshot(self.conn()?, args)
+    }
+
+    fn evidence_summary(&mut self, args: &Value) -> Result<Value, AppError> {
+        use kassiber_journals::evidence_summary;
+        let options = evidence_summary::options(args)?;
+        let paths = context()?
+            .resolve(&ResolveOptions {
+                data_root: Some(PathBuf::from(&self.data_root)),
+                ..Default::default()
+            })
+            .map_err(error)?;
+        std::fs::create_dir_all(&paths.attachments_root)
+            .map_err(|e| AppError::new("internal_error", e.to_string()))?;
+        evidence_summary::summary(self.conn()?, &paths.attachments_root, &options)
+    }
+
+    fn report_blockers(&mut self, auto_sync: Option<&Value>) -> Result<Value, AppError> {
+        use kassiber_workspace::readiness;
+        let conn = self.conn()?;
+        let (context, profile) = readiness::scope(conn, None)?;
+        let health = readiness::health(conn, &context, profile.as_ref())?;
+        let coverage = kassiber_rates::desktop_command(
+            conn,
+            "ui.rates.coverage",
+            &dict([("limit", Value::Int(10.into()))]),
+            &self.rates,
+        )?;
+        let snapshot = kassiber_journals::report_blockers::snapshot(conn, health, coverage)?;
+        Ok(kassiber_journals::report_blockers::apply_sync_failure(
+            snapshot, auto_sync,
+        ))
     }
 
     fn transaction_dashboard(

@@ -23,6 +23,42 @@ mod worker;
 pub use worker::fixture_followup;
 pub use worker::followup;
 
+/// `load_local_transaction_reference`: the most complete compatible local
+/// graph for a txid, or a conflict when local observations disagree.
+pub enum LocalReference {
+    Conflict,
+    Payload(Json),
+    Absent,
+}
+
+/// Local transaction references for the desktop graph read; no request.
+pub fn local_reference(
+    conn: &Connection,
+    profile: &str,
+    chain: &str,
+    network: &str,
+    txid: &str,
+    current: &Json,
+) -> Result<LocalReference> {
+    Ok(
+        match references::local(conn, profile, chain, network, txid, current)? {
+            references::Local::Conflict => LocalReference::Conflict,
+            references::Local::Payload(raw) => LocalReference::Payload(raw),
+            references::Local::Absent => LocalReference::Absent,
+        },
+    )
+}
+
+/// `_load_graph_lookup_cache`: a previously fetched public reference graph.
+pub fn cached_reference(
+    conn: &Connection,
+    chain: &str,
+    network: &str,
+    txid: &str,
+) -> Result<Option<Json>> {
+    references::cached(conn, chain, network, txid)
+}
+
 pub const MAX_ROWS: usize = 1_000;
 pub const MAX_TRANSACTIONS: usize = 50;
 pub const MAX_PREVOUTS: usize = 250;

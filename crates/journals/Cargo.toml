@@ -16,6 +16,7 @@ kassiber-pyjson = { path = "../pyjson" }
 kassiber-pytext = { path = "../pytext" }
 kassiber-transfers = { path = "../transfers" }
 kassiber-transactions = { path = "../transactions" }
+kassiber-workspace = { path = "../workspace" }
 # Reuse the shared SQL driver for test-only review composition.
 kassiber-store = { path = "../store" }
 kassiber-wallets = { path = "../wallets" }

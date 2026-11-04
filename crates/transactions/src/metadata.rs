@@ -640,6 +640,33 @@ fn edit(conn: &Connection, scope: &Scope<'_>, command: &Command) -> Result<Value
 fn stale(conn: &Connection, profile: &str) -> Result<Value> {
     let profile_row = rows(conn, "SELECT * FROM profiles WHERE id=?", [profile])?.remove(0);
     let version = int(&profile_row, "last_processed_input_version");
+    stale_summary(
+        conn,
+        profile,
+        version,
+        value(&profile_row, "last_processed_at"),
+    )
+}
+
+/// `transaction_history.history_for_transaction_ids` for a profile whose
+/// processed journal input version the caller already holds.
+pub fn history_for_transaction_ids(
+    conn: &Connection,
+    profile: &str,
+    version: i64,
+    ids: &[String],
+) -> Result<Vec<(String, Vec<Value>)>> {
+    history::for_transactions(conn, profile, version, ids)
+}
+
+/// `transaction_history.stale_summary`: edits recorded after the processed
+/// journal input version, for a caller that already holds the version.
+pub fn stale_summary(
+    conn: &Connection,
+    profile: &str,
+    version: i64,
+    last_processed_at: Value,
+) -> Result<Value> {
     let summary = rows(conn,"SELECT COUNT(*) AS count,MAX(changed_at) AS latest FROM transaction_edit_events WHERE profile_id=? AND journal_input_version_after>?",params![profile,version])?.remove(0);
     let fields = rows(conn,"SELECT f.field,COUNT(*) AS count FROM transaction_edit_events e JOIN transaction_edit_fields f ON f.event_id=e.id WHERE e.profile_id=? AND e.journal_input_version_after>? GROUP BY f.field",params![profile,version])?;
     let sources = rows(conn,"SELECT source,COUNT(*) AS count FROM transaction_edit_events WHERE profile_id=? AND journal_input_version_after>? GROUP BY source",params![profile,version])?;
@@ -703,9 +730,6 @@ fn stale(conn: &Connection, profile: &str) -> Result<Value> {
             ),
         ),
         ("last_processed_input_version", Value::Int(version.into())),
-        (
-            "last_processed_at",
-            value(&profile_row, "last_processed_at"),
-        ),
+        ("last_processed_at", last_processed_at),
     ]))
 }

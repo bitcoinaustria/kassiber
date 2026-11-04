@@ -30,6 +30,7 @@ mod sql;
 #[doc(hidden)]
 pub mod sql;
 
+pub use component_store::authored_active_components;
 use kassiber_envelope::{dict, get, py_str, AppError};
 use kassiber_pyjson::Value;
 use kassiber_store::rusqlite::Connection;

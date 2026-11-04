@@ -9,6 +9,23 @@ mod gates;
 mod graph;
 pub mod interpretation;
 pub mod journal_support;
+/// `core.onchain` ownership graph parsing shared with desktop projections.
+pub mod onchain {
+    use kassiber_pyjson::Value as Py;
+    use serde_json::Value;
+
+    /// `parse_ownership_tx(raw_json)`: a stored observation's graph with
+    /// partially valued legs, or `None` when it carries no graph.
+    pub fn parse_ownership_tx(raw: &Value) -> Result<Option<Py>, String> {
+        crate::graph::stored::parse(raw)
+    }
+
+    /// `merge_ownership_txs(items)`: complementary observations of one
+    /// transaction, with disagreeing legs listed as evidence conflicts.
+    pub fn merge_ownership_txs(items: &[Py]) -> Option<Py> {
+        crate::graph::stored::merge(items)
+    }
+}
 pub mod ledger_request;
 mod liquid;
 mod par;

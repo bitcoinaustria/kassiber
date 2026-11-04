@@ -524,6 +524,36 @@ fn event_payload(conn: &Connection, row: &Value, version: i64) -> Result<Value> 
     ]))
 }
 
+/// `history_for_transaction_ids`: every edit event of the selected
+/// transactions, oldest first, grouped by transaction id in sorted order.
+pub(super) fn for_transactions(
+    conn: &Connection,
+    profile_id: &str,
+    version: i64,
+    ids: &[String],
+) -> Result<Vec<(String, Vec<Value>)>> {
+    let unique: BTreeSet<&String> = ids.iter().collect();
+    if unique.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut bind = vec![SqlValue::Text(profile_id.into())];
+    bind.extend(unique.iter().map(|id| SqlValue::Text((*id).clone())));
+    let found = rows(conn,&format!("SELECT e.*,w.label AS wallet_label,t.direction,t.asset,t.amount,t.fee,t.counterparty FROM transaction_edit_events e LEFT JOIN wallets w ON w.id=e.wallet_id LEFT JOIN transactions t ON t.id=e.transaction_id WHERE e.profile_id=? AND e.transaction_id IN ({}) ORDER BY e.changed_at ASC,e.id ASC",vec!["?";unique.len()].join(",")),params_from_iter(bind))?;
+    let mut grouped: Vec<(String, Vec<Value>)> = unique
+        .iter()
+        .map(|id| ((*id).clone(), Vec::new()))
+        .collect();
+    for row in &found {
+        let id = text(row, "transaction_id").to_owned();
+        let payload = event_payload(conn, row, version)?;
+        match grouped.iter_mut().find(|(key, _)| *key == id) {
+            Some((_, events)) => events.push(payload),
+            None => grouped.push((id, vec![payload])),
+        }
+    }
+    Ok(grouped)
+}
+
 pub(super) fn list(
     conn: &Connection,
     scope: &Scope<'_>,

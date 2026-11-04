@@ -5,9 +5,17 @@ use kassiber_runtime::store::Book;
 
 pub use kassiber_transactions::desktop::{AUDIT_KINDS, KINDS};
 
+/// The transaction-flow graph: a local read over stored observations, the
+/// owned index and the current custody projection.
+pub const GRAPH_KIND: &str = "ui.transactions.graph";
+
 pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<Value, AppError> {
     if kind == "ui.transactions.dashboard" {
         return dashboard(book, args);
+    }
+    if kind == GRAPH_KIND {
+        // Python passes the raw arguments; anything but an object reads as {}.
+        return book.transaction_graph(args);
     }
     let projection = kassiber_transactions::desktop::Projection::from_kind(kind)
         .ok_or_else(|| AppError::new("unsupported_kind", "Unsupported desktop transaction kind"))?;

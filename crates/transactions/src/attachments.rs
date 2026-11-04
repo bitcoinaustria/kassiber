@@ -132,6 +132,29 @@ pub(crate) fn storage(
     Ok((root.join(&relative), relative))
 }
 
+/// `_resolve_stored_path`: a managed file inside the attachments root, or
+/// `(None, false)` for an absolute or escaping stored path.
+pub fn stored_path(root: &Path, relative: &str) -> (Option<PathBuf>, bool) {
+    stored(root, relative)
+}
+
+/// `attachment_display_label(row)`.
+pub fn display_label(row: &Value) -> String {
+    let explicit = clean(text(row, "label"));
+    if !explicit.is_empty() {
+        explicit
+    } else if text(row, "attachment_type") == "url" {
+        url_display_label(text(row, "source_url"))
+    } else {
+        let name = clean(text(row, "original_filename"));
+        if name.is_empty() {
+            "File attachment".into()
+        } else {
+            name
+        }
+    }
+}
+
 fn stored(root: &Path, relative: &str) -> (Option<PathBuf>, bool) {
     let relative = strip(relative);
     if relative.is_empty() {
@@ -362,19 +385,7 @@ fn payload(row: &Value, root: &Path) -> Value {
             } else {
                 Value::Null
             });
-    let explicit = clean(text(row, "label"));
-    let display = if !explicit.is_empty() {
-        explicit
-    } else if text(row, "attachment_type") == "url" {
-        url_display_label(text(row, "source_url"))
-    } else {
-        let name = clean(text(row, "original_filename"));
-        if name.is_empty() {
-            "File attachment".into()
-        } else {
-            name
-        }
-    };
+    let display = display_label(row);
     dict([
         ("id", value(row, "id")),
         ("transaction_id", value(row, "transaction_id")),

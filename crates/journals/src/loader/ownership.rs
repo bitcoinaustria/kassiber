@@ -282,6 +282,14 @@ pub(super) fn has_descriptor(config: &Value) -> bool {
     };
     present("descriptor") || (present("xpub") && truth(get(config, "script_types")))
 }
+/// `item` with its branch label, when the caller asked for branch labels.
+fn with_branch(branches: bool, item: &Value, label: String) -> Value {
+    let mut item = item.clone();
+    if branches {
+        set(&mut item, "branch_label", Value::from(label));
+    }
+    item
+}
 fn match_facts(wallet: &Value, account: &str, chain: &str, network: &str, source: &str) -> Value {
     dict([
         ("wallet_id", Value::from(text(get(wallet, "id")))),
@@ -400,6 +408,49 @@ pub(super) fn load(
     }) {
         return Ok((Value::Null, vec![]));
     }
+    let (index, warnings) = build(conn, profile_id, false)?;
+    let mut references = BTreeSet::new();
+    for row in rows {
+        let native = serde_json::json!({"raw_json":row.get("raw_json")});
+        if let Some(graph) =
+            kassiber_custody::journal_support::parsed(&native).map_err(Error::Invalid)?
+        {
+            for entry in graph["inputs"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .chain(graph["outputs"].as_array().into_iter().flatten())
+            {
+                if let Some(script) = entry["script"].as_str().filter(|s| !s.is_empty()) {
+                    references.insert(script.to_lowercase());
+                }
+                if let Some(outpoint) = entry["outpoint"].as_str().filter(|s| !s.is_empty()) {
+                    references.insert(outpoint.to_lowercase());
+                    references.insert(outpoint.split(':').next().unwrap_or("").to_lowercase());
+                }
+            }
+            if let Some(txid) = graph["txid"].as_str().filter(|s| !s.is_empty()) {
+                references.insert(txid.to_lowercase());
+            }
+        }
+    }
+    Ok((index.encode(&references), warnings))
+}
+
+/// `build_owned_index(conn, profile_id, load_profile_wallets(...))` for a
+/// caller that knows which scripts, outpoints and txids it will look up; the
+/// encoded index keeps only those keys. Matches also carry their wallet
+/// branch label, which the journal snapshot omits.
+pub fn owned_index(
+    conn: &Connection,
+    profile_id: &str,
+    references: &BTreeSet<String>,
+) -> Result<(Value, Vec<Value>)> {
+    let (index, warnings) = build(conn, profile_id, true)?;
+    Ok((index.encode(references), warnings))
+}
+
+fn build(conn: &Connection, profile_id: &str, branches: bool) -> Result<(Index, Vec<Value>)> {
     let wallets=query(conn,"SELECT w.id,w.label,w.kind,w.config_json,a.code AS account_code,a.label AS account_label FROM wallets w LEFT JOIN accounts a ON a.id=w.account_id WHERE w.profile_id=? ORDER BY w.label ASC",[profile_id])?;
     let summary_rows = query(
         conn,
@@ -427,7 +478,7 @@ pub(super) fn load(
         let chain=if truth(get(&row,"chain")) { get(&row,"chain") } else { get(&config,"chain") };
         let network=if truth(get(&row,"network")) { get(&row,"network") } else { get(&config,"network") };
         let (chain,network)=chain_network(chain,network);
-        let item=match_facts(&wallet,"",&chain,&network,"inventory");
+        let item=with_branch(branches,&match_facts(&wallet,"",&chain,&network,"inventory"),if truth(get(&row,"branch_label")) { text(get(&row,"branch_label")) } else { String::new() });
         index.address(get(&row,"address"),&item);
         let script=if truth(get(&row,"address")) { bitcoin_address_script(&text(get(&row,"address"))) } else { None };
         index.script(script.or_else(||normalized_script(get(&row,"script_pubkey"))),&item);
@@ -480,6 +531,7 @@ pub(super) fn load(
                     "address_list"
                 },
             );
+            let item = with_branch(branches, &item, "address".into());
             for address in addresses(&config)? {
                 index.address(&Value::from(address.clone()), &item);
                 index.script(bitcoin_address_script(&address), &item);
@@ -547,6 +599,11 @@ pub(super) fn load(
                 },
             );
             for target in targets {
+                let item = with_branch(
+                    branches,
+                    &item,
+                    target["branch_label"].as_str().unwrap_or("").to_owned(),
+                );
                 index.script(target["script_pubkey"].as_str().map(str::to_owned), &item);
                 index.address(
                     &Value::from(target["address"].as_str().unwrap_or("")),
@@ -578,32 +635,7 @@ pub(super) fn load(
             for item in &matches { index.outpoint(&Value::from(txid.clone()),&Value::from(vout.clone()),item)?; }
         }
     }
-    let mut references = BTreeSet::new();
-    for row in rows {
-        let native = serde_json::json!({"raw_json":row.get("raw_json")});
-        if let Some(graph) =
-            kassiber_custody::journal_support::parsed(&native).map_err(Error::Invalid)?
-        {
-            for entry in graph["inputs"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .chain(graph["outputs"].as_array().into_iter().flatten())
-            {
-                if let Some(script) = entry["script"].as_str().filter(|s| !s.is_empty()) {
-                    references.insert(script.to_lowercase());
-                }
-                if let Some(outpoint) = entry["outpoint"].as_str().filter(|s| !s.is_empty()) {
-                    references.insert(outpoint.to_lowercase());
-                    references.insert(outpoint.split(':').next().unwrap_or("").to_lowercase());
-                }
-            }
-            if let Some(txid) = graph["txid"].as_str().filter(|s| !s.is_empty()) {
-                references.insert(txid.to_lowercase());
-            }
-        }
-    }
-    Ok((index.encode(&references), warnings))
+    Ok((index, warnings))
 }
 
 #[cfg(test)]

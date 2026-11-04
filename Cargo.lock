@@ -1709,6 +1709,7 @@ dependencies = [
  "kassiber-transactions",
  "kassiber-transfers",
  "kassiber-wallets",
+ "kassiber-workspace",
  "nix 0.30.1",
  "serde",
  "serde_json",

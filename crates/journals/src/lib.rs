@@ -4,7 +4,9 @@
 //! boundary; the engine result and rendered entries have native types.
 pub mod boundary;
 pub mod engine;
+pub mod evidence_summary;
 mod integer;
+pub mod journal_events;
 pub mod loader;
 mod model;
 pub mod native;
@@ -14,6 +16,7 @@ pub mod prebuild;
 pub mod process;
 mod quarantine;
 mod render;
+pub mod report_blockers;
 mod review_apply;
 pub mod review_effects;
 mod review_simulation;
@@ -22,6 +25,7 @@ pub mod scalar;
 pub mod service;
 pub mod storage;
 pub mod timing;
+pub mod transaction_graph;
 pub mod views;
 pub use model::*;
 pub use render::{enrich_quarantine_detail, render_ledger, LedgerInputs, LedgerState};

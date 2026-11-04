@@ -2,8 +2,8 @@
   {
     "id": "settings-registration",
     "file": "crates/daemon/src/lib.rs",
-    "find": "    kinds.extend(settings::KINDS);\n",
-    "replace": "",
+    "find": "    kinds.extend(&settings::KINDS[..2]);\n    kinds.push(settings::RUN_KIND);\n    kinds.extend(&settings::KINDS[2..]);\n",
+    "replace": "    kinds.push(settings::RUN_KIND);\n",
     "expect_failing": [
       "tests/test_rust_desktop_settings.py::RustFreshnessSettingsTest::test_status_reads_match_wire_bytes_across_policies"
     ],
