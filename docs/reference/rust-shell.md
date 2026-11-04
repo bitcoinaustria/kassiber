@@ -16279,3 +16279,56 @@ entries, all killed by their named tests.
 
 Served by Rust in the parity run, with zero fallbacks:
 `wallets.reveal_descriptor` 25.
+
+## Dependency review: LWK, SSHSIG and HTTP (plan 21, 2026-11-04)
+
+The owner asked whether the Rust backend uses the Rust versions of Python's
+dependencies, and approved replacing hand-written code where a maintained
+crate makes it more reliable. Three places were reviewed.
+
+**Liquid and `lwk_wollet`: no replacement today.** Python's `lwk` 0.18.0 is
+used only by Liquid sync: `LwkObserver` in
+`kassiber/core/chain_observer/lwk.py` (`Wollet`, `WolletDescriptor`,
+`ElectrumClient`, the SQLCipher `ForeignStore`) and its dispatch in
+`sync_backends.py`. Every other Liquid behaviour Python has comes from
+**embit**, not LWK: descriptor normalisation, `slip77` keys and address
+derivation (`wallet_descriptors.py`, `liquid_descriptors.py`), raw Liquid
+transaction decoding (`decode_liquid_transaction`, `onchain.py`,
+`chain_analysis_*`) and Liquid address checks. The Rust code over
+`elements`/`elements-miniscript` (`crates/wallets/src/descriptors.rs`,
+`config.rs`, `analysis_index/datasets.rs`, `analysis_ops/labels.rs`,
+`analysis_ops/acquisition/apply.rs`, `crates/custody/src/liquid.rs`) ports
+those embit paths, as plan 21's table maps `embit`. Calling LWK there would
+change what is accepted: LWK's descriptor grammar is `ct(...)`, which Python
+translates to only inside `LwkObserver`, while every other path keeps embit's
+`blinded(...)`; and a consensus transaction decoder
+refuses inputs embit admits (`crates/custody/src/liquid.rs` documents them).
+Rust has no Liquid sync yet (it answers `not_implemented`), so there is no
+LWK-derived Rust code to replace, and no persisted state or envelope changed.
+
+Facts for the Liquid sync slice, from the round's single online fetch (the
+crate was not added to the workspace):
+
+- `lwk_wollet` 0.18.0 exists and matches Python's `lwk` 0.18.0. Its index
+  entry requires `elements` 0.25 and `elements-miniscript` 0.4 (Kassiber's
+  versions) plus `elements` 0.26 under the name `elements26`. The resolver
+  picked the newest, 0.20.0, which moves to `elements` 0.27 and
+  `elements-miniscript` 0.5; that would be a second Elements stack.
+- With default features off, 0.20.0 compiles no networking crate: the
+  `esplora`, `electrum`, `electrum_oidc`, `elements_rpc`, `amp0`, `amp2`,
+  `prices` and `registry` features (which bring `reqwest`, `electrum-client`,
+  `bitcoincore-rpc`, `tokio-tungstenite`) are all optional. It still always
+  brings `tokio` (`rt-multi-thread`, `macros`, `sync`, `time`; not `net`),
+  `futures` and `lwk_registry`. `cargo tree -e features` showed no socket
+  crate.
+- Kassiber would feed it chain data through its own `kassiber-net` Electrum
+  client, either by implementing LWK's blockchain-backend trait over that
+  client or by building `Update`s itself, and keep its SQLCipher store.
+
+The new vectors item 1 asked for (Python's `lwk` over confidential and
+explicit outputs, non-L-BTC assets, wrong or missing blinding keys) belong
+to that slice, where a Rust consumer exists to compare against.
+
+**Release signatures and `ssh-key`.** Done on
+`t3code/r5-deps-1-release` (based on the workspace-shell branch, which owns
+`crates/release`); see the workspace-shell section there.

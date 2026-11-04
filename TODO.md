@@ -189,6 +189,20 @@ natively; generic `cancel` keeps Python's refusal.
   forms, including HTTP probe prefix-only/large-body reads, before declaring
   full chain-client parity.
 
+## Rust backend R5 dependency review
+
+The [dependency review](docs/reference/rust-shell.md#dependency-review-lwk-sshsig-and-http-plan-21-2026-11-04)
+compared the Rust backend's hand-written code with plan 21's named crates.
+
+- [x] Check where Python's Liquid behaviour comes from LWK: only Liquid sync;
+  descriptors, addresses and transaction decoding come from embit, which the
+  Rust port already follows. No LWK replacement is possible before native
+  Liquid sync exists.
+- [ ] When porting Liquid sync, adopt `lwk_wollet` =0.18.0 (matching Python's
+  `lwk`) with default features off, feed it through the `kassiber-net`
+  Electrum client, and freeze Python `lwk` vectors for confidential and
+  explicit outputs, non-L-BTC assets and wrong or missing blinding keys.
+
 ## Rust backend R5 Bitcoin wallet sync (CLI and no-refresh daemon registered)
 
 - [x] Port the compatibility descriptor gap walker for Esplora and Electrum,

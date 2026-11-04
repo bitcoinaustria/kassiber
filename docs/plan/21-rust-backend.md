@@ -134,7 +134,7 @@ Replacements for today's dependencies, decided per stage:
 | Python | Rust |
 | --- | --- |
 | `sqlcipher3`, `sqlite3` | `rusqlite` with bundled SQLCipher 4, `backup` and `functions` |
-| `bdkpython`, `lwk` | `bdk_wallet`/`bdk_chain`/`bdk_core` through Kassiber's gated transports (no BDK networking crates); `lwk_wollet`, with Kassiber's own persisted state formats |
+| `bdkpython`, `lwk` | `bdk_wallet`/`bdk_chain`/`bdk_core` through Kassiber's gated transports (no BDK networking crates); `lwk_wollet` for Liquid sync, with Kassiber's own persisted state formats (not yet adopted: Python uses LWK only for Liquid sync, which Rust has not ported; the other Liquid paths port embit, see [the dependency review](../reference/rust-shell.md#dependency-review-lwk-sshsig-and-http-plan-21-2026-11-04)) |
 | `embit` | `bitcoin`, `miniscript`, `elements`, `elements-miniscript`, `secp256k1`; the hand-written PSBT v2 reader stays hand-written |
 | `XlsxWriter`, `openpyxl` | `rust_xlsxwriter`, `calamine` |
 | `reportlab` | a rewrite, most likely Typst as a library with the bundled fonts; the hand-written PDF 1.4 report ports directly |
