@@ -480,6 +480,15 @@
           "Run journal processing before trusting reports.",
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -536,6 +545,15 @@
             "Run journal processing before trusting reports.",
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -3749,6 +3767,15 @@
           "Run journal processing before trusting reports.",
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -3805,6 +3832,15 @@
             "Run journal processing before trusting reports.",
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -7016,6 +7052,15 @@
           "Run journal processing before trusting reports.",
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -7072,6 +7117,15 @@
             "Run journal processing before trusting reports.",
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -10282,6 +10336,15 @@
         "hints": [
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -10337,6 +10400,15 @@
           "hints": [
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -13538,6 +13610,15 @@
         "hints": [
           "Reports are ready from the current processed journal state."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -13593,6 +13674,15 @@
           "hints": [
             "Reports are ready from the current processed journal state."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -16783,6 +16873,15 @@
         "hints": [
           "Reports are ready from the current processed journal state."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -16838,6 +16937,15 @@
           "hints": [
             "Reports are ready from the current processed journal state."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -20001,6 +20109,15 @@
         "hints": [
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -20056,6 +20173,15 @@
           "hints": [
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -28101,6 +28227,15 @@
         "hints": [
           "Run journal processing before trusting reports."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -28156,6 +28291,15 @@
           "hints": [
             "Run journal processing before trusting reports."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -30752,6 +30896,15 @@
         "hints": [
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -30807,6 +30960,15 @@
           "hints": [
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -33223,6 +33385,15 @@
         "hints": [
           "Add a watch-only source before refreshing or importing transactions."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -33278,6 +33449,15 @@
           "hints": [
             "Add a watch-only source before refreshing or importing transactions."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -34156,6 +34336,15 @@
         "hints": [
           "Refresh sources or import files before journal processing."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -34211,6 +34400,15 @@
           "hints": [
             "Refresh sources or import files before journal processing."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -35660,6 +35858,15 @@
           "Run journal processing before trusting reports.",
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -35716,6 +35923,15 @@
             "Run journal processing before trusting reports.",
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -38929,6 +39145,15 @@
           "Run journal processing before trusting reports.",
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -38985,6 +39210,15 @@
             "Run journal processing before trusting reports.",
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -42197,6 +42431,15 @@
         "hints": [
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -42252,6 +42495,15 @@
           "hints": [
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -45312,6 +45564,15 @@
           "Run journal processing before trusting reports.",
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -45368,6 +45629,15 @@
             "Run journal processing before trusting reports.",
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -48578,6 +48848,15 @@
         "hints": [
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -48633,6 +48912,15 @@
           "hints": [
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -51693,6 +51981,15 @@
           "Run journal processing before trusting reports.",
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -51749,6 +52046,15 @@
             "Run journal processing before trusting reports.",
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -54960,6 +55266,15 @@
           "Run journal processing before trusting reports.",
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -55016,6 +55331,15 @@
             "Run journal processing before trusting reports.",
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -58227,6 +58551,15 @@
           "Run journal processing before trusting reports.",
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -58283,6 +58616,15 @@
             "Run journal processing before trusting reports.",
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -61496,6 +61838,15 @@
           "Run journal processing before trusting reports.",
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -61552,6 +61903,15 @@
             "Run journal processing before trusting reports.",
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -64764,6 +65124,15 @@
         "hints": [
           "Run journal processing before trusting reports."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -64819,6 +65188,15 @@
           "hints": [
             "Run journal processing before trusting reports."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -68010,6 +68388,15 @@
         "hints": [
           "Reports are ready from the current processed journal state."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -68065,6 +68452,15 @@
           "hints": [
             "Reports are ready from the current processed journal state."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -71255,6 +71651,15 @@
         "hints": [
           "Run journal processing before trusting reports."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -71310,6 +71715,15 @@
           "hints": [
             "Run journal processing before trusting reports."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -74501,6 +74915,15 @@
         "hints": [
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -74556,6 +74979,15 @@
           "hints": [
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -77763,6 +78195,15 @@
         "hints": [
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -77818,6 +78259,15 @@
           "hints": [
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -81025,6 +81475,15 @@
         "hints": [
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -81080,6 +81539,15 @@
           "hints": [
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -84293,6 +84761,15 @@
         "hints": [
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -84348,6 +84825,15 @@
           "hints": [
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -87561,6 +88047,15 @@
         "hints": [
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -87616,6 +88111,15 @@
           "hints": [
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -90823,6 +91327,15 @@
         "hints": [
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -90878,6 +91391,15 @@
           "hints": [
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -94085,6 +94607,15 @@
         "hints": [
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -94140,6 +94671,15 @@
           "hints": [
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -97347,6 +97887,15 @@
         "hints": [
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -97402,6 +97951,15 @@
           "hints": [
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -100609,6 +101167,15 @@
         "hints": [
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -100664,6 +101231,15 @@
           "hints": [
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -103871,6 +104447,15 @@
         "hints": [
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -103926,6 +104511,15 @@
           "hints": [
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -107139,6 +107733,15 @@
         "hints": [
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -107194,6 +107797,15 @@
           "hints": [
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -110401,6 +111013,15 @@
         "hints": [
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -110456,6 +111077,15 @@
           "hints": [
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -113663,6 +114293,15 @@
         "hints": [
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -113718,6 +114357,15 @@
           "hints": [
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -116926,6 +117574,15 @@
           "Run journal processing before trusting reports.",
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -116982,6 +117639,15 @@
             "Run journal processing before trusting reports.",
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -120194,6 +120860,15 @@
         "hints": [
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -120249,6 +120924,15 @@
           "hints": [
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -123480,6 +124164,15 @@
         "hints": [
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -123535,6 +124228,15 @@
           "hints": [
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -126770,6 +127472,15 @@
         "hints": [
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -126825,6 +127536,15 @@
           "hints": [
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -130056,6 +130776,15 @@
         "hints": [
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -130111,6 +130840,15 @@
           "hints": [
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -133340,6 +134078,15 @@
         "hints": [
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -133395,6 +134142,15 @@
           "hints": [
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -136634,6 +137390,15 @@
           "Run journal processing before trusting reports.",
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -136690,6 +137455,15 @@
             "Run journal processing before trusting reports.",
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -139907,6 +140681,15 @@
         "hints": [
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -139962,6 +140745,15 @@
           "hints": [
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -143202,6 +143994,15 @@
         "hints": [
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -143257,6 +144058,15 @@
           "hints": [
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -146428,6 +147238,15 @@
           "Run journal processing before trusting reports.",
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -146484,6 +147303,15 @@
             "Run journal processing before trusting reports.",
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -150238,6 +151066,15 @@
         "hints": [
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -150293,6 +151130,15 @@
           "hints": [
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -154024,6 +154870,15 @@
         "hints": [
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -154079,6 +154934,15 @@
           "hints": [
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -157214,6 +158078,15 @@
         "hints": [
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -157269,6 +158142,15 @@
           "hints": [
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -160503,6 +161385,15 @@
         "hints": [
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -160558,6 +161449,15 @@
           "hints": [
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [
@@ -163802,6 +164702,15 @@
           "Run journal processing before trusting reports.",
           "Review quarantined transactions before tax export."
         ]
+      },
+      "definitions": {
+        "wallets": "Wallets in the active book.",
+        "transactions": "Transaction rows in the active book, excluded rows included.",
+        "active_transactions": "Transaction rows that are not excluded.",
+        "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+        "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+        "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+        "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
       }
     },
     "next_actions": {
@@ -163858,6 +164767,15 @@
             "Run journal processing before trusting reports.",
             "Review quarantined transactions before tax export."
           ]
+        },
+        "definitions": {
+          "wallets": "Wallets in the active book.",
+          "transactions": "Transaction rows in the active book, excluded rows included.",
+          "active_transactions": "Transaction rows that are not excluded.",
+          "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+          "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+          "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+          "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."
         }
       },
       "suggestions": [

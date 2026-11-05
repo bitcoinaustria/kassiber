@@ -189,7 +189,7 @@ def generate():
                 "workspace_overview": workspace_overview(conn),
             })
             assert list(conn.iterdump()) == before
-            assert conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").fetchone()[0] == 112
+            assert conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").fetchone()[0] == 113
             conn.close()
     return output
 
@@ -197,8 +197,22 @@ def generate():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true")
+    parser.add_argument(
+        "--projections",
+        help="comma-separated projections to refresh (e.g. health,next_actions); "
+        "the others keep their accepted values, so slices of a main sync can "
+        "regenerate only what they port",
+    )
     args = parser.parse_args()
-    encoded = json.dumps(generate(), indent=2, ensure_ascii=True) + "\n"
+    generated = generate()
+    if args.projections:
+        keep = json.loads(DESTINATION.read_text())
+        assert [(c["group"], c["name"]) for c in keep] == [(c["group"], c["name"]) for c in generated]
+        for accepted, fresh in zip(keep, generated):
+            for projection in args.projections.split(","):
+                accepted[projection] = fresh[projection]
+        generated = keep
+    encoded = json.dumps(generated, indent=2, ensure_ascii=True) + "\n"
     if args.check:
         if DESTINATION.read_text() != encoded:
             raise SystemExit("workspace vectors differ; regenerate export_workspace_vectors.py")
