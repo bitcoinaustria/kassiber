@@ -266,6 +266,15 @@ refused. The 12, each with its slice:
 | `ui.chain_analysis.query` | `snapshot_id` | pre-merge, not investigated |
 | `ui.logs.snapshot` | each side's own log lines | expected |
 
+Verification of S1: `kassiber-store` (72 tests), the shell crates
+(`kassiber-cli`, `-runtime`, `-envelope`, `-daemon`, every test binary)
+and the store comparisons in `tests/test_rust_store_migrations.py` pass:
+the four historical fixtures, the new `pre_sync_bae01537b` among them, give
+identical first-pass dumps and ledgers in both runtimes, plaintext and
+SQLCipher. The store mutation catalog (ten entries) is fully killed. The
+preflight shard passes. Not rerun for S1: the other workspace crates and
+the remaining Python lanes.
+
 The comparison is plaintext: the harness does not unlock SQLCipher books.
 Encrypted admission is covered by the store differential tests, which open a
 current Python SQLCipher book in both Rust open modes without changing it.
