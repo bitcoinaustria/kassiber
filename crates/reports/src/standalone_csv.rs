@@ -4,14 +4,58 @@ use artifact_csv::{File, Prepared, Section};
 
 const STALE: &str = "Reports require fresh journals. Run `kassiber journals process` first.";
 
+/// The transaction CSV's columns in the shared design's machine format:
+/// amounts carry their unit and are exact decimal text.
+const COLUMNS: [(&str, &str); 23] = [
+    ("occurred_at", "occurred_at"),
+    ("wallet", "wallet"),
+    ("transaction_id", "transaction_id"),
+    ("direction", "direction"),
+    ("asset", "asset"),
+    ("amount_btc", "amount_exact"),
+    ("amount_msat", "amount_msat"),
+    ("fee_btc", "fee_exact"),
+    ("fee_msat", "fee_msat"),
+    ("fiat_currency", "fiat_currency"),
+    ("fiat_price", "fiat_price_exact"),
+    ("fiat_value", "fiat_value_exact"),
+    ("fmv", "fmv_exact"),
+    ("fiat_fee", "fiat_fee_exact"),
+    ("cost_basis", "cost_basis_exact"),
+    ("gain_loss", "gain_loss_exact"),
+    ("description", "description"),
+    ("note", "note"),
+    ("counterparty", "counterparty"),
+    ("transfer", "transfer"),
+    ("tags", "tags"),
+    ("references", "references"),
+    ("attachments", "attachments"),
+];
+
 pub(super) fn prepare(conn: &Connection, profile: &Value, args: &Value) -> Result<Prepared> {
     let (section, metadata) = project(conn, profile, args)?;
     let count = section.rows.len();
+    let header: Vec<&str> = COLUMNS.iter().map(|(name, _)| *name).collect();
+    let lines = section.rows.iter().map(|row| {
+        COLUMNS
+            .iter()
+            .map(|(name, key)| {
+                // A draft list withholds basis and gain: its float is null.
+                let withheld = matches!(*name, "cost_basis" | "gain_loss")
+                    && matches!(value(row, name), Value::Null);
+                if withheld {
+                    String::new()
+                } else {
+                    artifact_csv::cell(value(row, key))
+                }
+            })
+            .collect()
+    });
     Ok(Prepared {
         files: vec![File {
             name: "report.csv".into(),
             sheet: "".into(),
-            bytes: artifact_csv::document(&text(&metadata, "title"), &[section]),
+            bytes: report_design::csv_table(&header, lines),
             rows: count,
         }],
         metadata,

@@ -206,3 +206,17 @@ fn attribute<'a>(tag: &'a str, name: &str) -> Option<&'a str> {
     let (_, value) = tag.split_once(&format!(" {name}=\""))?;
     value.split_once('"').map(|(value, _)| value)
 }
+
+/// A deflated ZIP of `members` in order, with fixed timestamps, so the same
+/// files always give the same bytes. Report bundles share it.
+pub fn archive(members: &[(String, Vec<u8>)]) -> Result<Vec<u8>, XlsxError> {
+    let mut out = ZipWriter::new(Cursor::new(Vec::new()));
+    let options = SimpleFileOptions::default()
+        .compression_method(CompressionMethod::Deflated)
+        .last_modified_time(zip::DateTime::default());
+    for (name, bytes) in members {
+        out.start_file(name.as_str(), options)?;
+        out.write_all(bytes)?;
+    }
+    Ok(out.finish()?.into_inner())
+}

@@ -10,7 +10,8 @@ checker = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = checker
 spec.loader.exec_module(checker)
 checker.ENGINE_PACKAGES = (
-    "-p", "kassiber-reports", "--offline", "--test", "report_design", "--test", "austrian_pdf", "--test", "source_funds_pdf",
+    "-p", "kassiber-reports", "--offline", "--lib", "--test", "report_design", "--test", "austrian_pdf",
+    "--test", "source_funds_pdf", "--test", "artifact_vectors",
 )
 checker.MUTATIONS = Path(__file__).with_name("report_design_mutations.json")
 

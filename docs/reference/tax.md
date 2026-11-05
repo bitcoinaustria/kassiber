@@ -456,15 +456,11 @@ Kennzahlen 172, 174, and 176. Domestic-provider and withheld-KESt rows such as
 them. The structured JSON report includes active Steuerbericht-style handoff sections
 across 1.x-4.x so unsupported areas such as margin/derivatives, gifts, lost coins,
 commercial mining, and minting are visible as zero-value placeholders instead
-of disappearing from the handoff. The PDF export renders those same real
-Kassiber rows as a styled Austrian report with summary/detail pages, holdings,
-Besonderheiten, explanations, a landscape transaction appendix, a
-FinanzOnline-style Kennzahl summary, and FAQ.
-The XLSX export mirrors that structure as an accountant-facing workbook with
-an `Übersicht` sheet, separate numbered tabs such as `1.1.`, `2.1.`, and
-`3.3.`, plus an `Erläuterungen zum Steuerreport` notes sheet.
-The CSV bundle mirrors the same layout as separate files so each section can
-keep its own table headers instead of flattening every section into one lossy
-CSV shape.
+of disappearing from the handoff. The PDF, XLSX and CSV exports render one
+document in the [shared report design](report-design.md#austrian-sections), in
+German: the Kennzahl page with its section index, disposals and income with a
+`section` column, holdings, a landscape transaction appendix, explanations and
+FAQ. The workbook has one sheet per table; the CSV bundle has one machine-format
+file per table plus `summary.csv` and `manifest.json`.
 
 See [../plan/06-austrian-tax-engine.md](../plan/06-austrian-tax-engine.md) for the broader design and remaining Austrian backlog, plus [../austrian-handoff.md](../austrian-handoff.md) for the current marker / carry-basis contract.

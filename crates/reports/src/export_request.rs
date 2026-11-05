@@ -177,6 +177,20 @@ fn summary_args(raw: &Value) -> Result<()> {
     Ok(())
 }
 
+/// The full report's CSV bundle is a ZIP: a requested path without the
+/// `.zip` suffix gets it, as Python's source-of-funds bundle does.
+fn csv_bundle_path(command: &str, path: PathBuf) -> PathBuf {
+    if command == "reports.export-csv"
+        && !path
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("zip"))
+    {
+        path.with_extension("zip")
+    } else {
+        path
+    }
+}
+
 /// Paths supplied by the CLI have already been expanded by crates/paths.
 /// Managed desktop roots come from that same resolved book, never request args.
 pub fn execute(
@@ -233,14 +247,17 @@ fn execute_admitted(
             let (_, profile) = kassiber_setup::references::scope(conn, raw)?;
             freshness(conn, &profile)?;
         }
-        let target = PathBuf::from(text(
-            raw,
-            if command == "reports.export-austrian-e1kv-csv" {
-                "dir"
-            } else {
-                "file"
-            },
-        ));
+        let target = csv_bundle_path(
+            command,
+            PathBuf::from(text(
+                raw,
+                if command == "reports.export-austrian-e1kv-csv" {
+                    "dir"
+                } else {
+                    "file"
+                },
+            )),
+        );
         return export::export(conn, command, raw, &target, sources);
     }
     if command == "transactions.export" {
@@ -309,7 +326,8 @@ fn execute_admitted(
                 } else if command == "ui.reports.export_pdf" {
                     ".pdf"
                 } else {
-                    ".csv"
+                    // The full report's CSV is a bundle of tables.
+                    ".zip"
                 },
                 "report",
             )
@@ -610,6 +628,37 @@ mod tests {
         )
         .unwrap()
     }
+    fn masked(v: &Value, kind: &str) -> Value {
+        let layout = matches!(
+            kind,
+            "ui.reports.export_csv" | "ui.reports.export_austrian_e1kv_csv"
+        );
+        match v {
+            Value::Dict(fields) => Value::Dict(
+                fields
+                    .iter()
+                    .map(|(k, v)| {
+                        let key = match k {
+                            kassiber_pyjson::Key::Str(k) => k.as_str().unwrap_or_default(),
+                            _ => "",
+                        };
+                        let hide = matches!(key, "content_sha256" | "bytes")
+                            || (layout
+                                && matches!(
+                                    key,
+                                    "sections" | "sheets" | "files" | "rows" | "file" | "filename"
+                                ));
+                        (
+                            k.clone(),
+                            if hide { s("<design>") } else { masked(v, kind) },
+                        )
+                    })
+                    .collect(),
+            ),
+            Value::List(items) => Value::List(items.iter().map(|v| masked(v, kind)).collect()),
+            other => other.clone(),
+        }
+    }
     fn files(root: &Path, at: &Path, out: &mut Vec<(String, Value)>) {
         if !at.exists() {
             return;
@@ -624,7 +673,7 @@ mod tests {
                         .unwrap()
                         .to_string_lossy()
                         .into_owned(),
-                    s(std::fs::read_to_string(path).unwrap()),
+                    s(String::from_utf8_lossy(&std::fs::read(path).unwrap()).into_owned()),
                 ));
             }
         }
@@ -660,9 +709,12 @@ mod tests {
                     ]),
                 )]),
             };
+            // The CSVs are the shared design's machine format: their bytes,
+            // hashes, file names and layout counts differ from Python's.
+            let kind = text(case, "kind");
             assert_eq!(
-                encode(&actual).replace(root.path().to_str().unwrap(), "<root>"),
-                encode(value(case, "expected")),
+                encode(&masked(&actual, &kind)).replace(root.path().to_str().unwrap(), "<root>"),
+                encode(&masked(value(case, "expected"), &kind)),
                 "{}",
                 text(case, "name")
             );
@@ -682,20 +734,113 @@ mod tests {
                     .unwrap(),
                 );
                 assert_eq!(
-                    encode(&actual),
-                    encode(expected),
+                    encode(&masked(&actual, &kind)),
+                    encode(&masked(expected, &kind)),
                     "{}: {table:?}",
                     text(case, "name")
                 );
             }
             let mut actual = Vec::new();
             files(root.path(), &root.path().join("exports"), &mut actual);
-            assert_eq!(
-                encode(&dict(actual)),
-                encode(value(case, "files")),
-                "{} files",
-                text(case, "name")
-            );
+            let expected = match value(case, "files") {
+                Value::Dict(files) => files.len(),
+                _ => 0,
+            };
+            if kind != "ui.reports.export_austrian_e1kv_csv" {
+                assert_eq!(actual.len(), expected, "{} files", text(case, "name"));
+            } else {
+                assert_eq!(
+                    actual.is_empty(),
+                    expected == 0,
+                    "{} files",
+                    text(case, "name")
+                );
+            }
+            if matches!(
+                kind.as_str(),
+                "ui.reports.export_capital_gains_csv" | "ui.transactions.export_csv"
+            ) {
+                for (name, content) in &actual {
+                    same_values(
+                        &py_str(content),
+                        &text(value(case, "files"), name),
+                        &format!("{} {name}", text(case, "name")),
+                    );
+                }
+            }
+        }
+    }
+
+    /// RFC 4180 records; quoted cells may hold line breaks.
+    fn records(text: &str) -> Vec<Vec<String>> {
+        let mut records = Vec::new();
+        let mut record = Vec::new();
+        let mut cell = String::new();
+        let mut quoted = false;
+        let mut chars = text.chars().peekable();
+        while let Some(c) = chars.next() {
+            match (c, quoted) {
+                ('"', true) if chars.peek() == Some(&'"') => {
+                    cell.push('"');
+                    chars.next();
+                }
+                ('"', _) => quoted = !quoted,
+                (',', false) => record.push(std::mem::take(&mut cell)),
+                ('\r', false) => (),
+                ('\n', false) => {
+                    record.push(std::mem::take(&mut cell));
+                    records.push(std::mem::take(&mut record));
+                }
+                _ => cell.push(c),
+            }
+        }
+        records
+    }
+
+    /// A machine-format CSV against Python's file: the same rows, and every
+    /// column Python has (`amount` for `amount_btc`) equal by value, so the
+    /// exact decimals match Python's floats.
+    fn same_values(actual: &str, expected: &str, name: &str) {
+        // Python's transaction file heads its columns with labels
+        // (`Occurred At`); they name the same keys.
+        let old: Vec<Vec<String>> = records(expected)
+            .into_iter()
+            .map(|r| {
+                if r.first().is_some_and(|c| c == "Occurred At") {
+                    r.iter()
+                        .map(|c| c.to_lowercase().replace(' ', "_"))
+                        .collect()
+                } else {
+                    r
+                }
+            })
+            .collect();
+        let start = old
+            .iter()
+            .position(|r| r.first().map(String::as_str) == Some("occurred_at"))
+            .unwrap_or_else(|| panic!("{name}: no header in Python's file"));
+        let old_rows: Vec<&Vec<String>> = old[start + 1..]
+            .iter()
+            .take_while(|r| !(r.len() == 1 && r[0].is_empty()))
+            // Python writes a placeholder row where the new file has none.
+            .filter(|r| !(r.len() == 1 && r[0] == "No rows in scope."))
+            .collect();
+        let new = records(actual);
+        assert_eq!(new.len() - 1, old_rows.len(), "{name}: rows");
+        for (row, before) in new[1..].iter().zip(old_rows) {
+            for (column, value) in new[0].iter().zip(row) {
+                let source = column.trim_end_matches("_btc");
+                let Some(index) = old[start].iter().position(|h| h == source) else {
+                    continue;
+                };
+                let was = &before[index];
+                let equal = value == was
+                    || matches!(
+                        (value.parse::<f64>(), was.parse::<f64>()),
+                        (Ok(a), Ok(b)) if a == b
+                    );
+                assert!(equal, "{name}: {column} {value:?} != {was:?}");
+            }
         }
     }
 

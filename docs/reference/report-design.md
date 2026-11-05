@@ -209,7 +209,10 @@ a rule, a neutral fill only on input cells, red only for a failed check.
 
 ## CSV
 
-Machine-first, one file per table, written into a directory (or ZIP):
+Machine-first, one file per table. The full report's bundle is one ZIP
+(`reports export-csv --file report.csv` writes `report.zip`; the desktop's
+managed name ends in `.zip`); the Austrian bundle is written into its
+directory. Single-table exports (transactions, capital gains) stay one file.
 
 - file name = table id (`holdings.csv`, `disposals.csv`, …);
 - header row only, stable `snake_case` column names, no titles or blank rows;
@@ -236,7 +239,8 @@ manifest's `schema` lets a consumer detect the new layout.
 
 | Today | New | Why |
 | --- | --- | --- |
-| full report: one file of 12 stacked sections with title rows | one file per table plus `manifest.json` | stacked sections cannot be loaded by any CSV reader without hand-editing |
+| full report: one file of 12 stacked sections with title rows | one ZIP: `summary.csv`, one file per table, `manifest.json` | stacked sections cannot be loaded by any CSV reader without hand-editing |
+| transactions: a title row and a section title row above the header | header row only | title rows break CSV readers; the title stays in the envelope |
 | `quantity`, `amount`, `fee` as Python float `repr` (`1e-08` possible) | `quantity_btc`, `amount_btc`, `fee_btc` as exact decimal strings | floats lose msat precision and exponents break spreadsheets; the suffix names the unit |
 | `*_sat` as float msat/1000 | removed | duplicates `*_msat` with less precision |
 | `*_msat` integer | unchanged | exact |
@@ -307,7 +311,7 @@ One report per commit, each with data parity against Python's model.
 | 3 | Exit tax | `reports export-exit-tax-pdf`, `ui.reports.export_exit_tax_pdf` | native, shared design |
 | 4 | Source of funds | `reports export-source-funds-pdf`, `ui.source_funds.export_pdf` | native, shared design |
 | 5 | XLSX | full, Austrian, exit tax, cross-check, verification, year handoff | native, shared design |
-| 6 | CSV | full, capital gains, Austrian bundle | pending |
+| 6 | CSV | full, capital gains, Austrian bundle, transactions | native, shared design |
 | 7 | Bundles | `reports export-austrian`, `ui.reports.export_audit_package`, source-of-funds bundle | pending |
 | 8 | Registration | every CLI leaf and daemon kind native, no fallback | pending |
 
@@ -325,6 +329,9 @@ keep byte parity with Python except where the new format changes them:
 | Full report XLSX | `bytes`, `sheets`, `rows` | the design's sheet names (then the appendix's); `rows` counts the design's table rows |
 | Austrian, exit-tax and year-handoff XLSX | `bytes`, `sheets` | the design's sheet names; every other key keeps Python's value |
 | Cross-check XLSX | `bytes` | the envelope names no sheets |
+| Full report CSV | `file`, `bytes`, `sections`, `rows`, `report_snapshot.content_sha256` | the ZIP's path (`.zip` instead of `.csv`), size and hash; `sections` lists the design's table ids and `rows` counts their rows; `title` and `wallet` stay Python's |
+| Austrian CSV bundle | `files`, `sheets`, `report_snapshot.content_sha256` | the design's files (`summary.csv`, one per table, `manifest.json`) and table ids; `form`, `tax_year`, `rows` and `summary_rows` stay Python's |
+| Transactions and capital-gains CSV | `bytes` | the new columns' file; `rows`, `title`, `wallet`, `warnings` and `range` stay Python's |
 | Austrian E 1kv | `pages`, `bytes`, `report_snapshot.content_sha256`, `renderer` | the new PDF's; `renderer` is `typst` instead of `reportlab`; `title`, `sections` (Python's section ids, each still present in the new layout), `assumptions` and `transactions` stay Python's |
 
 ## Owner decisions (2026-11-04)

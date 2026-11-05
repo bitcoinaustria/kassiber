@@ -1255,7 +1255,8 @@ fn csv_field(text: &str) -> String {
     }
 }
 
-fn csv_table(header: &[&str], rows: impl Iterator<Item = Vec<String>>) -> Vec<u8> {
+/// One CSV file: a header of keys, then rows of machine text.
+pub fn csv_table(header: &[&str], rows: impl Iterator<Item = Vec<String>>) -> Vec<u8> {
     let mut out = header
         .iter()
         .map(|h| csv_field(h))
@@ -1383,4 +1384,9 @@ pub fn csv(doc: &Document) -> Result<Vec<(String, Vec<u8>)>> {
         .collect();
     out.push(("manifest.json".into(), text.into_bytes()));
     Ok(out)
+}
+
+/// The CSV bundle as one ZIP, for single-file CSV destinations.
+pub fn csv_zip(doc: &Document) -> Result<Vec<u8>> {
+    kassiber_xlsx::archive(&csv(doc)?).map_err(|e| AppError::new("internal_error", e.to_string()))
 }

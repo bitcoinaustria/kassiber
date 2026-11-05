@@ -245,21 +245,41 @@ pub(super) fn report_rows_current(
             ] {
                 replace(&mut result, key, v);
             }
+            // The machine CSV writes these exactly.
+            let exact = |d: Option<&Decimal>| {
+                d.map(|d| s(crate::report_design::plain(d)))
+                    .unwrap_or(Value::Null)
+            };
+            for (key, v) in [
+                ("amount_exact", exact(Some(&amount_btc))),
+                ("fee_exact", exact(Some(&fee_btc))),
+                ("fiat_price_exact", exact(price.as_ref())),
+                ("fiat_value_exact", exact(cash.as_ref())),
+                ("fmv_exact", exact(fmv.as_ref())),
+                ("fiat_fee_exact", exact(fiat_fee.as_ref())),
+            ] {
+                replace(&mut result, key, v);
+            }
             let tx = text(&row, "id");
             let journal = basis.get(&tx).unwrap_or(&Value::Null);
             for (key, count) in [
                 ("cost_basis", "basis_entries"),
                 ("gain_loss", "gain_entries"),
             ] {
+                let total = if int(journal, count) > 0 {
+                    Some(decimal(value(journal, key))?)
+                } else {
+                    None
+                };
                 replace(
                     &mut result,
                     key,
-                    if int(journal, count) > 0 {
-                        float(&decimal(value(journal, key))?)?
-                    } else {
-                        Value::Null
+                    match &total {
+                        Some(d) => float(d)?,
+                        None => Value::Null,
                     },
                 );
+                replace(&mut result, &format!("{key}_exact"), exact(total.as_ref()));
             }
             replace(
                 &mut result,

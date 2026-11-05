@@ -255,10 +255,12 @@ kassiber --format plain reports balance-history --wallet satoshi-liquid --asset 
 
 ## Complete report exports
 
-Kassiber includes built-in full-report export commands. The CSV export is a
-sectioned spreadsheet-friendly file; the XLSX export uses separate sheets for
-overview, wallets, flows, reviewed transfers/swaps, balances, capital gains,
-history, data quality, and transactions.
+Kassiber includes built-in full-report export commands. All three render one
+report document. The XLSX export opens on a `summary` sheet and has one sheet
+per table (holdings, flows, disposals, income, transactions, …) plus the
+verification appendix. The CSV export is a ZIP of machine-format tables
+(`summary.csv`, one file per table, `manifest.json`; exact decimals, ISO dates,
+`snake_case` headers): `--file report.csv` writes `report.zip`.
 
 ```bash
 kassiber reports export-pdf --file report.pdf
@@ -291,7 +293,10 @@ counted in the book's calendar (Europe/Vienna for Austrian books, else UTC)
 unless `--timezone` names another, and the result reports the resolved
 `range`. Transactions without a known date are left out of a period and
 counted in `warnings`; an undated quarantine still blocks a platform export.
-Without them every transaction is exported. `cointracking-csv` and `blockpit-csv` write another tool's import format
+Without them every transaction is exported. The `csv` format is one header
+row and the rows, with exact decimal text: `amount_btc` and `fee_btc` beside
+integer `amount_msat` and `fee_msat`, fiat values at their stored precision.
+`cointracking-csv` and `blockpit-csv` write another tool's import format
 instead of Kassiber's columns; see
 [moving to CoinTracking or Blockpit](../../../docs/reference/imports.md#moving-to-cointracking-or-blockpit).
 They fail closed on quarantined transactions in scope

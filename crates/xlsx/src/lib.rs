@@ -6,6 +6,7 @@ use rust_xlsxwriter::{
 };
 use serde::{Deserialize, Serialize};
 mod package;
+pub use package::archive;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]

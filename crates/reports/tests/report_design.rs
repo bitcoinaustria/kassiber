@@ -125,6 +125,22 @@ fn summary_model_matches_python_and_renders_deterministically() {
                     "{name}: CSV bytes"
                 );
                 check_csv(&csv, &name);
+                // The single-file bundle holds the same members, in order.
+                let zip = report_design::csv_zip(&document).unwrap();
+                assert!(zip.starts_with(b"PK\x03\x04"), "{name}: ZIP");
+                assert_eq!(
+                    report_design::csv_zip(&document).unwrap(),
+                    zip,
+                    "{name}: ZIP bytes"
+                );
+                let mut at = 0;
+                for (member, _) in &csv {
+                    let found = zip[at..]
+                        .windows(member.len())
+                        .position(|w| w == member.as_bytes())
+                        .unwrap_or_else(|| panic!("{name}: {member} missing from the ZIP"));
+                    at += found + member.len();
+                }
                 rendered += 1;
             }
             Err(e) => {

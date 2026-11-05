@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import sqlite3
 import sys
 import uuid
+import zipfile
 
 import pytest
 
@@ -118,6 +120,46 @@ def _normalize(wire, identities):
     return wire
 
 
+def _csv_design(raw, identities):
+    """A CSV export's response in the shared design's machine format
+    (docs/reference/report-design.md#csv). Artifact bytes and hashes differ
+    from Python's, the full report's bundle is one ZIP (`.zip` for `.csv`),
+    and its and the Austrian bundle's file and table layout follow the
+    design. Every other value must match; data parity is pinned in Rust."""
+    payload = json.loads(raw)
+    data = payload.get("data")
+    if isinstance(data, dict):
+        snapshot = data.get("report_snapshot")
+        if isinstance(snapshot, dict) and "content_sha256" in snapshot:
+            identities[snapshot["content_sha256"]] = "<artifact-sha256>"
+        layout = "sections" in data or "sheets" in data
+        for key in ("bytes", "sections", "sheets", "files", *(("rows",) if layout else ())):
+            if key in data:
+                data[key] = "<design>"
+    wire = json.dumps(payload, ensure_ascii=False).encode().replace(b".zip", b".csv")
+    return _normalize(wire, identities)
+
+
+def _csv_artifacts(base, native):
+    """The published CSV artifacts by name. The native ones are checked
+    against the design: plain CSV files and ZIP bundles with a manifest."""
+    found = {}
+    for path in sorted(p for p in base.rglob("*") if p.is_file() and p.suffix in {".csv", ".zip", ".json"}):
+        relative = path.relative_to(base)
+        if len(relative.parts) > 1:
+            found[relative.parts[0] + "/"] = "<bundle>"
+            if native and path.name == "manifest.json":
+                assert json.loads(path.read_text())["schema"] == "kassiber.report/1"
+            continue
+        if native and path.suffix == ".zip":
+            with zipfile.ZipFile(path) as bundle:
+                assert "manifest.json" in bundle.namelist() and "summary.csv" in bundle.namelist()
+        elif native:
+            assert path.read_bytes().split(b"\n", 1)[0].startswith(b"occurred_at,")
+        found[str(relative.with_suffix(".csv"))] = "<artifact>"
+    return found
+
+
 @pytest.mark.parametrize("scenario", ["reviewed", "stale", "large-signed-values", "unbounded", "empty"])
 def test_commercial_subledger_read_csv_bytes_database_and_routing(tmp_path, monkeypatch, scenario):
     root, _, env, call = _book(tmp_path, monkeypatch, "generic", "FIFO")
@@ -192,8 +234,8 @@ def test_cli_csv_export_sequences_and_rust_routing(tmp_path, monkeypatch, countr
                 identities[snapshot["id"]] = f"action-{index}"
                 first = first or snapshot["id"]
                 assert snapshot["created_at"] == STAMP
-            outcomes.append((_normalize(result.stdout, identities), result.stderr,
-                             _dump(root, identities), {str(p.relative_to(artifacts)): p.read_bytes() for p in sorted(artifacts.rglob("*.csv"))}))
+            stdout = _csv_design(result.stdout, identities)
+            outcomes.append((stdout, result.stderr, _dump(root, identities), _csv_artifacts(artifacts, not reference)))
         return outcomes
     expected = sequence(True)
     database.write_bytes(original)
@@ -242,8 +284,8 @@ def test_daemon_csv_exports_response_artifact_and_state_parity(tmp_path, monkeyp
                 identities[snapshot["id"]] = f"action-{index}"
                 assert snapshot["report_state"] == "saved"
         assert len(identities) == (3 if country == "at" else 2)
-        return ([_normalize(r, identities) for r in records], _dump(root, identities),
-                {str(p.relative_to(exports)): p.read_bytes() for p in sorted(exports.rglob("*.csv"))})
+        records = [_csv_design(r, identities) for r in records]
+        return records, _dump(root, identities), _csv_artifacts(exports, not reference)
     expected = session(True)
     database.write_bytes(original)
     assert session(False) == expected
@@ -268,7 +310,12 @@ def test_cli_stale_admission_and_transaction_drafts(tmp_path, monkeypatch, count
         assert "report_snapshot" not in json.loads(draft.stdout)["data"]
         state = _dump(root, {})
         assert state["filed_report_snapshots"] == []
-        return result.stdout, result.stderr, published, draft.stdout, draft.stderr, (tmp_path / "draft.csv").read_bytes(), state
+        drafted = (tmp_path / "draft.csv").read_bytes()
+        if not reference:
+            # A draft list withholds basis and gain: their cells stay empty.
+            header, *rows = drafted.decode().splitlines()
+            assert header.startswith("occurred_at,") and rows
+        return (result.stdout, result.stderr, published, _csv_design(draft.stdout, {}), draft.stderr, state)
     expected = sequence(True)
     database.write_bytes(original)
     assert sequence(False) == expected
@@ -280,21 +327,35 @@ def test_cli_stale_admission_and_transaction_drafts(tmp_path, monkeypatch, count
 def test_cli_csv_export_rendering_formats(tmp_path, monkeypatch, country, algorithm):
     root, database, env, call = _book(tmp_path, monkeypatch, country, algorithm)
     original = database.read_bytes()
-    target = tmp_path / "rendered.csv"
+    out = tmp_path / "out"
+    target = out / "rendered.csv"
     commands = [("reports", "export-csv", "--file", str(target)),
                 ("transactions", "export", "--export-format", "csv", "--file", str(target))]
     if country == "at":
-        commands.append(("reports", "export-austrian-e1kv-csv", "--year", "2024", "--dir", str(tmp_path / "bundle")))
+        commands.append(("reports", "export-austrian-e1kv-csv", "--year", "2024", "--dir", str(out / "bundle")))
     for format_ in ("table", "plain", "csv"):
         for command in commands:
             def execute(reference):
                 database.write_bytes(original)
+                shutil.rmtree(out, ignore_errors=True)
                 result = call("--format", format_, *command, reference=reference)
                 assert result.returncode == 0, result.stderr
                 state = _dump(root, {})
                 identities = {row["id"]: "<saved-id>" for row in state["filed_report_snapshots"]}
-                files = {str(p.relative_to(tmp_path)): p.read_bytes() for p in sorted(tmp_path.rglob("*.csv"))}
-                return _normalize(result.stdout, identities), result.stderr, files
+                identities.update({row["content_sha256"]: "<artifact-sha256>" for row in state["filed_report_snapshots"]})
+                state = _dump(root, identities)
+                stdout = _normalize(result.stdout, identities).replace(b".zip", b".csv")
+                if command[1] == "transactions":
+                    # The design's file has its own size; every other rendered
+                    # value must match.
+                    size = target.stat().st_size
+                    stdout = re.sub(rb"\b%d\b" % size, b"<bytes>", stdout)
+                else:
+                    # The bundles' sizes, files and tables follow the design;
+                    # their values are pinned by the machine-envelope tests.
+                    assert b"rendered.csv" in stdout or b"bundle" in stdout, stdout
+                    stdout = b"<design>"
+                return stdout, result.stderr, state, _csv_artifacts(out, not reference)
             assert execute(False) == execute(True)
     calls = [json.loads(line) for line in Path(env["KASSIBER_HYBRID_LOG"]).read_text().splitlines()]
     assert calls and all(c["served_by"] == "rust" for c in calls)
@@ -316,7 +377,8 @@ def test_cli_csv_export_filesystem_refusals(tmp_path, monkeypatch):
                 result = call("--machine", *args, *extra, option, str(target), reference=reference)
                 assert result.returncode == 1
                 assert parent_file.read_bytes() == b"keep existing file"
-                return result.returncode, result.stdout, result.stderr, _dump(root, {})
+                # The full report's bundle path ends in `.zip`.
+                return result.returncode, result.stdout.replace(b".zip", b".csv"), result.stderr, _dump(root, {})
             assert execute(False) == execute(True)
     calls = [json.loads(line) for line in Path(env["KASSIBER_HYBRID_LOG"]).read_text().splitlines()]
     assert calls and all(c["served_by"] == "rust" for c in calls)

@@ -17810,6 +17810,17 @@ the verification appendix keep their live formulas. Admission, refusals
 markers are Python's; the XLSX process tests compare everything but the
 workbook layout, `sheets` and, for the full report, `rows`.
 
+The CSV exports (`reports export-csv`, `export-austrian-e1kv-csv`,
+`transactions export --export-format csv` and the desktop's full-report,
+capital-gains and transaction CSV kinds) write the design's machine format
+(see [CSV](report-design.md#csv)). The full report's bundle is one ZIP: a
+`--file` without `.zip` gets the suffix, and the managed name ends in `.zip`.
+`tests/test_rust_report_exports.py` compares envelopes, errors, saved and
+filed markers and tables with Python's but for the artifacts' bytes, hashes
+and table layout; `crates/reports/tests/artifact_vectors.rs` and the desktop
+request vectors in `crates/reports/src/export_request.rs` compare the
+transaction and capital-gains values with Python's files cell by cell.
+
 Evidence: `tests/test_rust_pdf_exports.py` runs CLI and daemon sessions for
 all five against Python (identical envelopes but for the rendered pages,
 bytes and hash, identical errors, files, saved and filed markers and tables;

@@ -174,5 +174,37 @@
     "replace": "formula.replace(&format!(\"{{{}}}\", column.key), &address(j, r));",
     "expect_failing": ["formula_cells_name_their_own_row_and_cache_the_value"],
     "rule": "A formula cell names the columns of its own sheet row."
+  },
+  {
+    "id": "csv-zip-members",
+    "file": "crates/reports/src/report_design/mod.rs",
+    "find": "kassiber_xlsx::archive(&csv(doc)?)",
+    "replace": "kassiber_xlsx::archive(&csv(doc)?[1..])",
+    "expect_failing": ["summary_model_matches_python_and_renders_deterministically"],
+    "rule": "The full report's CSV ZIP holds every file of the CSV bundle, summary first."
+  },
+  {
+    "id": "capital-csv-country-columns",
+    "file": "crates/reports/src/capital_csv.rs",
+    "find": "let austria = kassiber_pytext::lower(&text(profile, \"tax_country\")) == \"at\";",
+    "replace": "let austria = true;",
+    "expect_failing": ["capital_gains_csv_is_exact_with_austrian_columns_only_in_austria"],
+    "rule": "The capital-gains CSV has the Austrian columns only in Austrian books."
+  },
+  {
+    "id": "capital-csv-exact-amount",
+    "file": "crates/reports/src/capital_csv.rs",
+    "find": "let raw = if truthy(exact) {\n        exact\n    } else {\n        value(row, key)\n    };",
+    "replace": "let raw = value(row, key);",
+    "expect_failing": ["capital_gains_csv_is_exact_with_austrian_columns_only_in_austria"],
+    "rule": "Capital-gains amounts are the stored exact text, not the float."
+  },
+  {
+    "id": "transaction-csv-draft-withheld",
+    "file": "crates/reports/src/standalone_csv.rs",
+    "find": "let withheld = matches!(*name, \"cost_basis\" | \"gain_loss\")",
+    "replace": "let withheld = matches!(*name, \"cost_basis\")",
+    "expect_failing": ["standalone_transactions_csv_artifact_vectors"],
+    "rule": "A draft transaction CSV withholds gain as well as basis."
   }
 ]

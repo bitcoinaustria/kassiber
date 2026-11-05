@@ -86,7 +86,7 @@ pub fn prepare(
                 austrian_pdf::prepare(conn, &workspace, &profile, &args, sources)
             }
             "reports.export-austrian-e1kv-csv" => {
-                austrian_csv::prepare(conn, &workspace, &profile, &args)
+                austrian_csv::prepare(conn, &workspace, &profile, &args, sources)
             }
             _ => Err(AppError::new(
                 "not_implemented",
@@ -168,27 +168,6 @@ pub(super) struct Section {
     pub headers: &'static [&'static str],
     pub rows: Vec<Value>,
 }
-pub(super) fn document(title: &str, sections: &[Section]) -> Vec<u8> {
-    let mut rows = vec![vec![s(title)], vec![]];
-    for section in sections {
-        rows.push(vec![s(section.title.as_str())]);
-        rows.push(section.headers.iter().map(|h| s(label(h))).collect());
-        if section.rows.is_empty() {
-            rows.push(vec![s("No rows in scope.")]);
-        } else {
-            rows.extend(section.rows.iter().map(|row| {
-                section
-                    .headers
-                    .iter()
-                    .map(|h| value(row, h).clone())
-                    .collect()
-            }));
-        }
-        rows.push(vec![]);
-    }
-    encode(&rows)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

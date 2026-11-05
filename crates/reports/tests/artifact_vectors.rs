@@ -11,6 +11,80 @@ impl kassiber_setup::Sources for Fixed {
         panic!("CSV preparation requested an identity")
     }
 }
+/// The new transaction CSV against Python's: the same rows; renamed unit
+/// columns (`amount_btc` for `amount`) and exact decimals for Python's
+/// floats compare by value.
+fn same_rows(actual: &str, expected: &str, name: &str) {
+    // Records of RFC 4180 text: quoted cells may hold line breaks.
+    let records = |text: &str| -> Vec<Vec<String>> {
+        let mut records = Vec::new();
+        let mut record = Vec::new();
+        let mut cell = String::new();
+        let mut quoted = false;
+        let mut chars = text.chars().peekable();
+        while let Some(c) = chars.next() {
+            match (c, quoted) {
+                ('"', true) if chars.peek() == Some(&'"') => {
+                    cell.push('"');
+                    chars.next();
+                }
+                ('"', _) => quoted = !quoted,
+                (',', false) => record.push(std::mem::take(&mut cell)),
+                ('\r', false) => (),
+                ('\n', false) => {
+                    record.push(std::mem::take(&mut cell));
+                    records.push(std::mem::take(&mut record));
+                }
+                _ => cell.push(c),
+            }
+        }
+        records
+    };
+    // Python's file heads its columns with labels (`Occurred At`); they
+    // name the same keys.
+    let old: Vec<Vec<String>> = records(expected)
+        .into_iter()
+        .map(|r| {
+            if r.first().is_some_and(|c| c == "Occurred At") {
+                r.iter()
+                    .map(|c| c.to_lowercase().replace(' ', "_"))
+                    .collect()
+            } else {
+                r
+            }
+        })
+        .collect();
+    let start = old
+        .iter()
+        .position(|r| r.first().map(String::as_str) == Some("occurred_at"))
+        .unwrap();
+    let old_header = old[start].clone();
+    let old_rows: Vec<Vec<String>> = old[start + 1..]
+        .iter()
+        .take_while(|r| !(r.len() == 1 && r[0].is_empty()))
+        // Python writes a placeholder row where the new file has none.
+        .filter(|r| !(r.len() == 1 && r[0] == "No rows in scope."))
+        .cloned()
+        .collect();
+    let mut new = records(actual).into_iter();
+    let new_header = new.next().unwrap();
+    let new_rows: Vec<Vec<String>> = new.collect();
+    assert_eq!(new_rows.len(), old_rows.len(), "{name}: rows");
+    for (new, old) in new_rows.iter().zip(&old_rows) {
+        for (column, value) in new_header.iter().zip(new) {
+            let source = column.trim_end_matches("_btc");
+            let index = old_header.iter().position(|h| h == source).unwrap();
+            let before = &old[index];
+            let equal = value == before
+                || matches!(
+                    (value.parse::<f64>(), before.parse::<f64>()),
+                    (Ok(a), Ok(b)) if a == b
+                );
+            assert!(equal, "{name}: {column} {value:?} != {before:?}");
+        }
+    }
+}
+
 fn check(command: &str) {
     let cases: Vec<serde_json::Value> =
         serde_json::from_str(include_str!("data/artifact_csv.json")).unwrap();
@@ -27,10 +101,13 @@ fn check(command: &str) {
         let actual = match result {
             Ok(p) => {
                 let directory = root.path().join("artifacts");
+                // The full report's bundle is binary (a ZIP).
+                let text =
+                    |bytes: Vec<u8>| String::from_utf8(bytes).unwrap_or_else(|_| "<binary>".into());
                 let published = if command != "reports.export-austrian-e1kv-csv" {
                     vec![kassiber_reports::artifact_publication::file(
                         &p,
-                        &directory.join("report.csv"),
+                        &directory.join(&p.files[0].name),
                     )
                     .unwrap()]
                 } else {
@@ -61,7 +138,7 @@ fn check(command: &str) {
                                             ("name", s(f.name)),
                                             ("sheet", s(f.sheet)),
                                             ("rows", Value::Int(f.rows.into())),
-                                            ("content", s(String::from_utf8(f.bytes).unwrap())),
+                                            ("content", s(text(f.bytes))),
                                         ])
                                     })
                                     .collect(),
@@ -86,41 +163,36 @@ fn check(command: &str) {
                 .unwrap();
         let expected = &case["expected"];
         if actual.get("ok").is_some() && expected.get("ok").is_some() {
-            assert_eq!(
-                actual["ok"]["metadata"], expected["ok"]["metadata"],
-                "{} metadata",
-                case["name"]
-            );
-            for (a, e) in actual["ok"]["files"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .zip(expected["ok"]["files"].as_array().unwrap())
-            {
-                let a_content = a["content"].as_str().unwrap();
-                let e_content = e["content"].as_str().unwrap();
-                let index = a_content
-                    .bytes()
-                    .zip(e_content.bytes())
-                    .position(|(a, e)| a != e)
-                    .unwrap_or(a_content.len().min(e_content.len()));
-                let sample = |v: &str| {
-                    v.get(index.saturating_sub(120)..(index + 200).min(v.len()))
-                        .unwrap_or("non-ascii boundary")
-                        .to_owned()
-                };
-                assert!(
-                    a_content == e_content,
-                    "{} {}: byte {} actual {:?} expected {:?}",
-                    case["name"],
-                    a["name"],
-                    index,
-                    sample(a_content),
-                    sample(e_content)
-                );
-                assert_eq!(a, e, "{}", case["name"]);
+            // The CSV is the shared design's machine format: Python's
+            // metadata but for the keys the layout names, Python's values.
+            let mut metadata = actual["ok"]["metadata"].clone();
+            let mut wanted = expected["ok"]["metadata"].clone();
+            for key in ["sections", "sheets", "rows"] {
+                if command != "reports.export-transactions-csv" || key != "rows" {
+                    metadata.as_object_mut().unwrap().remove(key);
+                    wanted.as_object_mut().unwrap().remove(key);
+                }
             }
-            assert_eq!(actual, *expected, "{}", case["name"]);
+            assert_eq!(metadata, wanted, "{} metadata", case["name"]);
+            let files = actual["ok"]["files"].as_array().unwrap();
+            match command {
+                "reports.export-transactions-csv" => same_rows(
+                    files[0]["content"].as_str().unwrap(),
+                    expected["ok"]["files"][0]["content"].as_str().unwrap(),
+                    case["name"].as_str().unwrap(),
+                ),
+                "reports.export-csv" => {
+                    let names: Vec<&str> =
+                        files.iter().map(|f| f["name"].as_str().unwrap()).collect();
+                    assert_eq!(names, ["report.zip"], "{}", case["name"]);
+                }
+                _ => {
+                    let names: Vec<&str> =
+                        files.iter().map(|f| f["name"].as_str().unwrap()).collect();
+                    assert_eq!(names[0], "summary.csv", "{}", case["name"]);
+                    assert_eq!(names.last(), Some(&"manifest.json"), "{}", case["name"]);
+                }
+            }
         } else {
             assert_eq!(actual, *expected, "{}", case["name"]);
         }
