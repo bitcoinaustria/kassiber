@@ -169,8 +169,16 @@ natively; generic `cancel` keeps Python's refusal.
 - [ ] Owner decision: keep Rust verifying without OpenSSH where Python reports
   `ssh_keygen_unavailable`/`ssh_keygen_unsupported` (the CLI oracle asserts
   the difference today).
-- [ ] Merge the round-5h redaction-scanner delta (`a12f3ad85`) into both the
-  Python scanner and `kassiber-envelope`'s mirror, with shared vectors.
+- [x] Mirror the round-5h/5i redaction scanner in `kassiber-envelope` and the
+  desktop supervisor, with shared fixture vectors, all six generators, per-shape
+  scaling and mutations; see
+  [the secret floor mirror](docs/reference/rust-shell.md#secret-floor-scanner-5i-mirror).
+- [ ] Port the non-redaction Python reference fixes merged with round 5i
+  (`t3code/python-reference-fixes-5i`) to the Rust backend: the 1e19 price
+  bound and `invalid_transaction_price`/`split_payout_requires_review`
+  quarantines, value-only import totals, staged CSV writes with device/pipe
+  targets, Esplora/Electrum history-anchor proofs, the freshness-count query
+  and new-name automatic diagnostics reports.
 - [ ] Add a loopback release-server oracle for `update --check` so the fetch,
   cache write and rendering are proven against Python without contacting
   GitHub.

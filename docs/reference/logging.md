@@ -80,7 +80,8 @@ extended private/public keys, descriptors, Silent Payments `sp()` / `spscan` /
 `spspend` material, BDK/LWK observer blobs or opaque store values, API keys,
 bearer tokens, and passphrase assignments. These are scrubbed by
 [`kassiber/redaction.py`](../../kassiber/redaction.py) (Python),
-`redact_sensitive_text` (Rust), and `redactSecretFloorText` (TypeScript)
+`kassiber_envelope::redaction` (Rust backend and desktop supervisor), and
+`redactSecretFloorText` (TypeScript)
 before a record is stored, so this material never exists in any buffer and
 cannot leak through later code paths, exports, or memory dumps.
 
@@ -94,9 +95,8 @@ checks. Nostr `nsec` private keys also pass through the key-material backstop.
 See [the scanner design and limits](#free-text-credential-scanner-and-limits)
 for encoding support, ambiguous URL text and prose-safe flag handling.
 
-The native Rust floor still uses its legacy token scanner. It must adopt the
-same scanners, aliases, exact corpora and all six generators during Rust
-integration; native-only stderr does not yet have Python/webview parity.
+The Rust backend and the desktop supervisor run the same floor as Python: see
+[the Rust mirror](#rust-mirror).
 
 **Operational redaction — applied at render/export time.** Amounts,
 addresses, txids, paths, URLs, labels. The Logs page renders redacted by
@@ -475,7 +475,27 @@ streams have the same SHA-256 digest in both runtimes; the first four also asser
 that planted identifiers, hostnames, prose and help remain readable. The webview bare-mnemonic heuristic retains its three
 known corpus differences from Python.
 
-The native Rust secret floor and supervisor need the same scanners, aliases,
-exact corpora and all six generators before claiming this free-text contract.
-Forwarding already-redacted Python records does not cover arbitrary native
-stderr. See the implementation verification report for the required Rust mirror.
+### Rust mirror
+
+[`crates/envelope/src/redaction/scanner.rs`](../../crates/envelope/src/redaction/scanner.rs)
+mirrors `kassiber/redaction_scanner.py` function by function, and
+[`floor.rs`](../../crates/envelope/src/redaction/floor.rs) the key, descriptor
+and token patterns and `is_sensitive_key` of `redaction.py`. Python's regular
+expressions are written out as matchers that accept exactly what `re` accepts,
+over code points, with no regex engine; a surrogate stands in as a
+private-use character, as elsewhere in the envelope. Both files use only the
+standard library, so the desktop supervisor
+([`secret_floor.rs`](../../ui-tauri/src-tauri/src/secret_floor.rs)) compiles
+the same source for its stderr tail, lifecycle records and error details,
+including the eight-level `[truncated]` depth of `redact_secret_value`.
+Every Rust caller (daemon errors and log ring, chain and wallet diagnostics,
+metadata history, provider previews) goes through these functions.
+
+`crates/envelope/tests/scanner_corpus.rs` checks Rust output byte for byte
+against Python's for every case of the shared fixture corpora, and, from
+`crates/envelope/scripts/gen_scanner_vectors.py generators`, for all six
+generators at their pinned seeds (reproducing the pinned digests), their pinned
+extra seeds and two more seeds each. `scanner_scaling.rs` times every scaling
+and stress shape at 40,000 and 400,000 characters in thread CPU time (release
+build); `scanner_families.rs` names one test per rule family, which the entries
+of `crates/envelope/scripts/mutations.json` must make fail.
