@@ -21,7 +21,7 @@ fn integer_or_zero(value: &Value) -> Result<Value, Error> {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct EventKey {
     pub chain: String,
     pub network: String,

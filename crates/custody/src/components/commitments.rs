@@ -2,9 +2,9 @@
 //! exactly as the historical SQL reads do. Lifecycle changes are not verdicts.
 use super::*;
 use crate::evidence;
+use crate::fxhash::HashSet;
 use kassiber_pyjson::{Key, Value as Py};
 use std::cell::{OnceCell, RefCell};
-use std::collections::HashSet;
 use std::rc::Rc;
 
 struct WithoutProvenance<'a, R>(&'a R);
@@ -305,7 +305,7 @@ impl Direction {
 #[derive(Default)]
 struct Pool {
     strings: HashSet<Rc<str>>,
-    events: BTreeSet<Rc<evidence::EventKey>>,
+    events: HashSet<Rc<evidence::EventKey>>,
 }
 impl Pool {
     fn string(&mut self, value: &str) -> Rc<str> {
