@@ -79,27 +79,45 @@ fn civil(at: Wall) -> (i64, i64, i64) {
 fn midnight(at: Wall, year: i64, month: i64, day: i64) -> Wall {
     at.replace(days_from_civil(year, month, day) * DAY, 0)
 }
-fn quarterly(period: &str) -> bool {
-    ["5years", "10years", "15years", "all"].contains(&period)
+/// "All" over a long book reads as a run of years: a decade of quarters is
+/// already forty bars.
+const YEARLY_BUCKET_MIN_YEARS: f64 = 10.0;
+
+/// `_history_years`: years from `earliest` to `end_us`, never negative.
+fn history_years(earliest: &str, end_us: i64) -> Result<f64> {
+    let elapsed = end_us - parse(earliest, "earliest")?;
+    let seconds = kassiber_pytext::parse_float(&format!("{elapsed}e-6")).unwrap();
+    Ok((seconds / (365.2425_f64 * 24.0 * 60.0 * 60.0)).max(0.0))
+}
+/// `_dashboard_bucket_size`.
+fn bucket_size(period: &str, history_years: f64) -> &'static str {
+    match period {
+        "30days" => "day",
+        "3months" => "week",
+        "all" if history_years >= YEARLY_BUCKET_MIN_YEARS => "year",
+        "4years" | "5years" | "10years" | "15years" | "all" => "quarter",
+        _ => "month",
+    }
 }
 /// `_dashboard_bucket_key`.
-fn bucket(at: Wall, period: &str) -> (String, Wall) {
+fn bucket(at: Wall, size: &str) -> (String, Wall) {
     let (year, month, day) = civil(at);
     let days = at.seconds.div_euclid(DAY);
     let date = |days: i64| {
         let (y, m, d) = civil_from_days(days);
         format!("{y:04}-{m:02}-{d:02}")
     };
-    match period {
-        "30days" => (date(days), midnight(at, year, month, day)),
-        "3months" => {
+    match size {
+        "day" => (date(days), midnight(at, year, month, day)),
+        "week" => {
             // Subtracting a timedelta resets the fold before `replace`.
             let monday = days - (days + 3).rem_euclid(7);
             let (y, m, d) = civil_from_days(monday);
             let reset = Wall { fold: false, ..at };
             (date(monday), midnight(reset, y, m, d))
         }
-        _ if quarterly(period) => {
+        "year" => (year.to_string(), midnight(at, year, 1, 1)),
+        "quarter" => {
             let first = (month - 1) / 3 * 3 + 1;
             (
                 format!("{year}-Q{}", (first - 1) / 3 + 1),
@@ -110,13 +128,18 @@ fn bucket(at: Wall, period: &str) -> (String, Wall) {
     }
 }
 /// `_dashboard_next_bucket`: wall-clock arithmetic, as aware datetimes add.
-fn next(at: Wall, period: &str) -> Wall {
-    let step = match period {
-        "30days" => 1,
-        "3months" => 7,
+fn next(at: Wall, size: &str) -> Wall {
+    let step = match size {
+        "day" => 1,
+        "week" => 7,
+        "year" => {
+            let (year, _, _) = civil(at);
+            let clock = at.seconds.rem_euclid(DAY);
+            return at.replace(days_from_civil(year + 1, 1, 1) * DAY + clock, at.micros);
+        }
         _ => {
             let (year, month, _) = civil(at);
-            let index = year * 12 + month - 1 + if quarterly(period) { 3 } else { 1 };
+            let index = year * 12 + month - 1 + if size == "quarter" { 3 } else { 1 };
             let clock = at.seconds.rem_euclid(DAY);
             return at.replace(
                 days_from_civil(index.div_euclid(12), index.rem_euclid(12) + 1, 1) * DAY + clock,
@@ -362,7 +385,7 @@ fn auto_period(auto: Auto<'_>) -> Result<String> {
         params_from_iter(bind),
     )?;
     if found.is_empty() {
-        return Ok("ytd".into());
+        return Ok("1year".into());
     }
     let dates = found
         .iter()
@@ -373,11 +396,11 @@ fn auto_period(auto: Auto<'_>) -> Result<String> {
             )
         })
         .collect::<Result<Vec<_>>>()?;
-    let elapsed = auto.end_us - parse(earliest, "earliest")?;
-    let seconds = kassiber_pytext::parse_float(&format!("{elapsed}e-6")).unwrap();
-    let history_years = (seconds / (365.2425_f64 * 24.0 * 60.0 * 60.0)).max(0.0);
-    let mut candidates = vec!["ytd", "1year"];
-    for (period, years) in [("5years", 5.0), ("10years", 10.0), ("15years", 15.0)] {
+    let history_years = history_years(earliest, auto.end_us)?;
+    // Auto settles on a range the page offers: twelve months, a halving
+    // cycle, a decade, or everything.
+    let mut candidates = vec!["1year"];
+    for (period, years) in [("4years", 4.0), ("10years", 10.0)] {
         if history_years >= years * 0.8 {
             candidates.push(period);
         }
@@ -390,7 +413,6 @@ fn auto_period(auto: Auto<'_>) -> Result<String> {
     let start = |period: &str| -> Option<Wall> {
         match period {
             "all" => None,
-            "ytd" => Some(midnight(end, year, 1, 1)),
             _ => {
                 let years: i64 = period
                     .trim_end_matches("years")
@@ -416,10 +438,8 @@ fn auto_period(auto: Auto<'_>) -> Result<String> {
             continue;
         }
         qualifying.push(period);
-        let buckets: BTreeSet<_> = visible
-            .iter()
-            .map(|date| bucket(**date, period).0)
-            .collect();
+        let size = bucket_size(period, history_years);
+        let buckets: BTreeSet<_> = visible.iter().map(|date| bucket(**date, size).0).collect();
         if buckets.len() >= AUTO_MIN_BUCKETS {
             return Ok(period.into());
         }
@@ -514,6 +534,80 @@ fn calendar(
     ])
 }
 
+/// The current UTC instant on the parser's microsecond scale.
+fn now_us(conn: &Connection) -> Result<i64> {
+    let now = rows(
+        conn,
+        "SELECT strftime('%Y-%m-%dT%H:%M:%fZ','now') AS now",
+        [],
+    )?;
+    parse(text(&now[0], "now"), "now")
+}
+
+/// `_iso_z` of a UTC instant in whole seconds since 1970.
+fn utc_text(seconds: i64) -> String {
+    let (year, month, day) = civil_from_days(seconds.div_euclid(DAY));
+    let clock = seconds.rem_euclid(DAY);
+    format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z",
+        clock / 3600,
+        clock / 60 % 60,
+        clock % 60
+    )
+}
+
+/// `_dashboard_years`: the calendar years holding dated activity, newest
+/// first, counted in the display zone the buckets use. Undated rows
+/// (stored at 1970-01-01) are not a year of their own.
+fn years(conn: &Connection, base: &str, bind: &[SqlValue], zone: &Zone) -> Result<Vec<Value>> {
+    let dated = format!("{base} AND t.occurred_at NOT IN ('',?)");
+    let mut dated_bind = bind.to_vec();
+    dated_bind.push(SqlValue::Text("1970-01-01T00:00:00Z".into()));
+    let bounds = rows(
+        conn,
+        &format!("SELECT MIN(t.occurred_at) AS first,MAX(t.occurred_at) AS last FROM transactions t JOIN wallets w ON w.id=t.wallet_id WHERE {dated}"),
+        params_from_iter(&dated_bind),
+    )?;
+    let (first, last) = (val(&bounds[0], "first"), val(&bounds[0], "last"));
+    if !truthy(&first) || !truthy(&last) {
+        return Ok(vec![]);
+    }
+    let first = civil(wall(zone, parse(&py_str(&first), "first")?)?).0;
+    let last = civil(wall(zone, parse(&py_str(&last), "last")?)?).0;
+    // `datetime(year, 1, 1, tzinfo=zone)` (fold 0) as a UTC instant.
+    let new_year = |year: i64| -> Result<i64> {
+        let local = days_from_civil(year, 1, 1) * DAY;
+        let offset = zone
+            .local_offset(local)
+            .ok_or_else(|| AppError::new("internal_error", "zone has no offset"))?;
+        Ok(local - offset)
+    };
+    let mut output = Vec::new();
+    for year in (first..=last).rev() {
+        let (start, end) = (new_year(year)?, new_year(year + 1)?);
+        let mut count_bind = dated_bind.clone();
+        count_bind.push(SqlValue::Text(utc_text(start)));
+        count_bind.push(SqlValue::Text(utc_text(end)));
+        let count = rows(
+            conn,
+            &format!("SELECT COUNT(*) AS count FROM transactions t JOIN wallets w ON w.id=t.wallet_id WHERE {dated} AND t.occurred_at >= ? AND t.occurred_at < ?"),
+            params_from_iter(count_bind),
+        )?;
+        let count = num(&count[0], "count");
+        if count != 0 {
+            output.push(dict([
+                ("year", Value::Int(year.into())),
+                ("count", Value::Int(count.into())),
+                ("since", s(utc_text(start))),
+                // Inclusive, whole-second: bounds compare as text, and a
+                // fractional until would sort before an exact timestamp.
+                ("until", s(utc_text(end - 1))),
+            ]));
+        }
+    }
+    Ok(output)
+}
+
 fn empty(resolve_auto: bool) -> Value {
     let mut history = dict([
         ("count", Value::Int(0.into())),
@@ -521,6 +615,7 @@ fn empty(resolve_auto: bool) -> Value {
         ("latest", Value::Null),
         ("accountingYears", Value::List(vec![])),
         ("accountingTimezone", s("UTC")),
+        ("years", Value::List(vec![])),
         ("walletOptions", Value::List(vec![])),
     ]);
     if resolve_auto {
@@ -551,6 +646,7 @@ fn empty(resolve_auto: bool) -> Value {
             ]),
         ),
         ("summary", summary),
+        ("bucketSize", s("month")),
         ("buckets", Value::List(vec![])),
         ("candidates", Value::List(vec![])),
         ("swapCandidateTotal", Value::Int(0.into())),
@@ -611,10 +707,11 @@ pub(super) fn execute(
             "ytd" => t,
             "all" | "max" => "all".into(),
             "30days" | "30day" | "30d" | "3months" | "3month" | "3m" | "6months" | "6month"
-            | "6m" | "1year" | "1years" | "1y" | "5years" | "5year" | "5y" | "10years"
+            | "6m" | "1year" | "1years" | "1y" | "4years" | "4year" | "4y" | "5years" | "5year"
+            | "5y" | "10years"
             | "10year" | "10y" | "15years" | "15year" | "15y" => t,
             _ => {
-                return Err(invalid("period must be one of: 30days, 3months, 6months, ytd, 1year, 5years, 10years, 15years, all").with_details(dict([("period", s(period_raw))])))
+                return Err(invalid("period must be one of: 30days, 3months, 6months, ytd, 1year, 4years, 5years, 10years, 15years, all").with_details(dict([("period", s(period_raw))])))
             }
         }
     };
@@ -664,12 +761,7 @@ pub(super) fn execute(
     let earliest_text = truthy(&earliest).then(|| py_str(&earliest));
     let auto = if resolve_auto {
         let end_us = if until.is_empty() {
-            let now = rows(
-                conn,
-                "SELECT strftime('%Y-%m-%dT%H:%M:%fZ','now') AS now",
-                [],
-            )?;
-            parse(text(&now[0], "now"), "now")?
+            now_us(conn)?
         } else {
             parse(&until, "until")?
         };
@@ -736,6 +828,10 @@ pub(super) fn execute(
     for key in ["review", "pending", "failed"] {
         set(&mut summary, key, Value::Int(0.into()));
     }
+    let size = match &earliest_text {
+        Some(earliest) => bucket_size(&period, history_years(earliest, now_us(conn)?)?),
+        None => bucket_size(&period, 0.0),
+    };
     let mut buckets: Vec<(String, Value)> = Vec::new();
     let new_bucket = |key: &str, start: Wall| {
         dict([
@@ -761,15 +857,15 @@ pub(super) fn execute(
                 parse(&until, "until")?
             },
         )?;
-        let mut cursor = bucket(start, &period).1;
+        let mut cursor = bucket(start, size).1;
         while cursor <= end {
-            let (key, start) = bucket(cursor, &period);
+            let (key, start) = bucket(cursor, size);
             let entry = new_bucket(&key, start);
             match buckets.iter_mut().find(|(k, _)| *k == key) {
                 Some(slot) => slot.1 = entry,
                 None => buckets.push((key, entry)),
             }
-            cursor = next(cursor, &period);
+            cursor = next(cursor, size);
         }
     }
     let mut external = 0;
@@ -789,7 +885,7 @@ pub(super) fn execute(
             py_str(&val(tx, "date"))
         };
         let date = wall(&zone, parse(&raw_date, "occurredAt")?)?;
-        let (key, start) = bucket(date, &period);
+        let (key, start) = bucket(date, size);
         let index = match buckets.iter().position(|(k, _)| *k == key) {
             Some(index) => index,
             None => {
@@ -894,6 +990,11 @@ pub(super) fn execute(
     }
     set(
         &mut history_payload,
+        "years",
+        Value::List(years(conn, &base, &base_bind, &zone)?),
+    );
+    set(
+        &mut history_payload,
         "walletOptions",
         Value::List(
             wallet_rows
@@ -937,6 +1038,7 @@ pub(super) fn execute(
             ]),
         ),
         ("summary", summary),
+        ("bucketSize", s(size)),
         (
             "buckets",
             Value::List(buckets.into_iter().map(|(_, b)| b).collect()),
