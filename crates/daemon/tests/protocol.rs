@@ -107,7 +107,7 @@ fn malformed_requests_match_python() {
         r#"{"kind":"error","schema_version":1,"error":{"code":"validation","message":"daemon request must be a JSON object","hint":null,"details":{"type":"list"},"retryable":false,"debug":null},"request_id":null}"#,
         r#"{"kind":"error","schema_version":1,"error":{"code":"validation","message":"daemon request requires a non-empty string kind","hint":null,"details":{"keys":["args"]},"retryable":false,"debug":null}}"#,
         r#"{"kind":"error","schema_version":1,"error":{"code":"validation","message":"daemon request requires a non-empty string kind","hint":null,"details":{"keys":["kind","request_id"]},"retryable":false,"debug":null},"request_id":7}"#,
-        r#"{"kind":"error","schema_version":1,"error":{"code":"unsupported_kind","message":"daemon kind 'token=[redacted]' is not classified or supported","hint":null,"details":{"kind":"token=[redacted]"},"retryable":false,"debug":null},"request_id":"c"}"#,
+        r#"{"kind":"error","schema_version":1,"error":{"code":"unsupported_kind","message":"daemon kind 'token=[redacted]","hint":null,"details":{"kind":"token=[redacted]"},"retryable":false,"debug":null},"request_id":"c"}"#,
     ];
     assert_eq!(&lines[1..], &expected);
 }
