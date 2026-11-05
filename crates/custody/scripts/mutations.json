@@ -16206,8 +16206,8 @@
   {
     "id": "QN-001",
     "file": "crates/custody/src/quantity/native.rs",
-    "find": "rde_json::{json, Value};\nuse std::borrow::Cow;\nuse std::collections::{BTreeMap, BTreeSet, HashMap};\nfn text(v: &Value) -> String {\n    if codec::truth(v) {\n        codec::pystr(v)\n    } else {\n        String::new()\n    }\n}\nfn hash(v: &Value) -> Result<Str",
-    "replace": "rde_json::{json, Value};\nuse std::borrow::Cow;\nuse std::collections::{BTreeMap, BTreeSet, HashMap};\nfn text(v: &Value) -> String {\n    if false && (codec::truth(v)) {\n        codec::pystr(v)\n    } else {\n        String::new()\n    }\n}\nfn hash(v: &Value) -> Result<Str",
+    "find": "fn text(v: &Value) -> String {\n    if codec::truth(v) {\n        codec::pystr(v)",
+    "replace": "fn text(v: &Value) -> String {\n    if false && (codec::truth(v)) {\n        codec::pystr(v)",
     "expect_failing": [
       "quantity_native_augmentation_vectors"
     ],
