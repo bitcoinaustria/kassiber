@@ -16705,3 +16705,195 @@ R6-4. As the owner settled, Python and Rust brokers share the one endpoint.
   `NativeAuth` seam (helper launch with result, ready and go pipes, live
   code-signing checks, account derivation, `configure_touch_id_authenticated`
   in the service), the restart handoff, and the signed hardware run.
+
+## Operator CLI, brokered routing and agent access (R6-3)
+
+Slice R6-3 of the [R6 design](r6-ai-operator-port.md#r6-3-operator-cli-brokered-routing-agent-sessions-and-agent-access).
+The seven password `operator` leaves, `--operator-auth-fd`, brokered routing,
+`config/agent-access.json` and the five `ui.agent_access.*` daemon kinds are
+native. `operator touch-id ...` stays unregistered and
+`operator unlock --auth touch-id` answers `not_implemented` after its
+interaction check (R6-4); `mcp ...` is R6-8.
+
+### What is native
+
+- **The leaves** (`crates/cli/src/operator_cli.rs`, Python's
+  `operator/cli.py`): `status` (with `mode` from `unlock_mode_status` and
+  `this_build`/`same_build`), `lock`, `stop`, `unlock --passphrase-fd`,
+  `mode`, `operation status` and `operation cancel`, through the R6-1
+  client with this binary's build identity. A secret comes from its
+  descriptor or one no-echo prompt (`kassiber_secrets::service::prompt_passphrase`);
+  a machine or piped caller gets `interaction_required` with
+  `details.reason = fresh_local_authentication`. Only `unlock`, `mode`
+  launch a broker; status, lock, stop and operation reads connect to an
+  existing one. `--duration` reaches the broker as Python's unbounded
+  integer, so a duration past the timestamp range is the broker's
+  `operator_invalid_duration`. `_maybe_migrate_default_state_root` is
+  skipped for `status`, `lock` and `operation`, as in Python.
+- **Brokered routing** (`route_brokered`) now runs once in `run`, in
+  Python's place: after the operator dispatch and before the broker-child
+  preparation, for every native command outside `_DIRECT_COMMANDS`
+  (`wallets import-ledger --dry-run` included, which the per-family stubs
+  missed). It pins the canonical `--data-root`, drops `--project`,
+  `--data-root`, `--operator-auth-fd` and `--db-passphrase-fd`, reads a
+  fresh admin passphrase through `--operator-auth-fd` before the other
+  secrets, replaces every `--*-fd`/`--*-stdin` value with a
+  `broker-secret-<hex>` label (R6-1's `prepare_arguments`, descriptors
+  adopted through `kassiber_ipc::descriptor`), and submits without starting a
+  broker and only to this build's. The accepted operation is one compact
+  `operator.operation.accepted` line on stderr under `--machine`, or
+  `operator operation accepted: <id>`. The wait polls with Python's backoff;
+  Ctrl-C (SIGINT, a console `CTRL_C_EVENT` on Windows) cancels the
+  operation, prints `operator cancellation requested: <id> (<state>)` and
+  exits 130. The handler (`kassiber_ipc::signal::install_interrupt`) is
+  installed once the operation is accepted, before the accepted line. Results
+  without child output become `operator_result_too_large`,
+  `operator_result_unknown`, `operator_operation_cancelled` or
+  `operator_operation_failed` envelopes with Python's details and exit codes,
+  and the binary exits with the low byte of the code as `sys.exit` does on
+  POSIX.
+- **Store seam.** `BookStore::selected_data_root` (Python's
+  `_selected_data_root`, which creates the default catalog project on first
+  use) and `BookStore::unlock_mode_status`
+  (`kassiber_secrets::modes::unlock_mode_status` and
+  `policy_binding_state`). `invalid_operator_unlock_mode` from routing now
+  carries Python's `details.configured`.
+- **`config/agent-access.json`** (`kassiber_setup::agent_access`,
+  `agent_access.py`): `KASSIBER_AGENT_ACCESS_FILE` or the state root's
+  `config/`; a regular file of at most 1,024 bytes whose `schema_version` is
+  exactly the integer 1; `mcp_enabled` only as literal `true`;
+  `ai_features_enabled` a bool or `null`; anything else reads as off.
+  `mcp_disabled` outranks `ai_features_disabled`. Writes keep the other field
+  and use `json.dumps(sort_keys=True)` with default separators through the
+  shared private-preference writer.
+- **The daemon kinds** (`crates/daemon/src/agent_access.rs`,
+  `daemon_agent_session.py`): `ui.agent_access.status`, `configure`,
+  `unlock`, `lock` and `pairing`, answered without opening a book and
+  while a freshness job runs. Unlock asks the broker for an 8 h `read`
+  lease, only if none exists, with a fresh 32-byte control secret and a
+  15-minute idle timeout; the local deadline starts before the request and
+  the give-up time after it. Status reads memory unless `refresh` is set
+  while the desktop's own lease exists. Locking names the lease id and asks
+  the broker to restore `manual` only when the grant replaced `manual`; a
+  stopped reply counts only after a failed ping. The request loop ticks the
+  lease: every 30 s a live lease is checked, an expired one is locked, a
+  failed lock is retried every 5 s and dropped 60 s past its expiry; the
+  input wait is bounded by the next of these. The lease also ends on
+  `daemon.lock`, daemon exit, passphrase rotation (after verification and
+  again when the book closes) and `ui.backup.apply` (on entry and when the
+  restore closes the book). The broker, clock, preference path and entropy
+  are seams.
+- **Agent-session labels on macOS** (`crates/operator/src/peers.rs`):
+  `/bin/ps -o ppid=|comm= -p <pid>` through `ChildCommand`, with `LC_ALL=C`,
+  `PATH=/usr/bin:/bin`, a 2 s limit and strict UTF-8, behind a
+  `ProcessTree` seam that Linux's `/proc` reader shares. The server takes its
+  labeler as a seam for tests.
+- **Small additions:** `kassiber_operator::error::into_app_error` (Python's
+  `str(OSError)` for the generic `internal_error`), `protocol::token_bytes`,
+  the client's `unlock` duration as a `BigInt`, and the service's
+  `Limits::max_remembered_agent_denials`.
+
+### Verification
+
+- **Rust tests:**
+  - `kassiber-cli`: 14 `operator_cli` unit tests (result mapping vectors from
+    `test_operator_cli.py`, pinning, interaction refusals, a scripted
+    endpoint proving no broker launch and no command line to another build,
+    and the Ctrl-C wait and cancel), plus the in-process brokered refusal in
+    `tests/run.rs`, isolated by `Environment::operator_runtime`.
+  - `kassiber-setup`: 3 agent-access tests.
+  - `kassiber-daemon`: 29 agent-access tests, the 25 of
+    `test_daemon_agent_session.py` plus interval, argument and
+    lease-ending cases (the last through a real `Daemon`) and the grant's
+    exact unlock frame.
+  - `kassiber-operator`: the 22 service, server and label tests of
+    `test_operator_agent_sessions.py` (its `PeerProcessTest` is the existing
+    peer-credential test), a cross-project session cap and the `/bin/ps`
+    label vectors.
+  - `kassiber-ipc`: the SIGINT interrupt in its own test binary.
+  - `crates/kassiber/tests/operator_broker.rs`: the leaves, routing and
+    lock through a real broker; Ctrl-C on a queued command (exit 130, the
+    operation cancelled); a Rust daemon granting, refusing to replace a
+    terminal lease, pairing this process, counting its `mcp call` and
+    ending the lease on `daemon.lock`.
+
+  Every child these harnesses start, Python's included, gets a disposable
+  `XDG_DATA_HOME`.
+- **Python:**
+  - `tests/test_rust_operator_cli.py` runs one 39-call CLI scenario and one
+    24-request daemon scenario per language, each through its own broker on
+    a copy of one book, and compares exit codes, stdout and stderr bytes and
+    daemon records after mapping generations, ids, origins, times, remaining
+    seconds and paths. The Rust side runs through the hybrid candidate; its
+    log shows every call, the daemon included, served by Rust. Both write
+    identical `agent-access.json` bytes.
+  - `KASSIBER_TEST_OPERATOR_BROKER=rust` keeps five of six
+    `test_operator_integration.py` scenarios passing. The MCP scenario
+    stays skipped: unskipped, the desktop grant and pairing work and its
+    first brokered `mcp call` returns `not_implemented` from the Rust child,
+    which is R6-8.
+  - `test_operator_cli.py`, `test_operator_agent_sessions.py`,
+    `test_daemon_agent_session.py` and `test_cli_agent_contract.py` pass
+    unchanged against Python.
+- **Mutations.** `crates/operator/scripts/mutations.json` gains 29 entries
+  (97 in all). Its checker now also builds `kassiber-setup`,
+  `kassiber-daemon` and `kassiber-cli`, and keeps each scratch tree's cargo
+  build directory inside it. All 29 are killed in scratch-tree runs. They cover
+  the agent-access parsing rules and reason precedence, the pid and token
+  check, denial memory and its cap, the `mcp call` scope, the heartbeat
+  and lease-end checks, the desktop check and retry intervals, the
+  conditional lock with `restore_manual`, `only_if_locked` and the idle
+  timeout, and the CLI's broker choice, build binding, Ctrl-C exit,
+  pinning, interaction check and result mapping.
+
+### Reviewed differences
+
+- Interactive `operator unlock --auth touch-id` answers `not_implemented`
+  until R6-4; a machine or piped caller gets Python's `interaction_required`.
+- A secret descriptor that cannot be read reports the Rust CLI's existing
+  `invalid_passphrase` wording, as `--db-passphrase-fd` does elsewhere.
+- Ctrl-C is noticed between status polls: a poll already in flight (at most
+  2 s) finishes first, then the operation is cancelled as in Python. A
+  Ctrl-C before the operation is accepted ends the process by signal, as an
+  uncaught `KeyboardInterrupt` does.
+- On Windows a negative exit code exits 1; `sys.exit(-9)` would exit
+  `0xFFFFFFF7`.
+- The daemon records no RAM log warning when an agent lease lock fails or
+  cleanup gives up; there is no native logs kind yet.
+- A broker status whose agent `sessions` is not a list reads as no
+  sessions; Python raises `TypeError`.
+- `/bin/ps` output is decoded as strict UTF-8 rather than in the locale
+  encoding; it runs in the C locale.
+
+### Not tested here
+
+- Windows: the console Ctrl-C handler (new `windows-sys` feature
+  `Win32_System_Console`) and the rest of the Windows arms were written
+  against `windows-sys` 0.61 and reviewed, not compiled.
+- macOS: the `/bin/ps` labels run here only through the seam and Linux's
+  `/bin/ps`.
+- Failures that predate R6: `privacy_hygiene_frozen_oracle_matches_unchanged_python`
+  fails with `AssertionError: baseline` at `3d9f49efc` too. At the R6-2 tip
+  `825d93a78`, `kassiber-setup`'s `python_vectors`, `desktop` and `networks`
+  tests (profile records now carry journal-semantics columns), the daemon's
+  `platform_csv_daemon_kind_is_registered` and the binary's
+  `lightning_service_capability_backend_and_grant_lifetime` fail
+  identically; this slice touches none of them.
+
+### Left for R6-4 and R6-8
+
+- **R6-4:** `operator touch-id status`/`enroll`/`forget` and
+  `operator unlock --auth touch-id` past the interaction check; the
+  broker's `unlock_touch_id` and `touch_id_configure` past the `NativeAuth`
+  seam (helper launch with result, ready and go pipes, live code-signing
+  checks, account derivation, `configure_touch_id_authenticated`); the
+  client's `ensure_native_auth_running` handoff with
+  `KASSIBER_NATIVE_AUTH_HELPER`; the signed hardware run.
+- **R6-8:** the six `mcp` leaves. `mcp status`/`enable`/`disable` read and
+  write `config/agent-access.json` through `kassiber_setup::agent_access`
+  (and `require_mcp_access` gates `mcp call`); `mcp serve` keeps one
+  agent session per brokered book with
+  `BrokerClient::open_agent_session` (10 s heartbeats) and submits each
+  call with its token; routing already sends `mcp call` through
+  `route_brokered`. The MCP integration scenario then runs unskipped under
+  the Rust broker switch.

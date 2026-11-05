@@ -542,6 +542,11 @@ and R6-4.
 
 ### R6-3 Operator CLI, brokered routing, agent sessions and agent access
 
+Done on branch `t3code/r6-3-operator-cli`; the
+[checkpoint](rust-shell.md#operator-cli-brokered-routing-and-agent-access-r6-3)
+records its verification, reviewed differences and what is left for R6-4
+and R6-8.
+
 **Scope:**
 
 - **Operator leaves:** the seven non-Touch-ID `operator` leaves, plus `--operator-auth-fd`.

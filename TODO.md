@@ -1205,9 +1205,9 @@ journal registration remains on R4-13.
 ## Rust backend R6
 
 The [R6 port design](docs/reference/r6-ai-operator-port.md) lists the
-census, slices, oracles and owner decisions. R6-1's libraries and R6-2's
-broker (`kassiber --operator-broker-server` and its children) are native; no
-R6 command or kind is registered yet.
+census, slices, oracles and owner decisions. R6-1's libraries, R6-2's
+broker (`kassiber --operator-broker-server` and its children) and R6-3's
+operator leaves, brokered routing and `ui.agent_access.*` kinds are native.
 
 - [x] R6-1: local IPC and child-process primitives (`crates/ipc`), the operator
   protocol and client, and the remaining ownership pieces; see the
@@ -1217,15 +1217,22 @@ R6 command or kind is registered yet.
   [R6-2 checkpoint](docs/reference/rust-shell.md#operator-broker-service-server-and-children-r6-2).
   Its Windows arms have not been compiled: build and run them on a Windows
   runner.
-- [ ] R6-3: operator leaves, brokered routing, agent sessions and
-  `ui.agent_access.*`.
-- [ ] R6-4: Touch ID flow, including the signed hardware run on a Mac.
+- [x] R6-3: operator leaves, brokered routing, agent sessions and
+  `ui.agent_access.*`; see the
+  [R6-3 checkpoint](docs/reference/rust-shell.md#operator-cli-brokered-routing-and-agent-access-r6-3).
+  Its Windows console Ctrl-C handler has not been compiled: build and run it
+  on a Windows runner, and run the `/bin/ps` labels on a Mac.
+- [ ] R6-4: Touch ID flow (`operator touch-id ...` and
+  `operator unlock --auth touch-id`), including the signed hardware run on a
+  Mac.
 - [ ] R6-5: AI tool catalog, executor, consent and projections; wire each tool
   as its R5 service lands (81 tools wait on R5, chain analysis the largest).
 - [ ] R6-6: provider configuration, streaming HTTP, the provider broker client
   and discovery.
 - [ ] R6-7: `ai.chat`, cancellation, consent, history, `chat` and `chats`.
-- [ ] R6-8: MCP server, direct books first, then brokered books.
+- [ ] R6-8: MCP server, direct books first, then brokered books; then run
+  the MCP scenario of `test_operator_integration.py` under
+  `KASSIBER_TEST_OPERATOR_BROKER=rust`.
 - [ ] Owner decisions in the design's risks section: registration timing,
   broker ledger rows, the broker bundle location, and an owner for chain
   analysis. Settled on 2026-11-02: Python and Rust brokers share one

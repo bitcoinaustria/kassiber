@@ -4674,3 +4674,29 @@ scope, replay, retention, expiry, admin authorization, result states,
 pinning and the guards. The
 [checkpoint](../reference/rust-shell.md#operator-broker-service-server-and-children-r6-2)
 records the details and what R6-3 and R6-4 take on.
+
+### R6-3 operator CLI, brokered routing and agent access
+
+The seven password `operator` leaves and `--operator-auth-fd` are native and
+talk to the per-user broker with this binary's build identity. Brokered
+routing runs once in the CLI, in Python's place, for every native command:
+it pins the canonical root, sends secrets only as labelled `S` frames,
+never starts a broker, writes the accepted line, waits, cancels on Ctrl-C
+with exit 130 (a SIGINT-only flag in `crates/ipc`, the console handler on
+Windows) and maps a result without child output to Python's typed errors.
+`config/agent-access.json` lives in `kassiber-setup`; the daemon registers
+the five `ui.agent_access.*` kinds and ticks the desktop's agent lease in its
+request loop, ending it with the desktop session. macOS agent labels ask
+`/bin/ps`. Touch ID stays R6-4 and `mcp` R6-8.
+
+Parity: the four Python suites are ported as Rust tests (with seams for the
+broker, clock, preference file and labels) or covered end to end through a
+real broker and daemon, and a new differential driver compares 39 CLI calls
+and 24 daemon requests per language, each through its own broker, byte for
+byte after declared mappings, with the hybrid log showing Rust served them.
+The MCP integration scenario still waits on R6-8's `mcp call`. 29 new
+mutation entries cover the agent-access file, the agent-session checks, the
+desktop lease's intervals and conditional lock, and the CLI's broker choice,
+build binding, exit codes and mapping. The
+[checkpoint](../reference/rust-shell.md#operator-cli-brokered-routing-and-agent-access-r6-3)
+records the details and what R6-4 and R6-8 take on.
