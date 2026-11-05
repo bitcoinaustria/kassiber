@@ -335,3 +335,49 @@ End to end at step 33 (process CPU, same pairs): generic 2k 1.75 / 0.45 s
 branch to the ledger request (`build_request`, `request_json`) did not
 move the fusion phase measurably and were not kept; the phase table above
 still describes where the time goes.
+
+## Margin and closing campaigns (2026-11-05, steps 34–38)
+
+Steps 34–38 index reviewed observations, component lookups, the
+commitment pool, quantity runtime maps and grouping indexes with the
+fast hasher, and keep one position map instead of three copied-key maps
+in reviewed compilation. Best of five alternating pairs on `0ce1e8969`,
+custody CPU in seconds:
+
+| Book | Python | Native | Speedup | Load |
+| --- | ---: | ---: | ---: | --- |
+| generic 2k | 0.829 | 0.058 | 14.3× | 18–21 |
+| multi-wallet 2k | 1.138 | 0.114 | 10.0× | 16–18 |
+| generic 20k | 5.310 | 0.503 | 10.6× | 11–17 |
+| multi-wallet 20k | 12.032 | 0.929 | 12.9× | 7–14 |
+
+Instruction counts are not fully repeatable between runs either: the
+record column cache and the raw text address table key on addresses, so
+address-space layout moves a stage by up to 1.5%.
+
+What the remaining custody time is, by instruction share:
+
+- Generic 20k: loading raw JSON texts (6.4%, mostly allocating the
+  parsed strings), building observation commitments (payload dump and
+  two SHA-256 per row, about 15%), and first reads of each source row in
+  finalized projection (memory-bound; several percent spread over
+  `truth`, row lookups and keys).
+- Multi-wallet 2k: component materialization (per-component canonical
+  rebuild for evidence status 2.5%, anchor scope checks 1.5%, leg
+  projection 1.7%, JSON-built validation results), recorded pair
+  detection copying whole rows into pair objects (2%), and gap search
+  beams (3.5%).
+
+Closing campaigns:
+
+- Generated-book gate on `337221a22`: 24,000 books, 50,060 byte
+  comparisons and 1,030 permutations, all equal.
+- End-to-end `journals process` comparison against Python on `0ce1e8969`
+  (three alternating pairs per book): payloads and complete database
+  dumps equal on all four books. Best process CPU, Python / native:
+  1.64 / 0.44 s, 2.11 / 0.59 s, 12.52 / 4.56 s, 22.17 / 5.87 s.
+- `classify_tests update` left `dispositions.json` unchanged; the
+  preflight shard passed (57 tests).
+- Full mutation catalog (2,492 recipes) on `0ce1e8969`: running in
+  resumable shards (`target/c10x/full-catalog.sh`), about one recipe a
+  minute on this machine.
