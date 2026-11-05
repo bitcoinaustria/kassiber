@@ -289,7 +289,7 @@ mod tests {
     }
 
     #[test]
-    fn provider_cursors_are_bound_to_the_visible_branch() {
+    fn provider_resume_cursor_is_bound_to_the_visible_chat_branch() {
         let chats = ActiveChats::default();
         chats.remember_provider_session(Some("s1"), "codex", Some("cursor-1"), "fp-a");
         assert_eq!(
