@@ -663,6 +663,16 @@ pub trait Book: Send {
     ) -> Result<Value, AppError> {
         Err(not_implemented("ai", "AI providers"))
     }
+    /// Chat history and the request-loop work of `ai.chat` (R6-7), on this
+    /// book.
+    fn ai_chat(&mut self, _op: kassiber_ai::chat::store::Op<'_>) -> Result<Value, AppError> {
+        Err(not_implemented("ai", "AI chat history"))
+    }
+    /// The passphrase that unlocked this book, if one did: `kassiber chat`
+    /// hands it to its daemon child over stdin (`daemon.unlock`).
+    fn unlock_passphrase(&self) -> Option<Secret> {
+        None
+    }
     /// Local file-import run services. Unsupported seam stores fail closed.
     fn import_runs(&mut self, _operation: kassiber_imports::Operation) -> Result<Value, AppError> {
         Err(not_implemented("imports", "file import runs"))

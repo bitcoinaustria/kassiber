@@ -10,6 +10,10 @@
 mod ai;
 pub mod argparse;
 mod attachments;
+#[cfg(feature = "native-chat")]
+pub mod chat;
+#[cfg(feature = "native-chat")]
+mod chats;
 mod commercial;
 pub mod describe;
 mod diagnostics;

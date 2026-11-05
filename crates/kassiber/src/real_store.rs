@@ -2400,6 +2400,29 @@ impl Book for RealBook {
             }
         }
     }
+    fn ai_chat(&mut self, op: kassiber_ai::chat::store::Op<'_>) -> Result<Value, AppError> {
+        let conn = self.conn()?;
+        let in_profile = |conn: &Connection, profile: &str, reference: &str| {
+            kassiber_transactions::desktop::transaction_in_profile(conn, profile, reference)
+        };
+        let bind = |conn: &Connection, scope: &Value, workspace: &str, profile: &str| {
+            kassiber_transactions::desktop::bind_screen_metrics_scope(
+                conn, scope, workspace, profile,
+            )
+        };
+        let binding = kassiber_ai::chat::store::ScreenBinding {
+            transaction_in_profile: &in_profile,
+            bind_metrics_scope: &bind,
+        };
+        let mut resolve = || self.resolve_scope(None, None);
+        kassiber_ai::chat::store::run(conn, op, &mut resolve, &binding)
+    }
+    fn unlock_passphrase(&self) -> Option<Secret> {
+        self.db_passphrase
+            .as_ref()
+            .filter(|passphrase| !passphrase.is_empty())
+            .map(|passphrase| Secret::new(passphrase.expose().to_owned()))
+    }
     fn preview_document(
         &mut self,
         request: kassiber_wallets::file_import::document::DocumentPreview,

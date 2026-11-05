@@ -255,7 +255,7 @@ impl Sink<'_> {
 }
 
 /// `format_table_value(value)`.
-fn table_value(value: &Value) -> String {
+pub(crate) fn table_value(value: &Value) -> String {
     match value {
         Value::Null => String::new(),
         Value::Float(f) => {

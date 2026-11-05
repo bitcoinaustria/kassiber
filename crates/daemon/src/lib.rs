@@ -14,8 +14,10 @@
 //! Python. See docs/reference/rust-shell.md.
 
 mod agent_access;
+#[cfg(feature = "native-chat")]
+mod ai_chat;
 mod ai_providers;
-#[cfg(feature = "test-kinds")]
+#[cfg(any(feature = "test-kinds", feature = "native-chat"))]
 mod ai_tools;
 mod attachments;
 mod backends;
@@ -249,6 +251,10 @@ pub fn supported_kinds() -> Vec<&'static str> {
     kinds.extend_from_slice(&SUPPORTED_KINDS[1..3]);
     kinds.push("wallets.reveal_descriptor");
     kinds.extend(ai_providers::KINDS);
+    // Chat stays out of product builds until every tool it can call is
+    // native (design §7 item 1); the `native-chat` gate registers it.
+    #[cfg(feature = "native-chat")]
+    kinds.extend(ai_chat::KINDS);
     kinds.extend(
         services::kinds()
             .filter(|k| backends::KINDS.contains(k) && ["backends.reveal_token"].contains(k)),
@@ -377,7 +383,11 @@ pub fn error_envelope(
     )
 }
 
-fn app_error_envelope(error: &AppError, request_id: &RequestId, kind: Option<&str>) -> Value {
+pub(crate) fn app_error_envelope(
+    error: &AppError,
+    request_id: &RequestId,
+    kind: Option<&str>,
+) -> Value {
     let code = if error.code.is_empty() {
         "app_error"
     } else {
@@ -497,6 +507,9 @@ pub(crate) struct Daemon {
     pub(crate) agent_access: agent_access::AgentAccess,
     /// `ctx.ai_discovery_cache`: RAM-only provider and model discovery.
     ai_discovery: Arc<kassiber_ai::discovery::Cache>,
+    /// Running chats and the book work their workers queue.
+    #[cfg(feature = "native-chat")]
+    chats: ai_chat::Chats,
 }
 
 impl Daemon {
@@ -526,6 +539,8 @@ impl Daemon {
             document_sessions: Default::default(),
             agent_access: agent_access::AgentAccess::system(config.build),
             ai_discovery: Default::default(),
+            #[cfg(feature = "native-chat")]
+            chats: Default::default(),
         }
     }
 
@@ -540,6 +555,8 @@ impl Daemon {
             }
             self.backup_sessions.expire();
             let _ = self.agent_access.expire();
+            #[cfg(feature = "native-chat")]
+            self.drain_chat_tasks();
             let timeout = self.backup_sessions.remaining();
             // The desktop agent lease's next check, expiry or lock retry.
             let timeout = match self.agent_access.due() {
@@ -548,6 +565,18 @@ impl Daemon {
                     Some(timeout.map_or(wait, |timeout| timeout.min(wait)))
                 }
                 None => timeout,
+            };
+            // A chat worker may wait on the request loop: poll as Python's
+            // loop does (`_next_input_line(ctx, timeout=0.05)`).
+            #[cfg(feature = "native-chat")]
+            let timeout = if self.chats.busy() {
+                Some(
+                    timeout
+                        .unwrap_or(std::time::Duration::from_millis(50))
+                        .min(std::time::Duration::from_millis(50)),
+                )
+            } else {
+                timeout
             };
             let timeout = if self.freshness_requests.polling() {
                 Some(
@@ -773,6 +802,8 @@ impl Daemon {
                 }
             }
             self.start_watch_worker();
+            #[cfg(feature = "native-chat")]
+            self.drain_chat_tasks();
             if shutdown {
                 return 0;
             }
@@ -1116,6 +1147,14 @@ impl Daemon {
                 Some(with_request_id(success(&kind_text, payload), &request_id)),
                 false,
             ));
+        }
+        #[cfg(feature = "native-chat")]
+        if ai_chat::CONTROL_KINDS.contains(&kind_text.as_str()) {
+            return ai_chat::control(self, &kind_text, args.as_ref(), &request_id);
+        }
+        #[cfg(feature = "native-chat")]
+        if ai_chat::KINDS.contains(&kind_text.as_str()) {
+            return ai_chat::handle(self, &kind_text, args.as_ref(), &request_id, input);
         }
         if ai_providers::KINDS.contains(&kind_text.as_str()) {
             return ai_providers::handle(self, &kind_text, args.as_ref(), &request_id, input);

@@ -15,6 +15,10 @@ name = "kassiber_daemon"
 # Protocol-exercising kinds for black-box tests (streaming, events, late
 # records, the secret-store control channel). Never in a release build.
 test-kinds = []
+# R6-7 chat: `ai.chat`, its controls and the chat history kinds. Off in
+# product builds until every AI tool chat can call is native (design §7
+# item 1; docs/reference/rust-shell.md lists what flips it).
+native-chat = []
 
 [dependencies]
 kassiber-ai = { path = "../ai" }

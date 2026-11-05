@@ -97,7 +97,9 @@ pub struct Streams {
     pub stdin: Box<dyn Read + Send>,
     pub stdin_is_tty: bool,
     pub stdout: Box<dyn Write + Send>,
+    pub stdout_is_tty: bool,
     pub stderr: Box<dyn Write + Send>,
+    pub stderr_is_tty: bool,
 }
 
 /// `USAGE_HINT` of the `--machine` usage-error envelope.
@@ -170,6 +172,12 @@ pub const PROBE_NOT_IMPLEMENTED: i32 = 3;
 
 // Platform transaction formats remain unported; refuse before opening a book.
 pub(crate) fn implemented(command: &str, args: &Namespace) -> bool {
+    // Chat stays out of product builds until every AI tool it can call is
+    // native (design §7 item 1); the `native-chat` gate registers it.
+    #[cfg(feature = "native-chat")]
+    if crate::chat::COMMANDS.contains(&command) || crate::chats::COMMANDS.contains(&command) {
+        return true;
+    }
     IMPLEMENTED.contains(&command)
         && (command != "transactions.export"
             || matches!(
@@ -190,8 +198,12 @@ pub fn run(
         mut stdin,
         stdin_is_tty,
         mut stdout,
+        stdout_is_tty,
         mut stderr,
+        stderr_is_tty,
     } = streams;
+    #[cfg(not(feature = "native-chat"))]
+    let _ = (stdout_is_tty, stderr_is_tty);
     // The hidden forms the desktop and the broker spawn; Python reports an
     // AppError from them as `<code>: <message>` on stderr.
     let hidden = match argv {
@@ -438,6 +450,69 @@ pub fn run(
             Err(error) => fail(&mut stdout, &mut stderr, error),
         };
     }
+    #[cfg(feature = "native-chat")]
+    if dotted == "chat" {
+        // Brokered routing above already refused a brokered project.
+        let outcome = store.bootstrap(&globals.selection).and_then(|bootstrap| {
+            let mut args = crate::chat::Args::from_namespace(&namespace);
+            let mut input = std::io::BufReader::new(&mut stdin);
+            let mut io = crate::chat::Io {
+                stdin: &mut input,
+                stdin_is_tty,
+                stdout: &mut stdout,
+                stdout_is_tty,
+                stderr: &mut stderr,
+                stderr_is_tty,
+                columns: env.columns.clone(),
+            };
+            let data_root = bootstrap.paths.data_root.clone();
+            let mut passphrase = |allow_prompt: bool| {
+                // `resolve_db_passphrase_for_bypass`: the chain ordinary
+                // commands unlock with; the book closes again at once.
+                let mut config = bootstrap.runtime_config.clone();
+                let mut book = store.open_book(
+                    &data_root,
+                    Unlock::Cli {
+                        passphrase_fd: globals.db_passphrase_fd,
+                        allow_prompt,
+                        expected_database_identity: None,
+                        initialize_version: None,
+                    },
+                    &mut config,
+                )?;
+                let secret = book.unlock_passphrase();
+                book.close()?;
+                Ok(secret)
+            };
+            crate::chat::run(
+                &mut args,
+                namespace.text("prompt").map(str::to_owned),
+                namespace.text("prompt_text").map(str::to_owned),
+                &mut io,
+                crate::chat::Start {
+                    data_root: &data_root,
+                    env_file: Some(bootstrap.paths.env_file.as_str()),
+                    passphrase: &mut passphrase,
+                },
+            )
+        });
+        return match outcome {
+            Ok(Some(payload)) => {
+                let mut sink = Sink {
+                    output: output.as_deref(),
+                    home: env.home.as_deref(),
+                    stdout: &mut stdout,
+                    stderr: &mut stderr,
+                };
+                match emit(&mut sink, format, "chat", payload) {
+                    Ok(()) => 0,
+                    Err(error) => fail(&mut stdout, &mut stderr, error),
+                }
+            }
+            Ok(None) => 0,
+            Err(error) => fail(&mut stdout, &mut stderr, error),
+        };
+    }
     let mut warnings = Vec::new();
     let mut prepare = |args: &Namespace| {
         if matches!(dotted.as_str(), "backends.create" | "backends.update") {
@@ -549,6 +624,20 @@ pub fn run(
                 }
                 let payload =
                     crate::wallets::execute(&namespace, book, stdin.as_mut(), sink.stdout, sink.stderr, stdin_is_tty)?;
+                emit(&mut sink, format, &kind, payload)
+            },
+        ),
+        #[cfg(feature = "native-chat")]
+        command if crate::chats::COMMANDS.contains(&command) => with_book(
+            env,
+            store.as_ref(),
+            &globals,
+            stdin_is_tty,
+            None,
+            (&namespace, build.version, &mut diagnostics),
+            |book, bootstrap| {
+                let encrypted = || store.database_is_encrypted(&bootstrap.paths.data_root);
+                let payload = crate::chats::execute(book, command, &namespace, &encrypted)?;
                 emit(&mut sink, format, &kind, payload)
             },
         ),

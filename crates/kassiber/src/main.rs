@@ -68,7 +68,9 @@ fn main() -> ExitCode {
     let streams = Streams {
         stdin_is_tty: stdin.is_terminal(),
         stdin: Box::new(stdin),
+        stdout_is_tty: std::io::stdout().is_terminal(),
         stdout: Box::new(std::io::stdout()),
+        stderr_is_tty: std::io::stderr().is_terminal(),
         stderr: Box::new(std::io::stderr()),
     };
     let code = run(&argv, &Environment::from_process(), store(), BUILD, streams);

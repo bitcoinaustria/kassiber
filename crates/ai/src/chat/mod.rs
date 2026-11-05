@@ -9,6 +9,7 @@ pub mod client;
 pub mod history;
 pub mod registry;
 pub mod screen;
+pub mod store;
 pub mod turn;
 
 pub use args::{validate, Validated};

@@ -47,7 +47,9 @@ fn invoke(store: Arc<dyn BookStore>, env: &Environment, argv: &[&str]) -> (i32, 
             stdin: Box::new(std::io::empty()),
             stdin_is_tty: false,
             stdout: Box::new(out.clone()),
+            stdout_is_tty: false,
             stderr: Box::new(err.clone()),
+            stderr_is_tty: false,
         },
     );
     (code, out.text(), err.text())

@@ -2,12 +2,15 @@
 //! the request loop, against the open book (`_run_on_daemon_main_thread` and
 //! `_drain_daemon_main_thread_tasks`), and each read reaches the same native
 //! family the desktop kind uses, without the desktop's pre-request
-//! maintenance. Chat (R6-7) drives it from its worker; until then only the
-//! test-harness kinds `test.ai_tool` and `test.ai_auto_read` do.
+//! maintenance. Chat (R6-7, `ai_chat.rs`) drives it from its worker through
+//! request-loop tasks; the test-harness kinds `test.ai_tool` and
+//! `test.ai_auto_read` drive it directly.
 
 use std::path::Path;
 
-use kassiber_ai::executor::{Book as AiBook, ReadHost};
+use kassiber_ai::executor::Book as AiBook;
+#[cfg(feature = "test-kinds")]
+use kassiber_ai::executor::ReadHost;
 use kassiber_ai::ToolError;
 use kassiber_envelope::{s, AppError};
 use kassiber_pyjson::Value;
@@ -15,10 +18,12 @@ use kassiber_pyjson::Value;
 use crate::Daemon;
 
 /// The daemon as the executor's request loop.
+#[cfg(feature = "test-kinds")]
 pub(crate) struct Host<'a> {
     pub(crate) daemon: &'a mut Daemon,
 }
 
+#[cfg(feature = "test-kinds")]
 impl ReadHost for Host<'_> {
     fn on_request_loop(
         &mut self,
@@ -43,13 +48,13 @@ impl ReadHost for Host<'_> {
     }
 }
 
-struct HostBook<'a> {
-    daemon: &'a mut Daemon,
+pub(crate) struct HostBook<'a> {
+    pub(crate) daemon: &'a mut Daemon,
 }
 
 /// Python's executor turns non-`AppError` exceptions into a generic
 /// `tool_error`; native code reports those as `internal_error`.
-fn tool_error(error: AppError) -> ToolError {
+pub(crate) fn tool_error(error: AppError) -> ToolError {
     if error.sqlite_origin && (error.message.contains("locked") || error.message.contains("busy")) {
         return ToolError::Busy;
     }

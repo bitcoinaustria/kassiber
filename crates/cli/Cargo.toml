@@ -43,3 +43,6 @@ unsafe_code = "forbid"
 [features]
 # Test builds only: KASSIBER_RUST_TEST_PROBE (see `Environment::test_probe`).
 test-probe = []
+# R6-7 chat: `chat` and the `chats` leaves, behind the same gate as the
+# daemon's chat kinds.
+native-chat = ["kassiber-daemon/native-chat"]
