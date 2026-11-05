@@ -57,8 +57,8 @@
   {
     "id": "kz-stated-empty",
     "file": "crates/reports/src/austrian.rs",
-    "find": "    if matches!(stored, Value::Null) || matches!(stored, Value::Str(raw) if raw.as_str() == Some(\"\")) {",
-    "replace": "    if matches!(stored, Value::Null) {",
+    "find": "        || matches!(stored, Value::Str(raw) if raw.as_str() == Some(\"\"))\n",
+    "replace": "",
     "expect_failing": [
       "capital_gains_vectors",
       "year_handoff_workbook_pins_observations_journals_rates_and_barriers"
