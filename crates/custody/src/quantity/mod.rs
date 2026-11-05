@@ -245,19 +245,32 @@ pub(super) fn validate_observation<O: Obs + ?Sized>(v: &O) -> Result<(), String>
     {
         return fail();
     }
-    let amount = exact(&v["amount_msat"])?;
-    let fee = exact(&v["fee_msat"])?;
-    if amount < BigInt::from(0) || fee < BigInt::from(0) {
-        return fail();
-    }
     let inclusive = codec::truth(&v["amount_includes_fee"]);
-    if v["direction"] == "inbound" && inclusive
-        || amount == BigInt::from(0) && !(v["direction"] == "outbound" && fee > BigInt::from(0))
-        || inclusive && fee > amount
-    {
-        return fail();
+    let outbound = v["direction"] == "outbound";
+    // Machine integers decide without big integers.
+    let valid = match (v["amount_msat"].as_i64(), v["fee_msat"].as_i64()) {
+        (Some(amount), Some(fee)) => quantity_valid(outbound, inclusive, amount, fee),
+        _ => quantity_valid(
+            outbound,
+            inclusive,
+            exact(&v["amount_msat"])?,
+            exact(&v["fee_msat"])?,
+        ),
+    };
+    if valid {
+        Ok(())
+    } else {
+        fail()
     }
-    Ok(())
+}
+/// The amount and fee rules of a quantity observation.
+fn quantity_valid<T: Ord + From<i8>>(outbound: bool, inclusive: bool, amount: T, fee: T) -> bool {
+    let zero = || T::from(0);
+    !(amount < zero()
+        || fee < zero()
+        || !outbound && inclusive
+        || amount == zero() && !(outbound && fee > zero())
+        || inclusive && fee > amount)
 }
 
 pub(super) fn into_py(value: Value) -> Result<kassiber_pyjson::Value, String> {
@@ -334,4 +347,40 @@ pub(super) fn py_dict<const N: usize>(
             .map(|(k, v)| (kassiber_pyjson::Key::Str(k.into()), v))
             .collect(),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn quantity_rules_match_for_machine_and_big_integers() {
+        let hash = "a".repeat(64);
+        let big = "100000000000000000000";
+        let cases = [
+            ("outbound", "5", "5", true, true),
+            ("outbound", "5", "6", true, false),
+            ("outbound", "0", "1", false, true),
+            ("outbound", "0", "0", false, false),
+            ("inbound", "5", "0", true, false),
+            ("inbound", "5", "0", false, true),
+            ("inbound", "-1", "0", false, false),
+            ("outbound", big, big, true, true),
+            ("outbound", big, "100000000000000000001", true, false),
+        ];
+        for (direction, amount, fee, inclusive, valid) in cases {
+            let observation = json!({
+                "transaction_id": "t", "anchor_transaction_id": "t", "wallet_id": "w",
+                "quantity_hash": hash, "evidence_detail_hash": hash, "asset": "BTC",
+                "direction": direction, "amount_includes_fee": inclusive,
+                "amount_msat": serde_json::from_str::<Value>(amount).unwrap(),
+                "fee_msat": serde_json::from_str::<Value>(fee).unwrap(),
+            });
+            assert_eq!(
+                validate_observation(&observation).is_ok(),
+                valid,
+                "{direction} {amount} {fee} {inclusive}"
+            );
+        }
+    }
 }

@@ -706,6 +706,15 @@ fn posting_py(
     ]))
 }
 
+/// The parts joined, without format machinery.
+fn concat(parts: &[&str]) -> String {
+    let mut text = String::with_capacity(parts.iter().map(|part| part.len()).sum());
+    for part in parts {
+        text.push_str(part);
+    }
+    text
+}
+
 fn postings<'a>(
     by_hash: &BTreeMap<String, LegRef<'a>>,
     input: &[LegRef<'a>],
@@ -727,7 +736,7 @@ fn postings<'a>(
     };
     for (hash, &o) in by_hash {
         result.push(posting(
-            format!("observed:{hash}"),
+            concat(&["observed:", hash]),
             o,
             "wallet",
             o["wallet_id"].clone(),
@@ -737,7 +746,7 @@ fn postings<'a>(
         let fee = exact(&o["fee_msat"])?;
         if o["direction"] == "outbound" && fee != BigInt::from(0) {
             result.push(posting(
-                format!("fee:{hash}"),
+                concat(&["fee:", hash]),
                 o,
                 "fee",
                 json!("network_fee"),
@@ -1060,7 +1069,8 @@ pub(super) fn arbitrate<'a>(
             .or_insert_with(|| (p.observation, BigInt::from(0)))
             .1 += &p.amount;
     }
-    let mut totals: BTreeMap<_, BigInt> = BTreeMap::new();
+    // Only whether every domain balances is read, so no order is kept.
+    let mut totals: crate::fxhash::HashMap<_, BigInt> = Default::default();
     for (observation, sum) in by_observation.values() {
         *totals
             .entry(super::Domain::leg_key(*observation))

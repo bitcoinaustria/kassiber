@@ -13336,8 +13336,8 @@
   {
     "id": "quantity-admission-negative-amount",
     "file": "crates/custody/src/quantity/mod.rs",
-    "find": "amount < BigInt::from(0) || fee < BigInt::from(0)",
-    "replace": "fee < BigInt::from(0)",
+    "find": "    !(amount < zero()\n",
+    "replace": "    !(false\n",
     "expect_failing": [
       "quantity_arbitration_vectors"
     ],
@@ -13346,8 +13346,8 @@
   {
     "id": "quantity-admission-negative-fee",
     "file": "crates/custody/src/quantity/mod.rs",
-    "find": "amount < BigInt::from(0) || fee < BigInt::from(0)",
-    "replace": "amount < BigInt::from(0)",
+    "find": "        || fee < zero()\n",
+    "replace": "        || false\n",
     "expect_failing": [
       "quantity_arbitration_vectors"
     ],
@@ -13356,8 +13356,8 @@
   {
     "id": "quantity-admission-inbound-included",
     "file": "crates/custody/src/quantity/mod.rs",
-    "find": "v[\"direction\"] == \"inbound\" && inclusive",
-    "replace": "false",
+    "find": "        || !outbound && inclusive\n",
+    "replace": "        || false\n",
     "expect_failing": [
       "quantity_arbitration_vectors"
     ],
@@ -13366,8 +13366,8 @@
   {
     "id": "quantity-admission-zero-principal",
     "file": "crates/custody/src/quantity/mod.rs",
-    "find": "amount == BigInt::from(0) && !(v[\"direction\"] == \"outbound\" && fee > BigInt::from(0))",
-    "replace": "false",
+    "find": "        || amount == zero() && !(outbound && fee > zero())",
+    "replace": "        || false",
     "expect_failing": [
       "quantity_arbitration_vectors"
     ],
@@ -24688,6 +24688,36 @@
       "exact_quantities_order_and_spell_as_big_integers"
     ],
     "rule": "A JSON machine integer parses as a machine quantity."
+  },
+  {
+    "id": "quantity-valid-fast-args",
+    "file": "crates/custody/src/quantity/mod.rs",
+    "find": "(Some(amount), Some(fee)) => quantity_valid(outbound, inclusive, amount, fee),",
+    "replace": "(Some(amount), Some(fee)) => quantity_valid(outbound, inclusive, fee, amount),",
+    "expect_failing": [
+      "quantity_rules_match_for_machine_and_big_integers"
+    ],
+    "rule": "Machine-integer validation reads amount and fee in order."
+  },
+  {
+    "id": "quantity-valid-included-fee",
+    "file": "crates/custody/src/quantity/mod.rs",
+    "find": "        || inclusive && fee > amount)",
+    "replace": "        || inclusive && fee >= amount)",
+    "expect_failing": [
+      "quantity_rules_match_for_machine_and_big_integers"
+    ],
+    "rule": "An included fee may equal the amount."
+  },
+  {
+    "id": "posting-observed-id",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "concat(&[\"observed:\", hash])",
+    "replace": "concat(&[\"observed\", hash])",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Observed posting ids join their prefix and hash with a colon."
   },
   {
     "id": "R4-evidence-alias-slot-index",
