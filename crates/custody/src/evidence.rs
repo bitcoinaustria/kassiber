@@ -1026,13 +1026,7 @@ fn canonical_event<F: Fields>(
                 .into_iter()
                 .collect::<BTreeSet<_>>()
                 .into_iter()
-                .map(|(amount, fee, included)| {
-                    json!([
-                        crate::quantity::number(amount),
-                        crate::quantity::number(fee),
-                        included
-                    ])
-                })
+                .map(|(amount, fee, included)| json!([amount.number(), fee.number(), included]))
                 .collect();
             contradictions.push(json!({"wallet_id":wallet,"direction":direction,"asset":asset,"semantics":semantics}));
         }

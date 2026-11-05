@@ -14,15 +14,94 @@ fn string(value: &Value) -> Cow<'_, str> {
     }
 }
 
-fn amount(value: &Value) -> Result<BigInt, Error> {
+/// An exact msat quantity: a machine integer, or a big integer when it does
+/// not fit one. Python admits integers up to its integer-string limit.
+#[derive(Clone, Debug)]
+pub(super) enum Exact {
+    Small(i64),
+    Big(BigInt),
+}
+
+impl Exact {
+    fn of(value: BigInt) -> Self {
+        i64::try_from(&value).map_or(Self::Big(value), Self::Small)
+    }
+
+    /// Bits of the magnitude; a machine integer never reaches the dump
+    /// limits.
+    fn bits(&self) -> u64 {
+        match self {
+            Self::Small(_) => 0,
+            Self::Big(n) => n.bits(),
+        }
+    }
+
+    fn sign(&self) -> std::cmp::Ordering {
+        match self {
+            Self::Small(n) => n.cmp(&0),
+            // A big integer is never zero.
+            Self::Big(n) => {
+                if *n < BigInt::from(0) {
+                    std::cmp::Ordering::Less
+                } else {
+                    std::cmp::Ordering::Greater
+                }
+            }
+        }
+    }
+
+    /// The quantity as a JSON integer.
+    pub(super) fn number(&self) -> Value {
+        match self {
+            Self::Small(n) => Value::from(*n),
+            Self::Big(n) => crate::quantity::number(n),
+        }
+    }
+}
+
+impl std::fmt::Display for Exact {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Small(n) => n.fmt(f),
+            Self::Big(n) => n.fmt(f),
+        }
+    }
+}
+
+impl Ord for Exact {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match (self, other) {
+            (Self::Small(a), Self::Small(b)) => a.cmp(b),
+            // A big integer lies beyond every machine integer.
+            (Self::Big(a), Self::Big(b)) => a.cmp(b),
+            (Self::Big(_), Self::Small(_)) => self.sign(),
+            (Self::Small(_), Self::Big(_)) => other.sign().reverse(),
+        }
+    }
+}
+impl PartialOrd for Exact {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl PartialEq for Exact {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == std::cmp::Ordering::Equal
+    }
+}
+impl Eq for Exact {}
+
+fn amount(value: &Value) -> Result<Exact, Error> {
     if let Some(value) = value.as_i64() {
-        return Ok(value.into());
+        return Ok(Exact::Small(value));
     }
     if let Some(value) = value.as_u64() {
-        return Ok(value.into());
+        return Ok(Exact::Big(value.into()));
     }
     let value = integer_or_zero(value)?;
-    Ok(crate::quantity::exact(&value).expect("converted evidence integer"))
+    Ok(Exact::of(
+        crate::quantity::exact(&value).expect("converted evidence integer"),
+    ))
 }
 
 /// Whether every byte is printable ASCII other than quote and backslash,
@@ -65,8 +144,8 @@ struct Quantity<'a> {
     wallet: Cow<'a, str>,
     direction: String,
     asset: String,
-    amount: BigInt,
-    fee: BigInt,
+    amount: Exact,
+    fee: Exact,
     included: bool,
 }
 
@@ -284,7 +363,7 @@ impl<'a> Observation<'a> {
     }
     /// The exact amount, fee and inclusion: Python admits reviewed amounts
     /// up to its integer-string limit, beyond any machine integer.
-    pub fn semantics(&self) -> (&BigInt, &BigInt, bool) {
+    pub fn semantics(&self) -> (&Exact, &Exact, bool) {
         (
             &self.quantity.amount,
             &self.quantity.fee,
@@ -307,7 +386,7 @@ impl<'a> Observation<'a> {
             return Err("quantity observations require an asset".into());
         }
         let (amount, fee, included) = self.semantics();
-        let zero = BigInt::from(0);
+        let zero = Exact::Small(0);
         if *amount < zero {
             return Err("quantity observation amount_msat must be non-negative".into());
         }
@@ -338,8 +417,10 @@ impl<'a> Observation<'a> {
         let (hash, text) = codec::hash_py(&payload, false)?;
         self.commitment.detail_hash = hash;
         self.commitment.payload_json = text;
-        self.quantity.amount = crate::quantity::exact(&proof["amount_msat"])
-            .expect("converted reconciliation integer");
+        self.quantity.amount = Exact::of(
+            crate::quantity::exact(&proof["amount_msat"])
+                .expect("converted reconciliation integer"),
+        );
         self.validate()
     }
 
@@ -350,7 +431,7 @@ impl<'a> Observation<'a> {
         super::canonical::Leg::new(
             [
                 Value::Bool(self.quantity.included),
-                crate::quantity::number(&self.quantity.amount),
+                self.quantity.amount.number(),
                 string(self.anchor_id),
                 Value::String(self.quantity.asset),
                 Value::Bool(self.authoritative),
@@ -358,7 +439,7 @@ impl<'a> Observation<'a> {
                 Value::String(self.commitment.detail_hash),
                 Value::String(self.commitment.payload_json),
                 Value::String(self.fee_attribution),
-                crate::quantity::number(&self.quantity.fee),
+                self.quantity.fee.number(),
                 Value::String(self.authority_reason),
                 string(self.occurred_at),
                 string(self.profile_id),
@@ -371,7 +452,7 @@ impl<'a> Observation<'a> {
     }
 
     pub fn value(&self) -> Value {
-        json!({"$type":"QuantityObservation","transaction_id":self.transaction_id,"anchor_transaction_id":self.anchor_id,"quantity_hash":self.commitment.quantity_hash,"evidence_detail_hash":self.commitment.detail_hash,"evidence_payload_json":self.commitment.payload_json,"event_key":self.quantity.key.value(),"profile_id":self.profile_id,"authoritative_chain_observation":self.authoritative,"observation_authority_reason":self.authority_reason,"fee_attribution":self.fee_attribution,"wallet_id":self.quantity.wallet,"asset":self.quantity.asset,"direction":self.quantity.direction,"amount_msat":crate::quantity::number(&self.quantity.amount),"fee_msat":crate::quantity::number(&self.quantity.fee),"amount_includes_fee":self.quantity.included,"occurred_at":self.occurred_at})
+        json!({"$type":"QuantityObservation","transaction_id":self.transaction_id,"anchor_transaction_id":self.anchor_id,"quantity_hash":self.commitment.quantity_hash,"evidence_detail_hash":self.commitment.detail_hash,"evidence_payload_json":self.commitment.payload_json,"event_key":self.quantity.key.value(),"profile_id":self.profile_id,"authoritative_chain_observation":self.authoritative,"observation_authority_reason":self.authority_reason,"fee_attribution":self.fee_attribution,"wallet_id":self.quantity.wallet,"asset":self.quantity.asset,"direction":self.quantity.direction,"amount_msat":self.quantity.amount.number(),"fee_msat":self.quantity.fee.number(),"amount_includes_fee":self.quantity.included,"occurred_at":self.occurred_at})
     }
 }
 
@@ -393,6 +474,36 @@ mod tests {
         Ok(
             json!({"$type":"EvidenceSnapshot","quantity_hash":quantity_hash,"detail_hash":detail_hash,"payload_json":payload_json}),
         )
+    }
+
+    #[test]
+    fn exact_quantities_order_and_spell_as_big_integers() {
+        let values: Vec<BigInt> = [
+            "-100000000000000000000",
+            "-9223372036854775809",
+            "-9223372036854775808",
+            "-1",
+            "0",
+            "7",
+            "9223372036854775807",
+            "9223372036854775808",
+            "18446744073709551616",
+        ]
+        .iter()
+        .map(|text| text.parse().unwrap())
+        .collect();
+        for a in &values {
+            let x = Exact::of(a.clone());
+            assert_eq!(x.to_string(), a.to_string());
+            assert_eq!(x.number(), crate::quantity::number(a));
+            for b in &values {
+                assert_eq!(x.cmp(&Exact::of(b.clone())), a.cmp(b), "{a} {b}");
+            }
+        }
+        let parsed = |text: &str| amount(&serde_json::from_str(text).unwrap()).unwrap();
+        assert!(matches!(parsed("9223372036854775807"), Exact::Small(_)));
+        assert!(matches!(parsed("9223372036854775808"), Exact::Big(_)));
+        assert!(matches!(parsed("\"12\""), Exact::Small(12)));
     }
 
     #[test]

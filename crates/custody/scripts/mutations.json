@@ -24552,8 +24552,8 @@
   {
     "id": "exact-contradiction-sorted",
     "file": "crates/custody/src/evidence.rs",
-    "find": "                .collect::<BTreeSet<_>>()\n                .into_iter()\n                .map(|(amount, fee, included)| {",
-    "replace": "                .collect::<Vec<_>>()\n                .into_iter()\n                .map(|(amount, fee, included)| {",
+    "find": "                .collect::<BTreeSet<_>>()\n                .into_iter()\n                .map(|(amount, fee, included)| json!([amount.number(), fee.number(), included]))",
+    "replace": "                .collect::<Vec<_>>()\n                .into_iter()\n                .map(|(amount, fee, included)| json!([amount.number(), fee.number(), included]))",
     "expect_failing": [
       "amounts_beyond_machine_integers_stay_exact"
     ],
@@ -24638,6 +24638,56 @@
       "pair_exact_msat"
     ],
     "rule": "A principal reads machine integers exactly."
+  },
+  {
+    "id": "exact-normalize",
+    "file": "crates/custody/src/evidence/observation.rs",
+    "find": "        i64::try_from(&value).map_or(Self::Big(value), Self::Small)",
+    "replace": "        Self::Big(value)",
+    "expect_failing": [
+      "exact_quantities_order_and_spell_as_big_integers"
+    ],
+    "rule": "Exact quantities that fit a machine integer are machine integers."
+  },
+  {
+    "id": "exact-cross-big-small",
+    "file": "crates/custody/src/evidence/observation.rs",
+    "find": "            (Self::Big(_), Self::Small(_)) => self.sign(),",
+    "replace": "            (Self::Big(_), Self::Small(_)) => std::cmp::Ordering::Greater,",
+    "expect_failing": [
+      "exact_quantities_order_and_spell_as_big_integers"
+    ],
+    "rule": "A negative big integer lies below every machine integer."
+  },
+  {
+    "id": "exact-cross-small-big",
+    "file": "crates/custody/src/evidence/observation.rs",
+    "find": "            (Self::Small(_), Self::Big(_)) => other.sign().reverse(),",
+    "replace": "            (Self::Small(_), Self::Big(_)) => other.sign(),",
+    "expect_failing": [
+      "exact_quantities_order_and_spell_as_big_integers"
+    ],
+    "rule": "A machine integer lies on the far side of a big integer's sign."
+  },
+  {
+    "id": "exact-small-number",
+    "file": "crates/custody/src/evidence/observation.rs",
+    "find": "            Self::Small(n) => Value::from(*n),",
+    "replace": "            Self::Small(n) => Value::from(n.saturating_add(1)),",
+    "expect_failing": [
+      "exact_quantities_order_and_spell_as_big_integers"
+    ],
+    "rule": "A machine quantity is its own JSON integer."
+  },
+  {
+    "id": "exact-parse-small",
+    "file": "crates/custody/src/evidence/observation.rs",
+    "find": "        return Ok(Exact::Small(value));",
+    "replace": "        return Ok(Exact::Big(value.into()));",
+    "expect_failing": [
+      "exact_quantities_order_and_spell_as_big_integers"
+    ],
+    "rule": "A JSON machine integer parses as a machine quantity."
   },
   {
     "id": "R4-evidence-alias-slot-index",
