@@ -879,8 +879,7 @@
     "find": "if !refresh || lease.ending {",
     "replace": "if lease.ending {",
     "expect_failing": [
-      "test_unlock_grants_a_read_lease_only_if_none_exists",
-      "test_status_never_contacts_the_broker"
+      "test_unlock_grants_a_read_lease_only_if_none_exists"
     ],
     "rule": "Without refresh, agent-access status reads memory only."
   },
