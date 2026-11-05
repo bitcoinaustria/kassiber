@@ -110,10 +110,9 @@ fn describes_all_commands_and_keeps_unported_execution_closed() {
     assert!(output.status.success());
     assert!(text(&output.stdout).contains("\"kind\": \"wallets.sync\""));
     let mut checked = 0;
-    for leaf in kassiber_cli::describe::leaves()
-        .into_iter()
-        .filter(|leaf| !leaf.implemented())
-    {
+    for leaf in kassiber_cli::describe::leaves().into_iter().filter(|leaf| {
+        !leaf.implemented() && !kassiber_cli::describe::feature_registered(&leaf.dotted())
+    }) {
         use kassiber_cli::spec::{parsers, Nargs, ValueType};
 
         let parser = &parsers()[leaf.parser];

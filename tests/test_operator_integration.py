@@ -357,7 +357,47 @@ class OperatorIntegrationTest(unittest.TestCase):
                     )
                 self.assertEqual(raised.exception.code, "agent_session_scope")
                 # ... and any other process is a stranger, however it calls.
-                other = subprocess.run(
+                if RUST_BROKER:
+                    # A fresh Python process names its own build, which the
+                    # Rust broker refuses before pairing; the stranger is the
+                    # Rust server instead, with its own app-data root.
+                    call = {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "tools/call",
+                        "params": {
+                            "_meta": {
+                                "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+                                "io.modelcontextprotocol/clientCapabilities": {},
+                            },
+                            "name": "status",
+                            "arguments": {},
+                        },
+                    }
+                    served = subprocess.run(
+                        [
+                            BROKER_SERVER_COMMAND[0],
+                            "--data-root",
+                            tmp,
+                            "mcp",
+                            "serve",
+                            "--workspace",
+                            workspace["id"],
+                            "--profile",
+                            profile["id"],
+                        ],
+                        input=(json.dumps(call) + "\n").encode(),
+                        capture_output=True,
+                        env={**os.environ, "XDG_DATA_HOME": str(Path(config) / "xdg-data")},
+                        timeout=60,
+                        check=True,
+                    )
+                    structured = json.loads(served.stdout)["result"]["structuredContent"]
+                    self.assertEqual(
+                        structured["error"]["details"]["reason"], "agent_pairing_required"
+                    )
+                    self.assertEqual(served.stderr, b"")
+                other = None if RUST_BROKER else subprocess.run(
                     [
                         sys.executable,
                         "-c",
@@ -376,10 +416,11 @@ class OperatorIntegrationTest(unittest.TestCase):
                     timeout=60,
                     check=True,
                 )
-                self.assertEqual(
-                    json.loads(other.stdout)["error"]["details"]["reason"],
-                    "agent_pairing_required",
-                )
+                if other is not None:
+                    self.assertEqual(
+                        json.loads(other.stdout)["error"]["details"]["reason"],
+                        "agent_pairing_required",
+                    )
 
                 # The desktop locking itself ends the agents' lease too.
                 daemon._clear_unlocked_passphrase(ctx)

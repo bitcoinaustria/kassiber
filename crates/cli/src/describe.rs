@@ -284,6 +284,23 @@ pub const IMPLEMENTED: &[&str] = &[
     "mcp.disable",
 ];
 
+/// Leaves a cargo feature registers on top of [`IMPLEMENTED`] in this
+/// build. Chat stays out of product builds until every AI tool it can call
+/// is native (design §7 item 1, the `native-chat` gate); the MCP server and
+/// its one-shot call follow the same rule for their 44 tools (`native-mcp`).
+pub fn feature_registered(command: &str) -> bool {
+    #[cfg(feature = "native-chat")]
+    if crate::chat::COMMANDS.contains(&command) || crate::chats::COMMANDS.contains(&command) {
+        return true;
+    }
+    #[cfg(feature = "native-mcp")]
+    if crate::mcp::GATED_COMMANDS.contains(&command) {
+        return true;
+    }
+    let _ = command;
+    false
+}
+
 /// `_NO_BOOTSTRAP_DATABASE_PREFIXES`.
 const NO_DATABASE_PREFIXES: &[&str] = &[
     "backup",

@@ -179,14 +179,7 @@ pub const PROBE_NOT_IMPLEMENTED: i32 = 3;
 pub(crate) fn implemented(command: &str, args: &Namespace) -> bool {
     // Chat stays out of product builds until every AI tool it can call is
     // native (design §7 item 1); the `native-chat` gate registers it.
-    #[cfg(feature = "native-chat")]
-    if crate::chat::COMMANDS.contains(&command) || crate::chats::COMMANDS.contains(&command) {
-        return true;
-    }
-    // The MCP server and its one-shot call follow the same rule: they
-    // register once every one of their 44 tools is native.
-    #[cfg(feature = "native-mcp")]
-    if crate::mcp::GATED_COMMANDS.contains(&command) {
+    if crate::describe::feature_registered(command) {
         return true;
     }
     IMPLEMENTED.contains(&command)

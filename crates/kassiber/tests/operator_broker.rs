@@ -49,6 +49,8 @@ impl Broker {
             .env("KASSIBER_RUST_TEST_OWNER_ROOT", self.owners.path())
             // A disposable app-data root: no child resolves the account's.
             .env("XDG_DATA_HOME", self.owners.path().join("xdg-data"))
+            // Broker children read the agent preference the desktop writes.
+            .env("KASSIBER_AGENT_ACCESS_FILE", self.agent_access_file())
             .env("KASSIBER_TEST_NO_EGRESS", "strict")
             .env_remove("KASSIBER_NO_EGRESS")
             .env_remove("KASSIBER_OPERATOR_DIRECT")
@@ -75,6 +77,11 @@ impl Broker {
         broker.process = Some(broker.command().spawn().unwrap());
         broker.wait_for_ping();
         broker
+    }
+
+    /// The external-agent preference every process of this broker reads.
+    fn agent_access_file(&self) -> PathBuf {
+        self.owners.path().join("agent-access.json")
     }
 
     fn runtime(&self) -> Runtime {
@@ -1287,8 +1294,7 @@ fn mcp_serve_reads_a_brokered_book_once_the_desktop_allows_it() {
     let broker = Broker::start();
     let (data_root, workspace, profile) = book(&broker);
     let data_root = root(&data_root);
-    let config = private_dir("kb-cfg-");
-    let access_file = config.path().join("agent-access.json");
+    let access_file = broker.agent_access_file();
     let mut daemon = DesktopDaemon::start(&broker, &data_root, &access_file);
     daemon.data(
         "daemon.unlock",
@@ -1338,8 +1344,20 @@ fn mcp_serve_reads_a_brokered_book_once_the_desktop_allows_it() {
     assert_eq!(get(get(&counted, "session"), "calls"), &Value::from(2));
 
     // The desktop locking itself ends the agents' lease: back to manual.
-    daemon.data("daemon.lock", "{}");
-    assert_eq!(reason(&server.call("status")), "database_passphrase");
+    let locked = daemon.data("daemon.lock", "{}");
+    let lease = broker.client().status(Some(&data_root)).unwrap();
+    let mode = cli(
+        &broker,
+        &["--data-root", &data_root, "--machine", "operator", "status"],
+        b"",
+    );
+    let after = server.call("status");
+    assert_eq!(
+        reason(&after),
+        "database_passphrase",
+        "{locked:?} {lease:?} {} {after:?}",
+        String::from_utf8_lossy(&mode.stdout)
+    );
     let finished = server.finish();
     assert!(finished.status.success(), "{finished:?}");
     assert!(finished.stderr.is_empty(), "{finished:?}");
