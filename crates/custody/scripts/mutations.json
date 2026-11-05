@@ -24840,6 +24840,16 @@
     "rule": "JSON observations are validated before arbitration."
   },
   {
+    "id": "pyjson-presorted-order",
+    "file": "crates/pyjson/src/encode.rs",
+    "find": "(Key::Str(a), Key::Str(b)) => a <= b,",
+    "replace": "(Key::Str(_), Key::Str(_)) => true,",
+    "expect_failing": [
+      "sorted_dumps_keep_presorted_ties_and_sort_the_rest"
+    ],
+    "rule": "Only dicts whose text keys are in order skip sorting."
+  },
+  {
     "id": "R4-evidence-alias-slot-index",
     "file": "crates/custody/src/evidence.rs",
     "find": "selected[*index] = keeper;",

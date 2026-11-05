@@ -418,14 +418,27 @@ impl Encoder<'_> {
         if level >= MAX_DEPTH {
             return Err(Error::TooDeep);
         }
-        // Python sorts the items before writing any of them.
-        let mut ordered: Vec<&(Key, Value)> = items.iter().collect();
-        if self.options.sort_keys {
+        // Python sorts the items before writing any of them. Text keys
+        // already in order need no sorting: a stable sort keeps them, ties
+        // included, where they are.
+        let presorted = !self.options.sort_keys
+            || items.windows(2).all(|pair| match (&pair[0].0, &pair[1].0) {
+                (Key::Str(a), Key::Str(b)) => a <= b,
+                _ => false,
+            });
+        let mut ordered: Vec<&(Key, Value)> = Vec::new();
+        if !presorted {
+            ordered.extend(items.iter());
             sort_items(&mut ordered)?;
         }
+        let entries: Box<dyn Iterator<Item = &(Key, Value)>> = if presorted {
+            Box::new(items.iter())
+        } else {
+            Box::new(ordered.into_iter())
+        };
         self.out.push('{');
         self.open(level);
-        for (index, (key, value)) in ordered.into_iter().enumerate() {
+        for (index, (key, value)) in entries.enumerate() {
             if index > 0 {
                 self.separate(level);
             }
@@ -697,6 +710,28 @@ mod tests {
             dumps(&doc, &Options::new().indent(2)).unwrap(),
             "{\n  \"b\": [\n    1,\n    null,\n    true\n  ],\n  \"a\": 1.5\n}"
         );
+    }
+
+    #[test]
+    fn sorted_dumps_keep_presorted_ties_and_sort_the_rest() {
+        let sorted = Options::new().compact().sort_keys(true);
+        let doc = dict(vec![
+            ("a".into(), 1.into()),
+            ("a".into(), 2.into()),
+            (
+                "b".into(),
+                dict(vec![("d".into(), 3.into()), ("c".into(), 4.into())]),
+            ),
+        ]);
+        assert_eq!(
+            dumps(&doc, &sorted).unwrap(),
+            r#"{"a":1,"a":2,"b":{"c":4,"d":3}}"#
+        );
+        let mixed = dict(vec![
+            (Key::Int(2.into()), 1.into()),
+            (Key::Int(1.into()), 2.into()),
+        ]);
+        assert_eq!(dumps(&mixed, &sorted).unwrap(), r#"{"1":2,"2":1}"#);
     }
 
     #[test]
