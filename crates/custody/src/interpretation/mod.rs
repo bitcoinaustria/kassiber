@@ -453,6 +453,38 @@ pub fn partial(snapshot: &Snapshot) -> Result<Value, String> {
 
 #[cfg(test)]
 mod stage_tests {
+    #[test]
+    fn json_aliases_resolve_as_typed_aliases() {
+        let row = |id: &str, event: &str, wallet: &str, at: &str| json!({"id":id,"profile_id":"p","wallet_id":wallet,"wallet_kind":"descriptor","direction":"inbound","asset":"BTC","amount":1000,"fee":0,"occurred_at":at,"source_ref":"src","external_id":event,"raw_json":"{}","network":"regtest"});
+        // Two observations share a slot, so one alias names the other's leg;
+        // a transaction also appears in two events.
+        let rows = [
+            row("t1", "e1", "w", "2024-01-02T00:00:00+00:00"),
+            row("t2", "e1", "w", "2024-01-01T00:00:00+00:00"),
+            row("t3", "e2", "v", "2024-01-01T00:00:00+00:00"),
+            row("t1", "e3", "w", "2024-01-01T00:00:00+00:00"),
+            row("t4", "e1", "w", "2024-01-03T00:00:00+00:00"),
+        ];
+        let typed = crate::evidence::canonical_of_rows(&rows).unwrap();
+        let json = typed.value().clone();
+        let typed_events: Vec<_> = typed.events().iter().map(EventRef::Typed).collect();
+        let json_events = crate::evidence::canonical::json_events(&json);
+        let flatten = |events: &[EventRef<'_>]| -> Vec<(String, Value)> {
+            observations(events)
+                .into_iter()
+                .map(|(id, o)| (id, (*o).clone()))
+                .collect()
+        };
+        let expected = flatten(&typed_events);
+        assert_eq!(expected.len(), 4);
+        assert_eq!(flatten(&json_events), expected);
+        // A later alias of t1 replaces the earlier one; t4 shares t2's slot
+        // and names t2's earlier observation.
+        let by_id: BTreeMap<_, _> = expected.into_iter().collect();
+        assert_eq!(by_id["t1"]["event_key"]["native_event_id"], "e3");
+        assert_eq!(by_id["t4"]["transaction_id"], "t2");
+    }
+
     use super::*;
     use crate::{codec, graph::stored};
     use kassiber_pyjson::Value as Py;

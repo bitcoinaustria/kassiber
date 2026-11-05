@@ -956,7 +956,7 @@
     "find": "[\"fingerprint\",\"occurred_at\",\"confirmed_at\",\"raw_json\"]",
     "replace": "[\"unused_fingerprint\",\"occurred_at\",\"confirmed_at\",\"raw_json\"]",
     "expect_failing": [
-      "components_commitment_volatile"
+      "built_payloads_hash_as_loaded_payloads"
     ],
     "rule": "Activation commitments exclude volatile fingerprint facts."
   },
@@ -1676,7 +1676,7 @@
     "find": ".flat_map(|event| event.aliases())",
     "replace": ".flat_map(|event| event.aliases().iter().take(1))",
     "expect_failing": [
-      "interpretation_shared_aliases"
+      "json_aliases_resolve_as_typed_aliases"
     ],
     "rule": "Every canonical alias resolves to its selected keeper observation."
   },
