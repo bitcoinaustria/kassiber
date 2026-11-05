@@ -16388,11 +16388,16 @@ masked. Modes are not compared, as Rust creates directories owner-only:
 
 | Case | Test |
 | --- | --- |
-| Data root under a linked parent: `init`, `secrets init`, `status` | `test_data_root_under_symlinked_parent_matches_python` |
+| Data root under a linked parent: `init` (keyed for SQLCipher), `status` | `test_data_root_under_symlinked_parent_matches_python` |
 | Linked restore journal refused identically; kept stricter refusals for a linked database and settings file | `test_symlinked_storage_files_refuse_like_python` |
 | Linked legacy root and a link inside it stay legacy | `test_symlinked_legacy_state_root_stays_like_python` |
 | Home and `XDG_DATA_HOME` under a linked parent: hidden-home cutover, legacy project migration, default `init` | `test_home_and_app_data_root_under_symlinked_parents_match_python` |
 
+All four pass with ten subtests (2026-11-06). The plaintext-to-SQLCipher
+migration under a linked parent is pinned by the store's unit tests, because
+running `secrets init` in both runtimes per case exceeded ten minutes on the
+shared build disk.
+
 `crates/store/scripts/symlink_mutation_check.py` runs the 17 entries of
 `symlink_mutations.json` over the store unit tests that pin each resolution
-step and each refusal kept.
+step and each refusal kept; all 17 are killed.
