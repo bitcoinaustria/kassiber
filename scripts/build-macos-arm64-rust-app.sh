@@ -190,6 +190,9 @@ run "$RUST_BIN" --help >/dev/null
 # import, which runs offline from data embedded in the binary.
 smoke_root="$(mktemp -d "${TMPDIR:-/tmp}/kassiber-rust-bundled-smoke.XXXXXX")"
 trap 'rm -rf "$smoke_root"' EXIT
+# $TMPDIR sits under /var -> /private/var. The store resolves such links, but
+# a physical path keeps the smoke independent of that.
+smoke_root="$(cd "$smoke_root" && pwd -P)"
 smoke_out="$smoke_root/daemon.jsonl"
 printf '{"request_id":"kraken-bundled-1","kind":"ui.rates.kraken_csv.import","args":{"use_bundled":true}}\n{"request_id":"shutdown-1","kind":"daemon.shutdown"}\n' \
   | "$RUST_BIN" --data-root "$smoke_root/data" daemon \

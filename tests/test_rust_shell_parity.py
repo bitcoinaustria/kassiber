@@ -1795,6 +1795,203 @@ class RustRealStoreParityTest(_Roots):
         sidecar.unlink()
         self.same_status(default=True)
 
+
+
+    # Python resolves data and app-data roots, so links above them (macOS
+    # /var -> /private/var, a linked home) are the user's layout. Each case
+    # runs Python, then Rust, from the same saved state at the same paths.
+    # SQLCipher key derivation and fsyncs get a longer limit on shared disks.
+    SLOW = 600
+
+    def slow(self, rust, args, **options):
+        return self.call(rust, args, timeout=self.SLOW, **options)
+
+    def aliased(self, base):
+        real = base / "private-var"
+        if real.exists():
+            shutil.rmtree(real)
+        real.mkdir()
+        alias = base / "var"
+        if not alias.is_symlink():
+            alias.symlink_to("private-var")
+        return alias, real
+
+    def saved(self, real, build):
+        """Build `real` once, then restore that exact tree for every run."""
+        saved = Path(tempfile.mkdtemp(dir=self._dir.name)) / "tree"
+        def reset():
+            if saved.exists():
+                shutil.rmtree(real)
+                shutil.copytree(saved, real, symlinks=True)
+            else:
+                build()
+                shutil.copytree(real, saved, symlinks=True)
+        return reset
+
+    def storage_state(self, root, secret):
+        """Every path and link, JSON text and masked database dumps.
+
+        Modes are not compared: Rust creates missing directories and locks
+        owner-only where Python follows the umask (rust-store.md).
+        """
+        import re
+        import sqlite3
+        from kassiber.secrets import sqlcipher
+        from tests.test_rust_store_migrations import normalized_dump
+        # Clocks also name migration reports and backups; mask them everywhere.
+        clock = re.compile(r"\d{4}-?\d{2}-?\d{2}T\d{2}:?\d{2}:?\d{2}(?:\.\d+)?Z?")
+        def mask(dump):
+            objects, tables = dump
+            masked = {}
+            for table, (columns, rows) in tables.items():
+                # The database identity and creation clocks are fresh per book.
+                masked[table] = (columns, [tuple(
+                    (kind, "<clock>" if isinstance(value, str) and clock.match(value)
+                     else "<identity>" if table == "settings" and row[0][1] == "database_instance_id" and index == 1
+                     else value)
+                    for index, (kind, value) in enumerate(row)) for row in rows])
+            return objects, masked
+        state = []
+        for path in root.rglob("*"):
+            entry = [clock.sub("<clock>", path.relative_to(root).as_posix())]
+            if path.is_symlink():
+                entry.append(("link", os.readlink(path)))
+            elif path.is_dir():
+                entry.append("directory")
+            elif path.suffix == ".json":
+                entry.append(clock.sub("<clock>", path.read_text(encoding="utf-8")))
+            elif path.name == "kassiber.sqlite3":
+                conn = (sqlcipher.open_encrypted(path, secret, enforce_operator_identity=False)
+                        if secret else sqlite3.connect(path))
+                try:
+                    entry.append(mask(normalized_dump(conn)))
+                finally:
+                    conn.close()
+            state.append(entry)
+        return sorted(state, key=lambda entry: entry[0])
+
+    def both_from(self, reset, steps, root, secret=None):
+        records = []
+        for rust in (False, True):
+            reset()
+            results = [step(rust) for step in steps]
+            records.append(([(r.returncode, r.stdout, r.stderr) for r in results],
+                            self.storage_state(root, secret)))
+        self.maxDiff = 4000
+        self.assertEqual(records[1][0], records[0][0])
+        self.assertEqual(records[1][1], records[0][1])
+        return records[0][0]
+
+    def test_data_root_under_symlinked_parent_matches_python(self):
+        for secret in (None, self.PASSPHRASE):
+            with self.subTest(encrypted=secret is not None):
+                alias, real = self.aliased(self.home)
+                root = alias / "folders" / "book" / "data"
+                # A keyed `init` creates the SQLCipher book directly; the
+                # plaintext migration is pinned by the store's unit tests.
+                steps = [lambda rust: self.slow(rust, ["init"], root=root, secret=secret)]
+                steps += [lambda rust: self.slow(rust, ["status"], root=root, secret=secret)] * 2
+                results = self.both_from(lambda: self.aliased(self.home), steps, real, secret)
+                self.assertEqual({code for code, _, _ in results}, {0})
+                self.assertIn(str(root).encode(), results[-1][1])
+
+    def test_symlinked_storage_files_refuse_like_python(self):
+        for secret in (None, self.PASSPHRASE):
+            with self.subTest(encrypted=secret is not None):
+                alias, real = self.aliased(self.home)
+                root = alias / "book" / "data"
+                def book():
+                    self.aliased(self.home)
+                    self.ok(self.slow(False, ["init"], root=root))
+                    if secret:
+                        self.ok(self.slow(False, ["secrets", "init"], root=root, secret=secret, new_secret=True))
+                reset = self.saved(real, book)
+                # A link swapped in for the restore journal is refused by both.
+                def journal():
+                    reset()
+                    (real / "book" / ".restore-pending.json").symlink_to("elsewhere.json")
+                status = lambda rust: self.slow(rust, ["status"], root=root, secret=secret)
+                [(code, stdout, _)] = self.both_from(journal, [status], real, secret)
+                error = json.loads(stdout)["error"]
+                self.assertEqual((code, error["code"], error["details"]), (1, "unsafe_restore_target", None))
+                # Kept stricter than Python: Python creates the book through a
+                # link at the database path and follows a linked settings file.
+                self.aliased(self.home)
+                (real / "book" / "data").mkdir(parents=True)
+                (real / "book" / "data" / "kassiber.sqlite3").symlink_to("elsewhere.sqlite3")
+                create = ["secrets", "init"] if secret else ["init"]
+                refused = self.slow(True, create, root=root, secret=secret, new_secret=bool(secret))
+                self.assertEqual(json.loads(refused.stdout)["error"]["code"], "unsafe_configuration")
+                self.assertFalse((real / "book" / "data" / "elsewhere.sqlite3").exists())
+                reset()
+                settings = real / "book" / "config" / "settings.json"
+                settings.rename(settings.with_name("real.json"))
+                settings.symlink_to("real.json")
+                self.ok(self.slow(False, ["status"], root=root, secret=secret))
+                refused = self.slow(True, ["status"], root=root, secret=secret)
+                self.assertEqual(json.loads(refused.stdout)["error"]["message"],
+                                 "configuration is unreadable or unsafe")
+
+    def migrate(self, rust):
+        with self.reference():
+            if rust:
+                return subprocess.run(_rust(["--migrate-default-state-root"]), cwd=ROOT, env=self.env,
+                                      capture_output=True, timeout=self.SLOW)
+            return cli_runner.run(["--migrate-default-state-root"], reference=True, cwd=ROOT,
+                                  env=self.env, capture_output=True, timeout=self.SLOW)
+
+    def test_symlinked_legacy_state_root_stays_like_python(self):
+        for secret in (None, self.PASSPHRASE):
+            target = self.home / "target"
+            shutil.rmtree(self.home)
+            self.home.mkdir()
+            self.ok(self.slow(False, ["init"], root=target / "data"))
+            if secret:
+                self.ok(self.slow(False, ["secrets", "init"], root=target / "data",
+                                  secret=secret, new_secret=True))
+            for inner in (False, True):
+                with self.subTest(encrypted=secret is not None, inner=inner):
+                    def legacy():
+                        if inner:
+                            (self.home / ".kassiber").mkdir()
+                            (self.home / ".kassiber" / "data").symlink_to(target / "data")
+                        else:
+                            (self.home / ".kassiber").symlink_to("target")
+                    reset = self.saved(self.home, legacy)
+                    [result] = self.both_from(reset, [self.migrate], self.home, secret)
+                    self.assertEqual(result, (0, b"", b""))
+                    self.assertFalse((self.home / "xdg-data" / "kassiber").exists())
+                    shutil.rmtree(self.home / ".kassiber") if inner else (self.home / ".kassiber").unlink()
+
+    def test_home_and_app_data_root_under_symlinked_parents_match_python(self):
+        base = Path(self._dir.name)
+        alias, real = self.aliased(base)
+        home = alias / "home"
+        self.env = self.env | {key: value for key, value in _environment(home).items()
+                               if key in {"HOME", "USERPROFILE", "LOCALAPPDATA"} or key.startswith("XDG_")}
+        for secret in (None, self.PASSPHRASE):
+            with self.subTest(encrypted=secret is not None):
+                # The hidden-home cutover renames across the linked parent.
+                def legacy():
+                    self.aliased(base)
+                    home.mkdir()
+                    self.ok(self.slow(False, ["init"], root=home / ".kassiber" / "data"))
+                    if secret:
+                        self.ok(self.slow(False, ["secrets", "init"], root=home / ".kassiber" / "data",
+                                          secret=secret, new_secret=True))
+                status = lambda rust: self.slow(rust, ["status"], default=True, secret=secret)
+                results = self.both_from(self.saved(real, legacy), [self.migrate, status, status], real, secret)
+                self.assertEqual([code for code, _, _ in results], [0, 0, 0])
+                self.assertTrue((real / "home/xdg-data/kassiber/projects/default/data/kassiber.sqlite3").is_file())
+                # A fresh default project in the app-data root (XDG_DATA_HOME).
+                def fresh():
+                    self.aliased(base)
+                    home.mkdir()
+                steps = [lambda rust: self.slow(rust, ["init"], default=True, secret=secret), status]
+                results = self.both_from(fresh, steps, real, secret)
+                self.assertEqual({code for code, _, _ in results}, {0})
+                self.assertIn(str(home / "xdg-data/kassiber/projects/default").encode(), results[-1][1])
+
     def test_historical_pair_free_fixture_matches_python_full_dump(self):
         from tests.test_rust_store_migrations import (
             HISTORICAL_FIXTURES, LEGACY_PAIR_FIXTURES, IDENTITY, TIMESTAMP,

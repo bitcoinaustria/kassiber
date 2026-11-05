@@ -542,3 +542,33 @@ pub fn validate_after_unlock(
     write_marker(&target, &path, &marker)?;
     observer("legacy.validated")
 }
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    #[test]
+    fn legacy_books_under_linked_parents_migrate_and_markers_refuse_links_below() {
+        let temporary = tempfile::tempdir().unwrap();
+        let (alias, real) = crate::durable::tests::aliased(temporary.path());
+        let mut context = Context::from_env().unwrap();
+        context.home = alias.join("home");
+        context.environ.clear();
+        let global = context.native_state_root();
+        drop(crate::Book::create(&global.join("data"), None).unwrap());
+        let entry =
+            ensure_default(&context, None, "2026-01-01T00:00:00Z", &mut |_| Ok(())).unwrap();
+        assert_eq!(entry.path, global.join("projects/default"));
+        let projects = real.join("home/.local/share/kassiber/projects");
+        let marker = read_marker(&projects.join("default/config").join(MARKER)).unwrap();
+        assert!(marker.get("legacy_artifacts").is_some());
+        // Kassiber's own project tree is below the resolved root and still refuses links.
+        let other = alias.join("other");
+        fs::create_dir_all(real.join("other/projects-real")).unwrap();
+        std::os::unix::fs::symlink("projects-real", real.join("other/projects")).unwrap();
+        let root = other.join("projects/default");
+        let error =
+            write_marker(&other, &root.join("config").join(MARKER), &json!({})).unwrap_err();
+        assert_eq!(error.kind, ErrorKind::UnsafeConfiguration);
+        assert!(!real.join("other/projects-real/default").exists());
+    }
+}

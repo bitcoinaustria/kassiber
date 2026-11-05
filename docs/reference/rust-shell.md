@@ -16349,3 +16349,50 @@ current `kassiber-net` client stays.
 | UUIDv5 (`crates/transfers/src/component_review.rs`, `crates/journals/src/persistence/filed.rs`) | Two copies over `bitcoin_hashes` SHA-1 | Use `uuid` (already locked, `v5` feature) or one shared helper |
 | Base64 decoders (`crates/wallets/src/psbt.rs`, `crates/release/src/verify.rs`) | Python-`b64decode` and OpenBSD-`b64_pton` compatible decoders | Keep. Each mirrors a reference's exact accept/refuse rules that `base64` does not offer |
 | Python-compatible JSON, decimal and text (`pyjson`, `pydecimal`, `pytext`) | CPython ports | Keep; byte parity is their purpose |
+
+## Storage roots under symlinked parents (R5 store, 2026-11-05)
+
+The owner's first macOS test build failed its daemon smoke on every standard
+Mac. `$TMPDIR` lives under `/var`, a link to `/private/var`, and
+`durable::refuse_symlinks` refused any storage path with a link anywhere in
+its ancestors. Python resolves the data root (`resolve_canonical_project_data_root`)
+and refuses links only at specific places, so the same refusal would have hit
+any user with a linked home, `Documents`, external volume or `--data-root`.
+The contract now lives in
+[storage roots and symlinks](rust-store.md#storage-roots-and-symlinks):
+`durable::under(root, path)` resolves the root the user or OS chose, keeps the
+Kassiber-managed tail lexical, and the no-link walk still covers the tail.
+`scripts/build-macos-arm64-rust-app.sh` also resolves its smoke directory with
+`pwd -P`.
+
+| Call site | Python counterpart | Behaviour now |
+| --- | --- | --- |
+| `creation::create` (data root, database) | `open_db`: `ensure_data_root` mkdir and `sqlite3.connect` follow links | Data root resolves (a linked `data` directory too). A link at the database path is still refused, also to an empty file; Python creates through it (stricter) |
+| `layout::initialize_layout` | `ensure_settings_file`, `_managed_settings_lock` follow links | Data and state roots resolve, explicit `--env-file` directories resolve; `config`, `exports`, `attachments`, `settings.json` and its lock below the state root refuse links (stricter). The manifest keeps lexical paths |
+| `layout::write_catalog`, `mutate_settings`, `write_private_json` | `_write_migration_json`, `mutate_managed_settings`, auth backoff `replace` | The `<state>/config/<file>` state root resolves; the config directory and file still refuse links (stricter) |
+| `state_root::migrate_hidden_home` | `migrate_hidden_home_state_root_if_needed` | The app-data parent and legacy root resolve, so a linked home migrates as in Python. `reject_symlinks` keeps a linked legacy root, or a link inside it, legacy like `_reject_unsafe_migration_symlinks`. Migration and startup locks refuse a final link (Python: `O_NOFOLLOW` for the startup lock, follows the migration lock), catalog rebasing refuses a linked catalog (stricter) |
+| `projects` legacy migration markers and owner guard | `projects.py` `_write_migration_json`; no owner guard | The global or project state root resolves; markers below it refuse links (stricter) |
+| `encryption` empty container, encrypt, open, validate | `create_empty_encrypted_database`, `migrate_plaintext_to_encrypted` follow links | The database's data root resolves. Links at the database, candidate and rollback backup still refuse (stricter) |
+| `restore` targets, journal, staged sources | `backup/install.py` `_reject_links` after `resolve()` | Unchanged: targets are resolved first in both. The refusal now carries Python's null details, so the envelope is byte-identical. Staged sources are not resolved in either runtime (see below) |
+
+Python and Rust both refuse a restore staged under a linked `$TMPDIR`, which on
+macOS is every restore: `tests/rust_port/repro_restore_staging_symlinked_tmpdir.py`.
+The store keeps that refusal byte-identical; TODO.md asks the owner whether to
+change the reference.
+
+Differential tests in `tests/test_rust_shell_parity.py` run Python, then Rust,
+from the same saved tree at the same paths, on plaintext and SQLCipher books.
+They compare exit codes, stdout and stderr bytes, every path and link, JSON
+bytes and normalized database dumps with only clocks and the database identity
+masked. Modes are not compared, as Rust creates directories owner-only:
+
+| Case | Test |
+| --- | --- |
+| Data root under a linked parent: `init`, `secrets init`, `status` | `test_data_root_under_symlinked_parent_matches_python` |
+| Linked restore journal refused identically; kept stricter refusals for a linked database and settings file | `test_symlinked_storage_files_refuse_like_python` |
+| Linked legacy root and a link inside it stay legacy | `test_symlinked_legacy_state_root_stays_like_python` |
+| Home and `XDG_DATA_HOME` under a linked parent: hidden-home cutover, legacy project migration, default `init` | `test_home_and_app_data_root_under_symlinked_parents_match_python` |
+
+`crates/store/scripts/symlink_mutation_check.py` runs the 17 entries of
+`symlink_mutations.json` over the store unit tests that pin each resolution
+step and each refusal kept.

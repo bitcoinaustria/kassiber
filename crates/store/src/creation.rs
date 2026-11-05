@@ -248,6 +248,16 @@ mod tests {
             .unwrap();
         assert_eq!(error.code, "unsafe_configuration");
         assert!(!linked.join("elsewhere.sqlite3").exists());
+        // Python creates the schema through such a link; this store refuses.
+        std::fs::write(linked.join("elsewhere.sqlite3"), b"").unwrap();
+        let error = Book::create(&alias.join("linked/data"), None)
+            .err()
+            .unwrap();
+        assert_eq!(error.code, "unsafe_configuration");
+        assert_eq!(
+            std::fs::read(linked.join("elsewhere.sqlite3")).unwrap(),
+            b""
+        );
     }
     #[test]
     fn new_books_follow_explicit_shipped_python_policy() {

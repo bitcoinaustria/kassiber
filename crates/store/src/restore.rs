@@ -34,10 +34,12 @@ fn invalid() -> Error {
 fn safe(path: &Path) -> Result<()> {
     durable::refuse_symlinks(path).map_err(|error| {
         if error.kind == ErrorKind::UnsafeConfiguration {
+            // Python's `_unsafe()` carries no details: the envelope says null.
             Error::new(
                 ErrorKind::UnsafeRestoreTarget,
                 "Restore destination contains a symbolic link",
             )
+            .details(Value::Null)
         } else {
             error
         }
@@ -874,9 +876,10 @@ mod tests {
             let other = root.path().join("other");
             fs::write(&other, "outside").unwrap();
             symlink(&other, original).unwrap();
+            let error = recover(&data, &mut |_| Ok(())).unwrap_err();
             assert_eq!(
-                recover(&data, &mut |_| Ok(())).unwrap_err().code,
-                "unsafe_restore_target"
+                (error.code, error.details),
+                ("unsafe_restore_target", Value::Null)
             );
             assert_eq!(fs::read_to_string(other).unwrap(), "outside");
         }

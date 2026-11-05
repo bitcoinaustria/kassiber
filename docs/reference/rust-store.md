@@ -290,6 +290,34 @@ and the full storage durability gates in plan 21. Implemented private subsets
 and their evidence are described below; R1 interop alone does not establish
 complete migration or production cutover readiness.
 
+## Storage roots and symlinks
+
+Python resolves the roots a user or the OS chooses (`Path.resolve`): a data
+root, its state root, the app-data directory, the legacy `~/.kassiber` root
+and an explicit `--env-file` directory. Links above them are the user's
+layout, such as macOS `/var` -> `/private/var` (where `$TMPDIR` lives) or a
+linked home or volume. The store does the same with `durable::under(root,
+path)`: the root resolves, the Kassiber-managed tail stays lexical, and
+`durable::refuse_symlinks` still refuses every link from the root down. A
+data root that is itself a link resolves, as in Python. Envelopes and the
+settings manifest keep Python's lexical paths.
+
+Below the resolved root the store is stricter than Python, which follows
+these links: the database file, its SQLCipher candidate and rollback backup,
+the settings file and lock, the `config`, `exports` and `attachments`
+directories, catalog, auth backoff and project migration markers, and the
+migration and legacy owner locks. A link swapped in for any of them could
+otherwise redirect a file Kassiber creates or replaces. The refusal is
+`unsafe_configuration` (`storage path contains a symlink`); metadata reads
+keep `configuration is unreadable or unsafe`. Where Python also refuses, the
+envelope matches it: a linked legacy root, or a link inside it, keeps the
+legacy layout, and restore links (`.restore-pending.json`, restore targets,
+staged sources) answer `unsafe_restore_target` with null details. Restore
+destinations are resolved first in both runtimes. Staged sources are not:
+`tests/rust_port/repro_restore_staging_symlinked_tmpdir.py` shows Python
+refusing a restore staged under a linked `$TMPDIR`, and the store keeps that
+refusal until the reference changes.
+
 ## Native stores and platform gates
 
 Direct keyring store versions match the desktop: `keyring-core=1.0.0`,
@@ -361,7 +389,7 @@ These tests skip on Linux. Their presence is not evidence of a native pass.
 ### R3 creation work
 
 `Book::create` is an explicit empty-book operation, separate from R1's
-existing-book admission. It refuses nonempty schemas and symlink paths, creates
+existing-book admission. It refuses nonempty schemas and a linked database path, creates
 owner-only directories/files, and commits all schema objects, audit markers,
 the database UUID, and graph-index initialization in one transaction. A failed
 statement rolls the whole schema back; either implementation can finish an
@@ -483,7 +511,8 @@ foreign-key checks afterwards.
 `state_root::migrate_hidden_home` is an explicit rename-only cutover, with the
 same prepared `.state-root-migration.json` proof, process lock, fixed `bin`/`run`
 restoration, project-catalog rebasing and conflict refusal as Python. It keeps
-database inodes, unknown local files and special files, refuses unsafe symlinks,
+database inodes, unknown local files and special files, keeps symlinked legacy
+layouts legacy (links above the home and app-data roots are resolved),
 and never copies or merges roots. Cross-device failures remove a prepared proof
 and retain legacy authority. Either runtime resumes interrupted cutovers.
 Rust creates missing directories owner-only and syncs each publication boundary;

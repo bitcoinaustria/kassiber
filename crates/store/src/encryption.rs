@@ -821,6 +821,17 @@ mod tests {
         .unwrap();
         refused(encrypt_plaintext(&namespace, &data, "synthetic key", None).map(drop));
         assert!(!real.join("candidate/data/elsewhere.sqlite3").exists());
+        let data = alias.join("backup/data");
+        drop(crate::Book::create(&data, None).unwrap());
+        let real_data = real.join("backup/data");
+        symlink(
+            "elsewhere.bak",
+            real_data.join("kassiber.pre-encryption.sqlite3.bak"),
+        )
+        .unwrap();
+        refused(encrypt_plaintext(&namespace, &data, "synthetic key", None).map(drop));
+        assert!(!real_data.join("kassiber.encrypted.sqlite3").exists());
+        assert!(kassiber_paths::looks_like_plaintext(&real_data.join("kassiber.sqlite3")).unwrap());
     }
     #[test]
     fn empty_container_is_verified_private_and_never_overwrites_a_book_or_candidate() {
