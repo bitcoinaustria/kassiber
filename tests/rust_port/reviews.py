@@ -619,3 +619,50 @@ REVIEWS["tests/test_rust_operator_cli.py"] = {
         "reason": "runs one operator CLI scenario and one agent-access daemon scenario per language, each through its own broker on a copy of one book (Python CLI and fixture broker; hybrid Rust CLI, daemon and --operator-broker-server); compares exit codes, output bytes and daemon records after declared id/time/build/path mappings",
     }
 }
+
+# R6-6a: the provider store, the HTTP transport and discovery are native in
+# crates/ai; chat (R6-7) and the provider broker client (R6-6b) are not.
+_R66_TRANSPORT = "crates/ai/tests/http_transport.rs"
+_R66_STORE = "crates/ai/src/providers/tests.rs"
+
+
+def _r66(reason, replacement, disposition="rust-test"):
+    return {"disposition": disposition, "group": "ai-mcp-operator", "reason": reason, "replacement": replacement}
+
+
+REVIEWS["tests/test_ai_core_http_transport.py"] = {
+    "ResponsesReasoningReplayTest": _r66("Responses reasoning replay, include and its single retry against the scripted loopback provider", _R66_TRANSPORT),
+    "ReasoningRefusalTest": _r66("refused effort and replayed reasoning are each dropped once, with the notice", _R66_TRANSPORT),
+    "ResponsesIncompleteTest": _r66("incomplete answers, cut-off calls and streams without their terminal event", _R66_TRANSPORT),
+    "ChatCompletionsStreamTest": _r66("Chat Completions stream parsing, tool-call accumulation and error payloads", _R66_TRANSPORT),
+    "ChatCompletionsRequestTest": _r66("Chat Completions bodies, replays, retries and the store: false invariant (the daemon tool-turn half stays with R6-7)", _R66_TRANSPORT + "; crates/ai/src/transport/wire.rs tests"),
+}
+REVIEWS["tests/test_ai_core_api_format.py"] = {
+    "ProviderFormatStorageTest": _r66("api_format and detected_api_format storage, CLI-locator refusals and endpoint-bound detection (column migrations belong to the store)", _R66_STORE + "::formats_start_auto_and_an_explicit_format_wins; cli_agents_take_no_format_and_drop_a_pinned_one_when_moved; a_new_endpoint_forgets_the_old_detection_and_records_only_its_own"),
+    "AutoFallbackTest": _r66("the auto fallback happens once, only on a missing route and only before anything answered", _R66_TRANSPORT),
+    "ConnectionTestDaemonTest": _r66("ai.test_connection probes, format detection and recording run as daemon sessions against Python on the same scripted provider", "tests/test_rust_ai_providers.py::RustAiProvidersParityTest::test_daemon_connection_tests_detect_and_record_the_format; " + _R66_TRANSPORT + "::connection_test_detects_the_format_tools_and_store", "subprocess-scenario"),
+}
+REVIEWS["tests/test_ai_core_provider_settings.py"] = {
+    "ProviderSettingsStorageTest": _r66("enable switch, default effort and the default-provider guards (column migrations belong to the store)", _R66_STORE + "::enable_switch_and_default_effort_persist"),
+    "ProviderKindInferenceTest": _r66("kind inference and the local acknowledgement rules", _R66_STORE + "::create_infers_local_or_remote_never_tee; update_moves_local_off_device_only_with_a_new_url"),
+    "ProviderKindInferenceTest::test_daemon_create_without_kind_infers_it": _r66("ai.providers.create without a kind, compared with Python as a daemon session", "tests/test_rust_ai_providers.py::RustAiProvidersParityTest::test_daemon_provider_crud_contacts_nothing", "subprocess-scenario"),
+}
+REVIEWS["tests/test_ai_discovery_cache.py"] = {
+    "test_discovery_cache_single_flight_and_last_good_fallback": _r66("single flight and last-good stale snapshots", "crates/ai/src/discovery/mod.rs::single_flight_and_last_good_fallback"),
+    "test_cold_probe_failure_is_shared_with_waiters": _r66("a cold failure is shared with the waiters of that probe", "crates/ai/src/discovery/mod.rs::cold_probe_failure_is_shared_with_waiters"),
+    "test_stale_failure_is_not_replayed_to_a_later_call": _r66("a later call probes again; entries expire after the TTL", "crates/ai/src/discovery/mod.rs::stale_failure_is_not_replayed_to_a_later_call_and_the_ttl_expires"),
+}
+REVIEWS["tests/test_ai_core.py"] = {
+    "ProvidersCrudTest": _r66("provider CRUD, seeding generations, secret refs and redaction", _R66_STORE),
+    "ResponsesToolCallAccumulatorTest": _r66("Responses tool-call slots by output index and ids", "crates/ai/src/transport/accumulate.rs::responses_calls_merge_by_index_and_ids"),
+    "HttpErrorMappingTest": _r66("status mapping and the redacted 512-character body preview", "crates/ai/src/transport/errors.rs::status_codes_map_like_python; " + _R66_TRANSPORT + "::http_errors_map_status_and_redact_the_body"),
+    "ListModelsStrictModeTest": _r66("lenient and strict model listing", _R66_TRANSPORT + "::list_models_is_forgiving_unless_strict"),
+}
+REVIEWS["tests/test_ai_fast_mode.py"] = {
+    "HttpFastModeTest": _r66("fast_mode never reaches an HTTP body", "crates/ai/src/transport/wire.rs::options_map_onto_responses_fields_and_reserved_ones_are_dropped"),
+    "ModelMetadataFastModeTest": _r66("bounded fast-mode metadata", "crates/ai/src/discovery/metadata.rs::listings_are_bounded_and_derived_like_python"),
+}
+REVIEWS["tests/test_rust_ai_providers.py"] = {"*": {
+    "disposition": "oracle", "group": "ai-mcp-operator",
+    "reason": "compares native AI provider daemon sessions, CLI leaves (with zero hybrid fallbacks) and scripted loopback provider requests with unchanged Python byte for byte, including offline mode and pinned clocks",
+}}

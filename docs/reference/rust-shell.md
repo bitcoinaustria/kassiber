@@ -17046,3 +17046,101 @@ should make it deterministic.
   `strict=True, auto_pair_journals=False`, and the `ui.review.*` workflow.
 - **Chat dependencies.** Duplicate call ids and the chat-loop consent records
   belong to R6-7.
+
+## AI providers, HTTP streaming and discovery (R6-6a)
+
+`t3code/r6-6a-providers` starts at `6297511d1`, the first commit of R6-5a,
+which created `crates/ai`. It ports the R6-6a scope of the
+[R6 design](r6-ai-operator-port.md#r6-6-providers-http-streaming-broker-client-and-discovery).
+No dependency, schema or Python product file changes.
+
+| Surface | Native | Notes |
+| --- | --- | --- |
+| `ai.providers.list`, `.get`, `.create`, `.update`, `.set_api_key`, `.move_api_key`, `.delete`, `.set_default`, `.clear_default`, `.acknowledge` | yes | contact nothing; the desktop keychain only through `supervisor.ai_secret_store.*` |
+| `ai.provider_runtime.status` | display reads | `cached_only` and "nothing a row allows" never probe; a runtime probe answers `not_implemented` (broker, R6-6b) |
+| `ai.list_models` | HTTP rows | probes on a cold or expired cache, or on `refresh`; CLI rows answer `not_implemented` |
+| `ai.test_connection` | HTTP targets | one `GET /models`, at most three `POST`s per format; CLI locators answer `not_implemented` after every validation |
+| `ai providers list`/`get`/`create`/`update`/`delete`/`set-default`/`clear-default` | yes | `--api-key-fd`, `--api-key-stdin`, or the argv shim with Python's warning |
+| `ai providers test`, `ai models` | HTTP rows | as the daemon kinds; CLI rows answer `not_implemented` |
+
+**Crates.** `crates/ai` gains `providers` (`kassiber/ai/providers.py`), the
+`transport` client (`client.py`), `discovery` (`discovery_cache.py`,
+`model_metadata.py`) and `service`, which serves both surfaces. Document OCR
+in `crates/wallets` now resolves, gates and maps errors through the same
+store, so chat, discovery and OCR cannot disagree about a provider.
+`kassiber-net` gains `HttpRequest::open`, a streaming reader that decodes
+`Content-Length`, chunked and close-delimited bodies incrementally with every
+framing byte charged against the limit and a bounded line reader, and a
+`Cancel` handle that shuts the in-flight socket down from another thread.
+`send` keeps its behaviour and shares the redirect loop. The daemon keeps one
+RAM-only discovery cache for its lifetime, invalidated by every provider edit
+except the preference-only ones Python exempts.
+
+**Transport.** Responses and Chat Completions bodies are built in Python's key
+order and written with `json.dumps` defaults. The SSE splitter keeps Python's
+quirks: only `\n` ends a line, all leading spaces of `data:` go, trailing CRs
+are stripped, only the exact `[DONE]` ends the stream. Both stream parsers,
+the tool-call accumulators (Responses slots by output index and ids; Chat
+Completions strictly by index, failing closed on a reused id), OpenRouter's
+reasoning details, the auto fallback (once, on a missing route, before
+anything answered), the relaxations (each part at most once; `store: false`
+never), the error mapping and the connection test follow `client.py`.
+
+**Reviewed differences.**
+
+- A streamed or buffered provider response is capped at 64 MiB and one SSE
+  line at 16 MiB (design §7, item 4, recommendation followed; Python reads
+  without a bound). Over the cap is `ai_unavailable`.
+- Transport failures carry `kassiber-net`'s fixed reason text
+  (`network I/O failed`) instead of the OS error string, and an invalid HTTP
+  message or a redirect loop is `ai_unavailable`. Python lets `IncompleteRead`
+  and `BadStatusLine` escape as unhandled exceptions and maps a redirect loop to
+  the last 3xx status.
+- A cancelled request refuses before connecting, or shuts its socket down;
+  the turn then ends quietly with what arrived, as Python's closed response does.
+
+**Privacy fences.** Listing, reading and editing providers contacts nothing:
+the service tests run them with a host whose gate panics, and the parity
+driver's CRUD session leaves the scripted provider untouched. Contact happens
+only from `ai.list_models`, `ai.test_connection`, `ai providers test` and
+`ai models`, after the enabled, acknowledgement and endpoint gates, through a
+route authorized for that request. Offline mode refuses everything but a
+provider marked local on a loopback URL, with Python's message; a remote row
+on `localhost` is refused. `KASSIBER_NO_EGRESS` leaves AI alone, as in Python
+(the parity driver runs with it set). Keys reach only the `Authorization`
+header: never argv (beyond Python's deprecated shim, with its warning),
+envelopes, the egress ledger or logs. Error bodies use the 512-character
+redacted preview.
+
+**Evidence.** `cargo test -p kassiber-ai` (providers, transport, discovery,
+service units, and `tests/http_transport.rs`: 33 ports of
+`test_ai_core_http_transport.py`, `AutoFallbackTest` and the client classes
+of `test_ai_core.py` against `kassiber_net::test_support::ScriptedProvider`).
+`tests/test_rust_ai_providers.py` runs Python (`tests/rust_port/ai_providers_reference.py`,
+clocks pinned by `KASSIBER_RUST_TEST_AI_TIME` and `KASSIBER_RUST_TEST_AI_CHECKED_AT`)
+and the test-harness binary on copies of one book: 44-request CRUD, model
+listing, connection-test and offline daemon sessions answer byte for byte,
+the provider tables end identical (the secret ref `service` is compared as
+"this root's"), the scripted provider sees identical requests, and 15 CLI
+calls through the hybrid candidate are all served by Rust. With
+`KASSIBER_TEST_CLI` naming the hybrid candidate, the boundary-fixture classes
+`ProviderTestCliTest`, `ProviderFormatCliTest`, `ProviderSettingsCliTest`,
+`ProviderKindInferenceCliTest` and `ProviderDisabledCliTest` pass 6 of 8
+tests with all 18 `ai` calls served by Rust. The other two
+(`test_store_field_flags`, `test_enable_disable_and_default_effort_flags`)
+hit their 60 s and 120 s subprocess timeouts creating a fresh book while the
+shared build disk sat at about 80% I/O pressure (one commit took seconds;
+`status` on a fresh book took 63 s); they need a rerun on an idle disk.
+`crates/ai/scripts/mutations.json` holds 19 entries (route phrases, single
+relaxation, status mapping, same-origin redirects, acknowledgement and
+test-target gates, kind inference, TTL, three SSE quirks, the store regex and
+invariant, fallback, offline loopback, key origin, secret namespace,
+duplicate call ids, cut-off calls), each killed by named tests.
+
+**Remaining for R6-6b.** The provider broker client (`broker_client.py`) and
+its gated process route: Node spawn in a new process group with the
+`XDG_RUNTIME_DIR` temp-root checks, the JSONL exchange with keep-alive and
+per-leg watchdogs, TERM-then-KILL, the three environment overrides, and the
+attempt observer. With it, `ai.provider_runtime.status` probes,
+`ai.list_models`/`ai models` and connection tests on CLI rows (including
+`binary_presence` check kinds) stop answering `not_implemented`.

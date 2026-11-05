@@ -714,6 +714,11 @@ Two runs:
 - **R6-6a:** provider configuration, the HTTP transport and discovery.
 - **R6-6b:** the provider broker client.
 
+R6-6a is done on branch `t3code/r6-6a-providers`; the
+[checkpoint](rust-shell.md#ai-providers-http-streaming-and-discovery-r6-6a)
+records its verification, its reviewed differences and what is left for R6-6b.
+§7 item 4 is settled as recommended: 64 MiB per response, 16 MiB per SSE line.
+
 **R6-6a scope:**
 
 - **Shared provider store in `crates/ai`.** The document-import provider code

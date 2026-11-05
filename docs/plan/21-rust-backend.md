@@ -242,6 +242,9 @@ reference while it still exists:
    connector; service slices remain disabled until their own consent and behavior
    contracts are implemented. As in Python, Rust offline mode still permits an
    explicitly local AI provider at a loopback address.
+
+   contracts are implemented. Offline mode blocks AI too, except a provider
+   marked local on a loopback URL, as in Python.
 7. **Storage durability:** beyond equal content, the storage stage proves
    schema objects and trigger behavior, migration audits and idempotency,
    foreign-key and integrity checks, busy and error semantics, the journal
@@ -4729,3 +4732,19 @@ killed by named tests. See the
 for the refused tools, the reviewed differences, one Python quirk kept with a
 repro, and the R6-5b remainder. No new external dependency and no Python
 product change.
+
+### R6-6a AI providers, HTTP streaming and discovery
+
+`t3code/r6-6a-providers` starts at `6297511d1` (R6-5a's first commit) and
+moves the provider store from `crates/wallets` into `crates/ai`, which now also
+holds the Responses/Chat Completions client and the discovery cache.
+`kassiber-net` gains a streaming reader and a socket-level cancel. The 13
+provider daemon kinds and the 9 `ai` CLI leaves are registered; paths that need
+a CLI agent runtime answer `not_implemented` until the provider broker client
+(R6-6b). Listing, reading and editing providers contacts nothing; model
+listing and connection tests contact only after the provider gates, through a
+route bound to that request. See the
+[checkpoint](../reference/rust-shell.md#ai-providers-http-streaming-and-discovery-r6-6a)
+for the parity driver, the 19 mutation entries and the reviewed differences
+(64 MiB response and 16 MiB SSE line caps, following the design's
+recommendation). Python product code is unchanged.

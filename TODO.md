@@ -87,6 +87,22 @@ ordered compatibility, hidden-home cutover and legacy project migration through
 - [ ] Complete storage crash/backup and Windows/macOS acceptance, then wire
   maintenance commands with Python-safe journals and credential stale guards.
 
+## Rust backend R6 AI providers
+
+The [R6-6a checkpoint](docs/reference/rust-shell.md#ai-providers-http-streaming-and-discovery-r6-6a)
+serves the provider store, model discovery and connection tests for HTTP
+providers natively.
+
+- [x] R6-6a: provider kinds and `ai` leaves, the shared store (document OCR
+  included), the streaming HTTP client, the discovery cache.
+- [ ] R6-6b: the provider broker client and its gated process route, so CLI
+  agent runtimes (`ai.provider_runtime.status` probes, model listing and
+  connection tests on `*-cli://default` rows) stop answering `not_implemented`.
+- [ ] Rerun `ProviderFormatCliTest::test_store_field_flags` and
+  `ProviderSettingsCliTest::test_enable_disable_and_default_effort_flags`
+  through the hybrid candidate on an idle disk; they timed out creating a fresh
+  book under I/O pressure (the other 6 hybrid CLI tests pass, all Rust-served).
+
 ## Rust backend R5 desktop projections
 
 The [completion checkpoint](docs/reference/rust-shell.md#desktop-projections-r5-completion)
