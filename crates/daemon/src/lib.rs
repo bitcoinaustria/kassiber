@@ -24,6 +24,7 @@ mod freshness;
 mod imports;
 pub mod input;
 mod journals;
+mod kind_order;
 mod loans;
 mod metadata;
 pub mod output;
@@ -222,30 +223,16 @@ pub fn supported_kinds() -> Vec<&'static str> {
             .filter(|k| backends::KINDS.contains(k) && ["backends.reveal_token"].contains(k)),
     );
     kinds.push(SUPPORTED_KINDS[3]);
-    // Python lists the chain-analysis UI kinds first, sorted; the internal
-    // staging kind keeps its own place.
-    let mut analysis: Vec<&'static str> = chain_analysis_reads::KINDS
-        .iter()
-        .chain(chain_analysis_ops::KINDS)
-        .chain(chain_analysis_ops::DATASET_KINDS)
-        .copied()
-        .filter(|k| k.starts_with("ui.chain_analysis."))
-        .collect();
-    analysis.sort_unstable();
-    kinds.splice(0..0, analysis);
-    // Among the kinds served here, Python's internal staging kind follows
-    // `ui.wallets.create` (its document-import neighbours stay Python).
-    let at = kinds
-        .iter()
-        .position(|k| *k == "ui.wallets.create")
-        .map_or(kinds.len(), |i| i + 1);
-    kinds.splice(
-        at..at,
-        chain_analysis_reads::KINDS
+    kinds.extend(chain_analysis_reads::KINDS);
+    kinds.extend(chain_analysis_ops::KINDS);
+    kinds.extend(chain_analysis_ops::DATASET_KINDS);
+    // Advertise in Python's order; test-only kinds Python lacks stay last.
+    kinds.sort_by_key(|kind| {
+        kind_order::PYTHON
             .iter()
-            .copied()
-            .filter(|k| !k.starts_with("ui.chain_analysis.")),
-    );
+            .position(|python| python == kind)
+            .unwrap_or(usize::MAX)
+    });
     #[cfg(feature = "test-kinds")]
     kinds.extend(test_kinds::KINDS);
     kinds
