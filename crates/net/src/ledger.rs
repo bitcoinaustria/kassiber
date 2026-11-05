@@ -135,6 +135,8 @@ impl Ledger {
             port: endpoint.port,
             scheme: if request.cln.is_some() {
                 "cln"
+            } else if request.broker.is_some() {
+                "broker"
             } else if request.tls == crate::TlsTrust::Plaintext {
                 "tcp"
             } else {

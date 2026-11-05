@@ -26,6 +26,7 @@
 //! stream, including TLS handshake and post-handshake writes. Ambient proxies
 //! are never read. Redirects default to refusal. No raw socket is exposed.
 
+mod broker;
 mod http;
 mod ledger;
 mod offline;
@@ -37,6 +38,13 @@ mod tls;
 #[cfg(feature = "test-support")]
 pub mod test_support;
 
+#[cfg(unix)]
+pub use broker::temp_parent_for;
+pub use broker::{
+    broker_script, broker_temp_parent, mount_fstype, node_executable, splitlines, which,
+    BrokerError, BrokerOutput, BrokerProcess, BrokerProgram, BrokerSignal, BROKER_GRACE,
+    BROKER_NODE_ENV, BROKER_SCRIPT_ENV, BROKER_TMPDIR_ENV,
+};
 pub use http::{
     Cancel, HttpOptions, HttpRequest, HttpResponse, HttpStream, RedirectPolicy, Upgrade,
 };
@@ -172,6 +180,7 @@ pub struct Request {
     on_device_ai: bool,
     action_binding: Option<[u8; 32]>,
     cln: Option<ClnConfig>,
+    broker: Option<BrokerProgram>,
 }
 
 impl Request {
@@ -184,6 +193,7 @@ impl Request {
             on_device_ai: false,
             action_binding: None,
             cln: None,
+            broker: None,
         }
     }
 
@@ -269,6 +279,7 @@ pub struct Gate {
     attempts: Ledger,
     observer: Observer,
     cln_fixture: Option<std::path::PathBuf>,
+    broker_fixture: Option<std::path::PathBuf>,
 }
 
 fn env_value(name: &str) -> String {
@@ -323,6 +334,7 @@ impl Gate {
             attempts: Ledger::default(),
             observer,
             cln_fixture: None,
+            broker_fixture: None,
         }
     }
 
@@ -340,6 +352,18 @@ impl Gate {
     /// do not count as network attempts; tests assert both buffers independently.
     pub fn attempts(&self) -> Snapshot {
         self.attempts.snapshot(0, 2_000)
+    }
+
+    /// Arm the attempt observer whatever the environment says, for service
+    /// tests that count launches and connections.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn with_test_observer(mut self, strict: bool) -> Self {
+        self.observer = if strict {
+            Observer::Strict
+        } else {
+            Observer::LoopbackAllowed
+        };
+        self
     }
 
     pub fn authorize(&self, request: Request, consent: Option<Consent>) -> Result<Route, Error> {
@@ -432,7 +456,7 @@ impl Route {
 
     fn connect_inner(self, timeout: Duration, http_forward: bool) -> Result<Connection, Error> {
         self.check()?;
-        if self.request.cln.is_some() {
+        if self.request.cln.is_some() || self.request.broker.is_some() {
             return Err(Error::InvalidEndpoint);
         }
         let config = tls::config(&self.request.tls, http_forward)?;

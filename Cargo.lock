@@ -1803,6 +1803,7 @@ dependencies = [
  "httparse",
  "idna_adapter",
  "kassiber-envelope",
+ "nix 0.30.1",
  "rustls",
  "rustls-native-certs",
  "serde_json",

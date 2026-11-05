@@ -14,6 +14,7 @@ fn test_gate(offline: impl Fn() -> Offline + Send + Sync + 'static) -> Gate {
         attempts: Ledger::default(),
         observer: Observer::LoopbackAllowed,
         cln_fixture: None,
+        broker_fixture: None,
     }
 }
 
