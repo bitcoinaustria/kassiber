@@ -303,3 +303,35 @@ journal persistence, `render_inputs`, `boundary::build` and the direct
 loader belong to the journals and tax-core crates. Reaching 4× on generic
 20k needs about 1.5 s from them together; persistence, the text boundary
 and the rendered JSON trees are the largest parts.
+
+## Margin work (steps 29–33, 2026-11-05)
+
+Steps 29–33 trust typed observations in arbitration (checked in debug
+builds), balance domains in i128, write presorted dicts without sorting,
+and move claim, quarantine and coverage lists into their results instead
+of letting `json!` copy them. Best of five alternating pairs on step 33
+(`de7434100`), custody CPU in seconds:
+
+| Book | Python | Native | Speedup | Load |
+| --- | ---: | ---: | ---: | --- |
+| generic 2k | 0.782 | 0.062 | 12.5× | 18–20 |
+| multi-wallet 2k | 1.191 | 0.120 | 9.9× | 16–17 |
+| generic 20k | 5.444 | 0.505 | 10.8× | 9–15 |
+| multi-wallet 20k | 13.296 | 0.974 | 13.7× | 8–9 |
+
+Multi-wallet 2k measured 0.113 s at step 28 and 0.120 s here, although
+an A/B in one sitting puts step 33 3% below step 28 (0.118 against
+0.122 s) and its instruction count 6% below. At 2k the custody total is
+about 0.1 s, and the machine's state moves it by ±6% between sittings, so
+that book needs about 10% more before 11× holds in every sitting. Its
+largest remaining parts are component materialization (30% of its custody
+instructions: per-component evidence status, anchor and conservation
+checks, leg projection), component claim compilation (9%) and gap search
+(7%).
+
+End to end at step 33 (process CPU, same pairs): generic 2k 1.75 / 0.45 s
+(3.9×), multi-wallet 2k 2.25 / 0.60 s (3.75×), generic 20k 13.06 / 4.68 s
+(2.8×), multi-wallet 20k 22.11 / 5.90 s (3.75×). Changes inside this
+branch to the ledger request (`build_request`, `request_json`) did not
+move the fusion phase measurably and were not kept; the phase table above
+still describes where the time goes.
