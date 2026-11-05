@@ -178,9 +178,10 @@ pub fn full(model: &Value) -> Document {
             tf("kpi.holdings_unrealized"),
             fiat(holdings, "unrealized_pnl"),
         ),
+        // Python's realized totals add income to the disposals.
         kpi(
             "realized_proceeds",
-            tf("kpi.realized_proceeds"),
+            tf("kpi.realized_proceeds_income"),
             fiat(realized, "proceeds"),
         ),
         kpi(
@@ -190,7 +191,7 @@ pub fn full(model: &Value) -> Document {
         ),
         kpi(
             "realized_gain",
-            tf("kpi.realized_gain"),
+            tf("kpi.realized_gain_income"),
             fiat(realized, "gain_loss"),
         ),
     ];
@@ -388,17 +389,28 @@ pub fn full(model: &Value) -> Document {
         blocks: holdings_blocks,
     });
 
-    // 4. Disposals: per wallet and asset in first-seen order, then each one
+    // 4. Disposals, then income: Python's capital rows hold both, and the
+    // journal's entry type says which each row is. Income is no disposal and
+    // carries no cost basis, so it gets its own table and total.
     let capital = list(model, "capital");
+    let disposals: Vec<&Value> = capital
+        .iter()
+        .filter(|r| text(r, "entry_type") != "income")
+        .collect();
+    let income: Vec<&Value> = capital
+        .iter()
+        .filter(|r| text(r, "entry_type") == "income")
+        .collect();
+    let blank = || Cell::Text(String::new());
     let mut blocks = Vec::new();
-    if capital.is_empty() {
+    if disposals.is_empty() {
         blocks.push(Block::Note {
             text: t("disposals.none").into(),
             accent: false,
         });
     } else {
         let mut groups: Vec<((String, String), Vec<&Value>)> = Vec::new();
-        for row in capital {
+        for &row in &disposals {
             let key = (text(row, "wallet"), text(row, "asset"));
             match groups.iter_mut().find(|(k, _)| *k == key) {
                 Some((_, rows)) => rows.push(row),
@@ -430,14 +442,13 @@ pub fn full(model: &Value) -> Document {
                 })
                 .collect(),
         );
-        let blank = || Cell::Text(String::new());
         summary.total = Some(vec![
             Cell::Text(t("doc.total").into()),
             blank(),
-            Cell::Count(capital.len() as i64),
-            fiat(realized, "proceeds"),
-            fiat(realized, "cost_basis"),
-            fiat(realized, "gain_loss"),
+            Cell::Count(disposals.len() as i64),
+            float_sum(&disposals, "proceeds"),
+            float_sum(&disposals, "cost_basis"),
+            float_sum(&disposals, "gain_loss"),
         ]);
         blocks.push(Block::Table(summary));
         blocks.push(Block::Table(table(
@@ -458,7 +469,7 @@ pub fn full(model: &Value) -> Document {
                 col("cost_basis", tf("col.cost_basis"), Kind::Fiat, 1.2),
                 col("gain", tf("col.gain"), Kind::Fiat, 1.1),
             ],
-            capital
+            disposals
                 .iter()
                 .map(|row| {
                     let quantity = btc(row, "quantity");
@@ -483,6 +494,62 @@ pub fn full(model: &Value) -> Document {
         page_break: false,
         landscape: false,
         blocks,
+    });
+    let income_block = if income.is_empty() {
+        Block::Note {
+            text: t("income.none").into(),
+            accent: false,
+        }
+    } else {
+        let mut receipts = table(
+            "income",
+            t("income.all"),
+            vec![
+                col("date", t("col.date"), Kind::Date, 0.9),
+                col("wallet", t("col.wallet"), Kind::Text, 1.2),
+                col("asset", t("col.asset"), Kind::Text, 0.6),
+                col("quantity", t("col.quantity"), Kind::Btc, 1.2),
+                col(
+                    "quantity_msat",
+                    t("col.quantity_msat_plain"),
+                    Kind::Msat,
+                    1.0,
+                ),
+                // The journal books income at its value when received.
+                col("value", tf("col.income_value"), Kind::Fiat, 1.3),
+            ],
+            income
+                .iter()
+                .map(|row| {
+                    let quantity = btc(row, "quantity");
+                    vec![
+                        day(row, "occurred_at"),
+                        txt(row, "wallet"),
+                        txt(row, "asset"),
+                        quantity.clone(),
+                        msat(&quantity),
+                        fiat(row, "proceeds"),
+                    ]
+                })
+                .collect(),
+        );
+        receipts.total = Some(vec![
+            Cell::Text(t("doc.total").into()),
+            blank(),
+            blank(),
+            blank(),
+            blank(),
+            float_sum(&income, "proceeds"),
+        ]);
+        Block::Table(receipts)
+    };
+    sections.push(Section {
+        id: "income",
+        title: t("income.title").into(),
+        lead: t("income.lead").into(),
+        page_break: false,
+        landscape: false,
+        blocks: vec![income_block],
     });
 
     // 5. Flows and fees per asset and per wallet

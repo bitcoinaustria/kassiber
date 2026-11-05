@@ -71,6 +71,16 @@ Shared sections, in this order wherever a report has them:
 | 8 | Open issues (`issues`) | quarantines, stale journals, missing prices, review gates, report blockers |
 | 9 | Method and provenance (`method`) | method, engine, pricing sources, assumptions, review gate text |
 
+Disposals and income stay apart. Python's capital-gains rows hold both
+(`entry_type` `disposal` and `income`), so the full report lists them in the
+Disposals and Income sections, each with its own total (income at its value
+when received, without cost basis or gain), as separate sheets and CSV files
+(`all_disposals`, `income`). Where a figure is Python's combined total it says
+so: the full report's headline figures read "Disposal proceeds and income" and
+"Realized gain incl. income". The summary's realized gain and its largest
+disposals count disposals only, as Python's do; the Austrian report, the year
+handoff and the cross-check already keep income separate.
+
 Columns are typed (text, code, date, fiat, BTC, msat, count, percent). The
 type decides alignment, face and number format in every renderer. One
 exception keeps the PDF readable: the integer `_msat` companion of a BTC

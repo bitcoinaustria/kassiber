@@ -38,5 +38,35 @@
       "labels_in_other_scripts_never_render_as_missing_glyphs"
     ],
     "rule": "Characters no bundled font draws become U+FFFD before layout."
+  },
+  {
+    "id": "full-income-not-disposal",
+    "file": "crates/reports/src/report_design/full.rs",
+    "find": "        .filter(|r| text(r, \"entry_type\") != \"income\")\n",
+    "replace": "        .filter(|_| true)\n",
+    "expect_failing": [
+      "full_report_model_matches_python_and_renders_deterministically"
+    ],
+    "rule": "Income rows never appear under the disposals heading."
+  },
+  {
+    "id": "full-income-entry-type",
+    "file": "crates/reports/src/full_pdf.rs",
+    "find": "                    (\"entry_type\", \"entry_type\"),\n",
+    "replace": "",
+    "expect_failing": [
+      "full_report_model_matches_python_and_renders_deterministically"
+    ],
+    "rule": "The full report's capital rows carry the journal's entry type."
+  },
+  {
+    "id": "full-income-disposal-total",
+    "file": "crates/reports/src/report_design/full.rs",
+    "find": "            float_sum(&disposals, \"gain_loss\"),\n",
+    "replace": "            fiat(realized, \"gain_loss\"),\n",
+    "expect_failing": [
+      "full_report_model_matches_python_and_renders_deterministically"
+    ],
+    "rule": "The disposals total sums disposals only, without income."
   }
 ]

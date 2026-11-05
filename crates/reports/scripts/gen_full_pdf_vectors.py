@@ -121,7 +121,8 @@ def full_model(context):
         portfolio=[dict(wallet=text(row['wallet']), account=text(row['account']), asset=text(row['asset']))
                    | pick(row, ('quantity', 'avg_cost', 'cost_basis', 'market_value', 'unrealized_pnl'))
                    for row in context['portfolio_rows']],
-        capital=[dict(occurred_at=text(row['occurred_at']), wallet=text(row['wallet']), asset=text(row['asset']))
+        capital=[dict(occurred_at=text(row['occurred_at']), wallet=text(row['wallet']), asset=text(row['asset']),
+                      entry_type=text(row['entry_type']))
                  | pick(row, ('quantity', 'proceeds', 'cost_basis', 'gain_loss'))
                  for row in context['capital_rows']],
         history=[dict(period_start=text(row['period_start']), asset=text(row['asset']))

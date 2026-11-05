@@ -241,6 +241,8 @@ pub fn model(
                     ("occurred_at", "occurred_at"),
                     ("wallet", "wallet"),
                     ("asset", "asset"),
+                    // Income rows sit beside disposals; the journal says which.
+                    ("entry_type", "entry_type"),
                 ],
                 &["quantity", "proceeds", "cost_basis", "gain_loss"],
             ),

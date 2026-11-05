@@ -37,6 +37,7 @@ fn full_report_model_matches_python_and_renders_deterministically() {
     let book = Book::create(&root.path().join("data"), None).unwrap();
     let conn = book.connection();
     let mut rendered = 0;
+    let mut income_rows = 0;
     for case in &cases {
         let name = case["name"].as_str().unwrap();
         conn.execute_batch("SAVEPOINT oracle_fixture").unwrap();
@@ -65,6 +66,33 @@ fn full_report_model_matches_python_and_renders_deterministically() {
                     python_groups(&ok["model"]),
                     "{name}: disposals per wallet and asset"
                 );
+                // Income is no disposal: each journal row is listed under
+                // its own entry type and nowhere else.
+                for (id, entry_type) in [("all_disposals", "disposal"), ("income", "income")] {
+                    assert_eq!(
+                        listed(&document, id),
+                        python_rows(&ok["model"], entry_type),
+                        "{name}: {id}"
+                    );
+                }
+                income_rows += python_rows(&ok["model"], "income").len();
+                // Each total sums its own rows only.
+                for (id, entry_type, column, key) in [
+                    ("disposals_by_wallet", "disposal", 5, "gain_loss"),
+                    ("income", "income", 5, "proceeds"),
+                ] {
+                    let expected: f64 = ok["model"]["capital"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .filter(|row| row["entry_type"] == entry_type)
+                        .map(|row| row[key].as_f64().unwrap())
+                        .sum();
+                    if let Some(total) = total(&document, id) {
+                        let actual: f64 = total[column].csv().parse().unwrap();
+                        assert_eq!(actual, expected, "{name}: {id} total");
+                    }
+                }
                 let [file] = prepared.files.as_slice() else {
                     panic!("{name}: one PDF")
                 };
@@ -92,6 +120,7 @@ fn full_report_model_matches_python_and_renders_deterministically() {
             .unwrap();
     }
     assert!(rendered >= 40, "{rendered}");
+    assert!(income_rows > 0, "no case lists income");
 }
 
 /// Python's capital-gain buckets: first-seen (wallet, asset) order and row
@@ -99,6 +128,9 @@ fn full_report_model_matches_python_and_renders_deterministically() {
 fn python_groups(model: &serde_json::Value) -> Vec<(String, String, i64)> {
     let mut groups: Vec<(String, String, i64)> = Vec::new();
     for row in model["capital"].as_array().unwrap() {
+        if row["entry_type"] == "income" {
+            continue;
+        }
         let key = (
             row["wallet"].as_str().unwrap(),
             row["asset"].as_str().unwrap(),
@@ -112,6 +144,54 @@ fn python_groups(model: &serde_json::Value) -> Vec<(String, String, i64)> {
         }
     }
     groups
+}
+/// Python's capital rows of one entry type: day, wallet and asset.
+fn python_rows(model: &serde_json::Value, entry_type: &str) -> Vec<(String, String, String)> {
+    model["capital"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|row| row["entry_type"] == entry_type)
+        .map(|row| {
+            (
+                row["occurred_at"].as_str().unwrap()[..10].to_owned(),
+                row["wallet"].as_str().unwrap().to_owned(),
+                row["asset"].as_str().unwrap().to_owned(),
+            )
+        })
+        .collect()
+}
+/// A document table's total row.
+fn total(document: &report_design::Document, id: &str) -> Option<Vec<report_design::Cell>> {
+    document
+        .sections
+        .iter()
+        .flat_map(|s| &s.blocks)
+        .find_map(|b| match b {
+            report_design::Block::Table(t) if t.id == id => t.total.clone(),
+            _ => None,
+        })
+}
+/// A document table's rows as day, wallet and asset.
+fn listed(document: &report_design::Document, id: &str) -> Vec<(String, String, String)> {
+    use report_design::{Block, Cell};
+    document
+        .sections
+        .iter()
+        .flat_map(|s| &s.blocks)
+        .find_map(|b| match b {
+            Block::Table(t) if t.id == id => Some(t.rows.clone()),
+            _ => None,
+        })
+        .unwrap_or_default()
+        .iter()
+        .map(|row| match (&row[0], &row[1], &row[2]) {
+            (Cell::Date(d), Cell::Text(w), Cell::Text(a)) => {
+                (d[..10].to_owned(), w.clone(), a.clone())
+            }
+            other => panic!("{other:?}"),
+        })
+        .collect()
 }
 fn disposal_groups(document: &report_design::Document) -> Vec<(String, String, i64)> {
     use report_design::{Block, Cell};
