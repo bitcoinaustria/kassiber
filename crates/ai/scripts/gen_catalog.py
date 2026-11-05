@@ -22,7 +22,9 @@ sys.path.insert(0, str(ROOT))
 
 def document() -> dict:
     from kassiber import daemon
-    from kassiber.ai import tools
+    from kassiber.ai import contracts, prompt, tools
+    from kassiber.cli import chat as cli_chat
+    from kassiber.core import chat_history, ui_snapshot
 
     entries = []
     for tool in tools.TOOL_CATALOG:
@@ -48,7 +50,24 @@ def document() -> dict:
         "tools": entries,
         "aliases": dict(sorted(aliases.items())),
         "skill_reference_index": tools.SKILL_REFERENCE_INDEX,
+        # Chat (R6-7): the product prompt and the page-metric definitions
+        # the model reads, embedded as Python writes them.
+        "system_prompt": prompt.DEFAULT_KASSIBER_SYSTEM_PROMPT,
+        "screen_metric_definitions": {
+            "grouped": ui_snapshot.screen_context_metric_definitions(True),
+            "ungrouped": ui_snapshot.screen_context_metric_definitions(False),
+        },
         "constants": {
+            "ai_screen_routes": sorted(daemon._AI_SCREEN_ROUTES),
+            "pending_ai_cancel_ttl_seconds": daemon.PENDING_AI_CANCEL_TTL_SECONDS,
+            "max_pending_ai_cancels": daemon.MAX_PENDING_AI_CANCELS,
+            "cut_off_finish_reasons": sorted(daemon._AI_CUT_OFF_FINISH_REASONS),
+            "chat_history_modes": list(chat_history.AI_CHAT_HISTORY_MODES),
+            "session_title_max_chars": chat_history.SESSION_TITLE_MAX_CHARS,
+            "provider_status_notices": dict(contracts.PROVIDER_STATUS_NOTICES),
+            "cli_finish_notices": dict(cli_chat._FINISH_NOTICES),
+            "cli_repl_help": cli_chat._REPL_HELP,
+            "copilot_incognito_notice": cli_chat.COPILOT_INCOGNITO_NOTICE,
             "sensitive_argument_key_parts": list(tools.SENSITIVE_ARGUMENT_KEY_PARTS),
             "skill_reference_names": list(tools.SKILL_REFERENCE_NAMES),
             "tool_profile_names": list(tools.TOOL_PROFILE_NAMES),

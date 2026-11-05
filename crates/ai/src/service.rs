@@ -662,11 +662,51 @@ pub fn daemon(
         "ai.provider_runtime.status" => runtime_status(conn, host, &args),
         "ai.list_models" => list_models(conn, host, &args),
         "ai.test_connection" => test_connection(conn, host, &args),
+        CHAT_PROVIDER => chat_provider(conn, host, &args),
         other => Err(AppError::new(
             "unsupported_kind",
             format!("unsupported AI provider kind {other}"),
         )),
     }
+}
+
+/// The internal operation `ai.chat` resolves its provider with on the
+/// request loop. Never a daemon kind: [`KINDS`] does not list it.
+pub const CHAT_PROVIDER: &str = "internal.ai.chat.provider";
+
+/// `ai.chat`'s `provider_snapshot`: `resolve_ai_provider`,
+/// `require_ai_provider_contactable`, then the key
+/// (`_resolve_ai_provider_api_key`, through the desktop keychain when the
+/// request carries the bridge flag). Contacts nothing.
+fn chat_provider(conn: &Connection, host: &mut dyn Host, args: &Value) -> Result<Value, AppError> {
+    let name = match field(args, "provider") {
+        Value::Str(text) => Some(crate::pyval::lossy(text)),
+        _ => None,
+    };
+    let provider = store::resolve(conn, name.as_deref())?;
+    store::require_contactable(&provider)?;
+    let key = resolve_key(conn, host, &provider, args)?;
+    let base_url = kassiber_envelope::py_str(field(&provider, "base_url"));
+    let local = *field(&provider, "kind") == s("local");
+    Ok(dict([
+        ("name", field(&provider, "name").clone()),
+        ("base_url", field(&provider, "base_url").clone()),
+        ("api_key", key.map_or(Value::Null, s)),
+        ("kind", field(&provider, "kind").clone()),
+        ("api_format", field(&provider, "api_format").clone()),
+        (
+            "detected_api_format",
+            field(&provider, "detected_api_format").clone(),
+        ),
+        (
+            "omit_store_field",
+            Value::Bool(truthy(field(&provider, "omit_store_field"))),
+        ),
+        (
+            "on_device",
+            Value::Bool(local && store::is_loopback_http_url(&base_url)),
+        ),
+    ]))
 }
 
 /// `ai.provider_runtime.status`: CLI runtimes. A display read

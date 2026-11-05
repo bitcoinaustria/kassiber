@@ -392,6 +392,95 @@ pub fn overview_rows(
     }
     Ok(output)
 }
+/// `transaction_in_profile(conn, profile_id, transaction_ref)`: whether an
+/// id or txid names a transaction of this book.
+pub fn transaction_in_profile(
+    conn: &Connection,
+    profile_id: &str,
+    reference: &str,
+) -> Result<bool> {
+    if profile_id.is_empty() || reference.is_empty() {
+        return Ok(false);
+    }
+    Ok(!rows(
+        conn,
+        "SELECT 1 FROM transactions WHERE profile_id = ? AND (id = ? OR lower(COALESCE(external_id, '')) = lower(?)) LIMIT 1",
+        [profile_id, reference, reference],
+    )?
+    .is_empty())
+}
+
+/// `bind_screen_metrics_scope(conn, scope, workspace_id=..., profile_id=...)`:
+/// the model-facing scope of page metrics, or `None` to drop them because
+/// they no longer describe the active book.
+pub fn bind_screen_metrics_scope(
+    conn: &Connection,
+    scope: &Value,
+    workspace_id: &str,
+    profile_id: &str,
+) -> Result<Option<Value>> {
+    if !matches!(scope, Value::Dict(_))
+        || workspace_id.is_empty()
+        || profile_id.is_empty()
+        || get(scope, "workspace_id") != Some(&s(workspace_id))
+        || get(scope, "profile_id") != Some(&s(profile_id))
+    {
+        return Ok(None);
+    }
+    let profile = rows(
+        conn,
+        "SELECT journal_input_version FROM profiles WHERE id = ? AND workspace_id = ?",
+        [profile_id, workspace_id],
+    )?;
+    let Some(profile) = profile.first() else {
+        return Ok(None);
+    };
+    let version = match val(profile, "journal_input_version") {
+        Value::Int(n) => Value::Int(n),
+        _ => Value::Int(0.into()),
+    };
+    if get(scope, "input_version") != Some(&version) {
+        return Ok(None);
+    }
+    let grouped = current(
+        conn,
+        &Scope {
+            workspace_id,
+            profile_id,
+        },
+    )?;
+    if get(scope, "pairs_grouped").is_some_and(|value| *value != Value::Bool(grouped)) {
+        return Ok(None);
+    }
+    let wallet = match get(scope, "wallet") {
+        None | Some(Value::Null) => {
+            return Ok(Some(dict([
+                ("wallet", Value::Null),
+                ("pairs_grouped", Value::Bool(grouped)),
+            ])))
+        }
+        Some(wallet) => py_str(wallet),
+    };
+    let wallets = rows(
+        conn,
+        "SELECT id, label FROM wallets WHERE profile_id = ? AND (id = ? OR lower(label) = lower(?)) ORDER BY id",
+        [profile_id, wallet.as_str(), wallet.as_str()],
+    )?;
+    if wallets.len() != 1 || py_str(&val(&wallets[0], "id")) != wallet {
+        return Ok(None);
+    }
+    Ok(Some(dict([
+        (
+            "wallet",
+            dict([
+                ("id", s(py_str(&val(&wallets[0], "id")))),
+                ("label", s(py_str(&val(&wallets[0], "label")))),
+            ]),
+        ),
+        ("pairs_grouped", Value::Bool(grouped)),
+    ])))
+}
+
 fn group(current: bool) -> &'static str {
     if current {
         sql::GROUP

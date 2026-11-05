@@ -16,6 +16,8 @@ pub mod sse;
 mod stream;
 pub mod wire;
 
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use kassiber_envelope::{dict, set, AppError};
@@ -185,6 +187,90 @@ pub struct HttpClient {
     fell_back: bool,
     /// Set once a Chat Completions answer arrived after the auto fallback.
     pub newly_detected_api_format: Option<&'static str>,
+    /// The turn's privacy receipt, when a chat counts what it sent.
+    receipt: Option<Receipt>,
+    /// Every consent this client was granted, revoked together.
+    revocation: Revocation,
+}
+
+/// The requests a chat turn sent, as Python's egress ledger records them
+/// (`record_url(..., operation="http.request")`): endpoint and byte counts,
+/// never a header value, URL path or body. The privacy receipt counts these.
+#[derive(Clone, Default)]
+pub struct Receipt(Arc<Mutex<Vec<Value>>>);
+
+impl Receipt {
+    pub fn records(&self) -> Vec<Value> {
+        self.0.lock().unwrap_or_else(|e| e.into_inner()).clone()
+    }
+
+    fn push(&self, record: Value) {
+        self.0
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(record);
+    }
+}
+
+/// Revokes every network consent a turn's client holds, including those of
+/// requests in flight (their next read or write fails), and refuses any
+/// later grant. Cancelling a chat calls this (design §5, R6-7 fences).
+#[derive(Clone, Default)]
+pub struct Revocation {
+    revoked: Arc<AtomicBool>,
+    consents: Arc<Mutex<Vec<Consent>>>,
+}
+
+impl Revocation {
+    pub fn revoke(&self) {
+        self.revoked.store(true, Ordering::SeqCst);
+        for consent in self
+            .consents
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+        {
+            consent.revoke();
+        }
+    }
+
+    pub fn is_revoked(&self) -> bool {
+        self.revoked.load(Ordering::SeqCst)
+    }
+
+    fn grant(&self, consent: Consent) {
+        let mut consents = self.consents.lock().unwrap_or_else(|e| e.into_inner());
+        if self.is_revoked() {
+            consent.revoke();
+        }
+        consents.push(consent);
+    }
+}
+
+/// `http_request_bytes_out(request, method)`: the method, path and query,
+/// each header as `len(key) + len(value) + 4`, and the body.
+fn request_bytes_out(
+    method: &str,
+    url: &kassiber_net::HttpUrl,
+    headers: &[(&str, String)],
+    body: Option<usize>,
+) -> usize {
+    let target = match url.query() {
+        Some(query) => format!("{}?{query}", url.path()),
+        None => url.path().to_owned(),
+    };
+    let target = if target.is_empty() {
+        "/".to_owned()
+    } else {
+        target
+    };
+    method.len()
+        + target.len()
+        + headers
+            .iter()
+            .map(|(key, value)| key.len() + value.len() + 4)
+            .sum::<usize>()
+        + body.unwrap_or(0)
 }
 
 fn wire(value: &str) -> Option<&'static str> {
@@ -206,7 +292,20 @@ impl HttpClient {
             answers: 0,
             fell_back: false,
             newly_detected_api_format: None,
+            receipt: None,
+            revocation: Revocation::default(),
         }
+    }
+
+    /// Count every request into `receipt` (a chat turn's privacy receipt).
+    pub fn with_receipt(mut self, receipt: Receipt) -> Self {
+        self.receipt = Some(receipt);
+        self
+    }
+
+    /// The handle that revokes this client's consents.
+    pub fn revocation(&self) -> Revocation {
+        self.revocation.clone()
     }
 
     pub fn config(&self) -> &ClientConfig {
@@ -270,11 +369,62 @@ impl HttpClient {
             request = request.on_device_ai();
         }
         let consent = Consent::explicit_trigger(&request);
+        self.revocation.grant(consent.clone());
         let route = self
             .gate
             .authorize(request, Some(consent))
             .map_err(transport_error)?;
         let method = if body.is_some() { "POST" } else { "GET" };
+        if let Some(receipt) = &self.receipt {
+            let mut headers = vec![
+                (
+                    "Accept",
+                    (if accept_sse {
+                        "text/event-stream"
+                    } else {
+                        "application/json"
+                    })
+                    .to_owned(),
+                ),
+                ("User-agent", "kassiber/ai".to_owned()),
+            ];
+            if body.is_some() {
+                headers.push(("Content-type", "application/json".to_owned()));
+            }
+            if let Some(key) = self.config.api_key.as_deref().filter(|key| !key.is_empty()) {
+                headers.push(("Authorization", format!("Bearer {key}")));
+            }
+            let host = kassiber_pytext::lower(
+                parsed
+                    .host_str()
+                    .unwrap_or_default()
+                    .trim_matches(['[', ']'])
+                    .trim()
+                    .trim_end_matches('.'),
+            );
+            receipt.push(dict([
+                ("subsystem", s("ai")),
+                ("host", s(host)),
+                (
+                    "port",
+                    parsed
+                        .port_or_known_default()
+                        .map_or(Value::Null, Value::from),
+                ),
+                ("scheme", s(parsed.scheme())),
+                ("operation", s("http.request")),
+                ("method", s(method)),
+                (
+                    "bytes_out",
+                    Value::from(request_bytes_out(
+                        method,
+                        &parsed,
+                        &headers,
+                        body.as_ref().map(Vec::len),
+                    )),
+                ),
+            ]));
+        }
         let invalid = |error: kassiber_net::Error| transport_error(error);
         let mut http = HttpRequest::new(method, &url)
             .map_err(invalid)?

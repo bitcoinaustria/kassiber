@@ -134,7 +134,7 @@ fn cli_locator_text(text: &str) -> bool {
     is_cli_locator(&s(text))
 }
 
-fn setting(conn: &Connection, key: &str) -> Result<Option<Value>, AppError> {
+pub(crate) fn setting(conn: &Connection, key: &str) -> Result<Option<Value>, AppError> {
     conn.query_row("SELECT value FROM settings WHERE key = ?", [key], |row| {
         Ok(value_of(row.get_ref(0)?))
     })
@@ -150,7 +150,7 @@ fn setting_text(conn: &Connection, key: &str) -> Result<Option<String>, AppError
     }))
 }
 
-fn set_setting(conn: &Connection, key: &str, value: &str) -> Result<(), AppError> {
+pub(crate) fn set_setting(conn: &Connection, key: &str, value: &str) -> Result<(), AppError> {
     conn.execute(
         "INSERT INTO settings(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
         [key, value],
@@ -160,7 +160,7 @@ fn set_setting(conn: &Connection, key: &str, value: &str) -> Result<(), AppError
 }
 
 /// `conn.commit()`; a no-op outside a transaction.
-fn commit(conn: &Connection) -> Result<(), AppError> {
+pub(crate) fn commit(conn: &Connection) -> Result<(), AppError> {
     if !conn.is_autocommit() {
         conn.execute_batch("COMMIT").map_err(database_error)?;
     }
@@ -169,7 +169,7 @@ fn commit(conn: &Connection) -> Result<(), AppError> {
 
 /// Runs `body` as one transaction, as Python's implicit transaction up to
 /// its `commit()` does.
-fn atomically<T>(
+pub(crate) fn atomically<T>(
     conn: &Connection,
     body: impl FnOnce() -> Result<T, AppError>,
 ) -> Result<T, AppError> {
@@ -191,7 +191,7 @@ fn atomically<T>(
     }
 }
 
-fn value_of(value: ValueRef<'_>) -> Value {
+pub(crate) fn value_of(value: ValueRef<'_>) -> Value {
     match value {
         ValueRef::Null => Value::Null,
         ValueRef::Integer(n) => Value::from(n),

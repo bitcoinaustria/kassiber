@@ -18,12 +18,14 @@
 pub mod analysis;
 pub mod broker;
 pub mod catalog;
+pub mod chat;
 pub mod clock;
 pub mod consent;
 pub mod discovery;
 pub mod executor;
 pub mod planner;
 pub mod projections;
+pub mod prompt;
 pub mod provenance;
 pub mod providers;
 mod pyre;

@@ -427,6 +427,49 @@ fn assert_scope(book: &mut dyn Book, data_root: &str, state: &Value) -> Result<(
     Ok(())
 }
 
+/// `_CUSTODY_GAP_MUTATING_DAEMON_KINDS`: custody linkage, for local
+/// providers only.
+pub const CUSTODY_GAP_MUTATING_KINDS: [&str; 1] = ["ui.custody.review.apply"];
+
+/// Who owns the mutating executor that is not native yet.
+pub const MUTATING_EXECUTOR_OWNER: &str = "the R6-5b mutating executor";
+
+/// `_execute_mutating_ai_tool(call, runtime)` up to the point where Python
+/// would write: its gates run in Python's order, then the call is refused
+/// with `not_implemented` because the mutating executor is R6-5b's. Nothing
+/// reaches the book.
+pub fn execute_mutating(call: &ParsedCall, state: &Value) -> Value {
+    if let Some(error) = call.argument_error {
+        return tool_result_denied(error, None);
+    }
+    let Some(entry) =
+        get_tool_py(&call.name).filter(|entry| entry.kind_class == KindClass::Mutating)
+    else {
+        return tool_result_denied("tool_not_allowed", None);
+    };
+    let local = matches!(get(state, "provider_kind"), Some(Value::Str(kind)) if kind.is("local"));
+    if entry
+        .daemon_kind
+        .as_deref()
+        .is_some_and(|kind| CUSTODY_GAP_MUTATING_KINDS.contains(&kind))
+        && !local
+    {
+        return tool_result_denied(
+            "local_provider_required",
+            Some(&PyStr::from(
+                "Custody-gap linkage is available to local AI providers only.",
+            )),
+        );
+    }
+    if !is_advertised(entry, state) {
+        return tool_result_denied("tool_not_advertised", None);
+    }
+    if let Err(error) = validate_arguments(entry, &call.arguments) {
+        return denial_for(error);
+    }
+    denial_for(not_native(&entry.name, MUTATING_EXECUTOR_OWNER).into())
+}
+
 /// The refusal for a tool whose service is not native yet.
 pub fn not_native(name: &str, owner: &str) -> AppError {
     AppError::new(
