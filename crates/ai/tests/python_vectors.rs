@@ -246,7 +246,7 @@ fn provenance_matches_python() {
             let Value::List(step) = step else {
                 panic!("step")
             };
-            record_tool_usage(&mut state, text(&step[0]), &step[1]);
+            record_tool_usage(&mut state, &PyStr::from(text(&step[0])), &step[1]);
         }
         assert_eq!(&state, field(case, "state"), "{case:?}");
         let have = answer_provenance(

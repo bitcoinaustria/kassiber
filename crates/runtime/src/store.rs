@@ -422,6 +422,11 @@ pub trait Book: Send {
     fn report_blockers(&mut self, _auto_sync: Option<&Value>) -> Result<Value, AppError> {
         Err(not_implemented("reports", "report blockers"))
     }
+    /// The same for an AI read (`_auto_maintain_for_read` with the turn's
+    /// state): the `ui.journals.process` payload when journals were rebuilt.
+    fn maintain_for_ai_read(&mut self, _sync_attempted: bool) -> Result<Option<Value>, AppError> {
+        Ok(None)
+    }
     /// `ui.transactions.dashboard` over the caller's suggestion candidates.
     fn transaction_dashboard(
         &mut self,

@@ -15,7 +15,7 @@ use crate::input::Input;
 use crate::output::{with_request_id, RequestId};
 use crate::{Daemon, Failure, Handled};
 
-pub const KINDS: [&str; 17] = [
+pub const KINDS: [&str; 19] = [
     "test.stream",
     "test.journals.refresh",
     "test.emit_event",
@@ -33,6 +33,8 @@ pub const KINDS: [&str; 17] = [
     "test.freshness.request.revoke",
     "test.freshness.graph.pending",
     "test.freshness.graph.start",
+    "test.ai_tool",
+    "test.ai_auto_read",
 ];
 
 fn arg_text(args: Option<&Value>, key: &str) -> String {
@@ -321,9 +323,135 @@ pub(crate) fn handle(
                 Err(error) => Err(Failure::from(error)),
             }
         }
+        "test.ai_tool" => ai_tool(daemon, args, request_id),
+        "test.ai_auto_read" => ai_auto_read(daemon, args, request_id),
         _ => Err(Failure::App(AppError::new(
             "unsupported_kind",
             "unknown test kind",
         ))),
     })
+}
+
+/// The executor state a test supplies (`maintenance_state`), and the data
+/// root frozen for the turn (the daemon's own unless overridden).
+fn ai_runtime(daemon: &Daemon, args: Option<&Value>) -> Result<(Value, String), Failure> {
+    let state = match args.and_then(|args| get(args, "state")) {
+        None | Some(Value::Null) => dict::<&str>([]),
+        Some(state @ Value::Dict(_)) => state.clone(),
+        Some(_) => return Err(AppError::new("validation", "state must be an object").into()),
+    };
+    let data_root = match args.and_then(|args| get(args, "runtime_data_root")) {
+        Some(Value::Str(root)) => root.as_str().unwrap_or_default().to_owned(),
+        _ => daemon.data_root.clone(),
+    };
+    Ok((state, data_root))
+}
+
+/// `test.ai_tool`: one read call through the AI executor, as the chat loop
+/// runs it (execute, record provenance, redact), with the record and the
+/// model-visible bytes.
+fn ai_tool(daemon: &mut Daemon, args: Option<&Value>, request_id: &RequestId) -> Handled {
+    use kassiber_ai::executor::{
+        execute_read_only, model_output, parse_tool_call, tool_result_record, ParsedCall, Runtime,
+    };
+    let (mut state, data_root) = ai_runtime(daemon, args)?;
+    let call = match args.and_then(|args| get(args, "raw_call")) {
+        Some(raw) => parse_tool_call(raw, 0),
+        None => ParsedCall::new(
+            match args.and_then(|args| get(args, "call_id")) {
+                Some(Value::Str(id)) => id.clone(),
+                _ => "call_0".into(),
+            },
+            match args.and_then(|args| get(args, "name")) {
+                Some(Value::Str(name)) => name.clone(),
+                _ => kassiber_pyjson::PyStr::new(),
+            },
+            args.and_then(|args| get(args, "arguments"))
+                .cloned()
+                .unwrap_or_else(|| dict::<&str>([])),
+        ),
+    };
+    let planned = matches!(
+        args.and_then(|args| get(args, "planned_auto_read")),
+        Some(Value::Bool(true))
+    );
+    let result = {
+        let mut runtime = Runtime {
+            data_root: &data_root,
+            state: &mut state,
+        };
+        let mut host = crate::ai_tools::Host {
+            daemon: &mut *daemon,
+        };
+        execute_read_only(&call, &mut runtime, &mut host, planned)
+    };
+    let display = kassiber_ai::catalog::get_tool_py(&call.name)
+        .map(|entry| kassiber_pyjson::PyStr::from(entry.name.as_str()))
+        .unwrap_or_else(|| call.name.clone());
+    kassiber_ai::provenance::record_tool_usage(&mut state, &display, &result);
+    let data = dict([
+        ("tool_result", tool_result_record(&call.call_id, &result)),
+        ("output", kassiber_envelope::s(model_output(&result))),
+        ("state", state),
+    ]);
+    Ok((
+        Some(with_request_id(success("test.ai_tool", data), request_id)),
+        false,
+    ))
+}
+
+/// `test.ai_auto_read`: the planner and `_run_auto_read_tools` for one
+/// question, streaming the status, call and result records.
+fn ai_auto_read(daemon: &mut Daemon, args: Option<&Value>, request_id: &RequestId) -> Handled {
+    use kassiber_ai::executor::{run_auto_reads, Runtime};
+    use kassiber_ai::planner::{insert_auto_tool_context_message, planned_auto_reads};
+    let (mut state, data_root) = ai_runtime(daemon, args)?;
+    let mut messages = match args.and_then(|args| get(args, "messages")) {
+        Some(Value::List(messages)) => messages.clone(),
+        _ => return Err(AppError::new("validation", "messages must be a list").into()),
+    };
+    let kind = match args.and_then(|args| get(args, "system_prompt_kind")) {
+        Some(Value::Str(kind)) => kind.as_str().map(str::to_owned),
+        _ => None,
+    };
+    let planned = planned_auto_reads(kind.as_deref(), &messages);
+    let mut records = Vec::new();
+    let context = {
+        let mut runtime = Runtime {
+            data_root: &data_root,
+            state: &mut state,
+        };
+        let mut host = crate::ai_tools::Host {
+            daemon: &mut *daemon,
+        };
+        run_auto_reads(
+            &planned,
+            &mut runtime,
+            &mut host,
+            &mut |record| records.push(record),
+            &|| false,
+        )
+    };
+    for record in records {
+        daemon.output.write(&with_request_id(record, request_id))?;
+    }
+    if let Some(context) = context {
+        insert_auto_tool_context_message(&mut messages, &context);
+    }
+    let planned = planned
+        .into_iter()
+        .map(|read| Value::List(vec![kassiber_envelope::s(read.name), read.arguments]))
+        .collect();
+    let data = dict([
+        ("planned", Value::List(planned)),
+        ("messages", Value::List(messages)),
+        ("state", state),
+    ]);
+    Ok((
+        Some(with_request_id(
+            success("test.ai_auto_read", data),
+            request_id,
+        )),
+        false,
+    ))
 }

@@ -1812,6 +1812,15 @@ impl Book for RealBook {
         Ok(Some(payload))
     }
 
+    fn maintain_for_ai_read(&mut self, sync_attempted: bool) -> Result<Option<Value>, AppError> {
+        // `_auto_maintain_for_read` with the turn's state: the automatic wallet
+        // refresh unless the turn already attempted it, then stale journals.
+        if !sync_attempted {
+            self.report_read_sync(false)?;
+        }
+        self.auto_process_journals()
+    }
+
     fn auto_process_journals(&mut self) -> Result<Option<Value>, AppError> {
         let context = self.context()?;
         if context.profile_id.is_empty() {

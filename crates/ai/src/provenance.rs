@@ -4,7 +4,7 @@
 //! it does in Python.
 
 use kassiber_envelope::{dict, get, py_str, s, set, truthy};
-use kassiber_pyjson::{BigInt, Key, Value};
+use kassiber_pyjson::{BigInt, Key, PyStr, Value};
 
 /// `PROVIDER_STATUS_NOTICES`, in order: the notice phases a receipt may name.
 pub const PROVIDER_STATUS_NOTICES: [&str; 2] =
@@ -126,9 +126,9 @@ pub fn record_provenance_envelope(state: &mut Value, envelope: &Value, automatic
 }
 
 /// `_record_ai_tool_usage(runtime, tool_name, result)`.
-pub fn record_tool_usage(state: &mut Value, tool: &str, result: &Value) {
+pub fn record_tool_usage(state: &mut Value, tool: &PyStr, result: &Value) {
     if let Some(attempted) = list_entry(state, "tools_attempted") {
-        attempted.push(s(tool));
+        attempted.push(Value::Str(tool.clone()));
     }
     if get(result, "ok") != Some(&Value::Bool(true)) {
         let reason = match get(result, "reason") {
@@ -136,12 +136,15 @@ pub fn record_tool_usage(state: &mut Value, tool: &str, result: &Value) {
             _ => "tool_error".to_owned(),
         };
         if let Some(denials) = list_entry(state, "tool_denials") {
-            denials.push(dict([("tool", s(tool)), ("reason", s(reason))]));
+            denials.push(dict([
+                ("tool", Value::Str(tool.clone())),
+                ("reason", s(reason)),
+            ]));
         }
         return;
     }
     if let Some(used) = list_entry(state, "tools_used") {
-        used.push(s(tool));
+        used.push(Value::Str(tool.clone()));
     }
     for key in ["auto_journal_process", "auto_sync"] {
         if let Some(envelope @ Value::Dict(_)) = get(result, key) {

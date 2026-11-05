@@ -17,14 +17,15 @@ name = "kassiber_daemon"
 test-kinds = []
 
 [dependencies]
+kassiber-ai = { path = "../ai" }
 kassiber-backup = { path = "../backup" }
+kassiber-paths = { path = "../paths" }
 kassiber-transactions = { path = "../transactions" }
 
 kassiber-imports = { path = "../imports" }
 kassiber-wallets = { path = "../wallets" }
 serde_json = "1"
 kassiber-envelope = { path = "../envelope" }
-kassiber-paths = { path = "../paths" }
 kassiber-net = { path = "../net" }
 kassiber-pyjson = { path = "../pyjson" }
 kassiber-pytext = { path = "../pytext" }

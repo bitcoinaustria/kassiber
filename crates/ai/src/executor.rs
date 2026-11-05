@@ -340,7 +340,12 @@ fn read(
         return Err(not_native(&entry.name, owner).into());
     }
     let data_root = runtime.data_root.to_owned();
-    let refresh = AUTO_JOURNAL_REFRESH_TOOLS.contains(&entry.name.as_str())
+    // Python tests the name as called: a model calls tools by their wire
+    // name, so only the planner's dotted auto-reads refresh journals
+    // (tests/rust_port/repro_ai_refresh_wire_name.py).
+    let refresh = AUTO_JOURNAL_REFRESH_TOOLS
+        .iter()
+        .any(|name| call.name.is(name))
         && !runtime.is("read_maintenance", "disabled");
     let state = &mut *runtime.state;
     let mut work = |book: &mut dyn Book| -> Result<Value, ToolError> {
@@ -417,4 +422,98 @@ pub fn not_native(name: &str, owner: &str) -> AppError {
 /// redact_ai_tool_result(result)), sort_keys=True, separators=(",", ":"))`.
 pub fn model_output(result: &Value) -> String {
     crate::planner::model_json(&redact_ai_tool_result(result))
+}
+
+/// `_run_auto_read_tools`: run the planner's reads that are local, read-only
+/// and advertised this turn, emitting the `ai.chat.status`,
+/// `ai.chat.tool_call` and `ai.chat.tool_result` records (without
+/// `request_id`), and return the context message for the model, if any.
+pub fn run_auto_reads(
+    planned: &[crate::planner::AutoRead],
+    runtime: &mut Runtime<'_>,
+    host: &mut dyn ReadHost,
+    emit: &mut dyn FnMut(Value),
+    cancelled: &dyn Fn() -> bool,
+) -> Option<String> {
+    if planned.is_empty() {
+        return None;
+    }
+    emit(success(
+        "ai.chat.status",
+        dict([
+            ("phase", s("reading_local_context")),
+            ("label", s("Reading local context")),
+        ]),
+    ));
+    let advertised: Vec<PyStr> = match get(runtime.state, "advertised_tools") {
+        Some(Value::List(names)) => names
+            .iter()
+            .filter_map(|name| match name {
+                Value::Str(name) => Some(name.clone()),
+                _ => None,
+            })
+            .collect(),
+        _ => Vec::new(),
+    };
+    let mut context = Vec::new();
+    for (index, read) in planned.iter().enumerate() {
+        if cancelled() {
+            return None;
+        }
+        let call = ParsedCall::new(
+            format!("auto_read_{}", index + 1),
+            read.name,
+            read.arguments.clone(),
+        );
+        let Some(entry) = crate::catalog::get_tool(read.name)
+            .filter(|entry| entry.kind_class == KindClass::ReadOnly)
+        else {
+            continue;
+        };
+        // Auto-reads run without consent, so they never leave the machine.
+        if entry.egresses || !advertised.iter().any(|name| name.is(entry.provider_name())) {
+            continue;
+        }
+        let arguments = crate::redact::redact_tool_arguments(&read.arguments);
+        emit(success(
+            "ai.chat.tool_call",
+            dict([
+                ("call_id", Value::Str(call.call_id.clone())),
+                ("name", s(entry.name.as_str())),
+                ("arguments", arguments.clone()),
+                ("kind_class", s(entry.kind_class.as_str())),
+                ("needs_consent", Value::Bool(false)),
+            ]),
+        ));
+        let result = execute_read_only(&call, runtime, host, true);
+        crate::provenance::record_tool_usage(
+            runtime.state,
+            &PyStr::from(entry.name.as_str()),
+            &result,
+        );
+        emit(tool_result_record(&call.call_id, &result));
+        context.push(crate::planner::context_record(
+            &entry.name,
+            &read.arguments,
+            &result,
+        ));
+    }
+    if context.is_empty() || cancelled() {
+        return None;
+    }
+    Some(crate::planner::auto_tool_context_for_model(&context))
+}
+
+/// The `ai.chat.tool_result` record: `{"call_id", **redacted_result}`.
+pub fn tool_result_record(call_id: &PyStr, result: &Value) -> Value {
+    let mut data = vec![(Key::from("call_id"), Value::Str(call_id.clone()))];
+    if let Value::Dict(pairs) = redact_ai_tool_result(result) {
+        for (key, value) in pairs {
+            match data.iter_mut().find(|(existing, _)| *existing == key) {
+                Some((_, slot)) => *slot = value,
+                None => data.push((key, value)),
+            }
+        }
+    }
+    success("ai.chat.tool_result", Value::Dict(data))
 }

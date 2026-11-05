@@ -1700,6 +1700,7 @@ dependencies = [
 name = "kassiber-daemon"
 version = "0.1.0"
 dependencies = [
+ "kassiber-ai",
  "kassiber-backup",
  "kassiber-envelope",
  "kassiber-imports",

@@ -14,6 +14,8 @@
 //! Python. See docs/reference/rust-shell.md.
 
 mod agent_access;
+#[cfg(feature = "test-kinds")]
+mod ai_tools;
 mod attachments;
 mod backends;
 mod backup;
