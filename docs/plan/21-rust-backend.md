@@ -4809,3 +4809,35 @@ codes, limits, id typing, the escaped result size, the access gate, the
 brokered checks, the pin and the chat Ctrl-C. The
 [checkpoint](../reference/rust-shell.md#mcp-server-and-cooperative-chat-ctrl-c-r6-8)
 records the details.
+
+### R6-5b AI tool writes, previews and projections
+
+`t3code/r6-5b-ai-tools` merges R6-5a into the r10b integration tip
+`a0b4d0342`, where workspace, journals, review, desktop projections and wallet
+onboarding are native. It:
+
+- lifts 22 of R6-5a's 23 read refusals, each after the driver matched Python
+  byte for byte on the fixture books; only `ui.connections.node.snapshot`
+  still refuses (no native node-snapshot route);
+- adds the mutating executor for all 61 writing tools, the custody AI audit
+  writer, and the consent cards with their server-side previews (review apply,
+  acquisition, dataset import);
+- adds the remaining projections: the review worklist and transaction review
+  composites, the desktop `ui.chain_analysis.ai_context` kind, the Lightning
+  profitability aggregate, file analysis, ownership identification, the
+  redacted Privacy Mirror and the AI egress view;
+- passes the AI-path parameters to the native routes: `ai_tool` authorship
+  for metadata edits, reverts, quarantine resolutions and the review workflow,
+  strict `ui.wallets.sync` without journal pairing, journal processing without
+  pairing, and maintenance runs that honour the turn's refresh state.
+
+Writes still refused: the PDF and audit-package export targets,
+`ui.source_funds.export`, `ui.btcpay.provenance.review`, and `ui.wallets.sync`
+for books whose sources need Python's direct-sync path. The chain-analysis
+`snapshot_id` was already derived as Python derives it; its instability came
+from two read paths that drew the index identity from the wrong source. Two
+native journal-view gaps found by the driver (calculation semantics in view
+freshness) are fixed. See the
+[checkpoint](../reference/rust-shell.md#ai-tool-writes-previews-and-projections-r6-5b)
+for evidence, reviewed differences and what chat still needs. No new external
+dependency and no Python product change.

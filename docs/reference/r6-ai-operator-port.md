@@ -638,7 +638,10 @@ R6-5a is done on branch `t3code/r6-5a-ai-tools`; the
 [checkpoint](rust-shell.md#ai-tool-executor-and-read-tools-r6-5a) records its
 verification, the read tools still refused and what is left for R6-5b. On that
 branch the chain-analysis kinds are already native, so §2's chain-analysis row
-no longer blocks their read tools.
+no longer blocks their read tools. R6-5b is done on `t3code/r6-5b-ai-tools`;
+its [checkpoint](rust-shell.md#ai-tool-writes-previews-and-projections-r6-5b)
+lists the tools that still refuse and what chat still needs. §2 and
+Appendix A record the census when this design was written.
 
 Two runs:
 

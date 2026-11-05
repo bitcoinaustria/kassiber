@@ -1198,18 +1198,22 @@ natively behind the `native-chat` gate (test-harness builds only).
 
 ## Rust backend R6 AI tools
 
-- [ ] R6-5b: port the mutating AI executor (61 tools) with the custody AI audit
-  writer, the consent previews (review apply, acquisition and dataset previews)
-  and the AI-path parameters on native routes (metadata `ai_tool` source,
-  `ui.wallets.sync` strict mode, the review workflow). See the
-  [R6-5a checkpoint](docs/reference/rust-shell.md#ai-tool-executor-and-read-tools-r6-5a).
-- [ ] Port the remaining read-side projections: the review worklist and
-  transaction review composites, `ui.chain_analysis.ai_context`, and the
-  Lightning, node-snapshot and file-analysis `_for_ai` builders. Unrefuse each
-  read tool once its service is native (23 remain).
-- [ ] Make the native chain-analysis `snapshot_id` deterministic and equal to
-  Python's. It differs between Rust runs on the same book; the AI driver maps it
-  meanwhile.
+The [R6-5b checkpoint](docs/reference/rust-shell.md#ai-tool-writes-previews-and-projections-r6-5b)
+serves 99 of the 100 read tools and the mutating executor natively, with the
+custody AI audit writer and the consent previews. These still refuse with
+`not_implemented`:
+
+- [ ] Port the Lightning node snapshot route and its `_for_ai` builder
+  (`snapshot_to_dict_for_ai`), then unrefuse `ui.connections.node.snapshot`.
+- [ ] Unrefuse the AI export targets once their renderers are native: the
+  `pdf` and audit-`package` targets of `ui.reports.export`, and
+  `ui.source_funds.export` (PDF and bundle).
+- [ ] Port commercial evidence review (`ui.btcpay.provenance.review`).
+- [ ] Port the direct-sync wallet path, so AI `ui.wallets.sync` also covers
+  books whose sources the native freshness plan cannot take (every fixture
+  book today).
+- [ ] R6-7 chat: duplicate call ids and the chat loop's consent records, then
+  register chat once the refusals above are gone (design §7 item 1).
 
 ## Rust backend R5 transfers and review
 

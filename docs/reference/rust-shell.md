@@ -17054,7 +17054,10 @@ design doc's §2 still listed as not native.
 **Found outside this slice.** The native chain-analysis `snapshot_id` differs
 from Python's and between two Rust runs on the same book; it is stable within
 one session. The driver maps it like a handle. The native chain-analysis owner
-should make it deterministic.
+should make it deterministic. (Resolved in
+[R6-5b](#ai-tool-writes-previews-and-projections-r6-5b): the derivation was
+already Python's; two read paths drew the index identity from the wrong
+source.)
 
 **Left for R6-5b.**
 
@@ -17610,3 +17613,144 @@ product file changes.
 
 - Turn the `native-mcp` gate on with the 13 refused read tools.
 - `kassiber chat` line editing (R6-7's remaining difference).
+
+## AI tool writes, previews and projections (R6-5b)
+
+`t3code/r6-5b-ai-tools` merges R6-5a (`322cfb0f0`) into the r10b integration
+tip `a0b4d0342` and finishes the executor side of
+[R6-5](r6-ai-operator-port.md#r6-5-ai-tool-executor-catalog-and-projections).
+Chat (R6-7) and MCP (R6-8) still drive nothing; the test-harness kinds
+`test.ai_tool`, `test.ai_auto_read`, `test.ai_consent_preview` and
+`test.ai_custody_record` run the executor, and stay out of release builds,
+the desktop allowlists and every AI catalog.
+
+**Read tools.** 99 of the 100 read tools run natively. Each refusal was lifted
+only after the driver matched Python on the fixture books:
+
+- overview, book-set overview, health and next actions; report blockers with
+  the automatic refresh's failure applied, and `auto_report_blockers` after any
+  other read whose refresh failed;
+- journal snapshot, quarantine, events and transfers; review cases, input
+  requests (stored with a redacted explanation), plans (refused when they would
+  not fit a later apply call or carry private fields) and badges;
+- the transaction graph, the transaction review composite and the review
+  worklist (`crates/daemon/src/worklist.rs`), whose `safety` block reports
+  whether the read prelude contacted the network;
+- the evidence summary and file analysis of the chat's staged attachment
+  (`core.file_analysis.redact_for_egress` for providers off the device);
+- ownership identification (`redact_result_for_ai`; never a CSV harvest),
+  the redacted Privacy Mirror, the AI egress view over the process ledger, and
+  Lightning profitability reduced to its aggregate after a consent bound to
+  the call.
+
+`ui.connections.node.snapshot` still refuses: there is no native node-snapshot
+route for its `snapshot_to_dict_for_ai` projection.
+
+**Writes.** `kassiber_ai::mutate::execute_mutating` follows
+`_execute_mutating_ai_tool`: argument errors, catalog and `kind_class`, the
+local-provider custody gate, the advertised set, then (unlike Python, which
+leaves it to the chat loop) a consent bound to the call id, then the schema and
+the route. Every write runs on the request loop after the frozen project and
+book check and reaches the native route the desktop uses; results are
+redacted. The host (`crates/daemon/src/ai_tools.rs`) passes the AI-path
+parameters:
+
+- `ai_tool` authorship for metadata edits and reverts, quarantine resolutions
+  (`Book::journal_view_as`), the review workflow (`review::execute_as`, with
+  the operation authority checks of `_validate_ai_review_operations`) and the
+  transfer and custody services;
+- strict `ui.wallets.sync` arguments and a native plan executed with
+  `auto_pair = false`; journal processing through `refresh_journals` without
+  pairing; `ui.maintenance.run` skips an `if_enabled` refresh the turn already
+  attempted (`settings::run_as`);
+- export targets mapped as `_ai_report_export_target` maps them, saved locally
+  and redacted.
+
+Refused before the book: the `pdf` and audit-`package` targets of
+`ui.reports.export` and `ui.source_funds.export` (renderers not native),
+`ui.btcpay.provenance.review` (service not native), and `ui.wallets.sync` for
+books whose sources the native freshness plan cannot take, which need
+Python's direct-sync path. Every fixture book is such a book, so the driver
+proves the strict arguments (Python vectors) and the refusal, not a native
+sync; that path reuses the desktop route's plan and execution with pairing
+off.
+
+**Custody AI audit.** `kassiber_transfers::custody_ai_audit::append` ports
+`append_assistance_record` (bounded proposals, facts and result digests).
+`RealBook::custody_ai_write` runs a consented `ui.custody.review.apply` inside
+`SAVEPOINT custody_ai_assisted_write` and commits it with its `executed` row;
+a failure rolls back and commits a `failed` row with the error code.
+`record_nonexecuted_custody_call` audits denied, timed-out and cancelled
+custody proposals and nothing else.
+
+**Consent cards.** `kassiber_ai::previews::consent_request` builds the
+`ai.chat.tool_consent_required` data: summary, redacted arguments, and, in
+place of the model's claims, the recomputed acquisition plan
+(`acquire.apply`, `sources.authorize`), the remembered dataset validation
+(`datasets.import`, `.start`; imports are refused unless they match it), and
+the review preview (`review.validate` on the native workflow, or the applied
+receipt for the same idempotency key). Previews write nothing authored.
+
+**Projections and kinds.** The desktop kind `ui.chain_analysis.ai_context`
+is native (`reads::ai_context` plus the `ca-ref:` projection).
+
+**Fixes found by the driver.**
+
+- The chain-analysis `snapshot_id` derivation already matched Python
+  (`digest([instance_id, profile, VERSION, revision])` over a per-book
+  `uuid4`). The instability came from two paths that drew the index identity
+  from the wrong source: the Privacy Mirror used the report source and the
+  chain-analysis reads used `SystemSources`; both now use the index's own
+  analysis source. With `KASSIBER_RUST_TEST_ANALYSIS_IDS=sequential` both
+  runtimes draw from one counter, and the driver compares snapshot ids byte
+  for byte.
+- Native journal view and quarantine freshness ignored calculation semantics,
+  so books built under older semantics read as current with a shorter reason.
+
+**Python reference bug, kept unfixed.** One wallet whose stored
+configuration is not JSON makes Python's AI `ui.wallets.sync` fail as a
+generic `tool_error` with a traceback, for the whole book
+(`tests/rust_port/repro_ai_wallets_sync_bad_config.py`). Rust refuses such
+books as needing the direct-sync path.
+
+**Reviewed differences.**
+
+- Writes, like egressing reads, run only with a consent bound to the call
+  (`consented_call_ids`); Python leaves that to the chat loop.
+- XLSX ZIP bytes differ between the writers, as in
+  `tests/test_rust_full_xlsx.py`: the driver declares each side's artifact
+  size and digest. Component-term and evidence-commitment digests hash their
+  generated ids and map like the ids.
+
+**Evidence.**
+
+- `tests/test_rust_ai_tools.py`: every read tool (353 calls per book) and
+  auto-read on three fixture books; every mutating tool's cases (schema fill,
+  fixture rows, refusals; 189 calls per book) on separate copies per tool,
+  comparing the whole envelope and model bytes per call and all 112 tables
+  after the session, plus 12 Rust-only refusal checks per book that leave every
+  table unchanged. Chain-analysis writes are compared mostly on their
+  argument, scope and staleness refusals over the fixture books; their success
+  paths are the native routes' own oracles (`tests/test_rust_analysis_ops.py`
+  and its siblings); the custody
+  writes, AI-authored writes and audit rows; consent cards for every
+  consented tool, leaving authored tables unchanged; the review flow (plan,
+  preview, apply, preview, receipt); kind-override receipts staying local end
+  to end; `ui.chain_analysis.ai_context`; and the Rust run inside an empty
+  network namespace. Declared mappings: generated ids and clocks, `ca-ref:`
+  handles, and the XLSX and derived digests above.
+- `crates/ai/tests/python_vectors.rs` adds Python's answers for the review
+  operation rules, planned-artifact limits, export targets, strict sync
+  arguments, sync failure detection, the egress view, file-analysis egress and
+  ownership redaction.
+- `crates/ai/tests/fences.rs` pins the write fences: consent bound to the call,
+  advertised tools only, the local custody gate and audit record, the frozen
+  book, refused exports, the dataset binding, redacted results, previews that
+  never write, and composite reads that report their refresh.
+- `crates/ai/scripts/mutations.json`: 47 entries (25 new, 6 of them process
+  oracles), each killed by named tests.
+
+**What chat still needs.** R6-7's duplicate call ids, consent records and
+registration; and, before chat can match Python for every tool, the refusals
+above (node snapshot, PDF and audit-package exports, commercial evidence
+review, direct-sync wallet refresh).
