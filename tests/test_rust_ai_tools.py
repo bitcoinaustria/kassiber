@@ -771,7 +771,7 @@ class AiToolExecutorParityTest(unittest.TestCase):
                 return tool("ui_review_plan", {"operations": operations, "expected_input_version": version}, "call_plan")
 
             def apply_arguments(records):
-                planned = output(records, 1)
+                planned = output(records, 2)
                 artifact = planned["envelope"]["data"] if planned.get("ok") else {"operations": []}
                 return {"artifact": artifact, "idempotency_key": "ai-review-1"}
 
@@ -780,8 +780,20 @@ class AiToolExecutorParityTest(unittest.TestCase):
                     "name": "ui_review_apply", "arguments": apply_arguments(records), "call_id": "call_apply",
                     "state": {**REMOTE, **scope}}}
 
+            def request_input(records):
+                cases = output(records, 0)
+                found = cases["envelope"]["data"].get("cases") or [] if cases.get("ok") else []
+                case_ids = [case["case_id"] for case in found if str(case.get("case_id", "")).startswith("quarantine:")]
+                return tool("ui_review_request_input", {
+                    "action": "attach_evidence", "case_ids": case_ids[:1] or ["quarantine:none"],
+                    "expected_input_version": cases["envelope"]["data"]["input_version"] if cases.get("ok") else 0,
+                    "explanation": "Attach the bank statement from /home/user/statements/2025.pdf"}, "call_input")
+
             steps = [
                 lambda records: tool("ui_review_cases", {}, "call_cases"),
+                # Before the plan changes the input version: the request's
+                # digest covers the stored, redacted explanation.
+                request_input,
                 plan,
                 preview,
                 lambda records: tool("ui_review_apply", apply_arguments(records), "call_apply"),
@@ -800,8 +812,10 @@ class AiToolExecutorParityTest(unittest.TestCase):
                                     masker.tables(self.snapshot(root), side=side)))
                 self.assertEqual(results[0][0], results[1][0])
                 self.assertEqual(results[0][1], results[1][1])
-                applied = json.loads(results[0][0][3])["data"]["tool_result"]["data"]
+                applied = json.loads(results[0][0][4])["data"]["tool_result"]["data"]
                 self.assertIs(applied["ok"], fixture == "reports", applied)
+                requested = json.loads(results[0][0][1])["data"]["tool_result"]["data"]
+                self.assertIs(requested["ok"], fixture == "reports", requested)
 
     @unittest.skipUnless(shutil.which("unshare"), "needs unshare for a network namespace")
     def test_no_network_traffic_without_a_network(self):

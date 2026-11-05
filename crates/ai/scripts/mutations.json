@@ -451,19 +451,19 @@
     "find": "            &kassiber_ai::redact::redact_ai_tool_result(args),",
     "replace": "            args,",
     "expect_failing": [
-      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_read_tools_match_python_on_every_fixture"
+      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_review_apply_flow_matches_python"
     ],
     "rule": "An AI input request stores a redacted explanation."
   },
   {
-    "id": "wire-worklist-pending-suggestions",
+    "id": "wire-worklist-default-sections",
     "file": "crates/daemon/src/worklist.rs",
-    "find": "                    (\"state\", s(\"suggested\")),\n",
-    "replace": "",
+    "find": "    \"transfers\",\n    \"loans\",\n];",
+    "replace": "    \"loans\",\n    \"transfers\",\n];",
     "expect_failing": [
       "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_read_tools_match_python_on_every_fixture"
     ],
-    "rule": "The worklist reads pending commercial suggestions only."
+    "rule": "The worklist's default sections are Python's, in Python's order."
   },
   {
     "id": "wire-mirror-index-sources",

@@ -1046,7 +1046,8 @@ fn mutating_results_are_redacted_before_they_leave_the_executor() {
         dict([("transaction", s("a"))]),
         None,
     );
-    let output = model_output(&result);
+    // The value itself, not the model bytes (which redact once more).
+    let output = kassiber_ai::planner::model_json(&result);
     for private in ["private.example", "/Users/alice", "sk-abcdef"] {
         assert!(!output.contains(private), "{private} in {output}");
     }
