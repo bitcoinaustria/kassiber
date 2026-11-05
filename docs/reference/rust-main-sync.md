@@ -71,7 +71,7 @@ Rust code was read instead.
 | PR | Python | Kinds and leaves | Rust state | Rust location |
 | --- | --- | --- | --- | --- |
 | #675, #678, #684, #686, #708 | `db.py`: `transactions.pricing_review_accepted_price`, `ai_providers.agent_access`, table `ai_provider_checks`, custody AI audit `consent_decision` CHECK widened to `mode_auto`, `mode_full_access`, `mcp_host` (table rebuild) | every kind and leaf that opens a book | **Done (S1)**. Before: every book the merged Python created or opened answered `requires_python_migration` (`object: ai_provider_secret_refs`, `reason: schema_structure`) on every database kind, 99 of the 103 read kinds on the Python-built `austria` book | `crates/store` (`schema.rs`, `compat*.rs`, `creation.rs`) |
-| #679, #681 | new CLI leaves `journals quarantine groups`, `transactions verify`, `transfers dismissals list`, `transfers dismissals delete`; kind derivation for `transfers_dismissals_command` | the four leaves | Kind derivation **done (S1)**. The leaves stay `not_implemented` until S5, S6 and S8 | `crates/envelope/src/lib.rs` (subcommand attrs), `crates/cli` |
+| #679, #681 | new CLI leaves `journals quarantine groups`, `transactions verify`, `transfers dismissals list`, `transfers dismissals delete`; kind derivation for `transfers_dismissals_command` | the four leaves | Kind derivation **done (S1)**. `transactions verify` **done (S8)**; the others stay `not_implemented` until S5 and S6 | `crates/envelope/src/lib.rs` (subcommand attrs), `crates/cli` |
 | #678, #684, #686 | changed arguments: `mcp enable` (`--grant`, `--agent-access`), `mcp call` (`--grant`, `--client`, effect now `mutating`), `chat` (`--permission-mode`, file options), `ai providers create/update` (`--agent-access`), `journals quarantine resolve price-override/exclude` (`--group-id`, `--reprocess`) | those leaves | `describe` **done (S1)**. None of these leaves is native | `crates/cli/src/describe.rs` |
 | #679, #681, #684, #689 | `command_capabilities.py`: four CLI leaves and four daemon kinds | `ui.transfers.dismissals.list/delete`, `ui.chat.attachments.upload`, `ai.chat.permission_mode` | **Done (S1)**: 317 entries each. The kinds stay `not_implemented` until S6 and S12 | `crates/runtime/src/capabilities.rs` |
 
@@ -84,10 +84,10 @@ Rust code was read instead.
 | #708 | `pricing.reviewed_price`, `metadata.py`, `transaction_history.py`, `ledger_request._coarse_needs_review`: an accepted coarse price is no longer held for review while the price is unchanged; a price edit drops the acceptance; history shows it | `ui.review.plan/apply` (`accept_coarse_prices`), `ui.transactions.metadata.update`, `ui.transactions.history`, `journals process` | **Refused**: `accept_coarse_prices` is an unsupported operation in Rust (Python: `review_case_changed`, nothing waiting). Rust's request builder sends `coarse` for every `coarse_fallback` row (`crates/custody/src/ledger_request.rs:654`), so after S1 an accepted book would quarantine again under Rust. Today such a book is refused by S1 | `crates/custody/src/ledger_request.rs`, `crates/journals/src/prebuild/pricing.rs`, `crates/transactions/src/metadata/history.rs` |
 | #707, #711, bd162caca | `review_workflow.py`, `ui_snapshot.py`, `daemon_freshness.py`: cases name `fiat_currency`; badges add `review` and `definitions`; freshness pairs automatically before journals | `ui.review.cases`, `ui.review.badges`, `ui.freshness.run`, `ui.workspace.freshness.run` | **Differs**: `ui.review.cases` lacks `fiat_currency`; `ui.review.badges` lacks `review` and `definitions` (fresh root too). Freshness: inspection | `crates/daemon/src/review.rs`, `crates/daemon/src/workspace_reads.rs`, `crates/wallets` (freshness) |
 | #681 | `quarantine_review.py` (+453): quarantine rolled up by root cause, groups, attention count, definitions; resolving by `group_id` with `reprocess` | `ui.journals.quarantine`, `journals quarantine groups`, `ui.journals.quarantine.resolve`, `ui.review.badges`, AI kind `ui.journals.quarantine.groups` | **Differs**: summary lacks `definitions` and `fiat_currency`; resolve with `group_id` is refused as an unsupported field (Python validates it). The books have no quarantine, so group rows were not compared | `crates/journals/src/quarantine.rs`, `crates/journals/src/views.rs`, `crates/daemon/src/journals.rs` |
-| #681 | `wallet_completeness.py`, `transaction_verify.py` | `ui.wallets.list`, `transactions verify`, AI kind `ui.transactions.verify` | **Differs**: wallets lack `completeness_class` and `scan_bounds`; `transactions verify` is not native | `crates/daemon/src/wallets.rs`, `crates/wallets`, `crates/transactions` |
+| #681 | `wallet_completeness.py`, `transaction_verify.py` | `ui.wallets.list`, `wallets list`, `transactions verify`, AI kind `ui.transactions.verify` | **Done (S8)**; see [after S8 to S10](#after-s8-to-s10). Before: wallets lacked `completeness_class` and `scan_bounds`; `transactions verify` was not native. The AI-only kind follows with S12 | `crates/wallets/src/completeness.rs`, `crates/journals/src/transaction_graph/verify.rs` |
 | #679, #683 | `custody_review_terms.dismiss_pair_candidate`, `transfer_matching.active_dismissed_pairs`, `handlers.suggest_transfer_candidates`: a dismissal marks journals stale, can be listed and deleted, and suggestions report exclusions (active pair, already journaled moves, dismissal) | `ui.transfers.dismiss`, `transfers dismiss`, `ui.transfers.suggest`, `ui.transfers.dismissals.list/delete`, `transfers dismissals list/delete` | **Differs**: after `transfers dismiss` Python bumps `journal_input_version`, Rust does not; `ui.transfers.suggest` lacks `exclusions`; list/delete kinds and leaves are not native | `crates/transfers/src/dismissals.rs`, `crates/transfers/src/pairing/service.rs`, `crates/daemon/src/transfers.rs` |
 | #679 | `custody_components.py`, `custody_component_planner.py`: revision planning and activation errors with remediation; qualified references | `ui.transfers.components.plan/apply`, review `custody_component` operations | Inspection: a revise plan for an unknown component answers the same; activation remediation and qualified references follow S2 | `crates/transfers` (components), `crates/custody` |
-| #701 | `ui_snapshot.build_transactions_dashboard_snapshot`: automatic bucket size and a `history.years` index for the period picker | `ui.transactions.dashboard` | **Differs**: lacks `bucketSize` and `history.years` (fresh root too) | `crates/transactions/src/desktop/dashboard.rs` |
+| #701 | `ui_snapshot.build_transactions_dashboard_snapshot`: automatic bucket size and a `history.years` index for the period picker | `ui.transactions.dashboard` | **Done (S9)**. Before: lacked `bucketSize` and `history.years` (fresh root too), refused the four-year range and auto-selected the old ranges | `crates/transactions/src/desktop/dashboard.rs` |
 | #682, #698, #714 | `document_import.py`: the read step needs no database and records the detected API format; chat imports reuse it | `ui.wallets.document_import.preview/import` | Inspection: needs an AI provider, not exercised | `crates/imports` (document core) |
 
 ### Reports
@@ -98,7 +98,7 @@ Rust code was read instead.
 | #706 | `austrian.py`, `reports.py`: E 1kv crypto Kennzahlen start in 2022; earlier disposals state no Kennzahl | `ui.reports.export_austrian_e1kv_csv/xlsx`, `reports export-austrian-e1kv*`, `ui.reports.export_capital_gains_csv` | **Differs, tax-relevant**: for 2021 Python refuses the E 1kv export ("The Austrian crypto Kennzahlen (KZ 172, 174, 176) start with tax year 2022"); Rust writes both files. The 2021 capital-gains CSV has an empty Kennzahl column in Python and 172/174 in Rust. 2025 matches | `crates/reports` (Austrian export, `full_csv.rs`, `tax_summary.rs`) |
 | #706 | `ui_snapshot.build_journal_events_list_snapshot`: each event carries an `explanationReference` for `ui.reports.explain_capital_gain` | `ui.journals.events.list` | **Differs**: field missing | `crates/journals/src/views.rs` |
 | #706 | `year_handoff.py`: asset presentation | `ui.reports.export_year_handoff` | Inspection: XLSX bytes differ in both runs (timestamps), contents not compared | `crates/reports` |
-| #677 | `ui_snapshot.py`, `tax_estimate.py`: core tax figures | `ui.workspace.health`, `ui.next_actions` | **Differs**: `definitions` missing | `crates/workspace/src/readiness.rs`, `crates/daemon/src/workspace_reads.rs` |
+| #677 | `ui_snapshot.py`, `tax_estimate.py`: core tax figures | `ui.workspace.health`, `ui.next_actions`, `health`, `next-actions` | **Done (S10)**. Before: `definitions` missing | `crates/workspace/src/readiness.rs` |
 
 Unchanged in every run: `ui.overview.snapshot` (#713 changed only the
 UI), `ui.reports.tax_summary`, `ui.reports.summary`, `ui.reports.balance_sheet`,
@@ -224,10 +224,11 @@ XL above.
    in the exports, `explanationReference` on journal events, the year handoff
    asset presentation. Independent of S2 to S6; it fixes a tax-relevant
    difference, so it can go first after S1.
-8. ★ **S8 Wallet completeness and verification** (M). `completeness_class`
+8. ★ **S8 Wallet completeness and verification** (M). **Done**; see
+   [after S8 to S10](#after-s8-to-s10). `completeness_class`
    and `scan_bounds` on `ui.wallets.list`, `transactions verify`. Needs S1.
-9. ★ **S9 Transaction dashboard** (S). Bucket size and the years index.
-10. **S10 Readiness definitions** (S). `definitions` on `ui.workspace.health`
+9. ★ **S9 Transaction dashboard** (S). **Done**. Bucket size and the years index.
+10. **S10 Readiness definitions** (S). **Done**. `definitions` on `ui.workspace.health`
     and `ui.next_actions`.
 11. **S11 Custody component revision** (S). Activation remediation and the
     planner changes. Needs S2.
@@ -279,6 +280,62 @@ The comparison is plaintext: the harness does not unlock SQLCipher books.
 Encrypted admission is covered by the store differential tests, which open a
 current Python SQLCipher book in both Rust open modes without changing it.
 
+## After S8 to S10
+
+S8 (#681), S9 (#701) and S10 (#677, #681) are native:
+
+- `wallets list` and `ui.wallets.list` append `completeness_class` and
+  `scan_bounds` from one derivation, `crates/wallets/src/completeness.rs`.
+  `wallets list` now fails a stored configuration that is not a JSON object
+  (`[1,2]`, `null`, an undecodable string) with Python's exception text, as
+  the leaf it extends does in Python.
+- `transactions verify` runs `crates/journals/src/transaction_graph/verify.rs`
+  over the graph read's local-only enrichment, parsing and owned index; it
+  never contacts the network and never writes. The AI-only
+  `ui.transactions.verify` tool comes with S12 and can call the same function.
+- `ui.transactions.dashboard` reports `bucketSize` and `history.years`,
+  accepts `4years`/`4year`/`4y`, groups "all" over ten or more years by year
+  and auto-selects among `1year`, `4years`, `10years` and `all`.
+- `ui.workspace.health` carries `definitions`, and with it `health`,
+  `next-actions`, `ui.next_actions` and the `health` inside
+  `ui.report.blockers`.
+
+`desktop_read_diff.py` on the Python-built `austria` book (built with
+`report_design_books.py`'s `build` from `t3code/r5-pdf-1` and this checkout's
+Python CLI), debug harness binaries of 6159f8f39 and of this slice:
+
+| Run | Before | After |
+| --- | --- | --- |
+| Default 103 read kinds plus the seven report reads and `ui.review.plan/worklist/receipt` (113 kinds) | 101 same, 12 differing | 104 same, 9 differing |
+| `ui.transactions.dashboard` with `{"period": "all", "resolveAuto": true}`, `ui.wallets.list`, `ui.workspace.health`, `ui.next_actions` | 4 differing (`bucketSize`, `completeness_class`, `definitions`, `health.definitions`) | 4 same |
+
+The default run sends the dashboard no arguments, so both sides refuse its
+`1year` default the same way; the targeted run is what shows S9. The nine
+still differing are the other slices' kinds and the known ones:
+`ui.review.cases`, `ui.review.badges` (S4), `ui.journals.quarantine` (S5),
+`ui.transfers.suggest` (S6), `ui.reports.capital_gains`,
+`ui.journals.events.list` (S7), `ui.journals.snapshot`,
+`ui.chain_analysis.query` and `ui.logs.snapshot`.
+
+Verification: `tests/test_rust_wallet_completeness.py` (7 tests: daemon and
+CLI `wallets list` in JSON, table, plain and CSV, malformed sources,
+`transactions verify` over stored, reference, Liquid and graphless rows,
+plaintext and SQLCipher, all 113 tables unchanged) and the dashboard tests
+(`tests/test_rust_transaction_dashboard.py`, 8) pass. `tests/test_rust_workspace_shell.py`
+passes except its sessions that include `ui.review.badges`, which differ
+only there (S4). The workspace vectors replay (5), `kassiber-transactions`,
+`kassiber-journals --lib`, `kassiber-cli`, `kassiber-runtime` and
+`kassiber-daemon` pass. The mutation catalog
+`crates/daemon/scripts/sync_s8_s10_mutations.json` (37 entries) is fully
+killed. The preflight shard passes.
+
+Found while verifying, not caused by these slices: `kassiber-wallets --lib`
+fails nine publication and sync oracle tests whose frozen full-table dumps
+predate `ai_provider_checks` (the 113th table, S1), and many Python harnesses
+still assert 112 tables (`tests/test_rust_*.py`, `gen_lightning_vectors.py`).
+This slice moved only the ones it uses (`tests/rust_desktop_parity.py`,
+`tests/test_rust_workspace_shell.py`, the workspace vectors).
+
 ## Verification of the merge
 
 - `cargo build --release -p kassiber`, both clippy lanes with `-D warnings`,
@@ -304,3 +361,12 @@ asymmetry deliberately; see [database compatibility](database-compatibility.md#s
 No Python behaviour was changed by this sync. The pre-merge
 `freshnessReason` difference and the `ui.chain_analysis.query` `snapshot_id`
 difference predate the merge.
+
+The dashboard's bucket size compares the coerced period with the canonical
+names only, so the aliases Python accepts bucket by month: `4y`, `4year` and
+`4 Year` get monthly buckets while `4years` gets quarters, as `30d` and `3m`
+already did before #701. Rust mirrors it. Repro:
+`uv run --locked python -c "from kassiber.core import ui_snapshot as u; print([u._dashboard_bucket_size(u._coerce_ui_transaction_period(p), 1.0) for p in ('4years', '4y', '30d')])"`
+prints `['quarter', 'month', 'month']`. The bucket size also reads the wall
+clock rather than `until`, so "all" switches to yearly buckets ten years
+after the first transaction regardless of the requested window.

@@ -47,12 +47,12 @@ INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,extern
  ('c5','w','p','addr','c5','%(e)s','BTC','outbound',150,0,'2025-01-15T00:00:00Z','2025','2025',0,'{}'),
  ('c6','w','p','sp','c6','%(f)s','BTC','inbound',150,0,'2025-01-15T00:00:00Z','2025','2025',1,'{}'),
  ('c7','w','p','api','c7',NULL,'ETH','outbound',7,0,'','','2025',0,'{}'),
- ('c8','w','p','api','c8',NULL,'BTC','inbound',7,0,'2025-04-01T00:00:00Z','','2025',0,'{"txid":"%(g)s","status":{"confirmed":false}}'),
+ ('c8','w','p','api','c8',NULL,'BTC','inbound',7,0,'2025-04-01T00:00:00Z','','2025',0,'{"txid":"8888888888888888888888888888888888888888888888888888888888888888","status":{"confirmed":false}}'),
  ('c12','w','p','api','c12',NULL,'BTC','outbound',5,0,'2025-03-01T00:00:00Z','2025','2025',0,'{}'),
  ('c9','w','p','river','c9',NULL,'BTC','outbound',9,0,'2025-04-02T00:00:00Z','2025','2025',0,'{}'),
  ('c10','w','p','river','c10',NULL,'BTC','outbound',9,1,'2025-04-02T00:00:00Z','2025','2025',0,'{}'),
  ('c11','w','p','river','c11',NULL,'BTC','inbound',20,0,'2025-04-02T00:00:00Z','2025','2025',0,'{}');
-""" % {key: key * 64 for key in "abcdefg"}
+""" % {key: key * 64 for key in "abcdef"}
 
 
 @unittest.skipUnless(RUST_BIN, "set KASSIBER_RUST_BIN to the harness build")
