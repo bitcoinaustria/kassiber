@@ -208,6 +208,8 @@ def test_daemon_rebuilds_semantics_stale_historical_lots(tmp_path, monkeypatch, 
                 report = result['data']
         assert projection_freshness(conn, 'profile')['is_current']
         assert not report['status']['needsJournals']
-        assert sum(Decimal(str(row['proceedsEur'])) for row in report['lots']) == Decimal('11.2')
+        # The AI projection names the (bounded) lot list `rows`.
+        lots = report['rows'] if reader == 'ai' else report['lots']
+        assert sum(Decimal(str(row['proceedsEur'])) for row in lots) == Decimal('11.2')
     finally:
         conn.close()
