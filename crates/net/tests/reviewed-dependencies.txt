@@ -9,10 +9,10 @@ dirs
 fancy-regex
 flate2 rust_backend
 kassiber-ai
-kassiber-cli test-probe
+kassiber-cli test-probe native-chat native-mcp
 kassiber-chain
 kassiber-custody timing
-kassiber-daemon test-kinds
+kassiber-daemon test-kinds native-chat
 kassiber-envelope
 kassiber-net test-observer test-support
 kassiber-ownership
@@ -115,3 +115,7 @@ kassiber-ipc
 kassiber-operator test-harness
 # AI providers, tools and discovery; HTTP only through kassiber-net routes.
 kassiber-ai test-harness
+
+# R6-8 MCP: the stdio JSON-RPC server and its read-only tool projection;
+# no I/O of its own beyond the streams it is handed.
+kassiber-mcp

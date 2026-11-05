@@ -17560,6 +17560,9 @@ product file changes.
     the stranger is a Rust `mcp serve` (a fresh Python process names
     another build, which the Rust broker refuses before pairing). Python's
     broker passes them too, with `test_mcp_server.py` (62) unchanged.
+  - `kassiber-net`'s chokepoint scanner passes with `kassiber-mcp` reviewed.
+    It had failed since R6-7, whose chat child launch and `native-chat`
+    feature forwarding were never added to the reviewed lists; both are now.
   - `tests/test_rust_ai_chat.py` and `tests/test_rust_operator_cli.py` pass
     on the merged branch; the operator daemon scenario failed once under a
     load average near 400 and passed alone.

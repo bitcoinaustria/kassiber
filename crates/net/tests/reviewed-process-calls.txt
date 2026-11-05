@@ -42,3 +42,7 @@ crates/ownership/tests/project.rs|inherited_owner_handles_exclude_a_second_owner
 crates/ownership/tests/project.rs|uninherited_children_hold_nothing|let mut command = ChildCommand::new("/bin/sh");
 # The store probe's lock-child op: a child holding inherited owner locks for the Python interop test.
 crates/store/examples/probe.rs|run|let mut command = ChildCommand::new("/bin/sh");
+# R6-7 `kassiber chat`: this binary re-run as its daemon child (in its own
+# process group since R6-8), and the R6-8 test of that group.
+crates/cli/src/chat/client.rs|start|let mut command = Command::new(program);
+crates/cli/src/chat/client.rs|the_daemon_child_leads_its_own_process_group|let mut command = Command::new("/bin/sh");
