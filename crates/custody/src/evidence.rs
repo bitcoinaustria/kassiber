@@ -1,5 +1,5 @@
 //! Port of custody_evidence's canonical identities, commitments and quantities.
-use crate::codec::{self, int, integer, text, text_ref, truth, wide};
+use crate::codec::{self, int, integer, text, text_ref, truth};
 use crate::components::Error;
 use crate::fields::Fields;
 use crate::python_text::PythonText;
@@ -806,14 +806,10 @@ fn enrich_with_keys<R: RowRecord>(
                 let fee = int(&field(&result, rows, i, "fee"));
                 if !truth(&field(&result, rows, i, "amount_includes_fee")) {
                     let amount = integer_or_zero(&field(&result, rows, i, "amount"))?;
-                    result[i].amount = Some(
-                        match codec::checked_wide(&amount)
-                            .and_then(|amount| amount.checked_add(i128::from(fee)))
-                        {
-                            Some(sum) => json!(sum),
-                            None => codec::number(&(codec::big(&amount) + fee)),
-                        },
-                    );
+                    // Exact: Python admits amounts beyond any machine integer.
+                    let amount =
+                        crate::quantity::exact(&amount).expect("converted evidence integer");
+                    result[i].amount = Some(crate::quantity::number(&(amount + fee)));
                 }
                 result[i].fee = Some(json!(0));
                 result[i].duplicate_normalized = Some(json!(true));
@@ -1025,7 +1021,19 @@ fn canonical_event<F: Fields>(
             .collect();
         if semantics.iter().any(|s| *s != semantics[0]) {
             let (wallet, direction, asset) = observations[items[0]].slot();
-            let semantics: BTreeSet<(i128, i128, bool)> = semantics.into_iter().collect();
+            // Python sorts the distinct exact tuples.
+            let semantics: Vec<Value> = semantics
+                .into_iter()
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .map(|(amount, fee, included)| {
+                    json!([
+                        crate::quantity::number(amount),
+                        crate::quantity::number(fee),
+                        included
+                    ])
+                })
+                .collect();
             contradictions.push(json!({"wallet_id":wallet,"direction":direction,"asset":asset,"semantics":semantics}));
         }
     }
@@ -1274,6 +1282,35 @@ mod semantic_tests {
             }
         }
     }
+    #[test]
+    fn amounts_beyond_machine_integers_stay_exact() {
+        let big: Value = serde_json::from_str("1000000000000000000000000000000000000000").unwrap();
+        let bigger: Value =
+            serde_json::from_str("1000000000000000000000000000000000000001").unwrap();
+        let row = |id: &str, amount: &Value| json!({"id":id,"profile_id":"p","wallet_id":"w","wallet_kind":"descriptor","direction":"inbound","asset":"BTC","amount":amount,"fee":0,"occurred_at":"2024-01-01T00:00:00+00:00","source_ref":"src","external_id":"e","raw_json":"{}","network":"regtest"});
+        // One slot observed with two exact amounts disagrees, listing both.
+        let rows = [row("t1", &bigger), row("t2", &big)];
+        let canonical = canonical_input(&rows, &json!({}), &BTreeSet::new()).unwrap();
+        let rejected = &canonical["rejected_events"][0];
+        assert_eq!(rejected["code"], "canonical_event_leg_contradiction");
+        assert_eq!(
+            rejected["details"]["contradictory_slots"][0]["semantics"],
+            json!([[big, 0, false], [bigger, 0, false]])
+        );
+        // An agreeing slot is one event.
+        let rows = [row("t1", &big), row("t2", &big)];
+        let canonical = canonical_input(&rows, &json!({}), &BTreeSet::new()).unwrap();
+        assert_eq!(canonical["events"][0]["legs"][0]["amount_msat"], big);
+        // A zero outbound amount needs a positive fee.
+        let mut empty = row("t1", &json!(0));
+        empty["direction"] = json!("outbound");
+        let canonical = canonical_input(&[empty], &json!({}), &BTreeSet::new()).unwrap();
+        assert_eq!(
+            canonical["rejected_events"][0]["details"]["errors"],
+            json!(["zero quantity is valid only for a fee-only outbound"])
+        );
+    }
+
     #[test]
     fn canonical_events_follow_key_order_with_unique_sources() {
         let row = |id: &str, event: &str| json!({"id":id,"profile_id":"p","wallet_id":"w","wallet_kind":"descriptor","direction":"inbound","asset":"BTC","amount":1000,"fee":0,"occurred_at":"2024-01-01T00:00:00+00:00","source_ref":"src","external_id":event,"raw_json":"{}","network":"regtest"});

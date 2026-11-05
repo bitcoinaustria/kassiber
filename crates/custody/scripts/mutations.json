@@ -24520,6 +24520,46 @@
     "rule": "Remembered loaded evidence is keyed by every column it reads."
   },
   {
+    "id": "exact-amount-negative",
+    "file": "crates/custody/src/evidence/observation.rs",
+    "find": "        if *amount < zero {",
+    "replace": "        if *amount <= zero {",
+    "expect_failing": [
+      "native_support_preserves_observation_admission_and_hashes"
+    ],
+    "rule": "Only a negative amount is refused as negative."
+  },
+  {
+    "id": "exact-amount-fee-only",
+    "file": "crates/custody/src/evidence/observation.rs",
+    "find": "        if *amount == zero && !(direction == \"outbound\" && *fee > zero) {",
+    "replace": "        if *amount == zero && !(direction == \"outbound\" && *fee >= zero) {",
+    "expect_failing": [
+      "amounts_beyond_machine_integers_stay_exact"
+    ],
+    "rule": "A zero amount needs a positive outbound fee."
+  },
+  {
+    "id": "exact-duplicate-fee-fold",
+    "file": "crates/custody/src/evidence.rs",
+    "find": "Some(crate::quantity::number(&(amount + fee)))",
+    "replace": "Some(crate::quantity::number(&amount))",
+    "expect_failing": [
+      "duplicate_fee_keeper"
+    ],
+    "rule": "A folded duplicate fee joins its row's amount."
+  },
+  {
+    "id": "exact-contradiction-sorted",
+    "file": "crates/custody/src/evidence.rs",
+    "find": "                .collect::<BTreeSet<_>>()\n                .into_iter()\n                .map(|(amount, fee, included)| {",
+    "replace": "                .collect::<Vec<_>>()\n                .into_iter()\n                .map(|(amount, fee, included)| {",
+    "expect_failing": [
+      "amounts_beyond_machine_integers_stay_exact"
+    ],
+    "rule": "Contradictory semantics are listed sorted and distinct."
+  },
+  {
     "id": "R4-evidence-alias-slot-index",
     "file": "crates/custody/src/evidence.rs",
     "find": "selected[*index] = keeper;",

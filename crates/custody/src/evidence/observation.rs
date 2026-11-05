@@ -282,12 +282,12 @@ impl<'a> Observation<'a> {
             &self.transaction_id,
         )
     }
-    pub fn semantics(&self) -> (i128, i128, bool) {
+    /// The exact amount, fee and inclusion: Python admits reviewed amounts
+    /// up to its integer-string limit, beyond any machine integer.
+    pub fn semantics(&self) -> (&BigInt, &BigInt, bool) {
         (
-            i128::try_from(&self.quantity.amount)
-                .expect("converted integer exceeds custody arithmetic range"),
-            i128::try_from(&self.quantity.fee)
-                .expect("converted integer exceeds custody arithmetic range"),
+            &self.quantity.amount,
+            &self.quantity.fee,
             self.quantity.included,
         )
     }
@@ -307,16 +307,17 @@ impl<'a> Observation<'a> {
             return Err("quantity observations require an asset".into());
         }
         let (amount, fee, included) = self.semantics();
-        if amount < 0 {
+        let zero = BigInt::from(0);
+        if *amount < zero {
             return Err("quantity observation amount_msat must be non-negative".into());
         }
-        if fee < 0 {
+        if *fee < zero {
             return Err("quantity observation fee_msat must be non-negative".into());
         }
         if direction == "inbound" && included {
             return Err("inbound quantity cannot use amount_includes_fee".into());
         }
-        if amount == 0 && !(direction == "outbound" && fee > 0) {
+        if *amount == zero && !(direction == "outbound" && *fee > zero) {
             return Err("zero quantity is valid only for a fee-only outbound".into());
         }
         if included && fee > amount {
