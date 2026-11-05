@@ -485,6 +485,9 @@ pub fn read_for_ai(
             }
             Ok(receipt)
         }
+        _ if kind.starts_with("ui.chain_analysis.") => {
+            chain_analysis_for_ai(kind, arguments, state, book)
+        }
         _ if COMMERCIAL_READS.contains(&kind) => {
             Ok(redact_evidence_for_ai(&book.read(kind, arguments, "gui")?))
         }
@@ -537,6 +540,57 @@ pub fn read_for_ai(
         }
         _ => book.read(kind, arguments, "gui"),
     }
+}
+
+/// `_chain_analysis_ai_payload(conn, runtime, kind, args)`: on-device
+/// providers get the curated result; any other provider gets the
+/// `ca-ref:` projection, and errors without their details, because a
+/// saved-query failure can carry public subjects.
+fn chain_analysis_for_ai(
+    kind: &str,
+    arguments: &Value,
+    state: &Value,
+    book: &mut dyn Book,
+) -> Result<Value, ToolError> {
+    let profile = book.active_profile()?;
+    let on_device = get(state, "provider_on_device") == Some(&Value::Bool(true));
+    if crate::analysis::on_device_kind(kind) && !on_device {
+        return Err(AppError::new(
+            "local_provider_required",
+            "Source acquisition and dataset imports are available to on-device AI providers and the desktop workflow",
+        )
+        .into());
+    }
+    let result = (|| {
+        let decoded = book.decode_analysis_references(&profile, arguments)?;
+        if kind.starts_with("ui.chain_analysis.datasets.") && kind.ends_with(".start") {
+            // Background dataset work needs the chat's job starter, which
+            // this executor state never carries.
+            return Err(ToolError::App(AppError::new(
+                "daemon_required",
+                "Background dataset work requires a running daemon; use the synchronous CLI operation",
+            )));
+        }
+        book.read(kind, &decoded, "gui")
+    })();
+    let result = match result {
+        Ok(result) => result,
+        Err(ToolError::App(error)) if !on_device => {
+            return Err(AppError::new(
+                error.code,
+                "Local chain investigation could not complete; inspect the error code and refresh the case or query",
+            )
+            .retryable(error.retryable)
+            .into());
+        }
+        Err(error) => return Err(error),
+    };
+    if on_device {
+        return Ok(result);
+    }
+    crate::analysis::project_ai_result(&result, &mut |value| {
+        book.issue_analysis_reference(&profile, value)
+    })
 }
 
 /// `_ai_safe_egress_snapshot(args)` over a ledger snapshot

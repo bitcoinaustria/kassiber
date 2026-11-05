@@ -63,14 +63,50 @@ class AiCatalogDriftTest(unittest.TestCase):
             "rerun crates/ai/scripts/gen_vectors.py and the kassiber-ai tests",
         )
 
+    def test_mutation_catalog_stays_applicable(self):
+        catalog = ROOT / "crates/ai/scripts/mutations.json"
+        entries = json.loads(catalog.read_text(encoding="utf-8"))
+        result = subprocess.run(
+            [sys.executable, str(ROOT / "crates/ai/scripts/mutation_check.py"), "--check"],
+            capture_output=True, check=True, timeout=60, cwd=ROOT,
+        )
+        self.assertEqual(result.stdout, f"{len(entries)} entries apply\n".encode())
+        sources = "".join(path.read_text(encoding="utf-8") for path in (ROOT / "crates/ai/tests").glob("*.rs"))
+        for entry in entries:
+            for name in entry["expect_failing"]:
+                self.assertIn(f"fn {name}()", sources, entry["id"])
 
 
 _GENERATED_AT = re.compile(rb'(\\?"generated_at\\?":\\?")\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ')
 
 
-def _mask(line: bytes) -> bytes:
-    """Declared mapping: read-time clocks (``generated_at``) are not compared."""
-    return _GENERATED_AT.sub(rb"\1<generated_at>", line)
+_REFERENCE = re.compile(rb"ca-ref:[0-9a-f]{64}")
+# The native chain-analysis snapshot digest differs from Python's and between
+# Rust runs on the same book (pre-existing, outside R6-5a); it is stable
+# within one session, so it is mapped like a handle.
+_SNAPSHOT = re.compile(rb'(\\?"(?:expected_)?snapshot_id\\?":\\?")([0-9a-f]{64})')
+
+
+def _mask(line: bytes, references: dict[bytes, bytes] | None = None) -> bytes:
+    """Declared mappings, not field masks.
+
+    Read-time clocks (``generated_at``) are not compared. Chain-analysis
+    ``ca-ref:`` handles are keyed by a per-process secret and the book's
+    path, so each side's handles are renamed by first appearance in its
+    session: the same subject must keep one name, and distinct subjects
+    distinct names.
+    """
+    line = _GENERATED_AT.sub(rb"\1<generated_at>", line)
+    if references is not None:
+        line = _SNAPSHOT.sub(
+            lambda match: match.group(1)
+            + references.setdefault(b"snapshot:" + match.group(2), b"snapshot#%d" % len(references)),
+            line,
+        )
+        line = _REFERENCE.sub(
+            lambda match: references.setdefault(match.group(0), b"ca-ref:#%d" % len(references)), line
+        )
+    return line
 
 
 REMOTE = {"provider_kind": "remote", "provider_on_device": False}
@@ -101,6 +137,9 @@ def _extra_arguments() -> dict[str, list[dict]]:
         "ui.source_funds.preview": [{"target_transaction": "a"}],
         "ui.source_funds.review_context": [{"target_transaction": "a"}],
         "read_skill_reference": [{"name": name} for name in SKILL_REFERENCE_NAMES],
+        # A handle this process never issued: stale, before any index read.
+        "ui.chain_analysis.query": [{"mode": "trace", "subject": "ca-ref:" + "0" * 64}],
+        "ui.chain_analysis.labels.list": [{}],
     }
 
 
@@ -241,6 +280,7 @@ class AiToolExecutorParityTest(unittest.TestCase):
         self.assertIn("test.ai_tool", json.loads(actual[0])["data"]["supported_kinds"])
         self.assertEqual(len(actual), len(expected))
         refused, compared, mismatches = set(), 0, []
+        rust_references, python_references = {}, {}
         from kassiber.ai.tools import get_tool
 
         for index, (have, want) in enumerate(zip(actual[1:], expected[1:]), start=1):
@@ -268,7 +308,7 @@ class AiToolExecutorParityTest(unittest.TestCase):
                 self.assertEqual(data["planned"], want_data["planned"], request)
                 continue
             compared += 1
-            have, want = _mask(have), _mask(want)
+            have, want = _mask(have, rust_references), _mask(want, python_references)
             if have != want:
                 mismatches.append((request, have.decode()[:3000], want.decode()[:3000]))
         if mismatches and os.environ.get("KASSIBER_AI_PARITY_REPORT"):
@@ -300,6 +340,59 @@ class AiToolExecutorParityTest(unittest.TestCase):
             with self.subTest(fixture=fixture):
                 self.compare(fixture, auto_read_requests())
 
+    def interactive(self, argv_prefix, root, first, follow_up):
+        """One request, then a second built from the first one's result."""
+        process = subprocess.Popen(
+            [*argv_prefix, "--machine", "--data-root", str(root), "daemon"],
+            env=self.env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=ROOT,
+        )
+        try:
+            lines = [process.stdout.readline()]
+            process.stdin.write((json.dumps(dict(first, request_id="1")) + "\n").encode())
+            process.stdin.flush()
+            lines.append(process.stdout.readline())
+            for index, request in enumerate(follow_up(json.loads(lines[-1])), start=2):
+                process.stdin.write((json.dumps(dict(request, request_id=str(index))) + "\n").encode())
+                process.stdin.flush()
+                lines.append(process.stdout.readline())
+            process.stdin.close()
+            self.assertEqual(process.wait(timeout=300), 0)
+            self.assertEqual(process.stderr.read(), b"")
+        finally:
+            if process.poll() is None:
+                process.kill()
+        return lines
+
+    def test_chain_analysis_handles_round_trip(self):
+        """A remote provider's handle reaches the same subject in both."""
+        seed = self.seed("desktop")
+        remote = {"provider_kind": "remote", "provider_on_device": False}
+        first = {"kind": "test.ai_tool", "args": {"name": "ui_chain_analysis_query", "arguments": {}, "state": remote}}
+
+        def follow_up(record):
+            output = json.loads(record["data"]["output"])
+            nodes = output["envelope"]["data"]["nodes"]
+            self.assertTrue(nodes)
+            subject = nodes[0]["id"]
+            self.assertTrue(subject.startswith("ca-ref:"))
+            trace = {"mode": "trace", "subject": subject}
+            return [
+                {"kind": "test.ai_tool", "args": {"name": "ui_chain_analysis_query", "arguments": trace, "state": remote}},
+                # On-device providers may use the same handle: it decodes, and
+                # the result carries the real subject.
+                {"kind": "test.ai_tool", "args": {"name": "ui_chain_analysis_query", "arguments": trace, "state": {"provider_kind": "local", "provider_on_device": True}}},
+            ]
+
+        results = []
+        for name, prefix in (("python", [sys.executable, str(REFERENCE)]), ("rust", [str(Path(RUST_BIN).resolve())])):
+            root = self.base / name
+            shutil.copytree(seed, root)
+            references = {}
+            results.append([_mask(line, references) for line in self.interactive(prefix, root, first, follow_up)[1:]])
+        self.assertEqual(results[1], results[0])
+        traced = json.loads(results[1][1])["data"]["tool_result"]["data"]
+        self.assertIs(traced["ok"], True, traced)
+
     @unittest.skipUnless(shutil.which("unshare"), "needs unshare for a network namespace")
     def test_no_network_traffic_without_a_network(self):
         """The whole executor run is identical inside an empty network namespace."""
@@ -318,8 +411,9 @@ class AiToolExecutorParityTest(unittest.TestCase):
         normal = self.session(rust, outside, requests)
         isolated = self.session(rust, inside, requests, sandbox=sandbox)
         self.assertEqual(len(normal), len(isolated))
+        inside_references, outside_references = {}, {}
         for have, want in zip(isolated[1:], normal[1:]):
-            self.assertEqual(_mask(have), _mask(want))
+            self.assertEqual(_mask(have, inside_references), _mask(want, outside_references))
 
 
 REFUSED_READS = {

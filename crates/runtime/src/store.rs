@@ -395,6 +395,29 @@ pub trait Book: Send {
     fn report_read_sync(&mut self, _force: bool) -> Result<Option<Value>, AppError> {
         Ok(None)
     }
+    /// `decode_ai_args`: chain-analysis `ca-ref:` handles in AI arguments back
+    /// to subjects of the active book. Unported stores fail closed.
+    fn chain_analysis_decode_ai_args(
+        &mut self,
+        _profile: &str,
+        _args: &Value,
+    ) -> Result<Value, AppError> {
+        Err(AppError::new(
+            "not_implemented",
+            "chain-analysis AI references are not available",
+        ))
+    }
+    /// Process- and book-scoped `ca-ref:` handles for these values, in order.
+    fn chain_analysis_issue_ai_references(
+        &mut self,
+        _profile: &str,
+        _values: &[String],
+    ) -> Result<Vec<String>, AppError> {
+        Err(AppError::new(
+            "not_implemented",
+            "chain-analysis AI references are not available",
+        ))
+    }
     /// `_auto_process_journals_if_needed`: the local journal rebuild payload
     /// when the active book's journals are stale.
     fn auto_process_journals(&mut self) -> Result<Option<Value>, AppError> {

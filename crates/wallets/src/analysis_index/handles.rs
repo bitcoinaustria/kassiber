@@ -237,6 +237,67 @@ fn decode(value: &Value, key: &str, lookup: &BTreeMap<String, String>) -> Value 
         _ => value.clone(),
     }
 }
+/// `decode_ai_args(conn, profile_id, args)`: `subject`/`target` handles back
+/// to the subjects they stand for, revalidated against the current index.
+/// Arguments without handles are returned unchanged without reading it.
+pub fn decode_ai_args(conn: &Connection, profile: &str, args: &Value) -> Result<Value, AppError> {
+    if !matches!(args, Value::Dict(_)) {
+        return Err(AppError::new(
+            "validation",
+            "Chain analysis arguments must be an object",
+        ));
+    }
+    let mut references = BTreeSet::new();
+    collect(args, "", &mut references);
+    if references.is_empty() {
+        return Ok(args.clone());
+    }
+    let scope = BookScope::read(conn, profile)?;
+    let mut values = with_process_references(conn, |refs| {
+        Ok(references
+            .iter()
+            .filter_map(|reference| {
+                refs.resolve(&scope, reference)
+                    .ok()
+                    .map(|subject| (reference.clone(), subject))
+            })
+            .collect::<BTreeMap<_, _>>())
+    })?;
+    // A remembered subject is never authority: only resolved handles are
+    // revalidated, so a wholly stale request never reads the index.
+    if !values.is_empty() {
+        values = super::views::with_read(conn, profile, "owner", |view| {
+            let mut current = BTreeMap::new();
+            for (reference, subject) in values {
+                if view.has_subject(&subject)? {
+                    current.insert(reference, subject);
+                }
+            }
+            Ok(current)
+        })?;
+    }
+    if values.len() != references.len() {
+        return Err(stale());
+    }
+    Ok(decode(args, "", &values))
+}
+
+/// `_reference(scope, value)` for each value, in order: the AI projection's
+/// process- and book-scoped handles.
+pub fn issue_ai_references(
+    conn: &Connection,
+    profile: &str,
+    values: &[String],
+) -> Result<Vec<String>, AppError> {
+    let scope = BookScope::read(conn, profile)?;
+    with_process_references(conn, |refs| {
+        values
+            .iter()
+            .map(|value| refs.issue(&scope, value))
+            .collect()
+    })
+}
+
 static PROCESS_REFERENCES: OnceLock<Mutex<Option<References>>> = OnceLock::new();
 pub fn with_process_references<R>(
     conn: &Connection,

@@ -34,6 +34,9 @@ impl Book for FakeBook {
     fn maintain_for_read(&mut self, _sync_attempted: bool) -> Result<Option<Value>, ToolError> {
         Ok(self.maintained.clone())
     }
+    fn active_profile(&mut self) -> Result<String, ToolError> {
+        Ok(self.profile())
+    }
     fn read(
         &mut self,
         kind: &str,
@@ -45,6 +48,12 @@ impl Book for FakeBook {
             .payload
             .clone()
             .unwrap_or_else(|| dict([("value", s("ok"))])))
+    }
+}
+
+impl FakeBook {
+    fn profile(&self) -> String {
+        "p1".to_owned()
     }
 }
 
@@ -204,23 +213,32 @@ fn on_device_only_tools_are_never_offered_to_other_providers() {
         .collect();
     assert_eq!(stripped.len(), 11);
     assert_eq!(strip_on_device_only(all.clone(), true).len(), all.len());
-    // The executor refuses them too, before the book is touched.
+    // The executor refuses them too: after the scope check, as Python does,
+    // and before any analysis read or reference.
     let mut fake = book();
     let mut state = dict([("provider_on_device", Value::Bool(false))]);
-    for name in [
-        "ui.chain_analysis.sources.list",
-        "ui.chain_analysis.acquire.plan",
+    let acquire = dict([
+        ("backend", s("core")),
+        ("subject", s("x")),
+        ("chain", s("bitcoin")),
+        ("network", s("main")),
+        ("direction", s("backward")),
+    ]);
+    for (name, arguments) in [
+        (
+            "ui.chain_analysis.sources.list",
+            dict([("limit", Value::from(1))]),
+        ),
+        ("ui.chain_analysis.acquire.plan", acquire),
     ] {
-        let result = run(
-            &mut fake,
-            &mut state,
-            name,
-            dict([("limit", Value::from(1))]).clone(),
-            true,
+        let result = run(&mut fake, &mut state, name, arguments, true);
+        assert_eq!(
+            reason(&result).as_deref(),
+            Some("local_provider_required"),
+            "{name}: {result:?}"
         );
-        assert_eq!(get(&result, "ok"), Some(&Value::Bool(false)), "{name}");
     }
-    assert_eq!(fake.visits, 0);
+    assert!(fake.reads.is_empty());
 }
 
 #[test]
@@ -449,4 +467,56 @@ fn consent_waits_end_on_decision_cancel_or_timeout() {
         kassiber_ai::consent::CONSENT_TIMEOUT,
         Duration::from_secs(300)
     );
+}
+
+#[test]
+fn auto_reads_never_run_egressing_tools() {
+    use kassiber_ai::executor::run_auto_reads;
+    use kassiber_ai::planner::AutoRead;
+    let mut fake = book();
+    let mut state = dict([(
+        "advertised_tools",
+        Value::List(vec![
+            s("ui_reports_lightning_profitability"),
+            s("ui_connections_node_snapshot"),
+            s("status"),
+        ]),
+    )]);
+    let planned = [
+        AutoRead {
+            name: "ui.reports.lightning_profitability",
+            arguments: dict([("connection", s("node"))]),
+        },
+        AutoRead {
+            name: "ui.connections.node.snapshot",
+            arguments: dict([("connection", s("node"))]),
+        },
+        AutoRead {
+            name: "status",
+            arguments: empty(),
+        },
+    ];
+    let mut records = Vec::new();
+    let mut runtime = Runtime {
+        data_root: "/data",
+        state: &mut state,
+    };
+    let context = run_auto_reads(
+        &planned,
+        &mut runtime,
+        &mut fake,
+        &mut |record| records.push(record),
+        &|| false,
+    );
+    // The status record, then one call and one result: only `status` ran.
+    assert_eq!(records.len(), 3);
+    assert_eq!(fake.visits, 1);
+    assert!(context.is_some());
+    for record in &records {
+        let text = format!("{record:?}");
+        assert!(
+            !text.contains("lightning") && !text.contains("node.snapshot"),
+            "{text}"
+        );
+    }
 }

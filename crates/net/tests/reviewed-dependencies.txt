@@ -8,6 +8,7 @@ core-foundation
 dirs
 fancy-regex
 flate2 rust_backend
+kassiber-ai
 kassiber-cli test-probe
 kassiber-chain
 kassiber-custody timing

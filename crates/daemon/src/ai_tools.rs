@@ -101,6 +101,33 @@ impl AiBook for HostBook<'_> {
     ) -> Result<Value, ToolError> {
         native_read(self.daemon, kind, arguments, authored_source).map_err(tool_error)
     }
+
+    fn active_profile(&mut self) -> Result<String, ToolError> {
+        let book = self.daemon.book_mut().map_err(tool_error)?;
+        Ok(book.resolve_scope(None, None).map_err(tool_error)?.1)
+    }
+
+    fn decode_analysis_references(
+        &mut self,
+        profile: &str,
+        arguments: &Value,
+    ) -> Result<Value, ToolError> {
+        let book = self.daemon.book_mut().map_err(tool_error)?;
+        book.chain_analysis_decode_ai_args(profile, arguments)
+            .map_err(tool_error)
+    }
+
+    fn issue_analysis_reference(
+        &mut self,
+        profile: &str,
+        value: &str,
+    ) -> Result<String, ToolError> {
+        let book = self.daemon.book_mut().map_err(tool_error)?;
+        let issued = book
+            .chain_analysis_issue_ai_references(profile, &[value.to_owned()])
+            .map_err(tool_error)?;
+        issued.into_iter().next().ok_or(ToolError::Unexpected)
+    }
 }
 
 /// One native read kind, routed as `Daemon::handle` routes it, for a book
@@ -157,6 +184,18 @@ fn native_read(
     }
     if crate::settings::KINDS.contains(&kind) {
         return crate::settings::execute(daemon.book_mut()?.as_mut(), kind, args);
+    }
+    if crate::chain_analysis_reads::KINDS.contains(&kind) {
+        let runtime = std::sync::Arc::clone(&daemon.analysis);
+        return crate::chain_analysis_reads::execute(
+            daemon.book_mut()?.as_mut(),
+            &runtime,
+            kind,
+            args,
+        );
+    }
+    if crate::chain_analysis_ops::KINDS.contains(&kind) {
+        return crate::chain_analysis_ops::execute(daemon.book_mut()?.as_mut(), kind, args);
     }
     if kind == "ui.wallets.list" {
         let default = daemon.runtime_config.default_backend.clone();

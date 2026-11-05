@@ -1,0 +1,228 @@
+[
+  {
+    "id": "A-validate-required-before-unknown",
+    "file": "crates/ai/src/validate.rs",
+    "find": "        if !missing.is_empty() {",
+    "replace": "        if !missing.is_empty() && pairs.iter().all(|(key, _)| property(properties, key).is_some()) {",
+    "expect_failing": [
+      "synthetic_validation_matches_python",
+      "catalog_validation_matches_python"
+    ],
+    "rule": "Missing required fields are reported before unsupported ones."
+  },
+  {
+    "id": "A-validate-enum",
+    "file": "crates/ai/src/validate.rs",
+    "find": "if let Some(Value::List(allowed)) = get(schema, \"enum\") {",
+    "replace": "if let Some(Value::List(allowed)) = get(schema, \"enum\").filter(|_| expected.is_empty()) {",
+    "expect_failing": [
+      "synthetic_validation_matches_python",
+      "catalog_validation_matches_python"
+    ],
+    "rule": "An enum is enforced alongside a declared type."
+  },
+  {
+    "id": "A-validate-depth",
+    "file": "crates/ai/src/validate.rs",
+    "find": "    if depth > MAX_SCHEMA_DEPTH {",
+    "replace": "    if depth > MAX_SCHEMA_DEPTH + 1 {",
+    "expect_failing": [
+      "synthetic_validation_matches_python"
+    ],
+    "rule": "Nesting past sixteen schema levels is refused."
+  },
+  {
+    "id": "A-validate-code-points",
+    "file": "crates/ai/src/validate.rs",
+    "find": "        let length = len_big(pyre::char_len(text));",
+    "replace": "        let length = len_big(text.as_surrogatepass_bytes().len());",
+    "expect_failing": [
+      "catalog_validation_matches_python",
+      "synthetic_validation_matches_python"
+    ],
+    "rule": "String lengths count code points, not UTF-8 bytes."
+  },
+  {
+    "id": "A-validate-size-limit",
+    "file": "crates/ai/src/validate.rs",
+    "find": "    if argument_chars(arguments)? > MAX_ARGUMENT_CHARS {",
+    "replace": "    if argument_chars(arguments)? > MAX_ARGUMENT_CHARS + 1 {",
+    "expect_failing": [
+      "catalog_validation_matches_python"
+    ],
+    "rule": "Arguments over 65,536 characters of escaped compact JSON are refused."
+  },
+  {
+    "id": "A-pattern-trailing-newline",
+    "file": "crates/envelope/src/redaction.rs",
+    "find": "            out.push_str(r\"(?=\\n?\\z)\");",
+    "replace": "            out.push_str(r\"\\z\");",
+    "expect_failing": [
+      "synthetic_validation_matches_python",
+      "catalog_validation_matches_python"
+    ],
+    "rule": "A Python $ also matches before a final newline."
+  },
+  {
+    "id": "A-redact-wif",
+    "file": "crates/ai/src/redact.rs",
+    "find": "    \"wif\",\n",
+    "replace": "    \"wif-never-matches\",\n",
+    "expect_failing": [
+      "redaction_matches_python"
+    ],
+    "rule": "Keys naming WIF material are blanked in previews and results."
+  },
+  {
+    "id": "A-redact-header",
+    "file": "crates/ai/src/redact.rs",
+    "find": "    \"header\",\n",
+    "replace": "    \"header-never-matches\",\n",
+    "expect_failing": [
+      "redaction_matches_python"
+    ],
+    "rule": "Header-named keys are blanked."
+  },
+  {
+    "id": "A-redact-path-cutoff",
+    "file": "crates/ai/src/redact.rs",
+    "find": "Ok(Some(found)) => format!(\"{}{REDACTED_PATH}\", &without_urls[..found.start()]),",
+    "replace": "Ok(Some(found)) => format!(\"{}{REDACTED_PATH}{}\", &without_urls[..found.start()], &without_urls[found.end()..]),",
+    "expect_failing": [
+      "redaction_matches_python"
+    ],
+    "rule": "Everything after the first local path is withheld."
+  },
+  {
+    "id": "A-consent-once-only",
+    "file": "crates/ai/src/consent.rs",
+    "find": "    \"ui.review.apply\",\n",
+    "replace": "    \"ui.review.apply-never-matches\",\n",
+    "expect_failing": [
+      "once_only_grants_are_never_remembered",
+      "constants_match_python"
+    ],
+    "rule": "A session grant for a review apply is never remembered."
+  },
+  {
+    "id": "A-consent-timeout",
+    "file": "crates/ai/src/consent.rs",
+    "find": "Duration::from_secs(300)",
+    "replace": "Duration::from_secs(299)",
+    "expect_failing": [
+      "constants_match_python",
+      "consent_waits_end_on_decision_cancel_or_timeout"
+    ],
+    "rule": "Consent waits 300 seconds."
+  },
+  {
+    "id": "A-gate-local-provider",
+    "file": "crates/ai/src/executor.rs",
+    "find": "        && !runtime.is(\"provider_kind\", \"local\")",
+    "replace": "        && false",
+    "expect_failing": [
+      "custody_reads_stay_with_local_providers"
+    ],
+    "rule": "Custody lineage reads need a local provider."
+  },
+  {
+    "id": "A-gate-advertised",
+    "file": "crates/ai/src/executor.rs",
+    "find": "    if !planned_auto_read && !is_advertised(entry, runtime.state) {",
+    "replace": "    if false && !is_advertised(entry, runtime.state) {",
+    "expect_failing": [
+      "only_tools_advertised_this_turn_run"
+    ],
+    "rule": "Only tools advertised this turn run."
+  },
+  {
+    "id": "A-gate-egress-consent",
+    "file": "crates/ai/src/executor.rs",
+    "find": "    if entry.egresses && !consented(runtime.state, &call.call_id) {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "egressing_reads_need_a_consent_bound_to_the_call"
+    ],
+    "rule": "Egressing reads need a consent bound to the call."
+  },
+  {
+    "id": "A-gate-stale-profile",
+    "file": "crates/ai/src/executor.rs",
+    "find": "    if &workspace != expected_workspace || &profile != expected_profile {",
+    "replace": "    if &workspace != expected_workspace {",
+    "expect_failing": [
+      "scoped_reads_check_the_frozen_project_and_book"
+    ],
+    "rule": "A changed book is a stale context even within one workspace."
+  },
+  {
+    "id": "A-auto-read-egress",
+    "file": "crates/ai/src/executor.rs",
+    "find": "        if entry.egresses || !advertised.iter().any(|name| name.is(entry.provider_name())) {",
+    "replace": "        if !advertised.iter().any(|name| name.is(entry.provider_name())) {",
+    "expect_failing": [
+      "auto_reads_never_run_egressing_tools"
+    ],
+    "rule": "Auto-reads never run an egressing tool."
+  },
+  {
+    "id": "A-on-device-strip",
+    "file": "crates/ai/src/select.rs",
+    "find": "    wire_name.starts_with(ON_DEVICE_WIRE_PREFIX) || ON_DEVICE_WIRE_NAMES.contains(&wire_name)",
+    "replace": "    ON_DEVICE_WIRE_NAMES.contains(&wire_name)",
+    "expect_failing": [
+      "on_device_only_tools_are_never_offered_to_other_providers"
+    ],
+    "rule": "Recurring-source tools are offered only to on-device providers."
+  },
+  {
+    "id": "A-on-device-executor",
+    "file": "crates/ai/src/projections.rs",
+    "find": "    if crate::analysis::on_device_kind(kind) && !on_device {",
+    "replace": "    if crate::analysis::on_device_kind(kind) && false {",
+    "expect_failing": [
+      "on_device_only_tools_are_never_offered_to_other_providers"
+    ],
+    "rule": "On-device-only analysis kinds refuse other providers."
+  },
+  {
+    "id": "A-trim-string",
+    "file": "crates/ai/src/planner.rs",
+    "find": "        Value::Str(text) if pyre::char_len(text) > AUTO_CONTEXT_STRING_LIMIT => {",
+    "replace": "        Value::Str(text) if pyre::char_len(text) > AUTO_CONTEXT_STRING_LIMIT + 1 => {",
+    "expect_failing": [
+      "context_messages_match_python"
+    ],
+    "rule": "Auto-context strings keep 2,000 characters."
+  },
+  {
+    "id": "A-trim-entry",
+    "file": "crates/ai/src/planner.rs",
+    "find": "    if model_json(&trimmed).len() <= AUTO_CONTEXT_ENTRY_MAX_CHARS {",
+    "replace": "    if model_json(&trimmed).len() < AUTO_CONTEXT_ENTRY_MAX_CHARS + 2 {",
+    "expect_failing": [
+      "context_messages_match_python"
+    ],
+    "rule": "An auto-context entry over 6,000 characters becomes a summary."
+  },
+  {
+    "id": "A-trim-total",
+    "file": "crates/ai/src/planner.rs",
+    "find": "        if model_json(&payload).len() > AUTO_CONTEXT_MAX_CHARS {",
+    "replace": "        if model_json(&payload).len() > AUTO_CONTEXT_MAX_CHARS + 1 {",
+    "expect_failing": [
+      "context_messages_match_python"
+    ],
+    "rule": "The auto-context message stays within 24,000 characters."
+  },
+  {
+    "id": "A-planner-cap",
+    "file": "crates/ai/src/planner.rs",
+    "find": "    plan.planned.truncate(MAX_PLANNED_READS);",
+    "replace": "    plan.planned.truncate(MAX_PLANNED_READS + 1);",
+    "expect_failing": [
+      "planner_matches_python"
+    ],
+    "rule": "At most twelve auto-reads run per turn."
+  }
+]

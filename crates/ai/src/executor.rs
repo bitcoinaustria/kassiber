@@ -216,6 +216,26 @@ pub trait Book {
         arguments: &Value,
         authored_source: &'static str,
     ) -> Result<Value, ToolError>;
+    /// `resolve_scope(conn, None, None)`: the active profile's id.
+    fn active_profile(&mut self) -> Result<String, ToolError> {
+        Err(not_native("the active profile", "this book").into())
+    }
+    /// `decode_ai_args`: chain-analysis handles in arguments back to subjects.
+    fn decode_analysis_references(
+        &mut self,
+        _profile: &str,
+        _arguments: &Value,
+    ) -> Result<Value, ToolError> {
+        Err(not_native("chain-analysis references", "this book").into())
+    }
+    /// `_reference(scope, value)`: one process- and book-scoped handle.
+    fn issue_analysis_reference(
+        &mut self,
+        _profile: &str,
+        _value: &str,
+    ) -> Result<String, ToolError> {
+        Err(not_native("chain-analysis references", "this book").into())
+    }
 }
 
 /// Runs database work on the daemon's request loop.
@@ -255,9 +275,6 @@ pub fn is_advertised(entry: &ToolEntry, state: &Value) -> bool {
 
 /// The owning work of a refused read tool, if it is refused.
 pub fn refused_read(name: &str) -> Option<&'static str> {
-    if name.starts_with("ui.chain_analysis.") {
-        return Some("the chain-analysis AI projection");
-    }
     REFUSED_READS
         .iter()
         .find(|(tool, _)| *tool == name)

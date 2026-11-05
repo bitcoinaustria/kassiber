@@ -203,7 +203,7 @@ def candidates(schema):
     for key in ("minLength", "maxLength"):
         bound = schema.get(key)
         if isinstance(bound, int):
-            values.extend(["y" * max(bound - 1, 0), "y" * bound, "y" * (bound + 1), "é" * (bound + 1)])
+            values.extend(["y" * max(bound - 1, 0), "y" * bound, "y" * (bound + 1), "é" * bound, "é" * (bound + 1)])
     for key in ("minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum"):
         bound = schema.get(key)
         if isinstance(bound, (int, float)) and not isinstance(bound, bool):
@@ -230,7 +230,8 @@ def validation_cases():
         tool_cases = [{}, base, {**base, "zz_unknown": 1}, {"debug": True, **base}]
         if tool.name in {"status", "ui.transactions.search", "ui.transfers.components.plan"}:
             # The size limit is checked first, on the ASCII-escaped length.
-            tool_cases += [{"zz": "x" * 65524}, {"zz": "x" * 65525}, {"zz": "é" * 10923}, {"zz": "é" * 10924}]
+            # `{"zz":"` and `"}` add nine characters: 65,536 is the last size accepted.
+            tool_cases += [{"zz": "x" * 65527}, {"zz": "x" * 65528}, {"zz": "é" * 10921}, {"zz": "é" * 10922}]
         for name, child in props.items():
             for value in candidates(child):
                 tool_cases.append({name: value, **{k: v for k, v in base.items() if k != name}})
@@ -441,6 +442,8 @@ def planner_cases():
         "transfer swap", "all books", "privacy egress", "rule", "saved view", "loan collateral",
         "price eur", "'ab'", "'a'", "\"" + "x" * 90 + "\"", "find " + "y" * 100, "find tx", "find transactions",
         "a\ud800b tax", "TRANSACTION Ü", "İstanbul wallet",
+        # More planned reads than the cap of twelve.
+        "pending transfer balance tax wallet backend loan privacy rate history quarantine total",
     ]
     cases = []
     for text in texts:
@@ -460,6 +463,41 @@ def planner_cases():
     return cases
 
 
+def _sized_contexts():
+    """Contexts whose entry or whole message sits exactly at a limit."""
+    def entry(tool, size):
+        return {"tool": tool, "arguments": {}, "result": {"ok": True, "pad": ["p" * 1000] * (size // 1000) + ["q" * (size % 1000)]}}
+
+    def entry_length(item):
+        trimmed = daemon._trim_auto_context_value(tools.redact_ai_tool_result(item))
+        return len(json.dumps(trimmed, sort_keys=True, separators=(",", ":")))
+
+    contexts = []
+    for target in (daemon.AUTO_CONTEXT_ENTRY_MAX_CHARS, daemon.AUTO_CONTEXT_ENTRY_MAX_CHARS + 1):
+        size = target - entry_length(entry("t", 0))
+        while entry_length(entry("t", size)) < target:
+            size += 1
+        while entry_length(entry("t", size)) > target:
+            size -= 1
+        assert entry_length(entry("t", size)) == target
+        contexts.append([entry("t", size)])
+
+    def message_length(context):
+        payload = {"untrusted_accounting_data": True, "auto_read_tools": [daemon._auto_context_entry_for_model(e) for e in context]}
+        return len(json.dumps(payload, sort_keys=True, separators=(",", ":")))
+
+    # Four entries just under the entry limit, then a small last one grown
+    # to the exact message size.
+    base = [entry(f"t{index}", 5700) for index in range(4)]
+    for target in (daemon.AUTO_CONTEXT_MAX_CHARS, daemon.AUTO_CONTEXT_MAX_CHARS + 1):
+        size = 0
+        while message_length([*base, entry("last", size)]) < target and size < 5000:
+            size += 1
+        assert message_length([*base, entry("last", size)]) == target, (target, size)
+        contexts.append([*base, entry("last", size)])
+    return contexts
+
+
 def context_cases():
     def entry(tool, result, arguments=None):
         return {"tool": tool, "arguments": arguments or {}, "result": result}
@@ -477,6 +515,9 @@ def context_cases():
         [entry(f"t{i}", {"ok": True, "envelope": {"kind": "k", "data": {"summary": "s" * 1900, "x": "y" * 3000}}}) for i in range(12)],
         [entry("deep", {"ok": True, "envelope": {"kind": "k", "data": deep_value(12)}})],
         [entry("unicode", {"ok": True, "envelope": {"kind": "k", "data": {"text": "ü" * 2500}}})],
+        [entry("edge", {"ok": True, "envelope": {"kind": "k", "data": {"at": "a" * 2000, "over": "b" * 2001}}})],
+        [entry("list", {"ok": True, "envelope": {"kind": "k", "data": {"at": list(range(25)), "over": list(range(26))}}})],
+        *_sized_contexts(),
     ]
     return [{"context": context, "message": daemon._auto_tool_context_for_model(copy.deepcopy(context))} for context in contexts]
 
@@ -533,6 +574,32 @@ def denied_cases():
     ]
 
 
+def projection_cases():
+    from kassiber.core import chain_analysis_ai
+
+    values = [
+        {"nodes": [{"id": "txid:" + "a" * 64, "kind": "transaction", "amount_msat": "1000", "label": "Alice"}], "snapshot_id": "s" * 64},
+        {"id": "12345678-1234-1234-1234-1234567890AB", "case_id": "c", "subject": "bc1qxyz", "subjects": ["a", 1, None, {"x": 1}]},
+        {"edges": [{"kind": "spends", "source": "out:1", "target": "in:2"}, {"kind": "label", "source": "local_label", "target": "x"}, {"kind": "spends", "source": "s"}, {"source": "free text"}]},
+        {"kind": "bc1qcode", "code": "fine_code-x", "rule": "a" * 64, "status": "x" * 101, "reason": "Upper", "level": "", "rules": ["ok_code", "tpub123", "BAD"], "model": 5},
+        {"asset": "BTC", "target_asset": "lbtc", "source_asset": "TOOLONGASSET", "fee_msat": "-0", "min_amount_msat": "-12", "amount_msat": "01", "interpretation_count": "12", "7": "33", "\u0663": "x", "8": 4},
+        {"final_fee_rate_sat_vb": "1.50", "created_at": "2026-01-01T00:00:00Z", "start": "2026-01-01", "end": "x" * 9, "valid_until": "2026-01-01T00:00:00+00:00\n"},
+        {"unknown_field": "x", "summary": {"count": 3, "free": "y"}, "items": [[1, "a"], {"id": "z"}], "error": {"code": "stale_x", "details": {"subject": "s"}}},
+        {"ai_reference_scope": "x", "observer": "owner"},
+        ["not", "a", "dict"],
+        {"decimal_like": 1.5, "count": 2.5, "deleted": True},
+    ]
+
+    def issue(scope, value):
+        return f"ref({value})"
+
+    cases = []
+    with mock.patch.object(chain_analysis_ai, "_scope", lambda conn, profile: b"scope"), mock.patch.object(chain_analysis_ai, "_reference", issue):
+        for value in values:
+            cases.append({"value": value, "projected": chain_analysis_ai.project_ai_result(None, "p", copy.deepcopy(value))})
+    return cases
+
+
 def document():
     return {
         "capabilities": {tool.name: sorted(tools.tool_capabilities(tool)) for tool in tools.TOOL_CATALOG},
@@ -549,6 +616,7 @@ def document():
         "planner": planner_cases(),
         "context": context_cases(),
         "provenance": provenance_cases(),
+        "projection": projection_cases(),
     }
 
 

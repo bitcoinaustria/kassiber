@@ -13,6 +13,7 @@
 //! is not native yet. Egressing tools never run without a consent bound to
 //! the call.
 
+pub mod analysis;
 pub mod catalog;
 pub mod clock;
 pub mod consent;

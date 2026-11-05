@@ -1259,6 +1259,26 @@ impl Book for RealBook {
         )
     }
 
+    fn chain_analysis_decode_ai_args(
+        &mut self,
+        profile: &str,
+        args: &Value,
+    ) -> Result<Value, AppError> {
+        kassiber_wallets::analysis_index::handles::decode_ai_args(self.conn()?, profile, args)
+    }
+
+    fn chain_analysis_issue_ai_references(
+        &mut self,
+        profile: &str,
+        values: &[String],
+    ) -> Result<Vec<String>, AppError> {
+        kassiber_wallets::analysis_index::handles::issue_ai_references(
+            self.conn()?,
+            profile,
+            values,
+        )
+    }
+
     fn diagnostics(
         &self,
         args: &Value,

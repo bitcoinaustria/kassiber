@@ -2198,6 +2198,10 @@
       "RpmArtifactPublicationSafetyTest": {"disposition": "rust-test", "flags": ["subprocess"], "group": "packaging-ci", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 2},
       "RpmPackagingTest": {"disposition": "rust-test", "flags": ["subprocess"], "group": "packaging-ci", "reason": "runs helper processes without the product entry", "reviewed": false, "tests": 4}
     },
+    "tests/test_rust_ai_tools.py": {
+      "AiCatalogDriftTest": {"disposition": "oracle", "flags": ["subprocess"], "group": "ai-mcp-operator", "reason": "regenerates the embedded AI catalog and the Python vectors the kassiber-ai tests replay, and checks the AI mutation catalog still applies", "reviewed": true, "tests": 3},
+      "AiToolExecutorParityTest": {"disposition": "oracle", "flags": ["sql", "subprocess"], "group": "ai-mcp-operator", "reason": "compares the Rust AI read executor (test.ai_tool, test.ai_auto_read) with Python's executor through a reference wrapper, raw JSONL per read tool, argument case, executor state and fixture book, and repeats the Rust run in an empty network namespace", "reviewed": true, "tests": 4}
+    },
     "tests/test_rust_analysis_acquisition.py": {
       "test_acquisition_plan_corpus_frozen_python_bytes_and_all_112_tables": {"disposition": "oracle", "flags": [], "group": "chain-sync", "reason": "compares the native acquisition planner with unchanged Python bytes and all 112 tables across argument, genesis-pin, backend capability, domain, instance and subject-resolution cases, plus encrypted-book CLI/daemon parity with offline off/on; planning contacts no backend", "reviewed": true, "tests": 1},
       "test_acquisition_plan_native_bytes_without_network_consent": {"disposition": "oracle", "flags": [], "group": "chain-sync", "reason": "compares the native acquisition planner with unchanged Python bytes and all 112 tables across argument, genesis-pin, backend capability, domain, instance and subject-resolution cases, plus encrypted-book CLI/daemon parity with offline off/on; planning contacts no backend", "reviewed": true, "tests": 1},

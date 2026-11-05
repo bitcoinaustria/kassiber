@@ -276,3 +276,15 @@ fn surrogate_text_survives_redaction() {
         )
     );
 }
+
+#[test]
+fn chain_analysis_projection_matches_python() {
+    for case in section("projection") {
+        let projected =
+            kassiber_ai::analysis::project_ai_result(field(case, "value"), &mut |value| {
+                Ok(format!("ref({value})"))
+            })
+            .unwrap();
+        assert_eq!(&projected, field(case, "projected"), "{case:?}");
+    }
+}
