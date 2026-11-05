@@ -1219,3 +1219,128 @@ fn desktop_agent_access_grants_pairs_and_ends_with_the_desktop_session() {
     );
     drop(agent);
 }
+
+/// `kassiber mcp serve` on a brokered book, speaking the modern era.
+struct McpServer {
+    child: Child,
+    stdin: Option<std::process::ChildStdin>,
+    stdout: std::io::BufReader<std::process::ChildStdout>,
+    next: u32,
+}
+
+impl McpServer {
+    fn start(broker: &Broker, data_root: &str, access_file: &Path, pin: &[&str]) -> Self {
+        let mut command = binary();
+        command
+            .args(["--data-root", data_root, "mcp", "serve"])
+            .args(pin);
+        broker.environment(&mut command);
+        command
+            .env("KASSIBER_AGENT_ACCESS_FILE", access_file)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        let mut child = command.spawn().unwrap();
+        McpServer {
+            stdin: child.stdin.take(),
+            stdout: std::io::BufReader::new(child.stdout.take().unwrap()),
+            child,
+            next: 0,
+        }
+    }
+
+    /// One `tools/call`'s structured content.
+    fn call(&mut self, tool: &str) -> Value {
+        self.next += 1;
+        writeln!(
+            self.stdin.as_mut().unwrap(),
+            "{{\"jsonrpc\": \"2.0\", \"id\": {}, \"method\": \"tools/call\", \"params\": {{\"_meta\": {{\"io.modelcontextprotocol/protocolVersion\": \"2026-07-28\", \"io.modelcontextprotocol/clientCapabilities\": {{}}}}, \"name\": \"{tool}\", \"arguments\": {{}}}}}}",
+            self.next
+        )
+        .unwrap();
+        let mut line = String::new();
+        assert!(std::io::BufRead::read_line(&mut self.stdout, &mut line).unwrap() > 0);
+        let reply = json(&line);
+        assert_eq!(get(&reply, "id"), &Value::from(self.next));
+        get(get(&reply, "result"), "structuredContent").clone()
+    }
+
+    fn finish(mut self) -> Output {
+        drop(self.stdin.take());
+        let status = self.child.wait().unwrap();
+        let mut stderr = Vec::new();
+        std::io::Read::read_to_end(self.child.stderr.as_mut().unwrap(), &mut stderr).unwrap();
+        Output {
+            status,
+            stdout: Vec::new(),
+            stderr,
+        }
+    }
+}
+
+fn reason(structured: &Value) -> String {
+    text(get(get(structured, "error"), "details"), "reason")
+}
+
+#[test]
+fn mcp_serve_reads_a_brokered_book_once_the_desktop_allows_it() {
+    let broker = Broker::start();
+    let (data_root, workspace, profile) = book(&broker);
+    let data_root = root(&data_root);
+    let config = private_dir("kb-cfg-");
+    let access_file = config.path().join("agent-access.json");
+    let mut daemon = DesktopDaemon::start(&broker, &data_root, &access_file);
+    daemon.data(
+        "daemon.unlock",
+        &format!("{{\"auth_response\": {{\"passphrase_secret\": \"{PASSPHRASE}\"}}}}"),
+    );
+    daemon.data("ui.agent_access.configure", "{\"mcp_enabled\": true}");
+    let mut server = McpServer::start(
+        &broker,
+        &data_root,
+        &access_file,
+        &["--workspace", &workspace, "--profile", &profile],
+    );
+
+    // A manual encrypted book: the agent is told to ask for an unlock.
+    assert_eq!(reason(&server.call("status")), "database_passphrase");
+
+    // The desktop grants a read lease for agents; this server is a stranger
+    // until the user allows it, and nothing starts another broker.
+    let granted = daemon.data("ui.agent_access.unlock", "{}");
+    assert_eq!(get(get(&granted, "session"), "active"), &Value::Bool(true));
+    let waiting = server.call("status");
+    assert_eq!(reason(&waiting), "agent_pairing_required");
+    assert_eq!(get(get(&waiting, "error"), "retryable"), &Value::Bool(true));
+    let shown = daemon.data("ui.agent_access.status", "{\"refresh\": true}");
+    let Value::List(agents) = get(get(&shown, "session"), "agents") else {
+        panic!("{shown:?}")
+    };
+    assert_eq!(agents.len(), 1);
+    assert_eq!(get(&agents[0], "pid"), &Value::from(server.child.id()));
+    assert_eq!(text(&agents[0], "state"), "pending");
+    daemon.data(
+        "ui.agent_access.pairing",
+        &format!(
+            "{{\"session_id\": \"{}\", \"allow\": true}}",
+            text(&agents[0], "id")
+        ),
+    );
+
+    // Allowed: its reads run in broker children with the lease, scoped to
+    // the pinned book, and each is counted.
+    let during = server.call("status");
+    assert_eq!(text(&during, "kind"), "status", "{during:?}");
+    assert_eq!(text(get(&during, "book"), "profile"), "Book A");
+    let wallets = server.call("wallets_list");
+    assert_eq!(text(&wallets, "kind"), "ui.wallets.list", "{wallets:?}");
+    let counted = daemon.data("ui.agent_access.status", "{\"refresh\": true}");
+    assert_eq!(get(get(&counted, "session"), "calls"), &Value::from(2));
+
+    // The desktop locking itself ends the agents' lease: back to manual.
+    daemon.data("daemon.lock", "{}");
+    assert_eq!(reason(&server.call("status")), "database_passphrase");
+    let finished = server.finish();
+    assert!(finished.status.success(), "{finished:?}");
+    assert!(finished.stderr.is_empty(), "{finished:?}");
+}

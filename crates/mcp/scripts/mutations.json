@@ -1,0 +1,389 @@
+[
+  {
+    "id": "mcp-era-modern-needs-version-key",
+    "file": "crates/mcp/src/protocol.rs",
+    "find": "if contains_key(meta, META_PROTOCOL_VERSION) {",
+    "replace": "if contains_key(meta, META_CLIENT_CAPABILITIES) {",
+    "expect_failing": [
+      "modern_request_requires_client_capabilities"
+    ],
+    "rule": "A request is modern only when its _meta names a protocol version."
+  },
+  {
+    "id": "mcp-era-legacy-structured",
+    "file": "crates/mcp/src/protocol.rs",
+    "find": "        self.modern\n            || self\n                .version",
+    "replace": "        self.modern\n            && self\n                .version",
+    "expect_failing": [
+      "legacy_initialize_echoes_supported_and_offers_newest_otherwise"
+    ],
+    "rule": "Both legacy revisions carry structured content and tool titles."
+  },
+  {
+    "id": "mcp-era-unknown-legacy-offers-newest",
+    "file": "crates/mcp/src/protocol.rs",
+    "find": ".unwrap_or(LEGACY_PROTOCOL_VERSIONS[0]);",
+    "replace": ".unwrap_or(LEGACY_PROTOCOL_VERSIONS[1]);",
+    "expect_failing": [
+      "legacy_initialize_echoes_supported_and_offers_newest_otherwise"
+    ],
+    "rule": "An unknown legacy revision is offered the newest legacy one."
+  },
+  {
+    "id": "mcp-era-ping-before-initialize",
+    "file": "crates/mcp/src/protocol.rs",
+    "find": "if method.is(\"initialize\") || method.is(\"ping\") {",
+    "replace": "if method.is(\"initialize\") {",
+    "expect_failing": [
+      "legacy_ping_works_before_initialize_and_modern_ping_is_unknown"
+    ],
+    "rule": "Legacy ping is allowed before initialize."
+  },
+  {
+    "id": "mcp-era-initialize-selects-legacy",
+    "file": "crates/mcp/src/protocol.rs",
+    "find": ".unwrap_or_else(|e| e.into_inner()) = Some(version);",
+    "replace": ".unwrap_or_else(|e| e.into_inner()) = None;",
+    "expect_failing": [
+      "legacy_initialize_echoes_supported_and_offers_newest_otherwise"
+    ],
+    "rule": "initialize selects legacy semantics for the rest of the process."
+  },
+  {
+    "id": "mcp-code-unsupported-version",
+    "file": "crates/mcp/src/protocol.rs",
+    "find": "pub const UNSUPPORTED_PROTOCOL_VERSION: i64 = -32022;",
+    "replace": "pub const UNSUPPORTED_PROTOCOL_VERSION: i64 = -32602;",
+    "expect_failing": [
+      "unsupported_modern_version_lists_supported_versions"
+    ],
+    "rule": "An unsupported modern revision answers -32022."
+  },
+  {
+    "id": "mcp-code-overloaded",
+    "file": "crates/mcp/src/protocol.rs",
+    "find": "pub const SERVER_OVERLOADED: i64 = -32000;",
+    "replace": "pub const SERVER_OVERLOADED: i64 = -32603;",
+    "expect_failing": [
+      "calls_beyond_the_in_flight_limit_are_refused",
+      "open_subscriptions_are_capped"
+    ],
+    "rule": "Too much work in flight answers -32000."
+  },
+  {
+    "id": "mcp-code-parse-error",
+    "file": "crates/mcp/src/protocol.rs",
+    "find": "pub const PARSE_ERROR: i64 = -32700;",
+    "replace": "pub const PARSE_ERROR: i64 = -32600;",
+    "expect_failing": [
+      "malformed_lines_get_errors_and_the_loop_continues",
+      "non_json_constants_are_parse_errors"
+    ],
+    "rule": "Unparseable lines answer -32700."
+  },
+  {
+    "id": "mcp-code-params-object",
+    "file": "crates/mcp/src/protocol.rs",
+    "find": "                    INVALID_PARAMS,\n                    PyStr::from(\"Request params must be an object\"),",
+    "replace": "                    INVALID_REQUEST,\n                    PyStr::from(\"Request params must be an object\"),",
+    "expect_failing": [
+      "envelope_errors_follow_python_order"
+    ],
+    "rule": "Non-object params are invalid params, not an invalid request."
+  },
+  {
+    "id": "mcp-code-invalid-id-is-null",
+    "file": "crates/mcp/src/protocol.rs",
+    "find": "    let id = if valid_request_id(request_id) {",
+    "replace": "    let id = if true {",
+    "expect_failing": [
+      "envelope_errors_follow_python_order"
+    ],
+    "rule": "An error for an invalid id names id null."
+  },
+  {
+    "id": "mcp-id-bool-is-invalid",
+    "file": "crates/mcp/src/protocol.rs",
+    "find": "matches!(value, Value::Str(_) | Value::Int(_))",
+    "replace": "matches!(value, Value::Str(_) | Value::Int(_) | Value::Bool(_))",
+    "expect_failing": [
+      "envelope_errors_follow_python_order",
+      "string_and_integer_ids_are_echoed_as_sent"
+    ],
+    "rule": "Request ids are strings or integers, never bools."
+  },
+  {
+    "id": "mcp-id-string-is-not-integer",
+    "file": "crates/mcp/src/protocol.rs",
+    "find": "Value::Str(text) => Some(IdKey::Str(text.clone())),",
+    "replace": "Value::Str(text) => text\n            .as_str()\n            .and_then(|text| text.parse::<BigInt>().ok())\n            .map(IdKey::Int)\n            .or_else(|| Some(IdKey::Str(text.clone()))),",
+    "expect_failing": [
+      "string_and_integer_ids_are_echoed_as_sent",
+      "a_cancel_names_its_id_by_type"
+    ],
+    "rule": "`1` and `\"1\"` are different JSON-RPC ids."
+  },
+  {
+    "id": "mcp-inflight-limit",
+    "file": "crates/mcp/src/protocol.rs",
+    "find": "!duplicate && state.inflight.len() >= MAX_INFLIGHT_CALLS;",
+    "replace": "!duplicate && state.inflight.len() > MAX_INFLIGHT_CALLS;",
+    "expect_failing": [
+      "calls_beyond_the_in_flight_limit_are_refused"
+    ],
+    "rule": "At most 32 tool calls are in flight."
+  },
+  {
+    "id": "mcp-inflight-duplicate",
+    "file": "crates/mcp/src/protocol.rs",
+    "find": "let duplicate = state.inflight.iter().any(|(existing, _)| *existing == key);",
+    "replace": "let duplicate = false;",
+    "expect_failing": [
+      "a_duplicate_in_flight_id_is_refused_and_a_finished_one_may_be_reused"
+    ],
+    "rule": "An id already in flight is refused."
+  },
+  {
+    "id": "mcp-subscription-cap",
+    "file": "crates/mcp/src/protocol.rs",
+    "find": "if shared.state().subscriptions.len() >= MAX_SUBSCRIPTIONS {",
+    "replace": "if shared.state().subscriptions.len() > MAX_SUBSCRIPTIONS {",
+    "expect_failing": [
+      "open_subscriptions_are_capped"
+    ],
+    "rule": "At most 16 subscriptions are open."
+  },
+  {
+    "id": "mcp-cancelled-call-never-runs",
+    "file": "crates/mcp/src/protocol.rs",
+    "find": "        let response = if event.is_set() {",
+    "replace": "        let response = if false {",
+    "expect_failing": [
+      "cancelled_call_gets_no_reply"
+    ],
+    "rule": "A call cancelled before it runs is neither run nor answered."
+  },
+  {
+    "id": "mcp-drain-bounded",
+    "file": "crates/mcp/src/protocol.rs",
+    "find": "        match done.recv_timeout(self.drain) {",
+    "replace": "        match done.recv().map_err(|_| RecvTimeoutError::Disconnected) {",
+    "expect_failing": [
+      "the_drain_is_bounded_and_unfinished_calls_get_no_reply"
+    ],
+    "rule": "End of input waits a bounded time for accepted calls."
+  },
+  {
+    "id": "mcp-result-escaped-length",
+    "file": "crates/mcp/src/tools.rs",
+    "find": "let text = dumps(&structured, &Options::new().compact()).map_err(|_| Internal)?;",
+    "replace": "let text = dumps(&structured, &Options::new().compact().ensure_ascii(false)).map_err(|_| Internal)?;",
+    "expect_failing": [
+      "oversized_results_are_measured_after_ascii_escaping"
+    ],
+    "rule": "result_too_large measures the ASCII-escaped text."
+  },
+  {
+    "id": "mcp-result-limit-boundary",
+    "file": "crates/mcp/src/tools.rs",
+    "find": "if text.len() > MAX_RESULT_BYTES {",
+    "replace": "if text.len() >= MAX_RESULT_BYTES {",
+    "expect_failing": [
+      "oversized_results_are_measured_after_ascii_escaping"
+    ],
+    "rule": "A result of exactly the limit is still returned."
+  },
+  {
+    "id": "mcp-access-gate-before-resolution",
+    "file": "crates/cli/src/mcp.rs",
+    "find": "        require_mcp_access(self.store.as_ref())?;\n",
+    "replace": "",
+    "expect_failing": [
+      "access_gates_refuse_before_any_project_is_resolved"
+    ],
+    "rule": "A server call is refused while agents are off, before anything is resolved."
+  },
+  {
+    "id": "mcp-call-access-gate-before-resolution",
+    "file": "crates/cli/src/mcp.rs",
+    "find": "    require_mcp_access(store)?;\n",
+    "replace": "",
+    "expect_failing": [
+      "a_one_shot_call_checks_access_before_resolving_the_book"
+    ],
+    "rule": "`mcp call` is refused while agents are off, before the book is resolved."
+  },
+  {
+    "id": "mcp-access-reason-precedence",
+    "file": "crates/setup/src/agent_access.rs",
+    "find": "        if !self.mcp_enabled {\n            Some(\"mcp_disabled\")\n        } else if self.ai_features_enabled == Some(false) {\n            Some(\"ai_features_disabled\")\n        } else {",
+    "replace": "        if self.ai_features_enabled == Some(false) {\n            Some(\"ai_features_disabled\")\n        } else if !self.mcp_enabled {\n            Some(\"mcp_disabled\")\n        } else {",
+    "expect_failing": [
+      "access_gates_refuse_before_any_project_is_resolved"
+    ],
+    "rule": "MCP off outranks the AI master switch."
+  },
+  {
+    "id": "mcp-never-starts-a-broker",
+    "file": "crates/cli/src/mcp.rs",
+    "find": "                    start_broker: false,",
+    "replace": "                    start_broker: true,",
+    "expect_failing": [
+      "a_broker_that_exits_after_the_lease_check_is_not_restarted"
+    ],
+    "rule": "An agent's read never starts a broker."
+  },
+  {
+    "id": "mcp-same-build-only",
+    "file": "crates/cli/src/mcp.rs",
+    "find": "                    require_same_build: true,",
+    "replace": "                    require_same_build: false,",
+    "expect_failing": [
+      "mcp_refuses_a_broker_of_another_build"
+    ],
+    "rule": "Agent reads go only to this build's broker."
+  },
+  {
+    "id": "mcp-caller-context-required",
+    "file": "crates/cli/src/mcp.rs",
+    "find": "                    require_caller_context: true,",
+    "replace": "                    require_caller_context: false,",
+    "expect_failing": [
+      "mcp_refuses_a_broker_that_ignores_caller_context"
+    ],
+    "rule": "A broker that ignores caller context is refused."
+  },
+  {
+    "id": "mcp-brokered-redact-again",
+    "file": "crates/cli/src/mcp.rs",
+    "find": "return Ok(kassiber_ai::redact::redact_ai_tool_result(data));",
+    "replace": "return Ok(data.clone());",
+    "expect_failing": [
+      "brokered_results_map_like_python"
+    ],
+    "rule": "Brokered results are redacted again at this boundary."
+  },
+  {
+    "id": "mcp-stale-session-replaced-once",
+    "file": "crates/cli/src/mcp.rs",
+    "find": "if existing.alive() && !replacing.is_some_and(|stale| Arc::ptr_eq(stale, existing)) {",
+    "replace": "if existing.alive() && replacing.is_none() {",
+    "expect_failing": [
+      "parallel_calls_with_a_stale_session_replace_it_only_once"
+    ],
+    "rule": "Parallel calls that saw one stale session replace it once."
+  },
+  {
+    "id": "mcp-broker-poll-interval",
+    "file": "crates/cli/src/mcp.rs",
+    "find": "pub(crate) const BROKER_POLL: Duration = Duration::from_millis(100);",
+    "replace": "pub(crate) const BROKER_POLL: Duration = Duration::from_millis(1);",
+    "expect_failing": [
+      "a_running_call_is_polled_until_it_ends"
+    ],
+    "rule": "A queued call is polled every 0.1 s."
+  },
+  {
+    "id": "mcp-cancel-queued-work",
+    "file": "crates/cli/src/mcp.rs",
+    "find": "                client\n                    .cancel(&operation_id)\n                    .map_err(crate::operator_cli::app_error)?;\n",
+    "replace": "",
+    "expect_failing": [
+      "cancelling_a_queued_call_cancels_its_operation"
+    ],
+    "rule": "A cancelled call cancels its queued operation."
+  },
+  {
+    "id": "mcp-pin-read-only",
+    "file": "crates/store/src/pinned.rs",
+    "find": "                 PRAGMA query_only = ON;\",",
+    "replace": "\",",
+    "expect_failing": [
+      "a_pin_answers_the_context_and_never_writes_it"
+    ],
+    "rule": "MCP reads run under SQLite query_only."
+  },
+  {
+    "id": "mcp-pin-shadows-context",
+    "file": "crates/store/src/pinned.rs",
+    "find": "WHERE key NOT IN ('context_workspace', 'context_profile') \\",
+    "replace": "WHERE key NOT IN ('context_profile') \\",
+    "expect_failing": [
+      "a_pin_answers_the_context_and_never_writes_it"
+    ],
+    "rule": "The pin answers both context keys, not the stored ones."
+  },
+  {
+    "id": "chat-ctrl-c-cancels-the-turn",
+    "file": "crates/cli/src/chat/mod.rs",
+    "find": "        Err(error) if error.code == INTERRUPTED => {\n            cancel_turn(client, io, show, &turn, markdown.as_mut())",
+    "replace": "        Err(error) if error.code == \"never\" => {\n            cancel_turn(client, io, show, &turn, markdown.as_mut())",
+    "expect_failing": [
+      "ctrl_c_mid_turn_cancels_it_and_keeps_the_session",
+      "ctrl_c_at_a_consent_prompt_cancels_the_turn"
+    ],
+    "rule": "Ctrl-C during a turn cancels it through the daemon and keeps the session."
+  },
+  {
+    "id": "chat-second-ctrl-c-is-cancelled",
+    "file": "crates/cli/src/chat/mod.rs",
+    "find": "            return Err(AppError::new(\"cancelled\", \"chat cancelled\"))",
+    "replace": "            return Err(AppError::new(\"chat_failed\", \"chat cancelled\"))",
+    "expect_failing": [
+      "a_second_ctrl_c_while_waiting_for_the_cancel_ends_the_turn"
+    ],
+    "rule": "A second Ctrl-C while the cancel is answered ends the turn as cancelled."
+  },
+  {
+    "id": "chat-ctrl-c-prompt-ends-repl",
+    "file": "crates/cli/src/chat/mod.rs",
+    "find": "        Err(error) if error.code == INTERRUPTED => {\n            io.write(Target::Out, \"\\n\");\n            Ok(None)",
+    "replace": "        Err(error) if error.code == INTERRUPTED => {\n            Ok(Some(String::new()))",
+    "expect_failing": [
+      "ctrl_c_at_the_prompt_ends_the_repl"
+    ],
+    "rule": "Ctrl-C at the prompt ends the REPL with a newline."
+  },
+  {
+    "id": "chat-ctrl-c-input",
+    "file": "crates/cli/src/chat/mod.rs",
+    "find": "        if self.interrupted() {\n            return Err(interrupted());\n        }\n        Ok(line)",
+    "replace": "        Ok(line)",
+    "expect_failing": [
+      "ctrl_c_at_the_prompt_ends_the_repl",
+      "ctrl_c_at_a_consent_prompt_cancels_the_turn"
+    ],
+    "rule": "Ctrl-C while waiting for input is a KeyboardInterrupt."
+  },
+  {
+    "id": "chat-ctrl-c-daemon-wait",
+    "file": "crates/cli/src/chat/client.rs",
+    "find": "            if interrupt() {",
+    "replace": "            if false {",
+    "expect_failing": [
+      "ctrl_c_ends_a_wait_for_the_daemon",
+      "ctrl_c_mid_turn_cancels_it_and_keeps_the_session"
+    ],
+    "rule": "Ctrl-C ends a wait for the daemon."
+  },
+  {
+    "id": "chat-daemon-own-process-group",
+    "file": "crates/cli/src/chat/client.rs",
+    "find": "    std::os::unix::process::CommandExt::process_group(command, 0);\n",
+    "replace": "",
+    "expect_failing": [
+      "the_daemon_child_leads_its_own_process_group"
+    ],
+    "rule": "The daemon child is outside the terminal's foreground group."
+  },
+  {
+    "id": "ipc-interrupt-taken-once",
+    "file": "crates/ipc/src/signal.rs",
+    "find": "let arrived = INTERRUPT_REQUESTED.swap(false, Ordering::SeqCst);",
+    "replace": "let arrived = INTERRUPT_REQUESTED.load(Ordering::SeqCst);",
+    "expect_failing": [
+      "sigint_sets_the_interrupt_and_cuts_a_sleep_short"
+    ],
+    "rule": "Each Ctrl-C is handled once."
+  }
+]

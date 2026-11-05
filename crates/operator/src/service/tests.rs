@@ -1002,6 +1002,12 @@ fn test_rejected_submissions_wipe_every_staged_secret() {
         "operator_command_not_brokerable",
         None,
     );
+    // A long-lived MCP server never queues in a worker.
+    rejected(
+        argv(&["mcp", "serve"]),
+        "operator_command_not_brokerable",
+        None,
+    );
     unlock(&service, &data_root).unwrap();
     rejected(
         argv(&["transactions", "list"]),

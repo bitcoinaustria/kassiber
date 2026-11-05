@@ -655,7 +655,7 @@ fn a_running_call_is_polled_until_it_ends() {
     );
     assert!(!outcome.is_error, "{:?}", outcome.structured);
     // Two polls at Python's 0.1 s.
-    assert!(started.elapsed() >= 2 * BROKER_POLL);
+    assert!(started.elapsed() >= Duration::from_millis(200));
     assert_eq!(
         actions(&broker),
         [
@@ -776,6 +776,50 @@ fn access_gates_refuse_before_any_project_is_resolved() {
         Some(&s("ai_features_disabled"))
     );
     assert!(broker.sent.lock().unwrap().is_empty());
+}
+
+#[test]
+fn a_one_shot_call_checks_access_before_resolving_the_book() {
+    let store = Store::new(UnlockMode::Manual);
+    let selection = Selection {
+        data_root: Some("/book".into()),
+        ..Selection::default()
+    };
+    require_existing_book(&store, &selection).unwrap();
+    assert_eq!(store.resolved.load(Ordering::SeqCst), 1);
+    kassiber_setup::agent_access::set(&store.access, Some(false), None).unwrap();
+    let error = require_existing_book(&store, &selection).unwrap_err();
+    assert_eq!(error.code, "mcp_disabled");
+    assert_eq!(
+        store.resolved.load(Ordering::SeqCst),
+        1,
+        "refused before resolving"
+    );
+    kassiber_setup::agent_access::set(&store.access, Some(true), None).unwrap();
+    std::fs::write(&store.database, b"").unwrap();
+    assert_eq!(
+        require_existing_book(&store, &selection)
+            .unwrap_err()
+            .message,
+        "No Kassiber book exists in the selected project yet"
+    );
+    let mut fresh = Store::new(UnlockMode::Manual);
+    fresh.projects = false;
+    let error = require_existing_book(&fresh, &Selection::default()).unwrap_err();
+    assert_eq!(
+        (error.code.as_str(), error.message.as_str()),
+        (
+            "not_initialized",
+            "No Kassiber project exists on this machine yet"
+        )
+    );
+    assert_eq!(fresh.resolved.load(Ordering::SeqCst), 0);
+    // A named project is resolved even with an empty catalog, as in Python.
+    let named = Selection {
+        project: Some("p".into()),
+        ..Selection::default()
+    };
+    require_existing_book(&fresh, &named).unwrap();
 }
 
 #[test]

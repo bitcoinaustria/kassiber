@@ -688,3 +688,64 @@ REVIEWS["tests/test_rust_ai_chat.py"] = {"*": {
     "disposition": "oracle", "group": "ai-mcp-operator",
     "reason": "runs whole ai.chat daemon sessions on unchanged Python and the Rust binary against one scripted provider and fake broker, and compares every record grouped by request id, the chat, provider and settings tables, and every provider and broker request byte for byte (uuid4 values mapped), including consent, cancellation, a locked book and offline mode",
 }}
+REVIEWS["tests/test_rust_operator.py"] = {
+    "*": {
+        "disposition": "oracle",
+        "group": "ai-mcp-operator",
+        "reason": "runs one broker scenario through the Python client against the Python broker fixture and the Rust --operator-broker-server on copies of one book; compares every reply, error, operation record and child envelope after declared id/time/build/path mappings",
+    }
+}
+
+REVIEWS["tests/test_rust_operator_cli.py"] = {
+    "*": {
+        "disposition": "oracle",
+        "group": "ai-mcp-operator",
+        "reason": "runs one operator CLI scenario and one agent-access daemon scenario per language, each through its own broker on a copy of one book (Python CLI and fixture broker; hybrid Rust CLI, daemon and --operator-broker-server); compares exit codes, output bytes and daemon records after declared id/time/build/path mappings",
+    }
+}
+
+# R6-8: the MCP server is native in crates/mcp (protocol and projection),
+# crates/cli/src/mcp.rs (leaves, direct and brokered paths) and
+# crates/daemon/src/mcp.rs (one call on an open book); tests that call
+# Python in process are ported as Rust tests or covered by the stdio
+# transcript driver.
+_R68_PROTOCOL = "crates/mcp/src/protocol/tests.rs"
+_R68_TOOLS = "crates/mcp/src/tools.rs"
+_R68_CLI = "crates/cli/src/mcp/tests.rs"
+_R68_DRIVER = "tests/test_rust_mcp.py"
+
+
+def _r68(reason, replacement, disposition="rust-test"):
+    return {"disposition": disposition, "group": "ai-mcp-operator", "reason": reason, "replacement": replacement}
+
+
+REVIEWS["tests/test_mcp_server.py"] = {
+    "ProtocolEraTests": _r68("both eras, discovery, unsupported versions, legacy initialize, ping and unknown tools or methods against a fake provider", _R68_PROTOCOL),
+    "StdioLoopTests": _r68("answers before exit at EOF, no reply for a cancelled call, malformed lines and subscriptions", _R68_PROTOCOL),
+    "SubscriptionLimitTests": _r68("malformed subscription envelopes and the 16-stream cap", _R68_PROTOCOL),
+    "CatalogProjectionTests": _r68("only local read-only catalog tools, portable names, annotations and description bounds", _R68_TOOLS + "::only_local_read_tools_are_exposed; names_drop_the_internal_prefix_only; definitions_carry_the_read_only_annotations"),
+    "BookExecutionTests": _r68("pinned reads, no journal rebuild, query_only, redaction, invalid arguments, unknown books, no sockets and the one-shot call run through the Rust binary against Python on copies of fixture books", _R68_DRIVER + "; crates/store/src/pinned.rs::a_pin_answers_the_context_and_never_writes_it", "subprocess-scenario"),
+    "MissingBookTests": _r68("no project or book is ever created by an agent read, and half pins are refused", _R68_CLI + "::a_fresh_machine_or_a_missing_book_is_not_initialized; a_one_shot_call_checks_access_before_resolving_the_book; " + _R68_DRIVER, "subprocess-scenario"),
+    "EncryptedManualBookTests": _r68("a manual encrypted book answers interaction_required without prompting, compared with Python", _R68_DRIVER + "::McpTranscriptParityTest::test_manual_encrypted_books_ask_for_the_users_unlock", "subprocess-scenario"),
+    "BrokeredRoutingTests": _r68("no-lease refusals, the scoped mcp call operation, agent-session registration and replacement, pairing, child errors, against a scripted broker", _R68_CLI),
+    "CommandSurfaceTests": _r68("catalog metadata, broker routing of mcp call only, this build's broker, and the broker refusing mcp serve", "crates/cli/tests/describe_drift.rs::every_leaf_describes_like_python; crates/cli/src/operator_cli.rs tests; crates/operator/src/service/tests.rs::test_rejected_submissions_wipe_every_staged_secret"),
+    "PinnedContextTests": _r68("the pin answers the context, refuses writes and never stores the context", "crates/store/src/pinned.rs::a_pin_answers_the_context_and_never_writes_it"),
+    "StdioProcessTests": _r68("the server process keeps stdout pure, writes no stderr, touches no file and exits on EOF", _R68_DRIVER + "::McpPrivacyFenceTest::test_launch_and_listing_touch_no_file_and_no_socket", "subprocess-scenario"),
+    "PublishedSchemaEnforcementTests": _r68("published schema keywords and out-of-bounds MCP arguments are refused by the shared validator", "crates/ai/tests/python_vectors.rs; " + _R68_CLI + "::invalid_arguments_are_refused_before_anything_is_queued"),
+    "ReviewHardeningTests": _r68("a broker that exits after the lease check is not restarted; oversized results are measured escaped", _R68_CLI + "::a_broker_that_exits_after_the_lease_check_is_not_restarted; " + _R68_TOOLS + "::oversized_results_are_measured_after_ascii_escaping"),
+    "StdioRobustnessTests": _r68("deep nesting is a parse error and calls past the in-flight limit are refused", _R68_PROTOCOL),
+    "OutdatedBrokerMcpTests": _r68("brokers without caller context or of another build are refused; arguments are validated before queueing", _R68_CLI),
+    "StrictJsonTests": _r68("NaN and Infinity are refused on the wire and in --arguments; a fresh machine creates no project", _R68_PROTOCOL + "::non_json_constants_are_parse_errors; " + _R68_CLI + "::half_pins_and_arguments_are_checked_like_python; " + _R68_DRIVER),
+    "AgentAccessTests": _r68("off by default, fail-closed parsing, the AI master switch, refusals before any book, the user's own terminal for enable", "crates/setup/src/agent_access.rs tests; " + _R68_CLI + "::access_gates_refuse_before_any_project_is_resolved; enabling_needs_the_users_terminal_and_disabling_never_does; crates/daemon/src/agent_access.rs tests"),
+}
+REVIEWS["tests/test_rust_mcp.py"] = {
+    "*": {
+        "disposition": "oracle", "group": "ai-mcp-operator",
+        "reason": "sends one stdio JSON-RPC transcript per fixture book to unchanged Python and the Rust binary on separate copies and compares every reply byte for byte (read clocks aside), skipping only the reads R6-5a refuses; compares the one-shot leaves; pins the privacy fences (no file, socket, endpoint or broker launch; the 44 read tools) on the Rust binary",
+    },
+    "McpMutationCatalogTest": {"disposition": "rust-test", "group": "ai-mcp-operator", "reason": "the R6-8 mutation catalog applies and names existing Rust tests"},
+}
+REVIEWS["tests/test_rust_chat_interrupt.py"] = {"*": {
+    "disposition": "subprocess-scenario", "group": "ai-mcp-operator",
+    "reason": "drives the Rust `kassiber chat` on a pseudo-terminal against a loopback provider holding its answer; a typed Ctrl-C cancels the turn and keeps the session and its daemon, a second at the prompt exits, a one-shot returns the cancelled turn; Python's CLI loses its daemon here (tests/rust_port/repro_chat_ctrl_c_kills_daemon.py)",
+}}
