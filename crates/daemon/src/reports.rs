@@ -22,6 +22,7 @@ pub const KINDS: &[&str] = &[
     "ui.reports.export_csv",
     "ui.reports.export_xlsx",
     "ui.reports.export_capital_gains_csv",
+    "ui.reports.export_austrian_e1kv_pdf",
     "ui.reports.export_austrian_e1kv_xlsx",
     "ui.reports.export_austrian_e1kv_csv",
     "ui.reports.export_exit_tax_pdf",
@@ -102,6 +103,7 @@ pub fn execute(book: &mut dyn Book, kind: &str, raw: Option<&Value>) -> Result<V
             | "ui.reports.export_capital_gains_csv"
             | "ui.reports.export_austrian_e1kv_csv"
             | "ui.reports.export_austrian_e1kv_xlsx"
+            | "ui.reports.export_austrian_e1kv_pdf"
             | "ui.transactions.export_csv"
             | "ui.transactions.export_xlsx"
             | "ui.reports.export_year_handoff"
@@ -876,6 +878,7 @@ mod tests {
                 "ui.reports.export_csv",
                 "ui.reports.export_xlsx",
                 "ui.reports.export_capital_gains_csv",
+                "ui.reports.export_austrian_e1kv_pdf",
                 "ui.reports.export_austrian_e1kv_xlsx",
                 "ui.reports.export_austrian_e1kv_csv",
                 "ui.reports.export_exit_tax_pdf",

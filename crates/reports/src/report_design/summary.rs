@@ -179,6 +179,7 @@ pub fn summary(model: &Value) -> Document {
         title: t("scope.title").into(),
         lead: String::new(),
         page_break: false,
+        landscape: false,
         blocks: vec![Block::Facts(scope)],
     });
 
@@ -290,6 +291,7 @@ pub fn summary(model: &Value) -> Document {
         title: t("summary.title.figures").into(),
         lead: String::new(),
         page_break: false,
+        landscape: false,
         blocks: vec![Block::Kpis(kpis)],
     });
 
@@ -374,6 +376,7 @@ pub fn summary(model: &Value) -> Document {
         title: t("holdings.title").into(),
         lead: t("holdings.lead").into(),
         page_break: false,
+        landscape: false,
         blocks: holdings,
     });
 
@@ -455,6 +458,7 @@ pub fn summary(model: &Value) -> Document {
         title: t("activity.title").into(),
         lead: t("activity.lead").into(),
         page_break: false,
+        landscape: false,
         blocks,
     });
 
@@ -550,6 +554,7 @@ pub fn summary(model: &Value) -> Document {
         title: t("largest.title").into(),
         lead: String::new(),
         page_break: false,
+        landscape: false,
         blocks: largest,
     });
 
@@ -594,13 +599,14 @@ pub fn summary(model: &Value) -> Document {
             title: t("at.kennzahlen.title").into(),
             lead: t("at.kennzahlen.lead").into(),
             page_break: false,
+            landscape: false,
             blocks: vec![
                 Block::Table(Table {
                     id: "e1kv_kennzahlen",
                     title: String::new(),
                     columns: vec![
-                        col("tax_year", t("col.tax_year"), Kind::Code, 0.6),
-                        col("kennzahl", t("col.kennzahl"), Kind::Code, 0.4),
+                        col("tax_year", t("col.tax_year"), Kind::Text, 0.6),
+                        col("kennzahl", t("col.kennzahl"), Kind::Text, 0.4),
                         col("field", t("col.field"), Kind::Text, 3.2),
                         col("form", t("col.form"), Kind::Text, 0.6),
                         col("amount_eur", t("col.amount_eur"), Kind::Fiat, 1.0),
@@ -703,6 +709,7 @@ pub fn summary(model: &Value) -> Document {
         title: t("issues.title").into(),
         lead: String::new(),
         page_break: false,
+        landscape: false,
         blocks,
     });
 
@@ -754,6 +761,7 @@ pub fn summary(model: &Value) -> Document {
         title: t("method.title").into(),
         lead: String::new(),
         page_break: false,
+        landscape: false,
         blocks,
     });
 
@@ -781,7 +789,7 @@ pub fn summary(model: &Value) -> Document {
         period_start: text(timeframe, "start"),
         period_end: text(timeframe, "end"),
         generated_at: text(report, "generated_at"),
-        input_version,
+        input_version: Some(input_version),
         fiat: currency,
         country,
         lang,
@@ -816,7 +824,7 @@ pub fn summary_model(
         let first: i64 = text(timeframe, "start")[..4].parse().unwrap_or(0);
         let last: i64 = text(timeframe, "end")[..4].parse().unwrap_or(0);
         for year in first..=last {
-            let annual = austrian::report(
+            let annual = crate::austrian::report(
                 conn,
                 &workspace,
                 &profile,

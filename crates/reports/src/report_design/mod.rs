@@ -9,10 +9,14 @@
 use super::*;
 use sha2::{Digest, Sha256};
 
+mod austrian;
+mod exit;
 mod full;
 mod locale;
 mod strings;
 mod summary;
+pub use austrian::austrian;
+pub use exit::exit_tax;
 pub use full::full;
 pub use locale::Lang;
 pub(crate) use summary::prepare as prepare_summary;
@@ -192,7 +196,44 @@ pub enum Block {
     Kpis(Vec<Kpi>),
     Table(Table),
     Chart(Chart),
+    Flow(Flow),
     Note { text: String, accent: bool },
+}
+
+/// A flow diagram: columns of boxes left to right and directed links
+/// between them. Only the PDF draws it; its data is in the report's tables.
+#[derive(Clone, Debug, Default)]
+pub struct Flow {
+    pub columns: Vec<FlowColumn>,
+    pub links: Vec<FlowLink>,
+    pub legend: Vec<Legend>,
+}
+
+#[derive(Clone, Debug)]
+pub struct FlowColumn {
+    pub title: String,
+    pub nodes: Vec<FlowNode>,
+}
+
+#[derive(Clone, Debug)]
+pub struct FlowNode {
+    pub id: String,
+    pub label: String,
+    pub detail: String,
+    pub amount: String,
+    /// `target`, `source`, `attested`, `hop`, `privacy` or `omitted`.
+    pub style: &'static str,
+}
+
+#[derive(Clone, Debug)]
+pub struct FlowLink {
+    pub from: String,
+    pub to: String,
+    pub label: String,
+    /// `plain`, `swap` or `privacy` (dashed).
+    pub style: &'static str,
+    /// Stroke width in points.
+    pub weight: f64,
 }
 
 #[derive(Clone, Debug)]
@@ -201,6 +242,8 @@ pub struct Section {
     pub title: String,
     pub lead: String,
     pub page_break: bool,
+    /// Wide tables: the section gets landscape pages of its own.
+    pub landscape: bool,
     pub blocks: Vec<Block>,
 }
 
@@ -215,11 +258,21 @@ pub struct Document {
     pub period_start: String,
     pub period_end: String,
     pub generated_at: String,
-    pub input_version: i64,
+    /// The journal input version; `None` when the report has none.
+    pub input_version: Option<i64>,
     pub fiat: String,
     pub country: String,
     pub lang: Lang,
     pub sections: Vec<Section>,
+}
+
+impl Document {
+    /// The input version as the footer prints it; unknown is `—`.
+    fn version_text(&self) -> String {
+        self.input_version
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| "\u{2014}".into())
+    }
 }
 
 // ---------------------------------------------------------------- formatting
@@ -691,6 +744,71 @@ fn pdf_block(block: &Block, lang: Lang) -> Value {
                 ),
             ])
         }
+        Block::Flow(f) => obj([
+            ("t", s("flow")),
+            (
+                "columns",
+                Value::List(
+                    f.columns
+                        .iter()
+                        .map(|c| {
+                            obj([
+                                ("title", s(c.title.as_str())),
+                                (
+                                    "nodes",
+                                    Value::List(
+                                        c.nodes
+                                            .iter()
+                                            .map(|nd| {
+                                                obj([
+                                                    ("id", s(nd.id.as_str())),
+                                                    ("label", s(nd.label.as_str())),
+                                                    ("detail", s(nd.detail.as_str())),
+                                                    ("amount", s(nd.amount.as_str())),
+                                                    ("style", s(nd.style)),
+                                                ])
+                                            })
+                                            .collect(),
+                                    ),
+                                ),
+                            ])
+                        })
+                        .collect(),
+                ),
+            ),
+            (
+                "links",
+                Value::List(
+                    f.links
+                        .iter()
+                        .map(|l| {
+                            obj([
+                                ("from", s(l.from.as_str())),
+                                ("to", s(l.to.as_str())),
+                                ("label", s(l.label.as_str())),
+                                ("style", s(l.style)),
+                                ("weight", n(l.weight)),
+                            ])
+                        })
+                        .collect(),
+                ),
+            ),
+            (
+                "legend",
+                Value::List(
+                    f.legend
+                        .iter()
+                        .map(|l| {
+                            obj([
+                                ("label", s(l.label.as_str())),
+                                ("mark", s(l.mark)),
+                                ("tone", s(l.tone)),
+                            ])
+                        })
+                        .collect(),
+                ),
+            ),
+        ]),
         Block::Note { text, accent } => obj([
             ("t", s("note")),
             ("text", s(text.as_str())),
@@ -712,17 +830,20 @@ fn pdf_data(doc: &Document, stamp: kassiber_pdf::engine::Stamp) -> Value {
                 ("period", s(doc.period.as_str())),
                 (
                     "footer",
-                    s(format!(
-                        "{}  ·  {}",
-                        lang.tf(
+                    s({
+                        let generated = lang.tf(
                             "doc.generated",
-                            &[("at", &lang.date_time(&doc.generated_at))]
-                        ),
-                        lang.tf(
-                            "doc.input_version",
-                            &[("version", &doc.input_version.to_string())]
-                        )
-                    )),
+                            &[("at", &lang.date_time(&doc.generated_at))],
+                        );
+                        // A report without a journal version names none.
+                        match doc.input_version {
+                            Some(v) => format!(
+                                "{generated}  ·  {}",
+                                lang.tf("doc.input_version", &[("version", &v.to_string())])
+                            ),
+                            None => generated,
+                        }
+                    }),
                 ),
                 ("page_format", s(lang.t("doc.page"))),
                 ("lang", s(lang.code())),
@@ -759,6 +880,7 @@ fn pdf_data(doc: &Document, stamp: kassiber_pdf::engine::Stamp) -> Value {
                             ("title", s(section.title.as_str())),
                             ("lead", s(section.lead.as_str())),
                             ("page_break", Value::Bool(section.page_break)),
+                            ("landscape", Value::Bool(section.landscape)),
                             (
                                 "blocks",
                                 Value::List(
@@ -939,7 +1061,7 @@ pub fn xlsx(doc: &Document) -> Result<Vec<u8>> {
                 Block::Note { text, .. } => {
                     facts.push((String::new(), Cell::Text(text.clone()), None))
                 }
-                Block::Chart(_) => (),
+                Block::Chart(_) | Block::Flow(_) => (),
             }
         }
         if facts.is_empty() {
@@ -988,10 +1110,9 @@ pub fn xlsx(doc: &Document) -> Result<Vec<u8>> {
         title: doc.title.clone(),
         subject: format!("{} · {}", doc.book, doc.period),
         author: "Kassiber".into(),
-        comments: doc.lang.tf(
-            "doc.input_version",
-            &[("version", &doc.input_version.to_string())],
-        ),
+        comments: doc
+            .lang
+            .tf("doc.input_version", &[("version", &doc.version_text())]),
         created: doc.generated_at.clone(),
         formats: styles(doc.lang),
         sheets: all,
@@ -1170,7 +1291,9 @@ pub fn csv(doc: &Document) -> Result<Vec<(String, Vec<u8>)>> {
         ("generated_at", s(doc.generated_at.as_str())),
         (
             "journal_input_version",
-            Value::Int(doc.input_version.into()),
+            doc.input_version
+                .map(|v| Value::Int(v.into()))
+                .unwrap_or(Value::Null),
         ),
         ("files", listing),
     ]);

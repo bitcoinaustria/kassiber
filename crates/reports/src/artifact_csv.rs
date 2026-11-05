@@ -77,6 +77,9 @@ pub fn prepare(
             "reports.export-capital-gains-csv" => capital_csv::prepare(conn, &profile, &args),
             "reports.export-csv" => full_csv::prepare(conn, &workspace, &profile, &args, sources),
             "reports.export-pdf" => full_pdf::prepare(conn, &workspace, &profile, &args, sources),
+            "reports.export-austrian-e1kv-pdf" => {
+                austrian_pdf::prepare(conn, &workspace, &profile, &args, sources)
+            }
             "reports.export-austrian-e1kv-csv" => {
                 austrian_csv::prepare(conn, &workspace, &profile, &args)
             }

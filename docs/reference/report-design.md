@@ -104,7 +104,11 @@ Today's Austrian report numbers its sections (1.1 Veräußerungen Altvermögen �
 4.5). The shared report keeps one Disposals and one Income table; each row
 carries a `section` column with today's Austrian section number (`1.2`), so an
 accountant can still filter a section. The Kennzahl page keeps an index of the
-sections: number, title and the Kennzahl it feeds.
+sections: number, title, the Kennzahlen it feeds, whether Kassiber models it,
+rows and amount. Python's English assumption texts are translated by their
+code; an unknown code keeps Python's text. The transaction appendix is wide
+and gets landscape pages.
+
 
 ## Language
 
@@ -233,7 +237,8 @@ column names except the unit suffixes above, and every `_msat` column.
 
 `crates/reports/src/report_design/` holds the document types and the three
 renderers (`mod.rs`), the language rules (`locale.rs`), the string tables
-(`strings.rs`) and one builder per report kind (`summary.rs`, `full.rs`, …). Builders
+(`strings.rs`) and one builder per report kind (`summary.rs`, `full.rs`,
+`austrian.rs`, `exit.rs`). Builders
 take the data Python's reports produce and decide nothing a tax, journal or
 custody decision depends on. The PDF template is
 `crates/pdf/templates/report.typ`; the engine is sealed (`crates/pdf/src/engine.rs`).
@@ -243,7 +248,9 @@ Evidence for every rolled-out report:
 - a data-parity test: the model handed to the renderers equals Python's for
   fixture cases, refusals included (`crates/reports/tests/report_design.rs`
   for the summary's 23 cases, `crates/reports/tests/full_pdf.rs` for the full
-  report's 89: Python's `_build_full_report_context` values, exact);
+  report's 89: Python's `_build_full_report_context` values, exact;
+  `crates/reports/tests/austrian_pdf.rs` for the Austrian report's 47: the E
+  1kv report, portfolio and transaction rows Python's writer receives; the exit-tax report in its vectors);
 - whole-process tests (`tests/test_rust_pdf_exports.py`) run each CLI leaf and
   daemon kind against Python and require identical envelopes, errors, files,
   saved and filed markers and database effects, except where this document
@@ -265,7 +272,8 @@ One report per commit, each with data parity against Python's model.
 | --- | --- | --- | --- |
 | 1 | Summary | `reports export-summary-pdf`, `ui.reports.export_summary_pdf` | native, shared design |
 | 2 | Full report | `reports export-pdf`, `ui.reports.export_pdf` | native, shared design |
-| 3 | Austrian E 1kv and exit tax | `reports export-austrian-e1kv-pdf`, `reports export-austrian`, `reports export-exit-tax-pdf` and their kinds | pending |
+| 3 | Austrian E 1kv | `reports export-austrian-e1kv-pdf`, its alias `reports export-austrian`, `ui.reports.export_austrian_e1kv_pdf` | native, shared design |
+| 3 | Exit tax | `reports export-exit-tax-pdf`, `ui.reports.export_exit_tax_pdf` | native, shared design |
 | 4 | Source of funds | `reports export-source-funds-pdf`, `ui.source_funds.export_pdf` | pending |
 | 5 | XLSX | full, Austrian, exit tax, cross-check, verification, year handoff | pending |
 | 6 | CSV | full, capital gains, Austrian bundle | pending |
@@ -281,6 +289,8 @@ keep byte parity with Python except where the new format changes them:
 | --- | --- | --- |
 | Summary | `pages`, `bytes`, `report_snapshot.content_sha256` | the new PDF's; `title` stays Python's (`Kassiber Summary Report`) while the PDF's own title follows the book's language |
 | Full report | `pages`, `bytes`, `report_snapshot.content_sha256` | the new PDF's; `title` stays Python's (`Kassiber PDF Report - <scope>`) |
+| Exit tax | `pages`, `bytes` | the new PDF's; Python registers no saved marker for it, and neither does Rust |
+| Austrian E 1kv | `pages`, `bytes`, `report_snapshot.content_sha256`, `renderer` | the new PDF's; `renderer` is `typst` instead of `reportlab`; `title`, `sections` (Python's section ids, each still present in the new layout), `assumptions` and `transactions` stay Python's |
 
 ## Owner decisions (2026-11-04)
 

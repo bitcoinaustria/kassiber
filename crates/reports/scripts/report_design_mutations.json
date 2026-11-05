@@ -110,5 +110,37 @@
     "replace": "        let step = [1.0, 10.0]",
     "expect_failing": ["chart_axes_step_on_round_values"],
     "rule": "Chart axes step on 1, 2, 2.5 or 5 times a power of ten."
+  },
+  {
+    "id": "austrian-section-order",
+    "file": "crates/reports/src/report_design/austrian.rs",
+    "find": "    for id in &order {",
+    "replace": "    for id in order.iter().rev() {",
+    "expect_failing": ["austrian_model_matches_python_and_renders_deterministically"],
+    "rule": "Disposals and income list the Austrian sections' rows in section order."
+  },
+  {
+    "id": "austrian-income-split",
+    "file": "crates/reports/src/report_design/austrian.rs",
+    "find": "            if text(row, \"entry_type\") == \"income\" {",
+    "replace": "            if text(row, \"entry_type\") == \"disposal\" {",
+    "expect_failing": ["austrian_model_matches_python_and_renders_deterministically"],
+    "rule": "Income rows go to the Income table, every other row to Disposals."
+  },
+  {
+    "id": "austrian-profile-gate",
+    "file": "crates/reports/src/austrian_pdf.rs",
+    "find": "    austrian::validate(profile)?;\n",
+    "replace": "",
+    "expect_failing": ["austrian_model_matches_python_and_renders_deterministically"],
+    "rule": "The Austrian PDF refuses books that are not Austrian EUR books, as Python does."
+  },
+  {
+    "id": "austrian-vienna-year",
+    "file": "crates/reports/src/austrian_pdf.rs",
+    "find": "        if calendar::vienna(&text(&row, \"occurred_at\"))?.0 != year {",
+    "replace": "        if false {",
+    "expect_failing": ["austrian_model_matches_python_and_renders_deterministically"],
+    "rule": "The transaction appendix holds the Europe/Vienna tax year only."
   }
 ]

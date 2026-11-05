@@ -56,4 +56,19 @@ fn main() {
     let model = kassiber_reports::full_pdf::model(&conn, &workspace, &profile, &request, &Fixed)
         .expect("full");
     write(out, "full", &model, &report_design::full(&model));
+
+    let request = dict([
+        ("departure_date", s("2025-12-13")),
+        ("destination", s("eu_eea")),
+    ]);
+    let model = kassiber_reports::exit_pdf::model(&conn, &request, &Fixed).expect("exit tax");
+    write(out, "exit_tax", &model, &report_design::exit_tax(&model));
+
+    if kassiber_envelope::get(&profile, "tax_country") == Some(&s("at")) {
+        let request = dict([("year", Value::Int(2025.into()))]);
+        let model =
+            kassiber_reports::austrian_pdf::model(&conn, &workspace, &profile, &request, &Fixed)
+                .expect("austrian");
+        write(out, "austrian", &model, &report_design::austrian(&model));
+    }
 }

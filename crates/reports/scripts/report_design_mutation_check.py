@@ -9,7 +9,9 @@ spec = importlib.util.spec_from_file_location("report_design_mutation_check", RO
 checker = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = checker
 spec.loader.exec_module(checker)
-checker.ENGINE_PACKAGES = ("-p", "kassiber-reports", "--offline", "--test", "report_design")
+checker.ENGINE_PACKAGES = (
+    "-p", "kassiber-reports", "--offline", "--test", "report_design", "--test", "austrian_pdf",
+)
 checker.MUTATIONS = Path(__file__).with_name("report_design_mutations.json")
 
 if __name__ == "__main__":

@@ -15,7 +15,9 @@ buys, sells, interest income, fee-paying transfers between owned wallets and
 a few spends. For each book ``python-model.json`` records, per report, exactly
 what Python's reports produce: ``summary`` (the summary model for the sample
 period, the profile's tax settings and, for Austria, the E 1kv Kennzahl totals
-of each tax year) and ``full`` (the full report's model). The Rust renderers
+of each tax year), ``full`` (the full report's model), ``exit_tax`` (the
+exit-tax estimate for a departure on 2025-12-13 to the EU) and, for Austria,
+``austrian`` (the E 1kv report's model for 2025). The Rust renderers
 must reproduce these values. ``--capture-only`` re-records them for books
 built earlier.
 
@@ -145,6 +147,7 @@ def capture(root: Path, country: str) -> dict:
     from kassiber.db import open_db
 
     from unittest.mock import patch
+    from gen_austrian_pdf_vectors import austrian_model
     from gen_full_pdf_vectors import FixedDateTime, full_model
 
     conn = open_db(str(root))
@@ -167,8 +170,15 @@ def capture(root: Path, country: str) -> dict:
         for year in (2024, 2025):
             report = reports.report_austrian_e1kv(conn, None, None, hooks, tax_year=year, report_context=context)
             model["kennzahlen"][str(year)] = report["kennzahl_totals"]
+    from kassiber.core import exit_tax
+
+    exit_report = exit_tax.report_exit_tax(conn, None, None, hooks, departure_date="2025-12-13",
+                                           destination="eu_eea", report_context=context)
+    models = {"summary": model, "full": full, "exit_tax": {"report": exit_report, "generated_at": STAMP}}
+    if country == "at":
+        models["austrian"] = austrian_model(conn, hooks, context, 2025)
     conn.close()
-    return json.loads(json.dumps({"summary": model, "full": full}))
+    return json.loads(json.dumps(models))
 
 
 def main() -> int:

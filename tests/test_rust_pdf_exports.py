@@ -1,10 +1,9 @@
 """Whole-process PDF export parity; every accepted command must route to Rust.
 
-The hand-written text reports (exit tax) must match Python byte for byte:
-bytes, envelopes, files, saved markers and database effects are all
-compared. Reports in the shared design (docs/reference/report-design.md:
-summary, full report) match everything but the rendered bytes, page count
-and content hash.
+Every report is in the shared design (docs/reference/report-design.md):
+envelopes, errors, files, saved and filed markers and database effects match
+Python; the rendered bytes, page count, content hash and the listed envelope
+differences do not.
 """
 from __future__ import annotations
 
@@ -41,10 +40,30 @@ def _design_normalized(stdout, identities, artifact):
         assert artifact.read_bytes().startswith(b"%PDF-")
         assert data["pages"] >= 1 and data["bytes"] == artifact.stat().st_size
         data["pages"] = data["bytes"] = "<rendered>"
+        # The Austrian PDF names its renderer: ReportLab in Python, Typst here.
+        if "renderer" in data:
+            assert data["renderer"] in {"reportlab", "typst"}
+            data["renderer"] = "<renderer>"
         sha = data["report_snapshot"]["content_sha256"]
         assert sha == hashlib.sha256(artifact.read_bytes()).hexdigest()
-        identities[sha] = f"sha-{len(identities)}"
+        # Typst output repeats byte for byte where ReportLab's may not, so
+        # every artifact hash maps to one placeholder.
+        identities[sha] = "<artifact-sha256>"
     return _normalize(json.dumps(payload, sort_keys=True).encode(), identities)
+
+
+def _exit_normalized(stdout, artifact):
+    """Exports without a saved marker (exit tax, source of funds): only the
+    pages, bytes and renderer differ."""
+    payload = json.loads(stdout)
+    data = payload["data"]
+    assert artifact.read_bytes().startswith(b"%PDF-")
+    assert data["pages"] >= 1 and data["bytes"] == artifact.stat().st_size
+    data["pages"] = data["bytes"] = "<rendered>"
+    if "renderer" in data:
+        assert data["renderer"] in {"reportlab", "typst"}
+        data["renderer"] = "<renderer>"
+    return json.dumps(payload, sort_keys=True).encode()
 
 
 def _served(env):
@@ -118,7 +137,7 @@ def test_full_pdf_daemon_envelope_completion_errors_collisions_and_native_routin
 @pytest.mark.parametrize("country,algorithm,variant", [
     ("at", "MOVING_AVERAGE_AT", "ready"), ("at", "MOVING_AVERAGE_AT", "stale"), ("generic", "FIFO", "ready"),
 ])
-def test_exit_tax_pdf_cli_bytes_and_native_routing(tmp_path, monkeypatch, country, algorithm, variant):
+def test_exit_tax_pdf_cli_envelope_and_native_routing(tmp_path, monkeypatch, country, algorithm, variant):
     root, database, env, call = _book(tmp_path, monkeypatch, country, algorithm, variant)
     before = database.read_bytes()
     target = tmp_path / "nested" / "exit.pdf"
@@ -132,8 +151,9 @@ def test_exit_tax_pdf_cli_bytes_and_native_routing(tmp_path, monkeypatch, countr
                       ["--departure-date", "not-a-date"], ["--destination", "mars"]]:
             result = call("--machine", "reports", "export-exit-tax-pdf", "--file", str(target), *flags,
                           reference=reference)
-            content = target.read_bytes() if target.exists() else None
-            outcomes.append((result.returncode, result.stdout, result.stderr, content, _dump(root, {})))
+            stdout = (_exit_normalized(result.stdout, target) if result.returncode == 0
+                      else _normalize(result.stdout, {}))
+            outcomes.append((result.returncode, stdout, result.stderr, _dump(root, {})))
         return outcomes
 
     assert sequence(False) == sequence(True)
@@ -143,7 +163,7 @@ def test_exit_tax_pdf_cli_bytes_and_native_routing(tmp_path, monkeypatch, countr
     assert {c["command"] for c in served} == {"reports.export-exit-tax-pdf", "<usage>"}
 
 
-def test_exit_tax_pdf_daemon_bytes_and_native_routing(tmp_path, monkeypatch):
+def test_exit_tax_pdf_daemon_envelope_and_native_routing(tmp_path, monkeypatch):
     root, database, env, call = _book(tmp_path, monkeypatch, "at", "MOVING_AVERAGE_AT")
     before = database.read_bytes()
     exports = tmp_path / "exports"
@@ -159,8 +179,13 @@ def test_exit_tax_pdf_daemon_bytes_and_native_routing(tmp_path, monkeypatch):
         database.write_bytes(before)
         result = call("daemon", reference=reference, wire=wire)
         assert (result.returncode, result.stderr) == (0, b""), result.stderr
-        return (result.stdout.splitlines()[1:], _dump(root, {}),
-                {str(p.relative_to(exports)): p.read_bytes() for p in exports.rglob("*.pdf")})
+        records = []
+        for raw in result.stdout.splitlines()[1:]:
+            record = json.loads(raw)
+            data = record.get("data")
+            records.append(_exit_normalized(raw, Path(data["file"])) if record["kind"] != "error"
+                           and isinstance(data, dict) and "file" in data else raw)
+        return records, _dump(root, {}), sorted(str(p.relative_to(exports)) for p in exports.rglob("*"))
 
     native, reference = session(False), session(True)
     for actual, expected in zip(native[0], reference[0]):
@@ -249,3 +274,75 @@ def test_summary_pdf_daemon_envelope_errors_collisions_and_native_routing(tmp_pa
         assert actual == expected
     assert native == reference
     assert _served(env) == [{"command": "daemon", "served_by": "rust"}]
+
+
+@pytest.mark.parametrize("country,algorithm,variant", [
+    ("at", "MOVING_AVERAGE_AT", "ready"), ("at", "MOVING_AVERAGE_AT", "stale"), ("generic", "FIFO", "ready"),
+])
+def test_austrian_pdf_cli_envelope_completion_filing_and_native_routing(tmp_path, monkeypatch, country, algorithm,
+                                                                        variant):
+    root, database, env, call = _book(tmp_path, monkeypatch, country, algorithm, variant)
+    before = database.read_bytes()
+    target = tmp_path / "nested" / "austrian.pdf"
+
+    def sequence(reference):
+        database.write_bytes(before)
+        shutil.rmtree(target.parent, ignore_errors=True)
+        identities, outcomes = {}, []
+        for index, (command, flags) in enumerate([
+                ("export-austrian-e1kv-pdf", ["--year", "2025"]), ("export-austrian", ["--year", "2024"]),
+                ("export-austrian-e1kv-pdf", ["--year", "2008"]), ("export-austrian", [])]):
+            result = call("--machine", "reports", command, "--file", str(target), *flags, reference=reference)
+            payload = json.loads(result.stdout)
+            if payload["kind"] != "error":
+                saved_id = _saved(payload["data"], target, identities, f"saved-{index}")
+                stdout = _design_normalized(result.stdout, identities, target)
+                filed = call("--machine", "reports", "filed-snapshots", "create", "--state", "filed",
+                             "--saved-snapshot-id", saved_id, reference=reference)
+                assert filed.returncode == 0, filed.stdout
+                identities[json.loads(filed.stdout)["data"]["id"]] = f"filed-{index}"
+                outcomes.append((filed.returncode, _normalize(filed.stdout, identities), filed.stderr))
+            else:
+                stdout = _normalize(result.stdout, identities)
+            outcomes.append((result.returncode, stdout, result.stderr, _dump(root, identities)))
+        return outcomes
+
+    native, reference = sequence(False), sequence(True)
+    for actual, expected in zip(native, reference):
+        assert actual == expected
+    assert native == reference
+    served = _served(env)
+    assert served and all(c["served_by"] == "rust" for c in served)
+    assert {c["command"] for c in served} <= {"reports.export-austrian-e1kv-pdf", "reports.export-austrian",
+                                              "reports.filed-snapshots.create", "<usage>"}
+
+
+def test_austrian_pdf_daemon_envelope_errors_collisions_and_native_routing(tmp_path, monkeypatch):
+    root, database, env, call = _book(tmp_path, monkeypatch, "at", "MOVING_AVERAGE_AT")
+    before = database.read_bytes()
+    exports = tmp_path / "exports"
+    requests = [{"year": 2025}, {"year": 2025}, {"year": 2024}, {}, {"year": "2025"}, {"year": 1999}]
+    wire = b"".join((json.dumps(dict(request_id=i, kind="ui.reports.export_austrian_e1kv_pdf", args=args)) + "\n")
+                    .encode() for i, args in enumerate(requests)) + b'{"request_id":"done","kind":"daemon.shutdown"}\n'
+
+    def session(reference):
+        shutil.rmtree(exports, ignore_errors=True)
+        database.write_bytes(before)
+        result = call("daemon", reference=reference, wire=wire)
+        assert (result.returncode, result.stderr) == (0, b""), result.stderr
+        identities, records = {}, []
+        for i, raw in enumerate(result.stdout.splitlines()[1:]):
+            record = json.loads(raw)
+            if record["kind"] != "error" and "file" in record.get("data", {}):
+                _saved(record["data"], Path(record["data"]["file"]), identities, f"saved-{i}")
+                records.append(_design_normalized(raw, identities, Path(record["data"]["file"])))
+            else:
+                records.append(_normalize(raw, identities))
+        return records, _dump(root, identities), sorted(str(p.relative_to(exports)) for p in exports.rglob("*"))
+
+    native, reference = session(False), session(True)
+    for actual, expected in zip(native[0], reference[0]):
+        assert actual == expected
+    assert native == reference
+    assert _served(env) == [{"command": "daemon", "served_by": "rust"}]
+

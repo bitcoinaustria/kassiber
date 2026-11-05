@@ -17757,24 +17757,17 @@ review, direct-sync wallet refresh).
 
 ## Text PDF reports (R5, partial)
 
-The owner brought PDF into scope on 2026-11-02. The hand-written PDF 1.4
-writer (`kassiber/pdf_report.py`) is ported directly to `crates/pdf` (`text`):
-Latin-1 transliteration, `textwrap` wrapping with the writer's options, the
-46-line pages and the object layout without dates or identifiers.
-`reports export-exit-tax-pdf` and `ui.reports.export_exit_tax_pdf` use it
-natively: the exit-tax estimate's lines; like Python, no saved marker. The CLI
-leaf admits source freshness first, as Python's final-export gate does. The
-envelope inserts `pages` between `file` and `bytes`.
+## PDF reports (R5, partial)
 
-Evidence: `crates/pdf/tests/text.rs` (Python's wrapping, table and document
-vectors) and `tests/test_rust_pdf_exports.py` (CLI and daemon sessions against
-Python: identical stdout, PDF bytes and every table; all served by Rust).
-Mutation entries in `crates/pdf/scripts/mutations.json` are each killed by
-named tests.
+The owner brought PDF into scope on 2026-11-02 and approved one shared report
+design (`docs/reference/report-design.md`) on 2026-11-04; it replaces both
+ReportLab's layouts and the hand-written fixed-pitch writer report by report.
+`crates/pdf` holds the sealed Typst engine; `crates/reports/src/report_design`
+builds every report's document from the model Python's writer receives.
+Every CLI leaf below admits source freshness first, as Python's final-export
+gate does, and every envelope inserts `pages` between `file` and `bytes`.
 
-The owner approved the shared report design
-(`docs/reference/report-design.md`) on 2026-11-04; it replaces ReportLab's
-layouts report by report. `reports export-summary-pdf` and
+`reports export-summary-pdf` and
 `ui.reports.export_summary_pdf` are native in that design: the model is
 Python's `build_summary_pdf_report_data` (parity for 23 fixture cases), the
 daemon kind admits only `start`, `end`, `wallets` and `include_snapshot` with
@@ -17787,5 +17780,23 @@ the period's years and wallets. The envelope keeps Python's keys and title;
 shared design too, replacing the byte-ported text PDF: the model is Python's
 `_build_full_report_context` read from the same stored inputs as the full CSV
 (`full_pdf::model`, exact parity for 89 fixture cases, refusals included),
-with the saved `full-report.pdf` marker as before. The rollout table in the
-design document tracks the remaining reports.
+with the saved `full-report.pdf` marker as before.
+
+`reports export-austrian-e1kv-pdf`, its alias `reports export-austrian` and
+`ui.reports.export_austrian_e1kv_pdf` render the Austrian E 1kv report in the
+design (German): the model is what Python's writer receives (E 1kv report,
+portfolio, the tax year's transaction rows; parity for 47 fixture cases),
+freshness admission first on the CLI, the saved `austrian-e1kv.pdf` marker
+for the tax year, managed name `kassiber-austrian-e1kv-<year>-…pdf`. The
+envelope keeps Python's keys; `renderer` is `typst`.
+
+`reports export-exit-tax-pdf` and `ui.reports.export_exit_tax_pdf` render the
+exit-tax estimate (`report_exit_tax`, parity in the exit-tax vectors) in the
+design: German for Austrian books with Python's English notes translated by
+their exact text, English otherwise; like Python, no saved marker.
+
+Evidence: `tests/test_rust_pdf_exports.py` runs CLI and daemon sessions for
+all four against Python (identical envelopes but for the rendered pages,
+bytes and hash, identical errors, files, saved and filed markers and tables;
+all served by Rust); the model tests are listed in the design document. The
+rollout table there tracks the remaining reports.

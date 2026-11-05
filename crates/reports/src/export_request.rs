@@ -17,6 +17,8 @@ pub fn handles(command: &str) -> bool {
             | "reports.export-commercial-subledger-csv"
             | "reports.export-austrian-e1kv-csv"
             | "reports.export-austrian-e1kv-xlsx"
+            | "reports.export-austrian-e1kv-pdf"
+            | "reports.export-austrian"
             | "transactions.export"
             | "ui.transactions.export_csv"
             | "ui.transactions.export_xlsx"
@@ -31,6 +33,7 @@ pub fn handles(command: &str) -> bool {
             | "ui.reports.export_csv"
             | "ui.reports.export_austrian_e1kv_csv"
             | "ui.reports.export_austrian_e1kv_xlsx"
+            | "ui.reports.export_austrian_e1kv_pdf"
             | "ui.reports.export_capital_gains_csv"
     )
 }
@@ -201,6 +204,12 @@ fn execute_admitted(
     exports_root: &Path,
     sources: &dyn Sources,
 ) -> Result<Value> {
+    // `reports export-austrian` is Python's alias of the Austrian PDF.
+    let command = if command == "reports.export-austrian" {
+        "reports.export-austrian-e1kv-pdf"
+    } else {
+        command
+    };
     let desktop = command.starts_with("ui.");
     let xlsx = command == "ui.reports.export_xlsx"
         || command == "ui.reports.export_austrian_e1kv_xlsx"
@@ -217,6 +226,7 @@ fn execute_admitted(
                 | "reports.export-pdf"
                 | "reports.export-summary-pdf"
                 | "reports.export-exit-tax-pdf"
+                | "reports.export-austrian-e1kv-pdf"
         ) {
             let (_, profile) = kassiber_setup::references::scope(conn, raw)?;
             freshness(conn, &profile)?;
@@ -360,6 +370,12 @@ fn execute_admitted(
                 "exit_tax",
             )
         }
+        "ui.reports.export_austrian_e1kv_pdf" => (
+            "reports.export-austrian-e1kv-pdf",
+            format!("kassiber-austrian-e1kv-{}", py_str(value(raw, "year"))),
+            ".pdf",
+            "austrian_e1kv",
+        ),
         "ui.reports.export_austrian_e1kv_xlsx" => (
             "reports.export-austrian-e1kv-xlsx",
             format!("kassiber-austrian-e1kv-{}", py_str(value(raw, "year"))),

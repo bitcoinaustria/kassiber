@@ -199,6 +199,8 @@ pub const IMPLEMENTED: &[&str] = &[
     "reports.export-pdf",
     "reports.export-summary-pdf",
     "reports.export-exit-tax-pdf",
+    "reports.export-austrian-e1kv-pdf",
+    "reports.export-austrian",
     "reports.export-xlsx",
     "reports.exit-tax",
     "reports.export-exit-tax-xlsx",

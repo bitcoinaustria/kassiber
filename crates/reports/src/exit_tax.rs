@@ -942,6 +942,16 @@ mod tests {
                     "{} workbook",
                     case["name"]
                 );
+                // The PDF renders this same report in the shared design, the
+                // same bytes every time.
+                let pdf = exit_pdf::prepare(conn, &args, &Fixed).unwrap();
+                let again = exit_pdf::prepare(conn, &args, &Fixed).unwrap();
+                assert!(pdf.files[0].bytes.starts_with(b"%PDF-"), "{}", case["name"]);
+                assert!(
+                    pdf.files[0].bytes == again.files[0].bytes,
+                    "{} PDF bytes repeat",
+                    case["name"]
+                );
             }
             conn.execute_batch("ROLLBACK TO exit_vector; RELEASE exit_vector")
                 .unwrap();

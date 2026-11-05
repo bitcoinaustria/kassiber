@@ -11,7 +11,7 @@ sys.modules[spec.name] = checker
 spec.loader.exec_module(checker)
 # Only the PDF test targets: filtering every reports test binary is slow.
 checker.ENGINE_PACKAGES = (
-    "-p", "kassiber-pdf", "-p", "kassiber-reports", "--offline", "--test", "text", "--test", "full_pdf", "--test", "engine",
+    "-p", "kassiber-pdf", "-p", "kassiber-reports", "--offline", "--test", "full_pdf", "--test", "engine",
 )
 checker.MUTATIONS = Path(__file__).with_name("mutations.json")
 

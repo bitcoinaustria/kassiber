@@ -4849,9 +4849,9 @@ on 2026-11-04 asked for one minimalist report format shared by every country
 and by PDF, XLSX and CSV instead of reproducing ReportLab's layouts. Python
 stays the reference for report data, not for layout.
 
-The hand-written PDF 1.4 writer ports directly with byte parity; the full
-report and exit-tax PDFs are registered natively for CLI and desktop (see
-[the checkpoint](../reference/rust-shell.md#text-pdf-reports-r5-partial)).
+The hand-written PDF 1.4 writer was first ported with byte parity for the
+full report and exit-tax PDFs; the shared design below replaced it (see
+[the checkpoint](../reference/rust-shell.md#pdf-reports-r5-partial)).
 
 The owner approved the [report design](../reference/report-design.md) on
 2026-11-04 with five decisions: Austrian books in German with Austrian number

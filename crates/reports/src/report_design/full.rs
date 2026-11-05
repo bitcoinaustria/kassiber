@@ -150,6 +150,7 @@ pub fn full(model: &Value) -> Document {
         title: t("scope.title").into(),
         lead: String::new(),
         page_break: false,
+        landscape: false,
         blocks: vec![Block::Facts(scope)],
     });
 
@@ -278,6 +279,7 @@ pub fn full(model: &Value) -> Document {
         title: t("summary.title.figures").into(),
         lead: String::new(),
         page_break: false,
+        landscape: false,
         blocks: vec![
             Block::Kpis(kpis),
             Block::Note {
@@ -382,6 +384,7 @@ pub fn full(model: &Value) -> Document {
         title: t("holdings.title").into(),
         lead: t("holdings.current_lead").into(),
         page_break: false,
+        landscape: false,
         blocks: holdings_blocks,
     });
 
@@ -478,6 +481,7 @@ pub fn full(model: &Value) -> Document {
         title: t("disposals.title").into(),
         lead: String::new(),
         page_break: false,
+        landscape: false,
         blocks,
     });
 
@@ -549,6 +553,7 @@ pub fn full(model: &Value) -> Document {
         title: t("flows.title").into(),
         lead: String::new(),
         page_break: false,
+        landscape: false,
         blocks,
     });
 
@@ -628,6 +633,7 @@ pub fn full(model: &Value) -> Document {
             t("history.lead").into()
         },
         page_break: false,
+        landscape: false,
         blocks,
     });
 
@@ -637,6 +643,7 @@ pub fn full(model: &Value) -> Document {
         title: t("wallets.title").into(),
         lead: String::new(),
         page_break: false,
+        landscape: false,
         blocks: vec![table_or(
             table(
                 "wallets",
@@ -692,6 +699,7 @@ pub fn full(model: &Value) -> Document {
         title: t("issues.title").into(),
         lead: String::new(),
         page_break: false,
+        landscape: false,
         blocks: vec![issues],
     });
 
@@ -720,6 +728,7 @@ pub fn full(model: &Value) -> Document {
         title: t("method.title").into(),
         lead: String::new(),
         page_break: false,
+        landscape: false,
         blocks: vec![
             Block::Facts(method),
             Block::Note {
@@ -777,6 +786,7 @@ pub fn full(model: &Value) -> Document {
         title: t("transactions.title").into(),
         lead: String::new(),
         page_break: !transactions.rows.is_empty(),
+        landscape: false,
         blocks: vec![table_or(transactions, t("transactions.none"))],
     });
 
@@ -794,7 +804,7 @@ pub fn full(model: &Value) -> Document {
         period_start: String::new(),
         period_end: String::new(),
         generated_at: text(model, "generated_at"),
-        input_version,
+        input_version: Some(input_version),
         fiat: currency,
         country,
         lang,
