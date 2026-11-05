@@ -27,6 +27,7 @@ mod pyre;
 mod pyval;
 pub mod redact;
 pub mod select;
+pub mod service;
 pub mod skills;
 pub mod summary;
 pub mod transport;

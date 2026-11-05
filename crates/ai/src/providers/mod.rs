@@ -862,8 +862,9 @@ pub fn normalize_base_url(value: &Value) -> Result<String, AppError> {
 }
 
 /// `redact_ai_provider_for_output(provider, default_name=...)`: never the
-/// API key. `default` is `None` when Python passes no `default_name`.
-pub fn redact_for_output(provider: &Value, default: Option<Option<&str>>) -> Value {
+/// API key. `is_default` is present only with a default name, as Python
+/// adds it only when `default_name is not None`.
+pub fn redact_for_output(provider: &Value, default: Option<&str>) -> Value {
     let mut payload = Vec::new();
     for key in SAFE_OUTPUT_FIELDS {
         if let Some(value) = kassiber_envelope::get(provider, key) {
@@ -897,7 +898,7 @@ pub fn redact_for_output(provider: &Value, default: Option<Option<&str>>) -> Val
     if let Some(default) = default {
         payload.push((
             "is_default",
-            Value::Bool(default.is_some_and(|default| *field(provider, "name") == s(default))),
+            Value::Bool(*field(provider, "name") == s(default)),
         ));
     }
     dict(payload)
@@ -1726,7 +1727,7 @@ pub fn list_with_default(conn: &Connection) -> Result<Value, AppError> {
             Value::List(
                 providers
                     .iter()
-                    .map(|provider| redact_for_output(provider, Some(default.as_deref())))
+                    .map(|provider| redact_for_output(provider, default.as_deref()))
                     .collect(),
             ),
         ),
@@ -1772,4 +1773,4 @@ pub fn contactable_cli_runtimes(conn: &Connection) -> Result<Vec<&'static str>, 
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

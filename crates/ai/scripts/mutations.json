@@ -224,5 +224,198 @@
       "planner_matches_python"
     ],
     "rule": "At most twelve auto-reads run per turn."
+  },
+  {
+    "id": "R66-route-phrase",
+    "file": "crates/ai/src/transport/errors.rs",
+    "find": "const UNKNOWN_ENDPOINT_PHRASES: &[&str] = &[\n    \"unexpected endpoint\",\n",
+    "replace": "const UNKNOWN_ENDPOINT_PHRASES: &[&str] = &[\n",
+    "expect_failing": [
+      "missing_routes_and_unserved_formats",
+      "missing_responses_path_falls_back_once_and_reports_detection"
+    ],
+    "rule": "A 400 naming the endpoint unknown counts as a missing route for the auto fallback."
+  },
+  {
+    "id": "R66-relax-once",
+    "file": "crates/ai/src/transport/mod.rs",
+    "find": "            self.compat.include = false;\n",
+    "replace": "",
+    "expect_failing": [
+      "a_refused_include_is_retried_once_and_then_left_out"
+    ],
+    "rule": "A refused optional part is dropped at most once and stays out for the rest of the turn."
+  },
+  {
+    "id": "R66-status-429",
+    "file": "crates/ai/src/transport/errors.rs",
+    "find": "        429 => (",
+    "replace": "        428 => (",
+    "expect_failing": [
+      "status_codes_map_like_python",
+      "http_errors_map_status_and_redact_the_body"
+    ],
+    "rule": "HTTP 429 maps to the retryable ai_rate_limited."
+  },
+  {
+    "id": "R66-same-origin",
+    "file": "crates/net/src/http.rs",
+    "find": "            if target.origin() != self.url.origin() {",
+    "replace": "            if false {",
+    "expect_failing": [
+      "redirects_never_connect_to_an_unconsented_origin"
+    ],
+    "rule": "Provider redirects are followed only to the exact origin."
+  },
+  {
+    "id": "R66-ack-gate",
+    "file": "crates/ai/src/providers/gates.rs",
+    "find": "    if *field(provider, \"kind\") == s(\"local\") || truthy(field(provider, \"acknowledged_at\")) {",
+    "replace": "    if *field(provider, \"kind\") == s(\"local\") {",
+    "expect_failing": [
+      "create_and_get_with_remote_kind"
+    ],
+    "rule": "An acknowledged off-device provider passes the acknowledgement gate."
+  },
+  {
+    "id": "R66-test-target-loopback",
+    "file": "crates/ai/src/providers/gates.rs",
+    "find": "    if kind == Some(\"local\") && is_loopback_http_url(base_url) {",
+    "replace": "    if kind == Some(\"local\") {",
+    "expect_failing": [
+      "gates_refuse_in_python_order"
+    ],
+    "rule": "A local claim for a non-loopback test target still needs acknowledgement."
+  },
+  {
+    "id": "R66-infer-kind",
+    "file": "crates/ai/src/providers/mod.rs",
+    "find": "pub fn infer_kind(base_url: &str) -> &'static str {\n    if is_loopback_http_url(base_url) {",
+    "replace": "pub fn infer_kind(base_url: &str) -> &'static str {\n    if true {",
+    "expect_failing": [
+      "create_infers_local_or_remote_never_tee"
+    ],
+    "rule": "Only a loopback HTTP URL infers the local kind."
+  },
+  {
+    "id": "R66-ttl",
+    "file": "crates/ai/src/discovery/mod.rs",
+    "find": "if !refresh && entry.expires > Instant::now() {",
+    "replace": "if !refresh {",
+    "expect_failing": [
+      "stale_failure_is_not_replayed_to_a_later_call_and_the_ttl_expires"
+    ],
+    "rule": "A discovery entry expires after its TTL."
+  },
+  {
+    "id": "R66-sse-leading-spaces",
+    "file": "crates/ai/src/transport/sse.rs",
+    "find": "data.trim_start_matches(' ')",
+    "replace": "data.strip_prefix(' ').unwrap_or(data)",
+    "expect_failing": [
+      "done_stops_and_quirks_hold"
+    ],
+    "rule": "SSE data loses all leading spaces, as Python's lstrip does."
+  },
+  {
+    "id": "R66-sse-trailing-cr",
+    "file": "crates/ai/src/transport/sse.rs",
+    "find": ".trim_end_matches('\\r');",
+    "replace": ";",
+    "expect_failing": [
+      "splits_events_like_python"
+    ],
+    "rule": "Trailing carriage returns are stripped, so CRLF blank lines end events."
+  },
+  {
+    "id": "R66-sse-done",
+    "file": "crates/ai/src/transport/sse.rs",
+    "find": "if payload == DONE_SENTINEL {",
+    "replace": "if payload.trim() == DONE_SENTINEL {",
+    "expect_failing": [
+      "done_stops_and_quirks_hold"
+    ],
+    "rule": "Only the exact [DONE] payload ends the stream."
+  },
+  {
+    "id": "R66-store-regex",
+    "file": "crates/ai/src/transport/errors.rs",
+    "find": "        !text[..index].chars().next_back().is_some_and(word)\n",
+    "replace": "        true\n",
+    "expect_failing": [
+      "store_refusals_read_paths_or_messages_never_echoed_input"
+    ],
+    "rule": "Only store as a whole word names the store field."
+  },
+  {
+    "id": "R66-store-never-dropped",
+    "file": "crates/ai/src/transport/mod.rs",
+    "find": "if prepared.store_sent && names_store(&error) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "store_false_is_never_dropped_by_an_error"
+    ],
+    "rule": "A refusal naming store fails the turn instead of relaxing anything."
+  },
+  {
+    "id": "R66-fallback-detected",
+    "file": "crates/ai/src/transport/mod.rs",
+    "find": "            && self.config.detected_api_format.is_none()\n",
+    "replace": "",
+    "expect_failing": [
+      "no_fallback_without_a_missing_path_or_for_a_known_format"
+    ],
+    "rule": "A provider with a detected format never falls back."
+  },
+  {
+    "id": "R66-offline-loopback",
+    "file": "crates/ai/src/transport/mod.rs",
+    "find": "if self.config.on_device && is_loopback_http_url(&self.config.base_url) {",
+    "replace": "if self.config.on_device {",
+    "expect_failing": [
+      "redirects_stay_on_origin_and_offline_keeps_only_local_loopback"
+    ],
+    "rule": "Only a local provider on a loopback URL passes offline mode."
+  },
+  {
+    "id": "R66-key-origin",
+    "file": "crates/ai/src/providers/mod.rs",
+    "find": "    if origin_changed && !present(&updates.api_key) {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "update_clears_and_sets_fields_and_retargeting_drops_the_key"
+    ],
+    "rule": "Retargeting a provider to another origin drops its API key."
+  },
+  {
+    "id": "R66-secret-namespace",
+    "file": "crates/ai/src/providers/mod.rs",
+    "find": "    if store != SECRET_STORE_INLINE && (service != expected_service || account != expected_account)",
+    "replace": "    if false",
+    "expect_failing": [
+      "narrow_set_api_key_and_native_refs"
+    ],
+    "rule": "A native secret ref outside this root's namespace is never used."
+  },
+  {
+    "id": "R66-duplicate-call-id",
+    "file": "crates/ai/src/transport/accumulate.rs",
+    "find": "} else if known.is_some() && known != slot {",
+    "replace": "} else if false {",
+    "expect_failing": [
+      "chat_calls_split_by_index_and_fail_closed_on_duplicates",
+      "chat_duplicate_ids_fail_closed_and_finish_reasons_map"
+    ],
+    "rule": "One call id under two indices fails closed instead of merging."
+  },
+  {
+    "id": "R66-cut-off-calls",
+    "file": "crates/ai/src/transport/stream.rs",
+    "find": "    if finish_reason == \"length\" || finish_reason == \"content_filter\" {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "chat_duplicate_ids_fail_closed_and_finish_reasons_map"
+    ],
+    "rule": "Calls of a cut-off Chat Completions answer never run."
   }
 ]

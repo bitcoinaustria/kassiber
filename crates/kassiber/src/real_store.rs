@@ -2383,6 +2383,23 @@ impl Book for RealBook {
             wallet_id,
         })
     }
+    fn ai_providers(
+        &mut self,
+        surface: kassiber_runtime::store::AiSurface,
+        operation: &str,
+        args: Option<&Value>,
+        host: &mut dyn kassiber_ai::service::Host,
+    ) -> Result<Value, AppError> {
+        let conn = self.conn()?;
+        match surface {
+            kassiber_runtime::store::AiSurface::Daemon => {
+                kassiber_ai::service::daemon(conn, host, operation, args)
+            }
+            kassiber_runtime::store::AiSurface::Cli => {
+                kassiber_ai::service::cli(conn, host, operation, args.unwrap_or(&Value::Null))
+            }
+        }
+    }
     fn preview_document(
         &mut self,
         request: kassiber_wallets::file_import::document::DocumentPreview,

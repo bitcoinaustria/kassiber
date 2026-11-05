@@ -23,6 +23,7 @@ kassiber-transactions = { path = "../transactions" }
 
 kassiber-imports = { path = "../imports" }
 kassiber-wallets = { path = "../wallets" }
+kassiber-ai = { path = "../ai" }
 kassiber-backup = { path = "../backup" }
 
 [dev-dependencies]

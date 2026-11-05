@@ -653,6 +653,16 @@ pub trait Book: Send {
     ) -> Result<Value, AppError> {
         Err(not_implemented("wallets", "Samourai import"))
     }
+    /// The `ai` provider kinds and CLI leaves (R6-6a), on this book.
+    fn ai_providers(
+        &mut self,
+        _surface: AiSurface,
+        _operation: &str,
+        _args: Option<&Value>,
+        _host: &mut dyn kassiber_ai::service::Host,
+    ) -> Result<Value, AppError> {
+        Err(not_implemented("ai", "AI providers"))
+    }
     /// Local file-import run services. Unsupported seam stores fail closed.
     fn import_runs(&mut self, _operation: kassiber_imports::Operation) -> Result<Value, AppError> {
         Err(not_implemented("imports", "file import runs"))
@@ -847,6 +857,14 @@ pub trait BookStore: Send + Sync {
         data_root: &str,
         select: bool,
     ) -> Result<(), AppError>;
+}
+
+/// Which surface an AI provider operation came from: a daemon kind or a
+/// CLI leaf, whose arguments and checks differ.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AiSurface {
+    Daemon,
+    Cli,
 }
 
 /// The typed error for work the Rust backend has not ported yet.

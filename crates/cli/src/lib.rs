@@ -7,6 +7,7 @@
 //! register in their own modules. Every other leaf parses exactly as in
 //! Python and then fails `not_implemented`.
 
+mod ai;
 pub mod argparse;
 mod attachments;
 mod commercial;

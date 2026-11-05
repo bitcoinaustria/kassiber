@@ -17,6 +17,7 @@ kassiber-transactions = { path = "../transactions" }
 kassiber-daemon = { path = "../daemon" }
 kassiber-imports = { path = "../imports" }
 kassiber-wallets = { path = "../wallets" }
+kassiber-ai = { path = "../ai" }
 kassiber-envelope = { path = "../envelope" }
 kassiber-pyjson = { path = "../pyjson" }
 kassiber-pytext = { path = "../pytext" }

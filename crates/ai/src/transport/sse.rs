@@ -132,6 +132,11 @@ mod tests {
             .unwrap(),
             [obj(1)]
         );
+        // Every leading space goes: `data:  [DONE]` is the sentinel.
+        assert_eq!(
+            parse_chunks(["data:  [DONE]\n", "\n", "data: {\"n\":2}\n"]).unwrap(),
+            []
+        );
         // `[DONE]` with a trailing space is a payload (and not JSON).
         assert_eq!(
             parse_chunks(["data: [DONE] \n", "\n", "data: {\"n\":2}\n"]).unwrap(),

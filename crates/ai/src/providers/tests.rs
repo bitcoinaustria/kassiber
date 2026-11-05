@@ -216,7 +216,7 @@ fn create_and_get_with_remote_kind() {
     assert_eq!(*field(&created, "acknowledged_at"), Value::Null);
     let fetched = get(&book.conn, "openai").unwrap();
     assert_eq!(text(&fetched, "api_key").unwrap(), "sk-secret");
-    let redacted = redact_for_output(&fetched, Some(Some("ollama")));
+    let redacted = redact_for_output(&fetched, Some("ollama"));
     assert!(kassiber_envelope::get(&redacted, "api_key").is_none());
     assert_eq!(*field(&redacted, "has_api_key"), Value::Bool(true));
     assert_eq!(

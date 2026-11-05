@@ -22,6 +22,7 @@ path = "src/main.rs"
 # test candidate routes on. Never in a release build.
 test-harness = [
   "kassiber-wallets/test-harness",
+  "kassiber-ai/test-harness",
   "kassiber-diagnostics/test-hooks",
   "kassiber-cli/test-probe",
   "kassiber-net/test-observer",
@@ -51,6 +52,7 @@ kassiber-release = { path = "../release" }
 kassiber-cli = { path = "../cli" }
 kassiber-imports = { path = "../imports" }
 kassiber-wallets = { path = "../wallets" }
+kassiber-ai = { path = "../ai" }
 kassiber-daemon = { path = "../daemon" }
 kassiber-net = { path = "../net" }
 kassiber-pytext = { path = "../pytext" }

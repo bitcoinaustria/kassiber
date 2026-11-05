@@ -1584,6 +1584,7 @@ dependencies = [
 name = "kassiber"
 version = "0.22.78"
 dependencies = [
+ "kassiber-ai",
  "kassiber-backup",
  "kassiber-chain",
  "kassiber-cli",
@@ -1669,6 +1670,7 @@ name = "kassiber-cli"
 version = "0.1.0"
 dependencies = [
  "fancy-regex",
+ "kassiber-ai",
  "kassiber-daemon",
  "kassiber-diagnostics",
  "kassiber-envelope",
@@ -1933,6 +1935,7 @@ dependencies = [
 name = "kassiber-runtime"
 version = "0.1.0"
 dependencies = [
+ "kassiber-ai",
  "kassiber-backup",
  "kassiber-envelope",
  "kassiber-imports",

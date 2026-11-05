@@ -14,6 +14,7 @@
 //! Python. See docs/reference/rust-shell.md.
 
 mod agent_access;
+mod ai_providers;
 #[cfg(feature = "test-kinds")]
 mod ai_tools;
 mod attachments;
@@ -247,6 +248,7 @@ pub fn supported_kinds() -> Vec<&'static str> {
     kinds.push("ui.wallets.sync");
     kinds.extend_from_slice(&SUPPORTED_KINDS[1..3]);
     kinds.push("wallets.reveal_descriptor");
+    kinds.extend(ai_providers::KINDS);
     kinds.extend(
         services::kinds()
             .filter(|k| backends::KINDS.contains(k) && ["backends.reveal_token"].contains(k)),
@@ -493,6 +495,8 @@ pub(crate) struct Daemon {
     document_sessions: documents_import::Sessions,
     /// The broker lease this desktop granted agents for its open book.
     pub(crate) agent_access: agent_access::AgentAccess,
+    /// `ctx.ai_discovery_cache`: RAM-only provider and model discovery.
+    ai_discovery: Arc<kassiber_ai::discovery::Cache>,
 }
 
 impl Daemon {
@@ -521,6 +525,7 @@ impl Daemon {
             verifications: Default::default(),
             document_sessions: Default::default(),
             agent_access: agent_access::AgentAccess::system(config.build),
+            ai_discovery: Default::default(),
         }
     }
 
@@ -1112,7 +1117,9 @@ impl Daemon {
                 false,
             ));
         }
-        let _ = input;
+        if ai_providers::KINDS.contains(&kind_text.as_str()) {
+            return ai_providers::handle(self, &kind_text, args.as_ref(), &request_id, input);
+        }
         if secrets::KINDS.contains(&kind_text.as_str()) {
             return secrets::handle(self, &kind_text, args.as_ref(), &request_id);
         }

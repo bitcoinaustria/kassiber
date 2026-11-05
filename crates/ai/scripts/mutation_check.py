@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Run the shared scratch-tree mutation checker for the AI tool executor (R6-5a).
+"""Run the shared scratch-tree mutation checker for the AI tool executor (R6-5a) and
+providers (R6-6a).
 
     TMPDIR=<worktree>/target/mutation-tmp CARGO_BUILD_BUILD_DIR=<same>/cargo-build \
         uv run --locked python crates/ai/scripts/mutation_check.py [--only ID ...]
@@ -13,7 +14,7 @@ spec = importlib.util.spec_from_file_location("tax_mutation_check", ROOT / "tax-
 checker = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = checker
 spec.loader.exec_module(checker)
-checker.ENGINE_PACKAGES = ("-p", "kassiber-ai")
+checker.ENGINE_PACKAGES = ("-p", "kassiber-ai", "-p", "kassiber-net")
 checker.MUTATIONS = Path(__file__).with_name("mutations.json")
 _run = checker._run
 

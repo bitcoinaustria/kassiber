@@ -552,6 +552,19 @@ pub fn run(
                 emit(&mut sink, format, &kind, payload)
             },
         ),
+        command if crate::ai::COMMANDS.contains(&command) => with_book(
+            env,
+            store.as_ref(),
+            &globals,
+            stdin_is_tty,
+            None,
+            (&namespace, build.version, &mut diagnostics),
+            |book, _| {
+                let payload =
+                    crate::ai::execute(book, command, &namespace, stdin.as_mut(), &mut warnings)?;
+                emit(&mut sink, format, &kind, payload)
+            },
+        ),
         _ if dotted.starts_with("imports.") => with_book(
             env,
             store.as_ref(),
