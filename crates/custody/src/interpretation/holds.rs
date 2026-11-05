@@ -682,10 +682,11 @@ pub(super) fn compute<R: Row, D: Row>(input: Inputs<'_, R, D>) -> Result<Holds, 
         Ids::new()
     };
     let pending_ids = pending_from_states(input.rows, &facts, &states)?;
-    let by_id: BTreeMap<_, _> = input
+    // Only looked up; a later row with the same id replaces an earlier one.
+    let by_id: crate::fxhash::HashMap<std::borrow::Cow<'_, str>, _> = input
         .rows
         .iter()
-        .map(|row| (codec::text(row.at("id")), row))
+        .map(|row| (codec::text_ref(row.at("id")), row))
         .collect();
     let mut covered: Ids = input
         .excluded
@@ -719,7 +720,9 @@ pub(super) fn compute<R: Row, D: Row>(input: Inputs<'_, R, D>) -> Result<Holds, 
         (&unscoped_ids, "unscoped_transfer_review"),
     ] {
         for id in ids {
-            if input.excluded.contains(id) || input.blocked.contains(id) || !by_id.contains_key(id)
+            if input.excluded.contains(id)
+                || input.blocked.contains(id)
+                || !by_id.contains_key(id.as_str())
             {
                 continue;
             }
@@ -762,7 +765,7 @@ pub(super) fn compute<R: Row, D: Row>(input: Inputs<'_, R, D>) -> Result<Holds, 
             for id in anchors.difference(&held) {
                 if input.excluded.contains(id)
                     || input.blocked.contains(id)
-                    || !by_id.contains_key(id)
+                    || !by_id.contains_key(id.as_str())
                 {
                     continue;
                 }
@@ -780,7 +783,7 @@ pub(super) fn compute<R: Row, D: Row>(input: Inputs<'_, R, D>) -> Result<Holds, 
     }
     let mut quarantines = Vec::new();
     for (id, reason) in &reasons {
-        let row = by_id[id];
+        let row = by_id[id.as_str()];
         let wallet_id = codec::text(row.at("wallet_id"));
         let wallet = input.wallets.get(&wallet_id).unwrap_or(&Value::Null);
         let label = wallet

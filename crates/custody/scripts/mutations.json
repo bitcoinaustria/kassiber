@@ -7296,8 +7296,8 @@
   {
     "id": "R2c-safety-holds-excluded",
     "file": "crates/custody/src/interpretation/holds.rs",
-    "find": "if input.excluded.contains(id) || input.blocked.contains(id) || !by_id.contains_key(id)",
-    "replace": "if input.blocked.contains(id) || !by_id.contains_key(id)",
+    "find": "        for id in ids {\n            if input.excluded.contains(id)\n                || input.blocked.contains(id)",
+    "replace": "        for id in ids {\n            if false\n                || input.blocked.contains(id)",
     "expect_failing": [
       "raw_observation_hold_vectors"
     ],
@@ -7306,8 +7306,8 @@
   {
     "id": "R2c-safety-holds-prior-block",
     "file": "crates/custody/src/interpretation/holds.rs",
-    "find": "if input.excluded.contains(id) || input.blocked.contains(id) || !by_id.contains_key(id)",
-    "replace": "if input.excluded.contains(id) || !by_id.contains_key(id)",
+    "find": "        for id in ids {\n            if input.excluded.contains(id)\n                || input.blocked.contains(id)",
+    "replace": "        for id in ids {\n            if input.excluded.contains(id)\n                || false",
     "expect_failing": [
       "raw_observation_hold_vectors"
     ],
@@ -7376,8 +7376,8 @@
   {
     "id": "R2c-safety-dependency-missing",
     "file": "crates/custody/src/interpretation/holds.rs",
-    "find": "|| !by_id.contains_key(id)\n                {",
-    "replace": "|| false\n                {",
+    "find": "                    || !by_id.contains_key(id.as_str())\n                {",
+    "replace": "                    || false\n                {",
     "expect_failing": [
       "raw_observation_hold_vectors"
     ],
@@ -20006,8 +20006,8 @@
   {
     "id": "R2-review-audit-arbitration-638",
     "file": "crates/custody/src/quantity/arbitration.rs",
-    "find": "if totals.values().any(|n| *n != BigInt::from(0)) {",
-    "replace": "if totals.values().any(|n| *n == BigInt::from(0)) {",
+    "find": "    Some(totals.values().all(|n| *n == 0))",
+    "replace": "    Some(totals.values().any(|n| *n == 0))",
     "expect_failing": [
       "quantity_operator_audit_vectors"
     ],
@@ -24808,6 +24808,36 @@
       "many_overrides_keep_their_values_and_key_order"
     ],
     "rule": "A generated integer reads as itself."
+  },
+  {
+    "id": "balance-small-sum",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "        *sum = sum.checked_add(amount)?;",
+    "replace": "        *sum = amount;",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "An observation sums all its postings."
+  },
+  {
+    "id": "balance-big-fallback",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "    totals.values().all(|n| *n == BigInt::from(0))",
+    "replace": "    totals.values().any(|n| *n == BigInt::from(0))",
+    "expect_failing": [
+      "domain_balance_matches_for_machine_and_big_integers"
+    ],
+    "rule": "Big-integer balance requires every domain to balance."
+  },
+  {
+    "id": "quantity-json-validation",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "            LegRef::Json(_) => validate_observation(&observation)?,",
+    "replace": "            LegRef::Json(_) => {}",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "JSON observations are validated before arbitration."
   },
   {
     "id": "R4-evidence-alias-slot-index",

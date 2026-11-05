@@ -321,13 +321,22 @@ impl Decision {
     }
 }
 
-type Validated<'a> = (BTreeMap<String, LegRef<'a>>, Vec<Claim>, Vec<Value>);
+/// Observations by quantity hash, borrowing typed observations' hashes.
+type ByHash<'a> = BTreeMap<std::borrow::Cow<'a, str>, LegRef<'a>>;
+type Validated<'a> = (ByHash<'a>, Vec<Claim>, Vec<Value>);
 fn validate<'a>(observations: &[LegRef<'a>], claims: &[Value]) -> Result<Validated<'a>, String> {
     let mut by_hash = BTreeMap::new();
     for &observation in observations {
-        validate_observation(&observation)?;
+        match observation {
+            // Evidence builds typed observations under the same rules.
+            LegRef::Typed(_) => debug_assert!(validate_observation(&observation).is_ok()),
+            LegRef::Json(_) => validate_observation(&observation)?,
+        }
         if by_hash
-            .insert(codec::text(&observation["quantity_hash"]), observation)
+            .insert(
+                codec::text_ref(observation.at("quantity_hash")),
+                observation,
+            )
             .is_some()
         {
             return Err("ValueError".into());
@@ -372,7 +381,7 @@ fn validate<'a>(observations: &[LegRef<'a>], claims: &[Value]) -> Result<Validat
         }
         for claim in &members {
             let source = by_hash
-                .get(&claim.source.hash)
+                .get(claim.source.hash.as_str())
                 .filter(|s| s["direction"] == "outbound");
             if let Some(source) = source {
                 sources.insert(claim.source.hash.clone());
@@ -386,7 +395,7 @@ fn validate<'a>(observations: &[LegRef<'a>], claims: &[Value]) -> Result<Validat
                 continue;
             };
             let Some(target) = by_hash
-                .get(&target_slice.hash)
+                .get(target_slice.hash.as_str())
                 .filter(|t| t["direction"] == "inbound")
             else {
                 reasons.insert("claim_target_invalid");
@@ -430,7 +439,7 @@ fn validate<'a>(observations: &[LegRef<'a>], claims: &[Value]) -> Result<Validat
         let source = Slice {
             hash: hash.clone(),
             start: BigInt::from(0),
-            end: principal(&by_hash[&hash])?,
+            end: principal(&by_hash[hash.as_str()])?,
         };
         let value = json!({"claim_id":format!("malformed-claim-bundle:{hash}"),"source":source.value(),"state":"custody_suspense","priority":{"value":priority},"reason":"malformed_claim_bundle"});
         valid.push(Claim::parse(&value)?);
@@ -439,10 +448,7 @@ fn validate<'a>(observations: &[LegRef<'a>], claims: &[Value]) -> Result<Validat
     Ok((by_hash, valid, errors))
 }
 
-fn source_decisions(
-    by_hash: &BTreeMap<String, LegRef<'_>>,
-    claims: &[Claim],
-) -> Result<Vec<Decision>, String> {
+fn source_decisions(by_hash: &ByHash<'_>, claims: &[Claim]) -> Result<Vec<Decision>, String> {
     let mut by_source: BTreeMap<&str, Vec<&Claim>> = BTreeMap::new();
     for claim in claims {
         by_source.entry(&claim.source.hash).or_default().push(claim);
@@ -454,7 +460,7 @@ fn source_decisions(
     sources.sort_by_cached_key(|(h, o)| (codec::text(&o["occurred_at"]), *h));
     let mut result = Vec::new();
     for (hash, observation) in sources {
-        let claims = by_source.get(hash.as_str()).cloned().unwrap_or_default();
+        let claims = by_source.get(&**hash).cloned().unwrap_or_default();
         let suspense = claims
             .iter()
             .any(|c| c.value["state"] == "custody_suspense");
@@ -465,7 +471,7 @@ fn source_decisions(
         let boundaries: Vec<_> = boundaries.into_iter().collect();
         for ends in boundaries.windows(2) {
             let source = Slice {
-                hash: hash.clone(),
+                hash: hash.to_string(),
                 start: ends[0].clone(),
                 end: ends[1].clone(),
             };
@@ -716,7 +722,7 @@ fn concat(parts: &[&str]) -> String {
 }
 
 fn postings<'a>(
-    by_hash: &BTreeMap<String, LegRef<'a>>,
+    by_hash: &ByHash<'a>,
     input: &[LegRef<'a>],
     decisions: &[Decision],
 ) -> Result<Vec<Posting<'a>>, String> {
@@ -765,7 +771,7 @@ fn postings<'a>(
             let source = &decision.source;
             result.push(posting(
                 format!("decision:{}:{}:{}", source.hash, source.start, source.end),
-                by_hash[&source.hash],
+                by_hash[source.hash.as_str()],
                 "external",
                 json!("unmatched_outbound_default"),
                 source.amount(),
@@ -793,7 +799,7 @@ fn postings<'a>(
         };
         result.push(posting(
             format!("decision:{}:{}:{}", source.hash, source.start, source.end),
-            by_hash[&source.hash],
+            by_hash[source.hash.as_str()],
             &kind,
             location,
             source.amount(),
@@ -848,7 +854,7 @@ pub(crate) fn project_refs(observations: &[&Value], claims: &[Value]) -> Result<
 }
 
 pub(super) struct Projection<'a> {
-    by_hash: BTreeMap<String, LegRef<'a>>,
+    by_hash: ByHash<'a>,
     decisions: Vec<Decision>,
     postings: Vec<Posting<'a>>,
     errors: Vec<Value>,
@@ -1050,6 +1056,51 @@ impl ProjectionState {
     }
 }
 
+/// Whether every domain's postings sum to zero. Each observation's postings
+/// are summed, then each domain's: a posting's domain is its observation's,
+/// and integer sums regroup exactly. Only balance is read, so no order is
+/// kept.
+fn balanced(postings: &[Posting<'_>]) -> bool {
+    let mut by_observation: crate::fxhash::HashMap<usize, (LegRef<'_>, BigInt)> =
+        Default::default();
+    for p in postings {
+        by_observation
+            .entry(p.observation.address())
+            .or_insert_with(|| (p.observation, BigInt::from(0)))
+            .1 += &p.amount;
+    }
+    let mut totals: crate::fxhash::HashMap<_, BigInt> = Default::default();
+    for (observation, sum) in by_observation.values() {
+        *totals
+            .entry(super::Domain::leg_key(*observation))
+            .or_default() += sum;
+    }
+    totals.values().all(|n| *n == BigInt::from(0))
+}
+
+/// `balanced` in machine integers, or `None` when an amount or a sum does
+/// not fit one.
+fn balanced_small(postings: &[Posting<'_>]) -> Option<bool> {
+    let mut by_observation: crate::fxhash::HashMap<usize, (LegRef<'_>, i128)> =
+        crate::fxhash::HashMap::with_capacity_and_hasher(postings.len(), Default::default());
+    for p in postings {
+        let amount = i128::try_from(&p.amount).ok()?;
+        let sum = &mut by_observation
+            .entry(p.observation.address())
+            .or_insert((p.observation, 0))
+            .1;
+        *sum = sum.checked_add(amount)?;
+    }
+    let mut totals: crate::fxhash::HashMap<_, i128> = Default::default();
+    for (observation, sum) in by_observation.values() {
+        let total = totals
+            .entry(super::Domain::leg_key(*observation))
+            .or_default();
+        *total = total.checked_add(*sum)?;
+    }
+    Some(totals.values().all(|n| *n == 0))
+}
+
 pub(super) fn arbitrate<'a>(
     observations: &[LegRef<'a>],
     claims: &[Value],
@@ -1059,24 +1110,7 @@ pub(super) fn arbitrate<'a>(
     destination_overlaps(&mut decisions);
     atomic_bundles(&mut decisions, &claims);
     let postings = postings(&by_hash, observations, &decisions)?;
-    // Sum each observation's postings, then each domain's: a posting's
-    // domain is its observation's, and integer sums regroup exactly.
-    let mut by_observation: crate::fxhash::HashMap<usize, (LegRef<'a>, BigInt)> =
-        Default::default();
-    for p in &postings {
-        by_observation
-            .entry(p.observation.address())
-            .or_insert_with(|| (p.observation, BigInt::from(0)))
-            .1 += &p.amount;
-    }
-    // Only whether every domain balances is read, so no order is kept.
-    let mut totals: crate::fxhash::HashMap<_, BigInt> = Default::default();
-    for (observation, sum) in by_observation.values() {
-        *totals
-            .entry(super::Domain::leg_key(*observation))
-            .or_default() += sum;
-    }
-    if totals.values().any(|n| *n != BigInt::from(0)) {
+    if !balanced_small(&postings).unwrap_or_else(|| balanced(&postings)) {
         return Err("AssertionError".into());
     }
     decisions.sort_by(|a, b| a.source.cmp(&b.source));
@@ -1091,6 +1125,56 @@ pub(super) fn arbitrate<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn domain_balance_matches_for_machine_and_big_integers() {
+        let btc = json!({"event_key": {"network": "regtest"}, "asset": "BTC"});
+        let usd = json!({"event_key": {"network": "regtest"}, "asset": "USD"});
+        let posting = |observation: &'static Value, amount: BigInt| Posting {
+            id: String::new(),
+            observation: LegRef::Json(observation),
+            kind: String::new(),
+            location: Value::Null,
+            amount,
+            state: Value::Null,
+        };
+        let (btc, usd): (&'static Value, &'static Value) =
+            (Box::leak(Box::new(btc)), Box::leak(Box::new(usd)));
+        let big: BigInt = BigInt::from(1) << 130usize;
+        let cases = [
+            (
+                vec![(btc, big.clone()), (btc, -big.clone()), (usd, big.clone())],
+                false,
+            ),
+            (
+                vec![
+                    (btc, BigInt::from(5)),
+                    (btc, BigInt::from(-5)),
+                    (usd, BigInt::from(1)),
+                ],
+                false,
+            ),
+            (vec![(btc, BigInt::from(5)), (btc, BigInt::from(-5))], true),
+            (vec![(btc, BigInt::from(5)), (usd, BigInt::from(-5))], false),
+            (vec![(btc, big.clone()), (btc, -big.clone())], true),
+            (vec![(btc, big.clone()), (usd, -big.clone())], false),
+            (
+                vec![
+                    (btc, BigInt::from(i128::MAX)),
+                    (btc, BigInt::from(1)),
+                    (btc, -(BigInt::from(i128::MAX) + BigInt::from(1))),
+                ],
+                true,
+            ),
+        ];
+        for (amounts, expected) in cases {
+            let postings: Vec<_> = amounts.into_iter().map(|(o, n)| posting(o, n)).collect();
+            assert_eq!(balanced(&postings), expected);
+            if let Some(small) = balanced_small(&postings) {
+                assert_eq!(small, expected);
+            }
+        }
+    }
     #[test]
     fn quantity_claim_constructor_vectors() {
         let vectors: Value = serde_json::from_str(include_str!(
