@@ -3,7 +3,8 @@ use super::{array, domain, Canon, QEvent};
 use crate::evidence::canonical::{EventRef, LegRef, Obs};
 use crate::{codec, python_text::PythonText};
 use serde_json::{json, Value};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use crate::fxhash::HashMap;
+use std::collections::{BTreeMap, BTreeSet};
 type Order = [String; 5];
 type Pool = [String; 4];
 fn text(v: &Value) -> String {
@@ -337,7 +338,7 @@ fn observations_needed(c: Canon<'_>, needed: bool) -> Result<Vec<(String, LegRef
         .map(|o| (super::text_key(o.at("quantity_hash")), o))
         .collect();
     let mut result: Vec<(String, LegRef)> = Vec::new();
-    let mut positions: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let mut positions: std::collections::HashMap<String, usize> = std::collections::HashMap::default();
     for event in &events {
         for a in event.aliases() {
             let o = *hashes
@@ -386,8 +387,8 @@ fn component_claims_observed(
     }
     let observed =
         super::reviewed::Observations::new(obs.iter().map(|(k, v)| (k.clone(), *v)).collect());
-    let mut first_observation: HashMap<&str, LegRef> = HashMap::new();
-    let mut hashes_by_tx: HashMap<&str, Vec<String>> = HashMap::new();
+    let mut first_observation: HashMap<&str, LegRef> = HashMap::default();
+    let mut hashes_by_tx: HashMap<&str, Vec<String>> = HashMap::default();
     for (tx, o) in obs {
         first_observation.entry(tx.as_str()).or_insert(*o);
         hashes_by_tx
@@ -621,7 +622,7 @@ fn whole_issues_rejected(
             .map(|o| (super::text_key(&o["quantity_hash"]), o))
             .collect()
     } else {
-        HashMap::new()
+        HashMap::default()
     };
     for e in projection.errors {
         let involved: Vec<_> = array(&e["involved_observation_hashes"])
@@ -876,7 +877,7 @@ fn compose<'a>(v: &Operands<'a>) -> Result<State<'a>, String> {
     );
     let canonical_events = canonical.events();
     let by_hash: HashMap<_, _> = if array(&v["claims"]).is_empty() {
-        HashMap::new()
+        HashMap::default()
     } else {
         canonical_events
             .iter()
@@ -980,7 +981,7 @@ fn compose<'a>(v: &Operands<'a>) -> Result<State<'a>, String> {
     };
     // Locate each observation by its event slot and leg, so the result
     // owns no borrow of the events it reads.
-    let mut located = HashMap::new();
+    let mut located = HashMap::default();
     for (slot, event) in events.iter().enumerate() {
         for (leg, observation) in event.legs().enumerate() {
             located.insert(identity(observation), (slot as u32, leg as u32));

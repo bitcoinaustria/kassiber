@@ -9,7 +9,8 @@ use crate::{
 use kassiber_pyjson::BigInt;
 use serde_json::{json, Value};
 use std::borrow::Cow;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use crate::fxhash::HashMap;
+use std::collections::{BTreeMap, BTreeSet};
 fn text(v: &Value) -> String {
     if codec::truth(v) {
         codec::pystr(v)
@@ -57,7 +58,7 @@ fn observation_refs<'a>(
         .flat_map(|e| array(&e["legs"]))
         .map(|o| (super::text_key(&o["quantity_hash"]), o))
         .collect();
-    let mut by_tx = HashMap::new();
+    let mut by_tx = HashMap::default();
     for e in events.values() {
         for alias in array(&e["observation_aliases"]) {
             let o = by_hash
