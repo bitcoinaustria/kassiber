@@ -280,19 +280,11 @@ fn stream_leg(
         Ok(()) | Err(Stop::Cancelled) => {}
         Err(stop) => return Err(stop),
     }
-    if finish_reason
-        .as_deref()
-        .is_some_and(|reason| CUT_OFF_FINISH_REASONS.contains(&reason))
-    {
-        // A call in a cut-off answer may be cut off too: none runs.
-        tool_calls.clear();
-        if let Some(output) = response_output.as_mut() {
-            output.retain(|item| {
-                !(matches!(item, Value::Dict(_))
-                    && matches!(get(item, "type"), Some(Value::Str(kind)) if kind.is("function_call")))
-            });
-        }
-    }
+    drop_cut_off_calls(
+        finish_reason.as_deref(),
+        &mut tool_calls,
+        &mut response_output,
+    );
     let response_output = match response_output {
         Some(output) => output,
         None => {
@@ -342,6 +334,26 @@ fn stream_leg(
         response_output,
         notices,
     })
+}
+
+/// A call in an answer cut off by its token limit or a content filter may be
+/// cut off too: none of the answer's calls runs or is replayed, whichever
+/// client streamed it.
+fn drop_cut_off_calls(
+    finish_reason: Option<&str>,
+    tool_calls: &mut Vec<Value>,
+    response_output: &mut Option<Vec<Value>>,
+) {
+    if !finish_reason.is_some_and(|reason| CUT_OFF_FINISH_REASONS.contains(&reason)) {
+        return;
+    }
+    tool_calls.clear();
+    if let Some(output) = response_output.as_mut() {
+        output.retain(|item| {
+            !(matches!(item, Value::Dict(_))
+                && matches!(get(item, "type"), Some(Value::Str(kind)) if kind.is("function_call")))
+        });
+    }
 }
 
 /// `_update_review_checkpoint(checkpoint, name, result)`: bounded
@@ -1065,5 +1077,55 @@ impl Worker {
             seed_notices: validated.seed_notices.clone(),
         };
         host.persist(request).ok().flatten()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cut_off_answers_drop_their_calls() {
+        let call = dict([("id", s("c1")), ("function", dict([("name", s("status"))]))]);
+        let item = dict([("type", s("function_call")), ("call_id", s("c1"))]);
+        let text = dict([("type", s("message"))]);
+        for reason in ["length", "content_filter"] {
+            let mut calls = vec![call.clone()];
+            let mut output = Some(vec![text.clone(), item.clone()]);
+            drop_cut_off_calls(Some(reason), &mut calls, &mut output);
+            assert!(calls.is_empty(), "{reason}");
+            assert_eq!(output, Some(vec![text.clone()]), "{reason}");
+        }
+        let mut calls = vec![call.clone()];
+        let mut output = Some(vec![item.clone()]);
+        drop_cut_off_calls(Some("tool_calls"), &mut calls, &mut output);
+        assert_eq!((calls.len(), output.map(|o| o.len())), (1, Some(1)));
+    }
+
+    #[test]
+    fn fingerprints_bind_role_and_content_only() {
+        let message =
+            |role: &str, content: &str| dict([("role", s(role)), ("content", s(content))]);
+        let base = history_fingerprint(&[message("user", "hi")]);
+        assert_eq!(
+            base,
+            history_fingerprint(&[dict([
+                ("role", s("user")),
+                ("content", s("hi")),
+                ("extra", s("x"))
+            ])])
+        );
+        assert_ne!(base, history_fingerprint(&[message("user", "hi "),]));
+        assert_eq!(base.len(), 64);
+        assert_eq!(
+            seed_prefix(&[
+                message("user", "a"),
+                message("assistant", "b"),
+                message("user", "c")
+            ])
+            .len(),
+            2
+        );
+        assert!(seed_prefix(&[message("user", "only")]).is_empty());
     }
 }

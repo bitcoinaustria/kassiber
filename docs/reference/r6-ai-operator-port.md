@@ -791,6 +791,13 @@ row); item 8 uses the recommended default until R7 packaging settles it.
 
 ### R6-7 Chat
 
+R6-7 is done on branch `t3code/r6-7-chat`; the
+[checkpoint](rust-shell.md#ai-chat-r6-7) records its verification and the
+reviewed differences. §7 item 1 is followed: the chat kinds and leaves are
+compiled behind the `native-chat` feature, which only test-harness builds
+enable, and the checkpoint lists what must be native before product builds
+turn it on. §7 item 11 is settled as recommended.
+
 **Scope:**
 
 - **`ai.chat`:**

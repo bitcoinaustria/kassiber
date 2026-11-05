@@ -4766,3 +4766,19 @@ launch, idle, listing, editing or `cached_only` status. See the
 the stream and provider parity drivers, the 17 mutation entries and the
 reviewed differences. `ai.chat` (R6-7) is the client's first chat caller.
 Python product code is unchanged.
+
+### R6-7 AI chat
+
+`t3code/r6-7-chat` starts at `b12e22ac5` (the R6-6b tip) and merges the R6-5a
+tip `322cfb0f0`. `crates/ai` gains the chat turn (worker loop, consent,
+cancel registry, provider cursors, history under the persistence policy,
+provenance with a per-turn request receipt) and the embedded Kassiber
+prompt; the daemon serves `ai.chat`, its controls and the five history kinds,
+running each turn's book work as request-loop tasks; the CLI serves `chat`
+(a daemon child unlocked over stdin) and the five `chats` leaves. All of it
+sits behind the `native-chat` feature, which only test-harness builds
+enable, as design §7 item 1 recommends: chat registers in product builds once
+R6-5b, the 23 refused read tools and document-import staging are native. See
+the [checkpoint](../reference/rust-shell.md#ai-chat-r6-7) for the stream
+driver, the 17 mutation entries, the reviewed differences and one Python
+quirk kept with a repro. Python product code is unchanged.

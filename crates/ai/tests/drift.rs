@@ -188,3 +188,36 @@ fn skill_references_come_only_from_the_allowlist() {
         assert_eq!(error.code, "tool_not_allowed", "{name}");
     }
 }
+
+#[test]
+fn chat_constants_match_python() {
+    use kassiber_ai::chat::args::SCREEN_ROUTES;
+    use kassiber_ai::chat::history::{HISTORY_MODES, SESSION_TITLE_MAX_CHARS};
+    use kassiber_ai::chat::registry::{MAX_PENDING_CANCELS, PENDING_CANCEL_TTL};
+    use kassiber_ai::chat::turn::CUT_OFF_FINISH_REASONS;
+    assert_eq!(names("ai_screen_routes"), sorted(&SCREEN_ROUTES));
+    assert_eq!(names("chat_history_modes"), HISTORY_MODES);
+    assert_eq!(
+        names("cut_off_finish_reasons"),
+        sorted(&CUT_OFF_FINISH_REASONS)
+    );
+    assert_eq!(
+        int("session_title_max_chars"),
+        SESSION_TITLE_MAX_CHARS as i64
+    );
+    assert_eq!(int("max_pending_ai_cancels"), MAX_PENDING_CANCELS as i64);
+    assert_eq!(
+        constant("pending_ai_cancel_ttl_seconds"),
+        Value::Float(PENDING_CANCEL_TTL.as_secs_f64())
+    );
+    let notices = constant("provider_status_notices");
+    for (phase, label) in kassiber_ai::transport::PROVIDER_STATUS_NOTICES {
+        assert_eq!(get(&notices, phase), Some(&kassiber_envelope::s(*label)));
+    }
+    assert_eq!(
+        get(&catalog_document(), "system_prompt"),
+        Some(&kassiber_envelope::s(
+            kassiber_ai::prompt::default_system_prompt()
+        ))
+    );
+}

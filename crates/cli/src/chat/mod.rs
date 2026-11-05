@@ -569,12 +569,11 @@ fn expand_user(file: &str) -> std::path::PathBuf {
     }
 }
 
-/// `_resolve_continuation(client, args)`: `(session id, prior messages,
-/// stored session)`.
-fn resolve_continuation(
-    client: &mut DaemonClient,
-    args: &Args,
-) -> Result<(Option<String>, Vec<Value>, Option<Value>), AppError> {
+/// A continued chat: its session id, prior messages and stored session.
+type Continuation = (Option<String>, Vec<Value>, Option<Value>);
+
+/// `_resolve_continuation(client, args)`.
+fn resolve_continuation(client: &mut DaemonClient, args: &Args) -> Result<Continuation, AppError> {
     let mut requested = args.session.clone().filter(|session| !session.is_empty());
     if requested.is_none() && !args.continue_session {
         return Ok((None, Vec::new(), None));
@@ -706,6 +705,7 @@ impl TurnState<'_> {
 }
 
 /// `_decide_and_send_consent(...)`.
+#[allow(clippy::too_many_arguments)]
 fn decide_and_send_consent(
     client: &mut DaemonClient,
     args: &Args,

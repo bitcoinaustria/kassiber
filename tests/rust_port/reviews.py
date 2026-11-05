@@ -668,10 +668,7 @@ _R66B_NET = "crates/net/src/broker.rs tests"
 REVIEWS["tests/test_ai_broker.py"] = {
     "BrokerClientTest": _r66("BrokerAIClient against the same fake brokers: status and model probes, chat legs, keep-alive across a tool call, cancellation at every stage, probe timeouts that end the whole group, private and stateless sessions", _R66B),
     "BrokerClientTest::test_sensitive_windows_provider_fails_before_resolution_or_spawn": _r66("Windows refuses a private CLI turn before lookup or launch (compiled on Windows only)", "crates/ai/tests/broker_windows.rs::sensitive_windows_provider_fails_before_resolution_or_spawn"),
-    "BrokerClientTest::test_provider_resume_cursor_is_bound_to_the_visible_chat_branch": {
-        "disposition": "subprocess-scenario", "group": "ai-mcp-operator",
-        "reason": "tests the daemon's provider-session registry (ActiveAiChats), not the broker client; it moves with ai.chat in R6-7",
-    },
+    "BrokerClientTest::test_provider_resume_cursor_is_bound_to_the_visible_chat_branch": _r66("the daemon's provider-session registry binds a cursor to the exact visible chat branch (R6-7)", "crates/ai/src/chat/registry.rs::provider_resume_cursor_is_bound_to_the_visible_chat_branch"),
     "BrokerTempParentTest": _r66("the XDG_RUNTIME_DIR temp-root checks and the per-turn root's creation and removal", _R66B_NET + "; " + _R66B + "::the_broker_gets_only_node_and_script_and_a_private_root"),
 }
 REVIEWS["tests/test_ai_fast_mode.py"]["BrokerFastModeTest"] = _r66("fast_mode crosses the broker only when exactly true and is rejected before a launch otherwise", _R66B + "::forwards_only_an_explicit_true; rejects_non_boolean_fast_mode_before_spawn")
@@ -683,4 +680,11 @@ REVIEWS["tests/test_rust_ai_broker.py"] = {"*": {
 REVIEWS["tests/test_rust_ai_providers.py"] = {"*": {
     "disposition": "oracle", "group": "ai-mcp-operator",
     "reason": "compares native AI provider daemon sessions, CLI leaves (with zero hybrid fallbacks), scripted loopback provider requests and the fake provider broker's request lines with unchanged Python byte for byte, including offline mode and pinned clocks",
+}}
+
+# R6-7: chat.
+REVIEWS["tests/test_ai_core.py"]["ChatHistorySeedTest"] = _r66("a branched chat's seeded prefix round-trips through get_session", "crates/ai/src/chat/history.rs::seeded_prefix_round_trips_via_get_session")
+REVIEWS["tests/test_rust_ai_chat.py"] = {"*": {
+    "disposition": "oracle", "group": "ai-mcp-operator",
+    "reason": "runs whole ai.chat daemon sessions on unchanged Python and the Rust binary against one scripted provider and fake broker, and compares every record grouped by request id, the chat, provider and settings tables, and every provider and broker request byte for byte (uuid4 values mapped), including consent, cancellation, a locked book and offline mode",
 }}

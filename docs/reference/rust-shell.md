@@ -17245,3 +17245,146 @@ leg outcome and broker request line matches. `crates/ai/scripts/mutations.json`
 gains 17 R6-6b entries (launch observation, the fixture rule, the missing-program check, both temp-root checks, the straggler kill, the empty and filtered scopes, the cancel latch and signal, keep-alive, complete tool results, private cursors, explicit fast mode, known notices, the leg watchdog and `binary_presence`), all killed by named tests.
 `test_provider_resume_cursor_is_bound_to_the_visible_chat_branch` tests the
 daemon's chat registry and moves with R6-7.
+
+## AI chat (R6-7)
+
+`t3code/r6-7-chat` starts at `b12e22ac5`, the R6-6b tip, and merges
+`322cfb0f0`, the R6-5a tip, so the read executor, the providers and the
+broker client meet. It ports the R6-7 scope of the
+[R6 design](r6-ai-operator-port.md#r6-7-chat). No schema, dependency or
+Python product file changes; the lockfile is unchanged.
+
+| Surface | Native | Notes |
+| --- | --- | --- |
+| `ai.chat` | behind the gate | worker thread per turn; book work runs as request-loop tasks |
+| `ai.chat.cancel`, `ai.tool_call.consent` | behind the gate | answered before the book gate, from the RAM registry |
+| `ui.chat.sessions.list`, `.get`, `.delete`, `.clear`, `ui.chat.history.configure` | behind the gate | the active profile's sessions; the stored policy |
+| `chat` | behind the gate | re-executes the binary as `kassiber --data-root … --env-file … daemon` |
+| `chats list`, `show`, `delete`, `clear`, `config` | behind the gate | on the open book |
+
+**The gate.** Design §7 item 1 is followed: chat registers only when every
+tool it can call is native. The `native-chat` cargo feature of
+`kassiber-daemon` and `kassiber-cli` registers the eight kinds and six leaves;
+only `kassiber`'s `test-harness` feature enables it, so product builds still
+answer `not_implemented` and advertise none of them. The gate flips when:
+
+- the mutating executor (R6-5b, 61 tools) runs natively, with the custody AI
+  audit writer that records denied and cancelled custody proposals and the
+  consent previews (`review_preview` for `ui.review.apply`, the acquisition
+  and dataset previews);
+- the 23 read tools R6-5a still refuses are native. The planner's automatic
+  reads use `ui.workspace.health` and `ui.next_actions` for nearly every
+  domain question, so a chat with the Kassiber prompt differs from Python
+  until they are;
+- document-import staging (`internal.document_import.stage` and its
+  sessions) is native, for chat attachments and `kassiber chat --file`.
+
+Flipping it means enabling `native-chat` in product builds (or dropping the
+`cfg`) and moving `chat`/`chats.*` into `describe::IMPLEMENTED`.
+
+**Crates.** `crates/ai` gains `prompt` (`kassiber/ai/prompt.py`; the Kassiber
+system prompt is embedded from `src/data/catalog.json`, which
+`scripts/gen_catalog.py` now also writes with the chat constants and the
+screen-metric definitions) and `chat`:
+
+- `args`: `_ai_chat_args` with the screen-context, metrics-scope, attachment
+  and seed-notice checks, in Python's order;
+- `registry`: `ActiveAiChats`, with early cancels held for 30 s (at most
+  128) and provider cursors bound to the history fingerprint;
+- `history`: `core/chat_history.py`, with uuid4 values from SQLite's
+  `randomblob`;
+- `screen`: the screen-context and attachment notes the model reads;
+- `client`: the HTTP client or the broker behind one interface;
+- `turn`: `_run_ai_chat_stream` and the tool loop;
+- `store`: the book operations the storage layer serves (`Book::ai_chat`).
+
+The HTTP client gains a per-turn `Receipt` (one record per request, with
+Python's `http_request_bytes_out` estimate) and a `Revocation` that revokes
+every consent the turn was granted. `kassiber-transactions` gains
+`transaction_in_profile` and `bind_screen_metrics_scope`;
+`Book::unlock_passphrase` hands `kassiber chat` the passphrase its daemon
+child is unlocked with over stdin. `crates/daemon/src/ai_chat.rs` holds the
+kinds and the worker host: an executor callback is served on the request loop
+as a sequence of book calls over channels, so no closure crosses threads and
+nothing needs `unsafe`. The loop polls every 50 ms while a worker runs, as
+Python's does. `crates/cli/src/chat` ports `kassiber/cli/chat.py`,
+`termrender.py` and `review_consent.py`; `crates/cli/src/chats.rs` the five
+leaves.
+
+**Record order.** `ai.chat.status` (preparing, connecting, waiting), then
+deltas, `ai.chat.tool_call` (with the consent registered before the record),
+`ai.chat.tool_consent_required`, `ai.chat.tool_result`, and one terminal
+`ai.chat` or an error envelope. A cancel before registration, during the
+stream, or while consent waits still ends with a terminal `cancelled`.
+
+**Reviewed differences.**
+
+- The privacy receipt counts the turn's own provider requests. Python counts
+  every egress-ledger record after the turn's cursor, including unrelated
+  daemon traffic in the same window; the Rust daemon has no process-wide
+  product ledger yet (`ui.egress.snapshot` is not native), so `egress_gap` is
+  always false. The broker records none, as in Python.
+- A persisted exchange is one transaction. Python leaves a partial write in
+  an open transaction when the final insert fails.
+- Tools R6-5b owns: an allowed mutating call answers `not_implemented` after
+  Python's gates; consent previews use plain argument redaction and the
+  `ui.review.apply` record carries no `review_preview`, so the CLI denies it;
+  denied or cancelled custody proposals write no audit row.
+- An attachment grant is never known (staging is not native): `ai.chat`
+  answers `document_import_session_expired` after resolving the book, as
+  Python does for an expired grant, and `kassiber chat --file` fails on the
+  staging kind.
+- `kassiber chat` has no SIGINT handling (no signal API without a new
+  dependency): Ctrl-C ends the session, and the daemon child stops at the end
+  of its input instead of cancelling the turn cooperatively. It reads REPL
+  lines without readline editing, sizes tool tables from `COLUMNS` only,
+  kills a daemon child that outlives its input instead of sending SIGTERM
+  first, and starts the child in the caller's working directory.
+
+**Python quirks kept.** A provider session cursor is recorded against the
+turn's transcript plus the last leg's answer and looked up against the next
+request's whole transcript, so it is never resumed
+(`tests/rust_port/repro_chat_cursor_never_resumes.py`). Design §7 item 11 is
+taken as recommended: a provider row without a name is named "selected
+provider" in the model hint.
+
+**Privacy fences.** Nothing is contacted before the user's message: argument
+validation, session lookup, provider resolution, screen binding and an early
+cancel all run before any request (`an_early_cancel_contacts_nothing`, the
+driver's validation and early-cancel scenarios). History is stored only for a
+request that asked and only under the stored policy, where `auto` means an
+encrypted book (`history_is_stored_only_under_the_policy`). The privacy
+receipt counts what was sent (`the_privacy_receipt_counts_what_was_sent`).
+Cancelling revokes the turn's network consent; a revoked consent refuses the
+next request on its own (`cancelling_revokes_the_turns_network_consent`).
+Offline mode refuses a remote provider and the broker before contact (driver).
+On-device-only tools are never offered to other providers, only tools offered
+this turn run, and a cut-off answer runs none of its calls.
+
+**Evidence.**
+
+- `cargo test -p kassiber-ai` adds the chat unit tests and `tests/chat.rs`
+  (16 turn tests against the scripted provider, including the R6-6b handover
+  `provider_resume_cursor_is_bound_to_the_visible_chat_branch` and
+  `ChatHistorySeedTest`'s round trip).
+- `tests/test_rust_ai_chat.py` (9 scenarios) runs one daemon session per side
+  against the same scripted provider and fake broker and compares every
+  record, grouped by request id, byte for byte after mapping uuid4 values;
+  the chat, provider and settings tables; and every provider and broker
+  request. It covers history and policy, 45 argument errors with no contact,
+  the tool loop with consent, early cancel, cancel during consent, cancel
+  after the book locks, the format fallback, a broker tool round with
+  Incognito, and offline refusal.
+- `tests/test_cli_chat.py` through the hybrid candidate: 39 of 41 pass with
+  every `chat` and `chats` call served by Rust; the two daemon-session tests
+  also pass with a Rust daemon. The two failures allow `ui.journals.process`
+  and need R6-5b.
+- The AI tests of `tests/test_daemon_smoke.py` with a Rust daemon: 70 of 75
+  pass. Four need refused or mutating tools (R6-5b, the refused reads); one
+  needs `ui.secrets.init`, which is not native.
+- `crates/ai/scripts/mutations.json` gains 17 R6-7 entries (record order,
+  consent before the record, the cancelled terminal, the auto policy, persist
+  intent, the 16-iteration rule, the cross-book phrase, the receipt, both
+  revocation halves, duplicate ids, cut-off answers, the advertised check,
+  the on-device strip, held early cancels, their cap, cursor binding), all
+  killed by named tests.

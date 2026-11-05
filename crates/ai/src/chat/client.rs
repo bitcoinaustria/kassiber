@@ -58,7 +58,9 @@ impl ProviderSnapshot {
 /// Stops a client from another thread.
 pub type Canceller = Arc<dyn Fn() + Send + Sync>;
 
-/// The turn's provider client.
+/// The turn's provider client; one per turn, so the size difference
+/// between the two clients does not matter.
+#[allow(clippy::large_enum_variant)]
 pub enum ChatClient {
     Http(HttpClient),
     Broker(BrokerClient),
@@ -113,6 +115,15 @@ impl ChatClient {
                 let cancel = client.canceller();
                 Arc::new(move || cancel.cancel())
             }
+        }
+    }
+
+    /// The handle that revokes an HTTP client's consents (the broker's
+    /// process route is stopped by its own cancel).
+    pub fn revocation(&self) -> Option<crate::transport::Revocation> {
+        match self {
+            ChatClient::Http(client) => Some(client.revocation()),
+            ChatClient::Broker(_) => None,
         }
     }
 

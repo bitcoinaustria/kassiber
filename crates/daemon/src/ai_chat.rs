@@ -703,11 +703,30 @@ fn start_chat(
         },
     };
     let workers = Arc::clone(&daemon.chats.workers);
+    let (registry, key, chat) = (
+        turn.registry.clone(),
+        turn.key.clone(),
+        Arc::clone(&turn.chat),
+    );
     workers.fetch_add(1, Ordering::SeqCst);
     let spawned = std::thread::Builder::new()
         .name("kassiber-ai-chat".into())
         .spawn(move || {
-            Worker::new(turn).run(&mut host);
+            let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                Worker::new(turn).run(&mut host);
+            }));
+            if let Err(panic) = outcome {
+                // Python's worker answers an unexpected failure with an
+                // internal_error envelope; the turn never stays silent.
+                let message = panic
+                    .downcast_ref::<&str>()
+                    .map(|m| (*m).to_owned())
+                    .or_else(|| panic.downcast_ref::<String>().cloned())
+                    .unwrap_or_else(|| "panic".to_owned());
+                host.emit_error(&AppError::new("internal_error", message));
+                registry.set_cancel_handler(&chat, None);
+                registry.unregister(key.as_deref(), &chat);
+            }
             workers.fetch_sub(1, Ordering::SeqCst);
         });
     if spawned.is_err() {

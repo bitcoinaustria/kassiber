@@ -57,14 +57,18 @@ pub enum Op<'a> {
     },
 }
 
+/// `transaction_in_profile(conn, profile_id, ref)`.
+pub type InProfile<'a> = &'a dyn Fn(&Connection, &str, &str) -> Result<bool, AppError>;
+
+/// `bind_screen_metrics_scope(conn, scope, workspace_id, profile_id)`.
+pub type BindMetricsScope<'a> =
+    &'a dyn Fn(&Connection, &Value, &str, &str) -> Result<Option<Value>, AppError>;
+
 /// The book-side helpers chat binding borrows from the transactions
 /// family (`kassiber/core/ui_snapshot.py`).
 pub struct ScreenBinding<'a> {
-    /// `transaction_in_profile(conn, profile_id, ref)`.
-    pub transaction_in_profile: &'a dyn Fn(&Connection, &str, &str) -> Result<bool, AppError>,
-    /// `bind_screen_metrics_scope(conn, scope, workspace_id, profile_id)`.
-    pub bind_metrics_scope:
-        &'a dyn Fn(&Connection, &Value, &str, &str) -> Result<Option<Value>, AppError>,
+    pub transaction_in_profile: InProfile<'a>,
+    pub bind_metrics_scope: BindMetricsScope<'a>,
 }
 
 fn without(value: &Value, keys: &[&str]) -> Value {

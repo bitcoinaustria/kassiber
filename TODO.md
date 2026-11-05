@@ -1172,6 +1172,25 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
 - [ ] R4-13 to R4-16: CLI and daemon commands, automatic pairing, the
   freshness journal job and the authority switch.
 
+## Rust backend R6 AI chat
+
+The [R6-7 checkpoint](docs/reference/rust-shell.md#ai-chat-r6-7) serves
+`ai.chat`, its controls, chat history, `kassiber chat` and the `chats` leaves
+natively behind the `native-chat` gate (test-harness builds only).
+
+- [x] R6-7: the chat turn, cancel and consent, history kinds, `chat` and
+  `chats`, with the stream driver `tests/test_rust_ai_chat.py`.
+- [ ] Turn the chat gate on for product builds once R6-5b, the 23 refused read
+  tools and document-import staging are native; then rerun
+  `tests/test_cli_chat.py` and the AI tests of `tests/test_daemon_smoke.py`
+  through the hybrid candidate with a Rust daemon (the 2 and 5 that fail today
+  need those services, and `ui.secrets.init`).
+- [ ] Give `kassiber chat` a cooperative Ctrl-C (cancel the turn, keep the
+  REPL) and line editing without a new dependency, or record the owner's
+  decision to keep the difference.
+- [ ] Count the whole egress ledger in the privacy receipt once the daemon has
+  a process-wide product ledger (`ui.egress.snapshot`).
+
 ## Rust backend R6 AI tools
 
 - [ ] R6-5b: port the mutating AI executor (61 tools) with the custody AI audit

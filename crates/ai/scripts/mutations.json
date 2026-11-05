@@ -226,6 +226,178 @@
     "rule": "At most twelve auto-reads run per turn."
   },
   {
+    "id": "R67-record-order",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "status(\"preparing\", \"Preparing chat\")",
+    "replace": "status(\"connecting\", \"Preparing chat\")",
+    "expect_failing": [
+      "records_follow_python_order"
+    ],
+    "rule": "A chat opens with the preparing status, then connecting, then waiting_for_model."
+  },
+  {
+    "id": "R67-consent-before-record",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "chat.consent.expect(&lossy(&call.call_id));",
+    "replace": "let _ = &call.call_id;",
+    "expect_failing": [
+      "consent_is_registered_before_the_tool_call_record"
+    ],
+    "rule": "A call is registered for consent before the record that announces it is written."
+  },
+  {
+    "id": "R67-cancel-terminal",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "        if self.turn.chat.is_cancelled() {\n            finish_reason = Some(\"cancelled\".into());\n        }\n        if finish_reason.as_deref() != Some(\"cancelled\")\n            && self.client.is_some()",
+    "replace": "        if finish_reason.as_deref() != Some(\"cancelled\")\n            && self.client.is_some()",
+    "expect_failing": [
+      "an_early_cancel_contacts_nothing"
+    ],
+    "rule": "A cancelled chat still ends with a terminal ai.chat whose finish_reason is cancelled."
+  },
+  {
+    "id": "R67-auto-encrypted-only",
+    "file": "crates/ai/src/chat/history.rs",
+    "find": "_ => database_encrypted,",
+    "replace": "_ => true,",
+    "expect_failing": [
+      "history_is_stored_only_under_the_policy",
+      "auto_policy_persists_only_into_encrypted_books"
+    ],
+    "rule": "The auto history policy persists only into an encrypted database."
+  },
+  {
+    "id": "R67-persist-intent",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "let opted_in = validated.persist == Value::Bool(true)",
+    "replace": "let opted_in = true || validated.persist == Value::Bool(true)",
+    "expect_failing": [
+      "history_is_stored_only_under_the_policy"
+    ],
+    "rule": "Only a request that asked to persist (persist true or auto, or a session id) is stored."
+  },
+  {
+    "id": "R67-sixteen-iterations",
+    "file": "crates/ai/src/chat/args.rs",
+    "find": "tool_loop_max_iterations = 16;",
+    "replace": "tool_loop_max_iterations = 8;",
+    "expect_failing": [
+      "review_and_source_funds_questions_get_16_iterations"
+    ],
+    "rule": "A tool chat about review or source of funds without an explicit budget gets 16 iterations."
+  },
+  {
+    "id": "R67-cross-book-phrase",
+    "file": "crates/ai/src/planner.rs",
+    "find": "    \"all books\",\n",
+    "replace": "    \"all bookz\",\n",
+    "expect_failing": [
+      "cross_book_reads_need_an_explicit_book_set_phrase"
+    ],
+    "rule": "An explicit book-set phrase such as 'all books' allows cross-book reads."
+  },
+  {
+    "id": "R67-receipt",
+    "file": "crates/ai/src/transport/mod.rs",
+    "find": "if let Some(receipt) = &self.receipt {",
+    "replace": "if let Some(receipt) = None::<&Receipt> {",
+    "expect_failing": [
+      "the_privacy_receipt_counts_what_was_sent"
+    ],
+    "rule": "Every provider request is counted into the turn's privacy receipt with Python's byte estimate."
+  },
+  {
+    "id": "R67-cancel-revokes",
+    "file": "crates/ai/src/chat/client.rs",
+    "find": "                    revocation.revoke();\n",
+    "replace": "",
+    "expect_failing": [
+      "cancelling_revokes_the_turns_network_consent"
+    ],
+    "rule": "Cancelling a chat revokes its client's network consents."
+  },
+  {
+    "id": "R67-consent-granted-to-turn",
+    "file": "crates/ai/src/transport/mod.rs",
+    "find": "self.revocation.grant(consent.clone());",
+    "replace": "let _ = &consent;",
+    "expect_failing": [
+      "cancelling_revokes_the_turns_network_consent"
+    ],
+    "rule": "Each request's consent is held by the turn so a revocation refuses it."
+  },
+  {
+    "id": "R67-duplicate-call",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "let duplicate = seen.contains(&call.call_id);",
+    "replace": "let duplicate = false;",
+    "expect_failing": [
+      "a_repeated_call_id_is_denied_without_consent"
+    ],
+    "rule": "A call id repeated within one answer is denied without running."
+  },
+  {
+    "id": "R67-cut-off",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "    tool_calls.clear();\n    if let Some(output) = response_output.as_mut() {",
+    "replace": "    if let Some(output) = response_output.as_mut() {",
+    "expect_failing": [
+      "cut_off_answers_drop_their_calls"
+    ],
+    "rule": "An answer cut off by its token limit or a content filter runs none of its tool calls."
+  },
+  {
+    "id": "R67-advertised",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "let advertised = entry.is_some_and(|entry| is_advertised(entry, &self.turn.state));",
+    "replace": "let advertised = entry.is_some();",
+    "expect_failing": [
+      "a_tool_not_offered_this_turn_never_runs"
+    ],
+    "rule": "Only a tool offered this turn runs."
+  },
+  {
+    "id": "R67-on-device-strip",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "let entries = strip_on_device_only(entries, on_device);",
+    "replace": "let entries = strip_on_device_only(entries, true);",
+    "expect_failing": [
+      "on_device_tools_are_never_offered_to_other_providers"
+    ],
+    "rule": "On-device-only tools are never offered to other providers."
+  },
+  {
+    "id": "R67-early-cancel-held",
+    "file": "crates/ai/src/chat/registry.rs",
+    "find": "if deadline >= now {",
+    "replace": "if deadline < now {",
+    "expect_failing": [
+      "an_early_cancel_contacts_nothing",
+      "an_early_cancel_is_held_and_starts_the_chat_cancelled"
+    ],
+    "rule": "A cancel that arrives before its chat is held and starts the chat cancelled."
+  },
+  {
+    "id": "R67-pending-cap",
+    "file": "crates/ai/src/chat/registry.rs",
+    "find": "while state.pending.len() > MAX_PENDING_CANCELS {",
+    "replace": "while state.pending.len() > MAX_PENDING_CANCELS * 2 {",
+    "expect_failing": [
+      "held_cancels_are_capped_at_128"
+    ],
+    "rule": "At most 128 early cancels are held, the earliest dropped first."
+  },
+  {
+    "id": "R67-cursor-branch",
+    "file": "crates/ai/src/chat/registry.rs",
+    "find": "(recorded == fingerprint).then(|| cursor.clone())",
+    "replace": "Some(cursor.clone())",
+    "expect_failing": [
+      "provider_resume_cursor_is_bound_to_the_visible_chat_branch"
+    ],
+    "rule": "A provider session cursor resumes only the exact visible chat branch it saw."
+  },
+  {
     "id": "R66-route-phrase",
     "file": "crates/ai/src/transport/errors.rs",
     "find": "const UNKNOWN_ENDPOINT_PHRASES: &[&str] = &[\n    \"unexpected endpoint\",\n",

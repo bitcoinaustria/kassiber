@@ -686,12 +686,9 @@ mod tests {
         let listed = list_sessions(&conn, "p1", 0).unwrap();
         assert_eq!(listed.len(), 1);
         assert_eq!(get(&listed[0], "message_count"), Some(&Value::from(4i64)));
-        assert_eq!(
-            get_session(&conn, "p1", &text(&id), false)
-                .map(|v| get(&v, "message_count").is_none())
-                .unwrap(),
-            true
-        );
+        assert!(get_session(&conn, "p1", &text(&id), false)
+            .map(|v| get(&v, "message_count").is_none())
+            .unwrap());
         let missing = get_session(&conn, "p2", &text(&id), false).unwrap_err();
         assert_eq!(missing.code, "not_found");
         assert_eq!(
