@@ -154,6 +154,87 @@ impl Interrupt {
         }
         self.is_set()
     }
+
+    /// Answer whether Ctrl-C arrived and forget it, so the next one counts
+    /// on its own: Python raises one `KeyboardInterrupt` per SIGINT, and
+    /// `kassiber chat` handles them one at a time.
+    pub fn take(&self) -> bool {
+        let arrived = INTERRUPT_REQUESTED.swap(false, Ordering::SeqCst);
+        #[cfg(unix)]
+        {
+            // SAFETY: the read end is leaked at installation and never closed.
+            let fd = unsafe { std::os::fd::BorrowedFd::borrow_raw(self.wake) };
+            let mut byte = 0u8;
+            while crate::poll::wait_readable(fd, Some(std::time::Duration::ZERO)).unwrap_or(false) {
+                // SAFETY: one byte into a local buffer from a readable pipe.
+                if unsafe { libc::read(self.wake, (&mut byte as *mut u8).cast(), 1) } != 1 {
+                    break;
+                }
+            }
+        }
+        arrived
+    }
+
+    /// Wait until `fd` is readable (or at end of file) or Ctrl-C arrives:
+    /// `true` when it is readable, `false` when Ctrl-C came first. A
+    /// terminal read cannot be interrupted any other way, because the
+    /// handler restarts system calls.
+    #[cfg(unix)]
+    pub fn wait_readable(&self, fd: std::os::fd::BorrowedFd<'_>) -> io::Result<bool> {
+        use std::os::fd::AsRawFd;
+        loop {
+            if self.is_set() {
+                return Ok(false);
+            }
+            let mut entries = [
+                libc::pollfd {
+                    fd: fd.as_raw_fd(),
+                    events: libc::POLLIN,
+                    revents: 0,
+                },
+                libc::pollfd {
+                    fd: self.wake,
+                    events: libc::POLLIN,
+                    revents: 0,
+                },
+            ];
+            // SAFETY: two valid pollfd entries for live descriptors.
+            let ready = unsafe { libc::poll(entries.as_mut_ptr(), 2, -1) };
+            if ready == -1 {
+                let error = io::Error::last_os_error();
+                if error.raw_os_error() == Some(libc::EINTR) {
+                    continue;
+                }
+                return Err(error);
+            }
+            if self.is_set() {
+                return Ok(false);
+            }
+            if entries[0].revents != 0 {
+                return Ok(true);
+            }
+        }
+    }
+}
+
+/// Python's uncaught `KeyboardInterrupt`: the process ends by SIGINT (on
+/// Windows with `STATUS_CONTROL_C_EXIT`), so a shell sees an interrupted
+/// command rather than an ordinary failure.
+pub fn exit_by_interrupt() -> ! {
+    #[cfg(unix)]
+    {
+        // SAFETY: restoring the default disposition and raising the signal
+        // at this thread; the default action ends the process.
+        unsafe {
+            libc::signal(libc::SIGINT, libc::SIG_DFL);
+            libc::raise(libc::SIGINT);
+        }
+        std::process::exit(130)
+    }
+    #[cfg(windows)]
+    {
+        std::process::exit(0xC000_013Au32 as i32)
+    }
 }
 
 #[cfg(unix)]

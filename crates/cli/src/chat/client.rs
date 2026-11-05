@@ -6,7 +6,7 @@
 //! the transcript does not record.
 
 use std::io::{BufRead, BufReader, Read, Write};
-use std::process::{Child, ChildStdin, Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
@@ -22,6 +22,13 @@ pub(crate) fn s(text: impl AsRef<str>) -> Value {
 }
 
 const STDERR_TAIL_CHARS: usize = 2000;
+/// How often a wait for the daemon looks for Ctrl-C.
+const INTERRUPT_SLICE: Duration = Duration::from_millis(50);
+
+enum ReceiveError {
+    Channel(RecvTimeoutError),
+    Interrupted,
+}
 
 /// A fresh `uuid.uuid4().hex`-shaped request id suffix.
 pub fn random_hex() -> String {
@@ -41,14 +48,18 @@ pub fn compact(value: &Value) -> String {
     dumps(value, &Options::new().compact()).unwrap_or_default()
 }
 
+/// Whether Ctrl-C arrived since it was last asked; asking handles it.
+pub type Interrupted = Arc<dyn Fn() -> bool + Send + Sync>;
+
 pub struct DaemonClient {
-    child: Child,
-    stdin: Option<ChildStdin>,
+    child: Option<Child>,
+    stdin: Option<Box<dyn Write + Send>>,
     lines: Receiver<Option<String>>,
     stderr_tail: Arc<Mutex<String>>,
     threads: Vec<JoinHandle<()>>,
     transcript: Option<std::fs::File>,
     timeout: Duration,
+    interrupt: Option<Interrupted>,
 }
 
 /// What the child is started with.
@@ -59,6 +70,8 @@ pub struct Launch<'a> {
     pub passphrase: Option<Secret>,
     pub timeout: Duration,
     pub transcript: Option<std::fs::File>,
+    /// Ctrl-C ends a wait for the daemon with [`crate::chat::INTERRUPTED`].
+    pub interrupt: Option<Interrupted>,
 }
 
 fn drain_stdout(stream: impl Read, lines: std::sync::mpsc::Sender<Option<String>>) {
@@ -114,6 +127,7 @@ impl DaemonClient {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+        away_from_terminal_interrupts(&mut command);
         let mut child = command
             .spawn()
             .map_err(|error| AppError::new("daemon_start_failed", error.to_string()))?;
@@ -133,13 +147,17 @@ impl DaemonClient {
                 .map_err(|error| AppError::new("daemon_start_failed", error.to_string()))?,
         ];
         let mut client = DaemonClient {
-            stdin: child.stdin.take(),
-            child,
+            stdin: child
+                .stdin
+                .take()
+                .map(|stdin| Box::new(stdin) as Box<dyn Write + Send>),
+            child: Some(child),
             lines,
             stderr_tail: tail,
             threads,
             transcript: launch.transcript,
             timeout: launch.timeout,
+            interrupt: launch.interrupt,
         };
         let ready = match client.read(true, None) {
             Ok(ready) => ready,
@@ -254,9 +272,10 @@ impl DaemonClient {
     /// chat timeout.
     pub fn read(&mut self, record: bool, timeout: Option<Duration>) -> Result<Value, AppError> {
         let wait = timeout.unwrap_or(self.timeout);
-        let line = match self.lines.recv_timeout(wait) {
+        let line = match self.receive(wait) {
             Ok(Some(line)) => line,
-            Ok(None) | Err(RecvTimeoutError::Disconnected) => {
+            Err(ReceiveError::Interrupted) => return Err(crate::chat::interrupted()),
+            Ok(None) | Err(ReceiveError::Channel(RecvTimeoutError::Disconnected)) => {
                 let stderr = self.stderr_snapshot();
                 let details = if stderr.is_empty() {
                     dict::<&str>([])
@@ -268,7 +287,7 @@ impl DaemonClient {
                         .with_details(details),
                 );
             }
-            Err(RecvTimeoutError::Timeout) => {
+            Err(ReceiveError::Channel(RecvTimeoutError::Timeout)) => {
                 return Err(AppError::new("daemon_timeout", "timed out waiting for daemon response")
                     .with_hint("Increase `kassiber chat --timeout <seconds>` if the selected local model or harness needs longer.")
                     .with_details(dict([("timeout_seconds", Value::Float(wait.as_secs_f64()))]))
@@ -295,15 +314,36 @@ impl DaemonClient {
         Ok(payload)
     }
 
+    /// The next line within `wait`; with Ctrl-C installed, the wait is
+    /// sliced so a Ctrl-C ends it as `KeyboardInterrupt` would.
+    fn receive(&mut self, wait: Duration) -> Result<Option<String>, ReceiveError> {
+        let Some(interrupt) = self.interrupt.clone() else {
+            return self.lines.recv_timeout(wait).map_err(ReceiveError::Channel);
+        };
+        let deadline = std::time::Instant::now() + wait;
+        loop {
+            if interrupt() {
+                return Err(ReceiveError::Interrupted);
+            }
+            let left = deadline.saturating_duration_since(std::time::Instant::now());
+            match self.lines.recv_timeout(left.min(INTERRUPT_SLICE)) {
+                Err(RecvTimeoutError::Timeout) if left > INTERRUPT_SLICE => {}
+                other => return other.map_err(ReceiveError::Channel),
+            }
+        }
+    }
+
     /// `close()`: end of input, then TERM after 5 s and KILL after 2 more.
     pub fn close(&mut self) {
         self.stdin = None;
-        let waited = wait_for(&mut self.child, Duration::from_secs(5));
-        if !waited {
-            terminate(&mut self.child);
-            if !wait_for(&mut self.child, Duration::from_secs(2)) {
-                let _ = self.child.kill();
-                let _ = wait_for(&mut self.child, Duration::from_secs(2));
+        if let Some(child) = self.child.as_mut() {
+            let waited = wait_for(child, Duration::from_secs(5));
+            if !waited {
+                terminate(child);
+                if !wait_for(child, Duration::from_secs(2)) {
+                    let _ = child.kill();
+                    let _ = wait_for(child, Duration::from_secs(2));
+                }
             }
         }
         for thread in self.threads.drain(..) {
@@ -331,6 +371,43 @@ fn terminate(child: &mut Child) {
     let _ = child.kill();
 }
 
+/// The terminal's Ctrl-C goes to its foreground process group; the daemon
+/// child sits in its own so that only the chat sees it and cancels the turn
+/// through the protocol (Python's child shares the group and dies:
+/// tests/rust_port/repro_chat_ctrl_c_kills_daemon.py).
+fn away_from_terminal_interrupts(command: &mut Command) {
+    #[cfg(unix)]
+    std::os::unix::process::CommandExt::process_group(command, 0);
+    #[cfg(windows)]
+    std::os::windows::process::CommandExt::creation_flags(
+        command,
+        0x0000_0200, // CREATE_NEW_PROCESS_GROUP: no console Ctrl-C.
+    );
+}
+
+#[cfg(test)]
+impl DaemonClient {
+    /// A client over a scripted daemon: records arrive on `lines`, requests
+    /// go to `requests`.
+    pub(crate) fn scripted(
+        lines: Receiver<Option<String>>,
+        requests: Box<dyn Write + Send>,
+        timeout: Duration,
+        interrupt: Option<Interrupted>,
+    ) -> Self {
+        DaemonClient {
+            child: None,
+            stdin: Some(requests),
+            lines,
+            stderr_tail: Arc::default(),
+            threads: Vec::new(),
+            transcript: None,
+            timeout,
+            interrupt,
+        }
+    }
+}
+
 /// `str(uuid.uuid4())`-shaped, for the bootstrap request id.
 fn uuid_dashed() -> String {
     let hex = random_hex();
@@ -342,4 +419,62 @@ fn uuid_dashed() -> String {
         &hex[17..20],
         &hex[20..32]
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn the_daemon_child_leads_its_own_process_group() {
+        let mut command = Command::new("/bin/sh");
+        command
+            .arg("-c")
+            .arg("ps -o pgid= -p $$")
+            .stdout(Stdio::piped());
+        away_from_terminal_interrupts(&mut command);
+        let child = command.spawn().unwrap();
+        let pid = child.id();
+        let output = child.wait_with_output().unwrap();
+        let group: u32 = String::from_utf8(output.stdout)
+            .unwrap()
+            .trim()
+            .parse()
+            .unwrap();
+        assert_eq!(group, pid, "a terminal's Ctrl-C must not reach the child");
+    }
+
+    #[test]
+    fn ctrl_c_ends_a_wait_for_the_daemon() {
+        let (_records, lines) = channel();
+        let pressed = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let flag = Arc::clone(&pressed);
+        let mut client = DaemonClient::scripted(
+            lines,
+            Box::new(std::io::sink()),
+            Duration::from_secs(20),
+            Some(Arc::new(move || {
+                flag.swap(false, std::sync::atomic::Ordering::SeqCst)
+            })),
+        );
+        let presser = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(120));
+            pressed.store(true, std::sync::atomic::Ordering::SeqCst);
+        });
+        let started = std::time::Instant::now();
+        let error = client.read(true, None).unwrap_err();
+        presser.join().unwrap();
+        assert_eq!(error.code, crate::chat::INTERRUPTED);
+        assert!(started.elapsed() < Duration::from_secs(5));
+        // Without Ctrl-C the wait still ends at the chat timeout.
+        let (_records, lines) = channel();
+        let mut client = DaemonClient::scripted(
+            lines,
+            Box::new(std::io::sink()),
+            Duration::from_millis(200),
+            Some(Arc::new(|| false)),
+        );
+        assert_eq!(client.read(true, None).unwrap_err().code, "daemon_timeout");
+    }
 }

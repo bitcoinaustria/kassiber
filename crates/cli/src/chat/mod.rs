@@ -55,6 +55,45 @@ pub const COPILOT_INCOGNITO_NOTICE: &str =
 
 const CONSENT_DECISIONS: [&str; 3] = ["allow_once", "allow_session", "deny"];
 
+/// The code of the error that carries Python's `KeyboardInterrupt` through
+/// a chat: Ctrl-C at the prompt ends the REPL, during a turn it cancels the
+/// turn, and anywhere else it ends the process by SIGINT once the daemon
+/// child is closed ([`kassiber_ipc::signal::exit_by_interrupt`]).
+pub const INTERRUPTED: &str = "keyboard_interrupt";
+
+pub(crate) fn interrupted() -> AppError {
+    AppError::new(INTERRUPTED, "KeyboardInterrupt")
+}
+
+/// Terminal input that gives way to Ctrl-C, as Python's `input()` raises
+/// `KeyboardInterrupt`: the SIGINT handler restarts system calls, so a
+/// read waits for the terminal or the interrupt first. Only a terminal is
+/// watched; piped input reads as it is.
+pub struct TerminalInput<'a> {
+    inner: &'a mut dyn std::io::Read,
+    terminal: bool,
+}
+
+impl<'a> TerminalInput<'a> {
+    pub fn new(inner: &'a mut dyn std::io::Read, terminal: bool) -> Self {
+        TerminalInput { inner, terminal }
+    }
+}
+
+impl std::io::Read for TerminalInput<'_> {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        #[cfg(unix)]
+        if self.terminal {
+            use std::os::fd::AsFd;
+            let interrupt = kassiber_ipc::signal::install_interrupt()?;
+            if !interrupt.wait_readable(std::io::stdin().as_fd())? {
+                return Err(std::io::Error::other("interrupted"));
+            }
+        }
+        self.inner.read(buffer)
+    }
+}
+
 /// `dict` without one key, keeping order.
 pub(crate) fn without(value: &Value, key: &str) -> Value {
     match value {
@@ -86,6 +125,8 @@ pub struct Io<'a> {
     pub stderr_is_tty: bool,
     /// `COLUMNS`, for tool-result tables.
     pub columns: Option<String>,
+    /// Ctrl-C, once the chat installed its handler.
+    pub interrupt: Option<client::Interrupted>,
 }
 
 impl Io<'_> {
@@ -114,10 +155,19 @@ impl Io<'_> {
         }
     }
 
-    fn read_line(&mut self) -> String {
+    /// One line of input, or [`INTERRUPTED`] when Ctrl-C came first.
+    fn read_line(&mut self) -> Result<String, AppError> {
         let mut line = String::new();
         let _ = self.stdin.read_line(&mut line);
-        line
+        if self.interrupted() {
+            return Err(interrupted());
+        }
+        Ok(line)
+    }
+
+    /// Whether Ctrl-C arrived since it was last handled; it is handled now.
+    fn interrupted(&self) -> bool {
+        self.interrupt.as_ref().is_some_and(|interrupt| interrupt())
     }
 }
 
@@ -636,7 +686,7 @@ fn interactive_consent(
     name: &str,
     summary: &str,
     preview: &Value,
-) -> String {
+) -> Result<String, AppError> {
     io.write(
         chrome,
         &format!(
@@ -654,15 +704,15 @@ fn interactive_consent(
             chrome,
             "Allow? [y] once, [s] session, [n] deny, [c] cancel: ",
         );
-        let choice = io.read_line();
+        let choice = io.read_line()?;
         if choice.is_empty() {
-            return "deny".into();
+            return Ok("deny".into());
         }
         match kassiber_pytext::lower(kassiber_pytext::strip(&choice)).as_str() {
-            "y" | "yes" => return "allow_once".into(),
-            "s" | "session" => return "allow_session".into(),
-            "n" | "no" | "deny" => return "deny".into(),
-            "c" | "cancel" => return "cancel".into(),
+            "y" | "yes" => return Ok("allow_once".into()),
+            "s" | "session" => return Ok("allow_session".into()),
+            "n" | "no" | "deny" => return Ok("deny".into()),
+            "c" | "cancel" => return Ok("cancel".into()),
             _ => {}
         }
     }
@@ -722,6 +772,9 @@ fn decide_and_send_consent(
         let mut chrome_out: Vec<u8> = Vec::new();
         let decision = review::decide(data, interactive, io.stdin, &mut chrome_out);
         io.write(chrome, &String::from_utf8_lossy(&chrome_out));
+        if io.interrupted() {
+            return Err(interrupted());
+        }
         Some(decision)
     } else {
         policy_decision(args, name, io.stdin_is_tty)
@@ -749,7 +802,7 @@ fn decide_and_send_consent(
                 .find(|value| truthy(value))
                 .cloned()
                 .unwrap_or_else(|| Value::Dict(Vec::new()));
-            let decision = interactive_consent(io, chrome, name, &summary, &preview);
+            let decision = interactive_consent(io, chrome, name, &summary, &preview)?;
             if decision == "allow_session" {
                 if let Some(allowed) = turn.session_allowed.as_mut() {
                     if !allowed.iter().any(|tool| tool == name) {
@@ -844,7 +897,15 @@ fn run_turn(
         consented: Vec::new(),
         session_allowed,
     };
-    let result = stream_turn(client, args, io, show, &mut turn, markdown.as_mut());
+    let result = match stream_turn(client, args, io, show, &mut turn, markdown.as_mut()) {
+        // Ctrl-C cancels this turn cooperatively, then waits for the
+        // daemon's terminal record so the transport stays usable for the
+        // next REPL turn.
+        Err(error) if error.code == INTERRUPTED => {
+            cancel_turn(client, io, show, &turn, markdown.as_mut())
+        }
+        other => other,
+    };
     if result.is_err() {
         // A failed turn must not leak open styles into the next prompt.
         if let Some(markdown) = markdown.as_mut() {
@@ -853,6 +914,59 @@ fn run_turn(
         }
     }
     result
+}
+
+/// The `KeyboardInterrupt` branch of `_stream_turn_records`.
+fn cancel_turn(
+    client: &mut DaemonClient,
+    io: &mut Io<'_>,
+    show: &Show,
+    turn: &TurnState<'_>,
+    markdown: Option<&mut MarkdownStream>,
+) -> Result<TurnResult, AppError> {
+    send_cancel(client, &turn.request_id)?;
+    let terminal = match drain_until_terminal(client, &turn.request_id) {
+        Err(error) if error.code == INTERRUPTED => {
+            return Err(AppError::new("cancelled", "chat cancelled"))
+        }
+        other => other?,
+    };
+    if get(&terminal, "kind") == Some(&s("error")) {
+        return Err(error_from_envelope(&terminal, "chat failed", "chat_failed"));
+    }
+    if show.stream_json {
+        io.write(Target::Out, &(compact(&terminal) + "\n"));
+    }
+    if let Some(markdown) = markdown {
+        let rest = markdown.flush();
+        io.write(show.out, &rest);
+    }
+    if show.render && (!turn.content.is_empty() || io.is_tty(show.out)) {
+        io.write(show.out, "\n");
+    }
+    Ok(TurnResult {
+        content: turn.content.clone(),
+        terminal,
+        tool_calls: turn
+            .tool_calls
+            .iter()
+            .map(|(_, entry)| entry.clone())
+            .collect(),
+    })
+}
+
+/// `_drain_until_terminal(client, request_id)`.
+fn drain_until_terminal(client: &mut DaemonClient, request_id: &str) -> Result<Value, AppError> {
+    loop {
+        let record = client.read(true, None)?;
+        if get(&record, "request_id") != Some(&s(request_id)) {
+            continue;
+        }
+        if matches!(get(&record, "kind"), Some(Value::Str(kind)) if kind.is("ai.chat") || kind.is("error"))
+        {
+            return Ok(record);
+        }
+    }
 }
 
 fn stream_turn(
@@ -1286,12 +1400,19 @@ pub fn run(
     let timeout = timeout_seconds(&args.timeout_seconds)?;
     let allow_prompt = io.stdin_is_tty && !args.non_interactive;
     let passphrase = (start.passphrase)(allow_prompt)?;
+    // From here on Ctrl-C is Python's KeyboardInterrupt: it cancels a turn,
+    // ends the REPL at its prompt, and otherwise ends the process by SIGINT
+    // once the daemon child is closed.
+    io.interrupt = kassiber_ipc::signal::install_interrupt()
+        .ok()
+        .map(|interrupt| std::sync::Arc::new(move || interrupt.take()) as client::Interrupted);
     let mut client = DaemonClient::start(Launch {
         data_root: start.data_root,
         env_file: start.env_file,
         passphrase,
         timeout: Duration::from_secs_f64(timeout),
         transcript,
+        interrupt: io.interrupt.clone(),
     })?;
     let outcome = session(&mut client, args, one_shot, io);
     client.close();
@@ -1359,11 +1480,9 @@ fn session(
     );
     let mut session_allowed: Vec<String> = Vec::new();
     loop {
-        io.write(Target::Out, "> ");
-        let line = io.read_line();
-        if line.is_empty() {
+        let Some(line) = prompt(io)? else {
             break;
-        }
+        };
         let prompt = kassiber_pytext::strip(&line).to_owned();
         if prompt.is_empty() {
             continue;
@@ -1447,6 +1566,21 @@ fn session(
         turns.push(result);
     }
     Ok(None)
+}
+
+/// `_read_repl_line` and the REPL's `KeyboardInterrupt`: the next line, or
+/// `None` when input ended or Ctrl-C at the prompt ended the REPL.
+fn prompt(io: &mut Io<'_>) -> Result<Option<String>, AppError> {
+    io.write(Target::Out, "> ");
+    match io.read_line() {
+        Ok(line) if line.is_empty() => Ok(None),
+        Ok(line) => Ok(Some(line)),
+        Err(error) if error.code == INTERRUPTED => {
+            io.write(Target::Out, "\n");
+            Ok(None)
+        }
+        Err(error) => Err(error),
+    }
 }
 
 /// `_render_tool_listing(args, out)`.
@@ -1614,6 +1748,268 @@ fn render_allowed(args: &Args, allowed: &[String], io: &mut Io<'_>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::{Arc, Mutex};
+
+    /// A scripted daemon: it reads the chat's requests from a pipe and
+    /// answers them; `on_chat` streams the turn, `on_cancel` ends it.
+    struct FakeDaemon {
+        requests: Arc<Mutex<Vec<Value>>>,
+        client: DaemonClient,
+        pressed: Arc<AtomicBool>,
+    }
+
+    fn fake_daemon(answer_cancel: bool, press_after_delta: bool, consent: bool) -> FakeDaemon {
+        let (reader, writer) = std::io::pipe().unwrap();
+        let (records, lines) = std::sync::mpsc::channel();
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let pressed = Arc::new(AtomicBool::new(false));
+        let seen = Arc::clone(&requests);
+        let press = Arc::clone(&pressed);
+        std::thread::spawn(move || {
+            let send = |record: Value| records.send(Some(compact(&record) + "\n")).is_ok();
+            for line in std::io::BufReader::new(reader).lines() {
+                let Ok(line) = line else { return };
+                let request = kassiber_pytext::loads(&line).unwrap();
+                seen.lock().unwrap().push(request.clone());
+                let id = get(&request, "request_id").cloned().unwrap();
+                match get(&request, "kind").map(py_str).as_deref() {
+                    Some("ai.chat") if consent => {
+                        send(dict([
+                            ("kind", s("ai.chat.tool_call")),
+                            ("request_id", id.clone()),
+                            (
+                                "data",
+                                dict([
+                                    ("call_id", s("call-1")),
+                                    ("name", s("ui.rates.rebuild")),
+                                    ("needs_consent", Value::Bool(true)),
+                                ]),
+                            ),
+                        ]));
+                    }
+                    Some("ai.chat") => {
+                        send(dict([
+                            ("kind", s("ai.chat.delta")),
+                            ("request_id", id),
+                            (
+                                "data",
+                                dict([("delta", dict([("content", s("Thinking"))]))]),
+                            ),
+                        ]));
+                        if press_after_delta {
+                            std::thread::sleep(Duration::from_millis(50));
+                            press.store(true, Ordering::SeqCst);
+                        }
+                    }
+                    Some("ai.chat.cancel") if answer_cancel => {
+                        let target = get(get(&request, "args").unwrap(), "target_request_id")
+                            .cloned()
+                            .unwrap();
+                        send(dict([
+                            ("kind", s("ai.chat.cancel")),
+                            ("request_id", id),
+                            ("data", dict([("cancelled", Value::Bool(true))])),
+                        ]));
+                        send(dict([
+                            ("kind", s("ai.chat")),
+                            ("request_id", target),
+                            ("data", dict([("finish_reason", s("cancelled"))])),
+                        ]));
+                    }
+                    Some("ai.chat.cancel") => {
+                        // The cancel is never answered: a second Ctrl-C comes.
+                        std::thread::sleep(Duration::from_millis(50));
+                        press.store(true, Ordering::SeqCst);
+                    }
+                    _ => {}
+                }
+            }
+        });
+        let flag = Arc::clone(&pressed);
+        let client = DaemonClient::scripted(
+            lines,
+            Box::new(writer),
+            Duration::from_secs(20),
+            Some(Arc::new(move || flag.swap(false, Ordering::SeqCst))),
+        );
+        FakeDaemon {
+            requests,
+            client,
+            pressed,
+        }
+    }
+
+    fn args() -> Args {
+        Args::from_namespace(&Namespace::default())
+    }
+
+    struct Streams {
+        stdin: std::io::Cursor<Vec<u8>>,
+        stdout: Vec<u8>,
+        stderr: Vec<u8>,
+    }
+
+    fn streams(input: &str) -> Streams {
+        Streams {
+            stdin: std::io::Cursor::new(input.as_bytes().to_vec()),
+            stdout: Vec::new(),
+            stderr: Vec::new(),
+        }
+    }
+
+    fn io<'a>(
+        streams: &'a mut Streams,
+        tty: bool,
+        interrupt: Option<client::Interrupted>,
+    ) -> Io<'a> {
+        Io {
+            stdin: &mut streams.stdin,
+            stdin_is_tty: tty,
+            stdout: &mut streams.stdout,
+            stdout_is_tty: false,
+            stderr: &mut streams.stderr,
+            stderr_is_tty: false,
+            columns: None,
+            interrupt,
+        }
+    }
+
+    fn kinds(requests: &Mutex<Vec<Value>>) -> Vec<String> {
+        requests
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|request| py_str(get(request, "kind").unwrap()))
+            .collect()
+    }
+
+    const SHOW: Show = Show {
+        out: Target::Out,
+        chrome: Target::Out,
+        render: true,
+        stream_json: false,
+    };
+
+    #[test]
+    fn ctrl_c_mid_turn_cancels_it_and_keeps_the_session() {
+        let mut daemon = fake_daemon(true, true, false);
+        let mut streams = streams("");
+        let mut io = io(&mut streams, false, None);
+        let messages = [dict([("role", s("user")), ("content", s("hi"))])];
+        let turn = run_turn(
+            &mut daemon.client,
+            &args(),
+            &mut io,
+            &messages,
+            &SHOW,
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(turn.content, "Thinking");
+        assert_eq!(
+            get(get(&turn.terminal, "data").unwrap(), "finish_reason"),
+            Some(&s("cancelled"))
+        );
+        // One cancel, naming the turn it cancels.
+        let requests = daemon.requests.lock().unwrap().clone();
+        assert_eq!(kinds(&daemon.requests), ["ai.chat", "ai.chat.cancel"]);
+        assert_eq!(
+            get(get(&requests[1], "args").unwrap(), "target_request_id"),
+            get(&requests[0], "request_id")
+        );
+        assert!(
+            !daemon.pressed.load(Ordering::SeqCst),
+            "the Ctrl-C was handled"
+        );
+        assert_eq!(String::from_utf8(streams.stdout).unwrap(), "Thinking\n");
+    }
+
+    #[test]
+    fn a_second_ctrl_c_while_waiting_for_the_cancel_ends_the_turn() {
+        let mut daemon = fake_daemon(false, true, false);
+        let mut streams = streams("");
+        let mut io = io(&mut streams, false, None);
+        let messages = [dict([("role", s("user")), ("content", s("hi"))])];
+        let error = run_turn(
+            &mut daemon.client,
+            &args(),
+            &mut io,
+            &messages,
+            &SHOW,
+            None,
+            None,
+        )
+        .err()
+        .unwrap();
+        assert_eq!(
+            (error.code.as_str(), error.message.as_str()),
+            ("cancelled", "chat cancelled")
+        );
+        assert_eq!(kinds(&daemon.requests), ["ai.chat", "ai.chat.cancel"]);
+    }
+
+    /// Input whose read is where Ctrl-C lands.
+    struct PressOnRead(Arc<AtomicBool>);
+
+    impl std::io::Read for PressOnRead {
+        fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+            self.0.store(true, Ordering::SeqCst);
+            Err(std::io::Error::other("interrupted"))
+        }
+    }
+
+    #[test]
+    fn ctrl_c_at_a_consent_prompt_cancels_the_turn() {
+        let mut daemon = fake_daemon(true, false, true);
+        let pressed = Arc::new(AtomicBool::new(false));
+        let mut stdin = std::io::BufReader::new(PressOnRead(Arc::clone(&pressed)));
+        let (mut stdout, mut stderr) = (Vec::new(), Vec::new());
+        let flag = Arc::clone(&pressed);
+        let mut io = Io {
+            stdin: &mut stdin,
+            stdin_is_tty: true,
+            stdout: &mut stdout,
+            stdout_is_tty: false,
+            stderr: &mut stderr,
+            stderr_is_tty: false,
+            columns: None,
+            interrupt: Some(Arc::new(move || flag.swap(false, Ordering::SeqCst))),
+        };
+        let messages = [dict([("role", s("user")), ("content", s("rebuild"))])];
+        let turn = run_turn(
+            &mut daemon.client,
+            &args(),
+            &mut io,
+            &messages,
+            &SHOW,
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            get(get(&turn.terminal, "data").unwrap(), "finish_reason"),
+            Some(&s("cancelled"))
+        );
+        assert!(String::from_utf8(stdout)
+            .unwrap()
+            .contains("Consent required"));
+        // No consent was sent for the interrupted question.
+        assert_eq!(kinds(&daemon.requests), ["ai.chat", "ai.chat.cancel"]);
+    }
+
+    #[test]
+    fn ctrl_c_at_the_prompt_ends_the_repl() {
+        let mut pressed = streams("next\n");
+        let mut terminal = io(&mut pressed, true, Some(Arc::new(|| true)));
+        assert_eq!(prompt(&mut terminal).unwrap(), None);
+        assert_eq!(String::from_utf8(pressed.stdout).unwrap(), "> \n");
+        let mut quiet = streams("next\n");
+        let mut terminal = io(&mut quiet, true, Some(Arc::new(|| false)));
+        assert_eq!(prompt(&mut terminal).unwrap().as_deref(), Some("next\n"));
+        assert_eq!(prompt(&mut terminal).unwrap(), None, "end of input");
+    }
 
     #[test]
     fn timeouts_are_validated_locally() {

@@ -2444,27 +2444,7 @@ impl Book for RealBook {
             .map(|passphrase| Secret::new(passphrase.expose().to_owned()))
     }
     fn pin_read_only_scope(&mut self, scope: Option<(&str, &str)>) -> Result<(), AppError> {
-        let sql = match scope {
-            Some((workspace, profile)) => {
-                let quote = |text: &str| format!("'{}'", text.replace('\'', "''"));
-                // `pinned_context_scope`: a temporary view shadows `settings`
-                // for this connection's unqualified reads, answering the two
-                // context keys with the pin; the stored context is untouched.
-                format!(
-                    "CREATE TEMP VIEW settings AS \
-                     SELECT key, value FROM main.settings \
-                     WHERE key NOT IN ('context_workspace', 'context_profile') \
-                     UNION ALL SELECT 'context_workspace', {} \
-                     UNION ALL SELECT 'context_profile', {}; \
-                     PRAGMA query_only = ON;",
-                    quote(workspace),
-                    quote(profile)
-                )
-            }
-            None => "PRAGMA query_only = OFF; DROP VIEW IF EXISTS temp.settings;".to_owned(),
-        };
-        self.conn()?
-            .execute_batch(&sql)
+        kassiber_store::pinned::pin_read_only_scope(self.conn()?, scope)
             .map_err(map_sqlite_error)
             .map_err(error)
     }

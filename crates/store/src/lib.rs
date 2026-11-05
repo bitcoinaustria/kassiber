@@ -6,6 +6,7 @@ mod durable;
 pub mod encryption;
 pub mod layout;
 pub mod observer;
+pub mod pinned;
 pub mod projects;
 pub mod restore;
 pub mod retired;

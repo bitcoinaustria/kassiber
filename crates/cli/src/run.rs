@@ -515,7 +515,10 @@ pub fn run(
         // Brokered routing above already refused a brokered project.
         let outcome = store.bootstrap(&globals.selection).and_then(|bootstrap| {
             let mut args = crate::chat::Args::from_namespace(&namespace);
-            let mut input = std::io::BufReader::new(&mut stdin);
+            // Only this process's own terminal is watched for Ctrl-C.
+            let mut terminal =
+                crate::chat::TerminalInput::new(&mut stdin, env.claim_stdio && stdin_is_tty);
+            let mut input = std::io::BufReader::new(&mut terminal);
             let mut io = crate::chat::Io {
                 stdin: &mut input,
                 stdin_is_tty,
@@ -524,6 +527,7 @@ pub fn run(
                 stderr: &mut stderr,
                 stderr_is_tty,
                 columns: env.columns.clone(),
+                interrupt: None,
             };
             let data_root = bootstrap.paths.data_root.clone();
             let mut passphrase = |allow_prompt: bool| {
@@ -570,6 +574,12 @@ pub fn run(
                 }
             }
             Ok(None) => 0,
+            Err(error) if error.code == crate::chat::INTERRUPTED => {
+                // An uncaught KeyboardInterrupt, after the daemon closed.
+                let _ = stdout.flush();
+                let _ = stderr.flush();
+                kassiber_ipc::signal::exit_by_interrupt()
+            }
             Err(error) => fail(&mut stdout, &mut stderr, error),
         };
     }
