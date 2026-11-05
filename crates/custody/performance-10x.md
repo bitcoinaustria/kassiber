@@ -206,27 +206,51 @@ What the steps changed, by cost removed:
 - Finalized rows overlay generated fields on their source records.
 - Gap search ranks qualifying groups by keys it already holds.
 
-### Where the remaining time goes
+### Where the remaining time goes (step 14)
 
 Instructions retired in native custody, generic 20k, step 14 (3.51 G in
 total), by stage: evidence canonical events 28%, finalized projection 15%,
 gap admission and search 15%, evidence enrichment 11%, quantity 11%,
-interpretation 9%, admission 8% (Python's figure has no admission). No
-single function is above 3% of the total. glibc allocation and string
-comparison together are 35%, spread over row, observation, claim and
-finalized-row values.
+interpretation 9%, admission 8% (Python's figure has no admission). glibc
+allocation and string comparison together were 35%.
 
-To reach 10× everywhere, custody CPU must drop a further 10% (generic 2k),
-23% (multi-wallet 2k) and 30% (generic 20k). These parts are not a parity
-floor; they need more structural work:
+## Results (2026-11-05)
 
-1. Finalized rows as typed overlays, with values built only when a row is
-   written. About 25k instructions per row remain, mostly building and reading
-   JSON values.
-2. Evidence events that keep typed observations and build their legs,
-   aliases and snapshots lazily, plus event keys computed once per row
-   instead of in both enrichment and the canonical pass.
-3. Admission over records, without typed copies of every network
-   observation and rate row.
-4. Component materialization (multi-wallet) without the per-component
-   canonical rebuild for evidence status.
+Steps 15–28 took the four structural changes listed at step 14 and the
+hot paths they exposed:
+
+1. Finalized rows hold typed overrides (integers, statics, references to
+   observation legs). Known field names carry key-order ranks kept inline,
+   fields are appended and sorted only when a row is written, and an
+   override entry is 56 bytes.
+2. Evidence events keep typed snapshots, aliases and keys: a selected
+   observation moves into its leg, snapshots and aliases name legs, key
+   objects are built on request, and events group by sorting. Observation
+   quantities stay machine integers unless they exceed one.
+3. Admission reads the loaded network JSON in place, types an observation
+   only when its columns are new, and types rate rows only when the gate
+   reads them.
+4. Interpretation and quantity resolve aliases through their legs, read
+   typed event keys, and check principals and quantity rules on machine
+   integers.
+
+Step 21 also keeps evidence amounts exact beyond i128 (the overflow the
+integration branch fixed in 3defac865 existed in the typed observations
+too).
+
+Best of five alternating Python/native pairs on step 28 (`9f25c45cb`),
+custody CPU in seconds:
+
+| Book | Python | Native | Speedup | Load |
+| --- | ---: | ---: | ---: | --- |
+| generic 2k | 0.813 | 0.060 | 13.6× | 16–17 |
+| multi-wallet 2k | 1.159 | 0.113 | 10.3× | 15–16 |
+| generic 20k | 5.188 | 0.519 | 10.0× | 10–14 |
+| multi-wallet 20k | 13.211 | 1.005 | 13.1× | 8–12 |
+
+Per stage, generic 20k (Python / native): evidence 1.778 / 0.143,
+interpretation 0.947 / 0.049, gaps 1.107 / 0.061, quantity 0.670 / 0.073,
+finalized projection 0.444 / 0.102; native admission adds 0.016.
+Finalized projection (4.4×) is still the weakest stage. Under machine load
+of 60–150 the same binaries measured 3–5% slower, so the 10.0× and 10.3×
+figures have no margin.
