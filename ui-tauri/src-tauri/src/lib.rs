@@ -1,4 +1,5 @@
 mod app_update;
+mod secret_floor;
 #[allow(dead_code)]
 mod secret_store;
 mod supervisor;

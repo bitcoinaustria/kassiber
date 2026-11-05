@@ -233,7 +233,7 @@
     "id": "floor-sk",
     "file": "crates/envelope/src/redaction/floor.rs",
     "find": "(sk_secret, \"[redacted-secret]\"),",
-    "replace": "",
+    "replace": "(|_, _, _| None, \"[redacted-secret]\"),",
     "expect_failing": [
       "floor_patterns_follow_the_scanner"
     ],
@@ -243,7 +243,7 @@
     "id": "floor-descriptor",
     "file": "crates/envelope/src/redaction/floor.rs",
     "find": "(descriptor, \"[redacted-descriptor]\"),",
-    "replace": "",
+    "replace": "(|_, _, _| None, \"[redacted-descriptor]\"),",
     "expect_failing": [
       "floor_patterns_follow_the_scanner"
     ],

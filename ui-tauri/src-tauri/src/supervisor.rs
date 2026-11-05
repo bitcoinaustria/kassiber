@@ -1,3 +1,4 @@
+use crate::secret_floor::floor::{is_sensitive_key, redact_secret_text};
 use crate::secret_store::{
     current_ai_provider_secret_store_policy, current_secret_store_platform,
     native_store_id_for_platform, NativeSecretStore, SecretStore, STORE_ID_SQLCIPHER_INLINE,
@@ -146,19 +147,32 @@ impl SupervisorError {
     }
 }
 
+/// The backend's `redact_secret_value`: sensitive keys become `[redacted]`,
+/// strings pass through the shared secret floor, and nesting past eight
+/// levels becomes `[truncated]`.
 fn redact_sensitive_value(value: Value) -> Value {
+    redact_value(value, 0)
+}
+
+fn redact_value(value: Value, depth: usize) -> Value {
+    if depth > 8 {
+        return Value::String("[truncated]".to_string());
+    }
     match value {
         Value::String(text) => Value::String(redact_sensitive_text(&text)),
-        Value::Array(items) => {
-            Value::Array(items.into_iter().map(redact_sensitive_value).collect())
-        }
+        Value::Array(items) => Value::Array(
+            items
+                .into_iter()
+                .map(|item| redact_value(item, depth + 1))
+                .collect(),
+        ),
         Value::Object(map) => Value::Object(
             map.into_iter()
                 .map(|(key, value)| {
                     if is_sensitive_key(&key) {
                         (key, Value::String("[redacted]".to_string()))
                     } else {
-                        (key, redact_sensitive_value(value))
+                        (key, redact_value(value, depth + 1))
                     }
                 })
                 .collect(),
@@ -167,169 +181,10 @@ fn redact_sensitive_value(value: Value) -> Value {
     }
 }
 
-fn is_sensitive_key(key: &str) -> bool {
-    let lowered = key.to_ascii_lowercase().replace('-', "_");
-    [
-        "api_key",
-        "auth_header",
-        "auth_response",
-        "blinding",
-        "cookie",
-        "descriptor",
-        "mnemonic",
-        "password",
-        "passphrase",
-        "private",
-        "recovery",
-        "secret",
-        "seed",
-        "token",
-        "xprv",
-    ]
-    .iter()
-    .any(|part| lowered.contains(part))
-}
-
+/// The backend's `redact_secret_text`: the same credential scanner and key,
+/// descriptor and token patterns, compiled from the envelope crate's source.
 fn redact_sensitive_text(text: &str) -> String {
-    let mut redact_next = false;
-    let mut recovery_tail_words = 0usize;
-    let mut words = Vec::new();
-    for word in text.split_whitespace() {
-        if recovery_tail_words > 0 {
-            if looks_like_recovery_tail_word(word) {
-                words.push("[redacted]".to_string());
-                recovery_tail_words -= 1;
-                continue;
-            }
-            recovery_tail_words = 0;
-        }
-        if redact_next {
-            words.push("[redacted]".to_string());
-            redact_next = false;
-            continue;
-        }
-        let recovery_assignment = is_recovery_assignment_word(word);
-        let (redacted, redact_following) = redact_sensitive_word(word);
-        if recovery_assignment {
-            // A spaced recovery phrase: its words follow as separate tokens, so
-            // arm the recovery tail instead of `redact_next` (which would eat
-            // only the first word and then stay stuck on across the phrase).
-            recovery_tail_words = 23;
-        } else {
-            redact_next = redact_following;
-        }
-        words.push(redacted);
-    }
-    words.join(" ")
-}
-
-fn is_recovery_assignment_word(word: &str) -> bool {
-    let lowered = word.to_ascii_lowercase();
-    for marker in [
-        "mnemonic",
-        "recovery_phrase",
-        "recovery-phrase",
-        "seed",
-        "seed_phrase",
-        "seed-phrase",
-        "seed_words",
-        "seed-words",
-    ] {
-        if let Some(index) = lowered.find(marker) {
-            let after = &word[index + marker.len()..];
-            if after.starts_with('=') || after.starts_with(':') {
-                return true;
-            }
-        }
-    }
-    false
-}
-
-fn looks_like_recovery_tail_word(word: &str) -> bool {
-    let trimmed = word.trim_matches(|c: char| !c.is_ascii_alphabetic());
-    let len = trimmed.len();
-    (2..=12).contains(&len) && trimmed.chars().all(|c| c.is_ascii_alphabetic())
-}
-
-/// Redacts a single whitespace-delimited token, returning the (possibly
-/// rewritten) token and whether the FOLLOWING token must also be redacted.
-/// The follow flag is true for `Bearer <token>` and for an assignment whose
-/// value is quoted *after* the separator (`"api_key": "secret"`), where
-/// `split_whitespace` puts the value in the next token.
-fn redact_sensitive_word(word: &str) -> (String, bool) {
-    let lowered = word.to_ascii_lowercase();
-    if lowered.starts_with("sk-") {
-        return ("[redacted]".to_string(), false);
-    }
-    if contains_extended_key_or_descriptor(&lowered) {
-        return ("[redacted]".to_string(), false);
-    }
-    if lowered.starts_with("bearer") {
-        return ("Bearer".to_string(), true);
-    }
-    for marker in [
-        "api_key",
-        "api-key",
-        "auth_header",
-        "auth-header",
-        "blinding_key",
-        "blinding-key",
-        "blinding",
-        "cookie",
-        "descriptor",
-        "mnemonic",
-        "password",
-        "passphrase",
-        "recovery_phrase",
-        "recovery-phrase",
-        "secret",
-        "seed",
-        "seed_phrase",
-        "seed-phrase",
-        "seed_words",
-        "seed-words",
-        "token",
-        "xprv",
-    ] {
-        if let Some(index) = lowered.find(marker) {
-            let after = &word[index + marker.len()..];
-            // Allow one closing quote between the key and the separator so JSON
-            // and Python-dict shapes match too: `api_key=`, `"api_key":`,
-            // `'api_key':`. `split_whitespace` leaves the quote on the key token.
-            let after_quote = after
-                .strip_prefix('"')
-                .or_else(|| after.strip_prefix('\''))
-                .unwrap_or(after);
-            if let Some(value) = after_quote
-                .strip_prefix(':')
-                .or_else(|| after_quote.strip_prefix('='))
-            {
-                if value.trim().is_empty() {
-                    // `"api_key":` — the value is quoted in the next token.
-                    return (word.to_string(), true);
-                }
-                // Value rides in this token (`api_key=sk...`, `{"api_key":"sk..."}`).
-                let key_end = word.len() - value.len();
-                return (format!("{}[redacted]", &word[..key_end]), false);
-            }
-        }
-    }
-    (word.to_string(), false)
-}
-
-fn contains_extended_key_or_descriptor(lowered: &str) -> bool {
-    let has_extended_key = [
-        "xpub", "ypub", "zpub", "tpub", "upub", "vpub", "xprv", "yprv", "zprv", "tprv", "uprv",
-        "vprv",
-    ]
-    .iter()
-    .any(|prefix| lowered.contains(prefix) && lowered.len() >= prefix.len() + 20);
-    if has_extended_key {
-        return true;
-    }
-    ["wpkh(", "sh(", "wsh(", "tr(", "pkh(", "combo("]
-        .iter()
-        .any(|prefix| lowered.contains(prefix) && lowered.len() > prefix.len() + 16)
+    redact_secret_text(text)
 }
 
 impl DaemonSupervisor {
@@ -1958,6 +1813,43 @@ mod tests {
         assert!(encoded.contains("\"tsMs\""));
         assert!(encoded.contains("\"stderrTail\""));
         assert!(encoded.contains("\"source\":\"env_python\""));
+    }
+
+    #[test]
+    fn native_floor_is_the_backend_floor() {
+        // Outputs of kassiber/redaction.py's redact_secret_text/_value.
+        for (input, expected) in [
+            (
+                "Authorization: Bearer abc.def==",
+                "Authorization: [redacted]",
+            ),
+            (
+                "cmd --password correct -horse battery",
+                "cmd --password [redacted]",
+            ),
+            (
+                "http://dom;password:PartA,PartB@host:8332/",
+                "http://[redacted]",
+            ),
+            ("dnsseed=Pw9Leak", "dnsseed=Pw9Leak"),
+            ("max_tokens: 16", "max_tokens: 16"),
+        ] {
+            assert_eq!(redact_sensitive_text(input), expected, "{input:?}");
+        }
+        let mut nested = json!("leaf");
+        for _ in 0..10 {
+            nested = json!([nested]);
+        }
+        assert_eq!(
+            redact_sensitive_value(
+                json!({"a": nested, "macaroon_hex": "x", "list": ["token=abc"]})
+            ),
+            json!({
+                "a": [[[[[[[["[truncated]"]]]]]]]],
+                "macaroon_hex": "[redacted]",
+                "list": ["token=[redacted]"]
+            })
+        );
     }
 
     #[test]
