@@ -447,6 +447,17 @@ fn freshness(conn: &Connection, profile: &Row) -> Result<Freshness, AppError> {
     let processed_count = int_or_zero(profile.get("last_processed_tx_count"))?;
     let input_version = int_or_zero(profile.get("journal_input_version"))?;
     let processed_version = int_or_zero(profile.get("last_processed_input_version"))?;
+    // A profile row without both semantics columns is never current.
+    let semantics_current = profile.has("required_journal_semantics_version")
+        && profile.has("journal_semantics_version")
+        && {
+            let required = int_or_zero(profile.get("required_journal_semantics_version"))?;
+            let built = int_or_zero(profile.get("journal_semantics_version"))?;
+            required == BigInt::from(0)
+                || (built
+                    == BigInt::from(kassiber_store::semantics::JOURNAL_CALCULATION_SEMANTICS_VERSION)
+                    && built >= required)
+        };
     let (status, reason) = if active == 0 {
         ("no_transactions", "no active transactions")
     } else if !processed_at {
@@ -458,10 +469,15 @@ fn freshness(conn: &Connection, profile: &Row) -> Result<Freshness, AppError> {
         )
     } else if input_version != processed_version {
         ("stale", "journal inputs changed since last processing")
+    } else if !semantics_current {
+        (
+            "stale",
+            "journal calculation semantics changed; rebuild with current Kassiber",
+        )
     } else {
         (
             "current",
-            "journals match the active transaction count and input version",
+            "journals match the active transaction count, input version and calculation semantics",
         )
     };
     let count = |table: &str| -> Result<BigInt, AppError> {
