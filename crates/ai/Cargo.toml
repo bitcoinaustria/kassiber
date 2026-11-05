@@ -18,7 +18,8 @@ test-harness = ["kassiber-net/test-support"]
 
 [dependencies]
 kassiber-envelope = { path = "../envelope" }
-# Provider configuration, discovery and the HTTP client (R6-6a).
+# Provider configuration, discovery and the HTTP client (R6-6a), and the
+# provider broker's process route (R6-6b).
 kassiber-net = { path = "../net" }
 kassiber-paths = { path = "../paths" }
 kassiber-store = { path = "../store" }

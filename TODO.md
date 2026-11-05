@@ -91,13 +91,18 @@ ordered compatibility, hidden-home cutover and legacy project migration through
 
 The [R6-6a checkpoint](docs/reference/rust-shell.md#ai-providers-http-streaming-and-discovery-r6-6a)
 serves the provider store, model discovery and connection tests for HTTP
-providers natively.
+providers natively; the [R6-6b checkpoint](docs/reference/rust-shell.md#ai-provider-broker-client-r6-6b)
+adds the provider broker client for CLI agent runtimes.
 
 - [x] R6-6a: provider kinds and `ai` leaves, the shared store (document OCR
   included), the streaming HTTP client, the discovery cache.
-- [ ] R6-6b: the provider broker client and its gated process route, so CLI
+- [x] R6-6b: the provider broker client and its gated process route, so CLI
   agent runtimes (`ai.provider_runtime.status` probes, model listing and
   connection tests on `*-cli://default` rows) stop answering `not_implemented`.
+- [ ] Build and run the broker's Windows paths (`TerminateProcess`, `PATHEXT`
+  lookup, `USERPROFILE` expansion, `tests/broker_windows.rs`) on Windows.
+- [ ] Settle where packaged builds find `provider_broker/index.mjs` (R7; the
+  Rust default is beside the executable).
 - [ ] Rerun `ProviderFormatCliTest::test_store_field_flags` and
   `ProviderSettingsCliTest::test_enable_disable_and_default_effort_flags`
   through the hybrid candidate on an idle disk; they timed out creating a fresh

@@ -17137,10 +17137,111 @@ test-target gates, kind inference, TTL, three SSE quirks, the store regex and
 invariant, fallback, offline loopback, key origin, secret namespace,
 duplicate call ids, cut-off calls), each killed by named tests.
 
-**Remaining for R6-6b.** The provider broker client (`broker_client.py`) and
-its gated process route: Node spawn in a new process group with the
+**Remaining for R6-6b** (done; see the
+[R6-6b checkpoint](#ai-provider-broker-client-r6-6b)). The provider broker
+client (`broker_client.py`) and its gated process route: Node spawn in a new process group with the
 `XDG_RUNTIME_DIR` temp-root checks, the JSONL exchange with keep-alive and
 per-leg watchdogs, TERM-then-KILL, the three environment overrides, and the
 attempt observer. With it, `ai.provider_runtime.status` probes,
 `ai.list_models`/`ai models` and connection tests on CLI rows (including
 `binary_presence` check kinds) stop answering `not_implemented`.
+
+## AI provider broker client (R6-6b)
+
+`t3code/r6-6b-broker-client` starts at `40caf2ea2`, the R6-6a tip. It ports
+the R6-6b scope of the
+[R6 design](r6-ai-operator-port.md#r6-6-providers-http-streaming-broker-client-and-discovery).
+No schema or Python product file changes, and no new crate in the lockfile.
+
+| Surface | Native | Notes |
+| --- | --- | --- |
+| `ai.provider_runtime.status` | yes | `cached_only` and "nothing a row allows" still never probe; otherwise one broker `status` request for the allowed runtimes, or only the named row's runtime |
+| `ai.list_models`, `ai models` | yes | CLI rows ask the broker for `models` (35 s cap) |
+| `ai.test_connection`, `ai providers test` | yes | CLI targets list models through the broker (10 s); the probe is skipped (`cli_provider`), `check_kind` is `binary_presence` when a row says so |
+
+**Crates.** `kassiber-net` gains the broker process route
+(`Request::ai_broker`, `Route::spawn_broker`, `Subsystem::Ai`,
+`Operation::Process`): the program lookup (`KASSIBER_AI_BROKER_NODE`, `node`
+on `PATH` as Python 3.11's `shutil.which` finds it, the fixed fallbacks;
+`KASSIBER_AI_PROVIDER_BROKER`), the `XDG_RUNTIME_DIR` temp-root checks, the
+private `kassiber-ai-broker-*` root (mode 0700) passed as
+`KASSIBER_AI_BROKER_TMPDIR`, a new process group on Unix, and a signal handle
+for SIGTERM, SIGKILL and waiting from any thread. It now uses `nix` (already
+in the lockfile for `kassiber-paths`) for `killpg`, `getuid` and
+`access(X_OK)`, with the new `signal` feature reviewed; it still forbids
+`unsafe`. `crates/ai` gains `broker`, the client (`BrokerAIClient`):
+`runtime_status`, `single_result` and `BrokerClient` with `list_models`,
+`stream_chat` and a cancel handle. `ai.chat` is R6-7; the client's chat legs
+are proven by the stream driver below.
+
+**Protocol.** Requests are written with `json.dumps` defaults in Python's key
+order; tool-call arguments with sorted keys and compact separators. A probe
+writes one line, closes stdin, and must reach EOF and exit within its
+deadline (35 s for status); on overrun the group gets SIGTERM, then SIGKILL
+after two seconds, and the request is `ai_unavailable`. Its output is read as
+Python's text pipe (`\r\n` and `\r` become `\n`) and split with
+`str.splitlines()`, so a raw U+2028 breaks a line there as in Python, while
+chat legs split on `\n` only, as Python's line iterator does. A chat leg has
+its own watchdog (`max(timeout, 1 s)`) that kills the group; after a
+`tool_call` the process stays alive for `tool_results`, which must answer
+every pending call. Each leg rechecks the online gate (Python calls
+`require_online` on every leg), and so does every write. A finished process
+gets SIGTERM, SIGKILL after two seconds, then a group SIGKILL for stragglers
+before its root is removed. Error events map as `_broker_event_error`; a
+private turn hides the provider's text.
+
+**Reviewed differences.**
+
+- Broker output Python cannot decode (not UTF-8, a line over 16 MiB, a probe
+  over 64 MiB, an integer over 4,300 digits, nesting past 1,000) is
+  `ai_unavailable` "The local AI provider broker returned invalid output".
+  Python reads without a bound and lets the decode error escape.
+- The broker leads a new process group (`process_group(0)`), not a new
+  session: `setsid` needs an `unsafe` `pre_exec`. Signals reach the same
+  group; a CLI started from a terminal keeps that controlling terminal.
+- Without an override the script is `<executable dir>/provider_broker/index.mjs`
+  (design §7 item 8, settled with R7 packaging). `~user` in an override is
+  expanded on Unix only; Windows expands `~` alone.
+- After a probe overruns, Rust waits for the broker to exit but not for EOF:
+  a grandchild that left the group cannot pin the request.
+- An unexpected pipe failure that Python lets escape becomes `internal_error`
+  with Python's `[Errno N] reason` text.
+- Dropping a client ends a broker it kept alive for tool results.
+
+**Privacy fences.** No broker starts without the online gate and an
+explicit-trigger consent bound to the program: offline mode (or an unreadable
+preference) refuses every probe, listing and chat leg with Python's message
+and no attempt, and a tool session refuses its next leg once offline mode is
+on. Every launch goes through `Route::spawn_broker`, where an armed observer
+records it (`scheme` `broker`, port 1); a strict observer, or a script other
+than the one a harness named (`KASSIBER_RUST_TEST_AI_BROKER_FIXTURE` in
+test-harness builds), trips the guard before anything starts. The product
+ledger records no launch, as Python records none (design §7 item 3).
+`KASSIBER_NO_EGRESS` leaves the broker alone, as in Python. The broker's argv
+is `[node, script]`; no key reaches it, and requests carry no credentials.
+Nothing runs at launch, on idle, on provider listing or editing, on
+`cached_only` status, or when no row allows a runtime: the parity driver's
+CRUD session leaves the fake broker's log empty, and an empty runtime list
+starts nothing. A missing Node or script starts nothing and counts no
+attempt. Windows code paths (`TerminateProcess` instead of group signals,
+`USERPROFILE` home expansion, `PATHEXT` lookup, the private-turn refusal) are
+written to compile but were not built here; review them on Windows.
+
+**Evidence.** `cargo test -p kassiber-net` (12 broker units, including
+`BrokerTempParentTest`'s 7) and `cargo test -p kassiber-ai`
+(`tests/broker.rs`: 30 tests porting `BrokerClientTest` and the broker classes
+of `test_ai_fast_mode.py` against the same fake brokers, plus the fences;
+`tests/broker_windows.rs` for Windows; the service unit test now probes,
+lists and tests a CLI row through a fake broker). `tests/test_rust_ai_providers.py`
+adds daemon sessions for probes, cache reuse, listings, connection tests and
+offline refusals, and CLI leaves through the hybrid candidate; envelopes,
+tables and the fake broker's request lines match Python byte for byte, and
+all `ai` calls are served by Rust. `tests/test_rust_ai_broker.py` drives
+Python's `BrokerAIClient` (`tests/rust_port/ai_broker_reference.py`) and the
+Rust client (`crates/ai/examples/broker_stream.rs`, named by
+`KASSIBER_RUST_AI_BROKER_EXAMPLE`) through tool rounds, quirky output, error
+events, invalid options, a mid-stream cancel and offline mode: every chunk,
+leg outcome and broker request line matches. `crates/ai/scripts/mutations.json`
+gains 17 R6-6b entries (launch observation, the fixture rule, the missing-program check, both temp-root checks, the straggler kill, the empty and filtered scopes, the cancel latch and signal, keep-alive, complete tool results, private cursors, explicit fast mode, known notices, the leg watchdog and `binary_presence`), all killed by named tests.
+`test_provider_resume_cursor_is_bound_to_the_visible_chat_branch` tests the
+daemon's chat registry and moves with R6-7.

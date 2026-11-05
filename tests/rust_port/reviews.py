@@ -662,7 +662,25 @@ REVIEWS["tests/test_ai_fast_mode.py"] = {
     "HttpFastModeTest": _r66("fast_mode never reaches an HTTP body", "crates/ai/src/transport/wire.rs::options_map_onto_responses_fields_and_reserved_ones_are_dropped"),
     "ModelMetadataFastModeTest": _r66("bounded fast-mode metadata", "crates/ai/src/discovery/metadata.rs::listings_are_bounded_and_derived_like_python"),
 }
+# R6-6b: the provider broker client and its process route.
+_R66B = "crates/ai/tests/broker.rs"
+_R66B_NET = "crates/net/src/broker.rs tests"
+REVIEWS["tests/test_ai_broker.py"] = {
+    "BrokerClientTest": _r66("BrokerAIClient against the same fake brokers: status and model probes, chat legs, keep-alive across a tool call, cancellation at every stage, probe timeouts that end the whole group, private and stateless sessions", _R66B),
+    "BrokerClientTest::test_sensitive_windows_provider_fails_before_resolution_or_spawn": _r66("Windows refuses a private CLI turn before lookup or launch (compiled on Windows only)", "crates/ai/tests/broker_windows.rs::sensitive_windows_provider_fails_before_resolution_or_spawn"),
+    "BrokerClientTest::test_provider_resume_cursor_is_bound_to_the_visible_chat_branch": {
+        "disposition": "subprocess-scenario", "group": "ai-mcp-operator",
+        "reason": "tests the daemon's provider-session registry (ActiveAiChats), not the broker client; it moves with ai.chat in R6-7",
+    },
+    "BrokerTempParentTest": _r66("the XDG_RUNTIME_DIR temp-root checks and the per-turn root's creation and removal", _R66B_NET + "; " + _R66B + "::the_broker_gets_only_node_and_script_and_a_private_root"),
+}
+REVIEWS["tests/test_ai_fast_mode.py"]["BrokerFastModeTest"] = _r66("fast_mode crosses the broker only when exactly true and is rejected before a launch otherwise", _R66B + "::forwards_only_an_explicit_true; rejects_non_boolean_fast_mode_before_spawn")
+REVIEWS["tests/test_ai_fast_mode.py"]["FastModeNoticeTest::test_broker_client_forwards_only_known_notices"] = _r66("only known provider notices are forwarded as status chunks", _R66B + "::broker_client_forwards_only_known_notices; tests/test_rust_ai_broker.py")
+REVIEWS["tests/test_rust_ai_broker.py"] = {"*": {
+    "disposition": "oracle", "group": "ai-mcp-operator",
+    "reason": "drives Python's BrokerAIClient and the Rust BrokerClient through the same chat legs against one fake broker and compares every streamed chunk, leg outcome and broker request line byte for byte, including cancellation and offline mode",
+}}
 REVIEWS["tests/test_rust_ai_providers.py"] = {"*": {
     "disposition": "oracle", "group": "ai-mcp-operator",
-    "reason": "compares native AI provider daemon sessions, CLI leaves (with zero hybrid fallbacks) and scripted loopback provider requests with unchanged Python byte for byte, including offline mode and pinned clocks",
+    "reason": "compares native AI provider daemon sessions, CLI leaves (with zero hybrid fallbacks), scripted loopback provider requests and the fake provider broker's request lines with unchanged Python byte for byte, including offline mode and pinned clocks",
 }}

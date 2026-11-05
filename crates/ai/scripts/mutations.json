@@ -499,14 +499,14 @@
     "rule": "Status rows outside the requested scope are dropped, whatever the broker echoes."
   },
   {
-    "id": "R66b-cancel-after-resolution",
+    "id": "R66b-cancel-latch",
     "file": "crates/ai/src/broker/mod.rs",
-    "find": "        self.stage(\"resolution\");\n        let route = authorize(&self.gate, program.clone())?;\n        self.check_cancelled()?;\n",
-    "replace": "        self.stage(\"resolution\");\n        let route = authorize(&self.gate, program.clone())?;\n",
+    "find": "    fn check_cancelled(&self) -> Result<(), AppError> {\n        if self.shared.cancelled.load(Ordering::SeqCst) {",
+    "replace": "    fn check_cancelled(&self) -> Result<(), AppError> {\n        if false {",
     "expect_failing": [
       "cancel_is_latched_before_resolution_spawn_registration_and_send"
     ],
-    "rule": "A cancel during broker lookup stops the turn before a launch."
+    "rule": "A cancel is latched for the client: at any stage it stops the turn before a request is sent."
   },
   {
     "id": "R66b-cancel-signals",

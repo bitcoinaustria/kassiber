@@ -70,8 +70,10 @@
       "AddressScriptsTest": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "calls kassiber.core.address_scripts directly", "reviewed": false, "tests": 2}
     },
     "tests/test_ai_broker.py": {
-      "BrokerClientTest": {"disposition": "rust-test", "flags": ["mock", "mock-internal"], "group": "ai-mcp-operator", "reason": "calls kassiber.ai.broker_client directly", "reviewed": false, "tests": 17},
-      "BrokerTempParentTest": {"disposition": "rust-test", "flags": ["mock", "mock-internal"], "group": "ai-mcp-operator", "reason": "calls kassiber.ai.broker_client directly", "reviewed": false, "tests": 7}
+      "BrokerClientTest": {"disposition": "rust-test", "flags": ["mock", "mock-internal"], "group": "ai-mcp-operator", "reason": "BrokerAIClient against the same fake brokers: status and model probes, chat legs, keep-alive across a tool call, cancellation at every stage, probe timeouts that end the whole group, private and stateless sessions", "replacement": "crates/ai/tests/broker.rs", "reviewed": true, "tests": 15},
+      "BrokerClientTest::test_sensitive_windows_provider_fails_before_resolution_or_spawn": {"disposition": "rust-test", "flags": ["mock", "mock-internal"], "group": "ai-mcp-operator", "reason": "Windows refuses a private CLI turn before lookup or launch (compiled on Windows only)", "replacement": "crates/ai/tests/broker_windows.rs::sensitive_windows_provider_fails_before_resolution_or_spawn", "reviewed": true, "tests": 1},
+      "BrokerClientTest::test_provider_resume_cursor_is_bound_to_the_visible_chat_branch": {"disposition": "subprocess-scenario", "flags": [], "group": "ai-mcp-operator", "reason": "tests the daemon's provider-session registry (ActiveAiChats), not the broker client; it moves with ai.chat in R6-7", "replacement": "crates/ai/tests/broker.rs", "reviewed": true, "tests": 1},
+      "BrokerTempParentTest": {"disposition": "rust-test", "flags": ["mock", "mock-internal"], "group": "ai-mcp-operator", "reason": "the XDG_RUNTIME_DIR temp-root checks and the per-turn root's creation and removal", "replacement": "crates/net/src/broker.rs tests; crates/ai/tests/broker.rs::the_broker_gets_only_node_and_script_and_a_private_root", "reviewed": true, "tests": 7}
     },
     "tests/test_ai_core.py": {
       "SseParserTest": {"disposition": "rust-test", "flags": [], "group": "ai-mcp-operator", "reason": "calls kassiber.ai.client directly", "reviewed": false, "tests": 7},
@@ -127,12 +129,13 @@
       "test_stale_failure_is_not_replayed_to_a_later_call": {"disposition": "rust-test", "flags": [], "group": "ai-mcp-operator", "reason": "a later call probes again; entries expire after the TTL", "replacement": "crates/ai/src/discovery/mod.rs::stale_failure_is_not_replayed_to_a_later_call_and_the_ttl_expires", "reviewed": true, "tests": 1}
     },
     "tests/test_ai_fast_mode.py": {
-      "BrokerFastModeTest": {"disposition": "rust-test", "flags": ["mock"], "group": "ai-mcp-operator", "reason": "calls kassiber.ai.broker_client directly", "reviewed": false, "tests": 2},
+      "BrokerFastModeTest": {"disposition": "rust-test", "flags": ["mock"], "group": "ai-mcp-operator", "reason": "fast_mode crosses the broker only when exactly true and is rejected before a launch otherwise", "replacement": "crates/ai/tests/broker.rs::forwards_only_an_explicit_true; rejects_non_boolean_fast_mode_before_spawn", "reviewed": true, "tests": 2},
       "HttpFastModeTest": {"disposition": "rust-test", "flags": [], "group": "ai-mcp-operator", "reason": "fast_mode never reaches an HTTP body", "replacement": "crates/ai/src/transport/wire.rs::options_map_onto_responses_fields_and_reserved_ones_are_dropped", "reviewed": true, "tests": 1},
       "ModelMetadataFastModeTest": {"disposition": "rust-test", "flags": [], "group": "ai-mcp-operator", "reason": "bounded fast-mode metadata", "replacement": "crates/ai/src/discovery/metadata.rs::listings_are_bounded_and_derived_like_python", "reviewed": true, "tests": 2},
       "DaemonFastModeTest": {"disposition": "rust-test", "flags": [], "group": "ai-mcp-operator", "reason": "calls kassiber.daemon directly", "reviewed": false, "tests": 2},
       "CliFastFlagTest": {"disposition": "rust-test", "flags": [], "group": "ai-mcp-operator", "reason": "calls kassiber.cli.chat directly", "reviewed": false, "tests": 2},
-      "FastModeNoticeTest": {"disposition": "rust-test", "flags": [], "group": "ai-mcp-operator", "reason": "calls kassiber.ai.broker_client directly", "reviewed": false, "tests": 2},
+      "FastModeNoticeTest": {"disposition": "rust-test", "flags": [], "group": "ai-mcp-operator", "reason": "calls kassiber.ai.broker_client, kassiber.ai.contracts directly", "reviewed": false, "tests": 1},
+      "FastModeNoticeTest::test_broker_client_forwards_only_known_notices": {"disposition": "rust-test", "flags": [], "group": "ai-mcp-operator", "reason": "only known provider notices are forwarded as status chunks", "replacement": "crates/ai/tests/broker.rs::broker_client_forwards_only_known_notices; tests/test_rust_ai_broker.py", "reviewed": true, "tests": 1},
       "FastModeNoticeResultTest": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql"], "group": "ai-mcp-operator", "reason": "calls kassiber.daemon directly", "reviewed": false, "tests": 4},
       "SeededNoticeTest": {"disposition": "rust-test", "flags": ["sql"], "group": "ai-mcp-operator", "reason": "calls kassiber.daemon directly", "reviewed": false, "tests": 2},
       "FastModeReferenceTest": {"disposition": "rust-test", "flags": [], "group": "ai-mcp-operator", "reason": "calls kassiber.ai.tools directly", "reviewed": false, "tests": 1}

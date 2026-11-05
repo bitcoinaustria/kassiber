@@ -7,11 +7,13 @@
 //!
 //! Python (`kassiber/ai/tools.py`, `kassiber/ai/prompt.py` and the AI half of
 //! `kassiber/daemon.py`) is the reference; docs/reference/r6-ai-operator-port.md
-//! is the design. This crate holds no network client and starts no process:
-//! the executor reaches the book only through [`executor::ReadHost`], which
-//! the daemon serves on its request loop, and refuses any tool whose service
-//! is not native yet. Egressing tools never run without a consent bound to
-//! the call.
+//! is the design. The provider store, the HTTP client, discovery (R6-6a) and
+//! the provider broker client (R6-6b) reach the network or start the broker
+//! only through `kassiber_net` routes the caller's gate authorizes. The
+//! executor reaches the book only through [`executor::ReadHost`], which the
+//! daemon serves on its request loop, and refuses any tool whose service is
+//! not native yet. Egressing tools never run without a consent bound to the
+//! call.
 
 pub mod analysis;
 pub mod broker;

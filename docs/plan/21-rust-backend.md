@@ -4748,3 +4748,21 @@ route bound to that request. See the
 for the parity driver, the 19 mutation entries and the reviewed differences
 (64 MiB response and 16 MiB SSE line caps, following the design's
 recommendation). Python product code is unchanged.
+
+### R6-6b AI provider broker client
+
+`t3code/r6-6b-broker-client` starts at `40caf2ea2` (the R6-6a tip).
+`kassiber-net` gains a gated process route for the TypeScript provider broker
+(`Subsystem::Ai`, `Operation::Process`): the online gate and an
+explicit-trigger consent bound to the program, the attempt observer on every
+launch, Node lookup with Python's three environment overrides, the
+`XDG_RUNTIME_DIR` temp-root checks and a new process group. `crates/ai` gains
+the broker client: probes under one deadline, chat legs with keep-alive
+between tool calls, per-leg watchdogs and SIGTERM-then-SIGKILL.
+`ai.provider_runtime.status` probes and model listing and connection tests on
+`*-cli://default` rows no longer answer `not_implemented`; nothing starts on
+launch, idle, listing, editing or `cached_only` status. See the
+[checkpoint](../reference/rust-shell.md#ai-provider-broker-client-r6-6b) for
+the stream and provider parity drivers, the 17 mutation entries and the
+reviewed differences. `ai.chat` (R6-7) is the client's first chat caller.
+Python product code is unchanged.

@@ -717,6 +717,11 @@ Two runs:
 R6-6a is done on branch `t3code/r6-6a-providers`; the
 [checkpoint](rust-shell.md#ai-providers-http-streaming-and-discovery-r6-6a)
 records its verification, its reviewed differences and what is left for R6-6b.
+R6-6b is done on branch `t3code/r6-6b-broker-client`; its
+[checkpoint](rust-shell.md#ai-provider-broker-client-r6-6b) records the
+process route, the parity drivers, the mutation entries and the reviewed
+differences. §7 item 3 is settled as recommended (observer only, no ledger
+row); item 8 uses the recommended default until R7 packaging settles it.
 §7 item 4 is settled as recommended: 64 MiB per response, 16 MiB per SSE line.
 
 **R6-6a scope:**

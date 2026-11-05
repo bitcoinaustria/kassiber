@@ -589,11 +589,12 @@ impl BrokerSignal {
         let _ = self.child().kill();
     }
 
-    /// SIGKILL to the group (`process.terminate()` on Windows).
+    /// SIGKILL to the group and the broker (`process.terminate()` on Windows).
     pub fn kill(&self) {
         #[cfg(unix)]
         self.group(nix::sys::signal::Signal::SIGKILL);
-        #[cfg(not(unix))]
+        // The broker itself as well: std refuses once it has been reaped, so
+        // this never reaches a reused pid, and a wait after it always ends.
         let _ = self.child().kill();
     }
 
