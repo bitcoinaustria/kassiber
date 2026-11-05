@@ -587,6 +587,15 @@ mod tests {
                 .count(),
             0
         );
+        let state = real.join("exported");
+        std::fs::create_dir_all(state.join("exports-real")).unwrap();
+        symlink("exports-real", state.join("exports")).unwrap();
+        paths = resolve(&alias.join("exported/data"));
+        assert_eq!(
+            initialize_layout(&paths).unwrap_err().kind,
+            ErrorKind::UnsafeConfiguration
+        );
+        assert!(!state.join("config/settings.json").exists());
     }
     #[cfg(unix)]
     #[test]
