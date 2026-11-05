@@ -354,10 +354,7 @@ fn unknown_tool_and_method_are_protocol_errors() {
         )
         .unwrap();
         assert!(
-            response.contains(&format!(
-                "\"message\":\"Unknown tool: {}\"",
-                shown.replace('\'', "'")
-            )),
+            response.contains(&format!("\"message\":\"Unknown tool: {shown}\"")),
             "{response}"
         );
     }

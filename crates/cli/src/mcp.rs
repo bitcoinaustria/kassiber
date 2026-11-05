@@ -475,7 +475,7 @@ impl<H: Host + 'static> BookTools<H> {
         let submit = |session: Option<&Arc<Session>>| -> Result<Value, AppError> {
             let mut prepared = prepare(&argv)?;
             let token = session.map(|session| session.token.clone());
-            let token = token.as_ref().map(|token| text(token));
+            let token = token.as_ref().map(text);
             let accepted = client.submit(
                 data_root,
                 &prepared,

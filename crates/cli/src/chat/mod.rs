@@ -1479,10 +1479,7 @@ fn session(
         "Kassiber chat. /help for commands, /exit to quit.\n",
     );
     let mut session_allowed: Vec<String> = Vec::new();
-    loop {
-        let Some(line) = prompt(io)? else {
-            break;
-        };
+    while let Some(line) = prompt(io)? {
         let prompt = kassiber_pytext::strip(&line).to_owned();
         if prompt.is_empty() {
             continue;
