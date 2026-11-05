@@ -63,7 +63,7 @@ the classifier's `summary` output and is checked by preflight.
 | Group | boundary-fixture | subprocess-scenario | rust-test | oracle | python-only | Total |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | store | 2 | 13 | 172 | 62 | 0 | 249 |
-| custody | 0 | 38 | 389 | 113 | 1 | 541 |
+| custody | 0 | 38 | 389 | 138 | 1 | 566 |
 | journals | 4 | 14 | 219 | 230 | 8 | 475 |
 | imports | 67 | 33 | 171 | 24 | 0 | 295 |
 | reports | 56 | 24 | 226 | 141 | 0 | 447 |
@@ -76,7 +76,7 @@ the classifier's `summary` output and is checked by preflight.
 | AI/MCP/operator | 64 | 134 | 604 | 0 | 0 | 802 |
 | CLI shell | 20 | 0 | 30 | 166 | 3 | 219 |
 | packaging/CI | 0 | 2 | 166 | 10 | 29 | 207 |
-| **Total** | **370** | **545** | **4321** | **1128** | **52** | **6416** |
+| **Total** | **370** | **545** | **4321** | **1153** | **52** | **6441** |
 <!-- disposition-counts:end -->
 
 Plan 21's five migration choices include Python-only retirement explicitly;
