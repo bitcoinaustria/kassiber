@@ -4,6 +4,8 @@ use crate::{remaining, Connection, Endpoint, Error, Proxy, ProxyKind, Route, Tls
 use base64::Engine;
 use std::collections::BTreeMap;
 use std::io::{self, BufRead, BufReader, Read, Write};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use url::Url;
 
@@ -53,6 +55,7 @@ pub struct HttpRequest {
     headers: Vec<(String, String)>,
     body: Vec<u8>,
     upgrade: bool,
+    cancel: Option<Cancel>,
 }
 
 impl HttpRequest {
@@ -71,6 +74,7 @@ impl HttpRequest {
             headers: Vec::new(),
             body: Vec::new(),
             upgrade: false,
+            cancel: None,
         })
     }
 
@@ -112,7 +116,61 @@ impl HttpRequest {
         self
     }
 
-    pub fn send(mut self, route: Route, options: HttpOptions) -> Result<HttpResponse, Error> {
+    /// Makes `cancel` able to stop this request: [`Cancel::cancel`] shuts the
+    /// socket down, so a blocked connect, write or read returns at once.
+    pub fn cancellable(mut self, cancel: &Cancel) -> Self {
+        self.cancel = Some(cancel.clone());
+        self
+    }
+
+    pub fn send(self, route: Route, options: HttpOptions) -> Result<HttpResponse, Error> {
+        let cancel = self.cancel.clone();
+        let response = self.exchange(route, options, |connection, method, upgrade, limit| {
+            let response = receive(connection, method, upgrade, limit)?;
+            let location = response.header("location").map(str::to_owned);
+            Ok((response.status, location, response))
+        });
+        if let Some(cancel) = cancel {
+            cancel.release();
+        }
+        response
+    }
+
+    /// Like [`HttpRequest::send`], but returns once the response head has
+    /// arrived; the body is read from the returned [`HttpStream`] as the
+    /// server sends it. Redirect bodies are still read whole, as `send`
+    /// reads them, before the next hop. A 101 is refused.
+    pub fn open(self, route: Route, options: HttpOptions) -> Result<HttpStream, Error> {
+        if self.upgrade {
+            return Err(Error::HttpInvalid);
+        }
+        let cancel = self.cancel.clone();
+        let stream = self.exchange(route, options, |connection, method, _, limit| {
+            let mut stream = HttpStream::receive(connection, method, limit)?;
+            let location = stream.header("location").map(str::to_owned);
+            if matches!(stream.status, 301 | 302 | 303 | 307 | 308) && location.is_some() {
+                // Read the body before following, as `receive` does.
+                stream.drain()?;
+            }
+            Ok((stream.status, location, stream))
+        });
+        match stream {
+            Ok(stream) => Ok(stream.attach(cancel)),
+            Err(error) => {
+                if let Some(cancel) = cancel {
+                    cancel.release();
+                }
+                Err(error)
+            }
+        }
+    }
+
+    fn exchange<T>(
+        mut self,
+        route: Route,
+        options: HttpOptions,
+        receive: impl Fn(Connection, &str, bool, usize) -> Result<(u16, Option<String>, T), Error>,
+    ) -> Result<T, Error> {
         route.check()?;
         self.bind(&route)?;
         if options.timeout.is_zero() {
@@ -133,36 +191,46 @@ impl HttpRequest {
                 request: route.request.clone(),
                 consent: route.consent.clone(),
             };
+            if self.cancel.as_ref().is_some_and(Cancel::is_cancelled) {
+                return Err(Error::Io(io::Error::new(
+                    io::ErrorKind::Interrupted,
+                    "request cancelled",
+                )));
+            }
             let mut connection = next.connect_inner(timeout, true)?;
+            if let Some(cancel) = &self.cancel {
+                cancel.register(&mut connection)?;
+            }
             connection.set_deadline(options.deadline);
             connection.transport().write_context =
                 crate::WriteContext::Http(method_label(&self.method)?);
             connection.write_all(&wire)?;
             connection.flush()?;
             wire.fill(0);
-            let response = receive(
+            let (status, location, response) = receive(
                 connection,
                 &self.method,
                 self.upgrade,
                 options.max_response_bytes.min(MAX_RESPONSE_BYTES),
             )?;
-            if !matches!(response.status, 301 | 302 | 303 | 307 | 308) {
+            if !matches!(status, 301 | 302 | 303 | 307 | 308) {
                 return Ok(response);
             }
-            let Some(location) = response.header("location") else {
+            let Some(location) = location else {
                 return Ok(response);
             };
+            drop(response);
             if options.redirects == RedirectPolicy::Refuse {
                 return Err(Error::RedirectRefused);
             }
-            let target = self.url.join(location).map_err(|_| Error::HttpInvalid)?;
+            let target = self.url.join(&location).map_err(|_| Error::HttpInvalid)?;
             validate_url(&target)?;
             if target.origin() != self.url.origin() {
                 return Err(Error::RedirectRefused);
             }
             // urllib does not redirect POST on 307/308 or arbitrary mutating verbs.
             if !matches!(self.method.as_str(), "GET" | "HEAD") {
-                if self.method != "POST" || !matches!(response.status, 301..=303) {
+                if self.method != "POST" || !matches!(status, 301..=303) {
                     return Err(Error::RedirectRefused);
                 }
                 self.method = "GET".into();
@@ -437,6 +505,368 @@ impl Write for Upgrade {
     fn flush(&mut self) -> io::Result<()> {
         self.0.get_mut().flush()
     }
+}
+
+/// Stops an [`HttpRequest`] made [`HttpRequest::cancellable`] from another
+/// thread. Clones share the request. Cancelling before the request connects
+/// makes it fail before any socket is opened; cancelling while it waits on
+/// the server shuts its socket down, as Python's AI client closes the
+/// response from its cancel thread.
+#[derive(Clone, Default)]
+pub struct Cancel(Arc<CancelState>);
+
+#[derive(Default)]
+struct CancelState {
+    cancelled: AtomicBool,
+    /// The in-flight socket (a duplicate used only for shutdown) and the
+    /// generation of the stream that owns it.
+    socket: Mutex<Option<(u64, std::net::TcpStream)>>,
+    generation: AtomicU64,
+}
+
+impl Cancel {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn cancel(&self) {
+        self.0.cancelled.store(true, Ordering::SeqCst);
+        let socket = self
+            .0
+            .socket
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take();
+        if let Some((_, socket)) = socket {
+            let _ = socket.shutdown(std::net::Shutdown::Both);
+        }
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.0.cancelled.load(Ordering::SeqCst)
+    }
+
+    fn register(&self, connection: &mut Connection) -> Result<(), Error> {
+        let socket = connection.transport().stream.try_clone()?;
+        let mut slot = self.0.socket.lock().unwrap_or_else(|e| e.into_inner());
+        if self.is_cancelled() {
+            let _ = socket.shutdown(std::net::Shutdown::Both);
+            return Err(Error::Io(io::Error::new(
+                io::ErrorKind::Interrupted,
+                "request cancelled",
+            )));
+        }
+        let generation = self.0.generation.fetch_add(1, Ordering::SeqCst) + 1;
+        *slot = Some((generation, socket));
+        Ok(())
+    }
+
+    /// Releases the duplicate so the connection closes with its stream.
+    fn release(&self) {
+        let generation = self.0.generation.load(Ordering::SeqCst);
+        let mut slot = self.0.socket.lock().unwrap_or_else(|e| e.into_inner());
+        if slot.as_ref().is_some_and(|(owner, _)| *owner == generation) {
+            *slot = None;
+        }
+    }
+}
+
+/// How the body of an [`HttpStream`] ends.
+enum Framing {
+    Empty,
+    Length(usize),
+    Chunked {
+        remaining: usize,
+        started: bool,
+        done: bool,
+        chunks: usize,
+    },
+    Close {
+        done: bool,
+    },
+}
+
+/// A response whose body is read incrementally: chunked transfer coding is
+/// decoded as chunks arrive. Untrusted, like [`HttpResponse`]: no Debug.
+/// Every byte, framing included, counts against the response limit.
+pub struct HttpStream {
+    pub status: u16,
+    /// Untrusted HTTP reason phrase; see [`HttpResponse::reason`].
+    pub reason: String,
+    pub headers: Vec<(String, String)>,
+    reader: BufReader<Box<dyn Read + Send>>,
+    framing: Framing,
+    limit: usize,
+    consumed: usize,
+    /// Decoded bytes read ahead by [`HttpStream::read_line`].
+    pending: Vec<u8>,
+    cancel: Option<Cancel>,
+}
+
+impl HttpStream {
+    fn receive(connection: Connection, method: &str, limit: usize) -> Result<Self, Error> {
+        Self::from_reader(Box::new(connection), method, limit)
+    }
+
+    fn from_reader(
+        reader: Box<dyn Read + Send>,
+        method: &str,
+        limit: usize,
+    ) -> Result<Self, Error> {
+        let mut reader = BufReader::new(reader);
+        let (status, reason, headers) = read_head(&mut reader)?;
+        check_content_encoding(&headers)?;
+        if status == 101 {
+            return Err(Error::HttpInvalid);
+        }
+        let framing = if method == "HEAD" || matches!(status, 204 | 304) {
+            Framing::Empty
+        } else {
+            framing(&headers)?
+        };
+        if matches!(framing, Framing::Length(length) if length > limit) {
+            // As `read_body`: never wait for a body announced over the limit.
+            return Err(Error::ResponseTooLarge);
+        }
+        Ok(Self {
+            status,
+            reason,
+            headers,
+            reader,
+            framing,
+            limit,
+            consumed: 0,
+            pending: Vec::new(),
+            cancel: None,
+        })
+    }
+
+    pub fn header(&self, name: &str) -> Option<&str> {
+        self.headers
+            .iter()
+            .find(|(key, _)| key.eq_ignore_ascii_case(name))
+            .map(|(_, value)| value.as_str())
+    }
+
+    fn charge(&mut self, count: usize) -> Result<(), Error> {
+        charge(&mut self.consumed, count, self.limit)
+    }
+
+    /// Reads decoded body bytes; 0 at the end of the body.
+    pub fn read_body(&mut self, bytes: &mut [u8]) -> Result<usize, Error> {
+        if !self.pending.is_empty() {
+            let count = bytes.len().min(self.pending.len());
+            bytes[..count].copy_from_slice(&self.pending[..count]);
+            self.pending.drain(..count);
+            return Ok(count);
+        }
+        self.decode(bytes)
+    }
+
+    fn decode(&mut self, bytes: &mut [u8]) -> Result<usize, Error> {
+        if bytes.is_empty() {
+            return Ok(0);
+        }
+        loop {
+            match &mut self.framing {
+                Framing::Empty => return Ok(0),
+                Framing::Close { done: true } => return Ok(0),
+                Framing::Close { done } => {
+                    let count = match self.reader.read(bytes) {
+                        Ok(count) => count,
+                        // Close framing only: see `read_body`'s ragged EOF.
+                        Err(error) if error.kind() == io::ErrorKind::UnexpectedEof => 0,
+                        Err(error) => return Err(error.into()),
+                    };
+                    if count == 0 {
+                        *done = true;
+                        return Ok(0);
+                    }
+                    if count > self.limit.saturating_sub(self.consumed) {
+                        return Err(Error::ResponseTooLarge);
+                    }
+                    self.consumed += count;
+                    return Ok(count);
+                }
+                Framing::Length(0) => return Ok(0),
+                Framing::Length(remaining) => {
+                    let want = bytes.len().min(*remaining);
+                    let count = self.reader.read(&mut bytes[..want])?;
+                    if count == 0 {
+                        return Err(Error::Io(io::ErrorKind::UnexpectedEof.into()));
+                    }
+                    *remaining -= count;
+                    self.charge(count)?;
+                    return Ok(count);
+                }
+                Framing::Chunked { done: true, .. } => return Ok(0),
+                Framing::Chunked {
+                    remaining: 0,
+                    started,
+                    chunks,
+                    ..
+                } => {
+                    if *started {
+                        let mut end = [0; 2];
+                        self.reader.read_exact(&mut end)?;
+                        if end != *b"\r\n" {
+                            return Err(Error::HttpInvalid);
+                        }
+                    }
+                    if *chunks >= MAX_CHUNKS {
+                        return Err(Error::HttpInvalid);
+                    }
+                    *chunks += 1;
+                    let line = read_line(&mut self.reader, 4096)?;
+                    let length = line.split(|b| *b == b';').next().unwrap();
+                    let length = std::str::from_utf8(length)
+                        .map_err(|_| Error::HttpInvalid)?
+                        .trim();
+                    if length.is_empty() || !length.bytes().all(|b| b.is_ascii_hexdigit()) {
+                        return Err(Error::HttpInvalid);
+                    }
+                    let length =
+                        usize::from_str_radix(length, 16).map_err(|_| Error::HttpInvalid)?;
+                    self.charge(line.len())?;
+                    if length == 0 {
+                        let mut trailers = 0;
+                        loop {
+                            let trailer = read_line(
+                                &mut self.reader,
+                                MAX_HEADER_BYTES.saturating_sub(trailers),
+                            )?;
+                            trailers += trailer.len();
+                            self.charge(trailer.len())?;
+                            if trailer == b"\r\n" {
+                                break;
+                            }
+                        }
+                        self.framing = Framing::Chunked {
+                            remaining: 0,
+                            started: false,
+                            done: true,
+                            chunks: 0,
+                        };
+                        return Ok(0);
+                    }
+                    self.charge(length)?;
+                    self.charge(2)?;
+                    let Framing::Chunked {
+                        remaining, started, ..
+                    } = &mut self.framing
+                    else {
+                        unreachable!()
+                    };
+                    *remaining = length;
+                    *started = true;
+                }
+                Framing::Chunked { remaining, .. } => {
+                    let want = bytes.len().min(*remaining);
+                    let count = self.reader.read(&mut bytes[..want])?;
+                    if count == 0 {
+                        return Err(Error::Io(io::ErrorKind::UnexpectedEof.into()));
+                    }
+                    *remaining -= count;
+                    return Ok(count);
+                }
+            }
+        }
+    }
+
+    /// The next line of the body, ending at (and including) `\n`, or the
+    /// unterminated rest at the end of the body; `None` once the body is
+    /// read. Like iterating a Python response, only `\n` ends a line. A line
+    /// longer than `max` bytes fails with [`Error::ResponseTooLarge`].
+    pub fn read_line(&mut self, max: usize) -> Result<Option<Vec<u8>>, Error> {
+        let mut searched = 0;
+        loop {
+            if let Some(index) = self.pending[searched..].iter().position(|b| *b == b'\n') {
+                let end = searched + index + 1;
+                if end > max {
+                    return Err(Error::ResponseTooLarge);
+                }
+                return Ok(Some(self.pending.drain(..end).collect()));
+            }
+            searched = self.pending.len();
+            if searched > max {
+                return Err(Error::ResponseTooLarge);
+            }
+            let mut buffer = [0; 8192];
+            let count = self.decode(&mut buffer)?;
+            if count == 0 {
+                return Ok((!self.pending.is_empty()).then(|| std::mem::take(&mut self.pending)));
+            }
+            self.pending.extend_from_slice(&buffer[..count]);
+        }
+    }
+
+    /// The rest of the body.
+    pub fn read_to_end(&mut self) -> Result<Vec<u8>, Error> {
+        let mut body = std::mem::take(&mut self.pending);
+        let mut buffer = [0; 8192];
+        loop {
+            let count = self.decode(&mut buffer)?;
+            if count == 0 {
+                return Ok(body);
+            }
+            body.extend_from_slice(&buffer[..count]);
+        }
+    }
+
+    fn drain(&mut self) -> Result<(), Error> {
+        self.read_to_end().map(drop)
+    }
+
+    fn attach(mut self, cancel: Option<Cancel>) -> Self {
+        self.cancel = cancel;
+        self
+    }
+}
+
+impl Drop for HttpStream {
+    fn drop(&mut self) {
+        if let Some(cancel) = &self.cancel {
+            cancel.release();
+        }
+    }
+}
+
+/// The body framing `read_body` accepts, decided from the head alone.
+fn framing(headers: &Headers) -> Result<Framing, Error> {
+    let lengths: Vec<_> = headers
+        .iter()
+        .filter(|(key, _)| key == "content-length")
+        .collect();
+    let encodings: Vec<_> = headers
+        .iter()
+        .filter(|(key, _)| key == "transfer-encoding")
+        .collect();
+    if lengths.windows(2).any(|pair| pair[0].1 != pair[1].1)
+        || encodings.len() > 1
+        || (!lengths.is_empty() && !encodings.is_empty())
+    {
+        return Err(Error::HttpInvalid);
+    }
+    if let Some((_, encoding)) = encodings.first() {
+        if !encoding.eq_ignore_ascii_case("chunked") {
+            return Err(Error::HttpInvalid);
+        }
+        return Ok(Framing::Chunked {
+            remaining: 0,
+            started: false,
+            done: false,
+            chunks: 0,
+        });
+    }
+    if let Some((_, length)) = lengths.first() {
+        if length.is_empty() || !length.bytes().all(|b| b.is_ascii_digit()) {
+            return Err(Error::HttpInvalid);
+        }
+        return Ok(Framing::Length(
+            length.parse().map_err(|_| Error::HttpInvalid)?,
+        ));
+    }
+    Ok(Framing::Close { done: false })
 }
 
 fn read_line(reader: &mut impl BufRead, limit: usize) -> Result<Vec<u8>, Error> {
@@ -886,6 +1316,177 @@ mod tests {
         }
         assert!(Endpoint::new("docker_service", 80).is_ok());
     }
+    fn stream(head: &str, body: &[u8], limit: usize) -> Result<HttpStream, Error> {
+        let mut wire = head.as_bytes().to_vec();
+        wire.extend_from_slice(body);
+        HttpStream::from_reader(Box::new(Cursor::new(wire)), "POST", limit)
+    }
+
+    fn lines(stream: &mut HttpStream, max: usize) -> Result<Vec<Vec<u8>>, Error> {
+        let mut lines = Vec::new();
+        while let Some(line) = stream.read_line(max)? {
+            lines.push(line);
+        }
+        Ok(lines)
+    }
+
+    #[test]
+    fn streamed_bodies_decode_like_buffered_ones_and_split_lines_only_on_lf() {
+        let body = b"data: a\r\n\r\ndata: b\rc\n\nlast";
+        let mut chunked = Vec::new();
+        for piece in body.chunks(3) {
+            chunked.extend_from_slice(format!("{:x};ext=1\r\n", piece.len()).as_bytes());
+            chunked.extend_from_slice(piece);
+            chunked.extend_from_slice(b"\r\n");
+        }
+        chunked.extend_from_slice(b"0\r\nTrailer: x\r\n\r\n");
+        let expected: Vec<&[u8]> = vec![b"data: a\r\n", b"\r\n", b"data: b\rc\n", b"\n", b"last"];
+        for (head, wire) in [
+            (
+                "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n",
+                &chunked[..],
+            ),
+            (
+                &*format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n", body.len()),
+                &body[..],
+            ),
+            ("HTTP/1.1 200 OK\r\n\r\n", &body[..]),
+        ] {
+            let mut stream = stream(head, wire, 1024).unwrap();
+            assert_eq!(lines(&mut stream, 64).unwrap(), expected);
+            assert!(stream.read_line(64).unwrap().is_none());
+            let mut stream = self::stream(head, wire, 1024).unwrap();
+            assert_eq!(stream.read_to_end().unwrap(), body);
+        }
+    }
+
+    #[test]
+    fn streamed_bodies_fail_closed_on_framing_limits_and_long_lines() {
+        for (head, wire, limit) in [
+            (
+                "HTTP/1.1 200 OK\r\nContent-Length: 4\r\n\r\n",
+                &b"abc"[..],
+                100,
+            ),
+            ("HTTP/1.1 200 OK\r\nContent-Length: 4\r\n\r\n", b"abcd", 3),
+            (
+                "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n",
+                b"4\r\nab",
+                100,
+            ),
+            (
+                "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n",
+                b"2\r\nabXX0\r\n\r\n",
+                100,
+            ),
+            (
+                "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n",
+                b"zz\r\nab\r\n",
+                100,
+            ),
+            (
+                "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n",
+                b"4\r\nabcd\r\n0\r\n\r\n",
+                6,
+            ),
+            ("HTTP/1.1 200 OK\r\n\r\n", b"abcd", 3),
+        ] {
+            let result = stream(head, wire, limit).and_then(|mut s| s.read_to_end());
+            assert!(result.is_err(), "{head:?} {wire:?}");
+        }
+        for head in [
+            "HTTP/1.1 200 OK\r\nContent-Length: 1\r\nContent-Length: 2\r\n\r\n",
+            "HTTP/1.1 200 OK\r\nContent-Length: 1\r\nTransfer-Encoding: chunked\r\n\r\n",
+            "HTTP/1.1 200 OK\r\nTransfer-Encoding: gzip\r\n\r\n",
+            "HTTP/1.1 200 OK\r\nContent-Encoding: gzip\r\n\r\n",
+            "HTTP/1.1 101 Switching\r\n\r\n",
+        ] {
+            assert!(stream(head, b"", 100).is_err(), "{head:?}");
+        }
+        let mut long = stream("HTTP/1.1 200 OK\r\n\r\n", b"abcdef\nx", 100).unwrap();
+        assert!(matches!(long.read_line(5), Err(Error::ResponseTooLarge)));
+        let mut unterminated = stream("HTTP/1.1 200 OK\r\n\r\n", b"abcdef", 100).unwrap();
+        assert!(matches!(
+            unterminated.read_line(5),
+            Err(Error::ResponseTooLarge)
+        ));
+        let mut exact = stream("HTTP/1.1 200 OK\r\n\r\n", b"abcd\n", 100).unwrap();
+        assert_eq!(exact.read_line(5).unwrap().unwrap(), b"abcd\n");
+    }
+
+    #[test]
+    fn a_live_stream_yields_lines_as_they_arrive_and_cancel_shuts_it_down() {
+        use crate::{Consent, Gate, Ledger, Offline, Request, Subsystem};
+        use std::net::TcpListener;
+        use std::sync::mpsc;
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let (sent, release) = mpsc::channel::<()>();
+        let server = std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            let mut request = [0; 4096];
+            let _ = socket.read(&mut request).unwrap();
+            socket
+                .write_all(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n6\r\nfirst\n\r\n")
+                .unwrap();
+            // Hold the rest until the client has read the first line.
+            let _ = release.recv();
+            let mut rest = Vec::new();
+            let _ = socket.read_to_end(&mut rest);
+        });
+        let request = Request::new(
+            Subsystem::Ai,
+            Endpoint::new("127.0.0.1", port).unwrap(),
+            TlsTrust::Plaintext,
+        );
+        let proof = Consent::explicit_trigger(&request);
+        let route = Gate::new(|| Offline::Online, Ledger::default())
+            .authorize(request, Some(proof))
+            .unwrap();
+        let cancel = Cancel::new();
+        let mut stream = HttpRequest::new("POST", &format!("http://127.0.0.1:{port}/v1/responses"))
+            .unwrap()
+            .cancellable(&cancel)
+            .open(route, HttpOptions::default())
+            .unwrap();
+        assert_eq!(stream.status, 200);
+        assert_eq!(stream.read_line(64).unwrap().unwrap(), b"first\n");
+        let canceller = cancel.clone();
+        let stopper = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(50));
+            canceller.cancel();
+        });
+        let started = Instant::now();
+        assert!(stream.read_line(64).is_err());
+        assert!(started.elapsed() < Duration::from_secs(10));
+        stopper.join().unwrap();
+        drop(stream);
+        sent.send(()).unwrap();
+        server.join().unwrap();
+        assert!(cancel.is_cancelled());
+    }
+
+    #[test]
+    fn a_cancel_before_connect_opens_no_socket() {
+        use crate::{Consent, Gate, Ledger, Offline, Request, Subsystem};
+        let request = Request::new(
+            Subsystem::Ai,
+            Endpoint::new("127.0.0.1", 9).unwrap(),
+            TlsTrust::Plaintext,
+        );
+        let proof = Consent::explicit_trigger(&request);
+        let gate = Gate::new(|| Offline::Online, Ledger::default());
+        let route = gate.authorize(request, Some(proof)).unwrap();
+        let cancel = Cancel::new();
+        cancel.cancel();
+        let result = HttpRequest::new("GET", "http://127.0.0.1:9/v1/models")
+            .unwrap()
+            .cancellable(&cancel)
+            .open(route, HttpOptions::default());
+        assert!(matches!(result, Err(Error::Io(_))));
+        assert!(gate.ledger().snapshot(0, 100).records.is_empty());
+    }
+
     #[test]
     fn connect_headers_read_in_blocks_and_preserve_tunnel_bytes() {
         struct Counted {

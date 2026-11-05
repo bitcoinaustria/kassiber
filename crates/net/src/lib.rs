@@ -37,7 +37,9 @@ mod tls;
 #[cfg(feature = "test-support")]
 pub mod test_support;
 
-pub use http::{HttpOptions, HttpRequest, HttpResponse, RedirectPolicy, Upgrade};
+pub use http::{
+    Cancel, HttpOptions, HttpRequest, HttpResponse, HttpStream, RedirectPolicy, Upgrade,
+};
 pub use offline::OfflineCache;
 pub use process::{ClnConfig, ClnMethod, ClnProcessError};
 pub use tls::{RootCertificates, TlsTrust};
