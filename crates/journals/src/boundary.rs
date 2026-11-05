@@ -204,6 +204,11 @@ fn fragment(v: &Value) -> Result<FragmentOut, Refusal> {
         },
     })
 }
+/// The engine's ledger for a request text, read back through its response text.
+pub fn ledger_text(request: &str) -> Result<LedgerResponse, Refusal> {
+    let response = kassiber_custody::codec::loads(&kassiber_tax_core::ledger(request))?;
+    ledger_response(&kassiber_custody::codec::to_json(&response))
+}
 /// Thin decoder: does not re-run tax computation or derive a second ledger.
 pub fn ledger_response(v: &Value) -> Result<LedgerResponse, Refusal> {
     if v["ok"] != true {
