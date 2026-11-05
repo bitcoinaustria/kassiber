@@ -847,6 +847,10 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   159 archived requests and permutations, and focused census/shadow. The
   [R9 audit](docs/reference/rust-backend-r9-integration.md#fresh-r9-verification)
   tracks the remaining combined parity and mutation gates.
+- [ ] Close the combined R10 gaps recorded in the
+  [R10 audit](docs/reference/rust-backend-r10-integration.md#remaining-work):
+  the post-merge parity modules not yet rerun, the full mutation kills on the
+  integrated stack and the owner's full census/shadow/native-lane shards.
 - [ ] R4-10 to R4-12: pre-build repairs, rendering and joins, persistence,
   each with byte or database-dump parity.
 - [ ] Finish the [R4-10 auto-pricing checkpoint](docs/reference/r4-journal-pipeline.md#r4-10-auto-pricing-checkpoint):
@@ -882,7 +886,7 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   All 2,327 inherited custody recipes also pass across verified prefixes and
   a targeted continuation. Final campaign binding and acceptance remain open.
 
-> Inherited from `t3code/r4-10-prebuild-5@a0393276a`; pending r10 verification.
+> Inherited from `t3code/r4-10-prebuild-5@a0393276a`; combined R10 results are in the [R10 audit](docs/reference/rust-backend-r10-integration.md).
 - [ ] R4-9 to R4-12: native loader, pre-build repairs, rendering and joins,
   persistence, each with byte or database-dump parity.
 - [x] Finish the [R4-10 pre-build boundary](docs/reference/r4-journal-pipeline.md#r4-10-functional-acceptance):
@@ -914,7 +918,7 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   cells. Unchanged builds still need a cheap comparison path. Corrected appended
   benchmark inputs carry distinct raw identities and assert actual writes.
 
-> Inherited from `t3code/r4-12-persist-accept@d6e46912b`; pending r10 verification.
+> Inherited from `t3code/r4-12-persist-accept@d6e46912b`; combined R10 results are in the [R10 audit](docs/reference/rust-backend-r10-integration.md).
   repeated work; the last complete five-pair campaign passes one of eight
   required 20k fresh/unchanged cells. A later schema-preserving digest probe
   missed the generic unchanged CPU budget over five pairs and was withdrawn;
@@ -928,7 +932,7 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   rewrite witness remain, with a targeted `JP-signed-zero` kill. Corrected
   appended benchmark inputs carry distinct raw identities and assert actual writes.
 
-> Inherited from `t3code/r4-12-persist-accept@9730f9e4b`; pending r10 verification.
+> Inherited from `t3code/r4-12-persist-accept@9730f9e4b`; combined R10 results are in the [R10 audit](docs/reference/rust-backend-r10-integration.md).
   close the accepted CPU budgets (read floor + 0.15 s unchanged; write floor +
   0.15 s fresh), exhaustive persistence mutations and inherited campaign gates
   before wiring production in R4-13. The unregistered service, complete dump
@@ -1006,7 +1010,7 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
 - [ ] R4-13, R4-15 and R4-16: CLI and daemon journal commands, integration of
   automatic pairing, the freshness journal job and the authority switch.
 
-> Inherited from `t3code/r4-15-journal-refresh@dfeaf1533`; pending r10 verification.
+> Inherited from `t3code/r4-15-journal-refresh@dfeaf1533`; combined R10 results are in the [R10 audit](docs/reference/rust-backend-r10-integration.md).
   reaches 13.02× / 11.75× Python at 20k. Pairing journal routes remain Python.
 - [ ] R4-13 and R4-16: CLI and daemon journal commands, integration of
   automatic pairing and the authority switch.
@@ -1019,7 +1023,7 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   gates, then register CLI and daemon in separate verified commits. Reconcile
   the desktop daemon's pairing default with R4-14 before changing its route;
 
-> Inherited from `t3code/r4-13-journals-process-6@684c76bad`; pending r10 verification.
+> Inherited from `t3code/r4-13-journals-process-6@684c76bad`; combined R10 results are in the [R10 audit](docs/reference/rust-backend-r10-integration.md).
   The continuation imports complete R4-10 pre-build, R4-14 pairing, renderer
   boundary hardening and persistence recovery. Its real pre-build adapter retains
   profile reload and distinct repair/build/store/filed-report clocks; complete
@@ -1062,7 +1066,7 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   Lossless refusal closure, inherited campaigns and timing acceptance remain
   on the R4-13/R4-16 tracks.
 
-> Inherited from `t3code/r4-11-render-fidelity-5@f1712c625`; pending r10 verification.
+> Inherited from `t3code/r4-11-render-fidelity-5@f1712c625`; combined R10 results are in the [R10 audit](docs/reference/rust-backend-r10-integration.md).
   ownership graph consumption is completed by the
   [native ownership continuation](docs/reference/r4-journal-render-scalar-checkpoint.md#native-ownership-graph-continuation),
   which compares 1,435 complete outcomes. The

@@ -32,7 +32,7 @@ Those CPU measurements are inherited from t3code/r4-14-auto-pair@c47450757.
 The R9 workspace passes the integrated pairing stage tests; combined CPU and
 mutation results are tracked in the [R9 audit](rust-backend-r9-integration.md#fresh-r9-verification).
 
-> Inherited from `t3code/r4-13-journals-process-6@684c76bad`; pending r10 verification.
+> Inherited from `t3code/r4-13-journals-process-6@684c76bad`; combined R10 results are in the [R10 audit](rust-backend-r10-integration.md).
 R4-9's [test-only loader acceptance](r4-native-loader-checkpoint.md#loader-9-acceptance)
 closes its exhaustive branch map, 308 loader and 2,292 custody mutations,
 and stage generated/recorded gates. The BLOB and deterministic-refusal
@@ -44,13 +44,13 @@ real ordered R4-10 repairs/pricing through native load and persistence with
 transactional rollback and progress, and no CLI or daemon registration. Its
 test-only probe does not close whole-pipeline parity or performance acceptance.
 
-> Inherited from `t3code/r4-10-prebuild-5@a0393276a`; pending r10 verification.
+> Inherited from `t3code/r4-10-prebuild-5@a0393276a`; combined R10 results are in the [R10 audit](rust-backend-r10-integration.md).
 that misses its 0.30 s target and remains unaccepted and unrouted.
 R4-10 has [functional acceptance](#r4-10-functional-acceptance) for its native
 pre-build boundary, with the scoped-cache multi-wallet CPU miss recorded.
 Production integration belongs to R4-13.
 
-> Inherited from `t3code/r4-13-journals-process-6@c14f2fa8e`; pending r10 verification.
+> Inherited from `t3code/r4-13-journals-process-6@c14f2fa8e`; combined R10 results are in the [R10 audit](rust-backend-r10-integration.md).
 test-only refresh coordinator also owns the R4-14 pairing commit and rollback,
 retaining a completed stale rebuild across a failed second rebuild. The probe
 does not close whole-pipeline parity or performance acceptance.
@@ -59,7 +59,7 @@ its 20k process CPU acceptance is 13.02× generic and 11.75× multi-wallet.
 Journal route activation remains with R4-13/R4-15/R4-16.
 This document plans stage R4 of
 
-> inherited from t3code/r5-transfers-17@59e1476a4; pending r10 verification
+> inherited from t3code/r5-transfers-17@59e1476a4; combined R10 results are in the [R10 audit](rust-backend-r10-integration.md).
 R4-9's accepted loader-9 and BLOB continuations are integrated; **40 measured
 seed-dependent messages remain pending the Python fix**. Its
 [test-only loader acceptance](r4-native-loader-checkpoint.md#loader-9-acceptance)
@@ -417,7 +417,7 @@ byte parity; its CPU ceilings remain the stage acceptance targets.
 | R4-8 | Typed fusion to `LedgerRequest`, `ledger_typed` in the engine, text only for refusal fidelity and comparison | builder 1.31 / 1.42, wire 0.19, engine parse and serialize about 0.08 | request ≤ 0.10 s; engine no slower |
 | R4-9 | Native SQLite loader to shared custody rows, with strict typed JSON admission retained separately; [accepted determinism continuation](r4-native-loader-checkpoint.md#deterministic-revision-reference-acceptance) combines lossless BLOB parity and exact typed revision refusals, closing all forty historical seed-dependent message exceptions. Source acceptance is inherited from t3code/r4-9-loader-determinism@aaf6216e3. Fresh R9 loader/BLOB, generated/replay and focused gates pass; the [R9 audit](rust-backend-r9-integration.md#fresh-r9-verification) tracks combined verification. Earlier mutation and timing receipts retain their historical scope; Python retains production authority | Python load 1.57 / 1.89 (historical floor 0.11; remeasured shell CPU 0.117) | ≤ 0.30 s |
 
-> Inherited from `t3code/r4-13-journals-process-6@c14f2fa8e`; pending r10 verification.
+> Inherited from `t3code/r4-13-journals-process-6@c14f2fa8e`; combined R10 results are in the [R10 audit](rust-backend-r10-integration.md).
 | R4-9 | Native SQLite loader to `BookSnapshot`, including book-network facts, the owned index and receipt sources; [fully accepted with BLOB parity and deterministic revision refusals, no pending exceptions](r4-native-loader-checkpoint.md#deterministic-revision-reference-acceptance); all 357 loader and inherited 2,292 custody recipes killed; 24,000 generated books/1,030 permutations, 159 retained replays/permutations and focused census/shadow pass; fresh 22,528-case composed and 16,384-case non-BLOB audits match exactly; inherited 20k CPU including admission is 0.288 s generic / 0.429 s multi-wallet, within 5% of loader-7; Python retains production authority | Python load 1.57 / 1.89 (historical floor 0.11; remeasured shell CPU 0.117) | ≤ 0.30 s |
 | R4-10 | Pre-build repairs and auto-pricing in Rust; database-dump parity. [Combined interface](#r4-10-combined-pre-build-contract) and later-failure rollback are implemented; campaign and CPU acceptance remain open. | Python 0.03 | ≤ 0.03 s |
 | R4-11 | Rendering and joins: entries, quarantine enrichment with ownership candidates, holdings, balance comparison, ownership review; [partial implementation](r4-journal-render-checkpoint.md), [boundary continuation](r4-journal-render-boundary-checkpoint.md); acceptance remains open | Python 1.38 / 1.71 | ≤ 0.15 s |
@@ -425,11 +425,11 @@ byte parity; its CPU ceilings remain the stage acceptance targets.
 | R4-13 | CLI `journals process` with and without `--auto-pair`, desktop `ui.journals.process` with pairing and scoped AI processing without pairing; progress phases; hybrid routing. [Test-only composition checkpoint](r4-journal-process-checkpoint.md) composes the real R4-10 API; refresh coordination and registration/acceptance gates remain open. | — | End-to-end targets below |
 | R4-14 | Automatic pairing (transfer suggestions, rules, bulk exact) for `--auto-pair` and the desktop path; [stage accepted](rust-pairing.md), journal routing awaits R4-13/R4-15/R4-16 | Python 3.44 / 4.74 historical; CPU remeasured 4.710 / 5.823 | 10× Python CPU; native 0.362 / 0.495, **13.02× / 11.75×** |
 
-> Inherited from `t3code/r4-10-prebuild-5@a0393276a`; pending r10 verification.
+> Inherited from `t3code/r4-10-prebuild-5@a0393276a`; combined R10 results are in the [R10 audit](rust-backend-r10-integration.md).
 | R4-9 | Native SQLite loader to `BookSnapshot`, including book-network facts, the owned index (descriptor derivation from the R5 descriptor slice) and receipt sources; v1 byte gate against Python; [direct-load checkpoint](r4-native-loader-checkpoint.md): generic 20k 0.505 s CPU / 0.509 s wall including admission, target missed, acceptance remains open | Python load 1.57 / 1.89 (historical floor 0.11; remeasured shell CPU 0.117) | ≤ 0.30 s |
 | R4-10 | Pre-build repairs and auto-pricing in Rust; [functional acceptance](#r4-10-functional-acceptance) completes database-dump and mutation gates. The scoped-cache multi-wallet CPU budget remains missed. | Python 0.03 | ≤ 0.03 s |
 
-> inherited from t3code/r5-transfers-17@59e1476a4; pending r10 verification
+> inherited from t3code/r5-transfers-17@59e1476a4; combined R10 results are in the [R10 audit](rust-backend-r10-integration.md).
 | R4-9 | Native SQLite loader to `BookSnapshot`, including book-network facts, the owned index and receipt sources; [accepted loader-9 and BLOB continuations; 40 measured seed-dependent messages pending the Python fix](r4-native-loader-checkpoint.md#loader-9-acceptance); all 308 loader and 2,292 custody recipes killed; 24,000 generated books/1,030 permutations, 159 retained replays/permutations and focused census/shadow pass; inherited non-BLOB audit has 16,384 matches, zero writes/unsafe admissions; inherited 20k CPU including admission is 0.288 s generic / 0.429 s multi-wallet, within 5% of loader-7; Python retains production authority | Python load 1.57 / 1.89 (historical floor 0.11; remeasured shell CPU 0.117) | ≤ 0.30 s |
 | R4-10 | Pre-build repairs and auto-pricing in Rust; database-dump parity | Python 0.03 | ≤ 0.03 s |
 | R4-11 | Rendering and joins: entries, quarantine enrichment with ownership candidates, holdings, balance comparison, ownership review; [partial implementation](r4-journal-render-checkpoint.md), acceptance remains open | Python 1.38 / 1.71 | ≤ 0.15 s |
@@ -438,7 +438,7 @@ byte parity; its CPU ceilings remain the stage acceptance targets.
 | R4-14 | Automatic pairing (transfer suggestions, rules, bulk exact) for `--auto-pair` and the desktop path (decision 3: ported in R4) | Python 3.44 / 4.74 | 10× Python |
 | R4-15 | Freshness `journal_refresh` job and the daemon's single execution slot in Rust | — | Parity with the daemon smoke sessions |
 
-> Inherited from `t3code/r4-15-journal-refresh@dfeaf1533`; pending r10 verification.
+> Inherited from `t3code/r4-15-journal-refresh@dfeaf1533`; combined R10 results are in the [R10 audit](rust-backend-r10-integration.md).
 | R4-15 | Freshness `journal_refresh` job and the daemon's single execution slot in Rust; [integration checkpoint and refusal census](r4-journal-freshness-checkpoint.md) | — | Parity with the daemon smoke sessions |
 | R4-16 | Authority switch (below) | — | All gates and budgets |
 

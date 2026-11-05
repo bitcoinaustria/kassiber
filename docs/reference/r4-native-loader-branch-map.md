@@ -215,7 +215,7 @@ recipes now enforce exact matching and BLOB seed-sweep coverage.
 | `crates/pyjson/src/value.rs` | `JB-bytes-repr-quotes` | `bytes_json_policy_and_repr_match_python` |
 | `crates/pytext/src/json.rs` | `JB-json-raw-surrogates` | `json_parser_preserves_raw_surrogate_identity` |
 
-> inherited from t3code/r5-transfers-17@59e1476a4; pending r10 verification
+> inherited from t3code/r5-transfers-17@59e1476a4; combined R10 results are in the [R10 audit](rust-backend-r10-integration.md).
 ## Transfer-branch integration
 
 Transfers-14 retains this original map and its campaign provenance. Raw database

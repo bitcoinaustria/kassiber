@@ -1,10 +1,14 @@
 # Rust backend R10 integration audit
 
-**Status: ordered replay complete; integration repaired and partially verified.**
+**Status: ordered replay complete, including the four queued lines;
+integration repaired and verified except the items under
+[remaining work](#remaining-work).**
 `t3code/rust-backend-r10b` starts at R9 (`b10e90e54`) and continues the paused
 `t3code/rust-backend-r10` worker from its tip `1baf45765`. All 22 requested
-source lines are integrated as one linear stack. No push, PR, remote comment,
-stash pop/drop, or merge commit occurred. Results below are fresh R10
+source lines, then the queued `chain-reads-2`, `chain-ops-2`,
+`desktop-projections-2` and `desktop-settings-1` lines, are integrated as one
+linear stack. No push, PR, remote comment, stash pop/drop, or merge commit
+occurred. Results below are fresh R10
 measurements unless a row says it is inherited.
 
 ## Requirement and method
@@ -20,12 +24,14 @@ acceptance until this audit says it was rerun.
 
 ## Provenance and replay counts
 
-The replay records **279 unique source commits: 144 picked and 135 skipped**.
-Repeated ancestry shared by later lines is counted once. **86 picks
-conflicted**, across **326 path occurrences in 102 distinct paths**. Twenty
-integration commits sit between or after the picks: five by the paused
-worker (`7177e766c`, `c82562ef5`, `239cf5117`, `e9b8c035f`, `1ecb55487`)
-and the fifteen below. The stack has **164 commits above R9**, before this audit.
+The replay records **306 unique source commits: 167 picked and 139 skipped**.
+Repeated ancestry shared by later lines is counted once. Across the 22 lines,
+**86 picks conflicted** (326 path occurrences in 102 distinct paths); across
+the four queued lines, **15 of 23 picks conflicted** (56 path occurrences in
+19 distinct paths). Thirty-eight integration commits sit between or after the
+picks: five by the paused worker (`7177e766c`, `c82562ef5`, `239cf5117`,
+`e9b8c035f`, `1ecb55487`) and the 33 below. The stack has **205 commits above
+R9**, before this audit's own commit.
 
 | Line / inherited provenance | Picked | Skipped |
 | --- | ---: | ---: |
@@ -51,6 +57,10 @@ and the fifteen below. The stack has **164 commits above R9**, before this audit
 | `t3code/r5-privacy-mirror-5a@e4c26e5f7` | 1 | 2 |
 | `t3code/r5-exit-tax-mirror@2254f3a42` | 22 | 0 |
 | `t3code/r5-mirror-6e-7b@f73668f25` | 6 | 7 |
+| `t3code/r5-chain-analysis-reads-2@4690dcee2` | 3 | 2 |
+| `t3code/r5-chain-analysis-ops-2@6688c95d9` | 7 | 1 |
+| `t3code/r5-desktop-projections-2@3d36e8909` | 8 | 0 |
+| `t3code/r5-desktop-settings-1@4ebb68e8e` | 5 | 1 |
 
 The loader line was already fully present in R9. Its R4-9 acceptance is
 inherited from `t3code/r4-9-loader-determinism@aaf6216e3`.
@@ -77,6 +87,11 @@ inherited from `t3code/r4-9-loader-determinism@aaf6216e3`.
   `e5b34797f`, `2216235b0`). Its alternative `HttpClient::with_cancel_check`
   API conflicts with that implementation, so its implementation-specific
   tests are not carried. Python rounds 7/7b themselves are present.
+
+The replay helper stages untracked files under `docs/`, so the first queued
+pick (`489f80a4d`, from `00636290f`) also committed this audit's draft and its
+two JSON records. No later commit touches them, and this audit's own commit
+supersedes the draft.
 
 The Mirror commits `f94d5b16d` to `4d2e0c289` overlapped with the PSBT
 squash `e3597426c`, which already contained their code. They were picked for
@@ -124,6 +139,24 @@ Integration commits:
 | `173715593` | Resolves `target/` in scratch-location guards so a symlinked target is accepted, and refreezes the renderer branch witnesses. |
 | `4844ba8b8` | Places the legacy hygiene snapshot and Lightning profitability kinds where Python lists them; the ready list now equals Python's order. |
 | `ab44b59bc` | Stamps semantics in the current automatic-pairing command seed. |
+| `2d58edb28` | Refreezes the journal render vectors in dependency order (`render.json` before `render-native-ledger.json`). |
+| `2eee3740c` | Owner fix `47a58f4c4`, cherry-picked: the default-home regression test no longer inherits `XDG_DATA_HOME`. |
+| `4c33b5deb` | Restores the shell-parity probe line a paused-worker merge dropped; probes `ai providers list`, still unported. |
+| `805d3ec4b` | Makes the reviewed sync seed and the paired desktop seed canonically current (count and semantics) and refreezes the publication vectors. |
+| `9db04258d` | Empty-scope `ui.freshness.run` leads with Python's keys; the product-default acquisition test compares each route's raw answer with Python. |
+| `cddb765c3` | The CLI run tests compile without `kassiber-cli/test-probe`, as the gate's workspace commands build them. |
+| `6b475d61d` | Restamps semantics when the CSV refusal test restores current journals. |
+| `3defac865` | Custody admits Python-sized (up to 4,300-digit) reviewed amounts with exact `BigInt` fallbacks instead of panicking; the intra-transfer `TypeError` carries Python's text. |
+| `d855136db` | Seeds the refresh failure books like the exact book recovery starts from, so Mirror's change clock in the expected partial is no longer one revision ahead. |
+| `2fa022810` | Refreshes the port classification after the parity fixes. |
+| `fc21d0340` | Clippy across the merged lines: a collapsible `if let` and the entropy hook literal under Mirror's gated fields. |
+| `75f11fed6` | Advertises the merged chain-analysis and desktop kinds in Python's order. |
+| `1e4deecaf` | Keeps the chain-analysis operations clear of the network chokepoint scan (`import_labels`/`import_dataset`, no bare `net`). |
+| `d71ede5a5` | Refreezes the nine chain-analysis vector files against the integrated reference. |
+| `f93e3bd6c` | Retargets 16 mutation anchors moved by the merges; all 16 are killed. |
+| `262372d98` | The desktop parity harness recognises the Rust daemon by its ready list and closes its seed connections. |
+| `a31f092d1` | Binds the analysis-operations witnesses to Mirror's projection version and ignores test-only kinds. |
+| `809b168c6` | Rerecords Python's chain-analysis hash-seed variants on the integrated schema. |
 
 ### Journal calculation semantics
 
@@ -142,29 +175,66 @@ refreshed to the integrated schema for the same reason. Every fixture built on
 it is regenerated, including Mirror's `custody_fresh` paths, which keep their
 228 and 6 current cases.
 
+### Queued chain-analysis and desktop lines
+
+The read and operation lines both branched from R7 and each carried a copy of
+the shared analysis runtime. The integration keeps one
+`analysis_index::runtime` (the operations line's copy was byte-identical),
+keeps `stream_claims` beside `preview` in `reads/preview.rs`, and deletes the
+operations line's `dataset_stream` shim, which loaded that file a second time.
+CLI dispatch checks the exact operation commands before the read prefix, so
+mutations never route to the read service. The daemon's `lock` path reaps
+freshness workers, clears analysis grants and receipts, and stops the watch
+worker.
+
+`daemon.ready` lists every native `ui.chain_analysis.*` kind first, sorted,
+and `internal.chain_analysis.stage` after `ui.wallets.create`, matching
+Python's `SUPPORTED_KINDS` order for all 219 native kinds. The report and
+transfer witnesses now include the desktop line's capital-gains and
+review-context kinds where Python lists them.
+
+The R7-era vectors of both chain-analysis lines were refrozen from integrated
+Python: the semantics columns and Mirror's projection version 3 change the
+schema hash and snapshot identities, not any finding. The integrated network
+scanner also rejects `::import(` calls and the bare word `net`, so the label
+and dataset imports take Python's names `import_labels` and `import_dataset`.
+The desktop line moved the time-zone port into `kassiber-pytext` and reworked
+its fold handling; its eleven zone recipes were retargeted, and the report
+mutation checker now also runs `kassiber-pytext`.
+
 ## Fresh R10 verification
 
 All commands use Rust 1.99.1 and locked Python 3.11 through
 `mise exec rust@1.99.1 uv@latest --`, `MATURIN_NO_INSTALL_RUST=1`, offline Cargo,
 `CARGO_BUILD_JOBS=8` and disposable data roots. `HOME` is unchanged. Scratch
-and build trees live under this worktree's `target/`, an ext4 symlink. Product
-storage refuses symlinked paths, so `TMPDIR` and the Cargo directories use the
-resolved path. One test job runs at a time.
+and build trees live under this worktree's `target/`, a symlink to the shared
+build disk. Product storage refuses symlinked paths, so `TMPDIR` and the Cargo
+directories use the resolved path. One test job runs at a time. Mutation
+builds use their own target and build directories, removed afterwards.
+
+Most runs shared the machine with other workers at one-minute loads of 100 to
+400, and the build disk briefly filled. Every failure listed as load-bound
+below was a timeout, `SQLITE_BUSY`, `SQLITE_FULL` or disk I/O error that passed
+when rerun alone or at lower load. Python's `secrets init` migration is the
+usual victim: `sqlcipher_export` spends about 7 s waiting on synchronous writes
+even for an empty book, and contention stretches that past the tests' 90 to
+120 s limits.
 
 | Check | Fresh R10 result |
 | --- | --- |
-| Formatting | `cargo fmt --all --check` passes |
-| All-target workspace clippy `-D warnings` | Passes with the journal harness/timing, binary, chain/wallet harness and network-observer features |
-| Workspace tests | Last full run (`workspace-replay5`): **2,163 passed, 2 failed** across 170 harness results. One failure, the descriptor-close race in `kassiber-secrets`, is fixed by `cb1fcebc7`. The other is `native_process_real_prebuild_matches_complete_python_books_and_lifecycle_tapes`, listed under remaining work |
-| Mutation catalog applicability | All **82 catalogs, 8,042 recipes**, apply with zero anchor problems. Full kills are not run here |
-| Custody generated lanes | **24,000 books + 1,030 permutations**: 24,852 complete custody stage matches and 178 matching upstream refusals; renderer 24,705 / 24,705 admitted cases match |
-| Archived custody recordings | 159 recorded requests + 159 permutations, 0 differences; archived renderer 318 / 318 |
-| Focused census and shadow | Each passes **300 tests and 32 subtests**, with one skip (platform), after the custody fixture refreeze |
-| Ledger feature check | Passes |
-| Custody crates | `kassiber-custody` and `kassiber-tax-core`: 787 passed, 0 failed |
-| Registered `journals process` | See the table below |
-| Parity suite | PARITY |
-| Classifier and preflight | CLASSIFY |
+| Formatting | `cargo fmt --all --check` passes at the tip |
+| Clippy `-D warnings` | Passes at the tip in all three configurations: the integration feature set (journal harness/timing, binary, chain/wallet harness, network observer), the gate's workspace command (`--features kassiber-journals/test-harness`) and the gate's binary/daemon/runtime command (`--features kassiber/test-harness`) |
+| Workspace tests | Post-merge run `workspace-merge1`: **2,177 passed, 24 failed** across 171 harness results. All 24 were fixed and rerun: the network chokepoint scan (9/9 after `1e4deecaf`) and 23 `kassiber-wallets` cases (stale R7-era vectors, refrozen in `d71ede5a5`, and one `SQLITE_FULL`). The rerun passes 363 of 364; the remaining `analysis_dataset_jobs_match_python_receipts_and_tables` hit `database_busy` at load ~140 and passes 3/3 alone. `kassiber-daemon` passes 46/46 after the kind-order change, `kassiber-journals` 212/212 and `kassiber-custody`, `kassiber-journals` `process_native` and `kassiber-cli` 686/686 after the overflow fix, `kassiber-cli` also without `test-probe` |
+| Mutation catalogs | All **87 catalogs, 8,201 recipes**, apply. The 16 recipes retargeted after the merges are all killed by their own runners (custody 1, chain 1, Lightning 1, transfers 2, reports 11). Full kills of the other recipes are not rerun here |
+| Custody generated lanes | Rerun at `3defac865`, after the custody change: **24,000 books + 1,030 permutations**, 24,852 complete custody stage matches and 178 matching upstream refusals; renderer 24,705 / 24,705. The merges do not touch custody, journals or the tax core |
+| Archived custody recordings | Rerun at `3defac865`: 159 recorded requests + 159 permutations, 0 differences; archived renderer 318 / 318 |
+| Focused census and shadow | Rerun at `3defac865`: each passes **300 tests and 32 subtests**, one platform skip |
+| Ledger feature check | Passes at `3defac865` |
+| Registered `journals process` | See the table below (measured before the merges; the merges do not touch the journal pipeline) |
+| Parity suite, before the merges | All **110 modules** (the 75 slice modules and the 35 modules R9 left unrun, every `tests/test_rust_*.py` and `tests/rust_port/test_*.py` module) ran to receipts. 100 passed outright. The other 10 were fixed or traced to load and rerun green: journal process and refresh (overflow and seed fixes), shell parity, transaction desktop, wallet acquisition and publication, reports, the inventory classifier, and backup desktop/install (load-bound, 26 nodes pass serially) |
+| Parity suite, the 24 merged-line modules | **24 / 24 pass** after the harness and witness fixes |
+| Parity suite, the 110 modules after the merges | In progress: **44 of 110** rerun on the merged stack. 41 pass, including journal process (51/51) and refresh (21/21); three have only load-bound failures (freshness native 2, freshness product 14 ready-line timeouts, Samourai 1 `secrets init` timeout) |
+| Classifier | `classify_tests update` rerun at the tip; the inventory and contract checks pass after the earlier refresh |
 
 ### Registered `journals process`, Python against native
 
@@ -189,4 +259,29 @@ target.
 
 ## Remaining work
 
-REMAINING
+- **Post-merge parity:** 66 of the 110 prior modules, shell parity among them,
+  still need a post-merge receipt (`parity.sh` is resumable), and the three
+  load-bound modules need a quieter rerun. The final preflight runs after them.
+- **Full mutation kills:** only catalog applicability (all 8,201 recipes) and
+  the 16 retargeted recipes were run. The full kill sweep, in resumable shards,
+  is not rerun on the integrated stack.
+- **`perf-conversions-3` skip:** owner review on a quiet machine, as described
+  under the skips above.
+- **Load-sensitive witnesses:** `analysis_dataset_jobs_match_python_receipts_and_tables`
+  opens its worker connection with SQLite's default 5 s busy timeout and can
+  report `database_busy` under heavy load. Several product suites wrap
+  Python's `secrets init` in 90–120 s limits that contention can exceed. Both
+  pass whenever the machine is quieter. No test was blocked by the sandbox;
+  the loopback suites ran here.
+- **Python reference observations (not fixed here):** the plaintext-to-encrypted
+  migration's `sqlcipher_export` takes about 7 s of synchronous write waits on
+  an empty book (SATA SSD). Python's dataset manifest field order depends on
+  `PYTHONHASHSEED` (recorded in `chain_analysis_reads_hashseeds.json`). A
+  truncated Electrum transaction aborts a whole acquisition with an uncaught
+  `RuntimeError` (`tests/rust_port/repro_acquisition_electrum_truncated.py`).
+- **Product gaps carried by the merged lines:** `ui.maintenance.run`, report
+  blockers, report-read wallet sync, `ui.transactions.graph` and
+  `ui.transactions.review_context`, `ui.audit.evidence.summary` and
+  `ui.review.request_input` stay unported; see [TODO](../../TODO.md).
+- **Owner runs:** the full census, shadow and native-lane shards beyond the
+  focused selections above.

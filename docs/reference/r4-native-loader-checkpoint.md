@@ -917,7 +917,7 @@ a local acceptance commit, with no push, PR, external comment or routing change.
 
 ## BLOB storage-class continuation (historical)
 
-> inherited from t3code/r5-transfers-17@59e1476a4; pending r10 verification
+> inherited from t3code/r5-transfers-17@59e1476a4; combined R10 results are in the [R10 audit](rust-backend-r10-integration.md).
 ## BLOB storage-class continuation (original branch evidence)
 
 At the BLOB checkpoint, SQLite BLOBs entered both native readers as `kassiber_pyjson::Value::Bytes`.
@@ -1092,7 +1092,7 @@ scalar identity, exact boundary pairing, all forty case identities, named kills,
 zero writes and authority. No background job remains at handoff. This is local
 only: no push, PR, external comment or production authority switch.
 
-> inherited from t3code/r5-transfers-17@59e1476a4; pending r10 verification
+> inherited from t3code/r5-transfers-17@59e1476a4; combined R10 results are in the [R10 audit](rust-backend-r10-integration.md).
 ## Integrated continuation
 
 Transfers-14 integrates loader-9 and the BLOB continuation, including loader-3

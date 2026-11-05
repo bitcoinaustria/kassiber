@@ -125,7 +125,7 @@ The development-only hybrid candidate selects Python before bootstrap except
 for sync capability selection, which uses the inert admitted-book preflight
 described in the [CLI registration checkpoint](#bitcoin-wallet-sync-cli-registration-r5-partial).
 
-> Inherited from `t3code/r4-13-journals-process-6@08e99c524`; pending r10 verification.
+> Inherited from `t3code/r4-13-journals-process-6@08e99c524`; combined R10 results are in the [R10 audit](rust-backend-r10-integration.md).
 The development-only hybrid candidate may select Python before bootstrap.
 `journals process`, including `--auto-pair`, supports guarded refusal replay
 after native execution: only a test build's byte-identical rollback signal can
@@ -12834,7 +12834,7 @@ table comparisons, zero-fallback counts and service/transport mutation kills
 remain required. Node-snapshot/backend-test routes and AI projections retain
 their separately scoped deferrals.
 
-> Inherited from `t3code/r4-15-journal-refresh@dfeaf1533`; pending r10 verification.
+> Inherited from `t3code/r4-15-journal-refresh@dfeaf1533`; combined R10 results are in the [R10 audit](rust-backend-r10-integration.md).
 
 ## Journal freshness integration (R4-15)
 

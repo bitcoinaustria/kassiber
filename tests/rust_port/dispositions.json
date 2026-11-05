@@ -2327,6 +2327,9 @@
       "test_watch_product_cli_bytes_all_tables_and_zero_fallback": {"disposition": "oracle", "flags": ["mock", "sql", "sql-seed", "subprocess"], "group": "chain-sync", "reason": "compares all eight native evidence-watch CLI/daemon routes with unchanged Python bytes and all 112 tables on keyed SQLCipher books; covers saved-report impacts, encryption refusal, SQLCipher DELETE/WAL rollback, named mutations, the retained acknowledgement-transaction reference quirk and zero-fallback no-consent processes with offline mode off/on; the background watch tick remains unported", "reviewed": true, "tests": 1},
       "test_watch_product_daemon_bytes_and_all_tables": {"disposition": "oracle", "flags": ["mock", "sql", "subprocess"], "group": "chain-sync", "reason": "compares all eight native evidence-watch CLI/daemon routes with unchanged Python bytes and all 112 tables on keyed SQLCipher books; covers saved-report impacts, encryption refusal, SQLCipher DELETE/WAL rollback, named mutations, the retained acknowledgement-transaction reference quirk and zero-fallback no-consent processes with offline mode off/on; the background watch tick remains unported", "reviewed": true, "tests": 1}
     },
+    "tests/test_rust_audit_projections.py": {
+      "RustAuditProjectionsTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares native audit change counts and the worklist direct-dispatch refusal raw JSONL and all 112 tables with Python", "reviewed": true, "tests": 3}
+    },
     "tests/test_rust_austrian_xlsx.py": {
       "test_austrian_service_content_errors_and_whole_database": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "subprocess"], "group": "reports", "reason": "compares native annual workbook content, complete normalized databases, actual saved hashes and explicit filing against Python; proves Rust-only CLI and daemon routing", "reviewed": true, "tests": 1},
       "test_austrian_cli_content_completion_filing_and_native_routing": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares native annual workbook content, complete normalized databases, actual saved hashes and explicit filing against Python; proves Rust-only CLI and daemon routing", "reviewed": true, "tests": 1},
@@ -2465,6 +2468,25 @@
     "tests/test_rust_custody_loader_blobs.py": {
       "test_loader_blob_note_refuses_only_at_json_encoding": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "journals", "reason": "compares actual SQLite BLOB consumers and JSON serialization refusals with unchanged Python at complete CLI/daemon and finalized projection boundaries, recording typeof and zero writes on disposable books", "reviewed": true, "tests": 1},
       "test_loader_blob_consumers_match_composed_and_transport_outcomes": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "journals", "reason": "compares actual SQLite BLOB consumers and JSON serialization refusals with unchanged Python at complete CLI/daemon and finalized projection boundaries, recording typeof and zero writes on disposable books", "reviewed": true, "tests": 1}
+    },
+    "tests/test_rust_custody_projections.py": {
+      "RustCustodyProjectionsTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "compares native custody coverage and lineage raw JSONL, cursors and all 112 tables with Python", "reviewed": true, "tests": 3}
+    },
+    "tests/test_rust_desktop_backends.py": {
+      "RustBackendsListTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "network-egress", "reason": "compares the native active-profile backend list raw JSONL and all 112 tables with Python, including redaction, wallet scope and default-backend summaries", "reviewed": true, "tests": 3}
+    },
+    "tests/test_rust_desktop_lightning_test.py": {
+      "RustLightningBackendTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "network-egress", "reason": "compares the native Lightning backend test raw JSONL, owned fake-node requests and all 112 tables with Python, including refusals, failures and the product no-egress switch", "reviewed": true, "tests": 7}
+    },
+    "tests/test_rust_desktop_settings.py": {
+      "RustFreshnessSettingsTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "chain-sync", "reason": "compares native freshness status/configure and maintenance settings/configure raw JSONL and all 112 tables with Python, including policy shapes, refusals, commit order and SQLCipher books", "reviewed": true, "tests": 6},
+      "DesktopSettingsMutationCatalogTest": {"disposition": "oracle", "flags": ["subprocess"], "group": "chain-sync", "reason": "compares native freshness status/configure and maintenance settings/configure raw JSONL and all 112 tables with Python, including policy shapes, refusals, commit order and SQLCipher books", "reviewed": true, "tests": 1}
+    },
+    "tests/test_rust_desktop_settings_egress.py": {
+      "RustDesktopReadsNoEgressTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "network-egress", "reason": "proves desktop status, settings, backend list and UTXO reads open no connection under the strict test guard while matching Python bytes and tables", "reviewed": true, "tests": 1}
+    },
+    "tests/test_rust_desktop_utxos.py": {
+      "RustWalletUtxosTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "chain-sync", "reason": "compares the native wallet UTXO inventory raw JSONL and all 112 tables with Python across every support branch, source filters, truncation and the reference surrogate crash", "reviewed": true, "tests": 4}
     },
     "tests/test_rust_diagnostics.py": {
       "test_normalization_changes_only_named_runtime_and_stack_values": {"disposition": "oracle", "flags": [], "group": "secrets-backup", "reason": "compares native public diagnostics/export and CLI failure bytes with Python; normalizes only explicitly allowed native runtime and stack values, with normalization-scope regressions", "reviewed": true, "tests": 1},
@@ -2787,6 +2809,12 @@
       "test_native_daemon_failed_import_rolls_back_before_next_request": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "chain-sync", "reason": "runs rates CLI leaves through the hybrid candidate with served-by assertions and compares native daemon JSONL bytes against Python", "reviewed": true, "tests": 1},
       "test_bounded_price_errors_match_python": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "chain-sync", "reason": "runs rates CLI leaves through the hybrid candidate with served-by assertions and compares native daemon JSONL bytes against Python", "reviewed": true, "tests": 1}
     },
+    "tests/test_rust_rates_rebuild.py": {
+      "RustRatesRebuildTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "network-egress", "reason": "compares native desktop rates rebuild with Python on disposable books, including live opt-in, the offline gate, local Kraken repricing and journal rebuilds", "reviewed": true, "tests": 4}
+    },
+    "tests/test_rust_report_capital_gains.py": {
+      "RustReportCapitalGainsTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares native desktop capital gains raw JSONL and all tables with Python, including the stale-journal rebuild prelude and the report-read sync refusal", "reviewed": true, "tests": 4}
+    },
     "tests/test_rust_report_exports.py": {
       "test_commercial_subledger_read_csv_bytes_database_and_routing": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares commercial CLI JSON/table/plain/CSV bytes, explicit CSV publication and path errors with Python; proves unchanged whole-database state and Rust-only hybrid routing", "reviewed": true, "tests": 1},
       "test_cli_csv_export_sequences_and_rust_routing": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares complete native CLI/daemon CSV export sequences, literal artifact bytes and normalized whole-database state with Python; declares generated identity mappings and proves Rust-only hybrid routing", "reviewed": true, "tests": 1},
@@ -3023,6 +3051,9 @@
       "test_sync_hybrid_never_retries_a_native_result": {"disposition": "python-only", "flags": ["mock", "mock-internal", "sql", "subprocess"], "group": "cli-shell", "reason": "pins the test-only Python hybrid launcher handoff, native-result refusal and preservation of consumable unlock inputs", "replacement": "retain while the hybrid Python launcher is required", "reviewed": true, "tests": 1},
       "test_sync_hybrid_requires_an_empty_explicit_handoff": {"disposition": "python-only", "flags": ["mock", "mock-internal", "sql", "subprocess"], "group": "cli-shell", "reason": "pins the test-only Python hybrid launcher handoff, native-result refusal and preservation of consumable unlock inputs", "replacement": "retain while the hybrid Python launcher is required", "reviewed": true, "tests": 1}
     },
+    "tests/test_rust_transaction_dashboard.py": {
+      "RustTransactionDashboardTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "compares native desktop dashboard raw JSONL and all 112 tables with Python, including periods, zone folds, candidates, reviewed pairs and stale journals", "reviewed": true, "tests": 6}
+    },
     "tests/test_rust_transaction_desktop.py": {
       "RustTransactionDesktopTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "compares desktop list/search/extremes raw daemon JSONL, all filters, grouped totals, queue scope, cursor pages and typed refusals with Python on disposable books", "reviewed": true, "tests": 3}
     },
@@ -3037,6 +3068,9 @@
     },
     "tests/test_rust_transfer_reads.py": {
       "RustTransferReadsTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "Compares CLI and daemon component/gap read bytes, complete unchanged database rows, private evidence projections and hybrid Rust routing", "reviewed": true, "tests": 4}
+    },
+    "tests/test_rust_transfer_review_context.py": {
+      "RustTransferReviewContextTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "compares the native transfer review context raw JSONL and all 112 tables with Python, including redaction, journal context and the stale-journal rebuild", "reviewed": true, "tests": 4}
     },
     "tests/test_rust_transfer_services.py": {
       "RustTransferServicesTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "custody", "reason": "Compares CLI/desktop bytes and normalized authoring outputs against Python; native vectors pin complete authoring rows and hybrid routing proves Rust execution", "reviewed": true, "tests": 11}
