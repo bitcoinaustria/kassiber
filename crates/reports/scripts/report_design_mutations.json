@@ -142,5 +142,29 @@
     "replace": "        if false {",
     "expect_failing": ["austrian_model_matches_python_and_renders_deterministically"],
     "rule": "The transaction appendix holds the Europe/Vienna tax year only."
+  },
+  {
+    "id": "source-funds-snapshot-hash",
+    "file": "crates/reports/src/source_funds_pdf.rs",
+    "find": "    if snapshot_hash(&snapshot)? != text(row, \"snapshot_hash\") {",
+    "replace": "    if false {",
+    "expect_failing": ["source_funds_model_matches_python_and_renders_deterministically"],
+    "rule": "A saved case whose snapshot no longer matches its stored hash refuses to export."
+  },
+  {
+    "id": "source-funds-review-gate",
+    "file": "crates/reports/src/source_funds_pdf.rs",
+    "find": "    if !truthy(value(gates, \"exportable\")) {",
+    "replace": "    if false {",
+    "expect_failing": ["source_funds_model_matches_python_and_renders_deterministically"],
+    "rule": "A case blocked by its review gates refuses to export."
+  },
+  {
+    "id": "source-funds-flow-links",
+    "file": "crates/reports/src/report_design/source_funds.rs",
+    "find": "        let links = list(flow, \"edges\")",
+    "replace": "        let links = list(flow, \"levels\")",
+    "expect_failing": ["source_funds_model_matches_python_and_renders_deterministically"],
+    "rule": "The diagram draws every edge of the simplified flow."
   }
 ]

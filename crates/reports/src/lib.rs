@@ -54,6 +54,7 @@ mod source_funds_explorers;
 pub mod source_funds_links;
 pub mod source_funds_mutations;
 mod source_funds_order;
+pub mod source_funds_pdf;
 pub mod source_funds_projection;
 mod source_funds_reads;
 pub mod source_funds_recipients;

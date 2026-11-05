@@ -13,12 +13,14 @@ mod austrian;
 mod exit;
 mod full;
 mod locale;
+mod source_funds;
 mod strings;
 mod summary;
 pub use austrian::austrian;
 pub use exit::exit_tax;
 pub use full::full;
 pub use locale::Lang;
+pub use source_funds::source_funds;
 pub(crate) use summary::prepare as prepare_summary;
 pub use summary::{summary, summary_model};
 

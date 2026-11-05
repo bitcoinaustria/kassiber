@@ -12,6 +12,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import sqlite3
 
 import pytest
 
@@ -346,3 +347,70 @@ def test_austrian_pdf_daemon_envelope_errors_collisions_and_native_routing(tmp_p
     assert native == reference
     assert _served(env) == [{"command": "daemon", "served_by": "rust"}]
 
+
+def _source_funds_book(tmp_path, monkeypatch):
+    """A book with the saved source-of-funds case of the PDF fixtures."""
+    root, database, env, call = _book(tmp_path, monkeypatch, "generic", "FIFO")
+    vectors = json.loads((Path(__file__).resolve().parents[1]
+                          / "crates/reports/tests/data/source_funds_pdf.json").read_text())
+    case = next(c for c in vectors["cases"] if c["name"] == "standard")
+    conn = sqlite3.connect(database)
+    conn.executescript(vectors["base_sql"] + case["sql"])
+    conn.commit()
+    conn.close()
+    return root, database, env, call
+
+
+def test_source_funds_pdf_cli_envelope_and_native_routing(tmp_path, monkeypatch):
+    root, database, env, call = _source_funds_book(tmp_path, monkeypatch)
+    before = database.read_bytes()
+    target = tmp_path / "nested" / "source-funds.pdf"
+
+    def sequence(reference):
+        database.write_bytes(before)
+        shutil.rmtree(target.parent, ignore_errors=True)
+        outcomes = []
+        for flags in [["--case", "case-1"], ["--case", "case-1"], ["--case", "missing"], [], ["--case", "c-z"],
+                      ["--case", "c-a"]]:
+            result = call("--machine", "reports", "export-source-funds-pdf", "--file", str(target), *flags,
+                          reference=reference)
+            stdout = (_exit_normalized(result.stdout, target) if result.returncode == 0
+                      else _normalize(result.stdout, {}))
+            outcomes.append((result.returncode, stdout, result.stderr, _dump(root, {})))
+        return outcomes
+
+    native, reference = sequence(False), sequence(True)
+    for actual, expected in zip(native, reference):
+        assert actual == expected
+    assert native == reference
+    served = _served(env)
+    assert served and all(c["served_by"] == "rust" for c in served)
+    assert {c["command"] for c in served} == {"reports.export-source-funds-pdf"}
+
+
+def test_source_funds_pdf_daemon_envelope_errors_and_native_routing(tmp_path, monkeypatch):
+    root, database, env, call = _source_funds_book(tmp_path, monkeypatch)
+    before = database.read_bytes()
+    exports = tmp_path / "exports"
+    requests = [{"case": "case-1"}, {"case": "case-1"}, {"case": 1}, {}, {"case": "missing"}, {"case": None}]
+    wire = b"".join((json.dumps(dict(request_id=i, kind="ui.source_funds.export_pdf", args=args)) + "\n").encode()
+                    for i, args in enumerate(requests)) + b'{"request_id":"done","kind":"daemon.shutdown"}\n'
+
+    def session(reference):
+        shutil.rmtree(exports, ignore_errors=True)
+        database.write_bytes(before)
+        result = call("daemon", reference=reference, wire=wire)
+        assert (result.returncode, result.stderr) == (0, b""), result.stderr
+        records = []
+        for raw in result.stdout.splitlines()[1:]:
+            record = json.loads(raw)
+            data = record.get("data")
+            records.append(_exit_normalized(raw, Path(data["file"])) if record["kind"] != "error"
+                           and isinstance(data, dict) and "file" in data else raw)
+        return records, _dump(root, {}), sorted(str(p.relative_to(exports)) for p in exports.rglob("*.pdf"))
+
+    native, reference = session(False), session(True)
+    for actual, expected in zip(native[0], reference[0]):
+        assert actual == expected
+    assert native == reference
+    assert _served(env) == [{"command": "daemon", "served_by": "rust"}]

@@ -19,6 +19,7 @@ pub fn handles(command: &str) -> bool {
             | "reports.export-austrian-e1kv-xlsx"
             | "reports.export-austrian-e1kv-pdf"
             | "reports.export-austrian"
+            | "reports.export-source-funds-pdf"
             | "transactions.export"
             | "ui.transactions.export_csv"
             | "ui.transactions.export_xlsx"
@@ -35,6 +36,7 @@ pub fn handles(command: &str) -> bool {
             | "ui.reports.export_austrian_e1kv_xlsx"
             | "ui.reports.export_austrian_e1kv_pdf"
             | "ui.reports.export_capital_gains_csv"
+            | "ui.source_funds.export_pdf"
     )
 }
 fn validation(message: impl Into<String>) -> AppError {
@@ -265,6 +267,7 @@ fn execute_admitted(
             "ui.transactions.export_csv"
                 | "ui.transactions.export_xlsx"
                 | "ui.transactions.export_platform_csv"
+                | "ui.source_funds.export_pdf"
         )
     {
         freshness(conn, &profile)?;
@@ -368,6 +371,19 @@ fn execute_admitted(
                 format!("kassiber-exit-tax-{}", py_str(&departure)),
                 if pdf { ".pdf" } else { ".xlsx" },
                 "exit_tax",
+            )
+        }
+        "ui.source_funds.export_pdf" => {
+            if !matches!(value(raw, "case"), Value::Null | Value::Str(_)) {
+                return Err(validation(
+                    "ui.source_funds.export_pdf case must be a string",
+                ));
+            }
+            (
+                "reports.export-source-funds-pdf",
+                "kassiber-source-funds".into(),
+                ".pdf",
+                "source_funds",
             )
         }
         "ui.reports.export_austrian_e1kv_pdf" => (

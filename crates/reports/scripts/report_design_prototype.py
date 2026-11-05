@@ -10,7 +10,8 @@ identical bytes, requires each report's model handed to the renderers
 (``<report>/model.json``) to equal Python's data for the same book
 (``python-model.json``) exactly, then keeps one run's PDF, XLSX and CSV
 bundle per report under ``--out/<book>/<report>/`` and renders every PDF page
-to PNG with ``pdftoppm``.
+to PNG with ``pdftoppm``. The source-of-funds samples come from the saved
+cases of its PDF fixtures and land in ``--out/source_funds/``.
 """
 
 from __future__ import annotations
@@ -65,6 +66,25 @@ def main() -> int:
                 "model_equals_python": model_equal,
                 "pages": sorted(p.name for p in (final / name).glob("page-*.png")),
             }
+    # Source of funds: the saved cases of the PDF fixtures (the model test
+    # pins them to Python); here only determinism and the pages.
+    runs = []
+    for run in ("run-1", "run-2"):
+        target = out / "runs" / "source_funds" / run
+        shutil.rmtree(target, ignore_errors=True)
+        target.mkdir(parents=True)
+        subprocess.run([args.bin, "--source-funds", str(target)], check=True, capture_output=True, text=True)
+        runs.append(digest(target))
+    if runs[0] != runs[1]:
+        failures.append("source_funds: two runs differ")
+    final = out / "source_funds"
+    shutil.rmtree(final, ignore_errors=True)
+    shutil.copytree(out / "runs" / "source_funds" / "run-1", final)
+    report["source_funds"] = {"deterministic": runs[0] == runs[1], "files": runs[0]}
+    for case in sorted(p.name for p in final.iterdir() if p.is_dir()):
+        subprocess.run(["pdftoppm", "-r", "110", "-png", str(final / case / f"{case}.pdf"), str(final / case / "page")],
+                       check=True)
+        report["source_funds"][case] = {"pages": sorted(p.name for p in (final / case).glob("page-*.png"))}
     shutil.rmtree(out / "runs", ignore_errors=True)
     (out / "prototype-check.json").write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps({book: {k: v for k, v in data.items() if k != "files"} for book, data in report.items()}, indent=2))

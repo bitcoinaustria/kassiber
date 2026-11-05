@@ -59,6 +59,11 @@ pub fn prepare(
         if command == "reports.export-platform-csv" {
             platform_csv::platform(value(&args, "platform"))?;
         }
+        // A saved source-of-funds case is admitted by its own rules before
+        // the book scope, without the journal freshness reports need.
+        if command == "reports.export-source-funds-pdf" {
+            return source_funds_pdf::prepare(conn, &args, sources);
+        }
         let (workspace, profile) = kassiber_setup::references::scope(conn, &args)?;
         if command == "reports.export-transactions-csv" {
             return standalone_csv::prepare(conn, &profile, &args);

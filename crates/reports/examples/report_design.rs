@@ -3,6 +3,10 @@
 //! with `model.json` (the data handed to the renderers), `<report>.pdf`,
 //! `<report>.xlsx` and `<report>-csv/`. The clock is fixed so two runs must
 //! write identical bytes.
+//!
+//! `report_design --source-funds <out-dir>` renders the saved source-of-funds
+//! cases of the PDF fixtures (`tests/data/source_funds_pdf.json`): the sample
+//! books have no reviewed source-of-funds evidence.
 use kassiber_envelope::{dict, s};
 use kassiber_pyjson::Value;
 use kassiber_reports::report_design::{self, Document};
@@ -38,8 +42,42 @@ fn write(out: &Path, name: &str, model: &Value, document: &Document) {
     println!("{name}: {pages} pages");
 }
 
+/// Saved source-of-funds cases from the PDF fixtures, one book per case.
+fn source_funds(out: &Path) {
+    let vectors: serde_json::Value =
+        serde_json::from_str(include_str!("../tests/data/source_funds_pdf.json")).unwrap();
+    let scratch = tempfile::tempdir_in(out).unwrap();
+    for name in ["standard", "austria", "planned-sats-masked"] {
+        let case = vectors["cases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["name"] == name)
+            .unwrap();
+        let book =
+            kassiber_store::Book::create(&scratch.path().join(name), None).expect("scratch book");
+        let conn = book.connection();
+        conn.execute_batch(include_str!("../tests/data/book.sql"))
+            .unwrap();
+        conn.execute_batch(vectors["base_sql"].as_str().unwrap())
+            .unwrap();
+        conn.execute_batch(case["sql"].as_str().unwrap()).unwrap();
+        let args = dict([("case", s("case-1"))]);
+        let model = kassiber_reports::source_funds_pdf::model(conn, &args, &Fixed).expect("case");
+        write(
+            out,
+            &format!("source_funds-{name}"),
+            &model,
+            &report_design::source_funds(&model),
+        );
+    }
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    if args[1] == "--source-funds" {
+        return source_funds(Path::new(&args[2]));
+    }
     let conn =
         Connection::open_with_flags(&args[1], OpenFlags::SQLITE_OPEN_READ_ONLY).expect("book");
     let out = Path::new(&args[2]);

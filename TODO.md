@@ -856,11 +856,11 @@ registers them; exit-tax preserves its reference no-registration boundary.
 - [x] Register the summary report (`reports export-summary-pdf`,
   `ui.reports.export_summary_pdf`) natively in the approved
   [shared report design](docs/reference/report-design.md) and move the full
-  report, Austrian E 1kv and exit-tax PDFs onto it (the fixed-pitch writer is
-  gone).
+  report, Austrian E 1kv, exit-tax and source-of-funds PDFs onto it (the
+  fixed-pitch writer is gone).
 - [ ] Roll out the rest of the [report design](docs/reference/report-design.md#rollout)
-  one report per commit: source of funds, the XLSX and CSV exports, the
-  bundles, and native registration of every report leaf and kind.
+  one report per commit: the XLSX and CSV exports, the bundles, and native
+  registration of every report leaf and kind.
 
 ## Rust backend R4
 

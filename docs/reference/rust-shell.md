@@ -17795,8 +17795,15 @@ exit-tax estimate (`report_exit_tax`, parity in the exit-tax vectors) in the
 design: German for Austrian books with Python's English notes translated by
 their exact text, English otherwise; like Python, no saved marker.
 
+`reports export-source-funds-pdf` and `ui.source_funds.export_pdf` render a
+saved source-of-funds case in the design: the case snapshot is read and its
+hash checked like Python's `load_case_snapshot`, outdated and blocked
+snapshots refuse with Python's errors, no journal freshness admission and no
+saved marker, managed name `kassiber-source-funds-…pdf`; the flow diagram is
+drawn natively. The bundle (`export-source-funds-bundle`) still runs in Python.
+
 Evidence: `tests/test_rust_pdf_exports.py` runs CLI and daemon sessions for
-all four against Python (identical envelopes but for the rendered pages,
+all five against Python (identical envelopes but for the rendered pages,
 bytes and hash, identical errors, files, saved and filed markers and tables;
 all served by Rust); the model tests are listed in the design document. The
 rollout table there tracks the remaining reports.
