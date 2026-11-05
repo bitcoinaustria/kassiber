@@ -11,7 +11,6 @@ pub use network::{NetworkArray, NetworkFacts, NetworkObject};
 pub use rows::{Column, NetworkRow, RateRow, SqlValue, TxRow, WalletRef, WorklistRow};
 /// Typed admission inputs of a loaded snapshot.
 pub(crate) struct AdmissionFacts {
-    pub book_network: Option<NetworkObject<NetworkFacts>>,
     pub wallets: Vec<WalletRef>,
 }
 
@@ -158,23 +157,12 @@ impl StageSnapshot {
     /// The typed facts loaded admission reads, exactly as `typed` would read
     /// them, without serializing the transactions.
     pub(crate) fn admission_facts(&self) -> Result<AdmissionFacts, String> {
-        use serde::de::IntoDeserializer;
-        let book_network = Option::<NetworkObject<NetworkFacts>>::deserialize(
-            self.book_network
-                .as_ref()
-                .unwrap_or(&Value::Null)
-                .into_deserializer(),
-        )
-        .map_err(|e| e.to_string())?;
         let wallets = self
             .wallets
             .iter()
             .map(Record::typed)
             .collect::<Result<_, _>>()?;
-        Ok(AdmissionFacts {
-            book_network,
-            wallets,
-        })
+        Ok(AdmissionFacts { wallets })
     }
 
     /// Database loading retains legacy SQLite scalars until their consuming
@@ -373,7 +361,18 @@ mod tests {
             fn text<T: serde::Serialize + ?Sized>(value: &T) -> String {
                 serde_json::to_string(value).unwrap()
             }
-            assert_eq!(text(&facts.book_network), text(&*typed.book_network));
+            assert_eq!(
+                crate::gates::require_accounting_loaded(
+                    snapshot.book_network.as_ref(),
+                    &facts.wallets,
+                    &snapshot.profile
+                ),
+                crate::gates::require_accounting_facts(
+                    &typed.book_network,
+                    &typed.wallets,
+                    &snapshot.profile
+                ),
+            );
             assert_eq!(text(&facts.wallets), text(&typed.wallets));
             let rate_rows = snapshot
                 .rate_rows

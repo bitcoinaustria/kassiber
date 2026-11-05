@@ -129,6 +129,19 @@ pub(crate) fn require_accounting_facts(
         .map_err(|(code, message)| crate::Refusal::new("components", code, message))
 }
 
+/// `require_accounting_facts` of a loaded snapshot, reading its network
+/// JSON without typing every observation.
+pub(crate) fn require_accounting_loaded(
+    book_network: Option<&Value>,
+    wallets: &[crate::snapshot::WalletRef],
+    profile: &crate::snapshot::Record,
+) -> Result<(), crate::Refusal> {
+    network::require_value(book_network, wallets)?;
+    let original = profile.get("tax_country").unwrap_or(&Value::Null);
+    require_tax_country(original)
+        .map_err(|(code, message)| crate::Refusal::new("components", code, message))
+}
+
 pub(crate) fn require_tax_country(original: &Value) -> Result<(), Error> {
     let country = normalized(original);
     if !["", "generic", "at"].contains(&country.as_str()) {

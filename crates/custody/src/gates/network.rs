@@ -5,7 +5,7 @@ use crate::python_text::PythonText;
 use crate::snapshot::BookSnapshot;
 use crate::snapshot::{NetworkArray, NetworkFacts, NetworkObject, NetworkRow, SqlValue, WalletRef};
 use serde::Deserialize;
-use serde_json::json;
+use serde_json::{json, Map, Value};
 use std::collections::BTreeSet;
 
 type Evidence = (Option<String>, Option<String>, bool);
@@ -208,7 +208,22 @@ fn evidence_with(row: &NetworkRow, configs: &mut Configs) -> Evidence {
 #[derive(Default)]
 struct Remembered<'a> {
     seen: Vec<([&'a SqlValue; 9], Evidence)>,
+    /// The same, by an untyped observation's JSON column values.
+    objects: Vec<([&'a Value; 9], Evidence)>,
 }
+
+/// Columns an observation's evidence depends on besides its payload.
+const COLUMNS: [&str; 9] = [
+    "config_json",
+    "wallet_config_json",
+    "wallet_kind",
+    "asset",
+    "chain",
+    "network",
+    "bitcoin_network",
+    "chain_network",
+    "chain_instance_id",
+];
 impl<'a> Remembered<'a> {
     /// Distinct column sets beyond this are computed without remembering.
     const LIMIT: usize = 64;
@@ -237,6 +252,114 @@ impl<'a> Remembered<'a> {
         }
         evidence
     }
+
+    /// `evidence` of an untyped observation object, typing it only when its
+    /// columns were not seen: equal JSON columns type to equal columns.
+    fn object_evidence(
+        &mut self,
+        object: &'a Map<String, Value>,
+        configs: &mut Configs,
+    ) -> Evidence {
+        let typed = |configs: &mut Configs| {
+            let row = NetworkRow::deserialize(&Value::Object(object.clone()))
+                .expect("a network observation object types as a row");
+            evidence_with(&row, configs)
+        };
+        let column = |name: &str| object.get(name).unwrap_or(&Value::Null);
+        if !empty_value_payload(column("raw_json")) {
+            return typed(configs);
+        }
+        let key = COLUMNS.map(column);
+        if let Some((_, evidence)) = self.objects.iter().find(|(known, _)| *known == key) {
+            return evidence.clone();
+        }
+        let evidence = typed(configs);
+        if self.objects.len() < Self::LIMIT {
+            self.objects.push((key, evidence.clone()));
+        }
+        evidence
+    }
+}
+
+/// `empty_payload` of the column a JSON value types to.
+fn empty_value_payload(value: &Value) -> bool {
+    match value {
+        Value::String(s) => empty_payload(&SqlValue::Text(s.as_str().into())),
+        Value::Object(_) => false,
+        _ => true,
+    }
+}
+
+/// One observation of the book's network inventory.
+enum Observation<'a> {
+    Row(&'a NetworkRow),
+    Object(&'a Map<String, Value>),
+}
+impl<'a> Observation<'a> {
+    /// Whether its wallet column names `wallet_id`; text identifiers
+    /// compare as the strings their JSON holds.
+    fn names(&self, wallet_id: &Value) -> bool {
+        match self {
+            Self::Row(row) => match (row.wallet_id.value().as_str(), wallet_id.as_str()) {
+                (Some(a), Some(b)) => a == b,
+                _ => row.wallet_id.json() == *wallet_id,
+            },
+            Self::Object(object) => match object.get("wallet_id").unwrap_or(&Value::Null) {
+                Value::String(a) => wallet_id.as_str() == Some(a.as_str()),
+                other => {
+                    SqlValue::deserialize(other)
+                        .expect("a JSON value types as a column")
+                        .json()
+                        == *wallet_id
+                }
+            },
+        }
+    }
+
+    fn evidence(&self, remembered: &mut Remembered<'a>, configs: &mut Configs) -> Evidence {
+        match self {
+            Self::Row(row) => remembered.evidence(row, configs),
+            Self::Object(object) => remembered.object_evidence(object, configs),
+        }
+    }
+}
+
+static EMPTY_ROW: std::sync::LazyLock<NetworkRow> = std::sync::LazyLock::new(NetworkRow::default);
+
+/// `require` of a loaded snapshot's network JSON, as its typed form reads.
+pub(super) fn require_value(
+    book_network: Option<&Value>,
+    wallets: &[WalletRef],
+) -> Result<(), crate::Refusal> {
+    let missing = || {
+        Err(crate::Refusal::new(
+            "components",
+            "custody_snapshot_invalid",
+            "missing network observations",
+        ))
+    };
+    let facts = match book_network {
+        None | Some(Value::Null) => return Ok(()),
+        Some(Value::Object(facts)) => facts,
+        Some(_) => return missing(),
+    };
+    let Some(Value::Array(observations)) = facts.get("observations") else {
+        return missing();
+    };
+    let observations: Vec<_> = observations
+        .iter()
+        .map(|observation| match observation {
+            Value::Object(object) => Observation::Object(object),
+            _ => Observation::Row(&EMPTY_ROW),
+        })
+        .collect();
+    let null = Value::Null;
+    require_with(
+        &observations,
+        facts.get("references").unwrap_or(&null),
+        facts.get("binding").unwrap_or(&null),
+        wallets,
+    )
 }
 
 pub(super) fn require(
@@ -261,7 +384,23 @@ pub(super) fn require(
             "missing network observations",
         ));
     };
-    let references = facts.references.as_array().ok_or_else(|| {
+    let observations: Vec<_> = observations
+        .iter()
+        .map(|observation| match observation {
+            NetworkObject::Object(row) => Observation::Row(row),
+            NetworkObject::Other(_) => Observation::Row(&EMPTY_ROW),
+        })
+        .collect();
+    require_with(&observations, &facts.references, &facts.binding, wallets)
+}
+
+fn require_with<'a>(
+    observations: &[Observation<'a>],
+    references: &Value,
+    binding: &Value,
+    wallets: &[WalletRef],
+) -> Result<(), crate::Refusal> {
+    let references = references.as_array().ok_or_else(|| {
         crate::Refusal::new(
             "components",
             "custody_snapshot_invalid",
@@ -285,27 +424,14 @@ pub(super) fn require(
         }
     };
     let mut configs = Configs::default();
-    let empty_row = NetworkRow::default();
     let mut remembered = Remembered::default();
     for wallet in wallets {
         let wallet_id = wallet.id.json();
-        // Text identifiers compare as the strings their JSON holds.
-        let same = |column: &crate::snapshot::Column| match (
-            column.value().as_str(),
-            wallet_id.as_str(),
-        ) {
-            (Some(a), Some(b)) => a == b,
-            _ => column.json() == wallet_id,
-        };
         let mut found = false;
         for observation in observations {
-            let row = match observation {
-                NetworkObject::Object(row) => row,
-                NetworkObject::Other(_) => &empty_row,
-            };
-            if same(&row.wallet_id) {
+            if observation.names(&wallet_id) {
                 found = true;
-                add(remembered.evidence(row, &mut configs), false);
+                add(observation.evidence(&mut remembered, &mut configs), false);
             }
         }
         if !found {
@@ -334,7 +460,6 @@ pub(super) fn require(
             json!({"state":state}),
         ));
     }
-    let binding = &facts.binding;
     if !binding.is_null()
         && (environments
             .iter()
@@ -383,6 +508,72 @@ mod tests {
             for row in &rows {
                 assert_eq!(remembered.evidence(row, &mut configs), evidence(row));
             }
+        }
+    }
+    #[test]
+    fn loaded_network_json_gates_as_typed() {
+        let wallets: Vec<WalletRef> = [
+            json!({"id":"a","kind":"descriptor","config_json":"{}"}),
+            json!({"id":"b","kind":"lnd","config_json":"{\"network\":\"main\"}"}),
+            json!({"id":7,"kind":"descriptor","config_json":null}),
+            json!({"id":"lonely","kind":"descriptor","config_json":"{\"chain\":\"liquid\",\"network\":\"liquidv1\"}"}),
+        ]
+        .into_iter()
+        .map(|w| serde_json::from_value(w).unwrap())
+        .collect();
+        let configured = |wallet: Value, raw: &str, network: Value, config: &str| json!({"id":"t","wallet_id":wallet,"asset":"BTC","raw_json":raw,"config_json":config,"network":network});
+        let observation =
+            |wallet: Value, raw: &str, network: Value| configured(wallet, raw, network, "{}");
+        let networks = [
+            Value::Null,
+            json!(3),
+            json!({"observations": 5, "references": []}),
+            json!({"references": []}),
+            json!({"observations": [], "references": {}}),
+            json!({"observations": [
+                observation(json!("a"), "{}", json!("regtest")),
+                observation(json!("a"), "{}", json!("regtest")),
+                observation(json!("b"), "{\"network\":\"testnet\"}", Value::Null),
+                observation(json!(7), "{}", json!("regtest")),
+                observation(json!(7.0), "{}", json!("regtest")),
+                json!(4),
+                observation(json!("a"), "{}", json!("main")),
+            ], "references": [], "binding": null}),
+            json!({"observations": [
+                observation(json!("a"), "{}", json!("regtest")),
+                observation(json!("a"), "{\"chain_instance_id\":\"x\"}", json!("regtest")),
+            ], "references": [], "binding": {"environment":"regtest","chain_instance_id":"x"}}),
+        ];
+        // Cases read by wallet `a` alone, so other wallets add no conflict.
+        let single = [
+            json!({"observations": [
+                observation(json!("a"), "{}", Value::Null),
+                configured(json!("a"), "{}", Value::Null, "{\"chain\":\"bitcoin\",\"network\":\"regtest\"}"),
+            ], "references": [], "binding": null}),
+            // Equal columns, one with a payload naming another network.
+            json!({"observations": [
+                configured(json!("a"), "{}", Value::Null, "{\"chain\":\"bitcoin\",\"network\":\"regtest\"}"),
+                configured(json!("a"), "{\"network\":\"testnet\"}", Value::Null, "{\"chain\":\"bitcoin\",\"network\":\"regtest\"}"),
+            ], "references": [], "binding": null}),
+            // Equal columns but the configuration.
+            json!({"observations": [
+                configured(json!("a"), "{}", Value::Null, "{\"chain\":\"bitcoin\",\"network\":\"regtest\"}"),
+                configured(json!("a"), "{}", Value::Null, "{\"chain\":\"bitcoin\",\"network\":\"testnet\"}"),
+            ], "references": [], "binding": null}),
+        ];
+        let cases = networks
+            .iter()
+            .map(|network| (network, &wallets[..]))
+            .chain(single.iter().map(|network| (network, &wallets[..1])));
+        for (network, wallets) in cases {
+            let typed: Option<NetworkObject<NetworkFacts>> =
+                Deserialize::deserialize(network).unwrap();
+            let loaded = (!network.is_null()).then_some(network);
+            assert_eq!(
+                require_value(loaded, wallets),
+                require(&typed, wallets),
+                "{network}"
+            );
         }
     }
     #[test]

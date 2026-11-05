@@ -216,7 +216,11 @@ pub fn run_loaded(snapshot: &snapshot::Snapshot, finalized: bool) -> Result<Stag
     let facts = snapshot
         .admission_facts()
         .map_err(|message| Refusal::new("snapshot", "custody_snapshot_invalid", message))?;
-    gates::require_accounting_facts(&facts.book_network, &facts.wallets, &snapshot.profile)?;
+    gates::require_accounting_loaded(
+        snapshot.book_network.as_ref(),
+        &facts.wallets,
+        &snapshot.profile,
+    )?;
     let projection_rows = finalized_projection::runtime::loaded_confirmations(snapshot)
         .map_err(|code| Refusal::code("components", code))?;
     gates::require_rate_records(&snapshot.rate_rows)
