@@ -11,6 +11,11 @@ pub enum Operation {
     List {
         profile_id: String,
     },
+    /// `wallets list`: the list with each wallet's completeness class and
+    /// scan bounds (`annotate_wallet_rows`).
+    ListWithCompleteness {
+        profile_id: String,
+    },
     Get {
         profile_id: String,
         wallet: String,
@@ -61,13 +66,14 @@ fn row(r: &Row<'_>) -> kassiber_store::rusqlite::Result<Wallet> {
         label: r.get("label")?,
         kind: r.get("kind")?,
         created_at: r.get("created_at")?,
-        config: serde_json::from_str(raw.as_deref().unwrap_or("{}")).map_err(|e| {
-            kassiber_store::rusqlite::Error::FromSqlConversionFailure(
-                0,
-                kassiber_store::rusqlite::types::Type::Text,
-                Box::new(e),
-            )
-        })?,
+        config: serde_json::from_str(raw.as_deref().filter(|raw| !raw.is_empty()).unwrap_or("{}"))
+            .map_err(|e| {
+                kassiber_store::rusqlite::Error::FromSqlConversionFailure(
+                    0,
+                    kassiber_store::rusqlite::types::Type::Text,
+                    Box::new(e),
+                )
+            })?,
     })
 }
 const SELECT: &str = "SELECT w.*,a.code AS account_code,a.label AS account_label FROM wallets w LEFT JOIN accounts a ON a.id=w.account_id";
@@ -210,15 +216,43 @@ fn details(w: &Wallet) -> Result<Py, AppError> {
         ("created_at", s(w.created_at.as_str())),
     ]))
 }
+/// The exception `json.loads(config_json or "{}").pop(...)` raises for a
+/// stored configuration that is not a JSON object.
+fn config_failure(raw: Option<&str>) -> Option<AppError> {
+    let raw = raw.filter(|raw| !raw.is_empty()).unwrap_or("{}");
+    match kassiber_pytext::loads(raw) {
+        Err(error) => Some(AppError::new("internal_error", error.to_string())),
+        Ok(Py::Dict(_)) => None,
+        Ok(Py::List(_)) => Some(AppError::new(
+            "internal_error",
+            "pop expected at most 1 argument, got 2",
+        )),
+        Ok(other) => Some(AppError::new(
+            "internal_error",
+            format!(
+                "'{}' object has no attribute 'pop'",
+                kassiber_envelope::type_name(&other)
+            ),
+        )),
+    }
+}
 fn list(conn: &Connection, profile: &str) -> Result<Py, AppError> {
     let mut stmt = conn
         .prepare(&format!(
             "{SELECT} WHERE w.profile_id=? ORDER BY w.label ASC"
         ))
         .map_err(database_error)?;
-    let rows = stmt.query_map([profile], row).map_err(database_error)?;
+    let rows = stmt
+        .query_map([profile], |r| {
+            Ok((r.get::<_, Option<String>>("config_json")?, row(r)))
+        })
+        .map_err(database_error)?;
     let mut out = Vec::new();
-    for w in rows {
+    for found in rows {
+        let (raw, w) = found.map_err(database_error)?;
+        if let Some(failure) = config_failure(raw.as_deref()) {
+            return Err(failure);
+        }
         let w = w.map_err(database_error)?;
         let c = &w.config;
         let (state, chain, network) = state(c)?;
@@ -461,6 +495,16 @@ pub(crate) fn execute_with_creation_source(
 ) -> Result<Py, AppError> {
     match operation {
         Operation::List { profile_id } => list(conn, &profile_id),
+        Operation::ListWithCompleteness { profile_id } => {
+            let Py::List(rows) = list(conn, &profile_id)? else {
+                unreachable!("wallet list")
+            };
+            Ok(Py::List(crate::completeness::annotate(
+                conn,
+                &profile_id,
+                rows,
+            )?))
+        }
         Operation::Get { profile_id, wallet } => details(&load(conn, &profile_id, &wallet)?),
         operation => {
             conn.execute_batch("SAVEPOINT wallet_lifecycle")

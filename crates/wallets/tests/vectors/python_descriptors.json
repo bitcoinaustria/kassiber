@@ -75,7 +75,19 @@
               "btcpay_provenance": [],
               "samourai": null,
               "script_types": [],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "descriptor-derived",
+              "scan_bounds": {
+                "first_transaction_at": "2025-01-02T00:00:00Z",
+                "last_transaction_at": "2025-01-02T00:00:00Z",
+                "undated_transactions": 0,
+                "last_synced_at": "2025-01-03T00:00:00Z",
+                "declared_scan_start_at": "2025-01-02T00:00:00Z",
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "declared_start",
+                "deficit_assets": [],
+                "warnings": []
+              }
             },
             {
               "id": "1",
@@ -117,7 +129,21 @@
                 "p2wpkh",
                 "p2tr"
               ],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "descriptor-derived",
+              "scan_bounds": {
+                "first_transaction_at": "2025-01-02T00:00:00Z",
+                "last_transaction_at": "2025-01-02T00:00:00Z",
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "never_synced"
+                ]
+              }
             },
             {
               "id": "2",
@@ -156,7 +182,23 @@
               "btcpay_provenance": [],
               "samourai": null,
               "script_types": [],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "address-list",
+              "scan_bounds": {
+                "first_transaction_at": null,
+                "last_transaction_at": null,
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "incomplete_by_construction",
+                  "never_synced",
+                  "no_transactions"
+                ]
+              }
             },
             {
               "id": "3",
@@ -195,7 +237,22 @@
               "btcpay_provenance": [],
               "samourai": null,
               "script_types": [],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "descriptor-derived",
+              "scan_bounds": {
+                "first_transaction_at": null,
+                "last_transaction_at": null,
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": 850000,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "never_synced",
+                  "no_transactions"
+                ]
+              }
             },
             {
               "id": "4",
@@ -234,7 +291,21 @@
               "btcpay_provenance": [],
               "samourai": null,
               "script_types": [],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "file-import",
+              "scan_bounds": {
+                "first_transaction_at": null,
+                "last_transaction_at": null,
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "no_transactions"
+                ]
+              }
             },
             {
               "id": "5",
@@ -279,7 +350,22 @@
               ],
               "samourai": null,
               "script_types": [],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "provider-api",
+              "scan_bounds": {
+                "first_transaction_at": null,
+                "last_transaction_at": null,
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "never_synced",
+                  "no_transactions"
+                ]
+              }
             },
             {
               "id": "6",
@@ -330,7 +416,22 @@
                 "watch_only": true
               },
               "script_types": [],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "descriptor-derived",
+              "scan_bounds": {
+                "first_transaction_at": null,
+                "last_transaction_at": null,
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "never_synced",
+                  "no_transactions"
+                ]
+              }
             },
             {
               "id": "7",
@@ -372,7 +473,21 @@
                 "p2tr",
                 "p2wpkh"
               ],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "manual",
+              "scan_bounds": {
+                "first_transaction_at": null,
+                "last_transaction_at": null,
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "no_transactions"
+                ]
+              }
             }
           ],
           "summary": {
@@ -457,7 +572,19 @@
               "btcpay_provenance": [],
               "samourai": null,
               "script_types": [],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "descriptor-derived",
+              "scan_bounds": {
+                "first_transaction_at": "2025-01-02T00:00:00Z",
+                "last_transaction_at": "2025-01-02T00:00:00Z",
+                "undated_transactions": 0,
+                "last_synced_at": "2025-01-03T00:00:00Z",
+                "declared_scan_start_at": "2025-01-02T00:00:00Z",
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "declared_start",
+                "deficit_assets": [],
+                "warnings": []
+              }
             },
             {
               "id": "1",
@@ -499,7 +626,21 @@
                 "p2wpkh",
                 "p2tr"
               ],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "descriptor-derived",
+              "scan_bounds": {
+                "first_transaction_at": "2025-01-02T00:00:00Z",
+                "last_transaction_at": "2025-01-02T00:00:00Z",
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "never_synced"
+                ]
+              }
             },
             {
               "id": "2",
@@ -538,7 +679,23 @@
               "btcpay_provenance": [],
               "samourai": null,
               "script_types": [],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "address-list",
+              "scan_bounds": {
+                "first_transaction_at": null,
+                "last_transaction_at": null,
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "incomplete_by_construction",
+                  "never_synced",
+                  "no_transactions"
+                ]
+              }
             },
             {
               "id": "3",
@@ -577,7 +734,22 @@
               "btcpay_provenance": [],
               "samourai": null,
               "script_types": [],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "descriptor-derived",
+              "scan_bounds": {
+                "first_transaction_at": null,
+                "last_transaction_at": null,
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": 850000,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "never_synced",
+                  "no_transactions"
+                ]
+              }
             },
             {
               "id": "4",
@@ -616,7 +788,21 @@
               "btcpay_provenance": [],
               "samourai": null,
               "script_types": [],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "file-import",
+              "scan_bounds": {
+                "first_transaction_at": null,
+                "last_transaction_at": null,
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "no_transactions"
+                ]
+              }
             },
             {
               "id": "5",
@@ -661,7 +847,22 @@
               ],
               "samourai": null,
               "script_types": [],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "provider-api",
+              "scan_bounds": {
+                "first_transaction_at": null,
+                "last_transaction_at": null,
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "never_synced",
+                  "no_transactions"
+                ]
+              }
             },
             {
               "id": "6",
@@ -712,7 +913,22 @@
                 "watch_only": true
               },
               "script_types": [],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "descriptor-derived",
+              "scan_bounds": {
+                "first_transaction_at": null,
+                "last_transaction_at": null,
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "never_synced",
+                  "no_transactions"
+                ]
+              }
             },
             {
               "id": "7",
@@ -754,7 +970,21 @@
                 "p2tr",
                 "p2wpkh"
               ],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "manual",
+              "scan_bounds": {
+                "first_transaction_at": null,
+                "last_transaction_at": null,
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "no_transactions"
+                ]
+              }
             }
           ],
           "summary": {
@@ -840,7 +1070,19 @@
               "btcpay_provenance": [],
               "samourai": null,
               "script_types": [],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "descriptor-derived",
+              "scan_bounds": {
+                "first_transaction_at": "2025-01-02T00:00:00Z",
+                "last_transaction_at": "2025-01-02T00:00:00Z",
+                "undated_transactions": 0,
+                "last_synced_at": "2025-01-03T00:00:00Z",
+                "declared_scan_start_at": "2025-01-02T00:00:00Z",
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "declared_start",
+                "deficit_assets": [],
+                "warnings": []
+              }
             },
             {
               "id": "1",
@@ -882,7 +1124,21 @@
                 "p2wpkh",
                 "p2tr"
               ],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "descriptor-derived",
+              "scan_bounds": {
+                "first_transaction_at": "2025-01-02T00:00:00Z",
+                "last_transaction_at": "2025-01-02T00:00:00Z",
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "never_synced"
+                ]
+              }
             },
             {
               "id": "2",
@@ -921,7 +1177,23 @@
               "btcpay_provenance": [],
               "samourai": null,
               "script_types": [],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "address-list",
+              "scan_bounds": {
+                "first_transaction_at": null,
+                "last_transaction_at": null,
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "incomplete_by_construction",
+                  "never_synced",
+                  "no_transactions"
+                ]
+              }
             },
             {
               "id": "3",
@@ -960,7 +1232,22 @@
               "btcpay_provenance": [],
               "samourai": null,
               "script_types": [],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "descriptor-derived",
+              "scan_bounds": {
+                "first_transaction_at": null,
+                "last_transaction_at": null,
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": 850000,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "never_synced",
+                  "no_transactions"
+                ]
+              }
             },
             {
               "id": "4",
@@ -999,7 +1286,21 @@
               "btcpay_provenance": [],
               "samourai": null,
               "script_types": [],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "file-import",
+              "scan_bounds": {
+                "first_transaction_at": null,
+                "last_transaction_at": null,
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "no_transactions"
+                ]
+              }
             },
             {
               "id": "5",
@@ -1044,7 +1345,22 @@
               ],
               "samourai": null,
               "script_types": [],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "provider-api",
+              "scan_bounds": {
+                "first_transaction_at": null,
+                "last_transaction_at": null,
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "never_synced",
+                  "no_transactions"
+                ]
+              }
             },
             {
               "id": "6",
@@ -1095,7 +1411,22 @@
                 "watch_only": true
               },
               "script_types": [],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "descriptor-derived",
+              "scan_bounds": {
+                "first_transaction_at": null,
+                "last_transaction_at": null,
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "never_synced",
+                  "no_transactions"
+                ]
+              }
             },
             {
               "id": "7",
@@ -1137,7 +1468,21 @@
                 "p2tr",
                 "p2wpkh"
               ],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "manual",
+              "scan_bounds": {
+                "first_transaction_at": null,
+                "last_transaction_at": null,
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "no_transactions"
+                ]
+              }
             }
           ],
           "summary": {
@@ -1220,7 +1565,21 @@
               "btcpay_provenance": [],
               "samourai": null,
               "script_types": [],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "descriptor-derived",
+              "scan_bounds": {
+                "first_transaction_at": null,
+                "last_transaction_at": null,
+                "undated_transactions": 0,
+                "last_synced_at": "2025-01-03T00:00:00Z",
+                "declared_scan_start_at": "2025-01-02T00:00:00Z",
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "declared_start",
+                "deficit_assets": [],
+                "warnings": [
+                  "no_transactions"
+                ]
+              }
             },
             {
               "id": "1",
@@ -1262,7 +1621,22 @@
                 "p2wpkh",
                 "p2tr"
               ],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "descriptor-derived",
+              "scan_bounds": {
+                "first_transaction_at": null,
+                "last_transaction_at": null,
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "never_synced",
+                  "no_transactions"
+                ]
+              }
             },
             {
               "id": "2",
@@ -1301,7 +1675,23 @@
               "btcpay_provenance": [],
               "samourai": null,
               "script_types": [],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "address-list",
+              "scan_bounds": {
+                "first_transaction_at": null,
+                "last_transaction_at": null,
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "incomplete_by_construction",
+                  "never_synced",
+                  "no_transactions"
+                ]
+              }
             },
             {
               "id": "3",
@@ -1340,7 +1730,22 @@
               "btcpay_provenance": [],
               "samourai": null,
               "script_types": [],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "descriptor-derived",
+              "scan_bounds": {
+                "first_transaction_at": null,
+                "last_transaction_at": null,
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": 850000,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "never_synced",
+                  "no_transactions"
+                ]
+              }
             },
             {
               "id": "4",
@@ -1379,7 +1784,21 @@
               "btcpay_provenance": [],
               "samourai": null,
               "script_types": [],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "file-import",
+              "scan_bounds": {
+                "first_transaction_at": null,
+                "last_transaction_at": null,
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "no_transactions"
+                ]
+              }
             },
             {
               "id": "5",
@@ -1424,7 +1843,22 @@
               ],
               "samourai": null,
               "script_types": [],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "provider-api",
+              "scan_bounds": {
+                "first_transaction_at": null,
+                "last_transaction_at": null,
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "never_synced",
+                  "no_transactions"
+                ]
+              }
             },
             {
               "id": "6",
@@ -1475,7 +1909,22 @@
                 "watch_only": true
               },
               "script_types": [],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "descriptor-derived",
+              "scan_bounds": {
+                "first_transaction_at": null,
+                "last_transaction_at": null,
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "never_synced",
+                  "no_transactions"
+                ]
+              }
             },
             {
               "id": "7",
@@ -1517,7 +1966,21 @@
                 "p2tr",
                 "p2wpkh"
               ],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "manual",
+              "scan_bounds": {
+                "first_transaction_at": null,
+                "last_transaction_at": null,
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "no_transactions"
+                ]
+              }
             }
           ],
           "summary": {
@@ -1641,7 +2104,19 @@
               "btcpay_provenance": [],
               "samourai": null,
               "script_types": [],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "descriptor-derived",
+              "scan_bounds": {
+                "first_transaction_at": "2025-01-02T00:00:00Z",
+                "last_transaction_at": "2025-01-02T00:00:00Z",
+                "undated_transactions": 0,
+                "last_synced_at": "2025-01-03T00:00:00Z",
+                "declared_scan_start_at": "2025-01-02T00:00:00Z",
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "declared_start",
+                "deficit_assets": [],
+                "warnings": []
+              }
             },
             {
               "id": "1",
@@ -1683,7 +2158,21 @@
                 "p2wpkh",
                 "p2tr"
               ],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "descriptor-derived",
+              "scan_bounds": {
+                "first_transaction_at": "2025-01-02T00:00:00Z",
+                "last_transaction_at": "2025-01-02T00:00:00Z",
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "never_synced"
+                ]
+              }
             },
             {
               "id": "2",
@@ -1722,7 +2211,23 @@
               "btcpay_provenance": [],
               "samourai": null,
               "script_types": [],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "address-list",
+              "scan_bounds": {
+                "first_transaction_at": null,
+                "last_transaction_at": null,
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "incomplete_by_construction",
+                  "never_synced",
+                  "no_transactions"
+                ]
+              }
             },
             {
               "id": "3",
@@ -1761,7 +2266,22 @@
               "btcpay_provenance": [],
               "samourai": null,
               "script_types": [],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "descriptor-derived",
+              "scan_bounds": {
+                "first_transaction_at": null,
+                "last_transaction_at": null,
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": 850000,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "never_synced",
+                  "no_transactions"
+                ]
+              }
             },
             {
               "id": "4",
@@ -1800,7 +2320,21 @@
               "btcpay_provenance": [],
               "samourai": null,
               "script_types": [],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "file-import",
+              "scan_bounds": {
+                "first_transaction_at": null,
+                "last_transaction_at": null,
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "no_transactions"
+                ]
+              }
             },
             {
               "id": "5",
@@ -1845,7 +2379,22 @@
               ],
               "samourai": null,
               "script_types": [],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "provider-api",
+              "scan_bounds": {
+                "first_transaction_at": null,
+                "last_transaction_at": null,
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "never_synced",
+                  "no_transactions"
+                ]
+              }
             },
             {
               "id": "6",
@@ -1896,7 +2445,22 @@
                 "watch_only": true
               },
               "script_types": [],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "descriptor-derived",
+              "scan_bounds": {
+                "first_transaction_at": null,
+                "last_transaction_at": null,
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "never_synced",
+                  "no_transactions"
+                ]
+              }
             },
             {
               "id": "7",
@@ -1938,7 +2502,21 @@
                 "p2tr",
                 "p2wpkh"
               ],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "manual",
+              "scan_bounds": {
+                "first_transaction_at": null,
+                "last_transaction_at": null,
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "no_transactions"
+                ]
+              }
             }
           ],
           "summary": {
@@ -2021,7 +2599,21 @@
               "btcpay_provenance": [],
               "samourai": null,
               "script_types": [],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "descriptor-derived",
+              "scan_bounds": {
+                "first_transaction_at": "2025-01-02T00:00:00Z",
+                "last_transaction_at": "2025-01-02T00:00:00Z",
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "never_synced"
+                ]
+              }
             },
             {
               "id": "1",
@@ -2063,7 +2655,21 @@
                 "p2wpkh",
                 "p2tr"
               ],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "descriptor-derived",
+              "scan_bounds": {
+                "first_transaction_at": "2025-01-02T00:00:00Z",
+                "last_transaction_at": "2025-01-02T00:00:00Z",
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "never_synced"
+                ]
+              }
             },
             {
               "id": "2",
@@ -2102,7 +2708,23 @@
               "btcpay_provenance": [],
               "samourai": null,
               "script_types": [],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "address-list",
+              "scan_bounds": {
+                "first_transaction_at": null,
+                "last_transaction_at": null,
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "incomplete_by_construction",
+                  "never_synced",
+                  "no_transactions"
+                ]
+              }
             },
             {
               "id": "3",
@@ -2141,7 +2763,22 @@
               "btcpay_provenance": [],
               "samourai": null,
               "script_types": [],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "descriptor-derived",
+              "scan_bounds": {
+                "first_transaction_at": null,
+                "last_transaction_at": null,
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": 850000,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "never_synced",
+                  "no_transactions"
+                ]
+              }
             },
             {
               "id": "4",
@@ -2180,7 +2817,21 @@
               "btcpay_provenance": [],
               "samourai": null,
               "script_types": [],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "file-import",
+              "scan_bounds": {
+                "first_transaction_at": null,
+                "last_transaction_at": null,
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "no_transactions"
+                ]
+              }
             },
             {
               "id": "5",
@@ -2225,7 +2876,22 @@
               ],
               "samourai": null,
               "script_types": [],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "provider-api",
+              "scan_bounds": {
+                "first_transaction_at": null,
+                "last_transaction_at": null,
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "never_synced",
+                  "no_transactions"
+                ]
+              }
             },
             {
               "id": "6",
@@ -2276,7 +2942,22 @@
                 "watch_only": true
               },
               "script_types": [],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "descriptor-derived",
+              "scan_bounds": {
+                "first_transaction_at": null,
+                "last_transaction_at": null,
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "never_synced",
+                  "no_transactions"
+                ]
+              }
             },
             {
               "id": "7",
@@ -2318,7 +2999,21 @@
                 "p2tr",
                 "p2wpkh"
               ],
-              "created_at": "2025-01-01T00:00:00Z"
+              "created_at": "2025-01-01T00:00:00Z",
+              "completeness_class": "manual",
+              "scan_bounds": {
+                "first_transaction_at": null,
+                "last_transaction_at": null,
+                "undated_transactions": 0,
+                "last_synced_at": null,
+                "declared_scan_start_at": null,
+                "declared_scan_start_height": null,
+                "history_before_first_transaction": "unknown",
+                "deficit_assets": [],
+                "warnings": [
+                  "no_transactions"
+                ]
+              }
             }
           ],
           "summary": {

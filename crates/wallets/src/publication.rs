@@ -7,7 +7,7 @@ use kassiber_store::rusqlite::{params, params_from_iter, Connection, OptionalExt
 use serde_json::{json, Value};
 use std::collections::BTreeSet;
 
-mod balance;
+pub(crate) mod balance;
 pub mod insert;
 pub mod inventory;
 pub(crate) mod physical;

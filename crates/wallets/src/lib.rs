@@ -1,5 +1,6 @@
 //! Watch-only wallet services. Local operations are inert; compatibility
 //! discovery requires its own explicit action grant and the network gate.
+pub mod completeness;
 pub mod config;
 pub mod file_import;
 mod silent_payments;

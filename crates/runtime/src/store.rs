@@ -413,6 +413,16 @@ pub trait Book: Send {
     fn transaction_graph(&mut self, _args: Option<&Value>) -> Result<Value, AppError> {
         Err(not_implemented("transactions", "transaction graph"))
     }
+    /// `transactions verify`: one transaction against its stored chain graph.
+    /// Local only; never contacts the network or writes.
+    fn verify_transaction(
+        &mut self,
+        _workspace: Option<&Value>,
+        _profile: Option<&Value>,
+        _transaction: &str,
+    ) -> Result<Value, AppError> {
+        Err(not_implemented("transactions", "transaction verification"))
+    }
     /// `ui.audit.evidence.summary`: the audit package's evidence surface for
     /// the active book, without copying files or writing an export.
     fn evidence_summary(&mut self, _args: &Value) -> Result<Value, AppError> {

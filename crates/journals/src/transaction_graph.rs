@@ -17,6 +17,9 @@ use kassiber_store::rusqlite::{params_from_iter, types::Value as Sql, Connection
 
 use crate::report_blockers::{rows, sql_error, val};
 
+mod verify;
+pub use verify::verify;
+
 type Result<T> = std::result::Result<T, AppError>;
 
 const MAX_NODES_PER_SIDE: usize = 250;
@@ -2733,6 +2736,17 @@ fn key_text(key: &Key) -> String {
 }
 
 /// `build_transaction_graph_snapshot(conn, args, runtime_config)`.
+/// `_fetch_transaction`: the row by id, else the newest by external id.
+fn fetch(conn: &Connection, profile_id: &str, reference: &str) -> Result<Option<Value>> {
+    Ok(rows(
+        conn,
+        "SELECT t.*, w.label AS wallet_label, w.kind AS wallet_kind, w.config_json AS wallet_config_json, w.account_id AS wallet_account_id, COALESCE(a.code, 'treasury') AS account_code, COALESCE(a.label, 'Treasury') AS account_label, jq.reason AS quarantine_reason, jq.detail_json AS quarantine_detail_json FROM transactions t JOIN wallets w ON w.id = t.wallet_id LEFT JOIN accounts a ON a.id = w.account_id LEFT JOIN journal_quarantines jq ON jq.transaction_id = t.id WHERE t.profile_id = ? AND (t.id = ? OR t.external_id = ?) ORDER BY CASE WHEN t.id = ? THEN 0 ELSE 1 END, t.occurred_at DESC, t.created_at DESC, t.id DESC LIMIT 1",
+        [profile_id, reference, reference, reference],
+    )?
+    .into_iter()
+    .next())
+}
+
 pub fn snapshot(conn: &Connection, args: Option<&Value>) -> Result<Value> {
     let args = match args {
         Some(v @ Value::Dict(_)) => v.clone(),
@@ -2773,13 +2787,7 @@ pub fn snapshot(conn: &Connection, args: Option<&Value>) -> Result<Value> {
     if profile_id.is_empty() {
         return Ok(empty_payload(&reference, "no_active_profile"));
     }
-    let Some(row) = rows(
-        conn,
-        "SELECT t.*, w.label AS wallet_label, w.kind AS wallet_kind, w.config_json AS wallet_config_json, w.account_id AS wallet_account_id, COALESCE(a.code, 'treasury') AS account_code, COALESCE(a.label, 'Treasury') AS account_label, jq.reason AS quarantine_reason, jq.detail_json AS quarantine_detail_json FROM transactions t JOIN wallets w ON w.id = t.wallet_id LEFT JOIN accounts a ON a.id = w.account_id LEFT JOIN journal_quarantines jq ON jq.transaction_id = t.id WHERE t.profile_id = ? AND (t.id = ? OR t.external_id = ?) ORDER BY CASE WHEN t.id = ? THEN 0 ELSE 1 END, t.occurred_at DESC, t.created_at DESC, t.id DESC LIMIT 1",
-        [&profile_id, &reference, &reference, &reference],
-    )?
-    .into_iter()
-    .next() else {
+    let Some(row) = fetch(conn, &profile_id, &reference)? else {
         return Ok(empty_payload(&reference, "not_found"));
     };
     let profile = rows(conn, "SELECT * FROM profiles WHERE id = ?", [&profile_id])?

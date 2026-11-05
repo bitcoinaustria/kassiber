@@ -450,6 +450,23 @@ pub fn owned_index(
     Ok((index.encode(references), warnings))
 }
 
+/// [`owned_index`] plus every wallet id the whole index names by script,
+/// address or outpoint (`transaction_verify._observed_wallet_ids`).
+pub fn owned_index_and_wallets(
+    conn: &Connection,
+    profile_id: &str,
+    references: &BTreeSet<String>,
+) -> Result<(Value, Vec<Value>, BTreeSet<String>)> {
+    let (index, warnings) = build(conn, profile_id, true)?;
+    let wallets = [&index.scripts, &index.addresses, &index.outpoints]
+        .into_iter()
+        .flat_map(|groups| &groups.entries)
+        .flat_map(|(_, matches)| matches)
+        .map(|item| text(get(item, "wallet_id")))
+        .collect();
+    Ok((index.encode(references), warnings, wallets))
+}
+
 fn build(conn: &Connection, profile_id: &str, branches: bool) -> Result<(Index, Vec<Value>)> {
     let wallets=query(conn,"SELECT w.id,w.label,w.kind,w.config_json,a.code AS account_code,a.label AS account_label FROM wallets w LEFT JOIN accounts a ON a.id=w.account_id WHERE w.profile_id=? ORDER BY w.label ASC",[profile_id])?;
     let summary_rows = query(

@@ -130,7 +130,7 @@ pub fn execute(
                 },
             })
         }
-        "list" => Operation::List { profile_id },
+        "list" => Operation::ListWithCompleteness { profile_id },
         "get" => Operation::Get { profile_id, wallet },
         "delete" => Operation::Delete {
             profile_id,
