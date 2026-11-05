@@ -41,6 +41,9 @@ _run = checker._run
 def _offline(command, cwd, env):
     if command[0] == "cargo":
         command = [command[0], "--offline", *command[1:]]
+        # The build cache lives in the scratch tree, so removing the tree
+        # removes it and no earlier run's artifacts are reused.
+        env = {**env, "CARGO_BUILD_BUILD_DIR": str(Path(cwd) / "target" / "build-dir")}
     return _run(command, cwd, env)
 
 
