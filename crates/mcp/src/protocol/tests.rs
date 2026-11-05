@@ -783,7 +783,7 @@ fn non_json_constants_are_parse_errors() {
             "{{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{{\"name\":\"echo\",\"arguments\":{{\"x\":{constant}}}}}}}\n"
         );
         let lines = serve_bytes(server(Fake::open()), input.into_bytes(), SHUTDOWN_DRAIN);
-        assert_eq!(error_code(&lines[0]), PARSE_ERROR, "{constant}");
+        assert_eq!(error_code(&lines[0]), -32700, "{constant}");
     }
     // A literal that overflows is a float, as in json.loads.
     let input = format!(

@@ -654,7 +654,8 @@ fn a_running_call_is_polled_until_it_ends() {
         "{}",
     );
     assert!(!outcome.is_error, "{:?}", outcome.structured);
-    // Two polls at Python's 0.1 s.
+    // Two polls at Python's 0.1 s (`_BROKER_POLL_SECONDS`).
+    assert_eq!(BROKER_POLL, Duration::from_millis(100));
     assert!(started.elapsed() >= Duration::from_millis(200));
     assert_eq!(
         actions(&broker),

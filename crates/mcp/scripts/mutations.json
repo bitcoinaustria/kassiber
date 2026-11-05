@@ -107,8 +107,7 @@
     "find": "matches!(value, Value::Str(_) | Value::Int(_))",
     "replace": "matches!(value, Value::Str(_) | Value::Int(_) | Value::Bool(_))",
     "expect_failing": [
-      "envelope_errors_follow_python_order",
-      "string_and_integer_ids_are_echoed_as_sent"
+      "envelope_errors_follow_python_order"
     ],
     "rule": "Request ids are strings or integers, never bools."
   },
