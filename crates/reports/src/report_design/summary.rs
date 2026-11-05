@@ -371,17 +371,18 @@ pub fn summary(model: &Value) -> Document {
         table.note = t("holdings.now_note").into();
         holdings.push(Block::Table(table));
     }
-    sections.push(Section {
+    let holdings = Section {
         id: "holdings",
         title: t("holdings.title").into(),
         lead: t("holdings.lead").into(),
         page_break: false,
         landscape: false,
         blocks: holdings,
-    });
+    };
 
-    // 4. Activity: charts and the month table. It follows the holdings on
-    // page 1 when it fits; charts never split across pages.
+    // 4. Activity: charts and the month table. It comes before the holdings
+    // so it starts on page 1 (charts never split across pages and would
+    // otherwise leave the rest of the page empty).
     let history = list(report, "balance_history");
     let flows = list(report, "flow_periods");
     let realized = list(report, "realized_pnl_periods");
@@ -461,6 +462,7 @@ pub fn summary(model: &Value) -> Document {
         landscape: false,
         blocks,
     });
+    sections.push(holdings);
 
     // 5. Largest disposals and movements
     let disposals = list(report, "top_disposals");

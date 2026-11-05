@@ -64,7 +64,7 @@
   if block.title != "" { std.block(sticky: true, below: 4pt, text(size: 8pt, weight: 500, block.title)) }
   let cols = block.columns
   let aligns = cols.map(c => if c.align == "right" { right } else { left })
-  let header = cols.map(c => text(size: 7pt, weight: 500, fill: muted, hyphenate: true, c.label))
+  let header = cols.map(c => text(size: 7pt, weight: 500, fill: muted, hyphenate: false, c.label))
   let body = block.rows.map(row => row.enumerate().map(((i, value)) =>
     cell-text(value, mono-face: cols.at(i).mono, tabular: cols.at(i).align == "right"))).flatten()
   let total = if block.total == none { () } else {
@@ -74,8 +74,40 @@
   }
   // A row never splits across pages.
   set table.cell(breakable: false)
+  // Headers and text wrap only at spaces and figures never wrap, so every
+  // column is at least as wide as its longest word and its widest figure.
+  // The weights share out the page; a column wider than its content gives
+  // its spare room first, and only then do text columns wrap.
+  let inset = 4pt
+  layout(size => {
+  let pad = 2 * inset + 0.5pt
+  let longest(items) = (..items, 0pt).fold(0pt, calc.max)
+  let fits = cols.enumerate().map(((i, c)) => {
+    let label = c.label.split(" ").map(w => measure(text(size: 7pt, weight: 500, w)).width)
+    let cells = block.rows.map(row => row.at(i))
+    if block.total != none { cells.push(block.total.at(i)) }
+    let whole = cells.map(v => measure(cell-text(v, tabular: c.align == "right", mono-face: c.mono)).width)
+    let words = if c.align == "right" { whole } else if c.mono { () } else {
+      cells.map(v => v.split(" ").map(w => measure(cell-text(w)).width)).flatten()
+    }
+    (need: longest((..label, ..words)) + pad, natural: longest((..label, ..whole)) + pad)
+  })
+  let need = fits.map(f => f.need)
+  let natural = fits.map(f => calc.max(f.need, f.natural))
+  let weight-sum = cols.map(c => c.width).sum()
+  let widths = cols.zip(need).map(((c, n)) => calc.max(size.width * c.width / weight-sum, n))
+  let give(widths, floor) = {
+    let extra = widths.sum() - size.width
+    let spare = widths.zip(floor).map(((w, f)) => calc.max(0pt, w - f))
+    let total = spare.sum()
+    if extra <= 0pt or total <= 0pt { widths } else {
+      let take = calc.min(extra, total)
+      widths.zip(spare).map(((w, sp)) => w - take * (sp / total))
+    }
+  }
+  let widths = give(give(widths, natural), need)
   table(
-    columns: cols.map(c => if c.width == "auto" { auto } else { 1fr * c.width }),
+    columns: widths,
     align: (x, y) => aligns.at(x) + top,
     stroke: (x, y) => (
       bottom: if y == 0 { 0.5pt + ink } else { none },
@@ -86,6 +118,7 @@
     ..body,
     ..total,
   )
+  })
   if block.note != "" { v(3pt); text(size: 7pt, fill: muted, block.note) }
 }
 

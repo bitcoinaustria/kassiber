@@ -189,8 +189,9 @@ reads either book the same way.
   dashed, quantity thin on a second axis) and monthly bars (gain/loss,
   inflow/outflow). Axes step on round values (1, 2, 2.5 or 5 times a power of
   ten: `0`, `20k`, `40k`; German `20 Tsd.`, `1,5 Mio.`), one hairline per
-  tick. Charts never split across pages; the Activity section follows the
-  holdings on page 1 when it fits.
+  tick. Charts never split across pages, so the summary puts its Activity
+  section right after the headline figures, where it starts on page 1, and
+  the holdings after it.
 
 ## XLSX
 
