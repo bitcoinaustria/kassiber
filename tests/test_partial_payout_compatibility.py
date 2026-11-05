@@ -128,13 +128,13 @@ def test_older_rebuild_cannot_reuse_current_semantics_stamp(tmp_path, rebuild_cu
     conn = open_db(tmp_path)
     try:
         assert not projection_freshness(conn, 'profile')['is_current']
-        command = [sys.executable, '-m', 'kassiber', '--machine', '--data-root', str(tmp_path),
+        command = ['--machine', '--data-root', str(tmp_path),
                    'reports', 'capital-gains', '--workspace', 'Books', '--profile', 'Book']
-        stale = json.loads(subprocess.run(command, capture_output=True, text=True).stdout)
+        stale = json.loads(cli_runner.run(command, capture_output=True, text=True).stdout)
         assert stale['kind'] == 'error'
         process_journals(conn, 'Books', 'Book')
         assert projection_freshness(conn, 'profile')['is_current']
-        report = json.loads(subprocess.run(command, capture_output=True, text=True).stdout)
+        report = json.loads(cli_runner.run(command, capture_output=True, text=True).stdout)
         assert sum(Decimal(str(row['proceeds'])) for row in report['data']) == Decimal('11.2')
     finally:
         conn.close()
