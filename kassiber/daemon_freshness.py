@@ -2728,19 +2728,10 @@ def _auto_process_journals_if_needed(conn: sqlite3.Connection) -> dict[str, Any]
     if profile is None:
         return None
     profile_id = profile["id"]
-    active_count = conn.execute(
-        "SELECT COUNT(*) AS count FROM transactions WHERE profile_id = ? AND excluded = 0",
-        (profile_id,),
-    ).fetchone()["count"]
-    active_count = int(active_count or 0)
-    if active_count == 0:
+    freshness = core_custody_journal.projection_freshness(conn, profile_id)
+    if freshness["active_transaction_count"] == 0:
         return None
-    if (
-        profile["last_processed_at"]
-        and _row_int(profile, "last_processed_tx_count") == active_count
-        and _row_int(profile, "last_processed_input_version")
-        == _row_int(profile, "journal_input_version")
-    ):
+    if freshness["is_current"]:
         return None
     return _journals_process_payload(conn)
 

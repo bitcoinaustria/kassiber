@@ -1,3 +1,4 @@
+import { redactCredentials } from "./secretScanner";
 export type AppLogLevel = "trace" | "debug" | "info" | "warning" | "error";
 
 export type AppLogFieldType =
@@ -104,51 +105,35 @@ const BARE_BIP39_WORD_RUN_PATTERNS: Array<[RegExp, TextBackstopReplacement]> =
   ]);
 
 const SECRET_FLOOR_TEXT_PATTERNS: Array<[RegExp, TextBackstopReplacement]> = [
-  [
-    /\b(mnemonic|recovery[_-]?phrase|seed(?:[_-]?phrase)?)\b(\s*[:=]\s*)(.+)$/gim,
-    "$1$2[redacted]",
-  ],
-  [
-    /\b((?:https?|tcp|ssl):\/\/)([^/\s:@]+):([^@\s/]+)@/gi,
-    "$1[redacted-credentials]@",
-  ],
   ...BARE_BIP39_WORD_RUN_PATTERNS,
+  [/(?<![A-Za-z0-9_])nsec1[023456789acdefghjklmnpqrstuvwxyz]{20,}(?![A-Za-z0-9_])/gi, "[redacted-private-key]"],
+  [/(?<![A-Za-z0-9_])(?:5[1-9A-HJ-NP-Za-km-z]{49,50}|[KL][1-9A-HJ-NP-Za-km-z]{50,51})(?![A-Za-z0-9_])/g, "[redacted-private-key]"],
   [
-    /\b(?:xprv|tprv|yprv|zprv|uprv|vprv)[1-9A-HJ-NP-Za-km-z]{20,}\b/g,
+    /(?<![A-Za-z0-9_])(?:xprv|tprv|yprv|zprv|uprv|vprv)[A-Za-z0-9]{16,}(?![A-Za-z0-9_])/gi,
     "[redacted-private-key]",
   ],
   [
-    /\b(?:xpub|tpub|ypub|zpub|upub|vpub)[1-9A-HJ-NP-Za-km-z]{20,}\b/g,
+    /(?<![A-Za-z0-9_])(?:xpub|tpub|ypub|zpub|upub|vpub)[1-9A-HJ-NP-Za-km-z]{20,}(?![A-Za-z0-9_])/gi,
     "[redacted-extended-key]",
   ],
   [
-    /\bsp\([^\n]{8,800}\)(?:#[a-z0-9]{8})?/gi,
+    /(?<![A-Za-z0-9_])sp\([^\n]{8,800}\)(?:#[a-z0-9]{8})?/gi,
     (match) => maskDescriptor(match),
   ],
   [
-    /\b(?:t?spscan|t?spspend)1[023456789acdefghjklmnpqrstuvwxyz]{20,1020}\b/gi,
+    /(?<![A-Za-z0-9_])(?:t?spscan|t?spspend)1[023456789acdefghjklmnpqrstuvwxyz]{20,1020}(?![A-Za-z0-9_])/gi,
     "[redacted-silent-payment-key]",
   ],
   [
-    /\b(?:sp|tsp)1[023456789acdefghjklmnpqrstuvwxyz]{100,1020}\b/gi,
+    /(?<![A-Za-z0-9_])(?:sp|tsp)1[023456789acdefghjklmnpqrstuvwxyz]{100,1020}(?![A-Za-z0-9_])/gi,
     "[redacted-silent-payment-address]",
   ],
   [
-    /\b(wpkh|sh|wsh|tr|pkh|combo|sp)\([^\n]{16,400}\)(?:#[a-z0-9]{8})?/gi,
-    (match) => maskDescriptor(match),
+    /(?<![A-Za-z0-9_])(wpkh|sh|wsh|tr|pkh|combo)\([^)\n]{16,400}\)/gi,
+    "[redacted-descriptor]",
   ],
-  [/\b[Bb]earer\s+[A-Za-z0-9._~+/-]+=*/g, "Bearer [redacted]"],
-  [
-    /\b(api[_-]?key|auth[_-]?header|blinding(?:[_-]?key)?|cookie|descriptor|passphrase|password|secret|silent[_-]?payments?(?:[_-]?(?:descriptor|key|material|scan))?|sp[_-]?descriptor|spscan|spspend|token)\b(\s*[:=]\s*)([^\s,;"']+)/gi,
-    "$1$2[redacted]",
-  ],
-  // JSON-shaped assignments, e.g. a logged object `{"api_key":"sk-..."}`. The
-  // pattern above stops at the key's closing quote, so the quoted value
-  // survives without this; keep the key and redact the value in place.
-  [
-    /("(?:api[_-]?key|auth[_-]?header|blinding(?:[_-]?key)?|cookie|descriptor|mnemonic|recovery[_-]?phrase|passphrase|password|secret|seed(?:[_-]?(?:phrase|words))?|silent[_-]?payments?(?:[_-]?(?:descriptor|key|material|scan))?|sp[_-]?descriptor|spscan|spspend|token|xprv)"\s*:\s*)"[^"]*"/gi,
-    '$1"[redacted]"',
-  ],
+  [/(?<![A-Za-z0-9_])[Bb]earer[ \t\r\n\v\f\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+[A-Za-z0-9._~+/-]+=*/g, "Bearer [redacted]"],
+  [/(?<![A-Za-z0-9_])sk-[A-Za-z0-9._~+/-]{6,}(?![A-Za-z0-9_])/g, "[redacted-secret]"],
 ];
 
 const PUBLIC_SAFE_AMOUNT_NUMBER =
@@ -214,28 +199,31 @@ function isMarketRateTail(full: string, offset: number): boolean {
 const AMOUNT_ID_RE =
   /(?<![A-Za-z0-9_-])(?:[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}|[0-9a-f]{32})(?![A-Za-z0-9_-])/gi;
 
-function amountIdGuard(text: string): (offset: number, length: number) => boolean {
-  const spans = Array.from(text.matchAll(AMOUNT_ID_RE), (match) =>
-    [match.index, match.index + match[0].length] as const,
-  );
-  return (offset, length) => spans.some(([start, end]) => offset < end && offset + length > start);
+function replaceOutsideAmountIds(text: string, replace: (segment: string) => string): string {
+  const parts: string[] = [];
+  let cursor = 0;
+  for (const identity of text.matchAll(AMOUNT_ID_RE)) {
+    parts.push(replace(text.slice(cursor, identity.index)), identity[0]);
+    cursor = identity.index + identity[0].length;
+  }
+  parts.push(replace(text.slice(cursor)));
+  return parts.join("");
 }
 
 function replaceAmounts(text: string, showScale: boolean): string {
-  const overlapsId = amountIdGuard(text);
-  return text.replace(
+  return replaceOutsideAmountIds(text, (segment) => segment.replace(
     AMOUNT_TOKEN_RE,
     (match: string, offset: number, full: string) => {
       // A market rate ("BTC/EUR 64000.12") is public data, not the user's
       // amount — its trailing "EUR 64000.12" is preceded by the pair separator,
       // so leave it readable (public_safe masks the whole rate separately).
-      if (overlapsId(offset, match.length) || isMarketRateTail(full, offset)) return match;
+      if (isMarketRateTail(full, offset)) return match;
       const numMatch = match.match(/[+-]?\d[\d.,_ ]*\d|[+-]?\d/);
       const num = numMatch ? numMatch[0] : match;
       const unit = match.replace(num, "").replace(/\s+/g, "").trim();
       return pseudoAmount(num, unit, showScale);
     },
-  );
+  ));
 }
 
 // Glued/keyed sat amounts: amount_sat=50000, fee_msat: 100000, "value_sats":12345.
@@ -246,15 +234,13 @@ const KEYED_AMOUNT_RE =
   /\b([A-Za-z][A-Za-z0-9_]*(?:msats?|sats?))\b(['"]?\s*[:=]\s*['"]?)([+-]?\d[\d.,_]*\d|[+-]?\d)/gi;
 
 function replaceKeyedAmounts(text: string, showScale: boolean): string {
-  const overlapsId = amountIdGuard(text);
-  return text.replace(
+  return replaceOutsideAmountIds(text, (segment) => segment.replace(
     KEYED_AMOUNT_RE,
-    (match: string, key: string, sep: string, num: string, offset: number) => {
-      if (overlapsId(offset, match.length)) return match;
+    (_match: string, key: string, sep: string, num: string) => {
       const unit = /msat/i.test(key) ? "msat" : "sat";
       return `${key}${sep}${pseudoAmount(num, unit, showScale)}`;
     },
-  );
+  ));
 }
 
 export function subscribeAppLogRecords(listener: () => void): () => void {
@@ -674,7 +660,7 @@ function redactTextForMode(value: string, options: AppLogRenderOptions): string 
 }
 
 function redactSecretFloorText(value: string): string {
-  return applyTextBackstop(value, SECRET_FLOOR_TEXT_PATTERNS);
+  return applyTextBackstop(redactCredentials(value), SECRET_FLOOR_TEXT_PATTERNS);
 }
 
 // high_signal keeps operational data (addresses, paths, URLs, labels) readable

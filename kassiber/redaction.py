@@ -6,10 +6,13 @@ import re
 import secrets
 from typing import Any
 
+from kassiber.redaction_scanner import redact_credentials
+
 
 SENSITIVE_KEY_PARTS = (
     "api_key",
     "api-key",
+    "authorization",
     "auth_header",
     "auth-header",
     "auth_response",
@@ -18,6 +21,10 @@ SENSITIVE_KEY_PARTS = (
     "descriptor",
     "mnemonic",
     "password",
+    "rpcauth",
+    "rpc_auth",
+    "rune",
+    "macaroon",
     "passphrase",
     "private",
     "recovery",
@@ -36,42 +43,16 @@ SENSITIVE_KEY_PARTS = (
     "xprv",
 )
 
-_PRIVATE_KEY_RE = re.compile(r"\b(?:xprv|tprv|yprv|zprv|uprv|vprv)[1-9A-HJ-NP-Za-km-z]{20,}\b")
-_EXTENDED_KEY_RE = re.compile(r"\b(?:xpub|tpub|ypub|zpub|upub|vpub)[1-9A-HJ-NP-Za-km-z]{20,}\b")
-_DESCRIPTOR_RE = re.compile(r"\b(?:wpkh|sh|wsh|tr|pkh|combo)\([^)\n]{16,}\)", re.IGNORECASE)
-_SP_DESCRIPTOR_RE = re.compile(r"\bsp\([^)\n]{8,}\)", re.IGNORECASE)
-_SP_KEY_RE = re.compile(r"\b(?:t?spscan|t?spspend)1q[023456789acdefghjklmnpqrstuvwxyz]{8,}\b", re.IGNORECASE)
-_SP_ADDRESS_RE = re.compile(r"\b(?:t?sp)1q[023456789acdefghjklmnpqrstuvwxyz]{20,}\b", re.IGNORECASE)
-_BEARER_RE = re.compile(r"\b[Bb]earer\s+[A-Za-z0-9._~+/-]+=*")
-_SK_SECRET_RE = re.compile(r"\bsk-[A-Za-z0-9._~+/-]{6,}\b")
-_ASSIGNED_SECRET_RE = re.compile(
-    r"(?P<key>\b(?:api[_-]?key|auth[_-]?header|blinding(?:[_-]?key)?|cookie|descriptor|mnemonic|"
-    r"passphrase|password|recovery[_-]?phrase|scan[_-]?key|secret|"
-    r"seed(?:[_-]?(?:phrase|words))?|silent[_-]?payment[_-]?scan[_-]?key|"
-    r"sp[_-]?descriptor|spscan|spspend|token)\b)"
-    r"(?P<sep>\s*[:=]\s*)"
-    r"(?P<quote>['\"]?)"
-    r"(?P<value>[^'\"\s,;}{]+)",
-    re.IGNORECASE,
-)
-_JSON_SECRET_RE = re.compile(
-    r"(?P<prefix>['\"](?:api[_-]?key|auth[_-]?header|blinding(?:[_-]?key)?|cookie|descriptor|mnemonic|"
-    r"passphrase|password|recovery[_-]?phrase|scan[_-]?key|secret|"
-    r"seed(?:[_-]?(?:phrase|words))?|silent[_-]?payment[_-]?scan[_-]?key|"
-    r"sp[_-]?descriptor|spscan|spspend|token)"
-    r"['\"]\s*:\s*['\"])"
-    r"(?P<value>[^'\"]+)",
-    re.IGNORECASE,
-)
-_RECOVERY_ASSIGNMENT_RE = re.compile(
-    r"(?P<key>\b(?:mnemonic|recovery[_-]?phrase|seed(?:[_-]?(?:phrase|words))?)\b)"
-    r"(?P<sep>\s*[:=]\s*)"
-    r"(?P<quote>['\"]?)"
-    r"(?P<value>[^,;}{]*?)"
-    r"(?=(?:\s+[A-Za-z0-9_.-]+\s*[:=])|[,;}'\"]|$)",
-    re.IGNORECASE,
-)
-
+_PRIVATE_KEY_RE = re.compile(r"(?<![A-Za-z0-9_])(?:xprv|tprv|yprv|zprv|uprv|vprv)[A-Za-z0-9]{16,}(?![A-Za-z0-9_])", re.IGNORECASE | re.ASCII)
+_EXTENDED_KEY_RE = re.compile(r"(?<![A-Za-z0-9_])(?:xpub|tpub|ypub|zpub|upub|vpub)[1-9A-HJ-NP-Za-km-z]{20,}(?![A-Za-z0-9_])", re.IGNORECASE | re.ASCII)
+_DESCRIPTOR_RE = re.compile(r"(?<![A-Za-z0-9_])(?:wpkh|sh|wsh|tr|pkh|combo)\([^)\n]{16,}\)", re.IGNORECASE | re.ASCII)
+_SP_DESCRIPTOR_RE = re.compile(r"(?<![A-Za-z0-9_])sp\([^)\n]{8,}\)", re.IGNORECASE | re.ASCII)
+_SP_KEY_RE = re.compile(r"(?<![A-Za-z0-9_])(?:t?spscan|t?spspend)1q[023456789acdefghjklmnpqrstuvwxyz]{8,}(?![A-Za-z0-9_])", re.IGNORECASE | re.ASCII)
+_SP_ADDRESS_RE = re.compile(r"(?<![A-Za-z0-9_])(?:t?sp)1q[023456789acdefghjklmnpqrstuvwxyz]{20,}(?![A-Za-z0-9_])", re.IGNORECASE | re.ASCII)
+_WIF_RE = re.compile(r"(?<![A-Za-z0-9_])(?:5[1-9A-HJ-NP-Za-km-z]{49,50}|[KL][1-9A-HJ-NP-Za-km-z]{50,51})(?![A-Za-z0-9_])", re.ASCII)
+_BEARER_RE = re.compile(r"(?<![A-Za-z0-9_])[Bb]earer[ \t\r\n\v\f\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+[A-Za-z0-9._~+/-]+=*", re.ASCII)
+_NOSTR_SECRET_RE = re.compile(r"(?<![A-Za-z0-9_])nsec1[023456789acdefghjklmnpqrstuvwxyz]{20,}(?![A-Za-z0-9_])", re.IGNORECASE | re.ASCII)
+_SK_SECRET_RE = re.compile(r"(?<![A-Za-z0-9_])sk-[A-Za-z0-9._~+/-]{6,}(?![A-Za-z0-9_])", re.ASCII)
 # --- Operational pseudonymization (txids + amounts) -------------------------
 # Unlike the secret floor above (credentials), txids and amounts are not
 # secrets but ARE the wallet fingerprint: a single txid/amount lets an AI
@@ -148,36 +129,33 @@ def redact_operational_text(value: str) -> str:
         key = f"{_AMOUNT_PSEUDONYM_SALT}|{re.sub(r'[,_ ]', '', num)}|{unit.lower()}"
         return f"amount#{_stable_hash(key)}"
 
-    id_spans = [match.span() for match in _AMOUNT_ID_RE.finditer(text)]
+    def _redact_segment(segment: str) -> str:
+        def _amount(match: re.Match[str]) -> str:
+            token = match.group(0)
+            if _is_market_rate_tail(segment, match.start()):
+                return token
+            num_match = _AMOUNT_NUM_RE.search(token)
+            num = num_match.group(0) if num_match else token
+            unit = re.sub(r"\s+", "", token.replace(num, "", 1))
+            return _amount_pseudonym(num, unit)
 
-    def _overlaps_id(match: re.Match[str]) -> bool:
-        return any(match.start() < end and match.end() > start for start, end in id_spans)
+        def _keyed_amount(match: re.Match[str]) -> str:
+            key, sep, num = match.group(1), match.group(2), match.group(3)
+            unit = "msat" if "msat" in key.lower() else "sat"
+            return f"{key}{sep}{_amount_pseudonym(num, unit)}"
 
-    def _keyed_amount(match: "re.Match[str]") -> str:
-        if _overlaps_id(match):
-            return match.group(0)
-        key, sep, num = match.group(1), match.group(2), match.group(3)
-        unit = "msat" if "msat" in key.lower() else "sat"
-        return f"{key}{sep}{_amount_pseudonym(num, unit)}"
+        return _KEYED_AMOUNT_RE.sub(_keyed_amount, _AMOUNT_RE.sub(_amount, segment))
 
-    # Keyed amounts first (amount_sat=50000); their numbers are then gone before
-    # the standalone-unit pass runs, so neither double-masks the other.
-    text = _KEYED_AMOUNT_RE.sub(_keyed_amount, text)
-    id_spans = [match.span() for match in _AMOUNT_ID_RE.finditer(text)]
-
-    def _amount(match: "re.Match[str]") -> str:
-        token = match.group(0)
-        start = match.start()
-        # A market-rate tail ("BTC/EUR 64000.12") is public data, not the
-        # user's amount; its number is preceded by the pair separator.
-        if _overlaps_id(match) or _is_market_rate_tail(text, start):
-            return token
-        num_match = _AMOUNT_NUM_RE.search(token)
-        num = num_match.group(0) if num_match else token
-        unit = re.sub(r"\s+", "", token.replace(num, "", 1))
-        return _amount_pseudonym(num, unit)
-
-    return _AMOUNT_RE.sub(_amount, text)
+    # Shield only the ID itself. An amount regex can start in an all-digit ID
+    # tail and swallow a neighboring amount; exempting that whole match leaks
+    # the amount. Scan the surrounding segments independently instead.
+    parts = []
+    cursor = 0
+    for identity in _AMOUNT_ID_RE.finditer(text):
+        parts.extend((_redact_segment(text[cursor:identity.start()]), identity.group(0)))
+        cursor = identity.end()
+    parts.append(_redact_segment(text[cursor:]))
+    return "".join(parts)
 
 
 def redact_operational_value(value: Any, *, depth: int = 0) -> Any:
@@ -208,16 +186,16 @@ def is_sensitive_key(key: str) -> bool:
 def redact_secret_text(value: str) -> str:
     """Redact secret-shaped material from text that may cross a trust boundary."""
 
-    text = _RECOVERY_ASSIGNMENT_RE.sub(r"\g<key>\g<sep>\g<quote>[redacted]", value)
+    text = redact_credentials(value)
     text = _PRIVATE_KEY_RE.sub("[redacted-private-key]", text)
+    text = _NOSTR_SECRET_RE.sub("[redacted-private-key]", text)
+    text = _WIF_RE.sub("[redacted-private-key]", text)
     text = _EXTENDED_KEY_RE.sub("[redacted-extended-key]", text)
     text = _SP_DESCRIPTOR_RE.sub("[redacted-silent-payment-descriptor]", text)
     text = _SP_KEY_RE.sub("[redacted-silent-payment-key]", text)
     text = _SP_ADDRESS_RE.sub("[redacted-silent-payment-address]", text)
     text = _DESCRIPTOR_RE.sub("[redacted-descriptor]", text)
     text = _BEARER_RE.sub("Bearer [redacted]", text)
-    text = _JSON_SECRET_RE.sub(r"\g<prefix>[redacted]", text)
-    text = _ASSIGNED_SECRET_RE.sub(r"\g<key>\g<sep>\g<quote>[redacted]", text)
     text = _SK_SECRET_RE.sub("[redacted-secret]", text)
     return text
 

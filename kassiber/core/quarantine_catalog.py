@@ -109,6 +109,8 @@ _REASONS: dict[str, ReasonInfo] = {
     ),
     # Prices.
     "missing_spot_price": _info(CATEGORY_MISSING_PRICE, ACTION_SET_PRICE),
+    "invalid_transaction_price": _info(CATEGORY_MISSING_PRICE, ACTION_SET_PRICE),
+    "split_payout_requires_review": _info(CATEGORY_NEEDS_DECISION, ACTION_PAIR_TRANSFER),
     "pricing_review_required": _info(CATEGORY_MISSING_PRICE, ACTION_SET_PRICE),
     "at_swap_price_required": _info(CATEGORY_MISSING_PRICE, ACTION_SET_PRICE),
     # A disposal needs earlier acquisitions Kassiber has not seen or priced.

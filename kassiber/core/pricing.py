@@ -11,6 +11,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, Mapping
 
 from ..msat import dec
+from .custody_pricing import finite_decimal, validate_transaction_price
 
 LEGACY_SOURCE_IMPORT = "import"
 LEGACY_SOURCE_MANUAL = "manual"
@@ -178,9 +179,13 @@ def pricing_payload(
     granularity: str | None = None,
     method: str | None = None,
     external_ref: str | None = None,
+    amount_msat: int | None = None,
 ) -> dict[str, Any]:
-    rate_exact = exact_decimal(rate)
-    value_exact = exact_decimal(value)
+    rate_exact = exact_decimal(finite_decimal(rate, "fiat_rate")) if rate not in (None, "") else None
+    value_exact = exact_decimal(finite_decimal(value, "fiat_value")) if value not in (None, "") else None
+    if amount_msat is not None:
+        validate_transaction_price(dict(id="pricing input", amount=amount_msat,
+            fiat_rate_exact=rate_exact, fiat_value_exact=value_exact))
     return {
         "fiat_rate": float(dec(rate_exact)) if rate_exact is not None else None,
         "fiat_value": float(dec(value_exact)) if value_exact is not None else None,

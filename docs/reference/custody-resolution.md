@@ -24,6 +24,12 @@ in sorted `blocked_by_transaction_ids`. An explicit root can itself connect
 another root to a dependent; propagation continues through it until no origin
 set grows. Unconnected blockers are excluded.
 
+When an explicit blocker holds a connected selected custody path, every
+dependent quarantine names the complete set of explicit roots in that path
+in sorted `blocked_by_transaction_ids`. An explicit root can itself connect
+another root to a dependent; propagation continues through it until no origin
+set grows. Unconnected blockers are excluded.
+
 An export's transaction hash can identify an event, but graph-shaped imported
 JSON cannot impersonate a native observer, and a supporting import cannot erase
 one either: enrichment updates prices and still-empty metadata columns while an
@@ -156,6 +162,9 @@ name the transactions that set their pool's barrier in
 at all is listed as such a downstream row instead of disappearing.
 `custody_quantity_unresolved` keeps a deterministic primary `blocker_code` and,
 when several issues apply, every `blocker_codes`/`issue_ids` plus `gap_ids`.
+Rows behind an invalid-price basis barrier retain their own missing-price or
+price-review cause as the primary reason, with the barrier as an additional
+reason. They remain excluded from booking until the relevant causes clear.
 
 `ui.journals.quarantine` and `journals quarantined` add per row `category`,
 `blocks_reports` (the row is named by a persisted custody quantity issue, which
@@ -408,7 +417,8 @@ so the recalculated journals are stored in the same transaction.
 Prices are decimal strings. Payouts, overrides, imports, manual/cached rates,
 commercial/document prices and source-of-funds values share finite decimal
 validation. NaN, infinity, malformed decimals, float overflow, exponents outside
--308…308 and nonzero magnitudes below 1e-13 return typed `validation` errors
+-308…308, nonzero magnitudes below 1e-13, or magnitudes at or above 1e19
+(including numeric mirrors rounded across that upper bound) return typed `validation` errors
 before storage or fixed-point formatting. The lower bound prevents prices
 comparing as zero in the tax engine. Negative zero normalizes to zero.
 Finalized custody projection names the transaction when refusing invalid stored

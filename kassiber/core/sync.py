@@ -1110,6 +1110,11 @@ def sync_wallet_from_backend(
                 observed_utxos,
             )
         )
+    elif conn is not None and adapter_meta.get("utxos_skipped_unchanged"):
+        from .output_inventory import refresh_wallet_output_confirmations
+        checkpoint = adapter_meta.get("freshness_checkpoint") or {}
+        tip_height = checkpoint.get(f"{kind}_tip_height") if kind in {"esplora", "electrum"} else None
+        refresh_wallet_output_confirmations(conn, profile, wallet, backend, sync_state, tip_height)
     notify_apply_stage(hooks, APPLY_STAGE_OUTPUT_INVENTORY)
     if hooks.update_derivation_coverage is not None:
         hooks.update_derivation_coverage(

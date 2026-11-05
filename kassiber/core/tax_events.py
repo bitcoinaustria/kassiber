@@ -4,14 +4,18 @@ The tax engine's reader (``engines/ledger_response.py``) renders the engine's
 quarantines through ``build_tax_quarantine``; ``custody_journal.py`` and
 ``review_workflow.py`` collapse a ledger's quarantines with
 ``dedupe_quarantines`` before storing or previewing them.
+``custody_tax_projection.py`` explains a standalone event's missing or
+review-required price with ``transaction_price_quarantine``.
 """
 
 from __future__ import annotations
 
 import json
+from decimal import Decimal
 from typing import Any, Mapping, Sequence
 
-from . import quarantine_catalog
+from ..msat import msat_to_btc
+from . import pricing, quarantine_catalog
 
 
 def build_tax_quarantine(
@@ -102,7 +106,86 @@ def dedupe_quarantines(quarantines: Sequence[Mapping[str, Any]]) -> list[dict[st
     return list(by_id.values())
 
 
+def _spot_price_from_row(row: Mapping[str, Any], quantity: Decimal) -> Decimal | None:
+    rate = pricing.decimal_from_exact(
+        _row_get(row, "fiat_rate_exact"),
+        _row_get(row, "fiat_rate"),
+    )
+    if rate is not None:
+        if rate > 0:
+            return rate
+    value = pricing.decimal_from_exact(
+        _row_get(row, "fiat_value_exact"),
+        _row_get(row, "fiat_value"),
+    )
+    if value is not None and quantity > 0:
+        if value > 0:
+            return value / quantity
+    return None
+
+
+def _pricing_needs_review(row: Mapping[str, Any]) -> bool:
+    return _row_get(row, "pricing_quality") == pricing.QUALITY_COARSE_FALLBACK
+
+
+def _profile_requires_coarse_review(profile: Mapping[str, Any]) -> bool:
+    """Coarse (daily/monthly/yearly) pricing is accepted by default; events are
+    booked at the coarse spot price and flagged non-blockingly in the UI. Only a
+    profile that opts into ``require_coarse_review`` quarantines them for manual
+    pricing review (the previous always-on behavior)."""
+    if not hasattr(profile, "keys") or "require_coarse_review" not in profile.keys():
+        return False
+    value = profile["require_coarse_review"]
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
+
+
+def _pricing_review_detail(row: Mapping[str, Any], wallet_label: str, asset: str, direction: str) -> dict[str, Any]:
+    return {
+        "wallet": wallet_label,
+        "asset": asset,
+        "direction": direction,
+        "required_for": "pricing_review",
+        "pricing_quality": _row_get(row, "pricing_quality"),
+        "pricing_source_kind": _row_get(row, "pricing_source_kind"),
+        "pricing_provider": _row_get(row, "pricing_provider"),
+        "pricing_pair": _row_get(row, "pricing_pair"),
+        "pricing_timestamp": _row_get(row, "pricing_timestamp"),
+        "pricing_granularity": _row_get(row, "pricing_granularity"),
+        "pricing_method": _row_get(row, "pricing_method"),
+    }
+
+
+def _row_msat(row: Mapping[str, Any], key: str) -> int:
+    return int(_row_get(row, key) or 0)
+
+
+def transaction_price_quarantine(
+    profile: Mapping[str, Any], row: Mapping[str, Any], wallet_label: str,
+) -> dict[str, Any] | None:
+    """Explain a standalone event's price even when prior basis blocks it."""
+    direction = _row_get(row, "direction")
+    if direction not in {"inbound", "outbound"}:
+        return None
+    amount = msat_to_btc(_row_msat(row, "amount"))
+    fee = msat_to_btc(_row_msat(row, "fee"))
+    if direction == "outbound" and amount + fee <= 0:
+        return None
+    asset = str(row["asset"])
+    if _pricing_needs_review(row) and _profile_requires_coarse_review(profile):
+        return build_tax_quarantine(profile, row, "pricing_review_required",
+            _pricing_review_detail(row, wallet_label, asset, direction))
+    if _spot_price_from_row(row, amount if amount > 0 else fee) is None:
+        return build_tax_quarantine(profile, row, "missing_spot_price", {
+            "wallet": wallet_label, "asset": asset, "direction": direction,
+            "required_for": "acquisition" if direction == "inbound" else "disposal",
+        })
+    return None
+
+
 __all__ = [
     "build_tax_quarantine",
     "dedupe_quarantines",
+    "transaction_price_quarantine",
 ]
