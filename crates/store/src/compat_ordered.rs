@@ -176,7 +176,12 @@ fn ensure_schema_compat(
     super::migrate_msat(conn, observer)?;
     // Python adds the accepted coarse price again here: the msat rebuild's
     // fixed column list drops it from a legacy REAL-typed transactions table.
-    if ensure_column(conn, "transactions", "pricing_review_accepted_price", "TEXT")? {
+    if ensure_column(
+        conn,
+        "transactions",
+        "pricing_review_accepted_price",
+        "TEXT",
+    )? {
         commit(conn)?;
     }
     columns_between(
@@ -262,7 +267,8 @@ mod tests {
 
     /// A current book taken back to main #654's storage: no accepted coarse
     /// price, no provider `agent_access`, no `ai_provider_checks` and the
-    /// narrow custody AI consent CHECK, with one audit row.
+    /// narrow custody AI consent CHECK, with one audit row. It also lacks
+    /// `privacy_boundary`, which the pass adds after the accepted price.
     fn pre_sync_book() -> (tempfile::TempDir, crate::Book) {
         let root = tempfile::tempdir().unwrap();
         let book = crate::Book::create(root.path(), None).unwrap();
@@ -274,10 +280,11 @@ mod tests {
             .unwrap()
             .collect::<rusqlite::Result<_>>()
             .unwrap();
-        let mut script = String::from("PRAGMA foreign_keys=OFF; DROP TABLE ai_provider_checks; ALTER TABLE ai_providers DROP COLUMN agent_access; ALTER TABLE transactions DROP COLUMN pricing_review_accepted_price; DROP TABLE custody_ai_assistance_audits;");
+        let mut script = String::from("PRAGMA foreign_keys=OFF; DROP TABLE ai_provider_checks; ALTER TABLE ai_providers DROP COLUMN agent_access; ALTER TABLE transactions DROP COLUMN pricing_review_accepted_price; ALTER TABLE transactions DROP COLUMN privacy_boundary; DROP TABLE custody_ai_assistance_audits;");
         for (name, sql) in objects {
             let sql = if name == "custody_ai_assistance_audits" {
-                let narrow = sql.replace("'mode_auto', 'mode_full_access',\n        'mcp_host', ", "");
+                let narrow =
+                    sql.replace("'mode_auto', 'mode_full_access',\n        'mcp_host', ", "");
                 assert_ne!(narrow, sql);
                 narrow
             } else {
@@ -308,7 +315,17 @@ mod tests {
                 .iter()
                 .any(|(name, _)| name == column)
         };
-        assert!(has("transactions", "pricing_review_accepted_price"));
+        // Python adds the accepted price before the later transaction
+        // columns, so a book missing both keeps that order.
+        let order: Vec<String> = super::super::columns(conn, "transactions")
+            .unwrap()
+            .into_iter()
+            .map(|(name, _)| name)
+            .filter(|name| {
+                ["pricing_review_accepted_price", "privacy_boundary"].contains(&name.as_str())
+            })
+            .collect();
+        assert_eq!(order, ["pricing_review_accepted_price", "privacy_boundary"]);
         assert!(has("ai_providers", "agent_access"));
         assert!(has("ai_provider_checks", "value_json"));
         let audits: Vec<(String, String)> = conn
@@ -322,9 +339,12 @@ mod tests {
         conn.execute("INSERT INTO custody_ai_assistance_audits(id,workspace_id,profile_id,tool_name,daemon_kind,call_id,provider_kind,model,facts_sha256,consent_decision,consent_requested_at,consent_decided_at,execution_status,created_at) VALUES('host','ws','pf','tool','kind','call','local','m',?1,'mcp_host','t','t','executed','t')", [&"1".repeat(64)]).unwrap();
         conn.execute("INSERT INTO ai_providers(name,base_url,kind,created_at,updated_at) VALUES('p','http://127.0.0.1:9/v1','local','t','t')", []).unwrap();
         assert_eq!(
-            conn.query_row("SELECT agent_access FROM ai_providers WHERE name='p'", [], |r| r
-                .get::<_, String>(0))
-                .unwrap(),
+            conn.query_row(
+                "SELECT agent_access FROM ai_providers WHERE name='p'",
+                [],
+                |r| r.get::<_, String>(0)
+            )
+            .unwrap(),
             "full"
         );
         let version: i64 = conn

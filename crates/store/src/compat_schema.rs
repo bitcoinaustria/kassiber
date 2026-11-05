@@ -670,7 +670,8 @@ pub(crate) fn step(
         "commercial" => commercial(conn),
         "freshness" => freshness(conn),
         "ai-audit" => ai_audit_consent(conn, observer),
-        "ai-refs" | "ai-checks" | "graph-cache" | "projection-view" | "legacy-freeze" | "source-target" => {
+        "ai-refs" | "ai-checks" | "graph-cache" | "projection-view" | "legacy-freeze"
+        | "source-target" => {
             let function = match name {
                 "ai-refs" => "_ensure_ai_provider_secret_refs_schema",
                 "ai-checks" => "_ensure_ai_provider_checks_schema",
@@ -810,14 +811,24 @@ mod tests {
     #[test]
     fn ai_audit_consent_rebuild_copies_rows_and_rolls_back_on_failure() {
         let function = "_ensure_custody_ai_audit_consent_schema";
-        for target in [
+        // #654's CHECK, and one that already has the permission modes but
+        // not `mcp_host`; either needs the rebuild.
+        let narrowings = [
+            "'mode_auto', 'mode_full_access',\n                        'mcp_host', ",
+            "\n                        'mcp_host',",
+        ];
+        let targets = [
             "ai-audit.after_rename",
             "ai-audit.after_copy",
             "ai-audit.after_restore_objects",
             "repair.before_commit",
             "repair.after_commit",
             "",
-        ] {
+        ];
+        for (removed, target) in narrowings
+            .iter()
+            .flat_map(|removed| targets.iter().map(move |target| (*removed, *target)))
+        {
             let root = tempfile::tempdir().unwrap();
             let mut book = crate::Book::create(root.path(), None).unwrap();
             let conn = &mut book.connection;
@@ -825,8 +836,7 @@ mod tests {
             execute(conn, "DROP TABLE custody_ai_assistance_audits").unwrap();
             execute(
                 conn,
-                &statement(function, "CREATE TABLE")
-                    .replace("'mode_auto', 'mode_full_access',\n                        'mcp_host', ", ""),
+                &statement(function, "CREATE TABLE").replace(removed, ""),
             )
             .unwrap();
             for prefix in ["CREATE INDEX", "CREATE TRIGGER"] {
@@ -840,12 +850,14 @@ mod tests {
             let insert_mode = "INSERT INTO custody_ai_assistance_audits(id,workspace_id,profile_id,tool_name,daemon_kind,call_id,provider_kind,model,facts_sha256,consent_decision,consent_requested_at,consent_decided_at,execution_status,created_at) VALUES('c','ws','pf','tool','kind','call','local','m',?1,'mcp_host','t','t','executed','t')";
             assert!(conn.execute(insert_mode, [&facts]).is_err());
             let rows = |conn: &Connection| -> Vec<(String, String)> {
-                conn.prepare("SELECT id,consent_decision FROM custody_ai_assistance_audits ORDER BY id")
-                    .unwrap()
-                    .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
-                    .unwrap()
-                    .collect::<rusqlite::Result<_>>()
-                    .unwrap()
+                conn.prepare(
+                    "SELECT id,consent_decision FROM custody_ai_assistance_audits ORDER BY id",
+                )
+                .unwrap()
+                .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+                .unwrap()
+                .collect::<rusqlite::Result<_>>()
+                .unwrap()
             };
             let before = rows(conn);
             let result = ai_audit_consent(conn, &mut |label| {

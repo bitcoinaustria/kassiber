@@ -12,7 +12,7 @@
   {
     "id": "accepted-price-after-msat",
     "file": "crates/store/src/compat_ordered.rs",
-    "find": "    if ensure_column(conn, \"transactions\", \"pricing_review_accepted_price\", \"TEXT\")? {\n        commit(conn)?;\n    }",
+    "find": "    if ensure_column(\n        conn,\n        \"transactions\",\n        \"pricing_review_accepted_price\",\n        \"TEXT\",\n    )? {\n        commit(conn)?;\n    }",
     "replace": "",
     "expect_failing": [
       "ordered_pass_restores_the_accepted_price_the_msat_rebuild_drops"

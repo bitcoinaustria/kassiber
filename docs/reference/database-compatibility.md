@@ -277,6 +277,9 @@ Python's step, kills it at each checkpoint and resumes in either runtime,
 opens a current Python book holding rows in every new object with Rust (both
 open modes) without any change, and alternates Rust and Python opens of a
 Rust-created book with no migration loop.
+`crates/store/scripts/mutations.json` breaks each step and the refusal rules
+one at a time (`crates/store/scripts/mutation_check.py`); every entry fails
+a Rust store test.
 
 **Newer layouts.** The Rust store refuses a book carrying any object, column
 or migration audit it does not know (`requires_python_migration`), in both its
