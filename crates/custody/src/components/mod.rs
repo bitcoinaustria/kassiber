@@ -14,9 +14,10 @@ use kassiber_pyjson::BigInt;
 fn big(v: &Value) -> BigInt {
     exact(v).expect("converted component integer")
 }
+use crate::fxhash::HashMap;
 use crate::snapshot::{Component, Record, Snapshot};
 use serde_json::{json, Map, Value};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug)]
 pub struct Error {
@@ -114,7 +115,7 @@ fn group<K: Eq + std::hash::Hash + Clone>(
     key: impl Fn(&Value) -> K,
 ) -> Vec<(K, Vec<Value>)> {
     let mut result = Vec::new();
-    let mut index = HashMap::new();
+    let mut index = HashMap::default();
     for item in items {
         let k = key(&item);
         codec::push_grouped(&mut result, &mut index, k, item);
@@ -247,14 +248,14 @@ impl<'a> Shared<'a> {
                 .iter()
                 .map(|r| (text(&r["id"]), Value::Object(r.clone().into_map()))),
         );
-        let mut lineages: HashMap<String, Vec<String>> = HashMap::new();
+        let mut lineages: HashMap<String, Vec<String>> = HashMap::default();
         for (key, o) in &headers {
             lineages
                 .entry(o["lineage_id"].to_string())
                 .or_default()
                 .push(key.clone());
         }
-        let mut members: HashMap<_, Vec<_>> = HashMap::new();
+        let mut members: HashMap<_, Vec<_>> = HashMap::default();
         for other in &snapshot.components {
             if other.header["state"] != "active" {
                 continue;
@@ -269,7 +270,7 @@ impl<'a> Shared<'a> {
                 }
             }
         }
-        let mut anchors: HashMap<String, Vec<_>> = HashMap::new();
+        let mut anchors: HashMap<String, Vec<_>> = HashMap::default();
         for (at, row) in snapshot
             .anchors
             .values()

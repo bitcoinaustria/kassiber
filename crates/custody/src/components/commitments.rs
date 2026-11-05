@@ -476,7 +476,7 @@ pub(super) struct Native {
 }
 impl Native {
     pub(super) fn new(observations: Vec<Observation>) -> Self {
-        let mut by_transaction = HashMap::new();
+        let mut by_transaction = HashMap::default();
         let mut by_event: BTreeMap<_, Vec<_>> = BTreeMap::new();
         for (at, o) in observations.iter().enumerate() {
             by_transaction.entry(o.transaction.clone()).or_insert(at);
@@ -562,7 +562,7 @@ pub(super) fn native_context(
 ) -> Result<Vec<Observation>, Error> {
     let profile = json!(pystr(&snapshot.profile["id"]));
     let mut observations = Vec::new();
-    let mut positions: HashMap<Rc<str>, usize> = HashMap::new();
+    let mut positions: HashMap<Rc<str>, usize> = HashMap::default();
     let mut pool = Pool::default();
     if let Some(prepared) = shared_enrichment(snapshot, &profile, prepared) {
         let records = &snapshot.transactions;

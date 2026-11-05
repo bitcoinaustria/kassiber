@@ -338,7 +338,7 @@ pub(super) fn connectivity(legs: &[Value], allocs: &[Value], mode: &str) -> Vec<
         .collect();
     // Dicts replace duplicate ids without changing their insertion slot.
     let mut unique: Vec<&Value> = Vec::new();
-    let mut positions = HashMap::new();
+    let mut positions = HashMap::default();
     let mut ids = Vec::new();
     for l in &material {
         let id = pystr(&l["id"]);

@@ -4,7 +4,7 @@ use crate::evidence::canonical::LegRef;
 use crate::{codec, python_text::PythonText};
 use kassiber_pyjson::BigInt;
 use serde_json::{json, Value};
-use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 #[derive(Debug)]
 pub struct Error {
@@ -283,28 +283,36 @@ fn payout(
 /// Observation pairs in order, indexed for the lookups a compilation makes.
 pub struct Observations<'a> {
     entries: Vec<(String, LegRef<'a>)>,
-    last: HashMap<String, usize>,
-    first_hash: HashMap<String, usize>,
-    positions: HashMap<String, Vec<usize>>,
+    first_hash: crate::fxhash::HashMap<&'a str, usize>,
+    /// Each key's positions in order; its last is the key's last entry.
+    positions: crate::fxhash::HashMap<String, Vec<usize>>,
 }
 impl<'a> Observations<'a> {
     pub fn new(entries: Vec<(String, LegRef<'a>)>) -> Self {
-        let mut last = HashMap::new();
-        let mut first_hash = HashMap::new();
-        let mut positions: HashMap<String, Vec<usize>> = HashMap::new();
+        let mut first_hash = crate::fxhash::HashMap::default();
+        let mut positions: crate::fxhash::HashMap<String, Vec<usize>> = Default::default();
         for (at, (key, o)) in entries.iter().enumerate() {
-            last.insert(key.clone(), at);
-            if let Some(hash) = o["quantity_hash"].as_str() {
-                first_hash.entry(hash.to_owned()).or_insert(at);
+            if let Some(hash) = o.at("quantity_hash").as_str() {
+                first_hash.entry(hash).or_insert(at);
             }
             positions.entry(key.clone()).or_default().push(at);
         }
         Self {
             entries,
-            last,
             first_hash,
             positions,
         }
+    }
+
+    /// The last observation with this key, as a reversed scan finds it.
+    fn last(&self, key: &str) -> Option<LegRef<'a>> {
+        let at = *self.positions.get(key)?.last()?;
+        Some(self.entries[at].1)
+    }
+
+    /// The first observation with this quantity hash.
+    fn first_with_hash(&self, hash: &str) -> Option<LegRef<'a>> {
+        self.first_hash.get(hash).map(|&at| self.entries[at].1)
     }
 }
 
@@ -427,16 +435,12 @@ pub fn compile_observed(c: &Value, observations: Option<&Observations>) -> Resul
     let observations = observations.ok_or_else(|| family("TypeError"))?;
     // The last pair with this key, as a reversed scan finds it.
     let observation = |key: &str| {
-        observations
-            .last
-            .get(key)
-            .map(|&at| observations.entries[at].1)
-            .ok_or_else(|| {
-                error(
-                    "component allocation references an unavailable observation",
-                    json!({"component_id":id,"transaction_id":key}),
-                )
-            })
+        observations.last(key).ok_or_else(|| {
+            error(
+                "component allocation references an unavailable observation",
+                json!({"component_id":id,"transaction_id":key}),
+            )
+        })
     };
     let mut sources: BTreeMap<String, BigInt> = BTreeMap::new();
     let mut targets: BTreeMap<String, BigInt> = BTreeMap::new();
@@ -457,11 +461,7 @@ pub fn compile_observed(c: &Value, observations: Option<&Observations>) -> Resul
             }
         }
         for (hash, n) in totals {
-            let o = observations
-                .first_hash
-                .get(&hash)
-                .map(|&at| observations.entries[at].1)
-                .unwrap();
+            let o = observations.first_with_hash(&hash).unwrap();
             let cap = principal(&o).map_err(|e| family(&e))?;
             if n > cap {
                 return Err(error(
@@ -757,5 +757,29 @@ pub fn outcome(component: &Value, observations: &Value) -> Value {
             json!({"error":error.code,"message":error.message,"details":error.details})
         }
         Err(error) => json!({"error":error.code}),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn observation_lookups_take_last_keys_and_first_hashes() {
+        let rows: Vec<Value> = (0..4)
+            .map(|at| json!({"n": at, "quantity_hash": if at < 2 { "h1" } else { "h2" }}))
+            .collect();
+        let entries = vec![
+            ("a".to_owned(), LegRef::Json(&rows[0])),
+            ("b".to_owned(), LegRef::Json(&rows[1])),
+            ("a".to_owned(), LegRef::Json(&rows[2])),
+            ("b".to_owned(), LegRef::Json(&rows[3])),
+        ];
+        let observations = Observations::new(entries);
+        assert_eq!(observations.last("a").unwrap()["n"], 2);
+        assert_eq!(observations.last("b").unwrap()["n"], 3);
+        assert!(observations.last("c").is_none());
+        assert_eq!(observations.first_with_hash("h1").unwrap()["n"], 0);
+        assert_eq!(observations.first_with_hash("h2").unwrap()["n"], 2);
     }
 }

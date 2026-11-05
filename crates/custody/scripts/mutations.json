@@ -14876,8 +14876,8 @@
   {
     "id": "QR-027",
     "file": "crates/custody/src/quantity/reviewed.rs",
-    "find": ".map(|&at| observations.entries[at].1)\n                .unwrap();\n            let cap = principal(&o).map_err(|e| family(&e))?;\n            if n > cap {\n                return Err(error(\n                    \"component claims exceed observed source prin",
-    "replace": ".map(|&at| observations.entries[at].1)\n                .unwrap();\n            let cap = principal(&o).map_err(|e| family(&e))?;\n            if false && (n > cap) {\n                return Err(error(\n                    \"component claims exceed observed source prin",
+    "find": "            let cap = principal(&o).map_err(|e| family(&e))?;\n            if n > cap {",
+    "replace": "            let cap = principal(&o).map_err(|e| family(&e))?;\n            if false && (n > cap) {",
     "expect_failing": [
       "quantity_reviewed_compilation_vectors"
     ],
@@ -15386,8 +15386,8 @@
   {
     "id": "QR-084",
     "file": "crates/custody/src/quantity/reviewed.rs",
-    "find": "                    json!({\"component_id\":id,\"transaction_id\":key}),",
-    "replace": "                    json!({\"component_id_mutated\":id,\"transaction_id\":key}),",
+    "find": "                json!({\"component_id\":id,\"transaction_id\":key}),",
+    "replace": "                json!({\"component_id_mutated\":id,\"transaction_id\":key}),",
     "expect_failing": [
       "quantity_reviewed_compilation_vectors"
     ],
@@ -15396,8 +15396,8 @@
   {
     "id": "QR-085",
     "file": "crates/custody/src/quantity/reviewed.rs",
-    "find": "                    json!({\"component_id\":id,\"transaction_id\":key}),",
-    "replace": "                    json!({\"component_id\":id,\"transaction_id_mutated\":key}),",
+    "find": "                json!({\"component_id\":id,\"transaction_id\":key}),",
+    "replace": "                json!({\"component_id\":id,\"transaction_id_mutated\":key}),",
     "expect_failing": [
       "quantity_reviewed_compilation_vectors"
     ],
@@ -19686,8 +19686,8 @@
   {
     "id": "R2-review-audit-reviewed-393",
     "file": "crates/custody/src/quantity/reviewed.rs",
-    "find": "            .last\n            .get(key)\n            .map(|&at| observations.entries[at].1)",
-    "replace": "            .entries\n            .iter()\n            .rev()\n            .find(|(k, _)| k != key)\n            .map(|(_, o)| *o)",
+    "find": "        observations.last(key).ok_or_else(|| {",
+    "replace": "        observations.entries.iter().rev().find(|(k, _)| k != key).map(|(_, o)| *o).ok_or_else(|| {",
     "expect_failing": [
       "quantity_operator_audit_vectors"
     ],
@@ -19706,8 +19706,8 @@
   {
     "id": "R2-review-audit-reviewed-424",
     "file": "crates/custody/src/quantity/reviewed.rs",
-    "find": "                .first_hash\n                .get(&hash)\n                .map(|&at| observations.entries[at].1)",
-    "replace": "                .entries\n                .iter()\n                .map(|(_, o)| *o)\n                .find(|o| o[\"quantity_hash\"] != hash)",
+    "find": "            let o = observations.first_with_hash(&hash).unwrap();",
+    "replace": "            let o = observations\n                .entries\n                .iter()\n                .map(|(_, o)| *o)\n                .find(|o| o[\"quantity_hash\"] != hash)\n                .unwrap();",
     "expect_failing": [
       "quantity_operator_audit_vectors"
     ],
@@ -24898,6 +24898,26 @@
       "raw_observation_hold_vectors"
     ],
     "rule": "A new unscoped key opens a group."
+  },
+  {
+    "id": "reviewed-last-position",
+    "file": "crates/custody/src/quantity/reviewed.rs",
+    "find": "        let at = *self.positions.get(key)?.last()?;",
+    "replace": "        let at = *self.positions.get(key)?.first()?;",
+    "expect_failing": [
+      "observation_lookups_take_last_keys_and_first_hashes"
+    ],
+    "rule": "A key resolves to its last observation."
+  },
+  {
+    "id": "reviewed-first-hash",
+    "file": "crates/custody/src/quantity/reviewed.rs",
+    "find": "                first_hash.entry(hash).or_insert(at);",
+    "replace": "                first_hash.insert(hash, at);",
+    "expect_failing": [
+      "observation_lookups_take_last_keys_and_first_hashes"
+    ],
+    "rule": "A quantity hash resolves to its first observation."
   },
   {
     "id": "R4-evidence-alias-slot-index",
