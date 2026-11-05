@@ -67,7 +67,8 @@ def test_mutation_catalog_stays_applicable():
     assert result.stdout == f"{len(entries)} entries apply\n"
     sources = "".join(
         path.read_text(encoding="utf-8")
-        for crate in ("operator", "ipc", "ownership")
+        # R6-3's CLI and agent-access recipes name tests in cli, setup and daemon.
+        for crate in ("operator", "ipc", "ownership", "cli", "setup", "daemon")
         for path in (ROOT / "crates" / crate).rglob("*.rs")
     )
     for entry in entries:
