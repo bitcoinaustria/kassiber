@@ -179,6 +179,10 @@ reference while it still exists:
    binary, and Python leaves the product. A test-only Python reference stays
    for an agreed validation period after that.
 
+Main keeps moving while the stack grows. Each merge of main into the stack
+inventories the Python changes the port must follow and slices them;
+[main sync 1](../reference/rust-main-sync.md) covers #672 to #714.
+
 ## Verification
 
 1. **Crate tests:** unit, property, and golden-vector tests per crate. Vectors
