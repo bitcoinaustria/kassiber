@@ -120,60 +120,87 @@ struct Name {
     rank: u16,
 }
 
-/// Generated fields in key order. A row has a dozen or so, so a sorted
-/// vector finds them faster than a tree and allocates once.
-#[derive(Clone, Debug, Default)]
-struct Overrides<'a>(Vec<(Name, Field<'a>)>);
+/// Inline ranks kept for this many generated fields; more are searched in
+/// the entries.
+const INLINE: usize = 24;
+
+/// Generated fields in the order they were set. Known names are found by
+/// their ranks, kept inline beside the entries, so setting a field moves
+/// none and a lookup reads one cache line; key order is restored only
+/// when the row is written.
+#[derive(Clone, Debug)]
+struct Overrides<'a> {
+    entries: Vec<(Name, Field<'a>)>,
+    ranks: [u16; INLINE],
+}
+
+impl Default for Overrides<'_> {
+    fn default() -> Self {
+        Self::with_capacity(0)
+    }
+}
 
 impl<'a> Overrides<'a> {
-    fn position(&self, key: &str) -> Result<usize, usize> {
+    fn with_capacity(capacity: usize) -> Self {
+        Self {
+            entries: Vec::with_capacity(capacity),
+            ranks: [NONE; INLINE],
+        }
+    }
+
+    fn position(&self, key: &str) -> Option<usize> {
         let wanted = rank(key);
-        self.0.binary_search_by(|(name, _)| {
-            if wanted != NONE && name.rank != NONE {
-                name.rank.cmp(&wanted)
-            } else {
-                name.text.cmp(key)
-            }
-        })
+        if wanted == NONE {
+            return self.entries.iter().position(|(name, _)| name.text == key);
+        }
+        let inline = self.entries.len().min(INLINE);
+        self.ranks[..inline]
+            .iter()
+            .position(|rank| *rank == wanted)
+            .or_else(|| {
+                self.entries[inline..]
+                    .iter()
+                    .position(|(name, _)| name.rank == wanted)
+                    .map(|at| at + inline)
+            })
     }
 
     fn get(&self, key: &str) -> Option<&Value> {
-        self.position(key).ok().map(|at| self.0[at].1.get())
+        self.position(key).map(|at| self.entries[at].1.get())
     }
 
     fn len(&self) -> usize {
-        self.0.len()
+        self.entries.len()
+    }
+
+    fn push(&mut self, key: &'static str, value: Field<'a>) -> usize {
+        let name = Name {
+            text: key,
+            rank: rank(key),
+        };
+        let at = self.entries.len();
+        if at < INLINE {
+            self.ranks[at] = name.rank;
+        }
+        self.entries.push((name, value));
+        at
     }
 
     fn insert(&mut self, key: &'static str, value: Field<'a>) {
         match self.position(key) {
-            Ok(at) => self.0[at].1 = value,
-            Err(at) => self.0.insert(
-                at,
-                (
-                    Name {
-                        text: key,
-                        rank: rank(key),
-                    },
-                    value,
-                ),
-            ),
+            Some(at) => self.entries[at].1 = value,
+            None => {
+                self.push(key, value);
+            }
         }
     }
 
     fn entry(&mut self, key: &'static str, value: impl FnOnce() -> Value) -> &mut Value {
         let at = match self.position(key) {
-            Ok(at) => at,
-            Err(at) => {
-                let name = Name {
-                    text: key,
-                    rank: rank(key),
-                };
-                self.0.insert(at, (name, Field::Value(value())));
-                at
-            }
+            Some(at) => at,
+            None => self.push(key, Field::Value(value())),
         };
-        let field = &mut self.0[at].1;
+        let field = &mut self.entries[at].1;
         if !matches!(field, Field::Value(_)) {
             *field = Field::Value(std::mem::replace(field, Field::Value(Value::Null)).into_value());
         }
@@ -183,22 +210,43 @@ impl<'a> Overrides<'a> {
         }
     }
 
+    /// The fields in no particular order.
     fn iter(&self) -> impl Iterator<Item = (&&'static str, &Value)> {
-        self.0.iter().map(|(name, value)| (&name.text, value.get()))
+        self.entries
+            .iter()
+            .map(|(name, value)| (&name.text, value.get()))
+    }
+
+    /// The fields in key order: known names by rank, any other by text,
+    /// which is the same order.
+    fn into_sorted(self) -> impl Iterator<Item = (Name, Field<'a>)> {
+        let mut order: Vec<usize> = (0..self.entries.len()).collect();
+        order.sort_unstable_by(|a, b| {
+            let (a, b) = (&self.entries[*a].0, &self.entries[*b].0);
+            if a.rank != NONE && b.rank != NONE {
+                a.rank.cmp(&b.rank)
+            } else {
+                a.text.cmp(b.text)
+            }
+        });
+        let mut slots: Vec<Option<(Name, Field<'a>)>> =
+            self.entries.into_iter().map(Some).collect();
+        order
+            .into_iter()
+            .map(move |at| slots[at].take().expect("each field once"))
     }
 }
 
 impl<'a> IntoIterator for Overrides<'a> {
     type Item = (&'static str, Value);
-    type IntoIter = std::iter::Map<
-        std::vec::IntoIter<(Name, Field<'a>)>,
-        fn((Name, Field<'a>)) -> (&'static str, Value),
-    >;
+    type IntoIter = Box<dyn Iterator<Item = (&'static str, Value)> + 'a>;
 
+    /// The fields in key order.
     fn into_iter(self) -> Self::IntoIter {
-        self.0
-            .into_iter()
-            .map(|(name, value)| (name.text, value.into_value()))
+        Box::new(
+            self.into_sorted()
+                .map(|(name, value)| (name.text, value.into_value())),
+        )
     }
 }
 
@@ -291,7 +339,7 @@ impl<'a> FinalizedRow<'a> {
     pub(super) fn borrowed(source: &'a Value) -> Self {
         Self {
             source: Src::Value(Cow::Borrowed(source)),
-            overrides: Overrides(Vec::with_capacity(24)),
+            overrides: Overrides::with_capacity(24),
         }
     }
 
@@ -307,7 +355,7 @@ impl<'a> FinalizedRow<'a> {
             RowRef::Value(row) => Self::borrowed(row),
             RowRef::Record(row) => Self {
                 source: Src::Record(row),
-                overrides: Overrides(Vec::with_capacity(24)),
+                overrides: Overrides::with_capacity(24),
             },
         }
     }
@@ -437,8 +485,7 @@ impl FinalizedRow<'_> {
         };
         let overrides = self
             .overrides
-            .0
-            .into_iter()
+            .into_sorted()
             .map(|(name, field)| {
                 let stored = match field {
                     Field::Value(value) => Stored::Value(value),
@@ -587,6 +634,60 @@ impl serde::Serialize for FinalizedRow<'_> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn many_overrides_keep_their_values_and_key_order() {
+        // More names than the inline ranks hold, known and unknown, set out
+        // of order and some twice.
+        const EXTRA: [&str; 12] = [
+            "zz",
+            "a",
+            "b_unknown",
+            "m",
+            "y",
+            "c",
+            "q",
+            "x1",
+            "x2",
+            "x3",
+            "x4",
+            "x5",
+        ];
+        let mut row = FinalizedRow::owned(json!({"id": "source", "zz": 0, "kept": 1}));
+        let names: Vec<&'static str> = EXTRA.iter().chain(NAMES.iter().rev()).copied().collect();
+        for (at, name) in names.iter().enumerate() {
+            row.set(name, json!(at));
+        }
+        row.set("id", json!("again"));
+        row.set_int("amount", 7);
+        for (at, name) in names.iter().enumerate() {
+            let expected = match *name {
+                "id" => json!("again"),
+                "amount" => json!(7),
+                _ => json!(at),
+            };
+            assert_eq!(row[name], expected, "{name}");
+        }
+        assert_eq!(row["kept"], json!(1));
+        let written = row.clone().into_json();
+        let python = row.into_python().unwrap();
+        assert_eq!(crate::codec::to_json(&python), written);
+        // The Python dict lists the merged fields in key order.
+        let Py::Dict(items) = python else {
+            panic!("a dict")
+        };
+        let keys: Vec<String> = items
+            .iter()
+            .map(|(key, _)| match key {
+                kassiber_pyjson::Key::Str(key) => key.as_str().unwrap().to_owned(),
+                _ => panic!("text keys"),
+            })
+            .collect();
+        let mut sorted = keys.clone();
+        sorted.sort();
+        assert_eq!(keys, sorted);
+        assert_eq!(keys.len(), names.len() + 1);
+    }
+
     #[test]
     fn override_ranks_order_as_names() {
         assert!(NAMES.windows(2).all(|pair| pair[0] < pair[1]));

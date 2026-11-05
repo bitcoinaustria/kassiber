@@ -23957,10 +23957,10 @@
   {
     "id": "row-overrides-order",
     "file": "crates/custody/src/finalized_projection/row.rs",
-    "find": "        self.0.binary_search_by(|(name, _)| {\n            if wanted != NONE && name.rank != NONE {\n                name.rank.cmp(&wanted)\n            } else {\n                name.text.cmp(key)\n            }\n        })",
-    "replace": "        self.0\n            .iter()\n            .position(|(name, _)| name.text == key)\n            .ok_or(self.0.len())",
+    "find": "            Some(at) => self.entries[at].1 = value,",
+    "replace": "            Some(_) => {\n                self.push(key, value);\n            }",
     "expect_failing": [
-      "finalized_borrowed_rows_preserve_overrides_and_source_bytes"
+      "many_overrides_keep_their_values_and_key_order"
     ],
     "rule": "Generated fields stay in key order."
   },
@@ -24752,20 +24752,20 @@
   {
     "id": "override-rank-compare",
     "file": "crates/custody/src/finalized_projection/row.rs",
-    "find": "                name.rank.cmp(&wanted)",
-    "replace": "                wanted.cmp(&name.rank)",
+    "find": "                a.rank.cmp(&b.rank)",
+    "replace": "                b.rank.cmp(&a.rank)",
     "expect_failing": [
-      "finalized_borrowed_rows_preserve_overrides_and_source_bytes"
+      "many_overrides_keep_their_values_and_key_order"
     ],
     "rule": "Ranked override names keep key order."
   },
   {
     "id": "override-rank-mixed",
     "file": "crates/custody/src/finalized_projection/row.rs",
-    "find": "            if wanted != NONE && name.rank != NONE {",
-    "replace": "            if wanted != NONE || name.rank != NONE {",
+    "find": "            if a.rank != NONE && b.rank != NONE {",
+    "replace": "            if a.rank != NONE || b.rank != NONE {",
     "expect_failing": [
-      "finalized_borrowed_rows_preserve_overrides_and_source_bytes"
+      "many_overrides_keep_their_values_and_key_order"
     ],
     "rule": "An unranked name compares as text."
   },
@@ -24778,6 +24778,26 @@
       "override_ranks_order_as_names"
     ],
     "rule": "Each known name ranks at its key-order position."
+  },
+  {
+    "id": "override-inline-overflow",
+    "file": "crates/custody/src/finalized_projection/row.rs",
+    "find": "                    .map(|at| at + inline)",
+    "replace": "                    .map(|at| at)",
+    "expect_failing": [
+      "many_overrides_keep_their_values_and_key_order"
+    ],
+    "rule": "Fields past the inline ranks are found at their own positions."
+  },
+  {
+    "id": "override-inline-rank",
+    "file": "crates/custody/src/finalized_projection/row.rs",
+    "find": "            self.ranks[at] = name.rank;",
+    "replace": "            self.ranks[at] = NONE;",
+    "expect_failing": [
+      "many_overrides_keep_their_values_and_key_order"
+    ],
+    "rule": "An inline rank names its entry."
   },
   {
     "id": "R4-evidence-alias-slot-index",
