@@ -385,7 +385,7 @@ pub(super) fn connectivity(legs: &[Value], allocs: &[Value], mode: &str) -> Vec<
         }
     }
     let mut groups: Vec<(usize, Vec<Value>)> = Vec::new();
-    let mut index = std::collections::HashMap::new();
+    let mut index = crate::fxhash::HashMap::default();
     for (i, l) in unique.iter().enumerate() {
         let r = root(&mut parent, i);
         crate::codec::push_grouped(&mut groups, &mut index, r, (*l).clone());

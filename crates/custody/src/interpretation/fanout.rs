@@ -114,7 +114,7 @@ fn clone_out<R: Row + ?Sized>(
 pub(super) fn derive<R: Row>(rows: &[R], handled: &BTreeSet<String>) -> Result<Value, String> {
     // A Vec retains Python's first-seen scope order, including interleaved groups.
     let mut groups: Vec<(_, Vec<&R>)> = Vec::new();
-    let mut index = std::collections::HashMap::new();
+    let mut index = crate::fxhash::HashMap::default();
     for row in rows {
         if let Some(scope) = row.onchain_scope() {
             crate::codec::push_grouped(&mut groups, &mut index, scope, row);

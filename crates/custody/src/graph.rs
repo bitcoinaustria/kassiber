@@ -1012,7 +1012,7 @@ pub(crate) fn reconcile_receipts<R: crate::fields::Row>(
         return Ok(Value::Object(serde_json::Map::new()));
     }
     let mut grouped: Vec<(ChainScope, Vec<&R>)> = Vec::new();
-    let mut index = std::collections::HashMap::new();
+    let mut index = crate::fxhash::HashMap::default();
     for (row, scope) in rows.iter().map(|row| (row, row.onchain_scope())) {
         if let Some(scope) = scope {
             codec::push_grouped(&mut grouped, &mut index, scope, row);

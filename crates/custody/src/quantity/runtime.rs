@@ -1,9 +1,9 @@
 //! Comparison-only runtime composition. No persistence or authority boundary.
 use super::{array, domain, Canon, QEvent};
 use crate::evidence::canonical::{EventRef, LegRef, Obs};
+use crate::fxhash::HashMap;
 use crate::{codec, python_text::PythonText};
 use serde_json::{json, Value};
-use crate::fxhash::HashMap;
 use std::collections::{BTreeMap, BTreeSet};
 type Order = [String; 5];
 type Pool = [String; 4];
@@ -338,7 +338,8 @@ fn observations_needed(c: Canon<'_>, needed: bool) -> Result<Vec<(String, LegRef
         .map(|o| (super::text_key(o.at("quantity_hash")), o))
         .collect();
     let mut result: Vec<(String, LegRef)> = Vec::new();
-    let mut positions: std::collections::HashMap<String, usize> = std::collections::HashMap::default();
+    let mut positions: std::collections::HashMap<String, usize> =
+        std::collections::HashMap::default();
     for event in &events {
         for a in event.aliases() {
             let o = *hashes

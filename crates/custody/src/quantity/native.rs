@@ -1,6 +1,7 @@
 //! Exact native audit augmentation, isolated from production authority.
 use super::{array, exact, number, principal};
 use crate::evidence::canonical::{EventRef, LegRef};
+use crate::fxhash::HashMap;
 use crate::{
     codec,
     evidence::{self, EventKey},
@@ -9,7 +10,6 @@ use crate::{
 use kassiber_pyjson::BigInt;
 use serde_json::{json, Value};
 use std::borrow::Cow;
-use crate::fxhash::HashMap;
 use std::collections::{BTreeMap, BTreeSet};
 fn text(v: &Value) -> String {
     if codec::truth(v) {

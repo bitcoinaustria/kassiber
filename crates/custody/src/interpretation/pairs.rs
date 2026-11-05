@@ -84,7 +84,7 @@ fn exact_fanout(
     scopes: &BTreeMap<String, (String, String, String, String)>,
 ) -> Result<BTreeSet<String>, String> {
     let mut groups: Vec<(String, Vec<&Value>)> = Vec::new();
-    let mut index = std::collections::HashMap::new();
+    let mut index = crate::fxhash::HashMap::default();
     for &pair in pairs {
         let group = text(&pair["group_id"]);
         if !group.is_empty() {

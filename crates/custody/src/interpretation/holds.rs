@@ -475,7 +475,7 @@ fn fanout_with_facts<R: Row>(
     facts: Option<&[Facts]>,
 ) -> Result<Ids, String> {
     let mut groups: Vec<(graph::ownership::TransferScope, Vec<&R>)> = Vec::new();
-    let mut index = std::collections::HashMap::new();
+    let mut index = crate::fxhash::HashMap::default();
     for (row_index, row) in rows.iter().enumerate() {
         let id = codec::pystr(row.at("id"));
         if SYNTHETIC.iter().any(|p| id.starts_with(p)) {

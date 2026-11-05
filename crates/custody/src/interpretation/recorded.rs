@@ -187,7 +187,7 @@ type Groups<'a, K, R> = Vec<(K, Vec<&'a R>)>;
 
 pub(super) fn detect<R: Row>(rows: &[R]) -> Result<(Vec<Value>, BTreeSet<String>), String> {
     let mut chain_groups: Groups<(String, String, String, String), R> = Vec::new();
-    let mut index = std::collections::HashMap::new();
+    let mut index = crate::fxhash::HashMap::default();
     for row in rows {
         if super::holds::invalid_transfer_identity(row) {
             continue;
@@ -206,8 +206,8 @@ pub(super) fn detect<R: Row>(rows: &[R]) -> Result<(Vec<Value>, BTreeSet<String>
     )?;
     let mut hash_groups: Groups<(String, Value, String), R> = Vec::new();
     // Asset values are keyed by their encoding, which is injective.
-    let mut hash_index: std::collections::HashMap<(String, String, String), usize> =
-        std::collections::HashMap::new();
+    let mut hash_index: crate::fxhash::HashMap<(String, String, String), usize> =
+        Default::default();
     for row in rows {
         if matched.contains(&text(row.at("id"))) || !lightning_row(row) {
             continue;
