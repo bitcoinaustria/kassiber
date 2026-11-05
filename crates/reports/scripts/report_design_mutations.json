@@ -206,5 +206,29 @@
     "replace": "let withheld = matches!(*name, \"cost_basis\")",
     "expect_failing": ["standalone_transactions_csv_artifact_vectors"],
     "rule": "A draft transaction CSV withholds gain as well as basis."
+  },
+  {
+    "id": "bundle-evidence-hash",
+    "file": "crates/reports/src/source_funds_bundle.rs",
+    "find": "if !well_formed || sha != expected {",
+    "replace": "if !well_formed {",
+    "expect_failing": ["the_bundle_ships_disclosed_evidence_only_when_its_hash_matches"],
+    "rule": "The bundle refuses evidence whose bytes no longer match the hash the saved case disclosed."
+  },
+  {
+    "id": "bundle-reveal-withholds",
+    "file": "crates/reports/src/source_funds_bundle.rs",
+    "find": "let include_files = matches!(mode.as_str(), \"standard\" | \"full\");",
+    "replace": "let include_files = true;",
+    "expect_failing": ["the_bundle_ships_disclosed_evidence_only_when_its_hash_matches"],
+    "rule": "Evidence files ship only in the standard and full reveal modes."
+  },
+  {
+    "id": "bundle-safe-name-unique",
+    "file": "crates/reports/src/source_funds_bundle.rs",
+    "find": "while used.contains(&name) {",
+    "replace": "while used.contains(&name) && false {",
+    "expect_failing": ["safe_names_match_python"],
+    "rule": "Bundled evidence names are unique, numbered like Python's."
   }
 ]

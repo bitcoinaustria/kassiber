@@ -46,6 +46,7 @@ pub const KINDS: &[&str] = &[
     "ui.source_funds.assemble",
     "ui.source_funds.evidence.list",
     "ui.source_funds.export_pdf",
+    "ui.source_funds.export_bundle",
     "ui.source_funds.coverage",
     "ui.source_funds.recipients.list",
     "ui.source_funds.recipients.create",
@@ -601,7 +602,7 @@ mod tests {
             assert_eq!(get(&actual, "args"), Some(&args));
         }
         assert!(KINDS.contains(&"ui.source_funds.export_pdf"));
-        assert!(!KINDS.contains(&"ui.source_funds.export_bundle"));
+        assert!(KINDS.contains(&"ui.source_funds.export_bundle"));
         assert_eq!(cross_check_args(None).unwrap(), dict::<&str>([]));
         assert_eq!(
             cross_check_args(Some(&Value::Null)).unwrap(),

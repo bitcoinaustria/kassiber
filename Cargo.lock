@@ -2792,6 +2792,7 @@ version = "0.1.0"
 dependencies = [
  "kassiber-custody",
  "kassiber-envelope",
+ "kassiber-paths",
  "kassiber-pdf",
  "kassiber-pydecimal",
  "kassiber-pyjson",

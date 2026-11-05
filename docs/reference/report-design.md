@@ -312,8 +312,13 @@ One report per commit, each with data parity against Python's model.
 | 4 | Source of funds | `reports export-source-funds-pdf`, `ui.source_funds.export_pdf` | native, shared design |
 | 5 | XLSX | full, Austrian, exit tax, cross-check, verification, year handoff | native, shared design |
 | 6 | CSV | full, capital gains, Austrian bundle, transactions | native, shared design |
-| 7 | Bundles | `reports export-austrian`, `ui.reports.export_audit_package`, source-of-funds bundle | pending |
-| 8 | Registration | every CLI leaf and daemon kind native, no fallback | pending |
+| 7 | Bundles | `reports export-source-funds-bundle`, `ui.source_funds.export_bundle`; `reports export-austrian` is the Austrian PDF (row 3) | native, shared design |
+| 8 | Registration | every report export leaf and kind above is registered natively and never falls back to Python | native |
+
+Two report routes stay in Python and are not report-design work: the audit
+package (`ui.reports.export_audit_package`) renders no report (it writes an
+evidence summary as JSON and copies evidence files), and `reports
+privacy-mirror` is a read ported separately.
 
 ### Envelope differences
 
@@ -332,6 +337,7 @@ keep byte parity with Python except where the new format changes them:
 | Full report CSV | `file`, `bytes`, `sections`, `rows`, `report_snapshot.content_sha256` | the ZIP's path (`.zip` instead of `.csv`), size and hash; `sections` lists the design's table ids and `rows` counts their rows; `title` and `wallet` stay Python's |
 | Austrian CSV bundle | `files`, `sheets`, `report_snapshot.content_sha256` | the design's files (`summary.csv`, one per table, `manifest.json`) and table ids; `form`, `tax_year`, `rows` and `summary_rows` stay Python's |
 | Transactions and capital-gains CSV | `bytes` | the new columns' file; `rows`, `title`, `wallet`, `warnings` and `range` stay Python's |
+| Source-of-funds bundle | `bytes` | the ZIP holds the new PDF, so its size and the manifest's `report_pdf.sha256` differ; members, evidence bytes and every other manifest value are Python's; member timestamps are fixed, so the ZIP repeats byte for byte |
 | Austrian E 1kv | `pages`, `bytes`, `report_snapshot.content_sha256`, `renderer` | the new PDF's; `renderer` is `typst` instead of `reportlab`; `title`, `sections` (Python's section ids, each still present in the new layout), `assumptions` and `transactions` stay Python's |
 
 ## Owner decisions (2026-11-04)

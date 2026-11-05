@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import shutil
 import sqlite3
+import zipfile
 
 import pytest
 
@@ -408,6 +409,131 @@ def test_source_funds_pdf_daemon_envelope_errors_and_native_routing(tmp_path, mo
             records.append(_exit_normalized(raw, Path(data["file"])) if record["kind"] != "error"
                            and isinstance(data, dict) and "file" in data else raw)
         return records, _dump(root, {}), sorted(str(p.relative_to(exports)) for p in exports.rglob("*.pdf"))
+
+    native, reference = session(False), session(True)
+    for actual, expected in zip(native[0], reference[0]):
+        assert actual == expected
+    assert native == reference
+    assert _served(env) == [{"command": "daemon", "served_by": "rust"}]
+
+
+def _bundle_book(tmp_path, monkeypatch):
+    """The source-of-funds book with cases for the bundle: `case-1` with its
+    evidence file on disk and hashed in the snapshot, `c-labels` withholding
+    evidence, `c-changed` whose file no longer matches and `c-gone` whose
+    file is missing."""
+    from kassiber.core.source_funds import _snapshot_hash
+    from kassiber.db import resolve_attachments_root
+
+    root, database, env, call = _source_funds_book(tmp_path, monkeypatch)
+    evidence = b"%PDF-1.4 invoice evidence\n"
+    stored = resolve_attachments_root(root) / "not-read" / "secret.pdf"
+    stored.parent.mkdir(parents=True)
+    stored.write_bytes(evidence)
+    conn = sqlite3.connect(database)
+    conn.row_factory = sqlite3.Row
+    row = dict(conn.execute("SELECT * FROM source_funds_cases WHERE id='case-1'").fetchone())
+
+    def save(case_id, sha, reveal="standard"):
+        snapshot = json.loads(row["snapshot_json"])
+        snapshot["reveal_mode"] = reveal
+        for item in snapshot["disclosure_preview"]["attachments"]:
+            if item["id"] == "a-a":
+                item["sha256"] = sha
+        if isinstance(snapshot.get("case"), dict):
+            snapshot["case"]["id"] = case_id
+        fields = dict(row, id=case_id, reveal_mode=reveal, snapshot_json=json.dumps(snapshot),
+                      snapshot_hash=_snapshot_hash(snapshot))
+        conn.execute("DELETE FROM source_funds_cases WHERE id=?", (case_id,))
+        conn.execute(f"INSERT INTO source_funds_cases({','.join(fields)}) VALUES({','.join('?' * len(fields))})",
+                     tuple(fields.values()))
+
+    digest = hashlib.sha256(evidence).hexdigest()
+    save("case-1", digest)
+    save("c-labels", digest, "labels_only")
+    save("c-changed", "0" * 64)
+    conn.commit()
+    conn.close()
+    return root, database, env, call, stored
+
+
+def _bundle_normalized(stdout, artifact):
+    """A bundle's response and contents. The PDF inside is the shared
+    design's, so the ZIP's size and the PDF's hash differ; the manifest,
+    member names and evidence bytes must not."""
+    payload = json.loads(stdout)
+    data = payload["data"]
+    assert data["bytes"] == artifact.stat().st_size
+    data["bytes"] = "<zip>"
+    with zipfile.ZipFile(artifact) as bundle:
+        names = bundle.namelist()
+        assert bundle.read("source-of-funds-report.pdf").startswith(b"%PDF-")
+        manifest = json.loads(bundle.read("manifest.json"))
+        manifest["report_pdf"]["sha256"] = "<pdf-sha256>"
+        # The reference process freezes the report clock, not source-funds'
+        # `now_iso`; Rust's harness freezes both.
+        assert manifest["generated_at"].endswith("Z")
+        manifest["generated_at"] = "<generated-at>"
+        evidence = {name: bundle.read(name) for name in names if name.startswith("evidence/")}
+    return json.dumps(payload, sort_keys=True).encode(), names, manifest, evidence
+
+
+def test_source_funds_bundle_cli_envelope_contents_and_native_routing(tmp_path, monkeypatch):
+    root, database, env, call, stored = _bundle_book(tmp_path, monkeypatch)
+    before = database.read_bytes()
+    target = tmp_path / "nested" / "bundle.out"
+
+    def sequence(reference):
+        database.write_bytes(before)
+        shutil.rmtree(target.parent, ignore_errors=True)
+        outcomes = []
+        for flags in [["--case", "case-1"], ["--case", "case-1"], ["--case", "c-labels"], ["--case", "c-changed"],
+                      ["--case", "missing"], [], ["--case", "c-z"], ["--case", "c-a"], ["--case", "gone"]]:
+            if flags == ["--case", "gone"]:
+                stored.rename(stored.with_suffix(".moved"))
+                flags = ["--case", "case-1"]
+            result = call("--machine", "reports", "export-source-funds-bundle", "--file", str(target), *flags,
+                          reference=reference)
+            stdout = (_bundle_normalized(result.stdout, target.with_suffix(".zip")) if result.returncode == 0
+                      else _normalize(result.stdout, {}))
+            outcomes.append((result.returncode, stdout, result.stderr, _dump(root, {})))
+        stored.with_suffix(".moved").rename(stored)
+        return outcomes
+
+    native, reference = sequence(False), sequence(True)
+    for actual, expected in zip(native, reference):
+        if isinstance(actual[1], tuple) and isinstance(expected[1], tuple):
+            for part, (mine, theirs) in zip(("envelope", "members", "manifest", "evidence"),
+                                            zip(actual[1], expected[1])):
+                assert mine == theirs, part
+        assert actual == expected
+    assert native == reference
+    served = _served(env)
+    assert served and all(c["served_by"] == "rust" for c in served)
+    assert {c["command"] for c in served} == {"reports.export-source-funds-bundle"}
+
+
+def test_source_funds_bundle_daemon_envelope_and_native_routing(tmp_path, monkeypatch):
+    root, database, env, call, _ = _bundle_book(tmp_path, monkeypatch)
+    before = database.read_bytes()
+    exports = tmp_path / "exports"
+    requests = [{"case": "case-1"}, {"case": "case-1"}, {"case": "c-labels"}, {"case": 1}, {}, {"case": "missing"},
+                {"case": "c-changed"}, {"case": None}]
+    wire = b"".join((json.dumps(dict(request_id=i, kind="ui.source_funds.export_bundle", args=args)) + "\n").encode()
+                    for i, args in enumerate(requests)) + b'{"request_id":"done","kind":"daemon.shutdown"}\n'
+
+    def session(reference):
+        shutil.rmtree(exports, ignore_errors=True)
+        database.write_bytes(before)
+        result = call("daemon", reference=reference, wire=wire)
+        assert (result.returncode, result.stderr) == (0, b""), result.stderr
+        records = []
+        for raw in result.stdout.splitlines()[1:]:
+            record = json.loads(raw)
+            data = record.get("data")
+            records.append(_bundle_normalized(raw, Path(data["file"])) if record["kind"] != "error"
+                           and isinstance(data, dict) and "file" in data else raw)
+        return records, _dump(root, {}), sorted(str(p.relative_to(exports)) for p in exports.rglob("*"))
 
     native, reference = session(False), session(True)
     for actual, expected in zip(native[0], reference[0]):

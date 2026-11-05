@@ -16,10 +16,11 @@ from tests.test_rust_report_exports import _book, ROOT, RUST_BIN
 from tests.test_rust_source_funds_diagnostics import _compare
 
 
-PDF_COMMANDS = {'reports.export-source-funds-bundle'}
-PDF_KINDS = {'ui.source_funds.export_bundle'}
+# Every source-funds route is native; none stays Python.
+PDF_COMMANDS = set()
+PDF_KINDS = set()
 NATIVE_COMMANDS = {
-    'reports.source-funds', 'reports.export-source-funds-pdf',
+    'reports.source-funds', 'reports.export-source-funds-pdf', 'reports.export-source-funds-bundle',
     'source-funds.sources.list', 'source-funds.sources.create', 'source-funds.sources.attach',
     'source-funds.links.list', 'source-funds.links.create', 'source-funds.links.review',
     'source-funds.links.attach', 'source-funds.links.bulk-review',
@@ -32,7 +33,7 @@ NATIVE_KINDS = {
     'ui.source_funds.' + name.removeprefix('source-funds.').replace('-', '_')
     for name in NATIVE_COMMANDS if name.startswith('source-funds.')
 } | {'ui.source_funds.preview', 'ui.source_funds.cases.save', 'ui.source_funds.evidence.list',
-     'ui.source_funds.export_pdf'}
+     'ui.source_funds.export_pdf', 'ui.source_funds.export_bundle'}
 
 
 def catalog():
@@ -41,8 +42,8 @@ def catalog():
 
 
 def test_source_funds_route_inventory_accounts_for_native_and_python_owners():
-    assert len(NATIVE_COMMANDS) == 20
-    assert len(NATIVE_KINDS) == 22
+    assert len(NATIVE_COMMANDS) == 21
+    assert len(NATIVE_KINDS) == 23
     assert {c['kind'] for c in catalog()} == NATIVE_COMMANDS | PDF_COMMANDS
     assert {k for k in daemon.SUPPORTED_KINDS if k.startswith('ui.source_funds.')} == NATIVE_KINDS | PDF_KINDS
     for path, expected in [

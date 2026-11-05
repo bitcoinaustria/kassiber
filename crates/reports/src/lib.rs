@@ -47,6 +47,7 @@ mod snapshots;
 mod source_funds_assemble;
 mod source_funds_assembly;
 pub mod source_funds_batch;
+pub mod source_funds_bundle;
 pub mod source_funds_cases;
 mod source_funds_coverage;
 pub mod source_funds_disclosure;

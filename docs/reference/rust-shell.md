@@ -17800,7 +17800,14 @@ saved source-of-funds case in the design: the case snapshot is read and its
 hash checked like Python's `load_case_snapshot`, outdated and blocked
 snapshots refuse with Python's errors, no journal freshness admission and no
 saved marker, managed name `kassiber-source-funds-…pdf`; the flow diagram is
-drawn natively. The bundle (`export-source-funds-bundle`) still runs in Python.
+drawn natively. The bundle (`reports export-source-funds-bundle`,
+`ui.source_funds.export_bundle`) is native too: Python's admission and
+refusals (named for the bundle), the `.zip` suffix, the reveal-mode rule for
+evidence, each evidence file read from the attachments root and checked
+against the hash the saved case disclosed, the manifest, and the managed name
+`kassiber-source-funds-bundle-…zip`. Its ZIP holds the design's PDF and fixed
+member timestamps. `tests/test_rust_pdf_exports.py` compares envelopes,
+refusals, manifests, member names and evidence bytes with Python's.
 
 The XLSX exports (`reports export-xlsx`, `export-austrian-e1kv-xlsx`,
 `export-exit-tax-xlsx`, `export-year-handoff`, `cross-check --xlsx` and their

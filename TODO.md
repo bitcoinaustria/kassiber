@@ -858,9 +858,10 @@ registers them; exit-tax preserves its reference no-registration boundary.
   [shared report design](docs/reference/report-design.md) and move the full
   report, Austrian E 1kv, exit-tax and source-of-funds PDFs onto it (the
   fixed-pitch writer is gone).
-- [ ] Roll out the rest of the [report design](docs/reference/report-design.md#rollout)
-  one report per commit: the bundles, and native registration of every
-  report leaf and kind. The XLSX and CSV exports are done.
+- [x] Roll out the [report design](docs/reference/report-design.md#rollout)
+  one report per commit: XLSX, CSV, the source-of-funds bundle and native
+  registration of every report export. The audit package renders no report
+  and remains a separate port.
 
 ## Rust backend R4
 

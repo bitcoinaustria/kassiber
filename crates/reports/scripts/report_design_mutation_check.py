@@ -13,6 +13,8 @@ checker.ENGINE_PACKAGES = (
     "-p", "kassiber-reports", "--offline", "--lib", "--test", "report_design", "--test", "austrian_pdf",
     "--test", "source_funds_pdf", "--test", "artifact_vectors",
 )
+# Tests run one at a time on a shared, loaded build disk.
+checker.TEST_TIMEOUT_SECONDS = 7200
 checker.MUTATIONS = Path(__file__).with_name("report_design_mutations.json")
 
 if __name__ == "__main__":

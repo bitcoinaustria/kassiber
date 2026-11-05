@@ -37,6 +37,8 @@ pub fn handles(command: &str) -> bool {
             | "ui.reports.export_austrian_e1kv_pdf"
             | "ui.reports.export_capital_gains_csv"
             | "ui.source_funds.export_pdf"
+            | "reports.export-source-funds-bundle"
+            | "ui.source_funds.export_bundle"
     )
 }
 fn validation(message: impl Into<String>) -> AppError {

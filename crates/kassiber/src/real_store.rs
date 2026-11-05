@@ -2315,6 +2315,16 @@ impl Book for RealBook {
                     }
                 }
             }
+            if kassiber_reports::source_funds_bundle::COMMANDS.contains(&command) {
+                return kassiber_reports::source_funds_bundle::execute(
+                    self.conn()?,
+                    command,
+                    &args,
+                    &paths.exports_root,
+                    &paths.attachments_root,
+                    &ReportSources,
+                );
+            }
             return kassiber_reports::export_request::execute(
                 self.conn()?,
                 command,

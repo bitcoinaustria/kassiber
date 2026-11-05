@@ -5,7 +5,7 @@ use artifact_csv::{File, Prepared};
 use sha2::{Digest, Sha256};
 
 /// `_snapshot_hash`: SHA-256 of the snapshot's sorted, compact JSON.
-fn snapshot_hash(snapshot: &Value) -> Result<String> {
+pub(super) fn snapshot_hash(snapshot: &Value) -> Result<String> {
     let compact = kassiber_pyjson::dumps(
         &kassiber_envelope::json_ready(snapshot.clone()),
         &kassiber_pyjson::Options::new().sort_keys(true).compact(),
@@ -45,15 +45,29 @@ pub fn model(
     args: &Value,
     sources: &dyn kassiber_setup::Sources,
 ) -> Result<Value> {
+    admit(conn, args, sources, false)
+}
+
+/// `model` for the PDF or, with `bundle`, the bundle, whose refusals name it.
+pub(super) fn admit(
+    conn: &Connection,
+    args: &Value,
+    sources: &dyn kassiber_setup::Sources,
+    bundle: bool,
+) -> Result<Value> {
     let case = value(args, "case");
     if !truthy(case) {
         return Err(AppError::new(
             "validation",
-            "export-source-funds-pdf requires --case from a saved source-funds preview",
+            format!(
+                "export-source-funds-{} requires --case from a saved source-funds preview",
+                if bundle { "bundle" } else { "pdf" }
+            ),
         )
-        .with_hint(
-            "Run `reports source-funds --save-case ...` first, review the disclosure preview, then export that case id.",
-        ));
+        .with_hint(format!(
+            "Run `reports source-funds --save-case ...` first, review the disclosure preview, then export that case id{}.",
+            if bundle { " as a bundle" } else { "" }
+        )));
     }
     let (_, profile) = kassiber_setup::references::scope(conn, args)?;
     let report = load_case(conn, &profile, &py_str(case))?;
@@ -71,7 +85,10 @@ pub fn model(
     if !truthy(value(gates, "exportable")) {
         return Err(AppError::new(
             "export_blocked",
-            "Source-of-funds PDF export is blocked by unresolved review gates",
+            format!(
+                "Source-of-funds {} export is blocked by unresolved review gates",
+                if bundle { "bundle" } else { "PDF" }
+            ),
         )
         .with_hint("Run `reports source-funds --machine ...` and resolve every explain_gates.blockers item.")
         .with_details(dict([("blockers", value(gates, "blockers").clone())])));

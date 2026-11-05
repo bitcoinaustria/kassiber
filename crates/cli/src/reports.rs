@@ -25,6 +25,7 @@ pub const COMMANDS: &[&str] = &[
     "reports.export-austrian-e1kv-pdf",
     "reports.export-austrian",
     "reports.export-source-funds-pdf",
+    "reports.export-source-funds-bundle",
     "reports.export-xlsx",
     "reports.exit-tax",
     "reports.export-exit-tax-xlsx",
@@ -144,6 +145,7 @@ pub fn execute(book: &mut dyn Book, command: &str, args: &Namespace) -> Result<V
             | "reports.export-austrian-e1kv-pdf"
             | "reports.export-austrian"
             | "reports.export-source-funds-pdf"
+            | "reports.export-source-funds-bundle"
             | "reports.export-xlsx"
             | "reports.export-exit-tax-xlsx"
             | "reports.export-austrian-e1kv-csv"
@@ -793,12 +795,13 @@ mod tests {
             );
             assert_eq!(get(&actual, "args"), Some(&payload));
         }
+        // The source-of-funds exports are native report exports.
         for command in [
             "reports.export-source-funds-pdf",
             "reports.export-source-funds-bundle",
         ] {
-            assert!(!COMMANDS.contains(&command));
-            assert!(!crate::describe::IMPLEMENTED.contains(&command));
+            assert!(COMMANDS.contains(&command));
+            assert!(crate::describe::IMPLEMENTED.contains(&command));
         }
     }
     #[test]
