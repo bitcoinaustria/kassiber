@@ -11876,8 +11876,8 @@
   {
     "id": "GAP-009",
     "file": "crates/custody/src/gaps/normalize.rs",
-    "find": "![\"outbound\", \"inbound\"].contains(&direction.as_str())",
-    "replace": "![\"inbound\"].contains(&direction.as_str())",
+    "find": "![\"outbound\", \"inbound\"].contains(&&*direction)",
+    "replace": "![\"inbound\"].contains(&&*direction)",
     "rule": "Admit outbound boundaries as sources.",
     "expect_failing": [
       "gaps_search_vectors"
@@ -11886,8 +11886,8 @@
   {
     "id": "GAP-010",
     "file": "crates/custody/src/gaps/normalize.rs",
-    "find": "text(&row[\"asset\"]).py_strip().py_upper()",
-    "replace": "text(&row[\"asset\"]).py_strip().to_owned()",
+    "find": "python_text::upper(&stripped(&row[\"asset\"])).into_owned()",
+    "replace": "stripped(&row[\"asset\"]).into_owned()",
     "rule": "Canonicalize assets with CPython uppercase mappings.",
     "expect_failing": [
       "gaps_search_vectors"
@@ -11946,8 +11946,8 @@
   {
     "id": "GAP-017",
     "file": "crates/custody/src/gaps/normalize.rs",
-    "find": "[\"parent\", \"child\"].contains(&lower(role).as_str())",
-    "replace": "[\"parent\"].contains(&lower(role).as_str())",
+    "find": "[\"parent\", \"child\"].contains(&&*lower(role))",
+    "replace": "[\"parent\"].contains(&&*lower(role))",
     "rule": "Samourai child policy is typed evidence.",
     "expect_failing": [
       "gaps_search_vectors"
@@ -24718,6 +24718,26 @@
       "quantity_arbitration_vectors"
     ],
     "rule": "Observed posting ids join their prefix and hash with a colon."
+  },
+  {
+    "id": "gap-lower-borrowed",
+    "file": "crates/custody/src/gaps/normalize.rs",
+    "find": "        Value::String(s) => python_text::lower(python_text::strip(s)),",
+    "replace": "        Value::String(s) => std::borrow::Cow::Borrowed(python_text::strip(s)),",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ],
+    "rule": "Gap texts are lowercased whether or not they are borrowed."
+  },
+  {
+    "id": "gap-stripped-borrowed",
+    "file": "crates/custody/src/gaps/normalize.rs",
+    "find": "        Value::String(s) => std::borrow::Cow::Borrowed(python_text::strip(s)),",
+    "replace": "        Value::String(s) => std::borrow::Cow::Borrowed(s.as_str()),",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ],
+    "rule": "Borrowed gap identifiers are stripped."
   },
   {
     "id": "R4-evidence-alias-slot-index",

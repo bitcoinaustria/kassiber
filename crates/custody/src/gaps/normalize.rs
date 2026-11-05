@@ -77,9 +77,21 @@ fn truthy(v: &Value) -> bool {
         || v.as_f64() == Some(1.0)
         || ["true", "yes", "on"].contains(&text(v).py_strip().py_lower().as_str())
 }
-fn lower(v: &Value) -> String {
-    text(v).py_strip().py_lower()
+/// `text` of `v`, stripped and lowercased, borrowed when `v` spells it.
+fn lower(v: &Value) -> std::borrow::Cow<'_, str> {
+    match v {
+        Value::String(s) => python_text::lower(python_text::strip(s)),
+        v => std::borrow::Cow::Owned(text(v).py_strip().py_lower()),
+    }
 }
+/// `text` of `v` stripped, borrowed when `v` spells it.
+fn stripped(v: &Value) -> std::borrow::Cow<'_, str> {
+    match v {
+        Value::String(s) => std::borrow::Cow::Borrowed(python_text::strip(s)),
+        v => std::borrow::Cow::Owned(text(v).py_strip().to_owned()),
+    }
+}
+static ZERO: std::sync::LazyLock<Value> = std::sync::LazyLock::new(|| json!(0));
 const SAMOURAI_KINDS: &[&str] = &["samourai", "samourai-whirlpool", "whirlpool"];
 const SAMOURAI_TRANSACTIONS: &[&str] = &[
     "samourai_deposit",
@@ -95,20 +107,19 @@ const SAMOURAI_TRANSACTIONS: &[&str] = &[
     "coinjoin",
 ];
 fn policy(role: &Value, section: &Value) -> bool {
-    ["parent", "child"].contains(&lower(role).as_str())
-        && ["deposit", "badbank", "premix", "postmix", "ricochet"]
-            .contains(&lower(section).as_str())
+    ["parent", "child"].contains(&&*lower(role))
+        && ["deposit", "badbank", "premix", "postmix", "ricochet"].contains(&&*lower(section))
 }
 fn codes(row: &Row<'_>) -> (BTreeSet<String>, BTreeSet<String>) {
     let mut signals = BTreeSet::new();
     let mut disqualifiers = BTreeSet::new();
-    if ["coinjoin", "payjoin", "whirlpool"].contains(&lower(&row["privacy_boundary"]).as_str()) {
+    if ["coinjoin", "payjoin", "whirlpool"].contains(&&*lower(&row["privacy_boundary"])) {
         signals.insert("structured_privacy_boundary".into());
     }
-    if SAMOURAI_KINDS.contains(&lower(&row["wallet_kind"]).as_str()) {
+    if SAMOURAI_KINDS.contains(&&*lower(&row["wallet_kind"])) {
         signals.insert("structured_samourai_wallet".into());
     }
-    if SAMOURAI_TRANSACTIONS.contains(&lower(&row["kind"]).as_str()) {
+    if SAMOURAI_TRANSACTIONS.contains(&&*lower(&row["kind"])) {
         signals.insert("structured_samourai_transaction".into());
     }
     let kind = if row["kind_override"].is_null() || row["kind_override"] == "" {
@@ -165,17 +176,17 @@ pub(super) fn leg<'a>(
     ignored: &BTreeSet<String>,
 ) -> Result<Option<Leg>, String> {
     let row = row.into();
-    let id = text(&row["id"]).py_strip().to_owned();
+    let id = stripped(&row["id"]).into_owned();
     if id.is_empty() || ignored.contains(&id) || truthy(&row["excluded"]) {
         return Ok(None);
     }
     let direction = lower(&row["direction"]);
-    if !["outbound", "inbound"].contains(&direction.as_str()) {
+    if !["outbound", "inbound"].contains(&&*direction) {
         return Ok(None);
     }
-    let profile_id = text(&row["profile_id"]).py_strip().to_owned();
-    let wallet_id = text(&row["wallet_id"]).py_strip().to_owned();
-    let asset = text(&row["asset"]).py_strip().py_upper();
+    let profile_id = stripped(&row["profile_id"]).into_owned();
+    let wallet_id = stripped(&row["wallet_id"]).into_owned();
+    let asset = python_text::upper(&stripped(&row["asset"])).into_owned();
     let when = time::instant(&row["occurred_at"]).map_err(|e| e.code.to_owned())?;
     let amount = exact(row.get("amount_msat").unwrap_or(&row["amount"]))?.filter(|v| *v > zero());
     if profile_id.is_empty()
@@ -186,7 +197,7 @@ pub(super) fn leg<'a>(
     {
         return Ok(None);
     }
-    let Some(fee) = exact(row.get("fee").unwrap_or(&json!(0)))? else {
+    let Some(fee) = exact(row.get("fee").unwrap_or(&ZERO))? else {
         return Ok(None);
     };
     let outbound = direction == "outbound";
@@ -219,7 +230,7 @@ pub(super) fn leg<'a>(
             wallet_id
         },
         when: when.expect("admitted timestamp"),
-        direction,
+        direction: direction.into_owned(),
         asset,
         chain,
         network,
