@@ -7,8 +7,10 @@
 //! control channel. Only `ai.list_models`, `ai.test_connection`,
 //! `ai providers test` and `ai models` contact a provider, after the
 //! provider gates, through the [`Gate`] the host supplies. CLI agent
-//! runtimes go through the provider broker, which is not native yet
-//! (R6-6b): those paths answer `not_implemented` before starting anything.
+//! runtimes go through the provider broker ([`crate::broker`]), launched
+//! on a process route of the same gate: `ai.provider_runtime.status`
+//! without `cached_only`, and model listing and connection tests on a
+//! `*-cli://default` row.
 
 use std::time::Duration;
 
@@ -17,6 +19,7 @@ pub use kassiber_net::Gate;
 use kassiber_pyjson::Value;
 use kassiber_store::rusqlite::Connection;
 
+use crate::broker::{BrokerClient, Locate, Scope};
 use crate::discovery::{unchecked_metadata, Cache};
 use crate::providers::{self as store, cli_provider_for_locator, is_cli_locator};
 use crate::pyval::{field, opt, s, str_or_none, string};
@@ -73,17 +76,13 @@ pub trait Host {
     ) -> Result<Value, AppError>;
     /// The RAM-only discovery cache of this process.
     fn discovery(&self) -> &Cache;
-    /// The gate every provider request is authorized by.
+    /// The gate every provider request and broker launch is authorized by.
     fn gate(&self) -> Gate;
-}
-
-/// The broker-backed paths R6-6b ports.
-fn broker_not_native() -> AppError {
-    AppError::new(
-        "not_implemented",
-        "the AI provider broker client is not implemented in the Rust backend yet",
-    )
-    .with_details(dict([("component", s("ai"))]))
+    /// How the provider broker is found: the environment overrides, else
+    /// the bundled script.
+    fn broker(&self) -> Locate {
+        crate::broker::default_locate()
+    }
 }
 
 fn validation(message: impl Into<String>) -> AppError {
@@ -696,6 +695,8 @@ fn runtime_status(conn: &Connection, host: &mut dyn Host, args: &Value) -> Resul
         ));
     }
     let mut scoped = None;
+    let mut probe: Vec<&'static str> = Vec::new();
+    let mut single = None;
     let (key, nothing_to_probe) = match &provider_name {
         None => {
             // Only runtimes an enabled, acknowledged row allows; a seeded
@@ -703,7 +704,8 @@ fn runtime_status(conn: &Connection, host: &mut dyn Host, args: &Value) -> Resul
             let allowed = store::contactable_cli_runtimes(conn)?;
             let mut parts = vec!["runtime", "*"];
             parts.extend(allowed.iter().copied());
-            (cache_key(&parts), allowed.is_empty())
+            probe = allowed;
+            (cache_key(&parts), probe.is_empty())
         }
         Some(name) => {
             let provider = store::get(conn, name)?;
@@ -719,6 +721,8 @@ fn runtime_status(conn: &Connection, host: &mut dyn Host, args: &Value) -> Resul
             if !cached_only {
                 store::require_contactable(&provider)?;
             }
+            // Its probe starts only that runtime's CLI.
+            single = Some(runtime);
             (cache_key(&["runtime", runtime]), false)
         }
     };
@@ -734,9 +738,15 @@ fn runtime_status(conn: &Connection, host: &mut dyn Host, args: &Value) -> Resul
             ),
         }
     } else {
-        let snapshot = host
-            .discovery()
-            .get(&key, refresh, || Err(broker_not_native()))?;
+        let gate = host.gate();
+        let locate = host.broker();
+        let snapshot = host.discovery().get(&key, refresh, || {
+            let scope = match single {
+                Some(runtime) => Scope::One(runtime),
+                None => Scope::Many(&probe),
+            };
+            crate::broker::runtime_status(&gate, &locate, scope)
+        })?;
         with_metadata(
             vec![("providers", snapshot.value.clone())],
             snapshot.metadata(),
@@ -770,7 +780,9 @@ fn list_models(conn: &Connection, host: &mut dyn Host, args: &Value) -> Result<V
         refresh,
         || {
             if cli {
-                return Err(broker_not_native());
+                return broker_client(host, &base_url, crate::transport::DEFAULT_TIMEOUT)?
+                    .list_models()
+                    .map(Value::List);
             }
             http_client(
                 host,
@@ -913,7 +925,11 @@ fn test_connection(
         ));
     }
     if cli {
-        return Err(broker_not_native());
+        let models = broker_client(host, &canonical, Duration::from_secs(10))?.list_models()?;
+        let mut payload = vec![("base_url".to_owned(), s(&canonical))];
+        payload.extend(cli_connection_test(models));
+        payload.push(("detection_saved".into(), Value::Bool(false)));
+        return Ok(dict(payload));
     }
     // Discovery fails fast; the one test request has its own, longer
     // timeout so a local model can load.
@@ -1013,18 +1029,20 @@ pub fn cli(
             // as `ai.list_models`.
             store::require_contactable(&provider)?;
             let key = store::api_key_for_use(&provider, None, None)?;
-            if is_cli_locator(field(&provider, "base_url")) {
-                return Err(broker_not_native());
-            }
-            let kind = string(field(&provider, "kind"));
-            let mut client = http_client(
-                host,
-                &kassiber_envelope::py_str(field(&provider, "base_url")),
-                key,
-                kind.as_deref(),
-                crate::transport::DEFAULT_TIMEOUT,
-            );
-            let models = client.list_models(false)?;
+            let base_url = kassiber_envelope::py_str(field(&provider, "base_url"));
+            let models = if is_cli_locator(field(&provider, "base_url")) {
+                broker_client(host, &base_url, crate::transport::DEFAULT_TIMEOUT)?.list_models()?
+            } else {
+                let kind = string(field(&provider, "kind"));
+                http_client(
+                    host,
+                    &base_url,
+                    key,
+                    kind.as_deref(),
+                    crate::transport::DEFAULT_TIMEOUT,
+                )
+                .list_models(false)?
+            };
             Ok(dict([
                 ("provider", field(&provider, "name").clone()),
                 ("models", Value::List(models)),
@@ -1047,10 +1065,19 @@ fn cli_test(
     let provider = store::get(conn, name)?;
     store::require_contactable(&provider)?;
     let key = store::api_key_for_use(&provider, None, None)?;
-    if is_cli_locator(field(&provider, "base_url")) {
-        return Err(broker_not_native());
-    }
     let base_url = kassiber_envelope::py_str(field(&provider, "base_url"));
+    if is_cli_locator(field(&provider, "base_url")) {
+        // A listing alone: the probe is skipped, so no model is required and
+        // no format is detected.
+        let models = broker_client(host, &base_url, Duration::from_secs(10))?.list_models()?;
+        let mut payload = vec![
+            ("provider".to_owned(), field(&provider, "name").clone()),
+            ("base_url".to_owned(), field(&provider, "base_url").clone()),
+        ];
+        payload.extend(cli_connection_test(models));
+        payload.push(("detection_saved".into(), Value::Bool(false)));
+        return Ok(dict(payload));
+    }
     let mut config = ClientConfig::new(&base_url);
     config.api_key = key;
     config.timeout = Duration::from_secs(10);
@@ -1102,9 +1129,51 @@ fn cli_test(
 
 /// The gate the product uses: the persisted offline switch, read afresh
 /// before every connection.
+/// `ai_client_for_locator(...)` for a CLI locator.
+fn broker_client(
+    host: &dyn Host,
+    locator: &str,
+    timeout: Duration,
+) -> Result<BrokerClient, AppError> {
+    Ok(BrokerClient::new(locator, timeout, host.gate())?.with_locate(host.broker()))
+}
+
+/// `run_connection_test(client, http=False)`: the listing, with the probe
+/// skipped because a CLI provider has no HTTP format to detect.
+fn cli_connection_test(models: Vec<Value>) -> Vec<(String, Value)> {
+    let binary_presence = models
+        .iter()
+        .any(|row| *field(row, "check_kind") == s("binary_presence"));
+    vec![
+        ("model_count".into(), Value::from(models.len())),
+        ("models".into(), Value::List(models)),
+        (
+            "check_kind".into(),
+            s(if binary_presence {
+                "binary_presence"
+            } else {
+                "models"
+            }),
+        ),
+        ("api_format".into(), Value::Null),
+        ("detected_api_format".into(), Value::Null),
+        ("tools_accepted".into(), Value::Null),
+        ("store_accepted".into(), Value::Null),
+        (
+            "probe".into(),
+            dict([
+                ("status", s("skipped")),
+                ("reason", s("cli_provider")),
+                ("model", Value::Null),
+                ("finish_reason", Value::Null),
+            ]),
+        ),
+    ]
+}
+
 pub fn system_gate() -> Gate {
     use kassiber_net::{Ledger, Offline};
-    Gate::new(
+    let gate = Gate::new(
         || match kassiber_paths::Context::from_env()
             .ok()
             .and_then(|c| kassiber_setup::offline::preference_path(&c).ok())
@@ -1114,7 +1183,14 @@ pub fn system_gate() -> Gate {
             None => Offline::Unavailable,
         },
         Ledger::default(),
-    )
+    );
+    // Test builds: the one fake broker an armed observer admits.
+    #[cfg(feature = "test-harness")]
+    let gate = match std::env::var_os("KASSIBER_RUST_TEST_AI_BROKER_FIXTURE") {
+        Some(script) => gate.with_broker_fixture(script.into()),
+        None => gate,
+    };
+    gate
 }
 
 #[cfg(test)]
@@ -1129,6 +1205,70 @@ mod tests {
         calls: Vec<String>,
         fail: bool,
         cache: Cache,
+        broker: Option<(Gate, Locate)>,
+    }
+
+    /// A Python script run as the broker, logging each request it reads.
+    struct FakeBroker {
+        dir: std::path::PathBuf,
+        script: std::path::PathBuf,
+        gate: Gate,
+    }
+
+    impl FakeBroker {
+        fn new(body: &str) -> Self {
+            static COUNT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+            let dir = std::env::temp_dir().join(format!(
+                "kassiber-service-broker-{}-{}",
+                std::process::id(),
+                COUNT.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+            ));
+            std::fs::create_dir_all(&dir).unwrap();
+            let script = dir.join("broker.py");
+            let log = dir.join("requests.jsonl");
+            let logged = body.replacen(
+                "request = json.loads(sys.stdin.readline())\n",
+                &format!(
+                    "line = sys.stdin.readline()\nopen({:?}, 'a').write(line)\nrequest = json.loads(line)\n",
+                    log.to_str().unwrap()
+                ),
+                1,
+            );
+            std::fs::write(&script, logged).unwrap();
+            let gate = Gate::new(|| kassiber_net::Offline::Online, Default::default())
+                .with_test_observer(false)
+                .with_broker_fixture(script.clone());
+            Self { dir, script, gate }
+        }
+
+        fn host(&self) -> (Gate, Locate) {
+            let program = kassiber_net::BrokerProgram::new(
+                kassiber_net::which("python3"),
+                self.script.clone(),
+            );
+            (
+                self.gate.clone(),
+                std::sync::Arc::new(move || program.clone()),
+            )
+        }
+
+        fn launches(&self) -> usize {
+            self.gate.attempts().records.len()
+        }
+
+        fn requests(&self) -> Vec<String> {
+            std::fs::read_to_string(self.dir.join("requests.jsonl"))
+                .unwrap_or_default()
+                .lines()
+                .map(str::to_owned)
+                .collect()
+        }
+    }
+
+    impl Drop for FakeBroker {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.dir);
+        }
     }
 
     impl Host for Desk {
@@ -1170,7 +1310,16 @@ mod tests {
             &self.cache
         }
         fn gate(&self) -> Gate {
-            panic!("provider configuration must not reach the network")
+            match &self.broker {
+                Some((gate, _)) => gate.clone(),
+                None => panic!("provider configuration must not reach the network"),
+            }
+        }
+        fn broker(&self) -> Locate {
+            match &self.broker {
+                Some((_, locate)) => locate.clone(),
+                None => panic!("provider configuration must not start the broker"),
+            }
         }
     }
 
@@ -1357,7 +1506,7 @@ mod tests {
     }
 
     #[test]
-    fn display_reads_never_probe_and_cli_runtimes_fail_closed() {
+    fn display_reads_never_probe_and_cli_runtimes_go_through_the_broker() {
         let book = book();
         let mut desk = Desk::default();
         let empty = call(&book.conn, &mut desk, "ai.provider_runtime.status", "{}").unwrap();
@@ -1383,36 +1532,78 @@ mod tests {
         )
         .unwrap();
         assert_eq!(*field(&cached, "checked_at"), Value::Null);
-        // Probing a runtime needs the broker client (R6-6b): refused, nothing started.
-        let error = call(
+        // Each probe and listing starts the broker once, through the gate.
+        let fake = FakeBroker::new(
+            r#"import json, sys
+request = json.loads(sys.stdin.readline())
+if request["command"] == "status":
+    rows = [{"provider": name, "state": "ready"} for name in request.get("providers") or [request.get("provider")]]
+    print(json.dumps({"type": "result", "data": rows + [{"provider": "claude", "state": "ready"}]}), flush=True)
+else:
+    print(json.dumps({"type": "result", "data": [{"id": "gpt-5.4", "check_kind": "binary_presence"}]}), flush=True)
+"#,
+        );
+        desk.broker = Some(fake.host());
+        let probed = call(
             &book.conn,
             &mut desk,
             "ai.provider_runtime.status",
             r#"{"provider": "codex"}"#,
         )
-        .unwrap_err();
-        assert_eq!(error.code, "not_implemented");
+        .unwrap();
         assert_eq!(
-            call(
-                &book.conn,
-                &mut desk,
-                "ai.list_models",
-                r#"{"provider": "codex"}"#
-            )
-            .unwrap_err()
-            .code,
-            "not_implemented"
+            *field(&probed, "providers"),
+            kassiber_pytext::loads(r#"[{"provider": "codex", "state": "ready"}]"#).unwrap()
         );
+        assert_eq!(*field(&probed, "provider"), s("codex"));
+        let all = call(&book.conn, &mut desk, "ai.provider_runtime.status", "{}").unwrap();
         assert_eq!(
-            call(
-                &book.conn,
-                &mut desk,
-                "ai.test_connection",
-                r#"{"base_url": "codex-cli://default", "provider": "codex"}"#
-            )
-            .unwrap_err()
-            .code,
-            "not_implemented"
+            *field(&all, "providers"),
+            kassiber_pytext::loads(r#"[{"provider": "codex", "state": "ready"}]"#).unwrap()
+        );
+        // The cache answers a display read now, and a repeat within the TTL.
+        call(&book.conn, &mut desk, "ai.provider_runtime.status", "{}").unwrap();
+        let cached = call(
+            &book.conn,
+            &mut desk,
+            "ai.provider_runtime.status",
+            r#"{"cached_only": true}"#,
+        )
+        .unwrap();
+        assert_eq!(*field(&cached, "providers"), *field(&all, "providers"));
+        assert_eq!(fake.launches(), 2);
+        let models = call(
+            &book.conn,
+            &mut desk,
+            "ai.list_models",
+            r#"{"provider": "codex"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            *field(&models, "models"),
+            kassiber_pytext::loads(r#"[{"id": "gpt-5.4", "check_kind": "binary_presence"}]"#)
+                .unwrap()
+        );
+        let tested = call(
+            &book.conn,
+            &mut desk,
+            "ai.test_connection",
+            r#"{"base_url": "codex-cli://default", "provider": "codex"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            kassiber_pyjson::dumps(&tested, &Default::default()).unwrap(),
+            r#"{"base_url": "codex-cli://default", "model_count": 1, "models": [{"id": "gpt-5.4", "check_kind": "binary_presence"}], "check_kind": "binary_presence", "api_format": null, "detected_api_format": null, "tools_accepted": null, "store_accepted": null, "probe": {"status": "skipped", "reason": "cli_provider", "model": null, "finish_reason": null}, "detection_saved": false}"#
+        );
+        assert_eq!(fake.launches(), 4);
+        assert_eq!(
+            fake.requests(),
+            [
+                r#"{"command": "status", "provider": "codex"}"#,
+                r#"{"command": "status", "providers": ["codex"]}"#,
+                r#"{"command": "models", "provider": "codex"}"#,
+                r#"{"command": "models", "provider": "codex"}"#,
+            ]
         );
     }
 }

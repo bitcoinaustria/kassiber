@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Run the shared scratch-tree mutation checker for the AI tool executor (R6-5a) and
-providers (R6-6a).
+providers (R6-6a, R6-6b).
 
     TMPDIR=<worktree>/target/mutation-tmp CARGO_BUILD_BUILD_DIR=<same>/cargo-build \
         uv run --locked python crates/ai/scripts/mutation_check.py [--only ID ...]

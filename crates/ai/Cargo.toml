@@ -12,8 +12,9 @@ publish.workspace = true
 name = "kassiber_ai"
 
 [features]
-# Test builds only: fixed clocks for the differential drivers.
-test-harness = []
+# Test builds only: fixed clocks for the differential drivers, and the
+# fake provider broker an armed egress observer admits.
+test-harness = ["kassiber-net/test-support"]
 
 [dependencies]
 kassiber-envelope = { path = "../envelope" }

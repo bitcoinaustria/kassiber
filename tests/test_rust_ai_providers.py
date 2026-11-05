@@ -8,6 +8,12 @@ tables must end identical; requests to the scripted loopback provider must
 carry identical bodies. CLI scenarios compare stdout, stderr and exit codes,
 and the hybrid candidate's log must show Rust served every `ai` leaf.
 
+Both sides find the same fake provider broker through
+`KASSIBER_AI_BROKER_NODE` and `KASSIBER_AI_PROVIDER_BROKER` (R6-6b); it logs
+every request line it reads, and the logs must match byte for byte. The
+Rust side's armed observer admits that one script
+(`KASSIBER_RUST_TEST_AI_BROKER_FIXTURE`).
+
 Children get their own XDG roots and preference files; HOME stays the
 account's. Only the loopback scripted provider is contacted.
 """
@@ -45,6 +51,39 @@ CHECKED_AT = "2026-11-05T12:00:00.123456Z"
 TABLES = ("ai_providers", "ai_provider_secret_refs", "settings")
 
 
+# Answers status and model requests from fixed data, logging each request
+# line and where its per-turn root lives. A result line holding a raw U+2028
+# comes first: Python's splitlines() breaks it, so both sides skip it.
+FAKE_BROKER = r"""
+import json, os, sys
+LOG = sys.argv[0] + ".log"
+line = sys.stdin.readline()
+root = os.environ["KASSIBER_AI_BROKER_TMPDIR"]
+with open(LOG, "a", encoding="utf-8") as log:
+    log.write(line.rstrip("\n") + "\n")
+    log.write(json.dumps({"root_parent": os.path.dirname(root), "root_mode": oct(os.stat(root).st_mode & 0o777), "argv": sys.argv[1:]}) + "\n")
+request = json.loads(line)
+provider = request.get("provider")
+names = request.get("providers") or ([provider] if provider else ["claude", "codex", "opencode", "copilot"])
+if request["command"] == "status":
+    if provider == "claude":
+        print(json.dumps({"type": "error", "code": "authentication_required", "hint": "Run claude login."}), flush=True)
+        raise SystemExit(0)
+    print(json.dumps({"type": "result", "data": [{"provider": "codex", "note": "a\u2028b"}]}, ensure_ascii=False), flush=True)
+    print("not json", flush=True)
+    rows = [{"provider": name, "state": "ready", "version": "1.0", "latency": 0.000125, "big": 10**20, "label": "Caf\u00e9 \u2603"} for name in names]
+    rows.append({"provider": "intruder", "state": "ready"})
+    print(json.dumps({"type": "result", "data": rows}), flush=True)
+elif request["command"] == "models":
+    if provider == "claude":
+        print(json.dumps({"type": "error", "message": "claude models failed"}), flush=True)
+    elif provider == "copilot":
+        print(json.dumps({"type": "result", "data": [{"id": "copilot", "check_kind": "binary_presence", "label": "GitHub Copilot"}]}), flush=True)
+    else:
+        print(json.dumps({"type": "result", "data": [{"id": "gpt-5.4", "label": "GPT-5.4", "reasoning_efforts": ["low", "high"], "fast_mode": True}, {"id": "gpt-5.4-mini", "context": 1.5e5}]}), flush=True)
+"""
+
+
 def _ok_chat():
     return chat_stream(chunk({"content": "OK"}), chunk({}, finish="stop"))
 
@@ -76,6 +115,16 @@ class RustAiProvidersParityTest(unittest.TestCase):
         self.provider = ScriptedProvider()
         self.addCleanup(self.provider.stop)
         self.log = self.base / "served.jsonl"
+        self.broker = self.base / "broker" / "fake_broker.py"
+        self.broker.parent.mkdir()
+        self.broker.write_text(FAKE_BROKER, encoding="utf-8")
+        self.env.update(
+            {
+                "KASSIBER_AI_BROKER_NODE": sys.executable,
+                "KASSIBER_AI_PROVIDER_BROKER": str(self.broker),
+                "KASSIBER_RUST_TEST_AI_BROKER_FIXTURE": str(self.broker),
+            }
+        )
 
     # --- running both sides ---------------------------------------------
 
@@ -124,8 +173,14 @@ class RustAiProvidersParityTest(unittest.TestCase):
         shutil.copytree(self.root, target)
         return target
 
+    def broker_requests(self):
+        log = Path(str(self.broker) + ".log")
+        return log.read_bytes() if log.exists() else b""
+
     def script(self, setup):
-        """Reset the scripted provider and queue a scenario's replies."""
+        """Reset the scripted provider and the broker log, and queue a
+        scenario's replies."""
+        Path(str(self.broker) + ".log").unlink(missing_ok=True)
         with self.provider.lock:
             self.provider.routes.clear()
             self.provider.requests.clear()
@@ -152,8 +207,10 @@ class RustAiProvidersParityTest(unittest.TestCase):
             self.script(setup)
             result = self.run_side(runtime, root, ["daemon"], input=wire)
             self.assertEqual((result.returncode, result.stderr), (0, b""), result.stdout[-2000:])
-            outcomes.append((result.stdout.splitlines()[1:], self.tables(root), self.requests_seen()))
-        (python_lines, python_tables, python_hits), (rust_lines, rust_tables, rust_hits) = outcomes
+            outcomes.append(
+                (result.stdout.splitlines()[1:], self.tables(root), self.requests_seen(), self.broker_requests())
+            )
+        (python_lines, python_tables, python_hits, python_broker), (rust_lines, rust_tables, rust_hits, rust_broker) = outcomes
         self.assertEqual(len(rust_lines), len(python_lines))
         mismatches = [
             (request, got, wanted)
@@ -163,6 +220,8 @@ class RustAiProvidersParityTest(unittest.TestCase):
         self.assertEqual(mismatches, [])
         self.assertEqual(rust_tables, python_tables)
         self.assertEqual(rust_hits, python_hits)
+        self.assertEqual(rust_broker, python_broker)
+        self.broker_log = rust_broker
         return [json.loads(line) for line in rust_lines]
 
     def cli(self, commands, *, setup=None):
@@ -175,7 +234,7 @@ class RustAiProvidersParityTest(unittest.TestCase):
             for args, stdin in commands:
                 result = self.run_side(runtime, root, args, input=stdin)
                 results.append((result.returncode, result.stdout, result.stderr))
-            outcomes.append((results, self.tables(root), self.requests_seen()))
+            outcomes.append((results, self.tables(root), self.requests_seen(), self.broker_requests()))
         python, rust, hybrid = outcomes
         mismatches = [
             (command[0], got, wanted)
@@ -188,6 +247,7 @@ class RustAiProvidersParityTest(unittest.TestCase):
         served = [json.loads(line) for line in self.log.read_text().splitlines()]
         self.assertEqual(len(served), len(commands))
         self.assertTrue(all(row["served_by"] == "rust" for row in served), served)
+        self.broker_log = rust[3]
         return rust[0]
 
     # --- scenarios --------------------------------------------------------
@@ -242,6 +302,8 @@ class RustAiProvidersParityTest(unittest.TestCase):
             ]
         )
         self.assertEqual(self.provider.requests, [])
+        # Listing, editing and display reads start no broker either.
+        self.assertEqual(self.broker_log, b"")
         listed = responses[-2]["data"]
         self.assertNotIn("sk-inline-secret", json.dumps(responses))
         self.assertIsNone(listed["default"])
@@ -334,6 +396,90 @@ class RustAiProvidersParityTest(unittest.TestCase):
             setup=setup,
         )
         self.assertEqual([r["path"] for r in self.provider.requests], ["/v1/models"])
+
+    def _contactable_cli_rows(self):
+        return [
+            request
+            for name in ("codex", "claude", "copilot")
+            for request in (
+                {"kind": "ai.providers.update", "args": {"name": name, "enabled": True}},
+                {"kind": "ai.providers.acknowledge", "args": {"name": name}},
+            )
+        ]
+
+    def test_daemon_broker_probes_listings_and_connection_tests(self):
+        responses = self.daemon(
+            [
+                {"kind": "ai.provider_runtime.status"},
+                *self._contactable_cli_rows(),
+                {"kind": "ai.provider_runtime.status", "args": {"cached_only": True}},
+                {"kind": "ai.provider_runtime.status"},
+                {"kind": "ai.provider_runtime.status"},
+                {"kind": "ai.provider_runtime.status", "args": {"cached_only": True}},
+                {"kind": "ai.provider_runtime.status", "args": {"refresh": True}},
+                {"kind": "ai.provider_runtime.status", "args": {"provider": "codex"}},
+                {"kind": "ai.provider_runtime.status", "args": {"provider": "codex", "base_url": "codex-cli://default", "refresh": True}},
+                {"kind": "ai.provider_runtime.status", "args": {"provider": "claude"}},
+                {"kind": "ai.provider_runtime.status", "args": {"provider": "claude", "cached_only": True}},
+                {"kind": "ai.list_models", "args": {"provider": "codex"}},
+                {"kind": "ai.list_models", "args": {"provider": "codex"}},
+                {"kind": "ai.list_models", "args": {"provider": "copilot", "refresh": True}},
+                {"kind": "ai.list_models", "args": {"provider": "claude"}},
+                {"kind": "ai.test_connection", "args": {"base_url": "codex-cli://default", "provider": "codex"}},
+                {"kind": "ai.test_connection", "args": {"base_url": "copilot-cli://default", "acknowledged": True}},
+                {"kind": "ai.test_connection", "args": {"base_url": " Claude-CLI://default ", "provider": "claude", "model": "opus"}},
+                {"kind": "ai.providers.update", "args": {"name": "codex", "enabled": False}},
+                {"kind": "ai.list_models", "args": {"provider": "codex"}},
+                {"kind": "ai.provider_runtime.status"},
+            ]
+        )
+        self.assertEqual(responses[0]["data"]["providers"], [])
+        probed = responses[8]["data"]
+        self.assertEqual([row["provider"] for row in probed["providers"]], ["claude", "codex", "copilot"])
+        self.assertEqual(responses[21]["data"]["check_kind"], "binary_presence")
+        self.assertEqual(self.provider.requests, [])
+        requests = [json.loads(line) for line in self.broker_log.splitlines()[::2]]
+        self.assertEqual(
+            [request["command"] for request in requests],
+            ["status", "status", "status", "status", "status", "models", "models", "models", "models", "models", "models", "status"],
+        )
+
+    def test_daemon_offline_mode_refuses_the_broker(self):
+        offline = Path(self.env["KASSIBER_OFFLINE_PREFERENCE_FILE"])
+        offline.parent.mkdir(parents=True, exist_ok=True)
+        offline.write_text('{"schema_version":1,"enabled":true}')
+        offline.chmod(0o600)
+        self.daemon(
+            [
+                *self._contactable_cli_rows(),
+                {"kind": "ai.provider_runtime.status"},
+                {"kind": "ai.provider_runtime.status", "args": {"provider": "codex"}},
+                {"kind": "ai.provider_runtime.status", "args": {"cached_only": True}},
+                {"kind": "ai.list_models", "args": {"provider": "codex"}},
+                {"kind": "ai.test_connection", "args": {"base_url": "codex-cli://default", "provider": "codex"}},
+            ]
+        )
+        self.assertEqual(self.broker_log, b"")
+
+    def test_cli_broker_leaves_match_and_are_served_by_rust(self):
+        enable = [
+            (["ai", "providers", "update", name, "--enable", "--acknowledge"], b"")
+            for name in ("codex", "claude", "copilot")
+        ]
+        results = self.cli(
+            [
+                (["ai", "models", "--provider", "codex"], b""),
+                *enable,
+                (["ai", "models", "--provider", "codex"], b""),
+                (["ai", "models", "--provider", "claude"], b""),
+                (["ai", "providers", "test", "codex"], b""),
+                (["ai", "providers", "test", "copilot", "--model", "x"], b""),
+                (["ai", "providers", "test", "claude"], b""),
+            ]
+        )
+        self.assertNotEqual(results[0][0], 0)
+        self.assertEqual(results[4][0], 0)
+        self.assertEqual(len(self.broker_log.splitlines()), 10)
 
     def test_cli_leaves_match_and_are_served_by_rust(self):
         local = self.provider.base_url

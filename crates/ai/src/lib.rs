@@ -14,6 +14,7 @@
 //! the call.
 
 pub mod analysis;
+pub mod broker;
 pub mod catalog;
 pub mod clock;
 pub mod consent;

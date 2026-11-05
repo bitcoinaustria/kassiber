@@ -417,5 +417,177 @@
       "chat_duplicate_ids_fail_closed_and_finish_reasons_map"
     ],
     "rule": "Calls of a cut-off Chat Completions answer never run."
+  },
+  {
+    "id": "R66b-observer-sees-launch",
+    "file": "crates/net/src/broker.rs",
+    "find": "        if self.gate.observer != Observer::Disabled {\n",
+    "replace": "        if false {\n",
+    "expect_failing": [
+      "every_launch_is_seen_by_the_observer_and_a_strict_one_blocks_it"
+    ],
+    "rule": "An armed observer records every broker launch before it starts."
+  },
+  {
+    "id": "R66b-fixture-only",
+    "file": "crates/net/src/broker.rs",
+    "find": "                || self.gate.broker_fixture.as_ref() != Some(&program.script)\n",
+    "replace": "",
+    "expect_failing": [
+      "every_launch_is_seen_by_the_observer_and_a_strict_one_blocks_it"
+    ],
+    "rule": "A loopback observer admits only the fake broker script a harness named."
+  },
+  {
+    "id": "R66b-missing-script",
+    "file": "crates/net/src/broker.rs",
+    "find": "(program.node.clone(), program.script.is_file())",
+    "replace": "(program.node.clone(), true)",
+    "expect_failing": [
+      "a_missing_node_or_script_starts_nothing_and_counts_no_attempt"
+    ],
+    "rule": "No Node or no script file starts nothing and counts no attempt."
+  },
+  {
+    "id": "R66b-runtime-dir-mode",
+    "file": "crates/net/src/broker.rs",
+    "find": "    if info.mode() & 0o022 != 0 {",
+    "replace": "    if info.mode() & 0o002 != 0 {",
+    "expect_failing": [
+      "refuses_a_runtime_dir_others_can_write"
+    ],
+    "rule": "A runtime directory its group or others can write is never used for the broker root."
+  },
+  {
+    "id": "R66b-runtime-dir-ram",
+    "file": "crates/net/src/broker.rs",
+    "find": "        \"tmpfs\" | \"ramfs\" => Some(path),\n        _ => None,",
+    "replace": "        _ => Some(path),",
+    "expect_failing": [
+      "keeps_the_disk_temp_dir_when_the_runtime_dir_is_not_ram"
+    ],
+    "rule": "The runtime directory holds the root only when it is tmpfs or ramfs."
+  },
+  {
+    "id": "R66b-group-straggler-kill",
+    "file": "crates/net/src/broker.rs",
+    "find": "    fn discard_root(&mut self) {\n        self.signal.kill();\n",
+    "replace": "    fn discard_root(&mut self) {\n",
+    "expect_failing": [
+      "probe_timeout_stops_a_provider_that_ignores_sigterm"
+    ],
+    "rule": "A finished broker's group is killed before its root goes, ending CLIs that ignored SIGTERM."
+  },
+  {
+    "id": "R66b-empty-scope",
+    "file": "crates/ai/src/broker/mod.rs",
+    "find": "    if names.as_ref().is_some_and(Vec::is_empty) {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "runtime_status_scopes_and_an_empty_list_starts_nothing"
+    ],
+    "rule": "An empty runtime list starts no broker."
+  },
+  {
+    "id": "R66b-scope-filter",
+    "file": "crates/ai/src/broker/mod.rs",
+    "find": "                    && names.iter().any(|name| field(row, \"provider\").is(name))\n",
+    "replace": "",
+    "expect_failing": [
+      "runtime_status_scopes_and_an_empty_list_starts_nothing"
+    ],
+    "rule": "Status rows outside the requested scope are dropped, whatever the broker echoes."
+  },
+  {
+    "id": "R66b-cancel-after-resolution",
+    "file": "crates/ai/src/broker/mod.rs",
+    "find": "        self.stage(\"resolution\");\n        let route = authorize(&self.gate, program.clone())?;\n        self.check_cancelled()?;\n",
+    "replace": "        self.stage(\"resolution\");\n        let route = authorize(&self.gate, program.clone())?;\n",
+    "expect_failing": [
+      "cancel_is_latched_before_resolution_spawn_registration_and_send"
+    ],
+    "rule": "A cancel during broker lookup stops the turn before a launch."
+  },
+  {
+    "id": "R66b-cancel-signals",
+    "file": "crates/ai/src/broker/mod.rs",
+    "find": "            if signal.running() {\n                signal.terminate();\n            }",
+    "replace": "            if signal.running() {}",
+    "expect_failing": [
+      "cancel_terminates_active_broker_process_group",
+      "cancellation_does_not_wait_for_a_blocked_prompt_writer"
+    ],
+    "rule": "A cancel sends SIGTERM to a running broker's group."
+  },
+  {
+    "id": "R66b-keep-alive",
+    "file": "crates/ai/src/broker/mod.rs",
+    "find": "                *keep_alive = true;\n",
+    "replace": "",
+    "expect_failing": [
+      "kassiber_typed_tools_cross_the_chat_only_broker",
+      "missing_tool_results_keep_the_broker_waiting"
+    ],
+    "rule": "After a tool call the broker stays alive for the results."
+  },
+  {
+    "id": "R66b-every-result",
+    "file": "crates/ai/src/broker/mod.rs",
+    "find": "            if answered != self.pending_call_ids {",
+    "replace": "            if answered.is_empty() && false {",
+    "expect_failing": [
+      "missing_tool_results_keep_the_broker_waiting"
+    ],
+    "rule": "A continuing leg must answer every pending tool call."
+  },
+  {
+    "id": "R66b-private-cursor",
+    "file": "crates/ai/src/broker/mod.rs",
+    "find": "!(sensitive || stateless) && text",
+    "replace": "!stateless && text",
+    "expect_failing": [
+      "sensitive_context_crosses_broker_and_cannot_retain_session"
+    ],
+    "rule": "A private turn keeps no provider session cursor."
+  },
+  {
+    "id": "R66b-fast-mode-explicit",
+    "file": "crates/ai/src/broker/mod.rs",
+    "find": "        if fast_mode {\n",
+    "replace": "        if true {\n",
+    "expect_failing": [
+      "forwards_only_an_explicit_true"
+    ],
+    "rule": "Fast mode reaches the broker only when it is exactly true."
+  },
+  {
+    "id": "R66b-known-notices",
+    "file": "crates/ai/src/broker/mod.rs",
+    "find": ".find(|(name, _)| phase.is(name))",
+    "replace": ".find(|_| true)",
+    "expect_failing": [
+      "broker_client_forwards_only_known_notices"
+    ],
+    "rule": "Only the known provider notices are forwarded."
+  },
+  {
+    "id": "R66b-leg-watchdog",
+    "file": "crates/ai/src/broker/mod.rs",
+    "find": "                flag.store(true, Ordering::SeqCst);\n                signal.kill();\n",
+    "replace": "                flag.store(true, Ordering::SeqCst);\n",
+    "expect_failing": [
+      "a_silent_broker_is_killed_by_the_leg_watchdog"
+    ],
+    "rule": "A leg that outlives its timeout has its broker group killed."
+  },
+  {
+    "id": "R66b-binary-presence",
+    "file": "crates/ai/src/service.rs",
+    "find": "            s(if binary_presence {",
+    "replace": "            s(if !binary_presence {",
+    "expect_failing": [
+      "display_reads_never_probe_and_cli_runtimes_go_through_the_broker"
+    ],
+    "rule": "A CLI connection test reports binary_presence when the broker's rows say so."
   }
 ]
