@@ -203,18 +203,27 @@ pub fn initialize_layout(paths: &RuntimePaths) -> Result<()> {
             "Restore recovery must finish before writing the runtime layout",
         ));
     }
+    // The data and state roots resolve like Python's; the managed directories
+    // and files below the state root keep refusing links.
+    let state = &paths.state_root;
+    durable::directory(&durable::under(&paths.data_root, &paths.data_root)?)?;
     for directory in [
-        &paths.data_root,
         &paths.config_root,
         &paths.exports_root,
         &paths.attachments_root,
     ] {
-        durable::directory(directory)?;
+        durable::directory(&durable::under(state, directory)?)?;
     }
     if let Some(parent) = paths.env_file.parent() {
-        durable::directory(parent)?;
+        // An explicit --env-file directory is the user's own root.
+        let root = if parent.starts_with(state) {
+            state
+        } else {
+            parent
+        };
+        durable::directory(&durable::under(root, parent)?)?;
     }
-    let settings = &paths.settings_file;
+    let settings = &durable::under(state, &paths.settings_file)?;
     durable::refuse_symlinks(settings)?;
     let lock_path = settings.with_file_name(format!(
         "{}.lock",
@@ -253,6 +262,16 @@ pub fn initialize_layout(paths: &RuntimePaths) -> Result<()> {
     Ok(())
 }
 
+/// Managed metadata lives in `<state root>/config/`; the state root resolves.
+fn config_file(path: &Path) -> Result<std::path::PathBuf> {
+    durable::under(
+        path.parent()
+            .and_then(Path::parent)
+            .unwrap_or(Path::new("")),
+        path,
+    )
+}
+
 /// Publish a complete catalog. Callers serialize read/modify/write operations
 /// using their project-management ownership lease.
 pub fn write_catalog(path: &Path, catalog: &Catalog) -> Result<()> {
@@ -272,7 +291,7 @@ pub fn write_catalog(path: &Path, catalog: &Catalog) -> Result<()> {
     }
     let payload = json!({"schema_version":1,"selected_project_id":catalog.selected_project_id,"projects":projects});
     durable::atomic_write(
-        path,
+        &config_file(path)?,
         (python_json(&payload, true)? + "\n").as_bytes(),
         &mut |_| Ok(()),
     )
@@ -283,8 +302,8 @@ pub fn mutate_settings(
     path: &Path,
     mutate: impl FnOnce(&mut serde_json::Map<String, Value>) -> Result<()>,
 ) -> Result<()> {
-    let parent = path.parent().expect("settings parent");
-    durable::directory(parent)?;
+    let path = &config_file(path)?;
+    durable::directory(path.parent().expect("settings parent"))?;
     durable::refuse_symlinks(path)?;
     let lock_path = path.with_file_name("settings.json.lock");
     durable::refuse_symlinks(&lock_path)?;
@@ -306,7 +325,7 @@ pub fn mutate_settings(
 /// Bounded private metadata publication for callers such as auth backoff.
 pub fn write_private_json(path: &Path, value: &Value) -> Result<()> {
     durable::atomic_write(
-        path,
+        &config_file(path)?,
         (python_json(value, true)? + "\n").as_bytes(),
         &mut |_| Ok(()),
     )
@@ -488,6 +507,86 @@ mod tests {
             assert!(bytes == b"old" || bytes == b"new");
             assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 1);
         }
+    }
+    #[cfg(unix)]
+    #[test]
+    fn layout_resolves_its_roots_and_refuses_links_below_them() {
+        use std::os::unix::fs::symlink;
+        let temporary = tempfile::tempdir().unwrap();
+        let (alias, real) = crate::durable::tests::aliased(temporary.path());
+        let mut context = kassiber_paths::Context::from_env().unwrap();
+        context.home = temporary.path().join("home");
+        context.environ.clear();
+        let resolve = |data: &Path| {
+            context
+                .resolve_for_recovery(&kassiber_paths::ResolveOptions {
+                    data_root: Some(data.into()),
+                    ..Default::default()
+                })
+                .unwrap()
+        };
+        let paths = resolve(&alias.join("book/data"));
+        initialize_layout(&paths).unwrap();
+        let settings = real.join("book/config/settings.json");
+        let manifest: Value = serde_json::from_slice(&std::fs::read(&settings).unwrap()).unwrap();
+        // The manifest keeps Python's lexical paths.
+        assert_eq!(
+            manifest["paths"]["settings_file"],
+            json!(paths.settings_file)
+        );
+        for name in [
+            "data",
+            "exports",
+            "attachments",
+            "config/settings.json.lock",
+        ] {
+            assert!(real.join("book").join(name).exists(), "{name}");
+        }
+        mutate_settings(&paths.settings_file, |settings| {
+            settings.insert("marker".into(), json!(true));
+            Ok(())
+        })
+        .unwrap();
+        write_catalog(
+            &alias.join("book/config/projects.json"),
+            &Catalog::default(),
+        )
+        .unwrap();
+        write_private_json(&alias.join("book/config/auth_backoff.json"), &json!({})).unwrap();
+        for name in ["projects.json", "auth_backoff.json"] {
+            assert!(real.join("book/config").join(name).is_file(), "{name}");
+        }
+        // A user-chosen data directory may itself be a link, as in Python.
+        std::fs::create_dir(real.join("data-real")).unwrap();
+        symlink("data-real", real.join("linked-data")).unwrap();
+        let mut paths = resolve(&alias.join("linked-data"));
+        initialize_layout(&paths).unwrap();
+        // Directories Kassiber manages below a state root still refuse links.
+        let state = real.join("managed");
+        std::fs::create_dir_all(state.join("config-real")).unwrap();
+        symlink("config-real", state.join("config")).unwrap();
+        paths = resolve(&alias.join("managed/data"));
+        assert_eq!(
+            initialize_layout(&paths).unwrap_err().kind,
+            ErrorKind::UnsafeConfiguration
+        );
+        assert!(!state.join("config-real/settings.json").exists());
+        for write in [
+            write_catalog(
+                &paths.config_root.join("projects.json"),
+                &Catalog::default(),
+            ),
+            write_private_json(&paths.config_root.join("auth_backoff.json"), &json!({})),
+            mutate_settings(&paths.settings_file, |_| Ok(())),
+        ] {
+            assert_eq!(write.unwrap_err().kind, ErrorKind::UnsafeConfiguration);
+        }
+        assert_eq!(
+            std::fs::read_dir(state.join("config-real"))
+                .unwrap()
+                .count(),
+            0
+        );
     }
     #[cfg(unix)]
     #[test]

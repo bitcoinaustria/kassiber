@@ -144,6 +144,8 @@ pub(crate) fn create(
             "invalid database identity",
         ));
     }
+    // Python resolves the data root itself; a link at the database still refuses.
+    let root = &durable::under(root, root)?;
     durable::directory(root)?;
     let database = root.join(kassiber_paths::DB_FILENAME);
     durable::refuse_symlinks(&database)?;
@@ -231,6 +233,22 @@ pub(crate) fn create(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    #[test]
+    fn data_roots_resolve_but_a_linked_database_is_refused() {
+        let temporary = tempfile::tempdir().unwrap();
+        let (alias, real) = crate::durable::tests::aliased(temporary.path());
+        let book = Book::create(&alias.join("book/data"), None).unwrap();
+        assert_eq!(book.database, real.join("book/data/kassiber.sqlite3"));
+        let linked = real.join("linked/data");
+        std::fs::create_dir_all(&linked).unwrap();
+        std::os::unix::fs::symlink("elsewhere.sqlite3", linked.join("kassiber.sqlite3")).unwrap();
+        let error = Book::create(&alias.join("linked/data"), None)
+            .err()
+            .unwrap();
+        assert_eq!(error.code, "unsafe_configuration");
+        assert!(!linked.join("elsewhere.sqlite3").exists());
+    }
     #[test]
     fn new_books_follow_explicit_shipped_python_policy() {
         let root = tempfile::tempdir().unwrap();

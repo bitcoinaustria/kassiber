@@ -27,7 +27,7 @@ fn owner_guard(data: &Path) -> Result<Option<fs::File>> {
         Ok(None)
     }
     #[cfg(not(windows))]
-    crate::state_root::owner_lock(&path, false, false)
+    crate::state_root::owner_lock(data, &path, false, false)
 }
 fn copy_in_use() -> Error {
     Error::new(
@@ -110,9 +110,10 @@ fn read_marker(path: &Path) -> Result<Value> {
     }
     Ok(value)
 }
-fn write_marker(path: &Path, marker: &Value) -> Result<()> {
+/// `root` is the global or project state root holding the marker.
+fn write_marker(root: &Path, path: &Path, marker: &Value) -> Result<()> {
     durable::atomic_write(
-        path,
+        &durable::under(root, path)?,
         (layout::python_json(marker, true)? + "\n").as_bytes(),
         &mut |_| Ok(()),
     )
@@ -286,7 +287,7 @@ fn resume(
         .as_object_mut()
         .expect("marker object")
         .remove("pending_legacy_artifacts");
-    write_marker(path, marker)?;
+    write_marker(global, path, marker)?;
     observer("legacy.complete")
 }
 fn resume_default(
@@ -336,7 +337,7 @@ fn move_aside(
             .map(|(k, p)| (k.into(), json!(p)))
             .collect();
         marker["pending_legacy_artifacts"] = json!({"backup_root":backup,"sources":sources});
-        write_marker(&path, &marker)?;
+        write_marker(global, &path, &marker)?;
         observer("legacy.intent")?;
     }
     resume(context, global, &path, &mut marker, timestamp, observer)
@@ -459,7 +460,7 @@ pub fn ensure_default(
                     }
                     let mut marker = initial_marker(&legacy, count, timestamp);
                     let marker_path = staging.join("config").join(MARKER);
-                    write_marker(&marker_path, &marker)?;
+                    write_marker(&global, &marker_path, &marker)?;
                     observer("legacy.marker")?;
                     let multi = count.is_some_and(|n| n > 1);
                     let report = report(
@@ -476,7 +477,7 @@ pub fn ensure_default(
                     )?;
                     observer("legacy.report")?;
                     marker["report"] = json!(report);
-                    write_marker(&marker_path, &marker)?;
+                    write_marker(&global, &marker_path, &marker)?;
                     observer("legacy.before_promote")?;
                     rename_noreplace(&staging, &target).map_err(Error::io)?;
                     durable::sync_directory(target.parent().expect("projects parent"))?;
@@ -538,6 +539,6 @@ pub fn validate_after_unlock(
     marker["requires_single_workspace_validation"] = json!(false);
     marker["legacy_workspace_count"] = json!(count);
     marker["validated_at"] = json!(timestamp);
-    write_marker(&path, &marker)?;
+    write_marker(&target, &path, &marker)?;
     observer("legacy.validated")
 }
