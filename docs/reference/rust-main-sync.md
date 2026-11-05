@@ -31,7 +31,11 @@ Books:
   merged Python CLI and once with the Rust CLI (same seeded CSVs, same
   commands; the Rust CLI serves all of them).
 
-Python-built books cannot be compared at all: see [S1](#s1-store-schema-and-command-registry).
+Before S1, Python-built books could not be compared at all: see
+[S1](#s1-store-schema-and-command-registry). After S1, the Python-built
+`austria` book (built by `report_design_books.py`'s steps with this
+checkout's Python CLI) compares 113 kinds with 101 the same, 12 differing
+and none refused; see [after S1](#after-s1).
 The Rust-built books are opened by each side on its own copy; the Python
 daemon migrates its copy on open.
 
@@ -66,10 +70,10 @@ Rust code was read instead.
 
 | PR | Python | Kinds and leaves | Rust state | Rust location |
 | --- | --- | --- | --- | --- |
-| #675, #678, #684, #686, #708 | `db.py`: `transactions.pricing_review_accepted_price`, `ai_providers.agent_access`, table `ai_provider_checks`, custody AI audit `consent_decision` CHECK widened to `mode_auto`, `mode_full_access`, `mcp_host` (table rebuild) | every kind and leaf that opens a book | **Refused**: every book the merged Python created or opened answers `requires_python_migration` (`object: ai_provider_secret_refs`, `reason: schema_structure`) on every database kind: 99 of the 103 read kinds on the Python-built `austria` book | `crates/store` (`schema.rs`, `compat*.rs`, `creation.rs`) |
-| #679, #681 | new CLI leaves `journals quarantine groups`, `transactions verify`, `transfers dismissals list`, `transfers dismissals delete`; kind derivation for `transfers_dismissals_command` | the four leaves | Refused (`not_implemented`, three probed). Rust derives `transfers.dismissals` for `transfers dismissals list`: `argparse_parity` fails | `crates/envelope/src/lib.rs` (subcommand attrs), `crates/cli` |
-| #678, #684, #686 | changed arguments: `mcp enable` (`--grant`, `--agent-access`), `mcp call` (`--grant`, `--client`, effect now `mutating`), `chat` (`--permission-mode`, file options), `ai providers create/update` (`--agent-access`), `journals quarantine resolve price-override/exclude` (`--group-id`, `--reprocess`) | those leaves | None of these leaves is native; `describe_drift` fails on `mcp.call` effect and the new arguments | `crates/cli/src/describe.rs` |
-| #679, #681, #684, #689 | `command_capabilities.py`: four CLI leaves and four daemon kinds | `ui.transfers.dismissals.list/delete`, `ui.chat.attachments.upload`, `ai.chat.permission_mode` | `capabilities::tables_match_python` fails (317 Python, 313 Rust) | `crates/runtime/src/capabilities.rs` |
+| #675, #678, #684, #686, #708 | `db.py`: `transactions.pricing_review_accepted_price`, `ai_providers.agent_access`, table `ai_provider_checks`, custody AI audit `consent_decision` CHECK widened to `mode_auto`, `mode_full_access`, `mcp_host` (table rebuild) | every kind and leaf that opens a book | **Done (S1)**. Before: every book the merged Python created or opened answered `requires_python_migration` (`object: ai_provider_secret_refs`, `reason: schema_structure`) on every database kind, 99 of the 103 read kinds on the Python-built `austria` book | `crates/store` (`schema.rs`, `compat*.rs`, `creation.rs`) |
+| #679, #681 | new CLI leaves `journals quarantine groups`, `transactions verify`, `transfers dismissals list`, `transfers dismissals delete`; kind derivation for `transfers_dismissals_command` | the four leaves | Kind derivation **done (S1)**. The leaves stay `not_implemented` until S5, S6 and S8 | `crates/envelope/src/lib.rs` (subcommand attrs), `crates/cli` |
+| #678, #684, #686 | changed arguments: `mcp enable` (`--grant`, `--agent-access`), `mcp call` (`--grant`, `--client`, effect now `mutating`), `chat` (`--permission-mode`, file options), `ai providers create/update` (`--agent-access`), `journals quarantine resolve price-override/exclude` (`--group-id`, `--reprocess`) | those leaves | `describe` **done (S1)**. None of these leaves is native | `crates/cli/src/describe.rs` |
+| #679, #681, #684, #689 | `command_capabilities.py`: four CLI leaves and four daemon kinds | `ui.transfers.dismissals.list/delete`, `ui.chat.attachments.upload`, `ai.chat.permission_mode` | **Done (S1)**: 317 entries each. The kinds stay `not_implemented` until S6 and S12 | `crates/runtime/src/capabilities.rs` |
 
 ### Transactions, review and journals
 
@@ -90,7 +94,7 @@ Rust code was read instead.
 
 | PR | Python | Kinds and leaves | Rust state | Rust location |
 | --- | --- | --- | --- | --- |
-| #706 | `ui_snapshot.build_capital_gains_snapshot`, `tax_estimate.py`: the Reports screen payload: `breakdown` by Kennzahl, `indicativeTax`, `e1kvApplies`, `rowsBeforeCryptoKennzahlen`, `fiatCurrency`, `longTermDays`, `totals`, lots with asset, category, entry type, Kennzahl and exact quantity. A root with no book reports `jurisdictionCode` `GENERIC`; Rust says `AT` | `ui.reports.capital_gains` | **Differs** on every book, with and without `year` | `crates/reports/src/gains_desktop.rs` |
+| #706 | `ui_snapshot.build_capital_gains_snapshot`, `tax_estimate.py`: the Reports screen payload: `breakdown` by Kennzahl, `indicativeTax`, `e1kvApplies`, `rowsBeforeCryptoKennzahlen`, `fiatCurrency`, `longTermDays`, `totals`, lots with asset, category, entry type, Kennzahl and exact quantity. A root with no book, or a missing profile, reports `jurisdictionCode` `GENERIC`, and a profile without a country falls back to `generic`; Rust hard-codes `AT` in the empty payload (`gains_desktop.rs` `empty`) and falls back to `AT`. Not a store or setup default, so S1 left it to S7 | `ui.reports.capital_gains` | **Differs** on every book, with and without `year` | `crates/reports/src/gains_desktop.rs` |
 | #706 | `austrian.py`, `reports.py`: E 1kv crypto Kennzahlen start in 2022; earlier disposals state no Kennzahl | `ui.reports.export_austrian_e1kv_csv/xlsx`, `reports export-austrian-e1kv*`, `ui.reports.export_capital_gains_csv` | **Differs, tax-relevant**: for 2021 Python refuses the E 1kv export ("The Austrian crypto Kennzahlen (KZ 172, 174, 176) start with tax year 2022"); Rust writes both files. The 2021 capital-gains CSV has an empty Kennzahl column in Python and 172/174 in Rust. 2025 matches | `crates/reports` (Austrian export, `full_csv.rs`, `tax_summary.rs`) |
 | #706 | `ui_snapshot.build_journal_events_list_snapshot`: each event carries an `explanationReference` for `ui.reports.explain_capital_gain` | `ui.journals.events.list` | **Differs**: field missing | `crates/journals/src/views.rs` |
 | #706 | `year_handoff.py`: asset presentation | `ui.reports.export_year_handoff` | Inspection: XLSX bytes differ in both runs (timestamps), contents not compared | `crates/reports` |
@@ -191,7 +195,7 @@ In dependency order. ★ marks the slices the new desktop screens need. Sizes
 are Rust lines including tests: S below 300, M 300 to 1,000, L 1,000 to 2,500,
 XL above.
 
-1. ★ **S1 Store schema and command registry** (M). The four schema changes
+1. ★ **S1 Store schema and command registry** (M). **Done**; see [after S1](#after-s1). The four schema changes
    above, in creation and the compatibility pass, with a fixture of a book the
    merged Python created; the `transfers_dismissals_command` kind attribute,
    `describe.rs` (four leaves, `mcp call` effect, new arguments) and
@@ -214,7 +218,8 @@ XL above.
    `reprocess`. Needs S1.
 6. ★ **S6 Transfer dismissals** (M). Stale journals on dismiss, list and
    delete leaves and kinds, suggestion exclusions. Needs S2.
-7. ★ **S7 Reports screen** (L). The capital-gains payload and indicative tax,
+7. ★ **S7 Reports screen** (L). The capital-gains payload and indicative tax
+   (including the empty-root `jurisdictionCode` and country fallback),
    the E 1kv refusal before 2022 and the empty Kennzahl before 1 March 2022
    in the exports, `explanationReference` on journal events, the year handoff
    asset presentation. Independent of S2 to S6; it fixes a tax-relevant
@@ -233,6 +238,38 @@ XL above.
     permission modes, visuals, document import). The Settings and chat
     screens need these kinds.
 
+## After S1
+
+The Rust store now runs the four schema steps where Python does (see
+[database compatibility](database-compatibility.md#storage-added-by-main-675-to-708)),
+and the registry, `describe` and capability tables follow main. The five
+shell tests pass.
+
+`desktop_read_diff.py` on the Python-built `austria` book, release binary,
+the default 103 read kinds plus the seven report reads and
+`ui.review.plan/worklist/receipt` (113 kinds, no `--args-file`): 101 the
+same, 12 differing, none refused. Before S1, 99 of the 103 default kinds were
+refused. The 12, each with its slice:
+
+| Kind | First difference | Slice |
+| --- | --- | --- |
+| `ui.review.cases` | `fiat_currency` missing | S4 |
+| `ui.review.badges` | `definitions` missing | S4 |
+| `ui.journals.quarantine` | `summary.definitions` missing | S5 |
+| `ui.transfers.suggest` | `exclusions` missing | S6 |
+| `ui.reports.capital_gains` | `asset` and the Reports payload | S7 |
+| `ui.journals.events.list` | `explanationReference` missing | S7 |
+| `ui.wallets.list` | `completeness_class` missing | S8 |
+| `ui.workspace.health` | `definitions` missing | S10 |
+| `ui.next_actions` | `health.definitions` missing | S10 |
+| `ui.journals.snapshot` | `freshnessReason` wording | pre-merge; fixed on `t3code/r6-5b-ai-tools` |
+| `ui.chain_analysis.query` | `snapshot_id` | pre-merge, not investigated |
+| `ui.logs.snapshot` | each side's own log lines | expected |
+
+The comparison is plaintext: the harness does not unlock SQLCipher books.
+Encrypted admission is covered by the store differential tests, which open a
+current Python SQLCipher book in both Rust open modes without changing it.
+
 ## Verification of the merge
 
 - `cargo build --release -p kassiber`, both clippy lanes with `-D warnings`,
@@ -249,6 +286,11 @@ XL above.
   for this sync.
 
 ## Python reference notes
+
+Python's `open_db` opens a book carrying tables, columns, indexes,
+triggers or migration audits it does not know, leaving them in place. The
+Rust store refuses such a book in both opens without writing. S1 keeps that
+asymmetry deliberately; see [database compatibility](database-compatibility.md#storage-added-by-main-675-to-708).
 
 No Python behaviour was changed by this sync. The pre-merge
 `freshnessReason` difference and the `ui.chain_analysis.query` `snapshot_id`

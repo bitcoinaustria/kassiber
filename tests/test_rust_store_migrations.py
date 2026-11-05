@@ -1103,8 +1103,8 @@ def populate_main_sync_storage(conn):
         INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,occurred_at,direction,asset,amount,
             fiat_currency,fiat_rate,pricing_quality,pricing_review_accepted_price,created_at)
             VALUES('tx','ws','pf','wal','tx','2025-01-01T00:00:00Z','inbound','BTC',100000,'EUR','51234.5','coarse','51234.5','fixed');
-        INSERT INTO ai_providers(name,base_url,kind,agent_access,created_at,updated_at)
-            VALUES('synthetic','http://127.0.0.1:9/v1','local','restricted','fixed','fixed');
+        INSERT INTO ai_providers(name,display_name,base_url,kind,agent_access,created_at,updated_at)
+            VALUES('synthetic','Synthetic','http://127.0.0.1:9/v1','local','restricted','fixed','fixed');
         INSERT INTO ai_provider_checks(provider_name,check_kind,base_url,checked_at,stale,error_json,value_json)
             VALUES('synthetic','models','http://127.0.0.1:9/v1','fixed',1,NULL,'{"models":["m"]}');
     """)
@@ -1189,7 +1189,7 @@ def test_newer_unknown_layouts_are_refused_by_rust_without_writing(storage_probe
     conn.close()
     database = root / "kassiber.sqlite3"
     before = database.read_bytes()
-    for op in ("open", "migrate"):
+    for op in ("open", "open-migrating"):
         result = invoke(storage_probe, root, encrypted=encrypted, op=op)
         assert not result["ok"] and result["error"]["code"] == "requires_python_migration", (op, result)
         assert database.read_bytes() == before, op
