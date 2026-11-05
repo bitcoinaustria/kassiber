@@ -1185,9 +1185,14 @@ natively behind the `native-chat` gate (test-harness builds only).
   `tests/test_cli_chat.py` and the AI tests of `tests/test_daemon_smoke.py`
   through the hybrid candidate with a Rust daemon (the 2 and 5 that fail today
   need those services, and `ui.secrets.init`).
-- [ ] Give `kassiber chat` a cooperative Ctrl-C (cancel the turn, keep the
-  REPL) and line editing without a new dependency, or record the owner's
-  decision to keep the difference.
+- [x] Give `kassiber chat` a cooperative Ctrl-C (cancel the turn, keep the
+  REPL); see the
+  [R6-8 checkpoint](docs/reference/rust-shell.md#mcp-server-and-cooperative-chat-ctrl-c-r6-8).
+- [ ] Give `kassiber chat` line editing without a new dependency, or record
+  the owner's decision to keep the difference.
+- [ ] Python's `kassiber chat` loses its daemon child on a terminal Ctrl-C
+  (`tests/rust_port/repro_chat_ctrl_c_kills_daemon.py`): decide whether to
+  start the child in its own process group, as Rust does.
 - [ ] Count the whole egress ledger in the privacy receipt once the daemon has
   a process-wide product ledger (`ui.egress.snapshot`).
 
@@ -1261,8 +1266,9 @@ journal registration remains on R4-13.
 
 The [R6 port design](docs/reference/r6-ai-operator-port.md) lists the
 census, slices, oracles and owner decisions. R6-1's libraries, R6-2's
-broker (`kassiber --operator-broker-server` and its children) and R6-3's
-operator leaves, brokered routing and `ui.agent_access.*` kinds are native.
+broker (`kassiber --operator-broker-server` and its children), R6-3's
+operator leaves, brokered routing and `ui.agent_access.*` kinds and R6-8's
+`mcp` leaves are native (`mcp serve` and `mcp call` behind `native-mcp`).
 
 - [x] R6-1: local IPC and child-process primitives (`crates/ipc`), the operator
   protocol and client, and the remaining ownership pieces; see the
@@ -1285,9 +1291,13 @@ operator leaves, brokered routing and `ui.agent_access.*` kinds are native.
 - [ ] R6-6: provider configuration, streaming HTTP, the provider broker client
   and discovery.
 - [ ] R6-7: `ai.chat`, cancellation, consent, history, `chat` and `chats`.
-- [ ] R6-8: MCP server, direct books first, then brokered books; then run
-  the MCP scenario of `test_operator_integration.py` under
-  `KASSIBER_TEST_OPERATOR_BROKER=rust`.
+- [x] R6-8: MCP server with direct and brokered books, and the MCP scenario
+  of `test_operator_integration.py` under `KASSIBER_TEST_OPERATOR_BROKER=rust`;
+  see the
+  [R6-8 checkpoint](docs/reference/rust-shell.md#mcp-server-and-cooperative-chat-ctrl-c-r6-8).
+  Its Windows stdio claim and chat console arm have not been compiled.
+- [ ] Turn the MCP gate (`native-mcp`) on for product builds once the 13 MCP
+  read tools R6-5a refuses are native.
 - [ ] Owner decisions in the design's risks section: registration timing,
   broker ledger rows, the broker bundle location, and an owner for chain
   analysis. Settled on 2026-11-02: Python and Rust brokers share one

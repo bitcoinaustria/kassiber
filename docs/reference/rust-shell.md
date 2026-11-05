@@ -16159,6 +16159,29 @@ Served by Rust in the parity run, with zero fallbacks: `ui.wallets.identify`
 successes, 15 refusals) and `ui.wallets.detect_script_types` 27 (16 fallback
 reports, 11 refusals).
 
+- The privacy receipt counts the turn's own provider requests. Python counts
+  every egress-ledger record after the turn's cursor, including unrelated
+  daemon traffic in the same window; the Rust daemon has no process-wide
+  product ledger yet (`ui.egress.snapshot` is not native), so `egress_gap` is
+  always false. The broker records none, as in Python.
+- A persisted exchange is one transaction. Python leaves a partial write in
+  an open transaction when the final insert fails.
+- Tools R6-5b owns: an allowed mutating call answers `not_implemented` after
+  Python's gates; consent previews use plain argument redaction and the
+  `ui.review.apply` record carries no `review_preview`, so the CLI denies it;
+  denied or cancelled custody proposals write no audit row.
+- An attachment grant is never known (staging is not native): `ai.chat`
+  answers `document_import_session_expired` after resolving the book, as
+  Python does for an expired grant, and `kassiber chat --file` fails on the
+  staging kind.
+- `kassiber chat` had no SIGINT handling here (no signal API without a new
+  dependency): Ctrl-C ended the session. R6-8 closed this with `crates/ipc`'s
+  interrupt; see its [checkpoint](#mcp-server-and-cooperative-chat-ctrl-c-r6-8).
+  It reads REPL
+  lines without readline editing, sizes tool tables from `COLUMNS` only,
+  kills a daemon child that outlives its input instead of sending SIGTERM
+  first, and starts the child in the caller's working directory.
+
 ### On-chain identification
 
 `ui.wallets.identify_onchain` and `ui.wallets.identify_onchain.cancel` are
@@ -17396,3 +17419,191 @@ this turn run, and a cut-off answer runs none of its calls.
   revocation halves, duplicate ids, cut-off answers, the advertised check,
   the on-device strip, held early cancels, their cap, cursor binding), all
   killed by named tests.
+
+## MCP server and cooperative chat Ctrl-C (R6-8)
+
+Slice R6-8 of the [R6 design](r6-ai-operator-port.md#r6-8-mcp-server).
+`t3code/r6-8-mcp` starts at `12cad03e2` (the R6-7 tip) and merges
+`8d3cbb7e6` (the R6-3 tip), so the read executor, chat and the operator
+client meet. All six `mcp` leaves are native. Following design §7 item 1 as
+R6-7 did for chat, `mcp serve` and `mcp call` register behind the
+`native-mcp` cargo feature of `kassiber-cli`, which only `kassiber`'s
+`test-harness` feature enables; `mcp tools`, `status`, `enable` and
+`disable` need no tool and register in product builds. The gate flips when
+the 13 MCP read tools R6-5a still refuses are native (`overview_snapshot`,
+`workspace_health`, `next_actions`, `report_blockers`, `transactions_graph`,
+`transactions_review_context`, the four `journals_*` reads, `review_cases`,
+`review_plan`, `review_worklist`); until then they answer `not_implemented`
+as the executor does. The slice also gives `kassiber chat` its cooperative
+Ctrl-C, which R6-7 recorded as a difference. No dependency, schema or Python
+product file changes.
+
+### What is native
+
+- **The protocol** (new crate `crates/mcp`, `kassiber/mcp/protocol.py`):
+  both eras chosen per message (modern `_meta` revision 2026-07-28 with no
+  session; legacy `initialize` for 2025-11-25 and 2025-06-18, newest
+  offered otherwise, `ping` before it), `server/discover`, `tools/list` and
+  `tools/call` with Python's field order, `subscriptions/listen` with an
+  empty filter, and every JSON-RPC error in Python's check order. The stdio
+  loop answers other methods on the reader thread and runs calls one at a
+  time on a worker; limits are 16 MiB per line (a longer line answers
+  `Message too large` and is skipped), 32 calls in flight, 16 subscriptions;
+  `notifications/cancelled` drops a call's reply (by id type: `1` and `"1"`
+  differ); at end of input accepted calls get 30 s, then open streams get
+  their final result. Replies are ASCII-escaped compact JSON. `NaN` and
+  `Infinity` are parse errors (`kassiber_pytext::loads_py_without_constants`,
+  Python's `parse_constant` hook); nesting past the scanner's limit is a
+  parse error, not a crash.
+- **The projection** (`kassiber/mcp/tools.py`): the 44 read tools in list
+  order with names from the catalog's wire names, titles, schemas with
+  `type: object`, the read-only annotations, `INSTRUCTIONS`, the 4 MiB
+  result bound measured on the escaped text, and the redacted error outcome
+  with its `code: message` / `hint:` text.
+- **The leaves** (`crates/cli/src/mcp.rs`, `kassiber/mcp/cli.py`): `serve`,
+  `tools`, `status`, `enable` and `disable` run before state migration,
+  path resolution or broker routing, as Python's launch path does. `serve`
+  refuses a half pin, then claims stdio (`kassiber_ipc::stdio::claim`:
+  private duplicates of descriptors 0 and 1, then 0, 1 and 2 on
+  `/dev/null`; `SetStdHandle` to `NUL` on Windows). `enable` asks on the
+  user's terminal and refuses machine or piped callers with
+  `interaction_required` (`reason: user_consent`). `mcp call` checks agent
+  access and the book's existence before migration or routing, opens the
+  book like any CLI read, and checks its pin and arguments after opening, in
+  Python's order.
+- **A call on a direct book** (`crates/daemon/src/mcp.rs`, `run_tool`): the
+  access gate first, then `not_initialized` for a machine without projects
+  or a selected project without a database (nothing is created); a
+  plaintext or `unattended` book is bootstrapped, opened without prompting
+  and accounted, the scope resolved, then pinned read-only for the call
+  (`kassiber_store::pinned`: a temporary view shadows `settings` with the
+  pinned context keys and `PRAGMA query_only` refuses writes; the stored
+  context is never written), the R6-5a read executor runs as a remote
+  provider with the 44 tools advertised, read maintenance off and no
+  cross-book reads, and the result is redacted again and named by its book.
+  The book closes after every call.
+- **A call on a brokered book**: arguments are validated in this build
+  first; `status` never starts a broker; without a lease the agent is told
+  to ask the user (`operator_lease_required`); the pin or the lease's
+  default scope names the book; an agent-scope lease registers this process
+  as an agent session (10 s heartbeats, one session per book, a stale one
+  replaced once by parallel callers, re-registered when the broker drops
+  it); the call is submitted as `--machine mcp call` without starting a
+  broker, only to this build's broker and only one that honours caller
+  context; it is polled every 0.1 s, a cancelled call cancels its queued
+  operation, and the child's envelope is mapped and redacted again.
+- **Store seams**: `BookStore::runtime_paths`, `catalog_has_projects` and
+  `agent_access_path`, and `Book::pin_read_only_scope`.
+- **Chat Ctrl-C** (`crates/cli/src/chat`): once the daemon child starts,
+  SIGINT is `crates/ipc`'s interrupt (new `take`, `wait_readable` and
+  `exit_by_interrupt`). Mid-turn it sends `ai.chat.cancel` and waits for the
+  terminal record, keeping the session; a second Ctrl-C there ends the turn
+  with `cancelled`; at a consent question it cancels the turn; at the REPL
+  prompt it ends the REPL; anywhere else the process ends by SIGINT after
+  closing its daemon, as an uncaught `KeyboardInterrupt` does. Terminal reads
+  wait for input or the interrupt, since the handler restarts system calls.
+  The daemon child now leads its own process group, so the terminal's
+  Ctrl-C reaches only the chat.
+
+### Verification
+
+- **Rust tests:**
+  - `kassiber-mcp`: 28 protocol tests against a fake provider (the
+    in-process `ProtocolEraTests`, `StdioLoopTests`,
+    `SubscriptionLimitTests`, `StdioRobustnessTests` and the wire half of
+    `StrictJsonTests`, with exact reply bytes, the error check order, id
+    typing, the in-flight and subscription caps, the 16 MiB line limit
+    around its boundary, a panicking provider and the bounded drain) and 7
+    projection tests (names, titles, annotations, only local read tools,
+    the escaped result bound at and past the limit, error texts).
+  - `kassiber-cli`: 21 `mcp` tests over a scripted broker and a minimal
+    store (`BrokeredRoutingTests`, `OutdatedBrokerMcpTests`, the broker half
+    of `ReviewHardeningTests`, the access gates and their order, missing
+    books, half pins and `--arguments`, `enable`/`disable`/`status`,
+    `os.path.abspath`), and 6 chat tests for Ctrl-C over a scripted daemon
+    (mid-turn cancel, the second Ctrl-C, a consent question, the prompt,
+    the daemon wait, the child's own process group).
+  - `kassiber-store`: the read-only pin on SQLite (`PinnedContextTests`).
+  - `kassiber-ipc`: the interrupt taken once and its wait on a descriptor.
+  - `kassiber-pytext`: `NaN`/`Infinity` refused, `1e999` still a float.
+  - `crates/kassiber/tests/operator_broker.rs`:
+    `mcp_serve_reads_a_brokered_book_once_the_desktop_allows_it` runs a Rust
+    `mcp serve` against a Rust broker and daemon: a manual book asks for an
+    unlock, the desktop's agent grant leaves the server pending until the
+    user allows it (its pid shown), two reads run in broker children and are
+    counted, and the desktop's lock returns the book to manual.
+- **Python:**
+  - `tests/test_rust_mcp.py` (13 tests): stdio transcripts of 14 messages that
+    are not tool calls and 91 tool calls (80 argument cases over the 44
+    tools, from the AI driver, plus 11 refusals) on the empty, desktop and reports fixture
+    books, pinned and unpinned books, an unknown book, a missing data root,
+    MCP off and the AI switch off, and a manual encrypted book: every reply
+    identical to Python's byte for byte, except the reads R6-5a refuses
+    (checked against that list). The one-shot leaves compare stdout and exit
+    codes (10 `mcp call` variants, each with and without `--machine`, `tools`,
+    `status`, `enable`, `disable`). The fences on Rust: launch and listing
+    leave the home tree unchanged, create no data or state root, connect to
+    no live operator endpoint and hold only `/dev/null` and two pipes; a
+    direct read reaches no socket and closes its book; a brokered book with
+    no broker answers `operator_lease_required` and no broker binds the
+    runtime directory; only the 44 read tools answer. The mutation catalog
+    applies and names existing tests.
+  - `tests/test_rust_chat_interrupt.py` (3 tests): `kassiber chat` on a
+    pseudo-terminal against a loopback provider holding its answer; a typed
+    Ctrl-C cancels the turn (one request), keeps the session and its daemon
+    (in its own process group), the next turn completes, a second Ctrl-C at
+    the prompt exits 0, and a one-shot `--machine` chat returns
+    `finish_reason: cancelled`.
+  - `KASSIBER_TEST_OPERATOR_BROKER=rust` runs all six
+    `test_operator_integration.py` scenarios, the MCP one unskipped: the
+    Python provider's brokered reads run in Rust `mcp call` children, and
+    the stranger is a Rust `mcp serve` (a fresh Python process names
+    another build, which the Rust broker refuses before pairing). Python's
+    broker passes them too, with `test_mcp_server.py` (62) unchanged.
+  - `tests/test_rust_ai_chat.py` and `tests/test_rust_operator_cli.py` pass
+    on the merged branch; the operator daemon scenario failed once under a
+    load average near 400 and passed alone.
+- **Mutations.** `crates/mcp/scripts/mutations.json` has 38 entries, run by
+  `crates/mcp/scripts/mutation_check.py` over `kassiber-mcp`,
+  `kassiber-cli`, `kassiber-setup`, `kassiber-store` and `kassiber-ipc`:
+  era selection (5), error codes (5), id typing (2), the in-flight,
+  duplicate and subscription limits (3), cancellation and the drain (2),
+  the escaped result size (2), the access gate's place and reason
+  precedence (3), the brokered checks (never starting a broker, this build,
+  caller context, re-redaction, one stale-session replacement, 0.1 s
+  polling, cancelling queued work: 7), the pin (2) and chat Ctrl-C (7).
+  All 38 are killed in scratch-tree runs. The first run left three
+  survivors whose tests compared a constant with itself or did not reach
+  the mutated line; those tests now pin Python's literal values.
+
+### Reviewed differences
+
+- Python's daemon child shares the chat's process group, so a terminal
+  Ctrl-C kills it and the cooperative cancel then fails with
+  `BrokenPipeError` (`tests/rust_port/repro_chat_ctrl_c_kills_daemon.py`,
+  which also shows `close()` raising on the dead child). Rust starts the
+  child in its own process group (`CREATE_NEW_PROCESS_GROUP` on Windows);
+  the cancel works and the child exits at the end of its input.
+- An uncaught Ctrl-C ends the process by SIGINT without Python's
+  traceback on stderr.
+- A Ctrl-C that lands between operations is handled at the next read
+  (the REPL prompt, a consent question or a wait for the daemon); Python
+  raises wherever it lands.
+- The read-only pin is a temporary view rather than a Python context
+  variable: a tool that wrote a context key would get SQLite's read-only
+  error instead of `scope_pinned`. No read tool writes settings.
+- The JSON nesting limit is the scanner's fixed 1,000 levels; Python's
+  depends on its stack at the call.
+
+### Not tested here
+
+- Windows: the stdio claim through `SetStdHandle`, the chat child's
+  `CREATE_NEW_PROCESS_GROUP` and terminal reads without the interrupt wait
+  were written against `windows-sys` 0.61 and std, not compiled.
+- macOS: the pseudo-terminal Ctrl-C test reads `/proc` and runs on Linux
+  only.
+
+### Left
+
+- Turn the `native-mcp` gate on with the 13 refused read tools.
+- `kassiber chat` line editing (R6-7's remaining difference).

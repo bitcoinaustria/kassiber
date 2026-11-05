@@ -4782,3 +4782,30 @@ R6-5b, the 23 refused read tools and document-import staging are native. See
 the [checkpoint](../reference/rust-shell.md#ai-chat-r6-7) for the stream
 driver, the 17 mutation entries, the reviewed differences and one Python
 quirk kept with a repro. Python product code is unchanged.
+### R6-8 MCP server and chat Ctrl-C
+
+`t3code/r6-8-mcp` merges the R6-3 tip into the R6-7 tip. The new crate
+`crates/mcp` holds the dual-era stdio JSON-RPC server (single tool worker,
+limits, cancellation, the 30 s drain) and the 44 read-only definitions
+derived from the AI catalog; `kassiber-cli` adds the six `mcp` leaves with
+the stdio claim, the direct path (agent access first, never creating a
+project or book, a read-only scope pin under SQLite `query_only` that never
+writes the stored context, the book opened and closed per call through the
+R6-5a read executor as a remote provider) and the brokered path (the
+operator client, agent sessions, 0.1 s polling, cancelling queued work,
+never starting a broker). `mcp serve` and `mcp call` register behind the
+`native-mcp` feature until the 13 MCP reads R6-5a refuses are native; the
+other four leaves always register. `kassiber chat` now cancels a turn on
+Ctrl-C and keeps its session; its daemon child leads its own process group,
+where Python's dies with the terminal's Ctrl-C (a recorded repro).
+
+Parity: a new stdio transcript driver compares every reply of Python and
+Rust byte for byte on copies of the same fixture books, plus the one-shot
+leaves; the in-process cases of `test_mcp_server.py` are ported as Rust
+tests; the MCP scenario of `test_operator_integration.py` runs under the
+Rust broker; a Rust-on-Rust test serves a brokered book through the
+desktop's agent grant. 38 mutation entries cover era selection, error
+codes, limits, id typing, the escaped result size, the access gate, the
+brokered checks, the pin and the chat Ctrl-C. The
+[checkpoint](../reference/rust-shell.md#mcp-server-and-cooperative-chat-ctrl-c-r6-8)
+records the details.

@@ -843,6 +843,14 @@ turn it on. §7 item 11 is settled as recommended.
 
 ### R6-8 MCP server
 
+Done on branch `t3code/r6-8-mcp`; the
+[checkpoint](rust-shell.md#mcp-server-and-cooperative-chat-ctrl-c-r6-8)
+records its verification, the reviewed differences and what is left. §7
+item 1 is followed as for chat: `mcp serve` and `mcp call` register behind
+the `native-mcp` feature until every MCP tool is native, while `mcp tools`,
+`status`, `enable` and `disable` need no tool and always register. The same
+run gave `kassiber chat` its cooperative Ctrl-C.
+
 **Scope:**
 
 - **`mcp serve`:**
