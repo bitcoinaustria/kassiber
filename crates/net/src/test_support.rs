@@ -182,3 +182,243 @@ impl Drop for FakeElectrum {
         }
     }
 }
+
+/// One scripted answer of a [`ScriptedProvider`].
+#[derive(Clone)]
+pub struct Reply {
+    pub status: u16,
+    pub content_type: String,
+    pub body: Vec<u8>,
+    /// Send the body as chunks of this many bytes, with chunked framing.
+    pub chunk_size: Option<usize>,
+    /// Keep the connection open after the body until the provider drops.
+    pub hold: bool,
+}
+
+impl Reply {
+    pub fn json(status: u16, body: &str) -> Self {
+        Self::raw(status, "application/json", body.as_bytes())
+    }
+
+    /// `data: <event>\n\n` per event, then `data: [DONE]` when `done`.
+    pub fn sse(events: &[&str], done: bool) -> Self {
+        let mut body = String::new();
+        for event in events {
+            body.push_str(&format!("data: {event}\n\n"));
+        }
+        if done {
+            body.push_str("data: [DONE]\n\n");
+        }
+        Self::raw(200, "text/event-stream", body.as_bytes())
+    }
+
+    pub fn raw(status: u16, content_type: &str, body: &[u8]) -> Self {
+        Self {
+            status,
+            content_type: content_type.into(),
+            body: body.to_vec(),
+            chunk_size: None,
+            hold: false,
+        }
+    }
+
+    pub fn chunked(mut self, size: usize) -> Self {
+        self.chunk_size = Some(size.max(1));
+        self
+    }
+
+    pub fn held(mut self) -> Self {
+        self.hold = true;
+        self
+    }
+}
+
+/// A request a [`ScriptedProvider`] received.
+#[derive(Clone, Debug)]
+pub struct Received {
+    pub method: String,
+    pub path: String,
+    pub body: Vec<u8>,
+    pub authorization: Option<String>,
+    pub accept: Option<String>,
+}
+
+#[derive(Default)]
+struct Script {
+    routes: Vec<((String, String), Vec<Reply>)>,
+    requests: Vec<Received>,
+}
+
+/// The Rust twin of the Python suites' `ScriptedProvider`: answers each
+/// (method, path) from its own queue, 404 `{"detail": "Not Found"}` when
+/// nothing is queued, on loopback only. Test builds only.
+pub struct ScriptedProvider {
+    port: u16,
+    script: Arc<Mutex<Script>>,
+    stop: Arc<AtomicBool>,
+    thread: Option<JoinHandle<()>>,
+}
+
+impl ScriptedProvider {
+    pub fn new() -> std::io::Result<Self> {
+        let listener = TcpListener::bind("127.0.0.1:0")?;
+        listener.set_nonblocking(true)?;
+        let port = listener.local_addr()?.port();
+        let script = Arc::new(Mutex::new(Script::default()));
+        let stop = Arc::new(AtomicBool::new(false));
+        let (shared, stopped) = (script.clone(), stop.clone());
+        let thread = thread::spawn(move || {
+            let mut workers = Vec::new();
+            while !stopped.load(Ordering::SeqCst) {
+                let stream = match listener.accept() {
+                    Ok((stream, _)) => stream,
+                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                        thread::sleep(Duration::from_millis(2));
+                        continue;
+                    }
+                    Err(_) => break,
+                };
+                let (shared, stopped) = (shared.clone(), stopped.clone());
+                workers.push(thread::spawn(move || serve(stream, &shared, &stopped)));
+            }
+            for worker in workers {
+                let _ = worker.join();
+            }
+        });
+        Ok(Self {
+            port,
+            script,
+            stop,
+            thread: Some(thread),
+        })
+    }
+
+    /// `http://127.0.0.1:<port>/v1`.
+    pub fn base_url(&self) -> String {
+        format!("http://127.0.0.1:{}/v1", self.port)
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    /// Queues replies for `method` and `/v1/<path>`.
+    pub fn queue(&self, method: &str, path: &str, replies: Vec<Reply>) {
+        let key = (method.to_owned(), format!("/v1/{path}"));
+        let mut script = self.script.lock().unwrap();
+        match script.routes.iter_mut().find(|(k, _)| *k == key) {
+            Some((_, queue)) => queue.extend(replies),
+            None => script.routes.push((key, replies)),
+        }
+    }
+
+    pub fn requests(&self) -> Vec<Received> {
+        self.script.lock().unwrap().requests.clone()
+    }
+
+    pub fn clear_requests(&self) {
+        self.script.lock().unwrap().requests.clear();
+    }
+
+    /// The raw bodies sent to `/v1/<path>`.
+    pub fn bodies(&self, path: &str) -> Vec<Vec<u8>> {
+        let path = format!("/v1/{path}");
+        self.requests()
+            .into_iter()
+            .filter(|r| r.path == path)
+            .map(|r| r.body)
+            .collect()
+    }
+}
+
+fn serve(mut stream: std::net::TcpStream, script: &Mutex<Script>, stop: &AtomicBool) {
+    let _ = stream.set_nonblocking(false);
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
+    let _ = stream.set_write_timeout(Some(Duration::from_secs(5)));
+    let mut head = Vec::new();
+    let mut byte = [0; 1];
+    while head.len() < 65536 && !head.ends_with(b"\r\n\r\n") {
+        if stream.read_exact(&mut byte).is_err() {
+            return;
+        }
+        head.push(byte[0]);
+    }
+    let text = String::from_utf8_lossy(&head).into_owned();
+    let mut lines = text.split("\r\n");
+    let mut first = lines.next().unwrap_or_default().split(' ');
+    let method = first.next().unwrap_or_default().to_owned();
+    let path = first.next().unwrap_or_default().to_owned();
+    let header = |name: &str| {
+        text.split("\r\n").skip(1).find_map(|line| {
+            let (key, value) = line.split_once(':')?;
+            key.eq_ignore_ascii_case(name)
+                .then(|| value.trim().to_owned())
+        })
+    };
+    let length = header("content-length")
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(0)
+        .min(16 * 1024 * 1024);
+    let mut body = vec![0; length];
+    if stream.read_exact(&mut body).is_err() {
+        return;
+    }
+    let reply = {
+        let mut script = script.lock().unwrap();
+        script.requests.push(Received {
+            method: method.clone(),
+            path: path.clone(),
+            body,
+            authorization: header("authorization"),
+            accept: header("accept"),
+        });
+        script
+            .routes
+            .iter_mut()
+            .find(|(key, _)| *key == (method.clone(), path.clone()))
+            .and_then(|(_, queue)| (!queue.is_empty()).then(|| queue.remove(0)))
+    }
+    .unwrap_or_else(|| Reply::json(404, r#"{"detail": "Not Found"}"#));
+    let framing = match reply.chunk_size {
+        Some(_) => "transfer-encoding: chunked".to_owned(),
+        None => format!("content-length: {}", reply.body.len()),
+    };
+    let head = format!(
+        "HTTP/1.1 {} Scripted\r\ncontent-type: {}\r\n{framing}\r\nconnection: close\r\n\r\n",
+        reply.status, reply.content_type
+    );
+    if stream.write_all(head.as_bytes()).is_err() {
+        return;
+    }
+    match reply.chunk_size {
+        Some(size) => {
+            for piece in reply.body.chunks(size) {
+                let mut chunk = format!("{:x}\r\n", piece.len()).into_bytes();
+                chunk.extend_from_slice(piece);
+                chunk.extend_from_slice(b"\r\n");
+                if stream.write_all(&chunk).is_err() || stream.flush().is_err() {
+                    return;
+                }
+            }
+            if !reply.hold {
+                let _ = stream.write_all(b"0\r\n\r\n");
+            }
+        }
+        None => {
+            let _ = stream.write_all(&reply.body);
+        }
+    }
+    let _ = stream.flush();
+    while reply.hold && !stop.load(Ordering::SeqCst) {
+        thread::sleep(Duration::from_millis(5));
+    }
+}
+
+impl Drop for ScriptedProvider {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::SeqCst);
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
+    }
+}

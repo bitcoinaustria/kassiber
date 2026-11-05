@@ -31,3 +31,7 @@ fancy-regex = "0.20"
 
 [lints.rust]
 unsafe_code = "forbid"
+
+[dev-dependencies]
+# The scripted loopback provider the transport suites run against.
+kassiber-net = { path = "../net", features = ["test-support"] }

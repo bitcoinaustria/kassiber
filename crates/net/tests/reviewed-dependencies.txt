@@ -113,3 +113,5 @@ zip deflate
 # admits their forms in crates/ipc alone); the operator protocol and client.
 kassiber-ipc
 kassiber-operator test-harness
+# AI providers, tools and discovery; HTTP only through kassiber-net routes.
+kassiber-ai test-harness
