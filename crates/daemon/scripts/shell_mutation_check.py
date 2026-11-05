@@ -58,8 +58,10 @@ def main():
     build = (ROOT / "target").resolve() / "shell-mutation-build"
     scratch.mkdir(parents=True, exist_ok=True)
     tempfile.tempdir = str(scratch)
+    # A user-level build.build-dir template would key intermediates on the
+    # random scratch path and outlive the run; keep them in the removed tree.
     os.environ.update(
-        TMPDIR=str(scratch), CARGO_TARGET_DIR=str(build), CARGO_INCREMENTAL="0",
+        TMPDIR=str(scratch), CARGO_TARGET_DIR=str(build), CARGO_BUILD_BUILD_DIR=str(build), CARGO_INCREMENTAL="0",
         CARGO_PROFILE_DEV_DEBUG="0", CARGO_PROFILE_TEST_DEBUG="0")
     os.environ.setdefault("CARGO_BUILD_JOBS", "8")
     checker._Runner = Runner
