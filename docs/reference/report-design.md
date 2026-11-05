@@ -299,6 +299,11 @@ Evidence for every rolled-out report:
   `crates/reports/scripts/report_design_prototype.py` into
   `target/report-design/{austria,generic}/`.
 
+Cost of the engine (2026-11-05, clean `cargo build --release -p kassiber`, 8
+jobs): the binary grows from 85.8 MB to 137.9 MB (71.3 MB to 110.1 MB
+stripped; the four bundled fonts are 0.8 MB of it) and the clean build from
+3 min 22 s to 5 min 04 s wall, 945 s to 1490 s user CPU.
+
 ## Rollout
 
 One report per commit, each with data parity against Python's model.
