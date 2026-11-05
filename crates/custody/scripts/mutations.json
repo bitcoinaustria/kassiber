@@ -24740,6 +24740,16 @@
     "rule": "Borrowed gap identifiers are stripped."
   },
   {
+    "id": "time-z-stack-zone",
+    "file": "crates/custody/src/components/time.rs",
+    "find": "copy_from_slice(b\"+00:00\")",
+    "replace": "copy_from_slice(b\"+01:00\")",
+    "expect_failing": [
+      "cpython_component_times"
+    ],
+    "rule": "A trailing Z reads as UTC."
+  },
+  {
     "id": "R4-evidence-alias-slot-index",
     "file": "crates/custody/src/evidence.rs",
     "find": "selected[*index] = keeper;",

@@ -318,6 +318,9 @@ pub(crate) fn register_rows(
             .map(|_| std::cell::OnceCell::new())
             .collect(),
     });
+    // Each transaction loads about one raw text; size the shared tables once.
+    RAW_TEXTS.with(|m| m.borrow_mut().reserve(records.len()));
+    RAW_ADDRESSES.with(|m| m.borrow_mut().reserve(records.len()));
     let guard = RowScopesGuard(ROW_SCOPES.with(|r| r.replace(Some(table))));
     if let Some(rows) = rows {
         note_rows(records, rows);

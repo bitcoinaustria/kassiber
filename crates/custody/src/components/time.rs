@@ -144,12 +144,24 @@ fn parsed_impl(v: &Value, strip: bool) -> Option<i64> {
     if v.is_null() || v == "" {
         return None;
     }
-    let raw = pystr(v);
+    let raw = match v {
+        Value::String(text) => std::borrow::Cow::Borrowed(text.as_str()),
+        v => std::borrow::Cow::Owned(pystr(v)),
+    };
     let raw = if strip { raw.py_strip() } else { &raw };
+    // The rewritten text of an ordinary timestamp fits on the stack.
+    let mut buffer = [0u8; 64];
     let rewritten;
     let s = if let Some(prefix) = raw.strip_suffix('Z') {
-        rewritten = format!("{prefix}+00:00");
-        rewritten.as_str()
+        let len = prefix.len() + 6;
+        if len <= buffer.len() {
+            buffer[..prefix.len()].copy_from_slice(prefix.as_bytes());
+            buffer[prefix.len()..len].copy_from_slice(b"+00:00");
+            std::str::from_utf8(&buffer[..len]).expect("text and an ASCII zone")
+        } else {
+            rewritten = format!("{prefix}+00:00");
+            rewritten.as_str()
+        }
     } else {
         raw
     };

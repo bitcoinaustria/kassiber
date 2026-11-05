@@ -720,7 +720,7 @@ fn postings<'a>(
     input: &[LegRef<'a>],
     decisions: &[Decision],
 ) -> Result<Vec<Posting<'a>>, String> {
-    let mut result = Vec::new();
+    let mut result = Vec::with_capacity(2 * by_hash.len() + decisions.len());
     let posting = |id: String,
                    observation: LegRef<'a>,
                    kind: &str,
