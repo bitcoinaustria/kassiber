@@ -130,6 +130,9 @@ class Side:
         self.log = scratch / f"hybrid-{name}.log"
         self.owners = scratch / f"owners-{name}"
         self.owners.mkdir(mode=0o700)
+        # A disposable app-data root: no child resolves the account's.
+        self.xdg_data = scratch / f"xdg-{name}"
+        self.xdg_data.mkdir(mode=0o700)
         self.broker: subprocess.Popen | None = None
         self.namer = Namer(book)
 
@@ -157,6 +160,7 @@ class Side:
             part for part in (str(ROOT), environment.get("PYTHONPATH")) if part
         )
         environment["COLUMNS"] = "100"
+        environment["XDG_DATA_HOME"] = str(self.xdg_data)
         if self.rust:
             environment["KASSIBER_RUST_TEST_OPERATOR_SESSION"] = "fixture"
             environment["KASSIBER_RUST_TEST_OWNER_ROOT"] = str(self.owners)
@@ -427,6 +431,12 @@ def sides():
                 side.close()
 
 
+def _app_data_untouched(made: dict) -> None:
+    """With explicit data roots, no child writes an app-data root."""
+    for side in made.values():
+        assert not any(side.xdg_data.rglob("*")), sorted(side.xdg_data.rglob("*"))
+
+
 def _compare(python: list, rust: list) -> None:
     assert [step[0] for step in rust] == [step[0] for step in python]
     for expected, actual in zip(python, rust):
@@ -454,6 +464,7 @@ def test_operator_cli_matches_python_through_both_brokers(sides):
     assert json.loads(by_label["admin"][1])["kind"] == "secrets.verify"
     assert json.loads(by_label["stop"][1])["data"]["broker"] == "stopping"
     _compare(python, rust)
+    _app_data_untouched(made)
 
     # Rust served every call; none fell back to Python.
     served = [json.loads(line) for line in made["rust"].log.read_text().splitlines()]
@@ -485,6 +496,7 @@ def test_agent_access_daemon_kinds_match_python_through_both_brokers(sides):
     assert by_label["lock"]["data"]["session"]["active"] is False
     assert by_label["unlock ai off"]["error"]["code"] == "ai_features_disabled"
     _compare(python, rust)
+    _app_data_untouched(made)
     assert made["python"].access_file.read_bytes() == made["rust"].access_file.read_bytes()
 
     served = [json.loads(line) for line in made["rust"].log.read_text().splitlines()]

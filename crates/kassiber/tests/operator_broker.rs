@@ -47,6 +47,8 @@ impl Broker {
             .env("XDG_RUNTIME_DIR", self.runtime_dir.path())
             .env("KASSIBER_RUST_TEST_OPERATOR_SESSION", "fixture")
             .env("KASSIBER_RUST_TEST_OWNER_ROOT", self.owners.path())
+            // A disposable app-data root: no child resolves the account's.
+            .env("XDG_DATA_HOME", self.owners.path().join("xdg-data"))
             .env("KASSIBER_TEST_NO_EGRESS", "strict")
             .env_remove("KASSIBER_NO_EGRESS")
             .env_remove("KASSIBER_OPERATOR_DIRECT")
