@@ -381,3 +381,52 @@ Closing campaigns:
 - Full mutation catalog (2,492 recipes) on `0ce1e8969`: running in
   resumable shards (`target/c10x/full-catalog.sh`), about one recipe a
   minute on this machine.
+
+## Multi-wallet 2k: median of 21 pairs
+
+Below 0.15 s of custody time a sitting's noise (±6%) is as large as the
+remaining gains, so multi-wallet 2k is also recorded as the median of 21
+alternating Python/native pairs (`target/c10x/median.py`), on
+`0ce1e8969`, load 18–30, custody CPU in seconds:
+
+| Statistic | Python | Native | Speedup |
+| --- | ---: | ---: | ---: |
+| median of 21 | 1.155 | 0.109 | 10.6× |
+| best of 21 | 1.092 | 0.104 | 10.5× |
+
+Native quartiles over the 21 runs: 0.105 / 0.109 / 0.116 s. Read a single
+best-of-five figure for this book against this spread before calling it a
+regression.
+
+Margin work stops here (owner decision, 2026-11-05): every book is at or
+above 10×, and what remains needs large changes for gains within the
+noise.
+
+## Mutation sample (2026-11-05)
+
+The full catalog (2,492 recipes) stays a TODO for a quiet period; its
+worktree `target/mtree` (`0ce1e8969`) and resumable state
+(`target/c10x/mut/state-full-0ce1e8969.json`, 32 killed) are kept.
+
+Instead a stratified sample ran on `target/mtree` (`0ce1e8969`),
+selected by `target/c10x/sample.py 337221a22`:
+
+- the first recipe, in catalog order, of each id family (the recipe id
+  without a trailing number, first two hyphen-separated tokens): 426;
+- the first recipe of each source file: 83 files;
+- every recipe anchored on or within three lines of code changed since
+  `337221a22`, and every recipe added or re-anchored since then: 13.
+
+That is 461 distinct recipes. They ran in ten chunks, one recipe at a
+time, waiting while the machine load was above 60.
+
+Result: 459 killed, 2 survived, both fixed in `57d7fab1b`:
+
+- `I-shared-aliases`: interpretation resolves typed aliases through their
+  legs, so no test reached the JSON alias path. A test now compares JSON
+  and typed alias resolution, and the recipe names it.
+- `components-volatile-fingerprint`: commitment checks take the
+  built-payload path, so the volatile-field list sits on the fallback;
+  the recipe now names the test that compares both paths.
+
+Both were rechecked as killed on the current tree.
