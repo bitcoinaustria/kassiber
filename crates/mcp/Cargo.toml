@@ -1,0 +1,18 @@
+[package]
+name = "kassiber-mcp"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "The stdio MCP server and its read-only tool projection (plan 21, R6-8)"
+
+[dependencies]
+kassiber-ai = { path = "../ai" }
+kassiber-envelope = { path = "../envelope" }
+kassiber-pyjson = { path = "../pyjson" }
+kassiber-pytext = { path = "../pytext" }
+
+[lints.rust]
+unsafe_code = "forbid"

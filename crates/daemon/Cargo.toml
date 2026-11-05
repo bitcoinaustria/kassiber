@@ -27,6 +27,7 @@ kassiber-paths = { path = "../paths" }
 kassiber-transactions = { path = "../transactions" }
 
 kassiber-imports = { path = "../imports" }
+kassiber-mcp = { path = "../mcp" }
 kassiber-wallets = { path = "../wallets" }
 serde_json = "1"
 kassiber-envelope = { path = "../envelope" }

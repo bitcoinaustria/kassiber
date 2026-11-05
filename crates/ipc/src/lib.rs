@@ -15,6 +15,8 @@
 //! - [`signal`]: termination signals delivered to a flag and a wake-up
 //!   descriptor;
 //! - [`poll`]: waiting for a pipe to become readable with a timeout;
+//! - [`stdio`]: moving a stdio protocol onto private descriptors and
+//!   pointing the standard streams at the null device;
 //! - [`descriptor`]: a caller-supplied descriptor number read and closed.
 //!
 //! The only sockets it creates are `AF_UNIX`; it never resolves names or
@@ -26,6 +28,7 @@ pub mod descriptor;
 pub mod poll;
 pub mod process;
 pub mod signal;
+pub mod stdio;
 #[cfg(unix)]
 pub mod unix;
 #[cfg(windows)]

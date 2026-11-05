@@ -673,6 +673,13 @@ pub trait Book: Send {
     fn unlock_passphrase(&self) -> Option<Secret> {
         None
     }
+    /// One MCP read (`kassiber/mcp/tools.py` `run_tool`): `Some((workspace,
+    /// profile))` turns on `PRAGMA query_only` and resolves the active
+    /// workspace and profile as those ids (`pinned_context_scope`) without
+    /// writing the stored context; `None` lifts both.
+    fn pin_read_only_scope(&mut self, _scope: Option<(&str, &str)>) -> Result<(), AppError> {
+        Err(not_implemented("mcp", "read-only book scope pins"))
+    }
     /// Local file-import run services. Unsupported seam stores fail closed.
     fn import_runs(&mut self, _operation: kassiber_imports::Operation) -> Result<Value, AppError> {
         Err(not_implemented("imports", "file import runs"))
@@ -867,6 +874,22 @@ pub trait BookStore: Send + Sync {
         data_root: &str,
         select: bool,
     ) -> Result<(), AppError>;
+    /// `resolve_runtime_paths(data_root, env_file, project)` without
+    /// creating anything: an agent's read must never create a project.
+    fn runtime_paths(&self, _selection: &Selection) -> Result<RuntimePaths, AppError> {
+        Err(not_implemented("store", "resolving runtime paths"))
+    }
+    /// `bool(load_catalog().get("projects"))`: whether any catalog project
+    /// exists; an unreadable catalog has none.
+    fn catalog_has_projects(&self) -> Result<bool, AppError> {
+        Err(not_implemented("store", "reading the project catalog"))
+    }
+    /// `agent_access.preference_path()`: the global external-agent
+    /// preference (`KASSIBER_AGENT_ACCESS_FILE` or the state root's
+    /// `config/agent-access.json`).
+    fn agent_access_path(&self) -> Result<std::path::PathBuf, AppError> {
+        Err(not_implemented("store", "the external-agent preference"))
+    }
 }
 
 /// Which surface an AI provider operation came from: a daemon kind or a

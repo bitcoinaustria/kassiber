@@ -25,6 +25,7 @@ members = [
   "crates/ownership",
   "crates/ipc",
   "crates/operator",
+  "crates/mcp",
   "crates/store",
   "crates/transactions",
   "crates/transfers",

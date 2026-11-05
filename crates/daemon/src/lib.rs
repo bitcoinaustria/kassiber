@@ -17,7 +17,6 @@ mod agent_access;
 #[cfg(feature = "native-chat")]
 mod ai_chat;
 mod ai_providers;
-#[cfg(any(feature = "test-kinds", feature = "native-chat"))]
 mod ai_tools;
 mod attachments;
 mod backends;
@@ -33,6 +32,7 @@ pub mod input;
 mod journals;
 mod kind_order;
 mod loans;
+pub mod mcp;
 mod metadata;
 mod onboarding;
 pub mod output;

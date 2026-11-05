@@ -6,7 +6,8 @@ pub fn decode(text: &str) -> Result<Value, Refusal> {
     kassiber_pytext::loads(text).map_err(|error| {
         let family = match error.kind {
             kassiber_pytext::JsonErrorKind::Decode { .. } => "JSONDecodeError",
-            kassiber_pytext::JsonErrorKind::IntTooLarge { .. } => "ValueError",
+            kassiber_pytext::JsonErrorKind::IntTooLarge { .. }
+            | kassiber_pytext::JsonErrorKind::Constant { .. } => "ValueError",
             kassiber_pytext::JsonErrorKind::TooDeep { .. } => "RecursionError",
         };
         Refusal::new(family, error.to_string())

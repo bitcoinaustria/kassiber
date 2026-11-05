@@ -30,6 +30,7 @@ test-harness = [
   "kassiber-runtime/fake",
   "kassiber-daemon/test-kinds",
   "kassiber-cli/native-chat",
+  "kassiber-cli/native-mcp",
   "kassiber-store/test-hooks",
   "kassiber-secrets/test-hooks",
   "kassiber-backup/test-hooks",

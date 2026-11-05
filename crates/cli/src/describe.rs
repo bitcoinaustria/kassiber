@@ -278,6 +278,10 @@ pub const IMPLEMENTED: &[&str] = &[
     "operator.mode",
     "operator.operation.status",
     "operator.operation.cancel",
+    "mcp.tools",
+    "mcp.status",
+    "mcp.enable",
+    "mcp.disable",
 ];
 
 /// `_NO_BOOTSTRAP_DATABASE_PREFIXES`.

@@ -45,6 +45,10 @@ pub struct Environment {
     /// disposable directory here so no client ever probes the account's
     /// endpoint.
     pub operator_runtime: Option<kassiber_operator::runtime::Runtime>,
+    /// Whether the streams are this process's own descriptors, which
+    /// `mcp serve` moves onto private copies before serving. Callers that
+    /// pass other streams (tests) leave it off.
+    pub claim_stdio: bool,
     /// `KASSIBER_RUST_TEST_PROBE=1`: parse the command line, print the
     /// selected command path (`wallets.list`), then exit 0 when this binary
     /// implements the command or 3 when it does not, without touching any
@@ -80,6 +84,7 @@ impl Environment {
             ),
             operator_direct: var("KASSIBER_OPERATOR_DIRECT"),
             operator_runtime: None,
+            claim_stdio: true,
             #[cfg(feature = "test-probe")]
             test_probe: var("KASSIBER_RUST_TEST_PROBE").as_deref() == Some("1"),
             #[cfg(feature = "test-probe")]
@@ -176,6 +181,12 @@ pub(crate) fn implemented(command: &str, args: &Namespace) -> bool {
     // native (design §7 item 1); the `native-chat` gate registers it.
     #[cfg(feature = "native-chat")]
     if crate::chat::COMMANDS.contains(&command) || crate::chats::COMMANDS.contains(&command) {
+        return true;
+    }
+    // The MCP server and its one-shot call follow the same rule: they
+    // register once every one of their 44 tools is native.
+    #[cfg(feature = "native-mcp")]
+    if crate::mcp::GATED_COMMANDS.contains(&command) {
         return true;
     }
     IMPLEMENTED.contains(&command)
@@ -358,6 +369,59 @@ pub fn run(
     if let Err(error) = prepared {
         return fail(&mut stdout, &mut stderr, error);
     }
+    let interaction = crate::operator_cli::Interaction {
+        non_interactive: globals.non_interactive,
+        stdin_is_tty,
+    };
+    if crate::mcp::EARLY_COMMANDS.contains(&dotted.as_str()) {
+        // MCP clients may launch probe copies: these never migrate state,
+        // resolve a project or route through a broker.
+        if dotted == "mcp.serve" {
+            if let Err(error) = crate::mcp::require_complete_pin(&namespace) {
+                return fail(&mut stdout, &mut stderr, error);
+            }
+            let client_env = env.clone();
+            let tools = crate::mcp::BookTools::new(
+                Arc::clone(&store),
+                build,
+                env.clone(),
+                Box::new(move || operator_client(build, &client_env)),
+                globals.selection.clone(),
+                namespace.text("workspace").map(str::to_owned),
+                namespace.text("profile").map(str::to_owned),
+            );
+            return crate::mcp::serve(tools, build.version, stdin, stdout, env.claim_stdio);
+        }
+        let mut input = std::io::BufReader::new(&mut stdin);
+        let result = crate::mcp::configure(
+            store.as_ref(),
+            &dotted,
+            interaction.non_interactive,
+            stdin_is_tty,
+            &mut input,
+            &mut stderr,
+        )
+        .and_then(|payload| {
+            let mut sink = Sink {
+                output: output.as_deref(),
+                home: env.home.as_deref(),
+                stdout: &mut stdout,
+                stderr: &mut stderr,
+            };
+            emit(&mut sink, format, &kind, payload)
+        });
+        return match result {
+            Ok(()) => 0,
+            Err(error) => fail(&mut stdout, &mut stderr, error),
+        };
+    }
+    if dotted == "mcp.call" {
+        // Before path resolution or broker routing, both of which would
+        // create a default project on a machine with no Kassiber state.
+        if let Err(error) = crate::mcp::require_existing_book(store.as_ref(), &globals.selection) {
+            return fail(&mut stdout, &mut stderr, error);
+        }
+    }
     #[cfg(feature = "test-probe")]
     let journal_invocation_guard = (dotted == "journals.process"
         && std::env::var("KASSIBER_RUST_TEST_JOURNAL_FALLBACK").as_deref() == Ok("1"))
@@ -378,10 +442,6 @@ pub fn run(
             return fail(&mut stdout, &mut stderr, error);
         }
     }
-    let interaction = crate::operator_cli::Interaction {
-        non_interactive: globals.non_interactive,
-        stdin_is_tty,
-    };
     if path.first() == Some(&"operator") {
         let result = crate::operator_cli::dispatch(
             &operator_client(build, env),
@@ -654,6 +714,26 @@ pub fn run(
                 emit(&mut sink, format, &kind, payload)
             },
         ),
+        "mcp.call" => crate::mcp::read_book(
+            &store,
+            build,
+            crate::mcp::Open {
+                selection: globals.selection.clone(),
+                passphrase_fd: globals.db_passphrase_fd,
+                allow_prompt: globals.db_passphrase_fd.is_none()
+                    && stdin_is_tty
+                    && !globals.non_interactive,
+                env,
+            },
+            &kassiber_pyjson::PyStr::from(namespace.text("tool").unwrap_or_default()),
+            &|| {
+                crate::mcp::require_complete_pin(&namespace)?;
+                crate::mcp::parse_arguments(namespace.get("arguments"))
+            },
+            namespace.text("workspace"),
+            namespace.text("profile"),
+        )
+        .and_then(|payload| emit(&mut sink, format, &kind, payload)),
         _ if dotted.starts_with("imports.") => with_book(
             env,
             store.as_ref(),
@@ -1132,7 +1212,9 @@ fn prepare_operator_child(
 }
 
 /// `_operator_expected_database_identity()`.
-fn operator_expected_database_identity(env: &Environment) -> Result<Option<String>, AppError> {
+pub(crate) fn operator_expected_database_identity(
+    env: &Environment,
+) -> Result<Option<String>, AppError> {
     if env.operator_child() && env.operator_expected_database_identity.is_none() {
         return Err(AppError::new(
             "operator_project_binding_invalid",
@@ -1143,7 +1225,7 @@ fn operator_expected_database_identity(env: &Environment) -> Result<Option<Strin
 }
 
 /// The broker client for this binary's build identity.
-fn operator_client(
+pub(crate) fn operator_client(
     build: BuildInfo,
     env: &Environment,
 ) -> kassiber_operator::client::BrokerClient<kassiber_operator::client::SystemHost> {

@@ -24,6 +24,7 @@ mod rates;
 
 mod imports;
 mod loans;
+mod mcp;
 mod metadata;
 pub mod render;
 mod run;

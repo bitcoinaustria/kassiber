@@ -16,6 +16,8 @@ kassiber-diagnostics = { path = "../diagnostics" }
 kassiber-transactions = { path = "../transactions" }
 kassiber-daemon = { path = "../daemon" }
 kassiber-imports = { path = "../imports" }
+kassiber-mcp = { path = "../mcp" }
+kassiber-setup = { path = "../setup" }
 kassiber-wallets = { path = "../wallets" }
 kassiber-ai = { path = "../ai" }
 kassiber-envelope = { path = "../envelope" }
@@ -46,3 +48,6 @@ test-probe = []
 # R6-7 chat: `chat` and the `chats` leaves, behind the same gate as the
 # daemon's chat kinds.
 native-chat = ["kassiber-daemon/native-chat"]
+# R6-8 MCP: `mcp serve` and `mcp call`, registered once all 44 MCP tools
+# are native (the other four `mcp` leaves need no tool and always are).
+native-mcp = []

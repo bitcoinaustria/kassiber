@@ -935,6 +935,26 @@ impl BookStore for RealStore {
             env_file: path(&resolved.env_file),
         })
     }
+    fn runtime_paths(&self, selection: &Selection) -> Result<RuntimePaths, AppError> {
+        context()?
+            .resolve_for_bootstrap(&options(selection))
+            .map(|resolved| paths(&resolved))
+            .map_err(error)
+    }
+    fn catalog_has_projects(&self) -> Result<bool, AppError> {
+        let context = context()?;
+        let file = context
+            .default_state_root()
+            .map_err(error)?
+            .join("config/projects.json");
+        // load_catalog answers an empty catalog for a missing or unreadable file.
+        Ok(kassiber_paths::load_catalog(&file, &context)
+            .map(|catalog| !catalog.projects.is_empty())
+            .unwrap_or(false))
+    }
+    fn agent_access_path(&self) -> Result<PathBuf, AppError> {
+        kassiber_setup::agent_access::preference_path(&context()?)
+    }
 }
 fn write_auth(
     path: &Path,
@@ -2422,6 +2442,31 @@ impl Book for RealBook {
             .as_ref()
             .filter(|passphrase| !passphrase.is_empty())
             .map(|passphrase| Secret::new(passphrase.expose().to_owned()))
+    }
+    fn pin_read_only_scope(&mut self, scope: Option<(&str, &str)>) -> Result<(), AppError> {
+        let sql = match scope {
+            Some((workspace, profile)) => {
+                let quote = |text: &str| format!("'{}'", text.replace('\'', "''"));
+                // `pinned_context_scope`: a temporary view shadows `settings`
+                // for this connection's unqualified reads, answering the two
+                // context keys with the pin; the stored context is untouched.
+                format!(
+                    "CREATE TEMP VIEW settings AS \
+                     SELECT key, value FROM main.settings \
+                     WHERE key NOT IN ('context_workspace', 'context_profile') \
+                     UNION ALL SELECT 'context_workspace', {} \
+                     UNION ALL SELECT 'context_profile', {}; \
+                     PRAGMA query_only = ON;",
+                    quote(workspace),
+                    quote(profile)
+                )
+            }
+            None => "PRAGMA query_only = OFF; DROP VIEW IF EXISTS temp.settings;".to_owned(),
+        };
+        self.conn()?
+            .execute_batch(&sql)
+            .map_err(map_sqlite_error)
+            .map_err(error)
     }
     fn preview_document(
         &mut self,

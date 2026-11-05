@@ -28,6 +28,9 @@ pub enum JsonErrorKind {
     /// `RecursionError` from nesting deeper than [`MAX_NESTING`]; `object`
     /// says which container was open.
     TooDeep { object: bool },
+    /// `ValueError` from a `parse_constant` hook that refuses `NaN`,
+    /// `Infinity` and `-Infinity` ([`loads_py_without_constants`]).
+    Constant { name: &'static str },
 }
 
 /// A failed [`loads`]. Its `Display` is `str(exc)` of the Python exception.
@@ -63,6 +66,7 @@ impl fmt::Display for JsonError {
                 "maximum recursion depth exceeded while decoding a JSON {} from a unicode string",
                 if *object { "object" } else { "array" }
             ),
+            JsonErrorKind::Constant { name } => write!(f, "invalid JSON constant {name}"),
         }
     }
 }
@@ -72,17 +76,28 @@ impl std::error::Error for JsonError {}
 /// `json.loads(text)` for a `str`.
 pub fn loads(text: &str) -> Result<Value, JsonError> {
     let points: Vec<u32> = text.chars().map(u32::from).collect();
-    loads_points(&points)
+    loads_points(&points, true)
 }
 
 /// json.loads of a Python string, preserving raw surrogate code points.
 pub fn loads_py(text: &PyStr) -> Result<Value, JsonError> {
     let points: Vec<u32> = text.code_points().collect();
-    loads_points(&points)
+    loads_points(&points, true)
 }
 
-fn loads_points(points: &[u32]) -> Result<Value, JsonError> {
-    let scanner = Scanner { s: points };
+/// `json.loads(text, parse_constant=reject)`: `NaN`, `Infinity` and
+/// `-Infinity` are not JSON and fail with [`JsonErrorKind::Constant`]. A
+/// number literal that overflows to infinity (`1e999`) is still a float.
+pub fn loads_py_without_constants(text: &PyStr) -> Result<Value, JsonError> {
+    let points: Vec<u32> = text.code_points().collect();
+    loads_points(&points, false)
+}
+
+fn loads_points(points: &[u32], constants: bool) -> Result<Value, JsonError> {
+    let scanner = Scanner {
+        s: points,
+        constants,
+    };
     if points.first() == Some(&0xFEFF) {
         return Err(scanner.decode_error("Unexpected UTF-8 BOM (decode using utf-8-sig)", 0));
     }
@@ -128,6 +143,8 @@ enum Frame {
 
 struct Scanner<'a> {
     s: &'a [u32],
+    /// Whether `NaN`, `Infinity` and `-Infinity` parse (Python's default).
+    constants: bool,
 }
 
 fn is_ws(point: u32) -> bool {
@@ -170,6 +187,17 @@ impl Scanner<'_> {
                 colno,
             },
         }
+    }
+
+    /// `parse_constant(name)`: the float, or the refusal.
+    fn constant(&self, name: &'static str, value: f64) -> Result<(Value, usize), Fail> {
+        if !self.constants {
+            return Err(JsonError {
+                kind: JsonErrorKind::Constant { name },
+            }
+            .into());
+        }
+        Ok((Value::Float(value), name.len()))
     }
 
     fn matches_word(&self, idx: usize, word: &str) -> bool {
@@ -305,10 +333,12 @@ impl Scanner<'_> {
             Some('n') if self.matches_word(idx, "null") => (Value::Null, 4),
             Some('t') if self.matches_word(idx, "true") => (Value::Bool(true), 4),
             Some('f') if self.matches_word(idx, "false") => (Value::Bool(false), 5),
-            Some('N') if self.matches_word(idx, "NaN") => (Value::Float(f64::NAN), 3),
-            Some('I') if self.matches_word(idx, "Infinity") => (Value::Float(f64::INFINITY), 8),
+            Some('N') if self.matches_word(idx, "NaN") => self.constant("NaN", f64::NAN)?,
+            Some('I') if self.matches_word(idx, "Infinity") => {
+                self.constant("Infinity", f64::INFINITY)?
+            }
             Some('-') if self.matches_word(idx, "-Infinity") => {
-                (Value::Float(f64::NEG_INFINITY), 9)
+                self.constant("-Infinity", f64::NEG_INFINITY)?
             }
             _ => {
                 let (value, end) = self.match_number(idx)?;
@@ -574,6 +604,24 @@ mod tests {
             "Extra data: line 1 column 2 (char 1)"
         );
         assert!(matches!(loads("NaN").unwrap(), Value::Float(f) if f.is_nan()));
+        // `parse_constant=reject`: only the three constants are refused.
+        for (text, name) in [
+            ("[NaN]", "NaN"),
+            ("{\"a\": Infinity}", "Infinity"),
+            ("-Infinity", "-Infinity"),
+        ] {
+            let error = loads_py_without_constants(&PyStr::from(text)).unwrap_err();
+            assert_eq!(error.kind, JsonErrorKind::Constant { name });
+            assert_eq!(error.to_string(), format!("invalid JSON constant {name}"));
+        }
+        assert!(matches!(
+            loads_py_without_constants(&PyStr::from("1e999")).unwrap(),
+            Value::Float(f) if f.is_infinite()
+        ));
+        assert_eq!(
+            loads_py_without_constants(&PyStr::from("[1, \"NaN\"]")).unwrap(),
+            loads("[1, \"NaN\"]").unwrap()
+        );
         assert!(!loads(&"9".repeat(4301)).unwrap_err().is_decode_error());
         let deep = "[".repeat(MAX_NESTING + 1);
         assert!(matches!(

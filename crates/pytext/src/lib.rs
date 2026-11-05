@@ -47,7 +47,9 @@ pub fn utf8_error(text: &kassiber_pyjson::PyStr) -> Option<String> {
 }
 
 pub use case::{lower, upper};
-pub use json::{loads, loads_py, JsonError, JsonErrorKind, MAX_NESTING};
+pub use json::{
+    loads, loads_py, loads_py_without_constants, JsonError, JsonErrorKind, MAX_NESTING,
+};
 pub use number::{parse_float, parse_int, NumberError};
 pub use text::{repr_py, repr_str, strip, strip_py};
 pub use unicode::{decimal_value, is_alpha, is_printable, is_space, unicode_version};
