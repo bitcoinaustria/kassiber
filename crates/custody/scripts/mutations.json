@@ -1973,7 +1973,7 @@
   {
     "id": "I-samourai-principal",
     "file": "crates/custody/src/interpretation/claims.rs",
-    "find": "amount - wide(&observation[\"fee_msat\"])",
+    "find": "amount - int(&observation[\"fee_msat\"])",
     "replace": "amount",
     "expect_failing": [
       "interpretation_samourai_fee_inclusive"
@@ -23817,7 +23817,7 @@
   {
     "id": "canonical-event-aliases",
     "file": "crates/custody/src/evidence/canonical.rs",
-    "find": "            \"observation_aliases\".into(),\n            Value::Array(self.aliases.clone()),",
+    "find": "            \"observation_aliases\".into(),\n            Value::Array(self.alias_values().to_vec()),",
     "replace": "            \"observation_aliases\".into(),\n            Value::Array(Vec::new()),",
     "expect_failing": [
       "quantity_runtime_wrapper_vectors"
@@ -24558,6 +24558,86 @@
       "amounts_beyond_machine_integers_stay_exact"
     ],
     "rule": "Contradictory semantics are listed sorted and distinct."
+  },
+  {
+    "id": "typed-alias-hash",
+    "file": "crates/custody/src/evidence/canonical.rs",
+    "find": "                        self.legs[alias.leg].fields[13].clone(),",
+    "replace": "                        self.legs[alias.leg].fields[6].clone(),",
+    "expect_failing": [
+      "quantity_runtime_wrapper_vectors"
+    ],
+    "rule": "An alias array names its leg's quantity hash."
+  },
+  {
+    "id": "typed-alias-leg",
+    "file": "crates/custody/src/evidence.rs",
+    "find": "            leg_of[keeper],\n",
+    "replace": "            (leg_of[keeper] + 1) % leg_count,\n",
+    "expect_failing": [
+      "typed_aliases_resolve_as_json_aliases"
+    ],
+    "rule": "An alias names the leg kept for its observation."
+  },
+  {
+    "id": "typed-alias-observations",
+    "file": "crates/custody/src/interpretation/mod.rs",
+    "find": "Observed::leg(event.leg(alias.leg)),",
+    "replace": "Observed::leg(event.leg(0)),",
+    "expect_failing": [
+      "pair_fanout"
+    ],
+    "rule": "Interpretation reads each alias's own leg."
+  },
+  {
+    "id": "typed-alias-quantity",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "                let o = event.leg(alias.leg);",
+    "replace": "                let o = event.leg(0);",
+    "expect_failing": [
+      "typed_aliases_resolve_as_json_aliases"
+    ],
+    "rule": "Quantity observations follow each alias's leg."
+  },
+  {
+    "id": "typed-alias-replace",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "                if let Some(&at) = positions.get(id) {\n                    result[at].1 = o;",
+    "replace": "                if let Some(&at) = positions.get(id) {\n                    let _ = (at, o);",
+    "expect_failing": [
+      "typed_aliases_resolve_as_json_aliases"
+    ],
+    "rule": "A later alias of a transaction replaces its observation."
+  },
+  {
+    "id": "typed-alias-orders",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "                    let hash = text(&event.leg(alias.leg)[\"quantity_hash\"]);",
+    "replace": "                    let hash = text(&event.leg(alias.leg)[\"transaction_id\"]);",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Pool orders map aliases to their legs' quantity hashes."
+  },
+  {
+    "id": "network-last-hit",
+    "file": "crates/custody/src/gates/network.rs",
+    "find": "            if *known == key {\n                return evidence.clone();",
+    "replace": "            if *known != key {\n                return evidence.clone();",
+    "expect_failing": [
+      "loaded_network_json_gates_as_typed"
+    ],
+    "rule": "The last-hit shortcut answers only equal columns."
+  },
+  {
+    "id": "claims-principal-fast",
+    "file": "crates/custody/src/interpretation/claims.rs",
+    "find": "v.as_i64().map_or_else(|| wide(v), i128::from)",
+    "replace": "v.as_i64().map_or_else(|| wide(v), |n| i128::from(n) + 1)",
+    "expect_failing": [
+      "pair_exact_msat"
+    ],
+    "rule": "A principal reads machine integers exactly."
   },
   {
     "id": "R4-evidence-alias-slot-index",

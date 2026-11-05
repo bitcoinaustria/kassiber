@@ -149,6 +149,14 @@ pub(crate) enum Snapshot {
     },
 }
 
+/// One observation alias: a transaction id and the event leg holding the
+/// observation kept for it, whose quantity hash the alias names.
+#[derive(Clone, Debug)]
+pub(crate) struct Alias {
+    pub transaction_id: String,
+    pub leg: usize,
+}
+
 /// One `CanonicalQuantityEvent`.
 #[derive(Clone, Debug)]
 pub struct Event {
@@ -158,7 +166,10 @@ pub struct Event {
     /// The snapshots' JSON objects, built on first request.
     snapshot_values: OnceLock<Vec<Value>>,
     sources: Vec<Value>,
-    aliases: Vec<Value>,
+    aliases: Vec<Alias>,
+    /// The aliases' `[transaction_id, quantity_hash]` arrays, built on first
+    /// request.
+    alias_values: OnceLock<Vec<Value>>,
 }
 
 impl Event {
@@ -167,7 +178,7 @@ impl Event {
         legs: Vec<Leg>,
         snapshots: Vec<Snapshot>,
         sources: Vec<Value>,
-        aliases: Vec<Value>,
+        aliases: Vec<Alias>,
     ) -> Self {
         Self {
             keys,
@@ -176,7 +187,23 @@ impl Event {
             snapshot_values: OnceLock::new(),
             sources,
             aliases,
+            alias_values: OnceLock::new(),
         }
+    }
+
+    /// The `observation_aliases` arrays.
+    fn alias_values(&self) -> &[Value] {
+        self.alias_values.get_or_init(|| {
+            self.aliases
+                .iter()
+                .map(|alias| {
+                    Value::Array(vec![
+                        Value::String(alias.transaction_id.clone()),
+                        self.legs[alias.leg].fields[13].clone(),
+                    ])
+                })
+                .collect()
+        })
     }
 
     pub fn key(&self) -> &EventKey {
@@ -236,7 +263,7 @@ impl Event {
         );
         object.insert(
             "observation_aliases".into(),
-            Value::Array(self.aliases.clone()),
+            Value::Array(self.alias_values().to_vec()),
         );
         object.insert(
             "source_transaction_ids".into(),
@@ -451,8 +478,16 @@ impl<'a> EventRef<'a> {
     /// `observation_aliases`: `[transaction_id, quantity_hash]` pairs.
     pub fn aliases(self) -> &'a [Value] {
         match self {
-            Self::Typed(event) => &event.aliases,
+            Self::Typed(event) => event.alias_values(),
             Self::Json(value) => array(&value["observation_aliases"]),
+        }
+    }
+
+    /// A typed event's aliases, naming their legs.
+    pub(crate) fn typed_aliases(self) -> Option<&'a [Alias]> {
+        match self {
+            Self::Typed(event) => Some(&event.aliases),
+            Self::Json(_) => None,
         }
     }
 

@@ -23,18 +23,20 @@ struct Payload {
 /// parsing it.
 fn empty_payload(value: &SqlValue) -> bool {
     match value {
-        SqlValue::Text(s) => {
-            s.as_ref() == "{}"
-                || s.is_empty()
-                || !s.trim_start().starts_with('{')
-                || !s.contains('\\')
-                    && !["chain", "network", "source"]
-                        .iter()
-                        .any(|name| s.contains(name))
-        }
+        SqlValue::Text(s) => empty_text_payload(s),
         SqlValue::Object(_) => false,
         _ => true,
     }
+}
+/// `empty_payload` of a text payload.
+fn empty_text_payload(s: &str) -> bool {
+    s == "{}"
+        || s.is_empty()
+        || !s.trim_start().starts_with('{')
+        || !s.contains('\\')
+            && !["chain", "network", "source"]
+                .iter()
+                .any(|name| s.contains(name))
 }
 impl Payload {
     fn parse(value: &SqlValue) -> Self {
@@ -210,6 +212,8 @@ struct Remembered<'a> {
     seen: Vec<([&'a SqlValue; 9], Evidence)>,
     /// The same, by an untyped observation's JSON column values.
     objects: Vec<([&'a Value; 9], Evidence)>,
+    /// The entry of `objects` the last lookup found.
+    last: usize,
 }
 
 /// Columns an observation's evidence depends on besides its payload.
@@ -261,8 +265,12 @@ impl<'a> Remembered<'a> {
         configs: &mut Configs,
     ) -> Evidence {
         let typed = |configs: &mut Configs| {
-            let row = NetworkRow::deserialize(&Value::Object(object.clone()))
-                .expect("a network observation object types as a row");
+            let fields = object.iter().map(|(key, value)| (key.as_str(), value));
+            let row = NetworkRow::deserialize(serde::de::value::MapDeserializer::<
+                _,
+                serde_json::Error,
+            >::new(fields))
+            .expect("a network observation object types as a row");
             evidence_with(&row, configs)
         };
         let column = |name: &str| object.get(name).unwrap_or(&Value::Null);
@@ -270,8 +278,15 @@ impl<'a> Remembered<'a> {
             return typed(configs);
         }
         let key = COLUMNS.map(column);
-        if let Some((_, evidence)) = self.objects.iter().find(|(known, _)| *known == key) {
-            return evidence.clone();
+        // Consecutive observations usually repeat the last columns seen.
+        if let Some((known, evidence)) = self.objects.get(self.last) {
+            if *known == key {
+                return evidence.clone();
+            }
+        }
+        if let Some(at) = self.objects.iter().position(|(known, _)| *known == key) {
+            self.last = at;
+            return self.objects[at].1.clone();
         }
         let evidence = typed(configs);
         if self.objects.len() < Self::LIMIT {
@@ -284,7 +299,7 @@ impl<'a> Remembered<'a> {
 /// `empty_payload` of the column a JSON value types to.
 fn empty_value_payload(value: &Value) -> bool {
     match value {
-        Value::String(s) => empty_payload(&SqlValue::Text(s.as_str().into())),
+        Value::String(s) => empty_text_payload(s),
         Value::Object(_) => false,
         _ => true,
     }

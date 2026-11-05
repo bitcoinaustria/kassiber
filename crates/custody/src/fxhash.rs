@@ -53,7 +53,10 @@ impl Hasher for FxHasher {
 
     #[inline]
     fn finish(&self) -> u64 {
-        self.hash
+        // The tables index buckets by the low bits, which the multiply leaves
+        // depending on the inputs' low bits only; rotating brings the
+        // well-mixed high bits down, as rustc-hash 2 does.
+        self.hash.rotate_left(26)
     }
 }
 

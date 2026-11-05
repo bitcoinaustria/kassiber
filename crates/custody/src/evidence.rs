@@ -1064,22 +1064,25 @@ fn canonical_event<F: Fields>(
     let mut aliases = Vec::with_capacity(observations.len());
     let mut ids = Vec::with_capacity(observations.len());
     for (index, item) in observations.iter().enumerate() {
+        let keeper = selected[index];
         aliases.push((
             item.transaction_id.as_ref(),
-            observations[selected[index]]
-                .commitment
-                .quantity_hash
-                .as_str(),
+            observations[keeper].commitment.quantity_hash.as_str(),
+            leg_of[keeper],
         ));
         ids.push(item.transaction_id.as_ref());
     }
-    aliases.sort();
+    // In `[transaction_id, quantity_hash]` order.
+    aliases.sort_by(|a, b| (a.0, a.1).cmp(&(b.0, b.1)));
     ids.sort();
     ids.dedup();
     let string = |value: &str| Value::String(value.to_owned());
     let aliases = aliases
         .into_iter()
-        .map(|(id, hash)| Value::Array(vec![string(id), string(hash)]))
+        .map(|(id, _, leg)| canonical::Alias {
+            transaction_id: id.to_owned(),
+            leg,
+        })
         .collect();
     let ids = ids.into_iter().map(string).collect();
     // In detail hash order, a later commitment with the same detail hash

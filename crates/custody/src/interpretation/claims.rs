@@ -1,12 +1,16 @@
 //! Shared claim shape. Quantities are integer half-open msat slices; hashes
 //! come exclusively from the canonical Rust evidence stage.
 use crate::codec::wide;
+use crate::evidence::canonical::Obs;
 use serde_json::{json, Value};
 
-pub(super) fn principal(observation: &Value) -> i128 {
-    let amount = wide(&observation["amount_msat"]);
+/// The observation's principal, read by field so a typed leg builds no
+/// object.
+pub(super) fn principal<O: Obs + ?Sized>(observation: &O) -> i128 {
+    let int = |v: &Value| v.as_i64().map_or_else(|| wide(v), i128::from);
+    let amount = int(&observation["amount_msat"]);
     if observation["direction"] == "outbound" && observation["amount_includes_fee"] == true {
-        amount - wide(&observation["fee_msat"])
+        amount - int(&observation["fee_msat"])
     } else {
         amount
     }

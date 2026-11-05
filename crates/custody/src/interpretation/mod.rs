@@ -257,6 +257,21 @@ fn observations<'a>(events: &[EventRef<'a>]) -> BTreeMap<String, Observed<'a>> {
             None => Cow::Owned(text(value)),
         }
     }
+    // A typed alias names its leg.
+    if events.iter().all(|event| event.typed_aliases().is_some()) {
+        return events
+            .iter()
+            .flat_map(|event| {
+                let aliases = event.typed_aliases().expect("typed aliases");
+                aliases.iter().map(move |alias| {
+                    (
+                        alias.transaction_id.clone(),
+                        Observed::leg(event.leg(alias.leg)),
+                    )
+                })
+            })
+            .collect();
+    }
     let by_hash: crate::fxhash::HashMap<_, _> = events
         .iter()
         .flat_map(|event| event.legs())

@@ -101,8 +101,18 @@ fn tax_eligibility_events(
             namespace,
             event_id,
         ];
-        for alias in event.aliases() {
-            aliases.insert(text(&alias[0]), text(&alias[1]));
+        match event.typed_aliases() {
+            Some(typed) => {
+                for alias in typed {
+                    let hash = text(&event.leg(alias.leg)["quantity_hash"]);
+                    aliases.insert(alias.transaction_id.clone(), hash);
+                }
+            }
+            None => {
+                for alias in event.aliases() {
+                    aliases.insert(text(&alias[0]), text(&alias[1]));
+                }
+            }
         }
         for leg in event.legs() {
             let hash = text(&leg["quantity_hash"]);
@@ -284,6 +294,29 @@ fn observations(c: Canon<'_>) -> Result<Vec<(String, LegRef<'_>)>, String> {
 }
 fn observations_needed(c: Canon<'_>, needed: bool) -> Result<Vec<(String, LegRef<'_>)>, String> {
     let events = c.events();
+    // A typed alias names the leg whose quantity hash it holds, so every
+    // alias resolves without a hash index.
+    if events.iter().all(|event| event.typed_aliases().is_some()) {
+        let mut result: Vec<(String, LegRef)> = Vec::new();
+        if !needed {
+            return Ok(result);
+        }
+        let mut positions: crate::fxhash::HashMap<&str, usize> = Default::default();
+        for event in &events {
+            for alias in event.typed_aliases().expect("typed aliases") {
+                let o = event.leg(alias.leg);
+                let id = alias.transaction_id.as_str();
+                // Insertion order is the first occurrence; a later alias replaces it.
+                if let Some(&at) = positions.get(id) {
+                    result[at].1 = o;
+                } else {
+                    positions.insert(id, result.len());
+                    result.push((id.to_owned(), o));
+                }
+            }
+        }
+        return Ok(result);
+    }
     if !needed
         && events.iter().all(|event| {
             event.aliases().iter().all(|alias| {
@@ -1577,6 +1610,34 @@ impl Rows for IndexedRows<'_> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn typed_aliases_resolve_as_json_aliases() {
+        let row = |id: &str, event: &str, wallet: &str| json!({"id":id,"profile_id":"p","wallet_id":wallet,"wallet_kind":"descriptor","direction":"inbound","asset":"BTC","amount":1000,"fee":0,"occurred_at":"2024-01-01T00:00:00+00:00","source_ref":"src","external_id":event,"raw_json":"{}","network":"regtest"});
+        // A transaction id in two events, and an event with two slots.
+        let rows = [
+            row("t1", "e1", "w"),
+            row("t2", "e2", "w"),
+            row("t3", "e2", "v"),
+            row("t1", "e3", "w"),
+        ];
+        let typed = crate::evidence::canonical_of_rows(&rows).unwrap();
+        let json = typed.value().clone();
+        let pairs = |c: Canon<'_>| -> Vec<(String, Value)> {
+            observations(c)
+                .unwrap()
+                .into_iter()
+                .map(|(id, o)| (id, o.value().into_owned()))
+                .collect()
+        };
+        let expected = pairs(Canon::Json(&json));
+        assert_eq!(expected.len(), 3);
+        assert_eq!(pairs(Canon::Typed(&typed)), expected);
+        // Each row is its own slot's observation, so it is its alias's leg.
+        for (id, o) in &expected {
+            assert_eq!(o["transaction_id"], json!(id));
+        }
+    }
+
     use super::*;
 
     #[test]

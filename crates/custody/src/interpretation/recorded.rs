@@ -234,7 +234,10 @@ pub(super) fn detect<R: Row>(rows: &[R]) -> Result<(Vec<Value>, BTreeSet<String>
     )?;
     Ok((pairs, matched))
 }
-pub(super) fn exact_native(source: &Value, target: &Value) -> bool {
+pub(super) fn exact_native<O: crate::evidence::canonical::Obs + ?Sized>(
+    source: &O,
+    target: &O,
+) -> bool {
     truth(&source["authoritative_chain_observation"])
         && truth(&target["authoritative_chain_observation"])
         && source["event_key"] == target["event_key"]
@@ -244,7 +247,11 @@ pub(super) fn exact_native(source: &Value, target: &Value) -> bool {
             Some("bitcoin" | "liquid")
         )
 }
-pub(super) fn exact_recorded(pair: &Value, source: &Value, target: &Value) -> bool {
+pub(super) fn exact_recorded<O: crate::evidence::canonical::Obs + ?Sized>(
+    pair: &Value,
+    source: &O,
+    target: &O,
+) -> bool {
     match pairs::source_name(pair).as_str() {
         "row_matched" => exact_native(source, target) && source["wallet_id"] != target["wallet_id"],
         "lightning_payment_hash" => {
