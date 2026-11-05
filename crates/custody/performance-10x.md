@@ -254,3 +254,52 @@ finalized projection 0.444 / 0.102; native admission adds 0.016.
 Finalized projection (4.4×) is still the weakest stage. Under machine load
 of 60–150 the same binaries measured 3–5% slower, so the 10.0× and 10.3×
 figures have no margin.
+
+## End to end (2026-11-05)
+
+Native `journals process` CPU time by phase, step 28 binary with drop
+spans added for this measurement only, best of three, quiet machine
+(seconds). Python figures are the process CPU of the alternating pairs
+above. "Drops" is freeing the phase results when `process` returns;
+"other" is process start, request parsing, repair, pricing and the
+remaining unspanned work.
+
+| Phase | generic 2k | multi-wallet 2k | generic 20k | multi-wallet 20k |
+| --- | ---: | ---: | ---: | ---: |
+| snapshot load | 0.027 | 0.049 | 0.277 | 0.388 |
+| custody | 0.062 | 0.110 | 0.513 | 0.978 |
+| render inputs | 0.062 | 0.068 | 0.634 | 0.687 |
+| fusion engine | 0.141 | 0.168 | 1.205 | 1.535 |
+| persistence and commit | 0.074 | 0.082 | 1.187 | 1.273 |
+| balance comparison | 0.001 | 0.002 | 0.014 | 0.016 |
+| drops | 0.040 | 0.048 | 0.391 | 0.428 |
+| other | 0.039 | 0.038 | 0.349 | 0.370 |
+| **native process** | **0.446** | **0.563** | **4.570** | **5.674** |
+| Python process | 1.75 | 2.17 | 12.46 | 21.87 |
+| speedup | 3.9× | 3.9× | 2.7× | 3.9× |
+| native budget for 4× | 0.438 | 0.543 | 3.115 | 5.468 |
+
+Generic 20k is 1.46 s over its 4× budget; the other books are 0.01–0.21 s
+over. Where the generic 20k phases go (CPU profile of the whole process):
+
+- Fusion engine, 1.205 s: building the ledger request from the rendered
+  projection 0.31 s (`ledger_request::build_request`, mostly JSON map
+  lookups in each rendered row), writing it as text 0.10 s, the tax engine
+  parsing that text and computing 0.25 s, loading and converting the
+  response text 0.17 s, freeing request and response 0.14 s, and
+  `boundary::ledger_response` 0.06 s. The request and response cross a
+  JSON text boundary between two Rust crates.
+- Persistence, 1.187 s: `persistence::store_ledger_state` writing journal
+  entries, quantities and calculations through SQLite.
+- Render inputs, 0.634 s, plus 0.249 s freeing its JSON when `process`
+  returns: `render_inputs` builds the rendered quantity, projection and
+  entry documents as JSON trees that the fusion request and
+  `boundary::build` then read by key.
+- Snapshot load, 0.277 s: the direct loader's row reads and record building.
+
+Ownership: request building (`ledger_request`) is custody-crate code and in
+this branch's scope. The tax engine API (a typed request instead of text),
+journal persistence, `render_inputs`, `boundary::build` and the direct
+loader belong to the journals and tax-core crates. Reaching 4× on generic
+20k needs about 1.5 s from them together; persistence, the text boundary
+and the rendered JSON trees are the largest parts.
