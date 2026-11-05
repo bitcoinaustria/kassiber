@@ -17378,7 +17378,15 @@ this turn run, and a cut-off answer runs none of its calls.
 - `tests/test_cli_chat.py` through the hybrid candidate: 39 of 41 pass with
   every `chat` and `chats` call served by Rust; the two daemon-session tests
   also pass with a Rust daemon. The two failures allow `ui.journals.process`
-  and need R6-5b.
+  and need R6-5b. Under heavy shared-disk load (test data on the 860 EVO,
+  load average about 20) a rerun also hit the module's 15 s subprocess
+  timeout on `init` and `ai providers create`; those tests pass alone.
+- `tests/test_rust_ai_tools.py::AiCatalogDriftTest` now looks for the
+  mutation entries' test names in all of `crates/ai` and `crates/net`, since
+  the merged catalog names unit tests too, and the drift test
+  `chat_constants_match_python` pins the chat constants and the embedded
+  prompt to `catalog.json`. `tests/test_rust_hybrid_candidate.py` passes
+  (35 tests, 4,741 subtests).
 - The AI tests of `tests/test_daemon_smoke.py` with a Rust daemon: 70 of 75
   pass. Four need refused or mutating tools (R6-5b, the refused reads); one
   needs `ui.secrets.init`, which is not native.

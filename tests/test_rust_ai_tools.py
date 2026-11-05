@@ -71,7 +71,13 @@ class AiCatalogDriftTest(unittest.TestCase):
             capture_output=True, check=True, timeout=60, cwd=ROOT,
         )
         self.assertEqual(result.stdout, f"{len(entries)} entries apply\n".encode())
-        sources = "".join(path.read_text(encoding="utf-8") for path in (ROOT / "crates/ai/tests").glob("*.rs"))
+        # Entries name unit tests in the crates the checker runs (kassiber-ai
+        # and kassiber-net) as well as their integration tests.
+        sources = "".join(
+            path.read_text(encoding="utf-8")
+            for crate in ("crates/ai", "crates/net")
+            for path in (ROOT / crate).rglob("*.rs")
+        )
         for entry in entries:
             for name in entry["expect_failing"]:
                 self.assertIn(f"fn {name}()", sources, entry["id"])
