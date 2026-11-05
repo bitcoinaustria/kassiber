@@ -396,7 +396,7 @@
       "kassiber/ai/prompt.py:104"
     ],
     "KASSIBER_TEST_CUSTODY_SNAPSHOT_DIR": [
-      "kassiber/core/custody_journal.py:517"
+      "kassiber/core/custody_journal.py:520"
     ],
     "KASSIBER_TEST_NO_EGRESS": [
       "kassiber/egress_ledger.py:17"
