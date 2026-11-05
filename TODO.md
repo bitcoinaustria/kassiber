@@ -198,9 +198,13 @@ against the Rust port and slices the gaps; Python stays the reference.
   (accepted coarse price, provider `agent_access`, `ai_provider_checks`, the
   widened custody AI consent CHECK) and the command registry, `describe` and
   capabilities follow main. New leaves and kinds stay `not_implemented`.
-- [ ] S2 to S11 as the inventory lists them: qualified transaction
-  references, coarse-price acceptance, the review workflow, quarantine root
-  causes, transfer dismissals, the Reports screen (including the empty-root
+- [x] S3: the request builder holds only an unaccepted or changed coarse
+  price; projected rows carry the reviewed price; the metadata service
+  records, lists and reverts an acceptance. `accept_coarse_prices` arrives
+  with S4.
+- [ ] S2 and S4 to S11 as the inventory lists them: qualified transaction
+  references, the review workflow, quarantine root causes, transfer
+  dismissals, the Reports screen (including the empty-root
   `jurisdictionCode`), wallet completeness, the transaction dashboard,
   readiness definitions and custody component revision.
 - [ ] S12: rebase the R6 branches (AI catalog, providers, tools, MCP grants,

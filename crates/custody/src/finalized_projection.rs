@@ -8,7 +8,7 @@ use std::str::FromStr;
 mod composition;
 mod conversions;
 mod fees;
-mod money;
+pub(crate) mod money;
 mod payouts;
 mod principal;
 mod quarantines;
@@ -210,6 +210,14 @@ fn base_row_with_rows(observation: &Value, rows: &dyn Rows) -> Result<Value, Err
             money::Money::finite_field(&result[field], &label)?;
         }
     }
+    // A coarse-price review was accepted for the transaction's own price; the
+    // projection re-slices that price, so keep what was reviewed.
+    result["pricing_review_price"] = crate::coarse_review::reviewed_price(&result)
+        .map_err(|(code, message)| Error {
+            code: code.into(),
+            message,
+        })?
+        .map_or(Value::Null, Value::String);
     result["custody_chain_order"] = chain_order(&result)?;
     for key in ["wallet_id", "asset", "direction", "occurred_at"] {
         result[key] = observation[key].clone();

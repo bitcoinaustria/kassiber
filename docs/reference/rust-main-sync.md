@@ -81,7 +81,7 @@ Rust code was read instead.
 | --- | --- | --- | --- | --- |
 | #679 | `core/transaction_lookup.py`, `handlers.resolve_transaction`: a reference resolves by id, then an unambiguous external id, then a qualified `<external id>:<wallet or in/out>`; ambiguity lists every candidate | every leaf and kind taking a transaction reference | **Differs**: `metadata notes set --transaction <txid>:in` succeeds in Python, Rust answers "not found"; the bare shared txid's `ambiguous_reference` hint differs | eight resolver copies: `crates/transactions/src/{metadata,attachments}.rs`, `crates/transfers/src/{dismissals,pair_authoring,component_reads}.rs`, `crates/reports/src/source_funds_reads.rs`, `crates/journals/src/evidence_summary.rs`, `crates/kassiber/src/real_store/journals.rs` |
 | #680 | `review_workflow.py`: plans carry journal-meaning term operations (`pair`, `dismiss_pair`, `undismiss_pair`, `custody_gap`) and a per-year tax `delta`; apply checks the delta; receipts keep it | `ui.review.plan`, `ui.review.apply`, `ui.review.receipt`, `ui.review.cases` | **Refused**: a `pair` or `dismiss_pair` plan returns a plan in Python and "Review operation type is unsupported" in Rust. No Rust artifact carries `delta`, so an artifact either side makes is refused by the other | `crates/transfers/src/review_operations.rs`, `crates/daemon/src/review.rs`, `crates/journals/src/review_effects.rs` |
-| #708 | `pricing.reviewed_price`, `metadata.py`, `transaction_history.py`, `ledger_request._coarse_needs_review`: an accepted coarse price is no longer held for review while the price is unchanged; a price edit drops the acceptance; history shows it | `ui.review.plan/apply` (`accept_coarse_prices`), `ui.transactions.metadata.update`, `ui.transactions.history`, `journals process` | **Refused**: `accept_coarse_prices` is an unsupported operation in Rust (Python: `review_case_changed`, nothing waiting). Rust's request builder sends `coarse` for every `coarse_fallback` row (`crates/custody/src/ledger_request.rs:654`), so after S1 an accepted book would quarantine again under Rust. Today such a book is refused by S1 | `crates/custody/src/ledger_request.rs`, `crates/journals/src/prebuild/pricing.rs`, `crates/transactions/src/metadata/history.rs` |
+| #708 | `pricing.reviewed_price`, `metadata.py`, `transaction_history.py`, `ledger_request._coarse_needs_review`, `custody_tax_projection._base_row`: an accepted coarse price is no longer held for review while the price the journals read is unchanged (compared by decimal value); a changed price is held again; projected rows carry their transaction's reviewed price; history shows the acceptance | `ui.review.plan/apply` (`accept_coarse_prices`), `ui.transactions.history`, `ui.transactions.history.revert`, `ui.activity.stale`, `journals process` | **Done (S3)** for the request builder, the projection, the metadata service and history; see [after S3 and S5](#after-s3-and-s5). `accept_coarse_prices` stays an unsupported review operation until S4, which calls the ported `accept_coarse_price` | `crates/custody/src/coarse_review.rs`, `crates/custody/src/ledger_request.rs` (`coarse_needs_review`), `crates/custody/src/finalized_projection.rs`, `crates/transactions/src/metadata/{grouped,history}.rs` |
 | #707, #711, bd162caca | `review_workflow.py`, `ui_snapshot.py`, `daemon_freshness.py`: cases name `fiat_currency`; badges add `review` and `definitions`; freshness pairs automatically before journals | `ui.review.cases`, `ui.review.badges`, `ui.freshness.run`, `ui.workspace.freshness.run` | **Differs**: `ui.review.cases` lacks `fiat_currency`; `ui.review.badges` lacks `review` and `definitions` (fresh root too). Freshness: inspection | `crates/daemon/src/review.rs`, `crates/daemon/src/workspace_reads.rs`, `crates/wallets` (freshness) |
 | #681 | `quarantine_review.py` (+453): quarantine rolled up by root cause, groups, attention count, definitions; resolving by `group_id` with `reprocess` | `ui.journals.quarantine`, `journals quarantine groups`, `ui.journals.quarantine.resolve`, `ui.review.badges`, AI kind `ui.journals.quarantine.groups` | **Differs**: summary lacks `definitions` and `fiat_currency`; resolve with `group_id` is refused as an unsupported field (Python validates it). The books have no quarantine, so group rows were not compared | `crates/journals/src/quarantine.rs`, `crates/journals/src/views.rs`, `crates/daemon/src/journals.rs` |
 | #681 | `wallet_completeness.py`, `transaction_verify.py` | `ui.wallets.list`, `transactions verify`, AI kind `ui.transactions.verify` | **Differs**: wallets lack `completeness_class` and `scan_bounds`; `transactions verify` is not native | `crates/daemon/src/wallets.rs`, `crates/wallets`, `crates/transactions` |
@@ -205,9 +205,9 @@ XL above.
    lands the Rust app cannot open a book the current Python app has opened.
 2. ★ **S2 Qualified transaction references** (M). One resolver following
    `core/transaction_lookup.py`, replacing the eight copies. Needs S1.
-3. ★ **S3 Coarse-price acceptance** (M). The request builder's accepted-price
-   rule, the acceptance column on price edits and history, the history labels.
-   Needs S1.
+3. ★ **S3 Coarse-price acceptance** (M). **Done**; see [after S3 and S5](#after-s3-and-s5).
+   The request builder's accepted-price rule, the acceptance column on price
+   edits and history, the history labels. Needs S1.
 4. ★ **S4 Review workflow** (L). Term operations, `accept_coarse_prices`,
    the per-year tax delta in plan, apply and receipt, `fiat_currency` on
    cases, `review` and `definitions` on badges, automatic pairing before
@@ -278,6 +278,40 @@ the remaining Python lanes.
 The comparison is plaintext: the harness does not unlock SQLCipher books.
 Encrypted admission is covered by the store differential tests, which open a
 current Python SQLCipher book in both Rust open modes without changing it.
+
+## After S3 and S5
+
+### S3
+
+`journals process` on a coarse-review book (`require_coarse_review`, two
+coarse prices) gives the same envelope and the same book as Python in seven
+shapes, plaintext and SQLCipher: unaccepted, accepted, accepted then rebuilt
+with trailing zeros, accepted then changed, accepted as a value, accepted as
+a value then priced by a rate, and review not required. Only the unaccepted
+and changed prices are held. `ui.transactions.history`, `ui.activity.history`
+and `ui.transactions.history.revert` render and revert the acceptance like
+Python (`tests/test_rust_coarse_price_acceptance.py`, 18 cases). Thirteen
+Python-oracle builder cases (`row-coarse-*` in `custody_fusion_builder.json`)
+cover the rule's edges, including an sNaN acceptance, a NaN rate
+(`InvalidOperation`) and a non-text acceptance (`AttributeError`).
+
+Before S3, 26 Python/Rust oracle tests failed on this base: the merged
+Python's projection rows carry `pricing_review_price`, which the committed
+projection fixtures and the Rust projection lacked
+(`test_custody_projection_port`, `_composition_port`, `_quarantines_port`,
+`_stage` and the fusion-builder probe). The fixtures were regenerated from
+the merged Python, refusing any change but that key and, in one DB-built
+adapter case, the new column; all 26 pass, with the ledger goldens and the
+builder probe over them. The S3 mutation entries (8 custody, 6 transactions)
+are all killed.
+
+Found while comparing, owned by S4: since #707 Python's journal rebuild
+recounts transfer candidates and caches `profiles.swap_candidate_count`
+(bumping the chain-index revision); Rust does not. Every `journals process`
+book comparison differs there; the S3 and S5 tests mask exactly that column
+and revision and compare the rest. The existing auto-pair comparison in
+`test_rust_journal_commands.py` also fails on this base, on the envelope
+(first case `exact-generic-False-False`); not investigated here.
 
 ## Verification of the merge
 

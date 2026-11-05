@@ -3854,6 +3854,20 @@ and `.delete`, and the kinds `ui.transfers.dismissals.list` and `.delete`,
 `ui.chat.attachments.upload` and `ai.chat.permission_mode`. Those leaves and
 kinds answer `not_implemented` until their slices land.
 
+S3 ports coarse-price acceptance (main #708). `kassiber_custody::coarse_review`
+holds `pricing.reviewed_price`, `same_reviewed_price` and the builder's
+`_coarse_needs_review`: the request builder now sends `coarse` only for an
+unaccepted coarse price or one that changed since it was accepted, compared
+by decimal value. The finalized projection stamps every row with its
+transaction's reviewed price (`pricing_review_price`), so a re-sliced row is
+judged by the price the owner accepted. The metadata service records an
+acceptance (`accept_coarse_price`, for the review workflow, S4) bound to the
+current price, refuses it next to a price edit or for a non-coarse price,
+lists `pricing_review_accepted` in history with Python's labels, counts it as
+a pricing edit and reverts it. The custody projection fixtures were
+regenerated from the merged Python; only `pricing_review_price` (and, in one
+DB-built adapter case, the new column) changed.
+
 CLI fd input is bounded, consumed once, closed and zeroized by `UnlockSession`.
 Its remaining chain is bound unattended remembered unlock, then a no-echo TTY
 prompt when allowed; noninteractive manual unlock returns `interaction_required`.

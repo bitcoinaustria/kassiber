@@ -292,6 +292,8 @@ pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<
                 at_regime: get(args, "at_regime").cloned(),
                 at_category: get(args, "at_category").cloned(),
                 kind: get(args, "kind").cloned(),
+                // Only a review plan accepts coarse prices.
+                accept_coarse_price: false,
             }))
         }
         "ui.activity.stale" => Command::Stale,

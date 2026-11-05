@@ -673,37 +673,11 @@ pub fn stale_summary(
     let mut families = BTreeMap::<&str, i64>::new();
     for row in &fields {
         let field = text(row, "field");
-        let family = if [
-            "review_status",
-            "taxable",
-            "at_regime",
-            "at_category",
-            "kind",
-        ]
-        .contains(&field)
-        {
-            "tax"
-        } else if [
-            "fiat_currency",
-            "fiat_rate",
-            "fiat_value",
-            "fiat_price_source",
-            "pricing_source_kind",
-            "pricing_provider",
-            "pricing_pair",
-            "pricing_timestamp",
-            "pricing_fetched_at",
-            "pricing_granularity",
-            "pricing_method",
-            "pricing_external_ref",
-            "pricing_quality",
-        ]
-        .contains(&field)
-        {
-            "pricing"
-        } else {
-            "metadata"
-        };
+        // FIELD_FAMILIES.get(field, "metadata").
+        let family = history::FIELDS
+            .iter()
+            .find(|(name, _, _)| *name == field)
+            .map_or("metadata", |(_, _, family)| *family);
         *families.entry(family).or_default() += int(row, "count");
     }
     Ok(dict([

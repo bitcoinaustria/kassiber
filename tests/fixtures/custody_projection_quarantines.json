@@ -308,6 +308,7 @@
           "raw_json": {
             "txid": "native:target"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -333,6 +334,7 @@
           "raw_json": {
             "txid": "native:other"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -358,6 +360,7 @@
           "raw_json": {
             "txid": "native:source"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -386,6 +389,7 @@
             "raw_json": {
               "txid": "native:source"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -411,6 +415,7 @@
             "raw_json": {
               "txid": "native:target"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -2044,6 +2049,7 @@
           "raw_json": {
             "txid": "native:other"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -2406,6 +2412,7 @@
           "raw_json": {
             "txid": "native:target"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -2431,6 +2438,7 @@
           "raw_json": {
             "txid": "native:source"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -2459,6 +2467,7 @@
             "raw_json": {
               "txid": "native:source"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -2484,6 +2493,7 @@
             "raw_json": {
               "txid": "native:target"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -2846,6 +2856,7 @@
           "raw_json": {
             "txid": "native:source"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "journal_transaction_id": "source",
           "fiat_value": null,
@@ -3422,6 +3433,7 @@
           "raw_json": {
             "txid": "native:other"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -3447,6 +3459,7 @@
           "raw_json": {
             "txid": "native:source"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "journal_transaction_id": "source",
           "fiat_value": null,
@@ -3774,6 +3787,7 @@
           "raw_json": {
             "txid": "native:other"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -3799,6 +3813,7 @@
           "raw_json": {
             "txid": "native:source"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "journal_transaction_id": "source",
           "fiat_value": null,
@@ -4109,6 +4124,7 @@
           "raw_json": {
             "txid": "native:other"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -4119,6 +4135,7 @@
           "custody_slice_end_msat": 100
         },
         {
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "wallet_id": "source",
           "asset": "BTC",
@@ -4483,6 +4500,7 @@
           "raw_json": {
             "txid": "native:target"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -4508,6 +4526,7 @@
           "raw_json": {
             "txid": "native:other"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -4533,6 +4552,7 @@
           "raw_json": {
             "txid": "native:source"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -4561,6 +4581,7 @@
             "raw_json": {
               "txid": "native:source"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -4586,6 +4607,7 @@
             "raw_json": {
               "txid": "native:target"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -4950,6 +4972,7 @@
           "raw_json": {
             "txid": "native:source"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "journal_transaction_id": "source",
           "fiat_value": null,
@@ -5307,6 +5330,7 @@
           "raw_json": {
             "txid": "native:target"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -5332,6 +5356,7 @@
           "raw_json": {
             "txid": "native:other"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -5357,6 +5382,7 @@
           "raw_json": {
             "txid": "native:source"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -5385,6 +5411,7 @@
             "raw_json": {
               "txid": "native:source"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -5410,6 +5437,7 @@
             "raw_json": {
               "txid": "native:target"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -5751,6 +5779,7 @@
           "raw_json": {
             "txid": "native:target"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -5776,6 +5805,7 @@
           "raw_json": {
             "txid": "native:other"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -5801,6 +5831,7 @@
           "raw_json": {
             "txid": "native:source"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -5829,6 +5860,7 @@
             "raw_json": {
               "txid": "native:source"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -5854,6 +5886,7 @@
             "raw_json": {
               "txid": "native:target"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -6203,6 +6236,7 @@
           "raw_json": {
             "txid": "native:target"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -6228,6 +6262,7 @@
           "raw_json": {
             "txid": "native:other"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -6253,6 +6288,7 @@
           "raw_json": {
             "txid": "native:source"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -6281,6 +6317,7 @@
             "raw_json": {
               "txid": "native:source"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -6306,6 +6343,7 @@
             "raw_json": {
               "txid": "native:target"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -6647,6 +6685,7 @@
           "raw_json": {
             "txid": "native:target"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -6672,6 +6711,7 @@
           "raw_json": {
             "txid": "native:source"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -6700,6 +6740,7 @@
             "raw_json": {
               "txid": "native:source"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -6725,6 +6766,7 @@
             "raw_json": {
               "txid": "native:target"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -7074,6 +7116,7 @@
           "raw_json": {
             "txid": "native:target"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -7099,6 +7142,7 @@
           "raw_json": {
             "txid": "native:source"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -7127,6 +7171,7 @@
             "raw_json": {
               "txid": "native:source"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -7152,6 +7197,7 @@
             "raw_json": {
               "txid": "native:target"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -7501,6 +7547,7 @@
           "raw_json": {
             "txid": "native:target"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -7526,6 +7573,7 @@
           "raw_json": {
             "txid": "native:source"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -7554,6 +7602,7 @@
             "raw_json": {
               "txid": "native:source"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -7579,6 +7628,7 @@
             "raw_json": {
               "txid": "native:target"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -7928,6 +7978,7 @@
           "raw_json": {
             "txid": "native:target"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -7953,6 +8004,7 @@
           "raw_json": {
             "txid": "native:other"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -7978,6 +8030,7 @@
           "raw_json": {
             "txid": "native:source"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -8006,6 +8059,7 @@
             "raw_json": {
               "txid": "native:source"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -8031,6 +8085,7 @@
             "raw_json": {
               "txid": "native:target"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -8470,6 +8525,7 @@
           "raw_json": {
             "txid": "native:target"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -8495,6 +8551,7 @@
           "raw_json": {
             "txid": "native:other"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -8520,6 +8577,7 @@
           "raw_json": {
             "txid": "native:source"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -8548,6 +8606,7 @@
             "raw_json": {
               "txid": "native:source"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -8573,6 +8632,7 @@
             "raw_json": {
               "txid": "native:target"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -8931,6 +8991,7 @@
           "raw_json": {
             "txid": "native:target"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -8956,6 +9017,7 @@
           "raw_json": {
             "txid": "native:other"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -8981,6 +9043,7 @@
           "raw_json": {
             "txid": "native:source"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -9009,6 +9072,7 @@
             "raw_json": {
               "txid": "native:source"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -9034,6 +9098,7 @@
             "raw_json": {
               "txid": "native:target"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -9392,6 +9457,7 @@
           "raw_json": {
             "txid": "native:target"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -9417,6 +9483,7 @@
           "raw_json": {
             "txid": "native:other"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -9442,6 +9509,7 @@
           "raw_json": {
             "txid": "native:source"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -9470,6 +9538,7 @@
             "raw_json": {
               "txid": "native:source"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -9495,6 +9564,7 @@
             "raw_json": {
               "txid": "native:target"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -9853,6 +9923,7 @@
           "raw_json": {
             "txid": "native:target"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -9878,6 +9949,7 @@
           "raw_json": {
             "txid": "native:other"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -9903,6 +9975,7 @@
           "raw_json": {
             "txid": "native:source"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -9931,6 +10004,7 @@
             "raw_json": {
               "txid": "native:source"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -9956,6 +10030,7 @@
             "raw_json": {
               "txid": "native:target"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -10314,6 +10389,7 @@
           "raw_json": {
             "txid": "native:target"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -10339,6 +10415,7 @@
           "raw_json": {
             "txid": "native:other"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -10364,6 +10441,7 @@
           "raw_json": {
             "txid": "native:source"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -10392,6 +10470,7 @@
             "raw_json": {
               "txid": "native:source"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -10417,6 +10496,7 @@
             "raw_json": {
               "txid": "native:target"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -10775,6 +10855,7 @@
           "raw_json": {
             "txid": "native:target"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -10800,6 +10881,7 @@
           "raw_json": {
             "txid": "native:other"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -10825,6 +10907,7 @@
           "raw_json": {
             "txid": "native:source"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -10853,6 +10936,7 @@
             "raw_json": {
               "txid": "native:source"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -10878,6 +10962,7 @@
             "raw_json": {
               "txid": "native:target"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -11236,6 +11321,7 @@
           "raw_json": {
             "txid": "native:target"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -11261,6 +11347,7 @@
           "raw_json": {
             "txid": "native:other"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -11286,6 +11373,7 @@
           "raw_json": {
             "txid": "native:source"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -11314,6 +11402,7 @@
             "raw_json": {
               "txid": "native:source"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -11339,6 +11428,7 @@
             "raw_json": {
               "txid": "native:target"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -11697,6 +11787,7 @@
           "raw_json": {
             "txid": "native:target"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -11722,6 +11813,7 @@
           "raw_json": {
             "txid": "native:other"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -11747,6 +11839,7 @@
           "raw_json": {
             "txid": "native:source"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -11775,6 +11868,7 @@
             "raw_json": {
               "txid": "native:source"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -11800,6 +11894,7 @@
             "raw_json": {
               "txid": "native:target"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -12158,6 +12253,7 @@
           "raw_json": {
             "txid": "native:target"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -12183,6 +12279,7 @@
           "raw_json": {
             "txid": "native:other"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -12208,6 +12305,7 @@
           "raw_json": {
             "txid": "native:source"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -12236,6 +12334,7 @@
             "raw_json": {
               "txid": "native:source"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -12261,6 +12360,7 @@
             "raw_json": {
               "txid": "native:target"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -12613,6 +12713,7 @@
           "raw_json": {
             "txid": "native:target"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -12638,6 +12739,7 @@
           "raw_json": {
             "txid": "native:other"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -12663,6 +12765,7 @@
           "raw_json": {
             "txid": "native:source"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -12691,6 +12794,7 @@
             "raw_json": {
               "txid": "native:source"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -12716,6 +12820,7 @@
             "raw_json": {
               "txid": "native:target"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -13067,6 +13172,7 @@
           "raw_json": {
             "txid": "native:target"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -13092,6 +13198,7 @@
           "raw_json": {
             "txid": "native:other"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -13117,6 +13224,7 @@
           "raw_json": {
             "txid": "native:source"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -13145,6 +13253,7 @@
             "raw_json": {
               "txid": "native:source"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -13170,6 +13279,7 @@
             "raw_json": {
               "txid": "native:target"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -13521,6 +13631,7 @@
           "raw_json": {
             "txid": "native:target"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -13546,6 +13657,7 @@
           "raw_json": {
             "txid": "native:other"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -13571,6 +13683,7 @@
           "raw_json": {
             "txid": "native:source"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -13599,6 +13712,7 @@
             "raw_json": {
               "txid": "native:source"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -13624,6 +13738,7 @@
             "raw_json": {
               "txid": "native:target"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -13975,6 +14090,7 @@
           "raw_json": {
             "txid": "native:target"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -14000,6 +14116,7 @@
           "raw_json": {
             "txid": "native:other"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -14025,6 +14142,7 @@
           "raw_json": {
             "txid": "native:source"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -14053,6 +14171,7 @@
             "raw_json": {
               "txid": "native:source"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -14078,6 +14197,7 @@
             "raw_json": {
               "txid": "native:target"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -14438,6 +14558,7 @@
           "raw_json": {
             "txid": "native:target"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -14463,6 +14584,7 @@
           "raw_json": {
             "txid": "native:other"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -14488,6 +14610,7 @@
           "raw_json": {
             "txid": "native:source"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -14516,6 +14639,7 @@
             "raw_json": {
               "txid": "native:source"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -14541,6 +14665,7 @@
             "raw_json": {
               "txid": "native:target"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -15216,6 +15341,7 @@
           "raw_json": {
             "txid": "native:target"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -15241,6 +15367,7 @@
           "raw_json": {
             "txid": "native:other"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -15266,6 +15393,7 @@
           "raw_json": {
             "txid": "native:source"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -15294,6 +15422,7 @@
             "raw_json": {
               "txid": "native:source"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -15319,6 +15448,7 @@
             "raw_json": {
               "txid": "native:target"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -15679,6 +15809,7 @@
           "raw_json": {
             "txid": "native:target"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -15704,6 +15835,7 @@
           "raw_json": {
             "txid": "native:other"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -15729,6 +15861,7 @@
           "raw_json": {
             "txid": "native:source"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -15757,6 +15890,7 @@
             "raw_json": {
               "txid": "native:source"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -15782,6 +15916,7 @@
             "raw_json": {
               "txid": "native:target"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -16495,6 +16630,7 @@
           "raw_json": {
             "txid": "native:target"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -16520,6 +16656,7 @@
           "raw_json": {
             "txid": "native:source"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -16548,6 +16685,7 @@
             "raw_json": {
               "txid": "native:source"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -16573,6 +16711,7 @@
             "raw_json": {
               "txid": "native:target"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -16946,6 +17085,7 @@
           "raw_json": {
             "txid": "native:target"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -16971,6 +17111,7 @@
           "raw_json": {
             "txid": "native:source"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -16999,6 +17140,7 @@
             "raw_json": {
               "txid": "native:source"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -17024,6 +17166,7 @@
             "raw_json": {
               "txid": "native:target"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -17365,6 +17508,7 @@
           "raw_json": {
             "txid": "native:target"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -17390,6 +17534,7 @@
           "raw_json": {
             "txid": "native:other"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -17415,6 +17560,7 @@
           "raw_json": {
             "txid": "native:source"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "journal_transaction_id": "source",
           "fiat_value": null,
@@ -17759,6 +17905,7 @@
           "raw_json": {
             "txid": "native:target"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -17784,6 +17931,7 @@
           "raw_json": {
             "txid": "native:other"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -17809,6 +17957,7 @@
           "raw_json": {
             "txid": "native:source"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "journal_transaction_id": "source",
           "fiat_value": null,
@@ -20252,6 +20401,7 @@
           "raw_json": {
             "txid": "native:target"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -20277,6 +20427,7 @@
           "raw_json": {
             "txid": "native:other"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -20302,6 +20453,7 @@
           "raw_json": {
             "txid": "native:source"
           },
+          "pricing_review_price": null,
           "custody_chain_order": null,
           "fiat_value": null,
           "fiat_value_exact": null,
@@ -20330,6 +20482,7 @@
             "raw_json": {
               "txid": "native:source"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
@@ -20355,6 +20508,7 @@
             "raw_json": {
               "txid": "native:target"
             },
+            "pricing_review_price": null,
             "custody_chain_order": null,
             "fiat_value": null,
             "fiat_value_exact": null,
