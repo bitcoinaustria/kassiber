@@ -15,7 +15,7 @@ from kassiber.cli.handlers import _report_hooks
 from kassiber.core import reports, custody_filed_reports, filed_report_chain
 from kassiber.db import open_db
 from kassiber.errors import AppError
-from tests.rust_port.xlsx import RecordingWorkbook, canonical, first_difference, STAMP
+from tests.rust_port.xlsx import RecordingWorkbook, design_content, design_wire, STAMP
 from tests.test_rust_report_exports import _book, _dump, _normalize
 from tests.test_rust_xlsx_exports import _wire
 
@@ -23,6 +23,11 @@ ROOT = Path(__file__).resolve().parents[1]
 SERVICE = os.environ.get("KASSIBER_XLSX_SERVICE_BIN")
 RUST_BIN = os.environ.get("KASSIBER_RUST_BIN")
 CASES = json.loads((ROOT / "crates/reports/tests/data/austrian_xlsx.json").read_text())
+
+
+def _designed(raw, identities):
+    """The envelope with the keys the shared design changes masked."""
+    return design_wire(_normalize(raw, identities), "sheets")
 
 
 def _saved(data, target, identities, name):
@@ -69,9 +74,9 @@ def test_austrian_service_content_errors_and_whole_database(tmp_path, case):
     conn.close()
     if "ok" in expected:
         _saved(expected["ok"], target, identities, "saved")
-        content = canonical(target)
+        content = design_content(target, False)
     expected_state = _dump(root, identities)
-    expected_wire = _wire(_normalize(json.dumps(expected).encode(), identities))
+    expected_wire = _wire(_designed(json.dumps(expected).encode(), identities))
     database.write_bytes(before)
     target.unlink(missing_ok=True)
     request = dict(database=str(database), command="reports.export-austrian-e1kv-xlsx",
@@ -84,10 +89,10 @@ def test_austrian_service_content_errors_and_whole_database(tmp_path, case):
     if "ok" in expected:
         assert list(actual["ok"]) == list(expected["ok"])
         _saved(actual["ok"], target, identities, "saved")
-        assert not (difference := first_difference(content, canonical(target))), difference
+        assert design_content(target, True) == content
     else:
         assert not target.exists()
-    assert _wire(_normalize(json.dumps(actual).encode(), identities)) == expected_wire
+    assert _wire(_designed(json.dumps(actual).encode(), identities)) == expected_wire
     assert _dump(root, identities) == expected_state
 
 
@@ -124,8 +129,8 @@ def test_austrian_cli_content_completion_filing_and_native_routing(tmp_path, mon
             content = None
             if payload["kind"] != "error":
                 saved_id = _saved(payload["data"], target, identities, f"saved-{year}")
-                content = canonical(target)
-            outcomes.append((result.returncode, _wire(_normalize(result.stdout, identities)), result.stderr,
+                content = design_content(target, not reference)
+            outcomes.append((result.returncode, _wire(_designed(result.stdout, identities)), result.stderr,
                              content, _dump(root, identities)))
             if payload["kind"] != "error":
                 for index in range(2):
@@ -164,8 +169,8 @@ def test_austrian_daemon_content_completion_errors_collisions_and_native_routing
             record = json.loads(raw)
             if record["kind"] != "error" and "file" in record.get("data", {}):
                 _saved(record["data"], Path(record["data"]["file"]), identities, f"saved-{i}")
-        return ([_wire(_normalize(r, identities)) for r in records], _dump(root, identities),
-                {str(p.relative_to(exports)): canonical(p) for p in exports.rglob("*.xlsx")})
+        return ([_wire(_designed(r, identities)) for r in records], _dump(root, identities),
+                {str(p.relative_to(exports)): design_content(p, not reference) for p in exports.rglob("*.xlsx")})
     assert session(False) == session(True)
     served = [json.loads(line) for line in Path(env["KASSIBER_HYBRID_LOG"]).read_text().splitlines()]
     assert served == [{"command": "daemon", "served_by": "rust"}]

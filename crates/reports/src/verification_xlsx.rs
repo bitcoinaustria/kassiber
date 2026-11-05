@@ -444,6 +444,46 @@ fn readme(
         operations: ops,
     })
 }
+/// The appendix in the shared design's palette: ink, grey, hairlines and
+/// red only for a failed check. Input cells keep a neutral fill because the
+/// README tells the reader to look for them.
+pub(super) fn shared_style(mut style: Style) -> Style {
+    const INK: &str = "#1F2328";
+    const MUTED: &str = "#5B6169";
+    match style.bg_color.as_deref() {
+        // Headers: grey label over a rule, no fill.
+        Some("#EFEFEF") => {
+            style.bg_color = None;
+            style.font_color = Some(MUTED.into());
+            style.bottom = 1;
+        }
+        // Inputs.
+        Some("#FFFDEB") => style.bg_color = Some("#F3F4F6".into()),
+        // Formulas and passed checks read as plain ink.
+        Some("#EAF4FF") | Some("#C6EFCE") => {
+            style.bg_color = None;
+            if style.font_color.is_some() {
+                style.font_color = Some(INK.into());
+            }
+        }
+        // A failed check is a blocker: red text, no fill.
+        Some("#FFC7CE") => {
+            style.bg_color = None;
+            style.font_color = Some("#C8102E".into());
+        }
+        // A coarse check is a caveat, not a blocker.
+        Some("#FFEB9C") => {
+            style.bg_color = None;
+            style.font_color = Some(MUTED.into());
+        }
+        _ => (),
+    }
+    if style.font_color.as_deref() == Some("#185FA5") {
+        style.font_color = Some(INK.into());
+    }
+    style
+}
+
 pub(super) fn append(
     document: &mut Document,
     profile: &Value,
@@ -453,7 +493,9 @@ pub(super) fn append(
 ) -> Result<()> {
     let offset = document.formats.len();
     let formats: Vec<Style> = serde_json::from_value(metadata()["formats"].clone()).unwrap();
-    document.formats.extend(formats);
+    document
+        .formats
+        .extend(formats.into_iter().map(shared_style));
     let add = list(value(data, "acquisitions")).len();
     let sub = list(value(data, "disposals")).len();
     let assets = list(value(data, "asset_rows")).len();

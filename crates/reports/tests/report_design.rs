@@ -258,3 +258,82 @@ fn the_tax_country_picks_the_language_and_sparse_zeros_print_a_dash() {
         ["2025-03", "1,234.50", "\u{2013}"]
     );
 }
+
+#[test]
+fn formula_cells_name_their_own_row_and_cache_the_value() {
+    use kassiber_xlsx::{Cell as XCell, Operation};
+    use report_design::{Block, Cell, Column, Document, Kind, Lang, Section, Table};
+    let value = |raw: &str| raw.parse::<kassiber_pydecimal::Decimal>().unwrap();
+    let row = |a: &str, b: &str, check: &str| {
+        vec![
+            Cell::Btc(value(a)),
+            Cell::Btc(value(b)),
+            Cell::Formula {
+                expression: "=ROUND({opening}-{closing},8)".into(),
+                cached: Box::new(Cell::Btc(value(check))),
+            },
+        ]
+    };
+    let document = Document {
+        kind: "test",
+        title: "Test".into(),
+        kicker: String::new(),
+        book: String::new(),
+        period: String::new(),
+        period_start: String::new(),
+        period_end: String::new(),
+        generated_at: "2026-01-02T03:04:05Z".into(),
+        input_version: None,
+        fiat: "EUR".into(),
+        country: String::new(),
+        lang: Lang::En,
+        sections: vec![Section {
+            id: "checks",
+            title: "Checks".into(),
+            lead: String::new(),
+            page_break: false,
+            landscape: false,
+            blocks: vec![Block::Table(Table {
+                id: "checks",
+                title: String::new(),
+                columns: vec![
+                    Column::new("opening", "Opening", Kind::Btc, 1.0),
+                    Column::new("closing", "Closing", Kind::Btc, 1.0),
+                    Column::new("check", "Check", Kind::Btc, 1.0),
+                ],
+                rows: vec![row("1", "0.5", "0.5"), row("2", "2", "0")],
+                total: None,
+                note: String::new(),
+            })],
+        }],
+    };
+    let workbook = report_design::xlsx_document(&document);
+    let formulas: Vec<(u32, String, String)> = workbook.sheets[1]
+        .operations
+        .iter()
+        .filter_map(|op| match op {
+            Operation::Cell {
+                row,
+                value: XCell::Formula { expression, result },
+                ..
+            } => Some((*row, expression.clone(), result.clone())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        formulas,
+        [
+            (1, "=ROUND(A2-B2,8)".into(), "0.5".into()),
+            (2, "=ROUND(A3-B3,8)".into(), "0.0".into())
+        ]
+    );
+    // PDF and CSV show the cached value.
+    assert_eq!(document_display(&document), "0.50000000");
+}
+
+fn document_display(document: &report_design::Document) -> String {
+    match &document.sections[0].blocks[0] {
+        report_design::Block::Table(t) => t.rows[0][2].display(report_design::Lang::En),
+        _ => unreachable!(),
+    }
+}

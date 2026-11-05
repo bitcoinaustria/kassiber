@@ -1,200 +1,14 @@
+//! The year handoff workbook (EA / Jahresabschluss) in the shared report
+//! design over the year handoff report; its checks stay live formulas.
 use super::*;
 use artifact_csv::{list, File, Prepared};
-use kassiber_xlsx::{Cell, Document, Operation, Sheet};
+use kassiber_xlsx::Document;
 
 pub(super) fn metadata() -> &'static Value {
     static META: std::sync::OnceLock<Value> = std::sync::OnceLock::new();
     META.get_or_init(|| kassiber_pytext::loads(include_str!("year_handoff_metadata.json")).unwrap())
 }
-fn scalar(value: &Value) -> String {
-    match value {
-        Value::Decimal(d) => d.to_string(),
-        _ => py_str(value),
-    }
-}
-fn cell(value: &Value) -> Result<Cell> {
-    match value {
-        Value::Decimal(d) => artifact_xlsx::cell(&float(d)?),
-        _ => artifact_xlsx::cell(value),
-    }
-}
-fn address(row: usize, col: usize) -> String {
-    let mut col = col + 1;
-    let mut name = String::new();
-    while col > 0 {
-        name.insert(0, (b'A' + ((col - 1) % 26) as u8) as char);
-        col = (col - 1) / 26;
-    }
-    format!("{name}{}", row + 1)
-}
-fn sheet(spec: &Value, title: String, rows: &[Value], fiat: &str) -> Result<Sheet> {
-    let columns = list(value(spec, "columns"));
-    let labels: Vec<_> = columns
-        .iter()
-        .map(|c| text(c, "label").replace("{fiat}", fiat))
-        .collect();
-    let widths: Vec<_> = columns
-        .iter()
-        .zip(&labels)
-        .map(|(c, label)| {
-            let sample = rows
-                .iter()
-                .take(50)
-                .map(|r| {
-                    let v = value(r, &text(c, "key"));
-                    if truthy(v) {
-                        scalar(v).chars().count().min(36)
-                    } else {
-                        0
-                    }
-                })
-                .max()
-                .unwrap_or(0);
-            (label.chars().count().max(sample) + 2).clamp(10, 38) as f64
-        })
-        .collect();
-    let last = (columns.len() - 1) as u16;
-    let mut operations = vec![
-        Operation::Landscape,
-        Operation::Fit {
-            width: 1,
-            height: 0,
-        },
-        Operation::Margins {
-            left: 0.35,
-            right: 0.35,
-            top: 0.5,
-            bottom: 0.5,
-        },
-        Operation::Row {
-            row: 0,
-            height: 28.0,
-        },
-        Operation::Merge {
-            first_row: 0,
-            first_col: 0,
-            last_row: 0,
-            last_col: last,
-            text: title,
-            style: 0,
-        },
-    ];
-    let header_lines = labels
-        .iter()
-        .enumerate()
-        .map(|(i, l)| artifact_xlsx::lines(&s(l.as_str()), widths[i]))
-        .max()
-        .unwrap_or(1);
-    operations.push(Operation::Row {
-        row: 1,
-        height: (header_lines * 15 + 4).max(24) as f64,
-    });
-    for (i, label) in labels.iter().enumerate() {
-        operations.push(Operation::Column {
-            first: i as u16,
-            last: i as u16,
-            width: widths[i],
-        });
-        operations.push(Operation::Cell {
-            row: 1,
-            col: i as u16,
-            value: Cell::String(label.clone()),
-            style: 1,
-        });
-    }
-    operations.push(Operation::Freeze { row: 2, col: 0 });
-    for (i, row) in rows.iter().enumerate() {
-        let mut lines = 1;
-        for (col, column) in columns.iter().enumerate() {
-            let key = text(column, "key");
-            let raw = value(row, &key);
-            let format = text(column, "format");
-            let numeric_style = match format.as_str() {
-                "int" => 3,
-                "quantity" => 7,
-                "sats" => 8,
-                "money" => 5,
-                _ => 2,
-            };
-            let mut style = if matches!(raw, Value::Null) || raw == &s("") {
-                2
-            } else {
-                numeric_style
-            };
-            let cell = if key == "attachments" && get(row, "attachments_list").is_some() {
-                let entries = list(value(row, "attachments_list"));
-                lines = lines.max(entries.len().max(1));
-                if entries.len() == 1 && truthy(value(&entries[0], "url")) {
-                    style = 6;
-                    Cell::Link {
-                        url: text(&entries[0], "url"),
-                        text: text(&entries[0], "display_name"),
-                    }
-                } else {
-                    style = 2;
-                    if entries.is_empty() {
-                        Cell::Blank
-                    } else {
-                        Cell::String(
-                            entries
-                                .iter()
-                                .map(|e| text(e, "display_name"))
-                                .collect::<Vec<_>>()
-                                .join("\n"),
-                        )
-                    }
-                }
-            } else if truthy(value(column, "formula")) {
-                let mut expression =
-                    text(column, "formula").replace("{decimals}", &py_str(value(row, "_decimals")));
-                for (j, other) in columns.iter().enumerate() {
-                    expression = expression
-                        .replace(&format!("{{{}}}", text(other, "key")), &address(i + 2, j));
-                }
-                style = numeric_style;
-                let result = if let Value::Decimal(d) = raw {
-                    py_str(&float(d)?)
-                } else {
-                    scalar(raw)
-                };
-                Cell::Formula { expression, result }
-            } else {
-                if format == "text" {
-                    lines = lines.max(artifact_xlsx::lines(raw, widths[col]));
-                }
-                cell(raw)?
-            };
-            operations.push(Operation::Cell {
-                row: (i + 2) as u32,
-                col: col as u16,
-                value: cell,
-                style,
-            });
-        }
-        operations.push(Operation::Row {
-            row: (i + 2) as u32,
-            height: (lines * 15 + 4).max(16) as f64,
-        });
-    }
-    if rows.is_empty() {
-        operations.push(Operation::Cell {
-            row: 2,
-            col: 0,
-            value: Cell::String("No rows in scope.".into()),
-            style: 2,
-        });
-    }
-    operations.push(Operation::Autofilter {
-        first_row: 1,
-        first_col: 0,
-        last_row: (rows.len() + 1).max(2) as u32,
-        last_col: last,
-    });
-    Ok(Sheet {
-        name: text(spec, "name"),
-        operations,
-    })
-}
+/// The overview sheet rows, for the desktop export preview.
 pub(super) fn overview(report: &Value) -> Vec<Value> {
     let profile = value(report, "profile");
     let mut rows = Vec::new();
@@ -297,6 +111,7 @@ pub(super) fn overview(report: &Value) -> Vec<Value> {
     }
     rows
 }
+
 pub(super) fn project(
     conn: &Connection,
     args: &Value,
@@ -304,68 +119,7 @@ pub(super) fn project(
 ) -> Result<(Prepared, Document)> {
     let report = year_handoff::build(conn, args, sources)?;
     let year = int(&report, "year");
-    let profile = value(&report, "profile");
-    let fiat = if truthy(value(profile, "fiat_currency")) {
-        text(profile, "fiat_currency")
-    } else {
-        String::new()
-    };
-    let titles = [
-        "Kassiber year handoff",
-        "Wallets in this book",
-        "Transactions",
-        "Journal entries",
-        "Opening and closing balances",
-        "Per-asset roll-forward",
-        "Journal vs observed wallet movements",
-        "Excluded transactions",
-    ];
-    let keys = [
-        "overview",
-        "wallets",
-        "transactions",
-        "journal",
-        "balances",
-        "roll_forward",
-        "reconciliation",
-        "excluded",
-    ];
-    let overview = overview(&report);
-    let sheets = list(value(metadata(), "sheets"))
-        .iter()
-        .enumerate()
-        .map(|(i, spec)| {
-            sheet(
-                spec,
-                format!("{} {year}", titles[i]),
-                if i == 0 {
-                    &overview
-                } else {
-                    list(value(&report, keys[i]))
-                },
-                &fiat,
-            )
-        })
-        .collect::<Result<Vec<_>>>()?;
-    let mut formats = artifact_xlsx::styles();
-    for number in ["#,##0.00000000###", "#,##0.###"] {
-        formats.push(kassiber_xlsx::Style {
-            font_size: Some(11.0),
-            valign: Some("top".into()),
-            num_format: Some(number.into()),
-            ..Default::default()
-        });
-    }
-    let document = Document {
-        title: format!("Kassiber year handoff {year} - {}", text(profile, "label")),
-        subject: "Kassiber year handoff for EA / Jahresabschluss".into(),
-        author: "Kassiber".into(),
-        comments: "Generated from the processed journal; checks are live formulas.".into(),
-        created: sources.now(conn)?,
-        formats,
-        sheets,
-        names: vec![],
-    };
+    let document = report_design::xlsx_document(&report_design::year_handoff(&report));
     let metadata = dict([
         ("year", Value::Int(year.into())),
         ("calendar", value(&report, "calendar").clone()),
@@ -412,6 +166,7 @@ pub(super) fn project(
         document,
     ))
 }
+
 pub(super) fn prepare(
     conn: &Connection,
     args: &Value,
@@ -441,26 +196,50 @@ mod tests {
             Ok("00000000-0000-4000-8000-000000000001".into())
         }
     }
-    fn operations(doc: &Document) -> Vec<(String, Vec<String>)> {
-        doc.sheets
-            .iter()
-            .map(|sheet| {
-                let mut operations: Vec<String> = sheet
-                    .operations
+    /// Equal on Python's fields, where one side keeps an exact decimal for a
+    /// figure the other holds as a float: the decimal's nearest double is
+    /// the float.
+    fn same(actual: &serde_json::Value, expected: &serde_json::Value, at: &str) -> Option<String> {
+        use serde_json::Value as J;
+        match (actual, expected) {
+            (J::String(text), J::Number(number)) | (J::Number(number), J::String(text)) => {
+                let parsed = text.parse::<f64>().ok();
+                (parsed != number.as_f64()).then(|| format!("{at}: {text} != {number}"))
+            }
+            // Every field Python's row has; Rust rows may carry fields no
+            // sheet column reads.
+            (J::Object(a), J::Object(b)) => b.iter().find_map(|(k, w)| match a.get(k) {
+                Some(v) => same(v, w, &format!("{at}.{k}")),
+                None => Some(format!("{at}: no {k}")),
+            }),
+            (J::Array(a), J::Array(b)) => {
+                if a.len() != b.len() {
+                    return Some(format!("{at}: {} rows != {}", a.len(), b.len()));
+                }
+                a.iter()
+                    .zip(b)
+                    .enumerate()
+                    .find_map(|(i, (v, w))| same(v, w, &format!("{at}[{i}]")))
+            }
+            (J::Number(a), J::Number(b)) => {
+                (a.as_f64() != b.as_f64()).then(|| format!("{at}: {a} != {b}"))
+            }
+            (a, b) => (a != b).then(|| format!("{at}: {a} != {b}")),
+        }
+    }
+    /// Exact decimals as their text, as the oracle records them.
+    fn decimals_as_text(v: &Value) -> Value {
+        match v {
+            Value::Decimal(d) => s(d.to_string()),
+            Value::List(items) => Value::List(items.iter().map(decimals_as_text).collect()),
+            Value::Dict(fields) => Value::Dict(
+                fields
                     .iter()
-                    .map(|op| {
-                        let mut json = serde_json::to_value(op).unwrap();
-                        if let Some(index) = json.get("style").and_then(|n| n.as_u64()) {
-                            json["style"] =
-                                serde_json::to_value(&doc.formats[index as usize]).unwrap();
-                        }
-                        serde_json::to_string(&json).unwrap()
-                    })
-                    .collect();
-                operations.sort();
-                (sheet.name.clone(), operations)
-            })
-            .collect()
+                    .map(|(k, v)| (k.clone(), decimals_as_text(v)))
+                    .collect(),
+            ),
+            other => other.clone(),
+        }
     }
     fn normalize_numbers(value: &mut serde_json::Value) {
         match value {
@@ -475,7 +254,7 @@ mod tests {
         }
     }
     #[test]
-    fn year_handoff_workbook_pins_observations_journals_rates_and_barriers() {
+    fn year_handoff_report_metadata_and_checks_match_python() {
         let mut cases: serde_json::Value =
             serde_json::from_str(include_str!("../tests/data/year_handoff.json")).unwrap();
         normalize_numbers(&mut cases);
@@ -508,42 +287,60 @@ mod tests {
                     case["name"]
                 );
             } else {
-                let (prepared, actual) =
+                // Python's metadata but for the design's sheet names, and
+                // Python's report rows exactly; the workbook keeps the checks
+                // as live formulas.
+                let (prepared, document) =
                     result.unwrap_or_else(|e| panic!("{}: {} {}", case["name"], e.code, e.message));
-                assert_eq!(
-                    serde_json::from_str::<serde_json::Value>(
-                        &kassiber_pyjson::dumps(&prepared.metadata, &Default::default()).unwrap()
-                    )
-                    .unwrap(),
-                    case["expected"]["metadata"],
-                    "{} metadata",
-                    case["name"]
-                );
-                let expected: Document =
-                    serde_json::from_value(case["expected"]["document"].clone()).unwrap();
-                assert_eq!(actual.title, expected.title, "{} title", case["name"]);
-                assert_eq!(actual.subject, expected.subject, "{} subject", case["name"]);
-                assert_eq!(actual.author, expected.author, "{} author", case["name"]);
-                assert_eq!(
-                    actual.comments, expected.comments,
-                    "{} comments",
-                    case["name"]
-                );
-                assert_eq!(actual.created, expected.created, "{} created", case["name"]);
-                assert_eq!(
-                    serde_json::to_string(&actual.names).unwrap(),
-                    serde_json::to_string(&expected.names).unwrap()
-                );
-                let actual = operations(&actual);
-                let expected = operations(&expected);
-                assert_eq!(actual.len(), expected.len(), "{}", case["name"]);
-                for ((name, actual), (wanted, expected)) in actual.iter().zip(&expected) {
-                    assert_eq!(name, wanted, "{}", case["name"]);
-                    assert_eq!(actual.len(), expected.len(), "{} {name}", case["name"]);
-                    for (actual, expected) in actual.iter().zip(expected) {
-                        assert_eq!(actual, expected, "{} {name}", case["name"]);
-                    }
+                let mut metadata: serde_json::Value = serde_json::from_str(
+                    &kassiber_pyjson::dumps(&prepared.metadata, &Default::default()).unwrap(),
+                )
+                .unwrap();
+                let mut expected = case["expected"]["metadata"].clone();
+                metadata.as_object_mut().unwrap().remove("sheets");
+                expected.as_object_mut().unwrap().remove("sheets");
+                assert_eq!(metadata, expected, "{} metadata", case["name"]);
+                let report = year_handoff::build(conn, &args, &Fixed).unwrap();
+                let mut rows = dict::<&str>([]);
+                for key in [
+                    "wallets",
+                    "transactions",
+                    "journal",
+                    "balances",
+                    "roll_forward",
+                    "reconciliation",
+                    "excluded",
+                    "reconciled",
+                    "warnings",
+                ] {
+                    replace(&mut rows, key, decimals_as_text(value(&report, key)));
                 }
+                let rows: serde_json::Value = serde_json::from_str(
+                    &kassiber_pyjson::dumps(&rows, &Default::default()).unwrap(),
+                )
+                .unwrap();
+                let mut expected = case["expected"]["report"].clone();
+                normalize_numbers(&mut expected);
+                if let Some(difference) = same(&rows, &expected, "report") {
+                    panic!("{}: {difference}", case["name"]);
+                }
+                let formulas = document
+                    .sheets
+                    .iter()
+                    .flat_map(|s| &s.operations)
+                    .filter(|op| {
+                        matches!(
+                            op,
+                            kassiber_xlsx::Operation::Cell {
+                                value: kassiber_xlsx::Cell::Formula { .. },
+                                ..
+                            }
+                        )
+                    })
+                    .count();
+                let expected_formulas = list(value(&report, "roll_forward")).len() * 2
+                    + list(value(&report, "reconciliation")).len() * 4;
+                assert_eq!(formulas, expected_formulas, "{} formulas", case["name"]);
             }
             conn.execute_batch("ROLLBACK TO xlsx_vector; RELEASE xlsx_vector")
                 .unwrap();

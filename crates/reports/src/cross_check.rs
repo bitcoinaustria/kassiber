@@ -1355,42 +1355,6 @@ pub(super) fn read_cli(conn: &Connection, args: &Value) -> Result<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    fn normalize_numbers(v: &mut serde_json::Value) {
-        match v {
-            serde_json::Value::Number(n) if n.as_u64().is_none() && n.as_i64().is_none() => {
-                *n = serde_json::Number::from_f64(n.as_f64().unwrap()).unwrap();
-            }
-            serde_json::Value::Array(values) => values.iter_mut().for_each(normalize_numbers),
-            serde_json::Value::Object(values) => values.values_mut().for_each(normalize_numbers),
-            _ => (),
-        }
-    }
-    fn difference(a: &serde_json::Value, b: &serde_json::Value, path: String) -> Option<String> {
-        if a == b {
-            return None;
-        }
-        if let (Some(a), Some(b)) = (a.as_object(), b.as_object()) {
-            for (key, a) in a {
-                if let Some(found) = difference(
-                    a,
-                    b.get(key).unwrap_or(&serde_json::Value::Null),
-                    format!("{path}.{key}"),
-                ) {
-                    return Some(found);
-                }
-            }
-        }
-        if let (Some(a), Some(b)) = (a.as_array(), b.as_array()) {
-            if a.len() == b.len() {
-                for (i, (a, b)) in a.iter().zip(b).enumerate() {
-                    if let Some(found) = difference(a, b, format!("{path}[{i}]")) {
-                        return Some(found);
-                    }
-                }
-            }
-        }
-        Some(format!("{path}: {a} != {b}"))
-    }
     fn canonical(v: &Value) -> String {
         kassiber_pyjson::dumps(
             v,
@@ -1401,19 +1365,6 @@ mod tests {
             },
         )
         .unwrap()
-    }
-    fn normalized(document: kassiber_xlsx::Document) -> serde_json::Value {
-        let mut v = serde_json::to_value(document).unwrap();
-        let formats = v["formats"].take();
-        v.as_object_mut().unwrap().remove("formats");
-        for sheet in v["sheets"].as_array_mut().unwrap() {
-            for op in sheet["operations"].as_array_mut().unwrap() {
-                if let Some(style) = op.get_mut("style") {
-                    *style = formats[style.as_u64().unwrap() as usize].clone();
-                }
-            }
-        }
-        v
     }
     #[test]
     fn cross_check_vectors_pin_parsing_matching_totals_and_workbooks() {
@@ -1430,58 +1381,75 @@ mod tests {
             conn.execute_batch(case["sql"].as_str().unwrap()).unwrap();
             let before = conn.total_changes();
             let args = kassiber_pytext::loads(case["args_json"].as_str().unwrap()).unwrap();
-            let actual = match report(
-                conn,
-                &args,
-                case["csv"].as_str().unwrap().as_bytes(),
-                "export.csv",
-            ) {
-                Ok(report) => {
-                    if let Some(error) = case.get("workbook_error") {
-                        let actual =
-                            cross_check_xlsx::document(&report, "2026-01-02T03:04:05Z".into())
-                                .err()
-                                .unwrap();
-                        assert_eq!(
-                            actual.message,
-                            error["message"].as_str().unwrap(),
-                            "{}",
-                            case["name"]
-                        );
+            let actual =
+                match report(
+                    conn,
+                    &args,
+                    case["csv"].as_str().unwrap().as_bytes(),
+                    "export.csv",
+                ) {
+                    Ok(report) => {
+                        let lang = crate::report_design::Lang::En;
+                        if let Some(error) = case.get("workbook_error") {
+                            let actual = cross_check_xlsx::document(
+                                &report,
+                                "2026-01-02T03:04:05Z".into(),
+                                lang,
+                            )
+                            .err()
+                            .unwrap();
+                            assert_eq!(
+                                actual.message,
+                                error["message"].as_str().unwrap(),
+                                "{}",
+                                case["name"]
+                            );
+                        }
+                        if !case["document"].is_null() {
+                            // The workbook is the shared design over this report:
+                            // a summary, then one sheet per outcome.
+                            let expected = case["document"]["sheets"].as_array().unwrap().len();
+                            let actual = cross_check_xlsx::document(
+                                &report,
+                                "2026-01-02T03:04:05Z".into(),
+                                lang,
+                            )
+                            .unwrap();
+                            // The summary, the design's totals and wallet tables,
+                            // then a sheet per outcome that has rows.
+                            let names: Vec<&str> =
+                                actual.sheets.iter().map(|s| s.name.as_str()).collect();
+                            let outcomes = [
+                                "differences",
+                                "only_in_tool",
+                                "only_in_kassiber",
+                                "excluded_in_kassiber",
+                                "matched",
+                                "not_comparable",
+                            ];
+                            assert_eq!(expected, outcomes.len() + 1, "{}", case["name"]);
+                            assert!(
+                                names[1..].iter().all(|n| outcomes.contains(n)
+                                    || ["totals", "wallet_pairs"].contains(n)),
+                                "{}: {names:?}",
+                                case["name"]
+                            );
+                            assert_eq!(actual.sheets[0].name, "summary", "{}", case["name"]);
+                            assert!(kassiber_xlsx::render(&actual).is_ok(), "{}", case["name"]);
+                        }
+                        dict([("ok", report)])
                     }
-                    if !case["document"].is_null() {
-                        let mut expected = case["document"].clone();
-                        normalize_numbers(&mut expected);
-                        let expected: kassiber_xlsx::Document =
-                            serde_json::from_value(expected).unwrap();
-                        let actual =
-                            cross_check_xlsx::document(&report, "2026-01-02T03:04:05Z".into())
-                                .unwrap();
-                        let diff = difference(
-                            &normalized(actual),
-                            &normalized(expected),
-                            "workbook".into(),
-                        );
-                        assert!(
-                            diff.is_none(),
-                            "{}: {}",
-                            case["name"],
-                            diff.unwrap_or_default()
-                        );
-                    }
-                    dict([("ok", report)])
-                }
-                Err(e) => dict([(
-                    "error",
-                    dict([
-                        ("code", s(e.code)),
-                        ("message", s(e.message)),
-                        ("hint", e.hint.map(s).unwrap_or(Value::Null)),
-                        ("details", e.details.unwrap_or(Value::Null)),
-                        ("retryable", Value::Bool(e.retryable)),
-                    ]),
-                )]),
-            };
+                    Err(e) => dict([(
+                        "error",
+                        dict([
+                            ("code", s(e.code)),
+                            ("message", s(e.message)),
+                            ("hint", e.hint.map(s).unwrap_or(Value::Null)),
+                            ("details", e.details.unwrap_or(Value::Null)),
+                            ("retryable", Value::Bool(e.retryable)),
+                        ]),
+                    )]),
+                };
             assert_eq!(
                 canonical(&actual),
                 case["expected_json"].as_str().unwrap(),

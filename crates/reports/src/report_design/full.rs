@@ -441,7 +441,7 @@ pub fn full(model: &Value) -> Document {
         ]);
         blocks.push(Block::Table(summary));
         blocks.push(Block::Table(table(
-            "disposals",
+            "all_disposals",
             t("disposals.all"),
             vec![
                 col("date", t("col.date"), Kind::Date, 0.9),

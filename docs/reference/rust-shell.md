@@ -17802,6 +17802,14 @@ snapshots refuse with Python's errors, no journal freshness admission and no
 saved marker, managed name `kassiber-source-funds-…pdf`; the flow diagram is
 drawn natively. The bundle (`export-source-funds-bundle`) still runs in Python.
 
+The XLSX exports (`reports export-xlsx`, `export-austrian-e1kv-xlsx`,
+`export-exit-tax-xlsx`, `export-year-handoff`, `cross-check --xlsx` and their
+desktop kinds) write the same documents as workbooks; the year handoff and
+the verification appendix keep their live formulas. Admission, refusals
+(including the cross-check's non-finite figure), managed names and saved
+markers are Python's; the XLSX process tests compare everything but the
+workbook layout, `sheets` and, for the full report, `rows`.
+
 Evidence: `tests/test_rust_pdf_exports.py` runs CLI and daemon sessions for
 all five against Python (identical envelopes but for the rendered pages,
 bytes and hash, identical errors, files, saved and filed markers and tables;

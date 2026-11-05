@@ -10,19 +10,23 @@ use super::*;
 use sha2::{Digest, Sha256};
 
 mod austrian;
+mod cross_check;
 mod exit;
 mod full;
 mod locale;
 mod source_funds;
 mod strings;
 mod summary;
+mod year_handoff;
 pub use austrian::austrian;
+pub use cross_check::cross_check;
 pub use exit::exit_tax;
 pub use full::full;
 pub use locale::Lang;
 pub use source_funds::source_funds;
 pub(crate) use summary::prepare as prepare_summary;
 pub use summary::{summary, summary_model};
+pub use year_handoff::year_handoff;
 
 /// The CSV bundle's schema identifier, versioned with the layout.
 pub const CSV_SCHEMA: &str = "kassiber.report/1";
@@ -42,6 +46,12 @@ pub enum Cell {
     Count(i64),
     /// A percentage (12.3 means 12.3 %).
     Percent(Decimal),
+    /// A live spreadsheet check: `expression` names the row's other columns
+    /// as `{key}`; PDF and CSV show the computed value `cached`.
+    Formula {
+        expression: String,
+        cached: Box<Cell>,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -297,6 +307,7 @@ impl Cell {
                 .unwrap_or_else(|_| n.to_string()),
             Cell::Count(n) => lang.integer((*n).into()),
             Cell::Percent(d) => lang.percent(d),
+            Cell::Formula { cached, .. } => cached.display(lang),
         }
     }
     /// A zero amount; sparse columns show it as `–`.
@@ -305,6 +316,7 @@ impl Cell {
             Cell::Fiat(d) | Cell::Btc(d) | Cell::Percent(d) => d.is_zero(),
             Cell::Count(n) => *n == 0,
             Cell::Msat(n) => n.to_string() == "0",
+            Cell::Formula { cached, .. } => cached.is_zero(),
             _ => false,
         }
     }
@@ -316,6 +328,7 @@ impl Cell {
             Cell::Fiat(d) | Cell::Btc(d) | Cell::Percent(d) => plain(d),
             Cell::Msat(n) => n.to_string(),
             Cell::Count(n) => n.to_string(),
+            Cell::Formula { cached, .. } => cached.csv(),
         }
     }
 }
@@ -423,6 +436,19 @@ impl Axis {
     pub fn at(&self, v: f64) -> f64 {
         (v - self.low) / (self.high - self.low)
     }
+}
+
+/// A `&'static str` for a key read from data (sheet metadata, statuses).
+/// The keys are a small fixed set, so interning them is bounded.
+fn intern(key: String) -> &'static str {
+    static KEYS: std::sync::Mutex<Vec<&'static str>> = std::sync::Mutex::new(Vec::new());
+    let mut keys = KEYS.lock().unwrap();
+    if let Some(found) = keys.iter().find(|k| **k == key) {
+        return found;
+    }
+    let interned: &'static str = Box::leak(key.into_boxed_str());
+    keys.push(interned);
+    interned
 }
 
 // --------------------------------------------------------------- builders
@@ -972,6 +998,17 @@ fn excel_date(text: &str) -> Option<f64> {
     Some(((day - base) / 86_400_000_000) as f64)
 }
 
+/// `A1` notation of a zero-based column and row.
+fn address(col: usize, row: usize) -> String {
+    let mut index = col + 1;
+    let mut name = String::new();
+    while index > 0 {
+        name.insert(0, (b'A' + ((index - 1) % 26) as u8) as char);
+        index = (index - 1) / 26;
+    }
+    format!("{name}{}", row + 1)
+}
+
 fn xlsx_cell(cell: &Cell, total: bool) -> (XCell, usize) {
     match cell {
         Cell::Empty => (XCell::Blank, TEXT),
@@ -998,6 +1035,8 @@ fn xlsx_cell(cell: &Cell, total: bool) -> (XCell, usize) {
         },
         Cell::Count(i) => (XCell::Number(*i as f64), COUNT),
         Cell::Percent(d) => (XCell::Number(number(d)), PERCENT),
+        // Formulas are written with their sheet context in `table_sheet`.
+        Cell::Formula { cached, .. } => xlsx_cell(cached, total),
     }
 }
 
@@ -1020,6 +1059,13 @@ fn sheet_name(id: &str) -> String {
 
 /// The workbook: a Summary sheet of facts, then one sheet per table.
 pub fn xlsx(doc: &Document) -> Result<Vec<u8>> {
+    kassiber_xlsx::render(&xlsx_document(doc))
+        .map_err(|e| AppError::new("internal_error", e.to_string()))
+}
+
+/// The workbook before rendering, for exports that append sheets of their
+/// own (the full report's verification appendix).
+pub fn xlsx_document(doc: &Document) -> kassiber_xlsx::Document {
     let mut summary = vec![
         Operation::Column {
             first: 0,
@@ -1104,11 +1150,11 @@ pub fn xlsx(doc: &Document) -> Result<Vec<u8>> {
         row += 1;
     }
     let mut all = vec![Sheet {
-        name: "Summary".into(),
+        name: "summary".into(),
         operations: summary,
     }];
     all.extend(sheets);
-    kassiber_xlsx::render(&kassiber_xlsx::Document {
+    kassiber_xlsx::Document {
         title: doc.title.clone(),
         subject: format!("{} · {}", doc.book, doc.period),
         author: "Kassiber".into(),
@@ -1119,8 +1165,7 @@ pub fn xlsx(doc: &Document) -> Result<Vec<u8>> {
         formats: styles(doc.lang),
         sheets: all,
         names: vec![],
-    })
-    .map_err(|e| AppError::new("internal_error", e.to_string()))
+    }
 }
 
 fn table_sheet(table: &Table) -> Sheet {
@@ -1141,7 +1186,30 @@ fn table_sheet(table: &Table) -> Sheet {
     }
     for (r, cells) in table.rows.iter().enumerate() {
         for (col, cell) in cells.iter().enumerate() {
-            let (value, style) = xlsx_cell(cell, false);
+            let (value, style) = match cell {
+                Cell::Formula { expression, cached } => {
+                    // Columns are named by key; the row is this sheet row.
+                    let mut formula = expression.clone();
+                    for (j, column) in table.columns.iter().enumerate() {
+                        formula =
+                            formula.replace(&format!("{{{}}}", column.key), &address(j, r + 1));
+                    }
+                    let (result, style) = xlsx_cell(cached, false);
+                    let result = match result {
+                        XCell::Number(n) => kassiber_pyjson::float_repr(n),
+                        XCell::String(t) => t,
+                        _ => String::new(),
+                    };
+                    (
+                        XCell::Formula {
+                            expression: formula,
+                            result,
+                        },
+                        style,
+                    )
+                }
+                _ => xlsx_cell(cell, false),
+            };
             ops.push(Operation::Cell {
                 row: r as u32 + 1,
                 col: col as u16,

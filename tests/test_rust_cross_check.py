@@ -12,7 +12,7 @@ import pytest
 
 from kassiber.db import open_db
 from crates.reports.scripts.gen_cross_check_vectors import outcome, encode, ct, bp
-from tests.rust_port.xlsx import RecordingWorkbook, canonical, first_difference
+from tests.rust_port.xlsx import RecordingWorkbook, design_content
 from tests.test_rust_report_exports import _dump
 from tests.test_rust_xlsx_exports import _wire
 from tests.test_rust_austrian_xlsx import _clocked_book
@@ -47,7 +47,7 @@ def test_cross_check_service_bytes_workbooks_and_all_database_tables(tmp_path,ca
     if workbook and 'ok' in expected:
         assert expected['ok']['bytes']==target.stat().st_size
         assert 'report_snapshot' not in expected['ok']
-        content=canonical(target)
+        content=design_content(target,False)
     expected_exists=target.exists()
     expected_artifact=target.read_bytes() if expected_exists and content is None else None
     expected_state=state(root)
@@ -60,7 +60,7 @@ def test_cross_check_service_bytes_workbooks_and_all_database_tables(tmp_path,ca
     if content is not None:
         assert list(actual['ok'])==list(expected['ok'])
         assert actual['ok']['bytes']==target.stat().st_size
-        assert not (difference:=first_difference(content,canonical(target))),difference
+        assert design_content(target,True)==content
     else:
         if expected_exists:
             assert target.read_bytes()==expected_artifact
@@ -90,7 +90,7 @@ def test_cross_check_cli_bytes_workbooks_all_tables_and_zero_fallbacks(tmp_path,
                 if payload['kind']!='error':
                     assert payload['data']['bytes']==target.stat().st_size
                     assert 'report_snapshot' not in payload['data']
-                outcomes.append((result.returncode,_wire(result.stdout),result.stderr,canonical(target) if target.exists() else None,state(root)))
+                outcomes.append((result.returncode,_wire(result.stdout),result.stderr,design_content(target,not reference) if target.exists() else None,state(root)))
         return outcomes
     actual=sequence(False);expected=sequence(True)
     for i,(a,e) in enumerate(zip(actual,expected)):
@@ -128,7 +128,7 @@ def test_cross_check_daemon_bytes_workbooks_all_tables_and_zero_fallbacks(tmp_pa
             if 'file' in payload.get('data',{}):
                 assert payload['data']['bytes']==Path(payload['data']['file']).stat().st_size
                 assert 'report_snapshot' not in payload['data']
-        return records,state(root),{str(p.relative_to(exports)):canonical(p) for p in exports.rglob('*.xlsx')}
+        return records,state(root),{str(p.relative_to(exports)):design_content(p,not reference) for p in exports.rglob('*.xlsx')}
     actual=session(False);expected=session(True)
     for i,(a,e) in enumerate(zip(actual[0],expected[0])):
         assert _wire(a)==_wire(e),(i,a,e)

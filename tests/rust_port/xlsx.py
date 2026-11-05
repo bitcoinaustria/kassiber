@@ -237,3 +237,28 @@ class RecordingSheet:
         self.add("contains", first_row=b-1, first_col=a-1, last_row=d-1, last_col=c-1,
                  text=options["value"], style=self.book.formats[options["format"]])
         return self.real.conditional_format(cell_range, options)
+
+
+def design_content(path, native):
+    """A workbook in the shared report design (docs/reference/report-design.md).
+
+    Its layout differs from Python's workbook by design, so content is not
+    compared cell by cell: both must load cleanly, and the native one opens on
+    the design's summary sheet. Data parity is pinned by the model tests.
+    """
+    canonical(path)
+    if native:
+        book = openpyxl.load_workbook(path, read_only=True)
+        assert book.sheetnames[0] == "summary", book.sheetnames
+    return "<workbook>"
+
+
+def design_wire(raw, *keys):
+    """Response bytes with the envelope keys the design changes masked."""
+    payload = json.loads(raw)
+    for container in (payload.get("data"), payload.get("ok")):
+        if isinstance(container, dict):
+            for key in keys:
+                if key in container:
+                    container[key] = "<design>"
+    return json.dumps(payload, sort_keys=True).encode()

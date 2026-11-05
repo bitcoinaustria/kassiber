@@ -78,6 +78,25 @@ def cases():
     return result
 
 
+# The report's rows and status; the period is pinned by the metadata.
+REPORT_KEYS = ('wallets', 'transactions', 'journal', 'balances', 'roll_forward', 'reconciliation', 'excluded',
+               'reconciled', 'warnings')
+
+
+def normalized(v):
+    """The report as JSON: exact decimals as their text, rows as objects."""
+    from collections.abc import Mapping
+    from decimal import Decimal
+    import sqlite3
+    if isinstance(v, Decimal):
+        return str(v)
+    if isinstance(v, (Mapping, sqlite3.Row)):
+        return {k: normalized(v[k]) for k in v.keys()}
+    if isinstance(v, (list, tuple)):
+        return [normalized(x) for x in v]
+    return v
+
+
 def build(root):
     result = []
     metadata = None
@@ -95,7 +114,9 @@ def build(root):
                 hooks = replace(_report_hooks(), now_iso=lambda: STAMP)
                 with patch('xlsxwriter.Workbook', Capture), patch.object(handoff, '_register_saved_export', return_value=None):
                     payload = handoff.export_year_handoff_xlsx(conn, None, None, path / 'handoff.xlsx', hooks, year=args.get('year'))
-                expected = dict(document=captured[0].document, metadata={k:v for k,v in payload.items() if k not in {"file", "bytes", "report_snapshot"}})
+                expected = dict(document=captured[0].document, metadata={k:v for k,v in payload.items() if k not in {"file", "bytes", "report_snapshot"}},
+                                report=normalized({k: v for k, v in handoff.build_year_handoff(
+                                    conn, None, None, hooks, year=args.get('year')).items() if k in REPORT_KEYS}))
                 if metadata is None:
                     report = handoff.build_year_handoff(conn, None, None, hooks, year=2024)
                     sheets = handoff._handoff_sheets(report)

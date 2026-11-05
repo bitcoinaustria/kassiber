@@ -184,12 +184,28 @@ reads either book the same way.
 
 ## XLSX
 
-The same sections as sheets, in the same order: a `Summary` sheet first with
-the cover facts and summary figures, then one sheet per table with the table
-id as its name. Headers are frozen and autofiltered; amounts are numbers with
-formats (`#,##0.00` fiat, `0.00000000` BTC, `0` msat), dates are dates, never
-text. Column widths come from the column type. The Verify/Control sheets of
-today's full report stay as appendix sheets with their formulas.
+The same document as the PDF, as sheets in the same order: a `summary` sheet
+first with the facts and headline figures, then one sheet per table with the
+table id as its name (`holdings_by_wallet`, `disposals`, …), the same in
+every language. Headers are frozen and autofiltered and read in the book's
+language; amounts are numbers with formats (`#,##0.00` fiat, `0.00000000`
+BTC, `0` msat), dates are dates with the language's date format, never text.
+Column widths come from the column type.
+
+Checks a reviewer recomputes stay live formulas: the year handoff's
+roll-forward and reconciliation columns are formula cells over the row's own
+columns with their computed values cached, and the full report's
+verification appendix (Verify, Acquisitions, Disposals, Control, Evidence,
+Quarantined) keeps its formulas, in the design's palette: grey headers over
+a rule, a neutral fill only on input cells, red only for a failed check.
+
+| Workbook | Sheets |
+| --- | --- |
+| Full report | the full report document, then the verification appendix unless `--no-verify` |
+| Austrian E 1kv | the Austrian document (Kennzahlen, sections, disposals, income, holdings, transactions) |
+| Exit tax | the exit-tax document |
+| Year handoff | scope and status, then wallets, transactions, journal, balances, roll-forward, reconciliation and excluded rows |
+| Cross-check | a summary of the comparison, then one sheet per outcome (differences, only in the tool, only in Kassiber, excluded, matched, not comparable) |
 
 ## CSV
 
@@ -290,7 +306,7 @@ One report per commit, each with data parity against Python's model.
 | 3 | Austrian E 1kv | `reports export-austrian-e1kv-pdf`, its alias `reports export-austrian`, `ui.reports.export_austrian_e1kv_pdf` | native, shared design |
 | 3 | Exit tax | `reports export-exit-tax-pdf`, `ui.reports.export_exit_tax_pdf` | native, shared design |
 | 4 | Source of funds | `reports export-source-funds-pdf`, `ui.source_funds.export_pdf` | native, shared design |
-| 5 | XLSX | full, Austrian, exit tax, cross-check, verification, year handoff | pending |
+| 5 | XLSX | full, Austrian, exit tax, cross-check, verification, year handoff | native, shared design |
 | 6 | CSV | full, capital gains, Austrian bundle | pending |
 | 7 | Bundles | `reports export-austrian`, `ui.reports.export_audit_package`, source-of-funds bundle | pending |
 | 8 | Registration | every CLI leaf and daemon kind native, no fallback | pending |
@@ -306,6 +322,9 @@ keep byte parity with Python except where the new format changes them:
 | Full report | `pages`, `bytes`, `report_snapshot.content_sha256` | the new PDF's; `title` stays Python's (`Kassiber PDF Report - <scope>`) |
 | Exit tax | `pages`, `bytes` | the new PDF's; Python registers no saved marker for it, and neither does Rust |
 | Source of funds | `pages`, `bytes`, `renderer` | the new PDF's; `renderer` is `typst`; no saved marker, as in Python |
+| Full report XLSX | `bytes`, `sheets`, `rows` | the design's sheet names (then the appendix's); `rows` counts the design's table rows |
+| Austrian, exit-tax and year-handoff XLSX | `bytes`, `sheets` | the design's sheet names; every other key keeps Python's value |
+| Cross-check XLSX | `bytes` | the envelope names no sheets |
 | Austrian E 1kv | `pages`, `bytes`, `report_snapshot.content_sha256`, `renderer` | the new PDF's; `renderer` is `typst` instead of `reportlab`; `title`, `sections` (Python's section ids, each still present in the new layout), `assumptions` and `transactions` stay Python's |
 
 ## Owner decisions (2026-11-04)

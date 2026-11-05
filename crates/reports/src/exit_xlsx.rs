@@ -1,5 +1,7 @@
+//! The exit-tax workbook in the shared report design: the same document as
+//! the PDF over the same exit-tax report, as sheets.
 use super::*;
-use artifact_csv::{list, File, Prepared, Section};
+use artifact_csv::{list, File, Prepared};
 use kassiber_xlsx::Document;
 
 pub(super) fn project(
@@ -7,202 +9,29 @@ pub(super) fn project(
     args: &Value,
     sources: &dyn kassiber_setup::Sources,
 ) -> Result<(Value, Document)> {
-    let (workspace, profile) = kassiber_setup::references::scope(conn, args)?;
-    require_context(conn, &profile, false)?;
-    let report = exit_tax::report(conn, &workspace, &profile, args, sources)?;
-    let totals = value(&report, "totals");
-    let fiat = text(&report, "fiatCurrency");
-    let overview = [
-        ("Profile".into(), value(&report, "profile")),
-        ("Jurisdiction".into(), value(&report, "jurisdictionCode")),
-        ("Departure date".into(), value(&report, "departureDate")),
-        (
-            "Departure timezone".into(),
-            value(&report, "departureTimezone"),
-        ),
-        ("Destination".into(), value(&report, "destination")),
-        (
-            "Collection timing".into(),
-            value(totals, "collectionTiming"),
-        ),
-        ("Accounting method".into(), value(&report, "method")),
-        (
-            "Journal input version".into(),
-            value(&report, "journalInputVersion"),
-        ),
-        (
-            format!("Neubestand gain ({fiat})"),
-            value(totals, "neuGain"),
-        ),
-        (
-            format!("Taxable gain ({fiat})"),
-            value(totals, "taxableGain"),
-        ),
-        ("Rate".into(), value(totals, "estimatedTaxRate")),
-        (
-            format!("Estimated exit tax ({fiat})"),
-            value(totals, "estimatedTax"),
-        ),
-        (
-            format!("Altbestand market value — excluded ({fiat})"),
-            value(totals, "altMarketValue"),
-        ),
-    ]
-    .into_iter()
-    .map(|(k, v)| dict([("field", s(k)), ("value", v.clone())]))
-    .collect();
-    let quantity = |r: &Value| -> Result<Value> {
-        float(
-            &decimal(value(r, "quantitySats"))?
-                .div(&Decimal::from(100_000_000), &DECIMAL)
-                .map_err(arithmetic)?,
-        )
-    };
-    let lots = list(value(&report, "lots"))
-        .iter()
-        .map(|r| {
-            Ok(dict([
-                ("asset", value(r, "asset").clone()),
-                ("regime", value(r, "regime").clone()),
-                ("quantity", quantity(r)?),
-                ("cost_basis", value(r, "costBasis").clone()),
-                ("market_value", value(r, "marketValue").clone()),
-                ("gain_loss", value(r, "gain").clone()),
-                (
-                    "taxable",
-                    s(if truthy(value(r, "taxable")) {
-                        "yes"
-                    } else {
-                        "no"
-                    }),
-                ),
-                ("kennzahl", value(r, "kennzahl").clone()),
-            ]))
-        })
-        .collect::<Result<Vec<_>>>()?;
-    let holdings = list(value(&report, "walletHoldings"))
-        .iter()
-        .map(|r| {
-            Ok(dict([
-                ("asset", value(r, "asset").clone()),
-                ("wallet", value(r, "wallet").clone()),
-                ("quantity", quantity(r)?),
-                ("market_value", value(r, "marketValue").clone()),
-            ]))
-        })
-        .collect::<Result<Vec<_>>>()?;
-    let mut notes = Vec::new();
-    let status = value(&report, "status");
-    if int(status, "quarantines") != 0 {
-        notes.push(dict([(
-            "note",
-            s(format!(
-                "{} quarantined transaction(s) — estimate is incomplete until resolved.",
-                int(status, "quarantines")
-            )),
-        )]));
-    }
-    let missing = list(value(status, "missingFmvAssets"));
-    if !missing.is_empty() {
-        notes.push(dict([(
-            "note",
-            s(format!(
-                "Incomplete estimate: missing FMV for {}",
-                missing.iter().map(py_str).collect::<Vec<_>>().join(", ")
-            )),
-        )]));
-    }
-    notes.extend(
-        list(value(&report, "assumptions"))
-            .iter()
-            .map(|n| dict([("note", n.clone())])),
-    );
-    notes.push(dict([("note", value(&report, "reviewGate").clone())]));
-    let sections = [
-        Section {
-            name: "Overview",
-            title: format!("Exit-tax estimate — {}", text(&report, "profile")),
-            headers: &["field", "value"],
-            rows: overview,
-        },
-        Section {
-            name: "FMV quotes",
-            title: "Fair market value quotes".into(),
-            headers: &["asset", "pair", "rate", "source", "as_of"],
-            rows: list(value(&report, "fmvSource"))
-                .iter()
-                .map(|quote| {
-                    dict([
-                        ("asset", value(quote, "asset").clone()),
-                        ("pair", value(quote, "pair").clone()),
-                        ("rate", value(quote, "rate").clone()),
-                        ("source", value(quote, "source").clone()),
-                        ("as_of", value(quote, "asOf").clone()),
-                    ])
-                })
-                .collect(),
-        },
-        Section {
-            name: "Deemed disposal",
-            title: "Deemed disposal at fair market value".into(),
-            headers: &[
-                "asset",
-                "regime",
-                "quantity",
-                "cost_basis",
-                "market_value",
-                "gain_loss",
-                "taxable",
-                "kennzahl",
-            ],
-            rows: lots,
-        },
-        Section {
-            name: "Wallet holdings",
-            title: "Wallet holdings (context)".into(),
-            headers: &["asset", "wallet", "quantity", "market_value"],
-            rows: holdings,
-        },
-        Section {
-            name: "Assumptions",
-            title: "Assumptions & Steuerberater review gate".into(),
-            headers: &["note"],
-            rows: notes,
-        },
-    ];
-    let document = Document {
-        title: format!(
-            "Kassiber Exit-Tax Estimate — {} ({})",
-            text(&report, "profile"),
-            text(&report, "departureDate")
-        ),
-        subject: "Wegzugsbesteuerung deemed-disposal estimate".into(),
-        author: "Kassiber".into(),
-        comments: text(&report, "reviewGate"),
-        created: sources.now(conn)?,
-        formats: artifact_xlsx::styles(),
-        sheets: sections
-            .iter()
-            .map(artifact_xlsx::sheet)
-            .collect::<Result<_>>()?,
-        names: vec![],
-    };
+    let model = exit_pdf::model(conn, args, sources)?;
+    let report = value(&model, "report");
+    let document = report_design::xlsx_document(&report_design::exit_tax(&model));
     let metadata = dict([
         ("scope", s("exit_tax")),
         ("format", s("xlsx")),
-        ("departure_date", value(&report, "departureDate").clone()),
-        ("destination", value(&report, "destination").clone()),
+        ("departure_date", value(report, "departureDate").clone()),
+        ("destination", value(report, "destination").clone()),
         (
             "sheets",
-            Value::List(sections.iter().map(|section| s(section.name)).collect()),
+            Value::List(
+                document
+                    .sheets
+                    .iter()
+                    .map(|sheet| s(sheet.name.as_str()))
+                    .collect(),
+            ),
         ),
-        (
-            "rows",
-            Value::Int(list(value(&report, "lots")).len().into()),
-        ),
+        ("rows", Value::Int(list(value(report, "lots")).len().into())),
     ]);
     Ok((metadata, document))
 }
+
 pub(super) fn prepare(
     conn: &Connection,
     args: &Value,
@@ -219,6 +48,7 @@ pub(super) fn prepare(
             rows: int(&metadata, "rows") as usize,
         }],
         metadata,
+        // Python registers no saved marker for the exit-tax estimate.
         completion: None,
     })
 }

@@ -166,5 +166,13 @@
     "replace": "        let links = list(flow, \"levels\")",
     "expect_failing": ["source_funds_model_matches_python_and_renders_deterministically"],
     "rule": "The diagram draws every edge of the simplified flow."
+  },
+  {
+    "id": "design-formula-row",
+    "file": "crates/reports/src/report_design/mod.rs",
+    "find": "formula.replace(&format!(\"{{{}}}\", column.key), &address(j, r + 1));",
+    "replace": "formula.replace(&format!(\"{{{}}}\", column.key), &address(j, r));",
+    "expect_failing": ["formula_cells_name_their_own_row_and_cache_the_value"],
+    "rule": "A formula cell names the columns of its own sheet row."
   }
 ]

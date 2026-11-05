@@ -2,6 +2,8 @@ use super::*;
 use artifact_csv::{File, Prepared};
 use kassiber_xlsx::Document;
 
+/// The full report workbook: the shared design's sheets for the full
+/// report's model, then the verification appendix when asked for.
 fn project(
     conn: &Connection,
     args: &Value,
@@ -12,66 +14,86 @@ fn project(
     replace(&mut args, "history_limit", limit);
     let (workspace, profile) = kassiber_setup::references::scope(conn, &args)?;
     require_context(conn, &profile, false)?;
-    let (sections, mut prepared) = full_csv::project(conn, &workspace, &profile, &args, sources)?;
-    let mut document = Document {
-        title: text(&prepared.metadata, "title"),
-        subject: "Kassiber full report export".into(),
-        author: "Kassiber".into(),
-        comments: "Generated from the same processed report context as the generic PDF export."
-            .into(),
-        created: sources.now(conn)?,
-        formats: artifact_xlsx::styles(),
-        sheets: sections
-            .iter()
-            .map(artifact_xlsx::sheet)
-            .collect::<Result<Vec<_>>>()?,
-        names: vec![],
+    let model = full_pdf::model(conn, &workspace, &profile, &args, sources)?;
+    let design = report_design::full(&model);
+    let mut document = report_design::xlsx_document(&design);
+    let wallet = if truthy(value(&args, "wallet")) {
+        Some(kassiber_wallets::resolve(
+            conn,
+            &text(&profile, "id"),
+            &text(&args, "wallet"),
+        )?)
+    } else {
+        None
     };
     let verify = get(&args, "verify").is_none_or(truthy);
     if verify {
-        let wallet = if truthy(value(&args, "wallet")) {
-            Some(kassiber_wallets::resolve(
-                conn,
-                &text(&profile, "id"),
-                &text(&args, "wallet"),
-            )?)
-        } else {
-            None
-        };
-        let generated = sections[0]
-            .rows
-            .iter()
-            .find(|r| text(r, "field") == "Generated at")
-            .map(|r| text(r, "value"))
-            .unwrap();
         verification_xlsx::append(
             &mut document,
             &profile,
             wallet.as_ref().map(|w| w.label.as_str()),
-            &generated,
+            &text(&model, "generated_at"),
             &verification::project(conn, &profile)?,
         )?;
     }
-    let rows = prepared.files[0].rows;
-    prepared.metadata = dict([
-        ("title", s(document.title.as_str())),
-        ("wallet", value(&prepared.metadata, "wallet").clone()),
-        (
-            "sheets",
-            Value::List(
-                document
-                    .sheets
-                    .iter()
-                    .map(|sheet| s(sheet.name.as_str()))
-                    .collect(),
+    // Python's title names the report's scope; the workbook's own title is
+    // the design's.
+    let scope = match &wallet {
+        Some(wallet) => wallet.label.clone(),
+        None => text(&profile, "label"),
+    };
+    let rows: usize = design
+        .sections
+        .iter()
+        .flat_map(|s| &s.blocks)
+        .map(|b| match b {
+            report_design::Block::Table(t) => t.rows.len(),
+            _ => 0,
+        })
+        .sum();
+    let prepared = Prepared {
+        files: vec![File {
+            name: "report.xlsx".into(),
+            sheet: String::new(),
+            bytes: Vec::new(),
+            rows,
+        }],
+        metadata: dict([
+            ("title", s(format!("Kassiber Report - {scope}"))),
+            (
+                "wallet",
+                if truthy(value(&args, "wallet")) {
+                    value(&args, "wallet").clone()
+                } else {
+                    s("")
+                },
             ),
-        ),
-        ("verified", Value::Bool(verify)),
-        ("rows", Value::Int(rows.into())),
-    ]);
-    prepared.completion.as_mut().unwrap().kind = "full-report.xlsx".into();
+            (
+                "sheets",
+                Value::List(
+                    document
+                        .sheets
+                        .iter()
+                        .map(|sheet| s(sheet.name.as_str()))
+                        .collect(),
+                ),
+            ),
+            ("verified", Value::Bool(verify)),
+            ("rows", Value::Int(rows.into())),
+        ]),
+        completion: Some(crate::export_completion::Completion {
+            kind: "full-report.xlsx".into(),
+            year: None,
+            end_year: None,
+            scope: match &wallet {
+                Some(wallet) => dict([("wallet_ids", Value::List(vec![s(wallet.id.as_str())]))]),
+                None => Value::Null,
+            },
+        }),
+    };
     Ok((prepared, document))
 }
+
 pub(super) fn prepare(
     conn: &Connection,
     args: &Value,
@@ -135,7 +157,7 @@ mod tests {
         }
     }
     #[test]
-    fn full_xlsx_projection_matches_python_workbook_vectors() {
+    fn full_xlsx_errors_and_verification_appendix_match_python() {
         let mut cases: serde_json::Value =
             serde_json::from_str(include_str!("../tests/data/full_xlsx.json")).unwrap();
         normalize_numbers(&mut cases);
@@ -164,11 +186,37 @@ mod tests {
                     case["name"]
                 );
             } else {
+                // The report sheets are the shared design over the full
+                // report's model (pinned to Python in tests/full_pdf.rs);
+                // the verification appendix stays Python's, formulas and all.
                 let (_, actual) = result.unwrap();
-                let expected: Document =
+                let mut expected: Document =
                     serde_json::from_value(case["expected"]["document"].clone()).unwrap();
-                let actual = operations(&actual);
-                let expected = operations(&expected);
+                // In the shared design's palette.
+                expected.formats = expected
+                    .formats
+                    .into_iter()
+                    .map(verification_xlsx::shared_style)
+                    .collect();
+                let appendix = [
+                    "Verify",
+                    "Acquisitions",
+                    "Disposals",
+                    "Control",
+                    "Evidence",
+                    "Quarantined",
+                ];
+                let pick = |doc: &Document| {
+                    operations(doc)
+                        .into_iter()
+                        .filter(|(name, _)| appendix.contains(&name.as_str()))
+                        .collect::<Vec<_>>()
+                };
+                let actual_sheets: Vec<String> =
+                    actual.sheets.iter().map(|s| s.name.clone()).collect();
+                assert_eq!(actual_sheets[0], "summary", "{}", case["name"]);
+                let actual = pick(&actual);
+                let expected = pick(&expected);
                 assert_eq!(actual.len(), expected.len(), "{}", case["name"]);
                 for ((name, actual), (wanted, expected)) in actual.iter().zip(&expected) {
                     assert_eq!(name, wanted, "{}", case["name"]);

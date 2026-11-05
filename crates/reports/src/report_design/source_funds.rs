@@ -1185,20 +1185,18 @@ pub fn source_funds(model: &Value) -> Document {
                                 let mut details = Vec::new();
                                 if source {
                                     if present(value(node, "fiat_value")) {
-                                        details.push(
-                                            lang.tf(
-                                                "sof.original_fiat",
-                                                &[(
-                                                    "value",
-                                                    &format!(
+                                        details.push(lang.tf(
+                                            "sof.original_fiat",
+                                            &[(
+                                                "value",
+                                                &format!(
                                                         "{} {}",
                                                         fiat_cell(value(node, "fiat_value"))
                                                             .display(lang),
                                                         text(node, "fiat_currency")
                                                     ),
-                                                )],
-                                            ),
-                                        );
+                                            )],
+                                        ));
                                     }
                                 } else {
                                     if truthy(value(node, "wallet")) {

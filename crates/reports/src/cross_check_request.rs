@@ -150,6 +150,15 @@ fn upload(kind: &str, args: &Value) -> Result<(Value, Vec<u8>, String)> {
     replace(&mut normalized, "wallets", wallets);
     Ok((normalized, bytes, filename))
 }
+/// The book's tax country picks the workbook's language.
+fn language(conn: &Connection, args: &Value) -> Result<report_design::Lang> {
+    let (_, profile) = kassiber_setup::references::scope(conn, args)?;
+    Ok(report_design::Lang::for_country(&text(
+        &profile,
+        "tax_country",
+    )))
+}
+
 pub(super) fn execute(
     conn: &Connection,
     command: &str,
@@ -164,6 +173,7 @@ pub(super) fn execute(
                 &report,
                 Path::new(&text(args, "xlsx")),
                 sources.now(conn)?,
+                language(conn, args)?,
             );
         }
         return Ok(report);
@@ -186,7 +196,8 @@ pub(super) fn execute(
     };
     let path = super::export_request::managed(exports_root, &stem, ".xlsx", &sources.now(conn)?)?;
     let report = cross_check::report(conn, &args, &bytes, &filename)?;
-    let mut result = cross_check_xlsx::publish(&report, &path, sources.now(conn)?)?;
+    let mut result =
+        cross_check_xlsx::publish(&report, &path, sources.now(conn)?, language(conn, &args)?)?;
     replace(&mut result, "format", s("xlsx"));
     replace(&mut result, "scope", s("cross_check"));
     replace(

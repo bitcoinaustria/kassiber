@@ -14,7 +14,7 @@ from kassiber.cli.handlers import _report_hooks
 from kassiber.core import exit_tax, reports
 from kassiber.db import open_db
 from kassiber.errors import AppError
-from tests.rust_port.xlsx import RecordingWorkbook, canonical, first_difference, STAMP
+from tests.rust_port.xlsx import RecordingWorkbook, design_content, design_wire, STAMP
 from tests.test_rust_report_exports import _dump
 from tests.test_rust_xlsx_exports import _wire
 from tests.test_rust_austrian_xlsx import _clocked_book
@@ -59,9 +59,10 @@ def test_exit_service_content_errors_and_all_database_tables(tmp_path, case, wor
     if workbook and 'ok' in expected:
         assert 'report_snapshot' not in expected['ok']
         assert expected['ok']['bytes'] == target.stat().st_size
-        content = canonical(target)
+        content = design_content(target, False)
     expected_state = _state(root)
-    expected_wire = _wire(json.dumps(expected).encode()) if workbook else json.dumps(expected, sort_keys=True).encode()
+    expected_wire = (_wire(design_wire(json.dumps(expected).encode(), 'sheets')) if workbook
+                     else json.dumps(expected, sort_keys=True).encode())
     database.write_bytes(before)
     target.unlink(missing_ok=True)
     request = dict(database=str(database), command='reports.export-exit-tax-xlsx' if workbook else 'reports.exit-tax',
@@ -73,10 +74,11 @@ def test_exit_service_content_errors_and_all_database_tables(tmp_path, case, wor
         assert list(actual['ok']) == list(expected['ok'])
         assert 'report_snapshot' not in actual['ok']
         assert actual['ok']['bytes'] == target.stat().st_size
-        assert not (difference := first_difference(content, canonical(target))), difference
+        assert design_content(target, True) == content
     else:
         assert not target.exists()
-    actual_wire = _wire(json.dumps(actual).encode()) if workbook else json.dumps(actual, sort_keys=True).encode()
+    actual_wire = (_wire(design_wire(json.dumps(actual).encode(), 'sheets')) if workbook
+                   else json.dumps(actual, sort_keys=True).encode())
     assert actual_wire == expected_wire
     assert _state(root) == expected_state
 
@@ -115,11 +117,12 @@ def test_exit_cli_wire_workbooks_database_and_zero_fallbacks(tmp_path, monkeypat
                 results.append((result.returncode, result.stdout, result.stderr, _state(root)))
             result = call('--machine', 'reports', 'export-exit-tax-xlsx', '--file', str(target), *flags, reference=reference)
             payload = json.loads(result.stdout)
-            content = canonical(target) if payload['kind'] != 'error' else None
+            content = design_content(target, not reference) if payload['kind'] != 'error' else None
             if payload['kind'] != 'error':
                 assert 'report_snapshot' not in payload['data']
                 assert payload['data']['bytes'] == target.stat().st_size
-            results.append((result.returncode, _wire(result.stdout), result.stderr, content, _state(root)))
+            results.append((result.returncode, _wire(design_wire(result.stdout, 'sheets')), result.stderr, content,
+                            _state(root)))
         return results
     assert sequence(False) == sequence(True)
     served = [json.loads(line) for line in Path(env['KASSIBER_HYBRID_LOG']).read_text().splitlines()]
@@ -160,8 +163,8 @@ def test_exit_daemon_wire_workbooks_database_and_zero_fallbacks(tmp_path, monkey
                 data = record['data']
                 assert data['filename'].startswith(f"kassiber-exit-tax-{data['departure_date']}-")
                 assert not re.search(r'[<>:"/\\|?*\x00-\x1f]', data['filename'])
-        return ([_wire(raw) for raw in records], _state(root),
-            {str(p.relative_to(exports)): canonical(p) for p in exports.rglob('*.xlsx')})
+        return ([_wire(design_wire(raw, 'sheets')) for raw in records], _state(root),
+            {str(p.relative_to(exports)): design_content(p, not reference) for p in exports.rglob('*.xlsx')})
     assert session(False) == session(True)
     served = [json.loads(line) for line in Path(env['KASSIBER_HYBRID_LOG']).read_text().splitlines()]
     assert served == [{'command': 'daemon', 'served_by': 'rust'}]
