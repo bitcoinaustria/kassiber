@@ -634,6 +634,12 @@ and R6-8.
 
 ### R6-5 AI tool executor, catalog and projections
 
+R6-5a is done on branch `t3code/r6-5a-ai-tools`; the
+[checkpoint](rust-shell.md#ai-tool-executor-and-read-tools-r6-5a) records its
+verification, the read tools still refused and what is left for R6-5b. On that
+branch the chain-analysis kinds are already native, so §2's chain-analysis row
+no longer blocks their read tools.
+
 Two runs:
 
 - **R6-5a:** the framework and the read tools.

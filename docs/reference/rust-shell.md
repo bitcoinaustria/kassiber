@@ -16897,3 +16897,152 @@ interaction check (R6-4); `mcp ...` is R6-8.
   call with its token; routing already sends `mcp call` through
   `route_brokered`. The MCP integration scenario then runs unskipped under
   the Rust broker switch.
+
+## AI tool executor and read tools (R6-5a)
+
+`t3code/r6-5a-ai-tools` starts at the r10b integration tip `809b168c6` and
+ports the framework of Python's in-product AI tool layer plus the read tools
+whose services are native, following the
+[R6 design](r6-ai-operator-port.md#r6-5-ai-tool-executor-catalog-and-projections).
+Nothing is registered for products yet: chat (R6-7) and MCP (R6-8) will drive
+the executor. Until then two test-harness kinds, `test.ai_tool` and
+`test.ai_auto_read`, run it. They are absent from release builds, from the
+desktop allowlists and from every AI catalog, as design §7 item 1 recommends.
+
+**`crates/ai` (`kassiber-ai`, `unsafe_code = "forbid"`).** It has no network
+client and starts no process.
+
+- **Catalog.** All 161 definitions (names, wire names, descriptions, schemas in
+  their literal key order, `kind_class`, `egresses`, daemon kinds, summary
+  templates) are embedded from `src/data/catalog.json`, which
+  `scripts/gen_catalog.py` writes from Python. The sets that gate behaviour stay
+  reviewed Rust constants (once-only consent, local custody kinds, refresh
+  tools, the sensitive key parts, the capability tables), and a drift test pins
+  them to the file.
+- **Selection.** Capability packs, the keyword rules, the review-checkpoint
+  continuation, the `core`/`scoped`/`full` profiles and the on-device strip.
+- **Validation.** The schema validator keeps Python's check order. `pattern` uses
+  `re.search` semantics through `kassiber-envelope`'s Python-pattern
+  translation, which now covers `\w` and `\Z`. The 65,536-character limit is
+  measured on the escaped compact JSON, and lengths count code points.
+- **Redaction.** `redact_tool_arguments` and `redact_ai_tool_result` reuse the
+  envelope's secret rules; the path scrub withholds the whole remainder.
+- **Consent and display.** `summarize_tool_call`, and the consent state machine:
+  once-only grants are downgraded and never remembered; waits time out at 300 s
+  or end on cancel.
+- **Executor.** The read executor, the auto-read planner and runner, context
+  trimming, provenance and the privacy receipt, and the embedded skill
+  references (allowlist only, never read from disk).
+- **Projections.** The evidence and source-of-funds key filters, the wallet
+  UTXO, profile, loan and capital-gains projections, the AI-safe egress
+  snapshot (pure; its tool stays refused), and the chain-analysis `ca-ref:`
+  projection.
+
+**Executor and host.** Gates run in Python's order: argument errors, the
+catalog and `kind_class`, the local-provider custody gate, the advertised set,
+the schema, then the read. `crates/daemon/src/ai_tools.rs` serves database work
+on the request loop against the open book (`_drain_daemon_main_thread_tasks`),
+checking first that the book is still the project and book frozen for the turn.
+Each read reaches the native family the desktop kind uses, without the desktop's
+pre-request maintenance. Additions to native code:
+
+- `Book::maintain_for_ai_read` returns the `ui.journals.process` payload and
+  skips report-read sync once the turn attempted it. With report-read sync on
+  and not yet attempted, it still refuses, because that sync is network work.
+- `transfers::execute_as` passes `authored_source = "ai_tool"` and applies the
+  AI conversion-review guard (design §2).
+- The handle registry gains `decode_ai_args` and `issue_ai_references`.
+  Revalidation reads the analysis index only for handles that resolved, as
+  Python does.
+
+**Reviewed differences.**
+
+- An egressing read (`ui.reports.lightning_profitability`,
+  `ui.connections.node.snapshot`) runs only with a consent bound to its call id
+  (`consented_call_ids`) and otherwise answers `consent_required` without
+  touching the book. Python leaves this to the chat loop. Both tools are refused
+  after consent too, because their routes are not native.
+- Rust's `test.ai_tool` opens a plaintext book lazily, as the daemon does. The
+  reference wrapper opens it the same way before calling Python's executor.
+
+**Python quirks kept.**
+
+- Journal refresh is decided by the name as called. Models use wire names, so
+  only the planner's dotted auto-reads ever refresh
+  (`tests/rust_port/repro_ai_refresh_wire_name.py`).
+- Design §7 item 10 (trailing-newline patterns, key-substring blanking,
+  ASCII-escaped length limits) and item 12 (unredacted consent summaries).
+
+**Read tools still refused.** 23 of the 100 read tools answer
+`not_implemented` before the book is touched, because their services or
+AI-only pieces are not native:
+
+- `ui.overview.snapshot`, `ui.workspace.health`, `ui.next_actions`,
+  `ui.report.blockers` and `ui.workspace.overview.snapshot` (workspace overview,
+  health and readiness);
+- `ui.journals.snapshot`, `.quarantine`, `.events.list` and `.transfers.list`;
+- `ui.review.cases`, `.request_input`, `.plan`, `ui.review.badges` and the
+  `ui.review.worklist` composite;
+- `ui.transactions.graph` and the `ui.transactions.review_context` composite;
+- `ui.audit.evidence.summary`;
+- `ui.wallets.identify` and `ui.wallets.analyze_file`;
+- `ui.reports.privacy_mirror` and the egress-ledger `ui.egress.snapshot`;
+- `ui.reports.lightning_profitability` (its aggregate-only projection) and
+  `ui.connections.node.snapshot` (the node route).
+
+The other 77 run natively. They include the 25 chain-analysis reads, which the
+design doc's §2 still listed as not native.
+
+**Evidence.**
+
+- **Python vectors.** `crates/ai/tests/python_vectors.rs` replays Python's
+  answers (`scripts/gen_vectors.py`, stable across `PYTHONHASHSEED`s 0, 1 and
+  12345) for capabilities, 710 selection cases, about 10,000 catalog-schema
+  validations plus synthetic schemas, redaction, consent summaries, call
+  parsing, the planner, context trimming at its exact limits, provenance and
+  the chain-analysis projection.
+- **Fences.** `crates/ai/tests/fences.rs` pins each privacy fence:
+  - only advertised tools run;
+  - egressing reads need bound consent;
+  - auto-reads skip egressing tools;
+  - once-only grants are never remembered;
+  - results are redacted before they leave;
+  - custody reads need a local provider, and on-device-only tools are neither
+    offered to nor run for other providers;
+  - there is no shell, filesystem, descriptor, secret or configuration tool;
+  - skill references come only from the allowlist.
+- **Executor parity.** `tests/test_rust_ai_tools.py` runs every read tool
+  through Python's `_execute_read_only_ai_tool` (via
+  `tests/rust_ai_tool_reference.py`) and through `test.ai_tool`. It covers each
+  argument case and executor state (remote, local, MCP-like, not advertised,
+  stale book and stale project) on separate copies of three fixture books
+  (empty, desktop, reports). About 240 records per book compare byte for byte,
+  envelope and model-visible bytes alike. Auto-read streams match on two books,
+  and a `ca-ref:` handle round trip resolves the same subject in both. The
+  declared mappings are `generated_at` clocks and per-session renaming of
+  `ca-ref:` handles and chain-analysis snapshot digests.
+- **No network traffic.** Every run uses `KASSIBER_TEST_NO_EGRESS=strict`, and
+  the whole Rust session repeats unchanged inside an empty network namespace
+  (`unshare --map-current-user --net`). The `kassiber-net` chokepoint scanner
+  covers the new crate, and its dependency edge is reviewed.
+- **Mutations.** `crates/ai/scripts/mutations.json`: 22 entries, all killed by
+  named tests.
+
+**Found outside this slice.** The native chain-analysis `snapshot_id` differs
+from Python's and between two Rust runs on the same book; it is stable within
+one session. The driver maps it like a handle. The native chain-analysis owner
+should make it deterministic.
+
+**Left for R6-5b.**
+
+- **Executor and previews.** The mutating executor (59 + 2 tools) with the
+  custody AI audit writer, and the consent previews (review apply, acquisition
+  and dataset previews).
+- **Projections.** The review worklist and transaction review composites, the
+  `ui.chain_analysis.ai_context` kind, the remaining `_for_ai` builders
+  (Lightning profitability, node snapshot, file analysis) and the
+  `ui.review.receipt` kind-override receipts end to end.
+- **AI-path parameters.** Metadata edits with `ai_tool`, `ui.wallets.sync` with
+  `strict=True, auto_pair_journals=False`, and the `ui.review.*` workflow.
+- **Chat dependencies.** Duplicate call ids and the chat-loop consent records
+  belong to R6-7.

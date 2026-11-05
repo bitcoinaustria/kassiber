@@ -4700,3 +4700,32 @@ desktop lease's intervals and conditional lock, and the CLI's broker choice,
 build binding, exit codes and mapping. The
 [checkpoint](../reference/rust-shell.md#operator-cli-brokered-routing-and-agent-access-r6-3)
 records the details and what R6-4 and R6-8 take on.
+
+### R6-5a AI tool executor and read tools (partial)
+
+`t3code/r6-5a-ai-tools` starts at the r10b integration tip `809b168c6`. It adds
+`crates/ai`, which holds:
+
+- the embedded 161-tool catalog, with a drift test against Python;
+- per-turn tool selection and the schema validator;
+- argument and result redaction and consent summaries;
+- the consent state machine;
+- the read executor;
+- the auto-read planner and context trimming;
+- provenance and the privacy receipt;
+- the embedded skill references and the read-side projections, including the
+  chain-analysis `ca-ref:` projection.
+
+The daemon serves the executor's database work on its request loop. Only the
+test-harness kinds `test.ai_tool` and `test.ai_auto_read` drive it until chat
+and MCP are registered (design §7 item 1). 77 of the 100 read tools run
+natively. The other 23 answer `not_implemented`, because their services are not
+native. Two of them egress, and those also need a consent bound to the call.
+
+A per-tool differential driver matches Python byte for byte on three fixture
+books. It also runs inside an empty network namespace. 22 mutation entries are
+killed by named tests. See the
+[checkpoint](../reference/rust-shell.md#ai-tool-executor-and-read-tools-r6-5a)
+for the refused tools, the reviewed differences, one Python quirk kept with a
+repro, and the R6-5b remainder. No new external dependency and no Python
+product change.

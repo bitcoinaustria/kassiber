@@ -1151,6 +1151,21 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
 - [ ] R4-13 to R4-16: CLI and daemon commands, automatic pairing, the
   freshness journal job and the authority switch.
 
+## Rust backend R6 AI tools
+
+- [ ] R6-5b: port the mutating AI executor (61 tools) with the custody AI audit
+  writer, the consent previews (review apply, acquisition and dataset previews)
+  and the AI-path parameters on native routes (metadata `ai_tool` source,
+  `ui.wallets.sync` strict mode, the review workflow). See the
+  [R6-5a checkpoint](docs/reference/rust-shell.md#ai-tool-executor-and-read-tools-r6-5a).
+- [ ] Port the remaining read-side projections: the review worklist and
+  transaction review composites, `ui.chain_analysis.ai_context`, and the
+  Lightning, node-snapshot and file-analysis `_for_ai` builders. Unrefuse each
+  read tool once its service is native (23 remain).
+- [ ] Make the native chain-analysis `snapshot_id` deterministic and equal to
+  Python's. It differs between Rust runs on the same book; the AI driver maps it
+  meanwhile.
+
 ## Rust backend R5 transfers and review
 
 The [partial checkpoint](docs/reference/rust-shell.md#transfers-and-review-classification-r5)
