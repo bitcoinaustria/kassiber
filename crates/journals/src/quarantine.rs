@@ -486,8 +486,7 @@ fn iso_utc(value: &str) -> Option<i64> {
 fn journal_freshness(conn: &Connection, profile_id: &str) -> Result<Py, AppError> {
     let marker = query(
         conn,
-        "SELECT p.last_processed_at, p.last_processed_tx_count,
-                   p.journal_input_version, p.last_processed_input_version,
+        "SELECT p.*,
                    (SELECT COUNT(*) FROM transactions t
                     WHERE t.profile_id = p.id AND t.excluded = 0)
                        AS active_transaction_count
@@ -505,11 +504,24 @@ fn journal_freshness(conn: &Connection, profile_id: &str) -> Result<Py, AppError
             let count = int_or_zero(row.get("last_processed_tx_count"))?;
             let input = int_or_zero(row.get("journal_input_version"))?;
             let done = int_or_zero(row.get("last_processed_input_version"))?;
+            // Canonical freshness: a profile row without both semantics
+            // columns is never current.
+            let semantics = if row.has("required_journal_semantics_version")
+                && row.has("journal_semantics_version")
+            {
+                let required = int_or_zero(row.get("required_journal_semantics_version"))?;
+                let built = int_or_zero(row.get("journal_semantics_version"))?;
+                let version =
+                    BigInt::from(kassiber_store::semantics::JOURNAL_CALCULATION_SEMANTICS_VERSION);
+                required == BigInt::from(0) || (built == version && built >= required)
+            } else {
+                false
+            };
             let status = if active == BigInt::from(0) {
                 "no_transactions"
             } else if !processed {
                 "not_processed"
-            } else if count != active || input != done {
+            } else if count != active || input != done || !semantics {
                 "stale"
             } else {
                 "current"
