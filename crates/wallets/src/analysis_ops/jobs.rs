@@ -79,6 +79,35 @@ pub fn import_token(
     )
 }
 
+/// The completed local validation an AI dataset import is bound to:
+/// `SOURCES.preview(scope_key(conn, profile), args["source_token"], recipe,
+/// args["expected_sha256"])` with Python's recipe
+/// `{"manifest": normalize_manifest(args["manifest"]), "format", "adapter"}`.
+/// Never reads the file again on this thread.
+pub fn remembered_preview(
+    conn: &Connection,
+    profile: &str,
+    runtime: &Runtime,
+    args: &Value,
+) -> Result<Value> {
+    let manifest =
+        crate::analysis_index::reads::preview::normalize_manifest(field(args, "manifest"))?;
+    let recipe = dict([
+        ("manifest", manifest),
+        ("format", get(args, "format").cloned().unwrap_or(s("csv"))),
+        (
+            "adapter",
+            get(args, "adapter").cloned().unwrap_or(s("generic")),
+        ),
+    ]);
+    runtime.preview(
+        &scope_key(conn, profile),
+        get(args, "source_token").unwrap_or(&Value::Null),
+        &recipe,
+        get(args, "expected_sha256").unwrap_or(&Value::Null),
+    )
+}
+
 /// `datasets.import.start` / `datasets.discard.start`: validate on the
 /// daemon thread, then admit one bounded worker and return its receipt.
 #[allow(clippy::too_many_arguments)]

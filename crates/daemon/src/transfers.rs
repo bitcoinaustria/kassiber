@@ -566,7 +566,7 @@ fn components(
                 None | Some(Value::Null) => true,
                 Some(activate) => kassiber_envelope::truthy(activate),
             };
-            ai_conversion_boundary(components, activate)?;
+            kassiber_ai::review::conversion_boundary(components, activate)?;
         }
     }
     book.resolve_scope(get(args, "workspace"), get(args, "profile"))?;
@@ -586,53 +586,6 @@ fn component_cap(kind: &str, args: &Value) -> Result<(), AppError> {
                 ("max_components", Value::Int(50.into())),
             ])));
         }
-    }
-    Ok(())
-}
-
-/// `_validate_ai_custody_conversion_boundary`: an AI-authored conversion
-/// component can neither attest its own review nor activate itself.
-fn ai_conversion_boundary(components: &[Value], activate: bool) -> Result<(), AppError> {
-    let conversions: Vec<usize> = components
-        .iter()
-        .enumerate()
-        .filter(|(_, component)| {
-            let mode = get(component, "conservation_mode")
-                .filter(|mode| kassiber_envelope::truthy(mode))
-                .map(kassiber_envelope::py_str)
-                .unwrap_or_else(|| "quantity".to_owned());
-            mode == "conversion"
-        })
-        .map(|(index, _)| index)
-        .collect();
-    if conversions.is_empty() {
-        return Ok(());
-    }
-    let indexes = |indexes: Vec<usize>| Value::List(indexes.into_iter().map(Value::from).collect());
-    let attested: Vec<usize> = conversions
-        .iter()
-        .copied()
-        .filter(|&index| get(&components[index], "conversion_reviewed") == Some(&Value::Bool(true)))
-        .collect();
-    if !attested.is_empty() {
-        return Err(AppError::new(
-            "interaction_required",
-            "AI-authored conversion components cannot attest their own review",
-        )
-        .with_hint(
-            "Create the conversion as a draft, then review and activate it in Custody Review.",
-        )
-        .with_details(dict([("component_indexes", indexes(attested))])));
-    }
-    if activate {
-        return Err(AppError::new(
-            "interaction_required",
-            "AI-authored conversion components require separate human review before activation",
-        )
-        .with_hint(
-            "Retry with activate=false, then review and activate the draft in Custody Review.",
-        )
-        .with_details(dict([("component_indexes", indexes(conversions))])));
     }
     Ok(())
 }

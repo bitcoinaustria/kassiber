@@ -288,3 +288,130 @@ fn chain_analysis_projection_matches_python() {
         assert_eq!(&projected, field(case, "projected"), "{case:?}");
     }
 }
+
+/// The Python `outcome()` record for a Rust result with a value; a Python
+/// exception other than `AppError` compares by its presence only.
+fn value_outcome(result: Result<Value, ToolError>, expected: &Value) -> Value {
+    match result {
+        Ok(value) => dict([("ok", value)]),
+        Err(ToolError::App(error)) => outcome(Err(ToolError::App(error))),
+        Err(_) if get(expected, "exception").is_some() => expected.clone(),
+        Err(other) => dict([("exception", s(format!("{other:?}")))]),
+    }
+}
+
+fn app(result: Result<(), AppError>) -> Result<(), ToolError> {
+    result.map_err(ToolError::App)
+}
+
+#[test]
+fn ai_review_operation_rules_match_python() {
+    use kassiber_ai::review::validate_operations;
+    for case in section("review_operations") {
+        let operations = field(case, "operations");
+        let operations = (!matches!(operations, Value::Null)).then_some(operations);
+        let have = outcome(app(validate_operations(operations)));
+        assert_eq!(&have, field(case, "outcome"), "{case:?}");
+    }
+}
+
+#[test]
+fn report_export_targets_match_python() {
+    use kassiber_ai::mutate::report_export_target;
+    for case in section("export_target") {
+        let expected = field(case, "outcome");
+        let have = value_outcome(
+            report_export_target(field(case, "arguments"))
+                .map(|(kind, args)| Value::List(vec![s(kind), args]))
+                .map_err(ToolError::App),
+            expected,
+        );
+        assert_eq!(&have, expected, "{case:?}");
+    }
+}
+
+#[test]
+fn strict_wallet_sync_arguments_match_python() {
+    use kassiber_ai::mutate::strict_wallets_sync_args;
+    for case in section("wallets_sync") {
+        let expected = field(case, "outcome");
+        let have = value_outcome(
+            strict_wallets_sync_args(field(case, "arguments")).map_err(ToolError::App),
+            expected,
+        );
+        assert_eq!(&have, expected, "{case:?}");
+    }
+}
+
+#[test]
+fn sync_failures_match_python() {
+    use kassiber_ai::executor::sync_payload_has_errors;
+    for case in section("sync_errors") {
+        let payload = field(case, "payload");
+        let payload = (!matches!(payload, Value::Null)).then_some(payload);
+        assert_eq!(
+            Value::Bool(sync_payload_has_errors(payload)),
+            *field(case, "errors"),
+            "{case:?}"
+        );
+    }
+}
+
+#[test]
+fn ai_egress_view_matches_python() {
+    use kassiber_ai::projections::egress_view;
+    for case in section("egress_view") {
+        let expected = field(case, "outcome");
+        let mut calls = Vec::new();
+        let ledger = field(case, "ledger").clone();
+        let have = value_outcome(
+            egress_view(field(case, "arguments"), &mut |after_id, limit| {
+                calls.push(Value::List(vec![Value::from(after_id), Value::from(limit)]));
+                Ok(ledger.clone())
+            }),
+            expected,
+        );
+        assert_eq!(&have, expected, "{case:?}");
+        assert_eq!(&Value::List(calls), field(case, "calls"), "{case:?}");
+    }
+}
+
+#[test]
+fn file_analysis_egress_matches_python() {
+    use kassiber_ai::file_analysis::redact_for_egress;
+    for case in section("file_egress") {
+        assert_eq!(
+            &redact_for_egress(field(case, "analysis")),
+            field(case, "redacted"),
+            "{case:?}"
+        );
+    }
+}
+
+#[test]
+fn ownership_results_for_ai_match_python() {
+    use kassiber_ai::projections::identify_result_for_ai;
+    for case in section("identify") {
+        assert_eq!(
+            &identify_result_for_ai(field(case, "item")),
+            field(case, "redacted"),
+            "{case:?}"
+        );
+    }
+}
+
+#[test]
+fn planned_review_artifact_checks_match_python() {
+    use kassiber_ai::review::check_planned_artifact;
+    for case in section("planned_artifact") {
+        let payload = field(case, "payload");
+        let expected = field(case, "outcome");
+        let have = value_outcome(
+            check_planned_artifact(payload)
+                .map(|()| payload.clone())
+                .map_err(ToolError::App),
+            expected,
+        );
+        assert_eq!(&have, expected, "{case:?}");
+    }
+}

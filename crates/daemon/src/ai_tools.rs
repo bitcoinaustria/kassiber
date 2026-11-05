@@ -9,6 +9,7 @@
 use std::path::Path;
 
 use kassiber_ai::executor::Book as AiBook;
+use kassiber_ai::executor::Maintenance;
 #[cfg(feature = "test-kinds")]
 use kassiber_ai::executor::ReadHost;
 use kassiber_ai::ToolError;
@@ -90,12 +91,17 @@ impl AiBook for HostBook<'_> {
         Ok((s(context.workspace_id), s(context.profile_id)))
     }
 
-    fn maintain_for_read(&mut self, sync_attempted: bool) -> Result<Option<Value>, ToolError> {
-        self.daemon
+    fn maintain_for_read(&mut self, sync_attempted: bool) -> Result<Maintenance, ToolError> {
+        let (auto_sync, journals) = self
+            .daemon
             .book_mut()
             .map_err(tool_error)?
             .maintain_for_ai_read(sync_attempted)
-            .map_err(tool_error)
+            .map_err(tool_error)?;
+        Ok(Maintenance {
+            auto_sync,
+            journals,
+        })
     }
 
     fn read(
@@ -105,6 +111,70 @@ impl AiBook for HostBook<'_> {
         authored_source: &'static str,
     ) -> Result<Value, ToolError> {
         native_read(self.daemon, kind, arguments, authored_source).map_err(tool_error)
+    }
+
+    fn report_blockers(&mut self, auto_sync: Option<&Value>) -> Result<Value, ToolError> {
+        self.daemon
+            .book_mut()
+            .map_err(tool_error)?
+            .report_blockers(auto_sync)
+            .map_err(tool_error)
+    }
+
+    fn analyze_file(&mut self, source_file: &str, arguments: &Value) -> Result<Value, ToolError> {
+        crate::onboarding::analyze_source(source_file, arguments).map_err(tool_error)
+    }
+
+    fn egress_ledger(&mut self, after_id: i64, limit: i64) -> Result<Value, ToolError> {
+        Ok(crate::diagnostics::ledger_counts(after_id, limit))
+    }
+
+    fn mutate(
+        &mut self,
+        kind: &str,
+        arguments: &Value,
+        authored_source: &'static str,
+    ) -> Result<Value, ToolError> {
+        native_mutate(self.daemon, kind, arguments, authored_source).map_err(tool_error)
+    }
+
+    fn maintenance_run(
+        &mut self,
+        arguments: &Value,
+        sync_attempted: bool,
+    ) -> Result<(Value, Option<Value>), ToolError> {
+        let book = self.daemon.book_mut().map_err(tool_error)?;
+        crate::settings::run_as(book.as_mut(), Some(arguments), sync_attempted).map_err(tool_error)
+    }
+
+    fn custody_assisted_write(
+        &mut self,
+        kind: &str,
+        arguments: &Value,
+        audit: &Value,
+    ) -> Result<Value, ToolError> {
+        let book = self.daemon.book_mut().map_err(tool_error)?;
+        book.custody_ai_write(audit, &mut |book| {
+            crate::transfers::execute_as(book, kind, Some(arguments), "ai_tool")
+        })
+        .map_err(tool_error)
+    }
+
+    fn dataset_preview(&mut self, arguments: &Value) -> Result<Value, ToolError> {
+        let runtime = std::sync::Arc::clone(&self.daemon.analysis);
+        let book = self.daemon.book_mut().map_err(tool_error)?;
+        book.chain_analysis_dataset_preview(arguments, &runtime)
+            .map_err(tool_error)
+    }
+
+    fn review_consent_preview(&mut self, arguments: &Value) -> Result<Value, ToolError> {
+        let book = self.daemon.book_mut().map_err(tool_error)?;
+        crate::review::consent_preview(book.as_mut(), arguments).map_err(tool_error)
+    }
+
+    fn append_custody_audit(&mut self, audit: &Value) -> Result<Value, ToolError> {
+        let book = self.daemon.book_mut().map_err(tool_error)?;
+        book.append_custody_ai_audit(audit).map_err(tool_error)
     }
 
     fn active_profile(&mut self) -> Result<String, ToolError> {
@@ -135,6 +205,122 @@ impl AiBook for HostBook<'_> {
     }
 }
 
+/// One native write for an AI call, through the route the desktop uses, with
+/// the AI-path parameters Python's `_execute_mutating_ai_tool` passes.
+fn native_mutate(
+    daemon: &mut Daemon,
+    kind: &str,
+    args: &Value,
+    source: &'static str,
+) -> Result<Value, AppError> {
+    match kind {
+        "ui.wallets.sync" => return ai_wallets_sync(daemon, args),
+        "ui.journals.process" => {
+            // `_journals_refresh_payload(conn, auto_pair=False)`.
+            if daemon.freshness_requests.running() {
+                return Err(crate::freshness::busy());
+            }
+            let book = daemon.book_mut()?;
+            let context = book.context()?;
+            let cancel = kassiber_wallets::scan::Cancellation::default();
+            let result = book.refresh_journals(&context, false, &cancel, &mut |_| Ok(()))?;
+            let payload = result.payload().clone();
+            result.after_reply()?;
+            return Ok(payload);
+        }
+        "ui.journals.quarantine.resolve" => {
+            return daemon.book_mut()?.journal_view_as(kind, Some(args), source);
+        }
+        "ui.maintenance.configure" => {
+            return crate::settings::execute(daemon.book_mut()?.as_mut(), kind, Some(args));
+        }
+        _ => {}
+    }
+    if crate::review::KINDS.contains(&kind) {
+        return crate::review::execute_as(daemon.book_mut()?.as_mut(), kind, Some(args), source);
+    }
+    if crate::transfers::KINDS.contains(&kind) {
+        return crate::transfers::execute_as(daemon.book_mut()?.as_mut(), kind, Some(args), source);
+    }
+    if crate::metadata::KINDS.contains(&kind) {
+        return crate::metadata::execute(daemon.book_mut()?.as_mut(), kind, Some(args));
+    }
+    if crate::loans::KINDS.contains(&kind) {
+        return crate::loans::execute(daemon.book_mut()?.as_mut(), kind, Some(args));
+    }
+    if crate::attachments::KINDS.contains(&kind) {
+        return crate::attachments::execute(daemon.book_mut()?.as_mut(), kind, Some(args));
+    }
+    if crate::documents::KINDS.contains(&kind) {
+        return crate::documents::execute(daemon.book_mut()?.as_mut(), kind, Some(args));
+    }
+    if crate::rates::KINDS.contains(&kind) {
+        return crate::rates::run(daemon.book_mut()?.as_mut(), kind, Some(args));
+    }
+    if crate::reports::KINDS.contains(&kind) {
+        return crate::reports::execute(daemon.book_mut()?.as_mut(), kind, Some(args));
+    }
+    if crate::chain_analysis_ops::DATASET_KINDS.contains(&kind) {
+        let runtime = std::sync::Arc::clone(&daemon.analysis);
+        return crate::chain_analysis_ops::execute_datasets(
+            daemon.book_mut()?.as_mut(),
+            &runtime,
+            kind,
+            Some(args),
+        );
+    }
+    if crate::chain_analysis_ops::KINDS.contains(&kind) {
+        return crate::chain_analysis_ops::execute(daemon.book_mut()?.as_mut(), kind, Some(args));
+    }
+    if crate::services::kinds().any(|served| served == kind) {
+        return crate::services::execute(daemon.book_mut()?.as_mut(), kind, Some(args));
+    }
+    Err(AppError::new(
+        "not_implemented",
+        format!("AI tool kind {kind} has no native write"),
+    ))
+}
+
+/// `_wallets_sync_payload(conn, runtime_config, args, strict=True,
+/// auto_pair_journals=False)` on the daemon's own connection: the consented
+/// refresh of the requested sources, then the journal step without automatic
+/// pairing. Books whose sources need Python's direct-sync path refuse.
+fn ai_wallets_sync(daemon: &mut Daemon, args: &Value) -> Result<Value, AppError> {
+    use kassiber_wallets::freshness::native::Consent;
+    if daemon.freshness_requests.running() {
+        return Err(crate::freshness::busy());
+    }
+    let book = daemon.book_mut()?;
+    let context = book.context()?;
+    if context.workspace_id.is_empty() || context.profile_id.is_empty() {
+        return Ok(kassiber_envelope::dict([("results", Value::List(vec![]))]));
+    }
+    let id = crate::output::RequestId::Value(s("ai_tool"));
+    let mut invocation = crate::freshness::product::parse("ui.wallets.sync", args, &id)?;
+    invocation.request.auto_pair = false;
+    // As the desktop route's admission does, any source the native plan
+    // cannot take (an unsupported source, a malformed wallet configuration)
+    // needs Python's direct-sync path.
+    let plan = book.freshness_plan(&invocation.request).ok();
+    let Some(plan) = plan.filter(|plan| plan.supports_wallets_sync()) else {
+        return Err(AppError::new(
+            "not_implemented",
+            "AI wallet sync of these sources is not implemented in the Rust backend yet (direct-sync reference path)",
+        ));
+    };
+    let consent = Consent::explicit_trigger(&plan);
+    let cancel = kassiber_wallets::scan::Cancellation::default();
+    let payload = book.freshness_execute(
+        plan,
+        &invocation.options,
+        Some(&consent),
+        &cancel,
+        &mut |_| Ok(()),
+    );
+    consent.revoke();
+    payload
+}
+
 /// One native read kind, routed as `Daemon::handle` routes it, for a book
 /// that is already open.
 fn native_read(
@@ -143,6 +329,7 @@ fn native_read(
     args: &Value,
     source: &'static str,
 ) -> Result<Value, AppError> {
+    let raw = args;
     let args = Some(args);
     if kind == "status" {
         // `_status_payload_from_parts`: the desktop's project fields are not
@@ -169,11 +356,36 @@ fn native_read(
     if crate::reports::KINDS.contains(&kind) {
         return crate::reports::execute(daemon.book_mut()?.as_mut(), kind, args);
     }
+    if kind == crate::transactions::GRAPH_KIND {
+        return crate::transactions::execute(daemon.book_mut()?.as_mut(), kind, args);
+    }
+    if crate::workspace_reads::handles(kind) && kind != crate::workspace_reads::ONBOARDING_KIND {
+        return crate::workspace_reads::execute(daemon.book_mut()?.as_mut(), kind, args);
+    }
+    if crate::journals::KINDS.contains(&kind) && kind != "ui.journals.quarantine.resolve" {
+        return crate::journals::execute(daemon.book_mut()?.as_mut(), kind, args);
+    }
+    if kind == crate::review_context::KIND {
+        return crate::review_context::execute(daemon.book_mut()?.as_mut(), args);
+    }
+    if kind == crate::worklist::KIND {
+        return crate::worklist::execute(daemon.book_mut()?.as_mut(), raw);
+    }
+    if kind == "ui.audit.evidence.summary" {
+        return daemon.book_mut()?.evidence_summary(raw);
+    }
+    if kind == "ui.wallets.identify" {
+        return daemon.book_mut()?.service(kind, raw);
+    }
+    if kind == "reports.privacy-mirror" {
+        // The CLI's redacted audience (`report_privacy_mirror(redacted=True)`).
+        return daemon.book_mut()?.reports(kind, raw);
+    }
     if crate::metadata::KINDS.contains(&kind) {
         return crate::metadata::execute(daemon.book_mut()?.as_mut(), kind, args);
     }
     if crate::review::KINDS.contains(&kind) {
-        return crate::review::execute(daemon.book_mut()?.as_mut(), kind, args);
+        return crate::review::execute_as(daemon.book_mut()?.as_mut(), kind, args, source);
     }
     if crate::transfers::KINDS.contains(&kind) {
         return crate::transfers::execute_as(daemon.book_mut()?.as_mut(), kind, args, source);

@@ -445,10 +445,21 @@ pub trait Book: Send {
     fn report_blockers(&mut self, _auto_sync: Option<&Value>) -> Result<Value, AppError> {
         Err(not_implemented("reports", "report blockers"))
     }
-    /// The same for an AI read (`_auto_maintain_for_read` with the turn's
-    /// state): the `ui.journals.process` payload when journals were rebuilt.
-    fn maintain_for_ai_read(&mut self, _sync_attempted: bool) -> Result<Option<Value>, AppError> {
-        Ok(None)
+    /// `_auto_maintain_for_read` with an AI turn's state: the automatic
+    /// wallet refresh payload (skipped once the turn attempted it, as in
+    /// Python) and the `ui.journals.process` payload when journals were
+    /// rebuilt.
+    fn maintain_for_ai_read(
+        &mut self,
+        sync_attempted: bool,
+    ) -> Result<(Option<Value>, Option<Value>), AppError> {
+        let auto_sync = if sync_attempted {
+            None
+        } else {
+            self.report_read_sync(false)?
+        };
+        let journals = self.auto_process_journals()?;
+        Ok((auto_sync, journals))
     }
     /// `ui.transactions.dashboard` over the caller's suggestion candidates.
     fn transaction_dashboard(
@@ -475,6 +486,43 @@ pub trait Book: Send {
     /// Desktop journal reads over the active book (`ui.journals.*` views).
     fn journal_view(&mut self, kind: &str, _args: Option<&Value>) -> Result<Value, AppError> {
         Err(not_implemented("journals", kind))
+    }
+    /// The same with the authored source of `ui.journals.quarantine.resolve`
+    /// (`default_source`: `"gui"` for the desktop, `"ai_tool"` for the AI).
+    fn journal_view_as(
+        &mut self,
+        kind: &str,
+        args: Option<&Value>,
+        _source: &str,
+    ) -> Result<Value, AppError> {
+        self.journal_view(kind, args)
+    }
+    /// A consented custody write for the AI (`_execute_mutating_ai_tool`'s
+    /// custody branch): `write` runs inside `SAVEPOINT
+    /// custody_ai_assisted_write`, and its result is committed together with
+    /// the `executed` audit row `audit` describes. On failure the write is
+    /// rolled back and a `failed` row (with the error code) is committed.
+    fn custody_ai_write(
+        &mut self,
+        _audit: &Value,
+        _write: &mut dyn FnMut(&mut dyn Book) -> Result<Value, AppError>,
+    ) -> Result<Value, AppError> {
+        Err(not_implemented("custody", "AI-assisted custody writes"))
+    }
+    /// The completed local dataset preview an AI import is bound to
+    /// (`SOURCES.preview` over Python's normalized recipe), for the active book.
+    fn chain_analysis_dataset_preview(
+        &mut self,
+        _args: &Value,
+        _runtime: &std::sync::Arc<kassiber_wallets::analysis_index::runtime::Runtime>,
+    ) -> Result<Value, AppError> {
+        Err(not_implemented("chain_analysis", "dataset previews"))
+    }
+    /// `core_custody_ai_audit.append_assistance_record(conn, **audit)` then
+    /// `conn.commit()`: a custody proposal that was denied, timed out or
+    /// cancelled.
+    fn append_custody_ai_audit(&mut self, _audit: &Value) -> Result<Value, AppError> {
+        Err(not_implemented("custody", "the custody AI audit"))
     }
     /// Local stored transfer/review services. No journal or network fallback.
     fn transfers(&mut self, operation: &str, _args: &Value) -> Result<Value, AppError> {

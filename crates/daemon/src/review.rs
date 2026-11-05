@@ -38,6 +38,19 @@ fn fields(kind: &str) -> (&'static [&'static str], &'static [&'static str]) {
 }
 
 pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<Value, AppError> {
+    execute_as(book, kind, args, "gui")
+}
+
+/// `_review_workflow_payload(..., authored_source=...)`. An `ai_tool` call
+/// stores a redacted explanation, may only plan or apply operations within
+/// the AI's own authority, and gets a plan back only if it can be sent to the
+/// provider unchanged.
+pub fn execute_as(
+    book: &mut dyn Book,
+    kind: &str,
+    args: Option<&Value>,
+    source: &str,
+) -> Result<Value, AppError> {
     let empty = dict::<&str>([]);
     let args = args.filter(|v| !matches!(v, Value::Null)).unwrap_or(&empty);
     let Value::Dict(entries) = args else {
@@ -62,7 +75,92 @@ pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<
         ));
     }
     let operation = format!("review.{}", kind.trim_start_matches("ui.review."));
-    book.review(&operation, args, "gui")
+    if source != "ai_tool" {
+        return book.review(&operation, args, source);
+    }
+    book.resolve_scope(None, None)?;
+    match kind {
+        "ui.review.cases" => book.review(&operation, args, source),
+        "ui.review.request_input" => book.review(
+            &operation,
+            &kassiber_ai::redact::redact_ai_tool_result(args),
+            source,
+        ),
+        "ui.review.receipt" => {
+            let receipt = book.review(&operation, args, source)?;
+            let overrides = matches!(
+                kassiber_envelope::get(&receipt, "proposed_operations"),
+                Some(Value::List(operations)) if operations.iter().any(|operation| {
+                    kassiber_envelope::get(operation, "type") == Some(&s("kind_override"))
+                })
+            );
+            if overrides {
+                return Err(AppError::new(
+                    "interaction_required",
+                    "Acquisition effect receipts are local desktop/CLI only",
+                ));
+            }
+            Ok(receipt)
+        }
+        _ => {
+            kassiber_ai::review::validate_operations(kassiber_ai::review::operations(args))?;
+            let payload = book.review(&operation, args, source)?;
+            if kind == "ui.review.plan" {
+                kassiber_ai::review::check_planned_artifact(&payload)?;
+            }
+            Ok(payload)
+        }
+    }
+}
+
+/// `_ai_review_consent_preview`'s scoped body: the accounting effects shown
+/// before an AI `ui.review.apply` are recomputed here, never taken from the
+/// model's artifact. A receipt under the same idempotency key reads as
+/// already applied.
+pub fn consent_preview(book: &mut dyn Book, arguments: &Value) -> Result<Value, AppError> {
+    use kassiber_envelope::{get, truthy};
+    let artifact = match get(arguments, "artifact") {
+        Some(artifact @ Value::Dict(_)) => artifact.clone(),
+        _ => return Err(AppError::new("validation", "Review artifact is required")),
+    };
+    kassiber_ai::review::validate_operations(get(&artifact, "operations"))?;
+    book.resolve_scope(None, None)?;
+    if let Some(key) = get(arguments, "idempotency_key").filter(|key| truthy(key)) {
+        match book.review(
+            "review.receipt",
+            &dict([("idempotency_key", key.clone())]),
+            "ai_tool",
+        ) {
+            Err(error) if error.code == "not_found" => {}
+            Err(error) => return Err(error),
+            Ok(receipt) => {
+                if get(&receipt, "artifact_digest")
+                    != get(&artifact, "digest").or(Some(&Value::Null))
+                {
+                    return Err(AppError::new(
+                        "review_idempotency_conflict",
+                        "Idempotency key belongs to another plan",
+                    ));
+                }
+                return Ok(dict([("status", s("applied")), ("receipt", receipt)]));
+            }
+        }
+    }
+    let validated = book.review(
+        "review.validate",
+        &dict([("artifact", artifact)]),
+        "ai_tool",
+    )?;
+    if !kassiber_ai::validate::py_eq(
+        &kassiber_ai::redact::redact_ai_tool_result(&validated),
+        &validated,
+    ) {
+        return Err(AppError::new(
+            "interaction_required",
+            "Review artifact requires local review",
+        ));
+    }
+    Ok(dict([("status", s("ready")), ("artifact", validated)]))
 }
 
 #[cfg(test)]

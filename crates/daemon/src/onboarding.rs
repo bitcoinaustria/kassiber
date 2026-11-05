@@ -437,6 +437,18 @@ fn sample_rows(args: &Value) -> Result<usize, AppError> {
     })
 }
 
+/// `core_file_analysis.analyze_file(source_file, column_map=_column_map_arg(args),
+/// sample_rows=_analyze_sample_rows_arg(args))` for a file the daemon already
+/// holds (the AI chat's staged attachment); the caller checked `column_map`.
+pub(crate) fn analyze_source(source: &str, args: &Value) -> Result<Value, AppError> {
+    let rows = sample_rows(args)?;
+    let mapping = match get(args, "column_map") {
+        Some(map @ Value::Dict(_)) => Some(ledger::ColumnMap::from_python(map)?),
+        _ => None,
+    };
+    analysis::analyze(source, mapping.as_ref(), rows)
+}
+
 /// `_analyze_file_payload`: a staged token or uploaded bytes, never a path.
 fn analyze_file(daemon: &mut Daemon, args: &Value) -> Result<Value, AppError> {
     let token = optional_string(args, "token")?;

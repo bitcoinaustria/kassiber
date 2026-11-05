@@ -32,6 +32,17 @@ pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<
 /// request), the local journal rebuild when stale, then the report blockers
 /// and maintenance settings. Arguments are refused before any of it runs.
 pub fn run(book: &mut dyn Book, args: Option<&Value>) -> Result<Value, AppError> {
+    run_as(book, args, false).map(|(payload, _)| payload)
+}
+
+/// `_maintenance_run_payload(..., state=...)`: the payload and the automatic
+/// refresh it attempted. Once a chat turn attempted one (`sync_attempted`),
+/// `if_enabled` skips it as Python's turn state does; `always` still runs.
+pub fn run_as(
+    book: &mut dyn Book,
+    args: Option<&Value>,
+    sync_attempted: bool,
+) -> Result<(Value, Option<Value>), AppError> {
     let args = match args {
         None | Some(Value::Null) => dict::<&str>([]),
         Some(v @ Value::Dict(_)) => v.clone(),
@@ -83,6 +94,7 @@ pub fn run(book: &mut dyn Book, args: Option<&Value>) -> Result<Value, AppError>
     };
     let mut maintenance = dict::<&str>([]);
     let sync = match force {
+        Some(false) if sync_attempted => None,
         Some(force) => book.report_read_sync(force)?,
         None => None,
     };
@@ -103,12 +115,15 @@ pub fn run(book: &mut dyn Book, args: Option<&Value>) -> Result<Value, AppError>
     let blockers = book.report_blockers(sync.as_ref())?;
     let settings = book.service("ui.maintenance.settings", &dict::<&str>([]))?;
     let field = |value: &Value, key: &str| get(value, key).cloned().unwrap_or(Value::Null);
-    Ok(dict([
-        ("ready", field(&blockers, "ready")),
-        ("sync_mode", mode),
-        ("maintenance", maintenance),
-        ("blockers", field(&blockers, "blockers")),
-        ("health", field(&blockers, "health")),
-        ("settings", field(&settings, "settings")),
-    ]))
+    Ok((
+        dict([
+            ("ready", field(&blockers, "ready")),
+            ("sync_mode", mode),
+            ("maintenance", maintenance),
+            ("blockers", field(&blockers, "blockers")),
+            ("health", field(&blockers, "health")),
+            ("settings", field(&settings, "settings")),
+        ]),
+        sync,
+    ))
 }

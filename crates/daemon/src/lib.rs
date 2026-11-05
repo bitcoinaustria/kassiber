@@ -49,6 +49,7 @@ mod test_kinds;
 mod transactions;
 mod transfers;
 mod wallets;
+mod worklist;
 mod workspace_reads;
 
 use std::io::{Read, Write};

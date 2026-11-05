@@ -4,6 +4,7 @@ mod component_review;
 mod component_rows;
 mod component_store;
 mod coverage;
+pub mod custody_ai_audit;
 mod dismissals;
 mod gap_candidates;
 mod gap_review;

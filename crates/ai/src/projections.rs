@@ -17,8 +17,12 @@ use crate::validate::py_eq;
 use crate::ToolError;
 
 /// Tools whose Python builder takes no arguments: the native read gets none.
-const ARGUMENTLESS: [&str; 9] = [
+const ARGUMENTLESS: [&str; 13] = [
     "status",
+    "ui.overview.snapshot",
+    "ui.workspace.health",
+    "ui.next_actions",
+    "ui.journals.snapshot",
     "ui.wallets.list",
     "ui.backends.list",
     "ui.profiles.snapshot",
@@ -182,6 +186,128 @@ pub fn wallet_utxos_for_ai(payload: Value) -> Value {
     let mut payload = payload;
     set(&mut payload, "utxos", Value::List(rows));
     payload
+}
+
+/// `core_ownership.redact_result_for_ai(item)`: the ownership verdict, without
+/// scripts, derivation paths or address indexes.
+pub fn identify_result_for_ai(item: &Value) -> Value {
+    let field = |key: &str| get(item, key).cloned();
+    let text_or = |key: &str, default: &str| field(key).unwrap_or_else(|| s(default));
+    let kind = match get(item, "type") {
+        Some(value) if kassiber_envelope::truthy(value) => kassiber_envelope::py_str(value),
+        _ => String::new(),
+    };
+    let shown_input = match kind.as_str() {
+        "extended_public_key" => s("extended public key (not shown)"),
+        "lightning_invoice" => s("Lightning invoice (not shown)"),
+        _ => text_or("input", ""),
+    };
+    let mut redacted = vec![
+        (Key::from("input"), shown_input),
+        (Key::from("type"), text_or("type", "")),
+        (Key::from("chain"), text_or("chain", "")),
+        (Key::from("status"), text_or("status", "")),
+        (Key::from("classification"), text_or("classification", "")),
+        (
+            Key::from("ownership_ambiguous"),
+            Value::Bool(get(item, "ownership_ambiguous").is_some_and(kassiber_envelope::truthy)),
+        ),
+        (Key::from("note"), text_or("note", "")),
+    ];
+    let mut wallets: Vec<Value> = Vec::new();
+    match (get(item, "matches"), get(item, "wallets")) {
+        (Some(matches), _) if kassiber_envelope::truthy(matches) => {
+            let mut names: Vec<Value> = Vec::new();
+            if let Value::List(matches) = matches {
+                for found in matches {
+                    if let Some(wallet) =
+                        get(found, "wallet").filter(|w| kassiber_envelope::truthy(w))
+                    {
+                        if !names.iter().any(|name| py_eq(name, wallet)) {
+                            names.push(wallet.clone());
+                        }
+                    }
+                }
+            }
+            names.sort_by(|a, b| match (a, b) {
+                (Value::Str(a), Value::Str(b)) => a.cmp(b),
+                _ => std::cmp::Ordering::Equal,
+            });
+            wallets = names;
+        }
+        (_, Some(listed)) if kassiber_envelope::truthy(listed) => {
+            if let Value::List(listed) = listed {
+                wallets = listed
+                    .iter()
+                    .filter(|wallet| kassiber_envelope::truthy(wallet))
+                    .cloned()
+                    .collect();
+            }
+        }
+        _ => {}
+    }
+    if !wallets.is_empty() {
+        redacted.push((Key::from("wallets"), Value::List(wallets.clone())));
+    }
+    if get(item, "classification") == Some(&s("owned_address")) {
+        let owners = wallets
+            .iter()
+            .map(|wallet| format!("'{}'", kassiber_envelope::py_str(wallet)))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let owners = if owners.is_empty() {
+            "a wallet in this profile".to_owned()
+        } else {
+            owners
+        };
+        set_pair(&mut redacted, "note", s(format!("Owned by {owners}.")));
+    }
+    for key in [
+        "owned_inputs",
+        "owned_outputs",
+        "external_outputs",
+        "match_source",
+    ] {
+        if let Some(value) = get(item, key).filter(|value| !matches!(value, Value::Null)) {
+            redacted.push((Key::from(key), value.clone()));
+        }
+    }
+    Value::Dict(redacted)
+}
+
+fn set_pair(pairs: &mut [(Key, Value)], key: &str, value: Value) {
+    if let Some((_, slot)) = pairs.iter_mut().find(|(name, _)| *name == Key::from(key)) {
+        *slot = value;
+    }
+}
+
+/// `build_wallet_identify_snapshot_for_ai`: never a bulk CSV harvest, and
+/// every result reduced to its ownership verdict.
+fn wallet_identify_for_ai(arguments: &Value, book: &mut dyn Book) -> Result<Value, ToolError> {
+    let arguments = match arguments {
+        Value::Dict(pairs) => Value::Dict(
+            pairs
+                .iter()
+                .filter(|(key, _)| *key != Key::from("csv_text"))
+                .cloned()
+                .collect(),
+        ),
+        other => other.clone(),
+    };
+    let mut payload = book.read("ui.wallets.identify", &arguments, "gui")?;
+    let results = match get(&payload, "results") {
+        Some(Value::List(rows)) => rows
+            .iter()
+            .filter(|row| matches!(row, Value::Dict(_)))
+            .map(identify_result_for_ai)
+            .collect(),
+        // `payload.get("results", [])` on a missing key.
+        None => Vec::new(),
+        // Iterating anything else is a Python TypeError.
+        Some(_) => return Err(ToolError::Unexpected),
+    };
+    set(&mut payload, "results", Value::List(results));
+    Ok(payload)
 }
 
 /// `_profiles_snapshot_for_ai`'s checks before the snapshot is read.
@@ -409,6 +535,7 @@ pub fn read_for_ai(
     kind: &str,
     arguments: &Value,
     state: &Value,
+    auto_sync: Option<&Value>,
     book: &mut dyn Book,
 ) -> Result<Value, ToolError> {
     let name = entry.name.as_str();
@@ -427,6 +554,101 @@ pub fn read_for_ai(
         };
     }
     match name {
+        "ui.workspace.overview.snapshot" => {
+            if get(state, "cross_book_read_allowed") == Some(&Value::Bool(false)) {
+                return Err(AppError::new(
+                    "validation",
+                    "A book-set overview requires an explicit all-books request",
+                )
+                .into());
+            }
+            let requested = match get(arguments, "workspace_id") {
+                Some(Value::Str(text)) => Some(kassiber_pytext::strip_py(text)),
+                _ => None,
+            };
+            let outside = match (&requested, get(state, "scope_workspace_id")) {
+                (None, _) => true,
+                (Some(requested), _) if requested.code_points().next().is_none() => true,
+                (Some(requested), Some(Value::Str(frozen))) => requested != frozen,
+                _ => false,
+            };
+            if outside {
+                return Err(AppError::new(
+                    "validation",
+                    "The AI book-set overview is limited to the chat's original workspace",
+                )
+                .into());
+            }
+            let requested = requested.expect("checked above");
+            book.read(
+                kind,
+                &dict([("workspace_id", Value::Str(requested))]),
+                "gui",
+            )
+        }
+        "ui.report.blockers" => book.report_blockers(auto_sync),
+        "ui.review.badges" => {
+            if matches!(arguments, Value::Dict(pairs) if !pairs.is_empty()) {
+                return Err(AppError::new(
+                    "validation",
+                    "ui.review.badges does not accept arguments",
+                )
+                .into());
+            }
+            book.read(kind, &empty, "gui")
+        }
+        "ui.transactions.graph" => {
+            refuse_unknown(arguments, &["transaction"], "AI transaction graph")?;
+            let transaction = match get(arguments, "transaction") {
+                Some(Value::Str(text)) => kassiber_pytext::strip_py(text),
+                _ => PyStr::new(),
+            };
+            if transaction.code_points().next().is_none() {
+                return Err(AppError::new(
+                    "validation",
+                    "ui.transactions.graph requires args.transaction",
+                )
+                .into());
+            }
+            book.read(
+                kind,
+                &dict([("transaction", Value::Str(transaction))]),
+                "gui",
+            )
+        }
+        "ui.audit.evidence.summary" => {
+            Ok(redact_evidence_for_ai(&book.read(kind, arguments, "gui")?))
+        }
+        "ui.wallets.identify" => wallet_identify_for_ai(arguments, book),
+        "ui.wallets.analyze_file" => {
+            crate::file_analysis::analyze_attached_file(arguments, state, book)
+        }
+        "ui.reports.privacy_mirror" => {
+            let unknown = unknown_fields(arguments, &[]);
+            if !unknown.is_empty() {
+                return Err(AppError::new(
+                    "validation",
+                    "ui.reports.privacy_mirror received unsupported arguments",
+                )
+                .with_details(dict([("unknown", Value::List(unknown))]))
+                .into());
+            }
+            // `report_privacy_mirror(..., redacted=True)`: the CLI's audience.
+            book.read("reports.privacy-mirror", &empty, "gui")
+        }
+        "ui.egress.snapshot" => egress_view(arguments, &mut |after_id, limit| {
+            book.egress_ledger(after_id, limit)
+        }),
+        "ui.reports.lightning_profitability" => {
+            // `report.to_ai_envelope_payload()`: the routing aggregate only,
+            // never the connection block or per-channel peer rows.
+            let payload = book.read(kind, arguments, "gui")?;
+            let field = |key: &str| get(&payload, key).cloned().ok_or(ToolError::Unexpected);
+            Ok(dict([
+                ("windowLabel", field("windowLabel")?),
+                ("summary", field("summary")?),
+            ]))
+        }
         "ui.wallets.utxos" => Ok(wallet_utxos_for_ai(book.read(kind, arguments, "gui")?)),
         "ui.transactions.history" => {
             refuse_unknown(arguments, &HISTORY_FIELDS, "ui.transactions.history")?;
@@ -468,22 +690,12 @@ pub fn read_for_ai(
             )?;
             loans_for_ai(book.read(kind, &empty, "gui")?, limit)
         }
-        "ui.review.receipt" => {
-            let receipt = book.read(kind, arguments, "ai_tool")?;
-            let overrides = match get(&receipt, "proposed_operations") {
-                Some(Value::List(operations)) => operations
-                    .iter()
-                    .any(|operation| matches!(get(operation, "type"), Some(Value::Str(t)) if t.is("kind_override"))),
-                _ => false,
-            };
-            if overrides {
-                return Err(AppError::new(
-                    "interaction_required",
-                    "Acquisition effect receipts are local desktop/CLI only",
-                )
-                .into());
-            }
-            Ok(receipt)
+        // `_review_workflow_payload(..., authored_source="ai_tool")`: the
+        // native route applies the AI rules (redacted explanations, the
+        // operation authority checks, plans that must reach the provider
+        // unchanged, no acquisition-effect receipts).
+        "ui.review.cases" | "ui.review.request_input" | "ui.review.plan" | "ui.review.receipt" => {
+            book.read(kind, arguments, "ai_tool")
         }
         _ if kind.starts_with("ui.chain_analysis.") => {
             chain_analysis_for_ai(kind, arguments, state, book)
@@ -546,7 +758,7 @@ pub fn read_for_ai(
 /// providers get the curated result; any other provider gets the
 /// `ca-ref:` projection, and errors without their details, because a
 /// saved-query failure can carry public subjects.
-fn chain_analysis_for_ai(
+pub(crate) fn chain_analysis_for_ai(
     kind: &str,
     arguments: &Value,
     state: &Value,
@@ -563,6 +775,13 @@ fn chain_analysis_for_ai(
     }
     let result = (|| {
         let decoded = book.decode_analysis_references(&profile, arguments)?;
+        if matches!(
+            kind,
+            "ui.chain_analysis.datasets.import" | "ui.chain_analysis.datasets.import.start"
+        ) {
+            // Consent was bound to this exact local validation.
+            book.dataset_preview(&decoded)?;
+        }
         if kind.starts_with("ui.chain_analysis.datasets.") && kind.ends_with(".start") {
             // Background dataset work needs the chat's job starter, which
             // this executor state never carries.
@@ -591,6 +810,28 @@ fn chain_analysis_for_ai(
     crate::analysis::project_ai_result(&result, &mut |value| {
         book.issue_analysis_reference(&profile, value)
     })
+}
+
+/// `_ai_safe_egress_snapshot(args)`: the argument checks, then the counts
+/// over `ledger(after_id, limit)`.
+pub fn egress_view(
+    arguments: &Value,
+    ledger: &mut dyn FnMut(i64, i64) -> Result<Value, ToolError>,
+) -> Result<Value, ToolError> {
+    refuse_unknown(arguments, &["after_id", "limit"], "ui.egress.snapshot")?;
+    let after_id = match get(arguments, "after_id") {
+        Some(raw) if kassiber_envelope::truthy(raw) => {
+            coerce_positive_int(raw, "after_id", i64::MAX)?
+        }
+        _ => 0,
+    };
+    let limit = coerce_positive_int(
+        get(arguments, "limit").unwrap_or(&Value::from(100)),
+        "limit",
+        500,
+    )?;
+    let snapshot = ledger(after_id, limit)?;
+    Ok(ai_safe_egress_snapshot(after_id, &snapshot))
 }
 
 /// `_ai_safe_egress_snapshot(args)` over a ledger snapshot

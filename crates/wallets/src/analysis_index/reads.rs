@@ -40,6 +40,7 @@ pub const OPERATIONS: &[&str] = &[
     "internal.stage",
     "datasets.preview",
     "datasets.preview.start",
+    "ai_context",
 ];
 
 /// Caller-supplied local inputs. File bytes come from the CLI; the runtime
@@ -251,6 +252,7 @@ pub fn execute_local(
     remove(&mut args, "expected_scope");
     match operation {
         "query" => query(conn, profile, &args, sources),
+        "ai_context" => ai_context(conn, profile, &args, sources),
         "entropy" => entropy(conn, profile, &args, sources, None),
         "entropy.start" => entropy(conn, profile, &args, sources, Some(local)),
         "jobs.get" | "jobs.cancel" => {
@@ -306,6 +308,51 @@ fn query(
         engine::views::with_read(conn, profile, text(&query, "observer"), |view| {
             engine::mirror::analyze_snapshot(view, &query)
         })
+    })
+}
+
+/// `ai_context` before its projection: the investigation the desktop hands
+/// the assistant, bound to the snapshot the user was looking at, and the
+/// subject only once it resolves in that snapshot. The caller projects the
+/// result to `ca-ref:` handles (`project_ai_result`).
+fn ai_context(
+    conn: &Connection,
+    profile: &str,
+    args: &Value,
+    sources: &mut dyn Sources,
+) -> Result<Value> {
+    arguments(
+        args,
+        &["query", "subject", "expected_snapshot_id"],
+        &["query", "expected_snapshot_id"],
+    )?;
+    atomic(conn, || {
+        let result = query(conn, profile, field(args, "query"), sources)?;
+        if !equivalent(
+            field(&result, "snapshot_id"),
+            field(args, "expected_snapshot_id"),
+        ) {
+            return Err(AppError::new(
+                "chain_analysis_stale",
+                "Investigation changed; refresh before opening assistant context",
+            )
+            .retryable(true));
+        }
+        let mut context = dict([
+            ("query", field(&result, "query").clone()),
+            ("snapshot_id", field(&result, "snapshot_id").clone()),
+        ]);
+        let subject = field(args, "subject");
+        if truthy(subject) {
+            text_value(subject, "subject", 1024)?;
+            let query = field(&result, "query");
+            let subject_text = subject.as_str().unwrap_or_default();
+            engine::views::with_read(conn, profile, text(query, "observer"), |view| {
+                engine::traversal::resolve_read(view, subject_text, query)
+            })?;
+            set(&mut context, "subject", subject.clone());
+        }
+        Ok(context)
     })
 }
 

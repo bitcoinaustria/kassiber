@@ -15,7 +15,7 @@ use crate::input::Input;
 use crate::output::{with_request_id, RequestId};
 use crate::{Daemon, Failure, Handled};
 
-pub const KINDS: [&str; 19] = [
+pub const KINDS: [&str; 21] = [
     "test.stream",
     "test.journals.refresh",
     "test.emit_event",
@@ -35,6 +35,8 @@ pub const KINDS: [&str; 19] = [
     "test.freshness.graph.start",
     "test.ai_tool",
     "test.ai_auto_read",
+    "test.ai_consent_preview",
+    "test.ai_custody_record",
 ];
 
 fn arg_text(args: Option<&Value>, key: &str) -> String {
@@ -324,6 +326,8 @@ pub(crate) fn handle(
             }
         }
         "test.ai_tool" => ai_tool(daemon, args, request_id),
+        "test.ai_consent_preview" => ai_consent_preview(daemon, args, request_id),
+        "test.ai_custody_record" => ai_custody_record(daemon, args, request_id),
         "test.ai_auto_read" => ai_auto_read(daemon, args, request_id),
         _ => Err(Failure::App(AppError::new(
             "unsupported_kind",
@@ -351,30 +355,18 @@ fn ai_runtime(daemon: &Daemon, args: Option<&Value>) -> Result<(Value, String), 
 /// runs it (execute, record provenance, redact), with the record and the
 /// model-visible bytes.
 fn ai_tool(daemon: &mut Daemon, args: Option<&Value>, request_id: &RequestId) -> Handled {
-    use kassiber_ai::executor::{
-        execute_read_only, model_output, parse_tool_call, tool_result_record, ParsedCall, Runtime,
-    };
+    use kassiber_ai::executor::{execute_read_only, model_output, tool_result_record, Runtime};
     let (mut state, data_root) = ai_runtime(daemon, args)?;
-    let call = match args.and_then(|args| get(args, "raw_call")) {
-        Some(raw) => parse_tool_call(raw, 0),
-        None => ParsedCall::new(
-            match args.and_then(|args| get(args, "call_id")) {
-                Some(Value::Str(id)) => id.clone(),
-                _ => "call_0".into(),
-            },
-            match args.and_then(|args| get(args, "name")) {
-                Some(Value::Str(name)) => name.clone(),
-                _ => kassiber_pyjson::PyStr::new(),
-            },
-            args.and_then(|args| get(args, "arguments"))
-                .cloned()
-                .unwrap_or_else(|| dict::<&str>([])),
-        ),
-    };
+    let call = ai_call(args);
+    let custody = custody_audit(args);
     let planned = matches!(
         args.and_then(|args| get(args, "planned_auto_read")),
         Some(Value::Bool(true))
     );
+    // As the chat loop dispatches: by `kind_class`, so an egressing read
+    // still runs through the read executor.
+    let mutating = kassiber_ai::catalog::get_tool_py(&call.name)
+        .is_some_and(|entry| entry.kind_class == kassiber_ai::KindClass::Mutating);
     let result = {
         let mut runtime = Runtime {
             data_root: &data_root,
@@ -383,7 +375,11 @@ fn ai_tool(daemon: &mut Daemon, args: Option<&Value>, request_id: &RequestId) ->
         let mut host = crate::ai_tools::Host {
             daemon: &mut *daemon,
         };
-        execute_read_only(&call, &mut runtime, &mut host, planned)
+        if mutating {
+            kassiber_ai::mutate::execute_mutating(&call, &mut runtime, &mut host, custody.as_ref())
+        } else {
+            execute_read_only(&call, &mut runtime, &mut host, planned)
+        }
     };
     let display = kassiber_ai::catalog::get_tool_py(&call.name)
         .map(|entry| kassiber_pyjson::PyStr::from(entry.name.as_str()))
@@ -398,6 +394,117 @@ fn ai_tool(daemon: &mut Daemon, args: Option<&Value>, request_id: &RequestId) ->
         Some(with_request_id(success("test.ai_tool", data), request_id)),
         false,
     ))
+}
+
+/// `CustodyAiConsentAudit(**args["custody_audit"])`, when supplied.
+fn custody_audit(args: Option<&Value>) -> Option<kassiber_ai::mutate::CustodyAudit> {
+    let audit = args.and_then(|args| get(args, "custody_audit"))?;
+    let text = |key: &str| match get(audit, key) {
+        Some(Value::Str(text)) => text.as_str().unwrap_or_default().to_owned(),
+        _ => String::new(),
+    };
+    Some(kassiber_ai::mutate::CustodyAudit {
+        provider_kind: text("provider_kind"),
+        model: text("model"),
+        consent_decision: text("consent_decision"),
+        consent_requested_at: text("consent_requested_at"),
+        consent_decided_at: text("consent_decided_at"),
+    })
+}
+
+/// `test.ai_consent_preview`: the consent card the chat loop shows before a
+/// tool runs (summary, redacted or recomputed arguments, review preview).
+fn ai_consent_preview(
+    daemon: &mut Daemon,
+    args: Option<&Value>,
+    request_id: &RequestId,
+) -> Handled {
+    use kassiber_ai::executor::Runtime;
+    let (mut state, data_root) = ai_runtime(daemon, args)?;
+    let call = ai_call(args);
+    let card = match kassiber_ai::catalog::get_tool_py(&call.name) {
+        Some(entry) => {
+            let mut runtime = Runtime {
+                data_root: &data_root,
+                state: &mut state,
+            };
+            let mut host = crate::ai_tools::Host {
+                daemon: &mut *daemon,
+            };
+            kassiber_ai::previews::consent_request(entry, &call, &mut runtime, &mut host)
+        }
+        None => Value::Null,
+    };
+    let data = dict([("card", card), ("state", state)]);
+    Ok((
+        Some(with_request_id(
+            success("test.ai_consent_preview", data),
+            request_id,
+        )),
+        false,
+    ))
+}
+
+/// `test.ai_custody_record`: `_record_nonexecuted_custody_ai_call` for a
+/// custody proposal that was denied, timed out or cancelled.
+fn ai_custody_record(daemon: &mut Daemon, args: Option<&Value>, request_id: &RequestId) -> Handled {
+    use kassiber_ai::executor::Runtime;
+    let (mut state, data_root) = ai_runtime(daemon, args)?;
+    let call = ai_call(args);
+    let audit = custody_audit(args)
+        .ok_or_else(|| AppError::new("validation", "custody_audit is required"))?;
+    let text = |key: &str| arg_text(args, key);
+    let recorded = {
+        let mut runtime = Runtime {
+            data_root: &data_root,
+            state: &mut state,
+        };
+        let mut host = crate::ai_tools::Host {
+            daemon: &mut *daemon,
+        };
+        kassiber_ai::mutate::record_nonexecuted_custody_call(
+            &call,
+            &mut runtime,
+            &mut host,
+            &audit,
+            &text("execution_status"),
+            &text("execution_code"),
+        )
+    };
+    // Python logs a failed append and carries on.
+    let data = dict([
+        ("recorded", Value::Bool(recorded.is_ok())),
+        ("state", state),
+    ]);
+    Ok((
+        Some(with_request_id(
+            success("test.ai_custody_record", data),
+            request_id,
+        )),
+        false,
+    ))
+}
+
+/// The call a test supplies: a provider's raw tool call, or a name, its
+/// arguments and a call id.
+fn ai_call(args: Option<&Value>) -> kassiber_ai::executor::ParsedCall {
+    use kassiber_ai::executor::{parse_tool_call, ParsedCall};
+    match args.and_then(|args| get(args, "raw_call")) {
+        Some(raw) => parse_tool_call(raw, 0),
+        None => ParsedCall::new(
+            match args.and_then(|args| get(args, "call_id")) {
+                Some(Value::Str(id)) => id.clone(),
+                _ => "call_0".into(),
+            },
+            match args.and_then(|args| get(args, "name")) {
+                Some(Value::Str(name)) => name.clone(),
+                _ => kassiber_pyjson::PyStr::new(),
+            },
+            args.and_then(|args| get(args, "arguments"))
+                .cloned()
+                .unwrap_or_else(|| dict::<&str>([])),
+        ),
+    }
 }
 
 /// `test.ai_auto_read`: the planner and `_run_auto_read_tools` for one

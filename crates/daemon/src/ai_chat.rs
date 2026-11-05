@@ -15,7 +15,7 @@ use std::sync::Arc;
 
 use kassiber_ai::chat::store::Op;
 use kassiber_ai::chat::{self, ActiveChats, ProviderSnapshot, Turn, TurnHost, Worker};
-use kassiber_ai::executor::{Book as AiBook, ReadHost};
+use kassiber_ai::executor::{Book as AiBook, Maintenance, ReadHost};
 use kassiber_ai::ToolError;
 use kassiber_envelope::{dict, get, py_str, s, success, AppError};
 use kassiber_pyjson::{BigInt, PyStr, Value};
@@ -126,7 +126,7 @@ enum BookReply {
     Unit(Result<(), ToolError>),
     Bool(Result<bool, ToolError>),
     Pair(Result<(Value, Value), ToolError>),
-    Maybe(Result<Option<Value>, ToolError>),
+    Maybe(Result<Maintenance, ToolError>),
     Value(Result<Value, ToolError>),
     Text(Result<String, ToolError>),
 }
@@ -207,7 +207,7 @@ impl AiBook for ProxyBook {
     fn context(&mut self) -> Result<(Value, Value), ToolError> {
         answer!(self, BookCall::Context, Pair)
     }
-    fn maintain_for_read(&mut self, sync_attempted: bool) -> Result<Option<Value>, ToolError> {
+    fn maintain_for_read(&mut self, sync_attempted: bool) -> Result<Maintenance, ToolError> {
         answer!(self, BookCall::Maintain(sync_attempted), Maybe)
     }
     fn read(

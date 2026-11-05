@@ -24,6 +24,7 @@ pub const KINDS: &[&str] = &[
     "internal.chain_analysis.stage",
     "ui.chain_analysis.datasets.preview",
     "ui.chain_analysis.datasets.preview.start",
+    "ui.chain_analysis.ai_context",
 ];
 
 pub fn execute(
@@ -42,7 +43,7 @@ pub fn execute(
         "internal.chain_analysis.stage" => "internal.stage",
         kind => kind.trim_start_matches("ui.chain_analysis."),
     };
-    book.chain_analysis_reads(
+    let result = book.chain_analysis_reads(
         None,
         None,
         operation,
@@ -51,5 +52,24 @@ pub fn execute(
             runtime: Some(Arc::clone(runtime)),
             ..Local::default()
         },
-    )
+    )?;
+    if operation != "ai_context" {
+        return Ok(result);
+    }
+    // The assistant receives the investigation through `ca-ref:` handles
+    // only (`project_ai_result`), whichever provider the user picks next.
+    let (_, profile) = book.resolve_scope(None, None)?;
+    kassiber_ai::analysis::project_ai_result(&result, &mut |value| {
+        book.chain_analysis_issue_ai_references(&profile, &[value.to_owned()])?
+            .into_iter()
+            .next()
+            .ok_or(kassiber_ai::ToolError::Unexpected)
+    })
+    .map_err(|error| match error {
+        kassiber_ai::ToolError::App(error) => error,
+        _ => AppError::new(
+            "internal_error",
+            "chain-analysis AI references are unavailable",
+        ),
+    })
 }

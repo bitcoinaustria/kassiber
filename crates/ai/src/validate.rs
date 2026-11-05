@@ -103,7 +103,7 @@ fn compare_int_float(n: &BigInt, f: f64) -> Option<Ordering> {
 }
 
 /// Python `==` between JSON-shaped values (`1 == 1.0 == True`).
-pub(crate) fn py_eq(a: &Value, b: &Value) -> bool {
+pub fn py_eq(a: &Value, b: &Value) -> bool {
     match (a, b) {
         (Value::Null, Value::Null) => true,
         (Value::Str(a), Value::Str(b)) => a == b,

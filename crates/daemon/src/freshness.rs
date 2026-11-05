@@ -60,7 +60,7 @@ pub(crate) struct Requests {
     graph_enabled: bool,
 }
 
-fn busy() -> AppError {
+pub(crate) fn busy() -> AppError {
     AppError::new(
         "project_operation_in_progress",
         "Another refresh is still running",

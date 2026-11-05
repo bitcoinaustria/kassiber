@@ -10,7 +10,7 @@ use kassiber_ai::chat::history::{self, Persist};
 use kassiber_ai::chat::{
     registry_key, validate, ActiveChats, ChatClient, ProviderSnapshot, Turn, TurnHost, Worker,
 };
-use kassiber_ai::executor::{Book, ReadHost};
+use kassiber_ai::executor::{Book, Maintenance, ReadHost};
 use kassiber_ai::transport::{ChatRequest, ClientConfig, HttpClient, Receipt, RequestContext};
 use kassiber_ai::ToolError;
 use kassiber_envelope::{dict, get, AppError};
@@ -80,8 +80,8 @@ impl Book for FakeBook {
     fn context(&mut self) -> Result<(Value, Value), ToolError> {
         Ok((s("w1"), s("p1")))
     }
-    fn maintain_for_read(&mut self, _sync_attempted: bool) -> Result<Option<Value>, ToolError> {
-        Ok(None)
+    fn maintain_for_read(&mut self, _sync_attempted: bool) -> Result<Maintenance, ToolError> {
+        Ok(Maintenance::default())
     }
     fn read(
         &mut self,

@@ -7,8 +7,11 @@ use std::time::Duration;
 
 use kassiber_ai::consent::{once_only, ConsentState};
 use kassiber_ai::executor::{
-    execute_read_only, is_advertised, model_output, Book, ParsedCall, ReadHost, Runtime,
+    execute_read_only, is_advertised, model_output, Book, Maintenance, ParsedCall, ReadHost,
+    Runtime,
 };
+use kassiber_ai::mutate::{execute_mutating, record_nonexecuted_custody_call, CustodyAudit};
+use kassiber_ai::previews::consent_request;
 use kassiber_ai::select::{build_responses_tools, on_device_only, strip_on_device_only};
 use kassiber_ai::{get_tool, tools, KindClass, ToolError};
 use kassiber_envelope::{dict, get, s};
@@ -18,6 +21,11 @@ use kassiber_pyjson::Value;
 struct FakeBook {
     visits: usize,
     reads: Vec<String>,
+    writes: Vec<String>,
+    written: Vec<Value>,
+    audits: Vec<Value>,
+    auto_sync: Option<Value>,
+    previewed: Option<Result<Value, String>>,
     in_scope: bool,
     context: (Value, Value),
     payload: Option<Value>,
@@ -31,8 +39,11 @@ impl Book for FakeBook {
     fn context(&mut self) -> Result<(Value, Value), ToolError> {
         Ok(self.context.clone())
     }
-    fn maintain_for_read(&mut self, _sync_attempted: bool) -> Result<Option<Value>, ToolError> {
-        Ok(self.maintained.clone())
+    fn maintain_for_read(&mut self, _sync_attempted: bool) -> Result<Maintenance, ToolError> {
+        Ok(Maintenance {
+            auto_sync: self.auto_sync.clone(),
+            journals: self.maintained.clone(),
+        })
     }
     fn active_profile(&mut self) -> Result<String, ToolError> {
         Ok(self.profile())
@@ -48,6 +59,59 @@ impl Book for FakeBook {
             .payload
             .clone()
             .unwrap_or_else(|| dict([("value", s("ok"))])))
+    }
+    fn mutate(
+        &mut self,
+        kind: &str,
+        arguments: &Value,
+        source: &'static str,
+    ) -> Result<Value, ToolError> {
+        self.writes.push(format!("{kind}:{source}"));
+        self.written.push(arguments.clone());
+        Ok(self
+            .payload
+            .clone()
+            .unwrap_or_else(|| dict([("value", s("ok"))])))
+    }
+    fn custody_assisted_write(
+        &mut self,
+        kind: &str,
+        arguments: &Value,
+        audit: &Value,
+    ) -> Result<Value, ToolError> {
+        self.audits.push(audit.clone());
+        self.mutate(kind, arguments, "ai_tool")
+    }
+    fn append_custody_audit(&mut self, audit: &Value) -> Result<Value, ToolError> {
+        self.audits.push(audit.clone());
+        Ok(Value::Null)
+    }
+    fn decode_analysis_references(
+        &mut self,
+        _profile: &str,
+        arguments: &Value,
+    ) -> Result<Value, ToolError> {
+        Ok(arguments.clone())
+    }
+    fn report_blockers(&mut self, auto_sync: Option<&Value>) -> Result<Value, ToolError> {
+        self.reads.push("ui.report.blockers".into());
+        Ok(dict([("ready", Value::Bool(auto_sync.is_none()))]))
+    }
+    fn dataset_preview(&mut self, _arguments: &Value) -> Result<Value, ToolError> {
+        self.reads.push("dataset.preview".into());
+        match self.previewed.clone() {
+            Some(Ok(preview)) => Ok(preview),
+            Some(Err(code)) => Err(kassiber_envelope::AppError::new(code, "preview").into()),
+            None => Err(kassiber_envelope::AppError::new(
+                "chain_analysis_preview_required",
+                "preview",
+            )
+            .into()),
+        }
+    }
+    fn review_consent_preview(&mut self, _arguments: &Value) -> Result<Value, ToolError> {
+        self.reads.push("review.preview".into());
+        Ok(dict([("status", s("ready"))]))
     }
 }
 
@@ -71,6 +135,11 @@ fn book() -> FakeBook {
     FakeBook {
         visits: 0,
         reads: Vec::new(),
+        writes: Vec::new(),
+        written: Vec::new(),
+        audits: Vec::new(),
+        auto_sync: None,
+        previewed: None,
         in_scope: true,
         context: (s("w1"), s("p1")),
         payload: None,
@@ -166,15 +235,34 @@ fn egressing_reads_need_a_consent_bound_to_the_call() {
             Some("consent_required"),
             "{name}"
         );
-        // Bound consent reaches the tool, which has no native route yet.
-        let mut bound = dict([("consented_call_ids", Value::List(vec![s("call_1")]))]);
-        let result = run(&mut fake, &mut bound, name, arguments(), false);
-        assert_eq!(
-            reason(&result).as_deref(),
-            Some("not_implemented"),
-            "{name}"
-        );
         assert_eq!(fake.visits, 0, "{name}");
+        // Bound consent reaches the tool: profitability over its native
+        // route, the node snapshot to its refusal without touching the book.
+        let mut bound = dict([("consented_call_ids", Value::List(vec![s("call_1")]))]);
+        fake.payload = Some(dict([
+            ("connection", dict([("id", s("node"))])),
+            ("windowLabel", s("30d")),
+            ("summary", dict([("netProfitSat", Value::from(1))])),
+            (
+                "channels",
+                Value::List(vec![dict([("peerAlias", s("peer"))])]),
+            ),
+        ]));
+        let result = run(&mut fake, &mut bound, name, arguments(), false);
+        if name == "ui.connections.node.snapshot" {
+            assert_eq!(reason(&result).as_deref(), Some("not_implemented"));
+            assert_eq!(fake.visits, 0);
+        } else {
+            assert_eq!(fake.visits, 1);
+            // The AI projection keeps the aggregate only.
+            let output = model_output(&result);
+            assert!(
+                output.contains("30d")
+                    && !output.contains("peer")
+                    && !output.contains("\"connection\""),
+                "{output}"
+            );
+        }
     }
 }
 
@@ -519,4 +607,490 @@ fn auto_reads_never_run_egressing_tools() {
             "{text}"
         );
     }
+}
+
+fn write(
+    book: &mut FakeBook,
+    state: &mut Value,
+    name: &str,
+    arguments: Value,
+    audit: Option<&CustodyAudit>,
+) -> Value {
+    let call = ParsedCall::new("call_1", name, arguments);
+    let mut runtime = Runtime {
+        data_root: "/data",
+        state,
+    };
+    execute_mutating(&call, &mut runtime, book, audit)
+}
+
+fn consented() -> Value {
+    dict([("consented_call_ids", Value::List(vec![s("call_1")]))])
+}
+
+fn audit() -> CustodyAudit {
+    CustodyAudit {
+        provider_kind: "local".into(),
+        model: "m".into(),
+        consent_decision: "allow_once".into(),
+        consent_requested_at: "2026-01-01T00:00:00Z".into(),
+        consent_decided_at: "2026-01-01T00:00:01Z".into(),
+    }
+}
+
+#[test]
+fn mutating_tools_run_only_with_a_consent_bound_to_the_call() {
+    for tool in tools()
+        .iter()
+        .filter(|tool| tool.kind_class == KindClass::Mutating)
+    {
+        let mut fake = book();
+        let name = tool.name.as_str();
+        // No consent, or a consent for another call: nothing runs.
+        for mut state in [
+            empty(),
+            dict([("consented_call_ids", Value::List(vec![s("call_2")]))]),
+            dict([("consented_call_ids", s("call_1"))]),
+        ] {
+            if name == "ui.custody.review.apply" {
+                kassiber_envelope::set(&mut state, "provider_kind", s("local"));
+            }
+            let result = write(&mut fake, &mut state, name, empty(), Some(&audit()));
+            assert_eq!(
+                reason(&result).as_deref(),
+                Some("consent_required"),
+                "{name}"
+            );
+        }
+        assert_eq!(
+            (fake.visits, fake.writes.len(), fake.audits.len()),
+            (0, 0, 0),
+            "{name}"
+        );
+    }
+}
+
+#[test]
+fn mutating_tools_run_only_when_advertised_this_turn() {
+    let mut fake = book();
+    let mut state = consented();
+    kassiber_envelope::set(
+        &mut state,
+        "advertised_tools",
+        Value::List(vec![s("ui_transactions_metadata_update")]),
+    );
+    let arguments = || dict([("transaction", s("a")), ("note", s("n"))]);
+    let denied = write(
+        &mut fake,
+        &mut state,
+        "ui_transactions_history_revert",
+        dict([("transaction", s("a")), ("event", s("e"))]),
+        None,
+    );
+    assert_eq!(reason(&denied).as_deref(), Some("tool_not_advertised"));
+    assert_eq!(fake.visits, 0);
+    let allowed = write(
+        &mut fake,
+        &mut state,
+        "ui_transactions_metadata_update",
+        arguments(),
+        None,
+    );
+    assert_eq!(get(&allowed, "ok"), Some(&Value::Bool(true)), "{allowed:?}");
+    // Edits are authored by the assistant, whatever the model asked for.
+    assert_eq!(fake.writes, vec!["ui.transactions.metadata.update:ai_tool"]);
+    assert_eq!(get(&fake.written[0], "source"), Some(&s("ai_tool")));
+}
+
+#[test]
+fn mutating_tools_check_the_frozen_project_and_book() {
+    let mut fake = book();
+    fake.in_scope = false;
+    let mut state = consented();
+    let result = write(
+        &mut fake,
+        &mut state,
+        "ui.loans.unmark",
+        dict([("txid", s("a"))]),
+        None,
+    );
+    assert_eq!(reason(&result).as_deref(), Some("stale_context"));
+    let mut fake = book();
+    let mut state = consented();
+    kassiber_envelope::set(&mut state, "scope_workspace_id", s("w1"));
+    kassiber_envelope::set(&mut state, "scope_profile_id", s("other"));
+    let result = write(
+        &mut fake,
+        &mut state,
+        "ui.loans.unmark",
+        dict([("txid", s("a"))]),
+        None,
+    );
+    assert_eq!(reason(&result).as_deref(), Some("stale_context"));
+    assert!(fake.writes.is_empty());
+}
+
+#[test]
+fn refused_exports_never_touch_the_book() {
+    let mut fake = book();
+    let mut state = consented();
+    for arguments in [
+        dict([("report", s("full")), ("format", s("pdf"))]),
+        dict([("report", s("audit_package")), ("format", s("package"))]),
+        dict([
+            ("report", s("exit_tax")),
+            ("format", s("pdf")),
+            ("departure_date", s("2025-06-30")),
+            ("destination", s("eu_eea")),
+        ]),
+    ] {
+        let result = write(&mut fake, &mut state, "ui.reports.export", arguments, None);
+        assert_eq!(
+            reason(&result).as_deref(),
+            Some("not_implemented"),
+            "{result:?}"
+        );
+    }
+    let result = write(
+        &mut fake,
+        &mut state,
+        "ui.source_funds.export",
+        dict([("case", s("c")), ("format", s("pdf"))]),
+        None,
+    );
+    assert_eq!(reason(&result).as_deref(), Some("not_implemented"));
+    let result = write(
+        &mut fake,
+        &mut state,
+        "ui.btcpay.provenance.review",
+        dict([("link", s("l")), ("state", s("suggested"))]),
+        None,
+    );
+    assert_eq!(reason(&result).as_deref(), Some("not_implemented"));
+    assert_eq!((fake.visits, fake.writes.len()), (0, 0));
+    // A native export target runs, saved locally, under its own kind.
+    let result = write(
+        &mut fake,
+        &mut state,
+        "ui.reports.export",
+        dict([("report", s("full")), ("format", s("csv"))]),
+        None,
+    );
+    let envelope = get(&result, "envelope").unwrap();
+    assert_eq!(get(envelope, "kind"), Some(&s("ui.reports.export_csv")));
+    assert_eq!(fake.writes, vec!["ui.reports.export_csv:gui"]);
+}
+
+#[test]
+fn dataset_imports_are_bound_to_the_completed_preview() {
+    let mut fake = book();
+    let mut state = consented();
+    kassiber_envelope::set(&mut state, "provider_on_device", Value::Bool(true));
+    let manifest = || {
+        dict([
+            ("dataset_key", s("k")),
+            ("name", s("n")),
+            ("version", s("1")),
+            ("chain", s("bitcoin")),
+            ("network", s("main")),
+            ("source", s("s")),
+            ("license", s("l")),
+            ("attribution_method", s("a")),
+            ("visibility", s("public")),
+        ])
+    };
+    let arguments = || {
+        dict([
+            ("source_token", s("t")),
+            ("manifest", manifest()),
+            ("expected_sha256", s("a".repeat(64))),
+        ])
+    };
+    let refused = write(
+        &mut fake,
+        &mut state,
+        "ui.chain_analysis.datasets.import",
+        arguments(),
+        None,
+    );
+    assert_eq!(
+        reason(&refused).as_deref(),
+        Some("chain_analysis_preview_required")
+    );
+    assert!(fake
+        .reads
+        .iter()
+        .all(|read| !read.starts_with("ui.chain_analysis.datasets.import")));
+    fake.previewed = Some(Ok(dict([("sha256", s("a".repeat(64)))])));
+    write(
+        &mut fake,
+        &mut state,
+        "ui.chain_analysis.datasets.import",
+        arguments(),
+        None,
+    );
+    assert!(
+        fake.reads
+            .contains(&"ui.chain_analysis.datasets.import:gui".to_string()),
+        "{:?}",
+        fake.reads
+    );
+}
+
+#[test]
+fn composite_reads_report_the_refresh_they_ran() {
+    let failed = dict([("ok", Value::Bool(false)), ("reason", s("sync_failed"))]);
+    for (auto_sync, contacted) in [(None, false), (Some(failed.clone()), true)] {
+        let mut fake = book();
+        fake.auto_sync = auto_sync.clone();
+        fake.payload = Some(dict([(
+            "safety",
+            dict([
+                ("local_only_reads", Value::Bool(true)),
+                ("network_contacted", Value::Bool(false)),
+            ]),
+        )]));
+        let mut state = empty();
+        let result = run(
+            &mut fake,
+            &mut state,
+            "ui.transactions.review_context",
+            dict([("transaction", s("a"))]),
+            true,
+        );
+        let safety = get(
+            get(get(&result, "envelope").unwrap(), "data").unwrap(),
+            "safety",
+        )
+        .unwrap();
+        assert_eq!(
+            get(safety, "network_contacted"),
+            Some(&Value::Bool(contacted))
+        );
+        assert_eq!(
+            get(safety, "network_contact_reason"),
+            Some(&if contacted {
+                s("opt_in_freshness_sync")
+            } else {
+                Value::Null
+            })
+        );
+        // A failed refresh also answers the readiness it blocks.
+        assert_eq!(
+            get(&result, "auto_report_blockers").is_some(),
+            contacted,
+            "{result:?}"
+        );
+        assert_eq!(
+            get(&state, "auto_sync_attempted"),
+            auto_sync.as_ref().map(|_| &Value::Bool(true))
+        );
+    }
+}
+
+#[test]
+fn the_executors_never_cross_kind_classes() {
+    let mut fake = book();
+    let mut state = consented();
+    for name in ["ui.rates.summary", "status", "nonexistent", ""] {
+        let result = write(&mut fake, &mut state, name, empty(), None);
+        assert_eq!(
+            reason(&result).as_deref(),
+            Some("tool_not_allowed"),
+            "{name}"
+        );
+    }
+    assert_eq!(fake.visits, 0);
+}
+
+#[test]
+fn custody_writes_need_a_local_provider_and_are_audited() {
+    let arguments = || {
+        dict([
+            ("action", s("reopen")),
+            ("gap_id", s("gap-1")),
+            ("expected_input_version", Value::from(0)),
+        ])
+    };
+    let mut fake = book();
+    let mut remote = consented();
+    kassiber_envelope::set(&mut remote, "provider_kind", s("remote"));
+    let denied = write(
+        &mut fake,
+        &mut remote,
+        "ui.custody.review.apply",
+        arguments(),
+        Some(&audit()),
+    );
+    assert_eq!(reason(&denied).as_deref(), Some("local_provider_required"));
+    assert_eq!(fake.visits, 0);
+    // A local provider without the consent audit context, or without the
+    // frozen book scope, is refused before any write.
+    let mut local = consented();
+    kassiber_envelope::set(&mut local, "provider_kind", s("local"));
+    let missing = write(
+        &mut fake,
+        &mut local,
+        "ui.custody.review.apply",
+        arguments(),
+        None,
+    );
+    assert_eq!(
+        reason(&missing).as_deref(),
+        Some("custody_ai_audit_required")
+    );
+    let unscoped = write(
+        &mut fake,
+        &mut local,
+        "ui.custody.review.apply",
+        arguments(),
+        Some(&audit()),
+    );
+    assert_eq!(reason(&unscoped).as_deref(), Some("stale_context"));
+    assert!(fake.writes.is_empty() && fake.audits.is_empty());
+    kassiber_envelope::set(&mut local, "scope_workspace_id", s("w1"));
+    kassiber_envelope::set(&mut local, "scope_profile_id", s("p1"));
+    let applied = write(
+        &mut fake,
+        &mut local,
+        "ui.custody.review.apply",
+        arguments(),
+        Some(&audit()),
+    );
+    assert_eq!(get(&applied, "ok"), Some(&Value::Bool(true)), "{applied:?}");
+    assert_eq!(fake.writes, vec!["ui.custody.review.apply:ai_tool"]);
+    let expected = dict([
+        ("workspace_id", s("w1")),
+        ("profile_id", s("p1")),
+        ("tool_name", s("ui.custody.review.apply")),
+        ("daemon_kind", s("ui.custody.review.apply")),
+        ("call_id", s("call_1")),
+        ("provider_kind", s("local")),
+        ("model", s("m")),
+        ("model_proposal", arguments()),
+        ("final_proposal", arguments()),
+        ("consent_decision", s("allow_once")),
+        ("consent_requested_at", s("2026-01-01T00:00:00Z")),
+        ("consent_decided_at", s("2026-01-01T00:00:01Z")),
+        ("execution_status", s("executed")),
+        ("execution_code", Value::Null),
+    ]);
+    assert_eq!(fake.audits, vec![expected]);
+}
+
+#[test]
+fn denied_custody_proposals_are_audited_without_running() {
+    let mut fake = book();
+    let mut state = dict([
+        ("scope_workspace_id", s("w1")),
+        ("scope_profile_id", s("p1")),
+    ]);
+    let call = ParsedCall::new(
+        "call_9",
+        "ui_custody_review_apply",
+        dict([("gap_id", s("g"))]),
+    );
+    let mut runtime = Runtime {
+        data_root: "/data",
+        state: &mut state,
+    };
+    record_nonexecuted_custody_call(
+        &call,
+        &mut runtime,
+        &mut fake,
+        &audit(),
+        "denied",
+        "user_denied",
+    )
+    .unwrap();
+    assert!(fake.writes.is_empty());
+    assert_eq!(fake.audits.len(), 1);
+    assert_eq!(get(&fake.audits[0], "execution_status"), Some(&s("denied")));
+    assert_eq!(
+        get(&fake.audits[0], "execution_code"),
+        Some(&s("user_denied"))
+    );
+    // Other tools are never audited as custody decisions.
+    let other = ParsedCall::new("call_9", "ui_transfers_pair", empty());
+    let mut runtime = Runtime {
+        data_root: "/data",
+        state: &mut state,
+    };
+    record_nonexecuted_custody_call(
+        &other,
+        &mut runtime,
+        &mut fake,
+        &audit(),
+        "denied",
+        "user_denied",
+    )
+    .unwrap();
+    assert_eq!(fake.audits.len(), 1);
+}
+
+#[test]
+fn mutating_results_are_redacted_before_they_leave_the_executor() {
+    let mut fake = book();
+    fake.payload = Some(dict([
+        (
+            "note",
+            s("see https://private.example/x and /Users/alice/file.pdf"),
+        ),
+        ("api_token", s("sk-abcdef123456")),
+    ]));
+    let mut state = consented();
+    let result = write(
+        &mut fake,
+        &mut state,
+        "ui.transactions.metadata.update",
+        dict([("transaction", s("a"))]),
+        None,
+    );
+    let output = model_output(&result);
+    for private in ["private.example", "/Users/alice", "sk-abcdef"] {
+        assert!(!output.contains(private), "{private} in {output}");
+    }
+}
+
+#[test]
+fn consent_previews_never_write() {
+    let mut fake = book();
+    let mut state = dict([("provider_on_device", Value::Bool(false))]);
+    for (name, arguments) in [
+        (
+            "ui.review.apply",
+            dict([("artifact", empty()), ("idempotency_key", s("k"))]),
+        ),
+        ("ui.chain_analysis.acquire.apply", dict([("plan", empty())])),
+        (
+            "ui.chain_analysis.datasets.import",
+            dict([("manifest", empty())]),
+        ),
+        (
+            "ui.transfers.pair",
+            dict([("tx_out", s("a")), ("tx_in", s("b"))]),
+        ),
+    ] {
+        let entry = get_tool(name).unwrap();
+        let call = ParsedCall::new("call_1", name, arguments);
+        let mut runtime = Runtime {
+            data_root: "/data",
+            state: &mut state,
+        };
+        let card = consent_request(entry, &call, &mut runtime, &mut fake);
+        assert_eq!(get(&card, "call_id"), Some(&s("call_1")), "{name}");
+        if name.starts_with("ui.chain_analysis.") {
+            // Other providers never see a recomputed acquisition or dataset.
+            assert_eq!(
+                get(&card, "arguments_preview"),
+                Some(&dict([
+                    ("status", s("blocked")),
+                    ("code", s("local_provider_required"))
+                ])),
+                "{name}"
+            );
+        }
+    }
+    assert!(fake.writes.is_empty() && fake.audits.is_empty());
+    assert_eq!(fake.reads, vec!["review.preview"]);
 }

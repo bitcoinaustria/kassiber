@@ -361,6 +361,8 @@ pub fn execute(
             &as_of,
             sources,
         ),
+        // `validate_review`: the consent preview's recomputation.
+        "review.validate" => validate(conn, scope, &value(args, "artifact"), &as_of, sources),
         "review.apply" => apply(
             conn,
             scope,

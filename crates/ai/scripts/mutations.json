@@ -226,6 +226,256 @@
     "rule": "At most twelve auto-reads run per turn."
   },
   {
+    "id": "B-mutate-consent",
+    "file": "crates/ai/src/mutate.rs",
+    "find": "    if !consented(runtime.state, &call.call_id) {",
+    "replace": "    if false && !consented(runtime.state, &call.call_id) {",
+    "expect_failing": [
+      "mutating_tools_run_only_with_a_consent_bound_to_the_call"
+    ],
+    "rule": "A write runs only with a consent bound to its own call id."
+  },
+  {
+    "id": "B-mutate-advertised",
+    "file": "crates/ai/src/mutate.rs",
+    "find": "    if !is_advertised(entry, runtime.state) {",
+    "replace": "    if false && !is_advertised(entry, runtime.state) {",
+    "expect_failing": [
+      "mutating_tools_run_only_when_advertised_this_turn"
+    ],
+    "rule": "A write runs only if the tool was advertised this turn."
+  },
+  {
+    "id": "B-mutate-local-custody",
+    "file": "crates/ai/src/mutate.rs",
+    "find": "        && !matches!(get(runtime.state, \"provider_kind\"), Some(Value::Str(kind)) if kind.is(\"local\"))",
+    "replace": "        && false",
+    "expect_failing": [
+      "custody_writes_need_a_local_provider_and_are_audited"
+    ],
+    "rule": "Custody-gap writes need a local provider."
+  },
+  {
+    "id": "B-mutate-stale-context",
+    "file": "crates/ai/src/mutate.rs",
+    "find": "        assert_scope(book, &data_root, state)?;\n        write(book, state)",
+    "replace": "        write(book, state)",
+    "expect_failing": [
+      "mutating_tools_check_the_frozen_project_and_book"
+    ],
+    "rule": "Every write checks the project and book frozen for the turn first."
+  },
+  {
+    "id": "B-mutate-redaction",
+    "file": "crates/ai/src/mutate.rs",
+    "find": "    Ok(redact_ai_tool_result(&host.on_request_loop(&mut work)?))",
+    "replace": "    host.on_request_loop(&mut work)",
+    "expect_failing": [
+      "mutating_results_are_redacted_before_they_leave_the_executor"
+    ],
+    "rule": "Write results are redacted before they leave the executor."
+  },
+  {
+    "id": "B-mutate-authorship",
+    "file": "crates/ai/src/mutate.rs",
+    "find": "            let args = with(arguments, \"source\", s(\"ai_tool\"));",
+    "replace": "            let args = arguments.clone();",
+    "expect_failing": [
+      "mutating_tools_run_only_when_advertised_this_turn"
+    ],
+    "rule": "Metadata edits and reverts are authored ai_tool whatever the model sends."
+  },
+  {
+    "id": "B-mutate-refused-exports",
+    "file": "crates/ai/src/mutate.rs",
+    "find": "        refuse_export(export_kind)?;\n        return scoped(runtime, host, &mut |book, _| {\n            let mut payload =\n                redact_evidence_for_ai",
+    "replace": "        return scoped(runtime, host, &mut |book, _| {\n            let mut payload =\n                redact_evidence_for_ai",
+    "expect_failing": [
+      "refused_exports_never_touch_the_book"
+    ],
+    "rule": "Export targets without a native renderer are refused before the book."
+  },
+  {
+    "id": "B-mutate-refused-tools",
+    "file": "crates/ai/src/mutate.rs",
+    "find": "        .find(|(name, _)| *name == entry.name)",
+    "replace": "        .find(|(name, _)| *name == \"none\")",
+    "expect_failing": [
+      "refused_exports_never_touch_the_book"
+    ],
+    "rule": "A write whose service is not native is refused before the book."
+  },
+  {
+    "id": "B-audit-executed",
+    "file": "crates/ai/src/mutate.rs",
+    "find": "workspace, profile, audit, \"executed\", None,",
+    "replace": "workspace, profile, audit, \"failed\", None,",
+    "expect_failing": [
+      "custody_writes_need_a_local_provider_and_are_audited"
+    ],
+    "rule": "A consented custody write is audited as executed."
+  },
+  {
+    "id": "B-audit-nonexecuted-filter",
+    "file": "crates/ai/src/mutate.rs",
+    "find": "        .filter(|kind| CUSTODY_GAP_MUTATING_KINDS.contains(kind))",
+    "replace": "        .filter(|_| true)",
+    "expect_failing": [
+      "denied_custody_proposals_are_audited_without_running"
+    ],
+    "rule": "Only custody proposals are audited when they did not run."
+  },
+  {
+    "id": "B-dataset-preview-binding",
+    "file": "crates/ai/src/projections.rs",
+    "find": "            book.dataset_preview(&decoded)?;",
+    "replace": "            let _ = book.dataset_preview(&decoded);",
+    "expect_failing": [
+      "dataset_imports_are_bound_to_the_completed_preview"
+    ],
+    "rule": "A dataset import runs only for the exact completed local preview."
+  },
+  {
+    "id": "B-preview-on-device",
+    "file": "crates/ai/src/previews.rs",
+    "find": "        if !on_device(state) {\n            return Ok(blocked(\"local_provider_required\"));\n        }\n        book.active_profile()?;",
+    "replace": "        book.active_profile()?;",
+    "expect_failing": [
+      "consent_previews_never_write"
+    ],
+    "rule": "Acquisition previews are computed for on-device providers only."
+  },
+  {
+    "id": "B-review-kind-override",
+    "file": "crates/ai/src/review.rs",
+    "find": "        if kind == Some(&s(\"kind_override\")) {",
+    "replace": "        if kind == Some(&s(\"kind_override_x\")) {",
+    "expect_failing": [
+      "ai_review_operation_rules_match_python"
+    ],
+    "rule": "AI review batches may not override acquisition effects."
+  },
+  {
+    "id": "B-review-conversion-activate",
+    "file": "crates/ai/src/review.rs",
+    "find": "    if activate {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "ai_review_operation_rules_match_python"
+    ],
+    "rule": "An AI-authored conversion component cannot activate itself."
+  },
+  {
+    "id": "B-review-artifact-size",
+    "file": "crates/ai/src/review.rs",
+    "find": "    if size > 65_536 {",
+    "replace": "    if size > 65_537 {",
+    "expect_failing": [
+      "planned_review_artifact_checks_match_python"
+    ],
+    "rule": "A planned artifact must fit a later ui.review.apply call."
+  },
+  {
+    "id": "B-composite-safety",
+    "file": "crates/ai/src/executor.rs",
+    "find": "                let contacted = auto_sync_data.is_some();",
+    "replace": "                let contacted = false;",
+    "expect_failing": [
+      "composite_reads_report_the_refresh_they_ran"
+    ],
+    "rule": "Composite reads say when the read prelude contacted the network."
+  },
+  {
+    "id": "B-auto-report-blockers",
+    "file": "crates/ai/src/executor.rs",
+    "find": "        if kind != \"ui.report.blockers\" && sync_payload_has_errors(auto_sync_data.as_ref()) {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "composite_reads_report_the_refresh_they_ran"
+    ],
+    "rule": "A failed automatic refresh adds the readiness it blocks."
+  },
+  {
+    "id": "B-audit-proposal-bound",
+    "file": "crates/transfers/src/custody_ai_audit.rs",
+    "find": "const MAX_REASON_CHARS: usize = 500;",
+    "replace": "const MAX_REASON_CHARS: usize = 5000;",
+    "expect_failing": [
+      "proposals_keep_only_the_custody_vocabulary_in_sorted_order"
+    ],
+    "rule": "Audited proposals keep at most 500 characters per text field."
+  },
+  {
+    "id": "B-audit-review-fallback",
+    "file": "crates/transfers/src/custody_ai_audit.rs",
+    "find": "    if !packet.iter().any(|(key, _)| *key == Key::from(\"review_id\")) {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "results_keep_identifiers_and_fall_back_to_id_for_the_review"
+    ],
+    "rule": "An audited result names its review by id when it has no review_id."
+  },
+  {
+    "id": "wire-custody-failed-row",
+    "file": "crates/kassiber/src/real_store.rs",
+    "find": "                kassiber_transfers::custody_ai_audit::append(conn, &failed, None, &sources)?;",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_custody_writes_are_audited_or_rolled_back"
+    ],
+    "rule": "A refused custody write still commits its failed audit row."
+  },
+  {
+    "id": "wire-custody-audit-record",
+    "file": "crates/transfers/src/custody_ai_audit.rs",
+    "find": "            bound(bounded_text(&field(\"call_id\"), 256))?,",
+    "replace": "            bound(field(\"call_id\"))?,",
+    "expect_failing": [
+      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_custody_audit_records_match_python"
+    ],
+    "rule": "The audit row bounds the call id as Python does."
+  },
+  {
+    "id": "wire-quarantine-ai-source",
+    "file": "crates/kassiber/src/real_store.rs",
+    "find": "                args,\n                source,\n            );",
+    "replace": "                args,\n                \"gui\",\n            );",
+    "expect_failing": [
+      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_ai_authored_writes_match_python"
+    ],
+    "rule": "An AI quarantine resolution is authored ai_tool."
+  },
+  {
+    "id": "wire-review-request-redaction",
+    "file": "crates/daemon/src/review.rs",
+    "find": "            &kassiber_ai::redact::redact_ai_tool_result(args),",
+    "replace": "            args,",
+    "expect_failing": [
+      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_read_tools_match_python_on_every_fixture"
+    ],
+    "rule": "An AI input request stores a redacted explanation."
+  },
+  {
+    "id": "wire-worklist-pending-suggestions",
+    "file": "crates/daemon/src/worklist.rs",
+    "find": "                    (\"state\", s(\"suggested\")),\n",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_read_tools_match_python_on_every_fixture"
+    ],
+    "rule": "The worklist reads pending commercial suggestions only."
+  },
+  {
+    "id": "wire-mirror-index-sources",
+    "file": "crates/kassiber/src/real_store.rs",
+    "find": "                &mut AnalysisSources::default(),\n            );\n        }\n        if lightning::COMMANDS.contains(&command) {",
+    "replace": "                &mut kassiber_wallets::publication::wallet::SystemSources::default(),\n            );\n        }\n        if lightning::COMMANDS.contains(&command) {",
+    "expect_failing": [
+      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_read_tools_match_python_on_every_fixture"
+    ],
+    "rule": "The privacy mirror synchronizes the analysis index with the index's own identity source."
+  },
+  {
     "id": "R67-record-order",
     "file": "crates/ai/src/chat/turn.rs",
     "find": "status(\"preparing\", \"Preparing chat\")",

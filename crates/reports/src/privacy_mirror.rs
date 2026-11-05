@@ -19,19 +19,31 @@ pub(super) fn execute(
     args: &Value,
     sources: &dyn kassiber_setup::Sources,
 ) -> Result<Value> {
+    let mut index_sources = IndexSources {
+        identity: sources.uuid(conn)?,
+        timestamp: sources.now(conn)?,
+    };
+    execute_with_index(conn, command, args, &mut index_sources)
+}
+
+/// The mirror report, synchronizing the analysis index with `index`, the same
+/// identity and clock source every other index read uses (Python draws them
+/// all from `projection_store`'s `uuid4` and `now_iso`).
+pub fn execute_with_index(
+    conn: &Connection,
+    command: &str,
+    args: &Value,
+    index: &mut dyn kassiber_wallets::publication::wallet::Sources,
+) -> Result<Value> {
     conn.execute_batch("SAVEPOINT mirror_report")
         .map_err(sql_error)?;
     let result = (|| {
         let (workspace, profile) = kassiber_setup::references::scope(conn, args)?;
-        let mut index_sources = IndexSources {
-            identity: sources.uuid(conn)?,
-            timestamp: sources.now(conn)?,
-        };
         kassiber_wallets::analysis_index::durable::synchronize_with_sources(
             conn,
             &text(&profile, "id"),
             false,
-            &mut index_sources,
+            index,
         )?;
         let report = report(
             conn,

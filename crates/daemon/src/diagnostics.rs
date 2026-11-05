@@ -560,6 +560,32 @@ fn subsystem(value: kassiber_net::Subsystem) -> &'static str {
     }
 }
 
+/// `get_egress_ledger().snapshot(after_id=..., limit=...)` reduced to what the
+/// AI-safe view counts: each record's subsystem and bytes, never its host.
+pub(crate) fn ledger_counts(after: i64, limit: i64) -> Value {
+    let all = kassiber_net::Ledger::process().retained();
+    let records = all
+        .records
+        .iter()
+        .filter(|record| BigInt::from(record.id) > BigInt::from(after))
+        .take(usize::try_from(limit).unwrap_or(0))
+        .map(|record| {
+            dict([
+                ("subsystem", s(subsystem(record.subsystem))),
+                ("bytes_out", Value::Int(record.bytes_out.into())),
+            ])
+        })
+        .collect();
+    dict([
+        ("records", Value::List(records)),
+        ("last_id", Value::Int(all.last_id.into())),
+        (
+            "gap",
+            Value::Bool(BigInt::from(after) < BigInt::from(all.evicted_through)),
+        ),
+    ])
+}
+
 /// `ui.egress.snapshot` over the process ledger.
 pub(crate) fn egress(
     args: Option<&Value>,

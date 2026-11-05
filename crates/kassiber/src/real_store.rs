@@ -1209,6 +1209,14 @@ impl Book for RealBook {
         }))
     }
     fn journal_view(&mut self, kind: &str, args: Option<&Value>) -> Result<Value, AppError> {
+        self.journal_view_as(kind, args, "gui")
+    }
+    fn journal_view_as(
+        &mut self,
+        kind: &str,
+        args: Option<&Value>,
+        source: &str,
+    ) -> Result<Value, AppError> {
         if kind == "ui.journals.quarantine.resolve" {
             let empty = kassiber_envelope::dict::<&str>([]);
             let args = match args {
@@ -1226,6 +1234,7 @@ impl Book for RealBook {
                 self.conn()?,
                 &|| self.resolve_scope(None, None),
                 args,
+                source,
             );
         }
         kassiber_journals::views::execute(self.conn()?, kind, args)
@@ -1268,13 +1277,15 @@ impl Book for RealBook {
         local: &mut kassiber_wallets::analysis_index::reads::Local,
     ) -> Result<Value, AppError> {
         let (workspace, profile) = self.resolve_scope(workspace, profile)?;
+        // The index's identity and clock come from the source every index
+        // synchronization uses (Python's `projection_store` uuid4 and clock).
         kassiber_wallets::analysis_index::reads::execute_local(
             self.conn()?,
             &workspace,
             &profile,
             operation,
             args,
-            &mut kassiber_wallets::publication::wallet::SystemSources::default(),
+            &mut AnalysisSources::default(),
             local,
         )
     }
@@ -1852,15 +1863,6 @@ impl Book for RealBook {
         Ok(Some(payload))
     }
 
-    fn maintain_for_ai_read(&mut self, sync_attempted: bool) -> Result<Option<Value>, AppError> {
-        // `_auto_maintain_for_read` with the turn's state: the automatic wallet
-        // refresh unless the turn already attempted it, then stale journals.
-        if !sync_attempted {
-            self.report_read_sync(false)?;
-        }
-        self.auto_process_journals()
-    }
-
     fn auto_process_journals(&mut self) -> Result<Option<Value>, AppError> {
         let context = self.context()?;
         if context.profile_id.is_empty() {
@@ -2251,6 +2253,17 @@ impl Book for RealBook {
         })
     }
     fn reports(&mut self, command: &str, args: &Value) -> Result<Value, AppError> {
+        if matches!(
+            command,
+            "reports.privacy-mirror" | "ui.reports.privacy_mirror"
+        ) {
+            return kassiber_reports::privacy_mirror::execute_with_index(
+                self.conn()?,
+                command,
+                args,
+                &mut AnalysisSources::default(),
+            );
+        }
         if lightning::COMMANDS.contains(&command) {
             return lightning::execute(
                 self.conn()?,
@@ -2865,6 +2878,79 @@ impl Book for RealBook {
             wid,
             kassiber_envelope::py_str(kassiber_envelope::get(&p, "id").expect("profile id")),
         ))
+    }
+    fn custody_ai_write(
+        &mut self,
+        audit: &Value,
+        write: &mut dyn FnMut(&mut dyn Book) -> Result<Value, AppError>,
+    ) -> Result<Value, AppError> {
+        #[cfg(feature = "test-harness")]
+        let sources = journals::Sources;
+        #[cfg(not(feature = "test-harness"))]
+        let sources = kassiber_transfers::SystemSources;
+        let sql = |conn: &Connection, statement: &str| {
+            conn.execute_batch(statement)
+                .map_err(map_sqlite_error)
+                .map_err(error)
+        };
+        sql(self.conn()?, "SAVEPOINT custody_ai_assisted_write")?;
+        let written = write(self).and_then(|payload| {
+            kassiber_transfers::custody_ai_audit::append(
+                self.conn()?,
+                audit,
+                Some(&payload),
+                &sources,
+            )?;
+            Ok(payload)
+        });
+        let conn = self.conn()?;
+        match written {
+            Ok(payload) => {
+                sql(conn, "RELEASE SAVEPOINT custody_ai_assisted_write")?;
+                Ok(payload)
+            }
+            Err(failure) => {
+                sql(
+                    conn,
+                    "ROLLBACK TO SAVEPOINT custody_ai_assisted_write; RELEASE SAVEPOINT custody_ai_assisted_write",
+                )?;
+                let code = if failure.code.is_empty() || failure.code == "internal_error" {
+                    "tool_error"
+                } else {
+                    failure.code.as_str()
+                };
+                let mut failed = audit.clone();
+                kassiber_envelope::set(
+                    &mut failed,
+                    "execution_status",
+                    kassiber_envelope::s("failed"),
+                );
+                kassiber_envelope::set(&mut failed, "execution_code", kassiber_envelope::s(code));
+                kassiber_transfers::custody_ai_audit::append(conn, &failed, None, &sources)?;
+                Err(failure)
+            }
+        }
+    }
+    fn chain_analysis_dataset_preview(
+        &mut self,
+        args: &Value,
+        runtime: &std::sync::Arc<kassiber_wallets::analysis_index::runtime::Runtime>,
+    ) -> Result<Value, AppError> {
+        let (_, profile_id) = self.resolve_scope(None, None)?;
+        kassiber_wallets::analysis_ops::jobs::remembered_preview(
+            self.conn()?,
+            &profile_id,
+            runtime,
+            args,
+        )
+    }
+    fn append_custody_ai_audit(&mut self, audit: &Value) -> Result<Value, AppError> {
+        #[cfg(feature = "test-harness")]
+        let sources = journals::Sources;
+        #[cfg(not(feature = "test-harness"))]
+        let sources = kassiber_transfers::SystemSources;
+        // Autocommit: the row is committed as it is written.
+        kassiber_transfers::custody_ai_audit::append(self.conn()?, audit, None, &sources)
     }
     fn rollback(&mut self) -> Result<(), AppError> {
         if !self.conn()?.is_autocommit() {

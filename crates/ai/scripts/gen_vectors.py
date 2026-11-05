@@ -600,6 +600,182 @@ def projection_cases():
     return cases
 
 
+def review_operation_cases():
+    conversion = {"conservation_mode": "conversion", "legs": []}
+    values = [
+        None,
+        {},
+        [],
+        ["x"],
+        [{"type": "exclude", "reason": "see /home/user/a.txt"}],
+        [{"type": "kind_override"}],
+        [{"type": "exclude"}, {"type": "kind_override"}],
+        [{"type": "custody_component"}],
+        [{"type": "custody_component", "request": {"action": "revise"}}],
+        [{"type": "custody_component", "request": {"action": None}}],
+        [{"type": "custody_component", "request": {"components": "x"}}],
+        [{"type": "custody_component", "request": {"components": [1]}}],
+        [{"type": "custody_component", "request": {"components": [{"conservation_mode": "quantity"}]}}],
+        [{"type": "custody_component", "request": {"components": [conversion]}}],
+        [{"type": "custody_component", "request": {"components": [conversion], "activate": False}}],
+        [{"type": "custody_component", "request": {"components": [conversion], "activate": None}}],
+        [{"type": "custody_component", "request": {"components": [{**conversion, "conversion_reviewed": True}], "activate": False}}],
+        [{"type": "custody_component", "request": {"action": "create", "components": [{}, conversion, {"conservation_mode": ""}], "activate": 0}}],
+        [{"type": "custody_component", "request": {"components": [{"conservation_mode": "conversion", "conversion_reviewed": 1}], "activate": False}}],
+    ]
+    return [{"operations": value, "outcome": outcome(daemon._validate_ai_review_operations, copy.deepcopy(value))} for value in values]
+
+
+def planned_artifact_cases():
+    """The AI checks on a planned review artifact, around the core planner."""
+    base = {"schema_version": 1, "operations": [], "digest": "d" * 64}
+
+    def size(payload):
+        return len(json.dumps({"artifact": payload, "idempotency_key": "x" * 200}, separators=(",", ":")))
+
+    exact = 65536 - size({**base, "note": ""})
+    payloads = [
+        base,
+        {**base, "note": "x" * exact},
+        {**base, "note": "x" * (exact + 1)},
+        {**base, "note": "see /home/user/statement.pdf"},
+        # Escaped length: each code point counts six characters.
+        {**base, "note": "\u00e9" * (exact // 6)},
+        {**base, "note": "\u00e9" * (exact // 6 + 1)},
+    ]
+    cases = []
+    for payload in payloads:
+        with mock.patch.object(daemon, "resolve_scope", lambda *args: (None, {"id": "p"})), \
+                mock.patch.object(daemon.core_review_workflow, "plan_review", lambda *args, **kwargs: copy.deepcopy(payload)):
+            result = outcome(daemon._review_workflow_payload, None, "ui.review.plan",
+                             {"operations": [], "expected_input_version": 0}, authored_source="ai_tool")
+        cases.append({"payload": payload, "outcome": result})
+    return cases
+
+
+def export_target_cases():
+    values = [
+        {},
+        {"report": "full"},
+        {"report": "full", "format": "pdf", "wallet": "w", "year": 2025},
+        {"report": "full", "format": "xlsx", "wallet": "w", "verify": True, "x": 1},
+        {"report": "summary", "format": "pdf", "wallet": "w"},
+        {"report": "summary", "format": "pdf", "wallet": 3},
+        {"report": "summary", "format": "pdf"},
+        {"report": "capital_gains", "format": "csv", "year": 2025, "wallet": "w"},
+        {"report": "austrian_e1kv", "format": "xlsx", "year": "2025"},
+        {"report": "exit_tax", "format": "pdf", "departure_date": "2025-06-30", "destination": "eu_eea"},
+        {"report": "exit_tax", "format": "xlsx", "departure_date": "2025-06-30"},
+        {"report": "exit_tax", "format": "xlsx", "departure_date": 5, "destination": "third_country"},
+        {"report": "audit_package", "format": "package", "transaction": "a", "transactions": ["b"], "source_funds_case": "c", "x": 1},
+        {"report": "full", "format": "package"},
+        {"report": 1, "format": "csv"},
+    ]
+    return [{"arguments": value, "outcome": outcome(daemon._ai_report_export_target, copy.deepcopy(value))} for value in values]
+
+
+def wallets_sync_cases():
+    from kassiber import daemon_freshness
+
+    values = [
+        {}, {"wallet": "cold"}, {"wallet": " cold "}, {"wallet": ""}, {"wallet": 3}, {"wallet": "c", "all": True},
+        {"all": False}, {"all": "yes"}, {"force_full": 1}, {"force_full": True, "process_journals": False},
+        {"process_journals": None}, {"process_journals": "no"}, {"rates": True}, {"wallet": None, "all": None},
+    ]
+    return [
+        {"arguments": value, "outcome": outcome(daemon_freshness._coerce_wallets_sync_args, copy.deepcopy(value), strict=True)}
+        for value in values
+    ]
+
+
+def sync_error_cases():
+    from kassiber import daemon_freshness
+
+    values = [
+        None, [], {}, {"ok": True}, {"ok": False}, {"ok": 0}, {"results": "x"}, {"results": [1, {"status": "ok"}]},
+        {"results": [{"status": "ERROR"}]}, {"results": [{"status": None}, {"status": 0}]}, {"results": [{"status": "error "}]},
+    ]
+    return [{"payload": value, "errors": daemon_freshness._sync_payload_has_errors(value)} for value in values]
+
+
+def egress_view_cases():
+    ledger = {
+        "records": [
+            {"subsystem": "sync", "bytes_out": 10, "host": "h"},
+            {"subsystem": "sync", "bytes_out": None},
+            {"subsystem": "", "bytes_out": 5},
+            {"bytes_out": 2},
+            "skip",
+            {"subsystem": "ai", "bytes_out": 7},
+        ],
+        "last_id": 9,
+        "gap": 1,
+    }
+    cases = []
+    for args in ({}, {"after_id": 0}, {"after_id": 3, "limit": 2}, {"after_id": "4"}, {"limit": 900}, {"limit": 0}, {"after_id": -1}, {"x": 1}):
+        calls = []
+
+        class Ledger:
+            def snapshot(self, *, after_id, limit):
+                calls.append([after_id, limit])
+                return copy.deepcopy(ledger)
+
+        with mock.patch.object(daemon, "get_egress_ledger", lambda: Ledger()):
+            cases.append({"arguments": args, "ledger": ledger, "outcome": outcome(daemon._ai_safe_egress_snapshot, copy.deepcopy(args)), "calls": calls})
+    return cases
+
+
+def file_egress_cases():
+    from kassiber.core import file_analysis
+
+    analyses = [
+        {
+            "source": {"path": "/home/u/export.CSV", "filename": "Umsatzliste_AT61.CSV", "kind": "csv"},
+            "headers": ["Date", "Type", "Amount", ""],
+            "header_is_preamble": False,
+            "inferred_plan": {"date": "Date", "amount": "Amount", "fee": None},
+            "applied_plan": {"date": "Date"},
+            "detected": [{"column": "Date", "field": "date"}, {"column": None}, "x", {"field": "fee"}],
+            "preview": [{"amount": "1"}],
+            "problems": [{"row": 2, "message": "bad 0.5"}],
+            "rows": 3,
+        },
+        {
+            "source": {"filename": ".hidden"},
+            "headers": ["Account holder", "Max Mustermann"],
+            "header_is_preamble": True,
+            "inferred_plan": {"date": "Account holder"},
+            "detected": [{"column": "Account holder"}],
+            "problems": None,
+        },
+        {
+            "headers": ["2025-01-02", "Buy", "0.01", "AT611904300234573201", "a@b.example", "f" * 32, "x" * 65, "  "],
+            "inferred_plan": {"date": "2025-01-02", "type": "Buy", "n": 1},
+            "detected": [{"column": "Buy"}, {"column": 7}],
+            "source": "not a mapping",
+        },
+        {"headers": "Date,Amount", "source": {"filename": "a.b.TSV", "extension": ".old"}},
+        {"headers": ["1.234,56", "+3", "1/2/24", "12.01.2024", "Fee (BTC)"], "detected": []},
+    ]
+    return [{"analysis": value, "redacted": file_analysis.redact_for_egress(copy.deepcopy(value))} for value in analyses]
+
+
+def identify_cases():
+    from kassiber.core import ownership
+
+    items = [
+        {"input": "xpub6C...", "type": "extended_public_key", "chain": "bitcoin", "status": "owned", "classification": "owned_address",
+         "wallets": ["Cold", "", "Hot"], "derivation_path": "m/84'/0'/0'/0/1", "note": "(change #0)"},
+        {"input": "bc1q", "type": "address", "matches": [{"wallet": "B"}, {"wallet": "A"}, {"wallet": "B"}, {"wallet": ""}],
+         "classification": "owned_address", "ownership_ambiguous": 1, "script_pubkey": "0014"},
+        {"input": "lnbc1", "type": "lightning_invoice", "classification": "external", "owned_inputs": 0, "owned_outputs": None,
+         "external_outputs": [1], "match_source": "local"},
+        {"classification": "owned_address"},
+        {"input": "tx", "type": None, "matches": [], "wallets": ["W"], "note": None},
+    ]
+    return [{"item": item, "redacted": ownership.redact_result_for_ai(copy.deepcopy(item))} for item in items]
+
+
 def document():
     return {
         "capabilities": {tool.name: sorted(tools.tool_capabilities(tool)) for tool in tools.TOOL_CATALOG},
@@ -617,6 +793,14 @@ def document():
         "context": context_cases(),
         "provenance": provenance_cases(),
         "projection": projection_cases(),
+        "review_operations": review_operation_cases(),
+        "export_target": export_target_cases(),
+        "planned_artifact": planned_artifact_cases(),
+        "wallets_sync": wallets_sync_cases(),
+        "sync_errors": sync_error_cases(),
+        "egress_view": egress_view_cases(),
+        "file_egress": file_egress_cases(),
+        "identify": identify_cases(),
     }
 
 

@@ -59,40 +59,14 @@ pub const LOCAL_CUSTODY_READ_KINDS: [&str; 6] = [
 
 /// Read tools refused until the service behind them is native, with the
 /// work that owns it (design doc §2).
-pub const REFUSED_READS: [(&str, &str); 23] = [
-    ("ui.overview.snapshot", "workspace overview and health"),
-    ("ui.wallets.identify", "ownership verification"),
-    ("ui.wallets.analyze_file", "file analysis"),
-    ("ui.connections.node.snapshot", "Lightning node snapshot"),
-    (
-        "ui.reports.lightning_profitability",
-        "the aggregate-only Lightning projection",
-    ),
-    ("ui.reports.privacy_mirror", "Privacy Mirror reports"),
-    ("ui.journals.snapshot", "journal reads"),
-    ("ui.journals.quarantine", "journal reads"),
-    ("ui.journals.events.list", "journal reads"),
-    ("ui.journals.transfers.list", "journal reads"),
-    ("ui.report.blockers", "workspace readiness"),
-    ("ui.workspace.health", "workspace overview and health"),
-    ("ui.next_actions", "workspace readiness"),
-    (
-        "ui.workspace.overview.snapshot",
-        "workspace overview and health",
-    ),
-    ("ui.transactions.graph", "transaction graph projections"),
-    (
-        "ui.transactions.review_context",
-        "the transaction review composite",
-    ),
-    ("ui.audit.evidence.summary", "audit evidence summaries"),
-    ("ui.review.badges", "review badges"),
-    ("ui.review.worklist", "the review worklist composite"),
-    ("ui.egress.snapshot", "the diagnostics egress ledger"),
-    ("ui.review.cases", "the review workflow"),
-    ("ui.review.request_input", "the review workflow"),
-    ("ui.review.plan", "the review workflow"),
-];
+pub const REFUSED_READS: [(&str, &str); 1] = [(
+    "ui.connections.node.snapshot",
+    "the Lightning node snapshot route",
+)];
+
+/// Reads whose payload carries a `safety` block that reports whether the
+/// read prelude contacted the network.
+const SAFETY_COMPOSITES: [&str; 2] = ["ui.transactions.review_context", "ui.review.worklist"];
 
 /// `ParsedAiToolCall`.
 #[derive(Clone, Debug, PartialEq)]
@@ -195,6 +169,15 @@ pub fn denial_for(error: ToolError) -> Value {
     }
 }
 
+/// What `_auto_maintain_for_read` did before an AI read.
+#[derive(Debug, Clone, Default)]
+pub struct Maintenance {
+    /// The `ui.wallets.sync` payload of the automatic refresh, if attempted.
+    pub auto_sync: Option<Value>,
+    /// The `ui.journals.process` payload, if stale journals were rebuilt.
+    pub journals: Option<Value>,
+}
+
 /// What a read needs from the open book. Implemented by the daemon; every
 /// method runs on its request loop.
 pub trait Book {
@@ -203,11 +186,11 @@ pub trait Book {
     fn database_in_scope(&mut self, data_root: &str) -> Result<bool, ToolError>;
     /// `current_context_snapshot(conn)`: the active workspace and profile ids.
     fn context(&mut self) -> Result<(Value, Value), ToolError>;
-    /// `_auto_maintain_for_read` for an AI read: the journal-processing
-    /// payload when stale journals were rebuilt. With report-read sync
-    /// enabled and not yet attempted this turn, it refuses
-    /// (`not_implemented`), because that sync is network work.
-    fn maintain_for_read(&mut self, sync_attempted: bool) -> Result<Option<Value>, ToolError>;
+    /// `_auto_maintain_for_read` for an AI read: the automatic wallet refresh
+    /// payload when the book's report-read policy ran one (never twice in a
+    /// turn), and the journal-processing payload when stale journals were
+    /// rebuilt.
+    fn maintain_for_read(&mut self, sync_attempted: bool) -> Result<Maintenance, ToolError>;
     /// One native read: the kind's payload, with `authored_source` passed to
     /// the services that record it.
     fn read(
@@ -216,6 +199,67 @@ pub trait Book {
         arguments: &Value,
         authored_source: &'static str,
     ) -> Result<Value, ToolError>;
+    /// `build_report_blockers_snapshot(conn)` with an automatic refresh's
+    /// failure applied (`_apply_sync_failure_blocker`).
+    fn report_blockers(&mut self, _auto_sync: Option<&Value>) -> Result<Value, ToolError> {
+        Err(not_native("ui.report.blockers", "this book").into())
+    }
+    /// `core_file_analysis.analyze_file(source_file, column_map=...,
+    /// sample_rows=...)` over the chat's staged attachment.
+    fn analyze_file(&mut self, _source_file: &str, _arguments: &Value) -> Result<Value, ToolError> {
+        Err(not_native("ui.wallets.analyze_file", "this book").into())
+    }
+    /// `get_egress_ledger().snapshot(after_id=..., limit=...)`.
+    fn egress_ledger(&mut self, _after_id: i64, _limit: i64) -> Result<Value, ToolError> {
+        Err(not_native("ui.egress.snapshot", "this book").into())
+    }
+    /// One native write for an AI call, with `authored_source` passed to the
+    /// services that record it: the route the desktop uses, with the AI-path
+    /// parameters Python passes (strict wallet sync without journal pairing,
+    /// journal processing without pairing, `ai_tool` review and quarantine
+    /// authorship).
+    fn mutate(
+        &mut self,
+        kind: &str,
+        _arguments: &Value,
+        _authored_source: &'static str,
+    ) -> Result<Value, ToolError> {
+        Err(not_native(kind, "this book").into())
+    }
+    /// `_maintenance_run_payload(..., state=...)`: the payload, and the
+    /// automatic refresh it attempted, if any. With `sync_attempted`, an
+    /// `if_enabled` refresh is skipped as the turn already ran one.
+    fn maintenance_run(
+        &mut self,
+        _arguments: &Value,
+        _sync_attempted: bool,
+    ) -> Result<(Value, Option<Value>), ToolError> {
+        Err(not_native("ui.maintenance.run", "this book").into())
+    }
+    /// The consented custody write inside `SAVEPOINT
+    /// custody_ai_assisted_write`, committed with its `executed` audit row; on
+    /// failure rolled back, with a `failed` row committed instead.
+    fn custody_assisted_write(
+        &mut self,
+        kind: &str,
+        _arguments: &Value,
+        _audit: &Value,
+    ) -> Result<Value, ToolError> {
+        Err(not_native(kind, "this book").into())
+    }
+    /// `SOURCES.preview(...)` over the normalized recipe: the completed local
+    /// validation a dataset import is bound to.
+    fn dataset_preview(&mut self, _arguments: &Value) -> Result<Value, ToolError> {
+        Err(not_native("ui.chain_analysis.datasets.import", "this book").into())
+    }
+    /// `_ai_review_consent_preview`'s scoped body.
+    fn review_consent_preview(&mut self, _arguments: &Value) -> Result<Value, ToolError> {
+        Err(not_native("ui.review.apply", "this book").into())
+    }
+    /// `append_assistance_record(...)` then `commit()`.
+    fn append_custody_audit(&mut self, _audit: &Value) -> Result<Value, ToolError> {
+        Err(not_native("the custody AI audit", "this book").into())
+    }
     /// `resolve_scope(conn, None, None)`: the active profile's id.
     fn active_profile(&mut self) -> Result<String, ToolError> {
         Err(not_native("the active profile", "this book").into())
@@ -284,7 +328,7 @@ pub fn refused_read(name: &str) -> Option<&'static str> {
 /// Whether `state` holds a consent bound to this call (`consented_call_ids`).
 /// The chat loop (R6-7) records it after the user's decision; nothing else
 /// may run an egressing tool.
-fn consented(state: &Value, call_id: &PyStr) -> bool {
+pub(crate) fn consented(state: &Value, call_id: &PyStr) -> bool {
     matches!(get(state, "consented_call_ids"), Some(Value::List(ids))
         if ids.iter().any(|id| matches!(id, Value::Str(id) if id == call_id)))
 }
@@ -368,10 +412,27 @@ fn read(
     let mut work = |book: &mut dyn Book| -> Result<Value, ToolError> {
         assert_scope(book, &data_root, state)?;
         let mut metadata: Vec<(Key, Value)> = Vec::new();
+        let mut auto_sync_data = None;
         if refresh {
             let attempted =
                 get(state, "auto_sync_attempted").is_some_and(kassiber_envelope::truthy);
-            if let Some(processed) = book.maintain_for_read(attempted)? {
+            let maintenance = book.maintain_for_read(attempted)?;
+            if let Some(auto_sync) = maintenance.auto_sync {
+                // The busy answer comes before Python's execution wrapper
+                // marks the turn as attempted.
+                if get(&auto_sync, "reason")
+                    != Some(&Value::Str("project_operation_in_progress".into()))
+                {
+                    kassiber_envelope::set(state, "auto_sync_attempted", Value::Bool(true));
+                }
+                kassiber_envelope::set(state, "auto_sync", auto_sync.clone());
+                metadata.push((
+                    Key::from("auto_sync"),
+                    success("ui.wallets.sync", auto_sync.clone()),
+                ));
+                auto_sync_data = Some(auto_sync);
+            }
+            if let Some(processed) = maintenance.journals {
                 kassiber_envelope::set(state, "auto_journal_process", processed.clone());
                 metadata.push((
                     Key::from("auto_journal_process"),
@@ -379,11 +440,41 @@ fn read(
                 ));
             }
         }
-        let payload = projections::read_for_ai(entry, kind, &call.arguments, state, book)?;
+        let mut payload = projections::read_for_ai(
+            entry,
+            kind,
+            &call.arguments,
+            state,
+            auto_sync_data.as_ref(),
+            book,
+        )?;
+        if SAFETY_COMPOSITES.contains(&kind) {
+            if let Some(mut safety @ Value::Dict(_)) = get(&payload, "safety").cloned() {
+                let contacted = auto_sync_data.is_some();
+                kassiber_envelope::set(&mut safety, "network_contacted", Value::Bool(contacted));
+                kassiber_envelope::set(
+                    &mut safety,
+                    "network_contact_reason",
+                    if contacted {
+                        s("opt_in_freshness_sync")
+                    } else {
+                        Value::Null
+                    },
+                );
+                kassiber_envelope::set(&mut payload, "safety", safety);
+            }
+        }
         let mut result = vec![
             (Key::from("ok"), Value::Bool(true)),
             (Key::from("envelope"), success(kind, payload)),
         ];
+        if kind != "ui.report.blockers" && sync_payload_has_errors(auto_sync_data.as_ref()) {
+            let blockers = book.report_blockers(auto_sync_data.as_ref())?;
+            result.push((
+                Key::from("auto_report_blockers"),
+                success("ui.report.blockers", blockers),
+            ));
+        }
         result.extend(metadata);
         Ok(Value::Dict(result))
     };
@@ -391,8 +482,31 @@ fn read(
     Ok(redact_ai_tool_result(&result))
 }
 
+/// `_sync_payload_has_errors(payload)`: the refresh failed, or a source did.
+pub fn sync_payload_has_errors(payload: Option<&Value>) -> bool {
+    let Some(payload @ Value::Dict(_)) = payload else {
+        return false;
+    };
+    if get(payload, "ok") == Some(&Value::Bool(false)) {
+        return true;
+    }
+    matches!(get(payload, "results"), Some(Value::List(rows)) if rows.iter().any(|row| {
+        matches!(row, Value::Dict(_))
+            && match get(row, "status") {
+                Some(status) if kassiber_envelope::truthy(status) => {
+                    kassiber_pytext::lower(&kassiber_envelope::py_str(status)) == "error"
+                }
+                _ => false,
+            }
+    }))
+}
+
 /// `_assert_ai_runtime_database_scope` and the frozen book check.
-fn assert_scope(book: &mut dyn Book, data_root: &str, state: &Value) -> Result<(), ToolError> {
+pub(crate) fn assert_scope(
+    book: &mut dyn Book,
+    data_root: &str,
+    state: &Value,
+) -> Result<(), ToolError> {
     if !book.database_in_scope(data_root)? {
         return Err(AppError::new(
             "stale_context",

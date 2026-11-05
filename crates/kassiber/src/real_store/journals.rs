@@ -436,11 +436,13 @@ mod hybrid;
 
 /// `ui.journals.quarantine.resolve`: one audited price override or exclusion,
 /// then an optional plain rebuild, mirroring Python's
-/// `_quarantine_resolution_payload` with `default_source="gui"`.
+/// `_quarantine_resolution_payload` with its `default_source` (`"gui"` for the
+/// desktop, `"ai_tool"` for the assistant).
 pub(super) fn quarantine_resolve(
     conn: &Connection,
     scope: &dyn Fn() -> Result<(String, String), kassiber_envelope::AppError>,
     args: &Value,
+    source: &str,
 ) -> Result<Value, kassiber_envelope::AppError> {
     use kassiber_envelope::{dict, get, py_str, s, AppError};
     use kassiber_pyjson::Key;
@@ -596,7 +598,7 @@ pub(super) fn quarantine_resolve(
     }
     let mut update = kassiber_transactions::metadata::GroupedUpdate {
         transaction: transaction_id.clone(),
-        source: "gui".into(),
+        source: source.into(),
         reason: Some(reason.as_str().into()),
         ..Default::default()
     };
