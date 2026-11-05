@@ -23957,8 +23957,8 @@
   {
     "id": "row-overrides-order",
     "file": "crates/custody/src/finalized_projection/row.rs",
-    "find": "        self.0.binary_search_by(|(name, _)| (*name).cmp(key))",
-    "replace": "        self.0.iter().position(|(name, _)| *name == key).ok_or(self.0.len())",
+    "find": "        self.0.binary_search_by(|(name, _)| {\n            if wanted != NONE && name.rank != NONE {\n                name.rank.cmp(&wanted)\n            } else {\n                name.text.cmp(key)\n            }\n        })",
+    "replace": "        self.0\n            .iter()\n            .position(|(name, _)| name.text == key)\n            .ok_or(self.0.len())",
     "expect_failing": [
       "finalized_borrowed_rows_preserve_overrides_and_source_bytes"
     ],
@@ -24748,6 +24748,36 @@
       "cpython_component_times"
     ],
     "rule": "A trailing Z reads as UTC."
+  },
+  {
+    "id": "override-rank-compare",
+    "file": "crates/custody/src/finalized_projection/row.rs",
+    "find": "                name.rank.cmp(&wanted)",
+    "replace": "                wanted.cmp(&name.rank)",
+    "expect_failing": [
+      "finalized_borrowed_rows_preserve_overrides_and_source_bytes"
+    ],
+    "rule": "Ranked override names keep key order."
+  },
+  {
+    "id": "override-rank-mixed",
+    "file": "crates/custody/src/finalized_projection/row.rs",
+    "find": "            if wanted != NONE && name.rank != NONE {",
+    "replace": "            if wanted != NONE || name.rank != NONE {",
+    "expect_failing": [
+      "finalized_borrowed_rows_preserve_overrides_and_source_bytes"
+    ],
+    "rule": "An unranked name compares as text."
+  },
+  {
+    "id": "override-rank-arm",
+    "file": "crates/custody/src/finalized_projection/row.rs",
+    "find": "        \"occurred_at\" => 20,",
+    "replace": "        \"occurred_at\" => 19,",
+    "expect_failing": [
+      "override_ranks_order_as_names"
+    ],
+    "rule": "Each known name ranks at its key-order position."
   },
   {
     "id": "R4-evidence-alias-slot-index",

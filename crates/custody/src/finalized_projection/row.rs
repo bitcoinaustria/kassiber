@@ -51,14 +51,90 @@ impl Field<'_> {
     }
 }
 
+/// The generated field names the projection writes, in key order.
+#[cfg(test)]
+const NAMES: [&str; 24] = [
+    "_closed_confirmation_observation",
+    "amount",
+    "amount_includes_fee",
+    "asset",
+    "custody_chain_order",
+    "custody_external_economic_subtype",
+    "custody_finalized_tax_projection",
+    "custody_quantity_hash",
+    "custody_slice_end_msat",
+    "custody_slice_start_msat",
+    "direction",
+    "external_id",
+    "fee",
+    "fiat_rate",
+    "fiat_rate_exact",
+    "fiat_value",
+    "fiat_value_exact",
+    "id",
+    "journal_transaction_id",
+    "kind",
+    "occurred_at",
+    "privacy_boundary",
+    "raw_json",
+    "wallet_id",
+];
+
+/// The position of `key` in `NAMES`, or `NONE`; ranks order as their names.
+fn rank(key: &str) -> u16 {
+    match key {
+        "_closed_confirmation_observation" => 0,
+        "amount" => 1,
+        "amount_includes_fee" => 2,
+        "asset" => 3,
+        "custody_chain_order" => 4,
+        "custody_external_economic_subtype" => 5,
+        "custody_finalized_tax_projection" => 6,
+        "custody_quantity_hash" => 7,
+        "custody_slice_end_msat" => 8,
+        "custody_slice_start_msat" => 9,
+        "direction" => 10,
+        "external_id" => 11,
+        "fee" => 12,
+        "fiat_rate" => 13,
+        "fiat_rate_exact" => 14,
+        "fiat_value" => 15,
+        "fiat_value_exact" => 16,
+        "id" => 17,
+        "journal_transaction_id" => 18,
+        "kind" => 19,
+        "occurred_at" => 20,
+        "privacy_boundary" => 21,
+        "raw_json" => 22,
+        "wallet_id" => 23,
+        _ => NONE,
+    }
+}
+const NONE: u16 = u16::MAX;
+
+/// A generated field's name and its rank, so known names compare as
+/// integers.
+#[derive(Clone, Copy, Debug)]
+struct Name {
+    text: &'static str,
+    rank: u16,
+}
+
 /// Generated fields in key order. A row has a dozen or so, so a sorted
 /// vector finds them faster than a tree and allocates once.
 #[derive(Clone, Debug, Default)]
-struct Overrides<'a>(Vec<(&'static str, Field<'a>)>);
+struct Overrides<'a>(Vec<(Name, Field<'a>)>);
 
 impl<'a> Overrides<'a> {
     fn position(&self, key: &str) -> Result<usize, usize> {
-        self.0.binary_search_by(|(name, _)| (*name).cmp(key))
+        let wanted = rank(key);
+        self.0.binary_search_by(|(name, _)| {
+            if wanted != NONE && name.rank != NONE {
+                name.rank.cmp(&wanted)
+            } else {
+                name.text.cmp(key)
+            }
+        })
     }
 
     fn get(&self, key: &str) -> Option<&Value> {
@@ -72,7 +148,16 @@ impl<'a> Overrides<'a> {
     fn insert(&mut self, key: &'static str, value: Field<'a>) {
         match self.position(key) {
             Ok(at) => self.0[at].1 = value,
-            Err(at) => self.0.insert(at, (key, value)),
+            Err(at) => self.0.insert(
+                at,
+                (
+                    Name {
+                        text: key,
+                        rank: rank(key),
+                    },
+                    value,
+                ),
+            ),
         }
     }
 
@@ -80,7 +165,11 @@ impl<'a> Overrides<'a> {
         let at = match self.position(key) {
             Ok(at) => at,
             Err(at) => {
-                self.0.insert(at, (key, Field::Value(value())));
+                let name = Name {
+                    text: key,
+                    rank: rank(key),
+                };
+                self.0.insert(at, (name, Field::Value(value())));
                 at
             }
         };
@@ -95,21 +184,21 @@ impl<'a> Overrides<'a> {
     }
 
     fn iter(&self) -> impl Iterator<Item = (&&'static str, &Value)> {
-        self.0.iter().map(|(name, value)| (name, value.get()))
+        self.0.iter().map(|(name, value)| (&name.text, value.get()))
     }
 }
 
 impl<'a> IntoIterator for Overrides<'a> {
     type Item = (&'static str, Value);
     type IntoIter = std::iter::Map<
-        std::vec::IntoIter<(&'static str, Field<'a>)>,
-        fn((&'static str, Field<'a>)) -> (&'static str, Value),
+        std::vec::IntoIter<(Name, Field<'a>)>,
+        fn((Name, Field<'a>)) -> (&'static str, Value),
     >;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0
             .into_iter()
-            .map(|(name, value)| (name, value.into_value()))
+            .map(|(name, value)| (name.text, value.into_value()))
     }
 }
 
@@ -362,7 +451,7 @@ impl FinalizedRow<'_> {
                         _ => Stored::Value(leg.field(slot).clone()),
                     },
                 };
-                (name, stored)
+                (name.text, stored)
             })
             .collect();
         Detached { source, overrides }
@@ -498,6 +587,17 @@ impl serde::Serialize for FinalizedRow<'_> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn override_ranks_order_as_names() {
+        assert!(NAMES.windows(2).all(|pair| pair[0] < pair[1]));
+        for (at, name) in NAMES.iter().enumerate() {
+            assert_eq!(rank(name), at as u16, "{name}");
+        }
+        for name in ["", "Id", "amount_", "zz", "custody"] {
+            assert_eq!(rank(name), NONE, "{name}");
+        }
+    }
+
     use super::*;
 
     #[test]
