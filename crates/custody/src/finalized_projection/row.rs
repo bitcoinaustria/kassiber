@@ -29,7 +29,8 @@ pub(super) enum Field<'a> {
     /// A field of a typed canonical observation, by its slot.
     Leg(&'a Leg, usize),
     /// An integer, built as a JSON number on first read.
-    Int(i64, std::cell::OnceCell<Value>),
+    /// The built number is boxed, so an unread integer keeps fields small.
+    Int(i64, std::cell::OnceCell<Box<Value>>),
 }
 
 impl Field<'_> {
@@ -38,14 +39,16 @@ impl Field<'_> {
             Self::Value(value) => value,
             Self::Static(value) => value,
             Self::Leg(leg, slot) => leg.field(*slot),
-            Self::Int(n, value) => value.get_or_init(|| Value::from(*n)),
+            Self::Int(n, value) => value.get_or_init(|| Box::new(Value::from(*n))),
         }
     }
 
     fn into_value(self) -> Value {
         match self {
             Self::Value(value) => value,
-            Self::Int(n, value) => value.into_inner().unwrap_or_else(|| Value::from(n)),
+            Self::Int(n, value) => value
+                .into_inner()
+                .map_or_else(|| Value::from(n), |value| *value),
             other => other.get().clone(),
         }
     }
@@ -112,14 +115,6 @@ fn rank(key: &str) -> u16 {
 }
 const NONE: u16 = u16::MAX;
 
-/// A generated field's name and its rank, so known names compare as
-/// integers.
-#[derive(Clone, Copy, Debug)]
-struct Name {
-    text: &'static str,
-    rank: u16,
-}
-
 /// Inline ranks kept for this many generated fields; more are searched in
 /// the entries.
 const INLINE: usize = 24;
@@ -130,7 +125,7 @@ const INLINE: usize = 24;
 /// when the row is written.
 #[derive(Clone, Debug)]
 struct Overrides<'a> {
-    entries: Vec<(Name, Field<'a>)>,
+    entries: Vec<(&'static str, Field<'a>)>,
     ranks: [u16; INLINE],
 }
 
@@ -151,7 +146,7 @@ impl<'a> Overrides<'a> {
     fn position(&self, key: &str) -> Option<usize> {
         let wanted = rank(key);
         if wanted == NONE {
-            return self.entries.iter().position(|(name, _)| name.text == key);
+            return self.entries.iter().position(|(name, _)| *name == key);
         }
         let inline = self.entries.len().min(INLINE);
         self.ranks[..inline]
@@ -160,7 +155,7 @@ impl<'a> Overrides<'a> {
             .or_else(|| {
                 self.entries[inline..]
                     .iter()
-                    .position(|(name, _)| name.rank == wanted)
+                    .position(|(name, _)| rank(name) == wanted)
                     .map(|at| at + inline)
             })
     }
@@ -174,15 +169,11 @@ impl<'a> Overrides<'a> {
     }
 
     fn push(&mut self, key: &'static str, value: Field<'a>) -> usize {
-        let name = Name {
-            text: key,
-            rank: rank(key),
-        };
         let at = self.entries.len();
         if at < INLINE {
-            self.ranks[at] = name.rank;
+            self.ranks[at] = rank(key);
         }
-        self.entries.push((name, value));
+        self.entries.push((key, value));
         at
     }
 
@@ -212,28 +203,34 @@ impl<'a> Overrides<'a> {
 
     /// The fields in no particular order.
     fn iter(&self) -> impl Iterator<Item = (&&'static str, &Value)> {
-        self.entries
-            .iter()
-            .map(|(name, value)| (&name.text, value.get()))
+        self.entries.iter().map(|(name, value)| (name, value.get()))
     }
 
     /// The fields in key order: known names by rank, any other by text,
     /// which is the same order.
-    fn into_sorted(self) -> impl Iterator<Item = (Name, Field<'a>)> {
-        let mut order: Vec<usize> = (0..self.entries.len()).collect();
-        order.sort_unstable_by(|a, b| {
-            let (a, b) = (&self.entries[*a].0, &self.entries[*b].0);
-            if a.rank != NONE && b.rank != NONE {
-                a.rank.cmp(&b.rank)
+    fn into_sorted(self) -> impl Iterator<Item = (&'static str, Field<'a>)> {
+        let rank_at = |at: usize| {
+            if at < INLINE {
+                self.ranks[at]
             } else {
-                a.text.cmp(b.text)
+                rank(self.entries[at].0)
+            }
+        };
+        let mut order: Vec<(u16, usize)> = (0..self.entries.len())
+            .map(|at| (rank_at(at), at))
+            .collect();
+        order.sort_unstable_by(|(a_rank, a), (b_rank, b)| {
+            if *a_rank != NONE && *b_rank != NONE {
+                a_rank.cmp(b_rank)
+            } else {
+                self.entries[*a].0.cmp(self.entries[*b].0)
             }
         });
-        let mut slots: Vec<Option<(Name, Field<'a>)>> =
+        let mut slots: Vec<Option<(&'static str, Field<'a>)>> =
             self.entries.into_iter().map(Some).collect();
         order
             .into_iter()
-            .map(move |at| slots[at].take().expect("each field once"))
+            .map(move |(_, at)| slots[at].take().expect("each field once"))
     }
 }
 
@@ -245,7 +242,7 @@ impl<'a> IntoIterator for Overrides<'a> {
     fn into_iter(self) -> Self::IntoIter {
         Box::new(
             self.into_sorted()
-                .map(|(name, value)| (name.text, value.into_value())),
+                .map(|(name, value)| (name, value.into_value())),
         )
     }
 }
@@ -498,7 +495,7 @@ impl FinalizedRow<'_> {
                         _ => Stored::Value(leg.field(slot).clone()),
                     },
                 };
-                (name.text, stored)
+                (name, stored)
             })
             .collect();
         Detached { source, overrides }
@@ -686,6 +683,11 @@ mod tests {
         sorted.sort();
         assert_eq!(keys, sorted);
         assert_eq!(keys.len(), names.len() + 1);
+    }
+
+    #[test]
+    fn generated_fields_stay_small() {
+        assert!(std::mem::size_of::<Field<'_>>() <= 40);
     }
 
     #[test]

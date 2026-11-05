@@ -24752,8 +24752,8 @@
   {
     "id": "override-rank-compare",
     "file": "crates/custody/src/finalized_projection/row.rs",
-    "find": "                a.rank.cmp(&b.rank)",
-    "replace": "                b.rank.cmp(&a.rank)",
+    "find": "                a_rank.cmp(b_rank)",
+    "replace": "                b_rank.cmp(a_rank)",
     "expect_failing": [
       "many_overrides_keep_their_values_and_key_order"
     ],
@@ -24762,8 +24762,8 @@
   {
     "id": "override-rank-mixed",
     "file": "crates/custody/src/finalized_projection/row.rs",
-    "find": "            if a.rank != NONE && b.rank != NONE {",
-    "replace": "            if a.rank != NONE || b.rank != NONE {",
+    "find": "            if *a_rank != NONE && *b_rank != NONE {",
+    "replace": "            if *a_rank != NONE || *b_rank != NONE {",
     "expect_failing": [
       "many_overrides_keep_their_values_and_key_order"
     ],
@@ -24792,12 +24792,22 @@
   {
     "id": "override-inline-rank",
     "file": "crates/custody/src/finalized_projection/row.rs",
-    "find": "            self.ranks[at] = name.rank;",
+    "find": "            self.ranks[at] = rank(key);",
     "replace": "            self.ranks[at] = NONE;",
     "expect_failing": [
       "many_overrides_keep_their_values_and_key_order"
     ],
     "rule": "An inline rank names its entry."
+  },
+  {
+    "id": "override-boxed-int",
+    "file": "crates/custody/src/finalized_projection/row.rs",
+    "find": "Box::new(Value::from(*n))",
+    "replace": "Box::new(Value::from(n.wrapping_add(1)))",
+    "expect_failing": [
+      "many_overrides_keep_their_values_and_key_order"
+    ],
+    "rule": "A generated integer reads as itself."
   },
   {
     "id": "R4-evidence-alias-slot-index",
