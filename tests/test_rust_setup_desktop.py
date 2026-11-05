@@ -73,7 +73,8 @@ def same_session(book, requests):
     expected_ready = json.loads(expected[0])
     actual_ready = json.loads(actual[0])
     supported = set(actual_ready["data"]["supported_kinds"])
-    expected_ready["data"]["supported_kinds"] = [k for k in expected_ready["data"]["supported_kinds"] if k in supported] + ["test.stream", "test.emit_event", "test.late", "test.secret_store", "test.freshness.plan", "test.freshness.select", "test.freshness.invoke", "test.freshness.execute", "test.freshness.product.execute", "test.freshness.cancel", "test.freshness.pause", "test.freshness.resume", "test.freshness.request.cancel", "test.freshness.request.revoke", "test.freshness.graph.pending", "test.freshness.graph.start"]
+    expected_ready["data"]["supported_kinds"] = [k for k in expected_ready["data"]["supported_kinds"] if k in supported] + [
+        k for k in actual_ready["data"]["supported_kinds"] if k.startswith("test.")]
     assert actual[0] == (json.dumps(expected_ready, separators=(",", ":")) + "\n").encode()
     records = [json.loads(line) for line in log.read_text().splitlines()]
     assert records == [{"command": "daemon", "served_by": "rust"}]
