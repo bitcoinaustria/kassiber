@@ -1621,8 +1621,13 @@ version = "0.1.0"
 dependencies = [
  "fancy-regex",
  "kassiber-envelope",
+ "kassiber-net",
+ "kassiber-paths",
  "kassiber-pyjson",
  "kassiber-pytext",
+ "kassiber-setup",
+ "kassiber-store",
+ "sha2 0.11.1",
 ]
 
 [[package]]
@@ -2056,6 +2061,7 @@ dependencies = [
  "bitcoin",
  "elements-miniscript",
  "flate2",
+ "kassiber-ai",
  "kassiber-chain",
  "kassiber-custody",
  "kassiber-envelope",

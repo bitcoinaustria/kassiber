@@ -11,8 +11,18 @@ publish.workspace = true
 [lib]
 name = "kassiber_ai"
 
+[features]
+# Test builds only: fixed clocks for the differential drivers.
+test-harness = []
+
 [dependencies]
 kassiber-envelope = { path = "../envelope" }
+# Provider configuration, discovery and the HTTP client (R6-6a).
+kassiber-net = { path = "../net" }
+kassiber-paths = { path = "../paths" }
+kassiber-store = { path = "../store" }
+kassiber-setup = { path = "../setup" }
+sha2 = "0.11"
 kassiber-pyjson = { path = "../pyjson" }
 kassiber-pytext = { path = "../pytext" }
 # Python `re` patterns (schema `pattern`, the planner's word rules and the

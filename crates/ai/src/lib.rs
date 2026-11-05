@@ -14,16 +14,21 @@
 //! the call.
 
 pub mod catalog;
+pub mod clock;
 pub mod consent;
+pub mod discovery;
 pub mod executor;
 pub mod planner;
 pub mod projections;
 pub mod provenance;
+pub mod providers;
 mod pyre;
+mod pyval;
 pub mod redact;
 pub mod select;
 pub mod skills;
 pub mod summary;
+pub mod transport;
 pub mod validate;
 
 use kassiber_envelope::AppError;

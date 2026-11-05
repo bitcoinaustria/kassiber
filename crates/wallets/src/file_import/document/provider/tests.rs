@@ -1,5 +1,6 @@
 use super::*;
 use kassiber_net::{test_support::FakeProvider, Ledger};
+use std::path::Path;
 
 fn fixture() -> Connection {
     let conn = Connection::open_in_memory().unwrap();

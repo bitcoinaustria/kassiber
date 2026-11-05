@@ -75,6 +75,8 @@ required-features = ["test-harness"]
 [dependencies]
 kassiber-chain = { path = "../chain" }
 kassiber-net = { path = "../net" }
+# The AI provider store and its error mapping, shared with chat (R6-6a).
+kassiber-ai = { path = "../ai" }
 kassiber-envelope = { path = "../envelope" }
 kassiber-pyjson = { path = "../pyjson" }
 kassiber-pytext = { path = "../pytext" }
