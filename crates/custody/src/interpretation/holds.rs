@@ -556,9 +556,8 @@ pub(super) fn unscoped(rows: &[Value]) -> Result<Ids, String> {
 }
 
 fn unscoped_with_facts<R: Row>(rows: &[R], facts: Option<&[Facts]>) -> Result<Ids, String> {
-    let mut groups: Vec<((String, String), Vec<&R>)> = Vec::new();
-    let mut positions: std::collections::HashMap<(String, String), usize> =
-        std::collections::HashMap::new();
+    let mut groups: Vec<Vec<&R>> = Vec::new();
+    let mut positions: crate::fxhash::HashMap<(String, String), usize> = Default::default();
     // `codec::text` of a string is the string itself.
     fn text(value: &Value) -> std::borrow::Cow<'_, str> {
         match value {
@@ -591,15 +590,15 @@ fn unscoped_with_facts<R: Row>(rows: &[R], facts: Option<&[Facts]>) -> Result<Id
         };
         let key = (external, codec::text(row.at("asset")).py_strip().py_upper());
         // Groups keep first-occurrence order, as a linear search kept them.
-        if let Some(&at) = positions.get(&key) {
-            groups[at].1.push(row);
-        } else {
-            positions.insert(key.clone(), groups.len());
-            groups.push((key, vec![row]));
+        let next = groups.len();
+        let at = *positions.entry(key).or_insert(next);
+        if at == next {
+            groups.push(Vec::new());
         }
+        groups[at].push(row);
     }
     let mut held = Ids::new();
-    for (_, group) in groups {
+    for group in groups {
         let mut outs = Vec::new();
         let mut ins = Vec::new();
         for (direction, legs) in [("outbound", &mut outs), ("inbound", &mut ins)] {

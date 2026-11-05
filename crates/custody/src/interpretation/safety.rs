@@ -278,7 +278,10 @@ fn compose_impl(
         quarantines.extend(array(&samourai["quarantines"]).iter().cloned());
         quarantines.extend(native.quarantines);
         quarantines.extend(holds.quarantines.iter().cloned());
-        let mut result = json!({"non_event_transaction_ids":non_events,"claims":claims,"native_audits":pairs::native_audits(&derived,context)?,"blocked_transaction_ids":all_blocked,"quarantines":quarantines,"transient_blocked_transaction_ids":transient});
+        let mut result = json!({"non_event_transaction_ids":non_events,"native_audits":pairs::native_audits(&derived,context)?,"blocked_transaction_ids":all_blocked,"transient_blocked_transaction_ids":transient});
+        // The lists move into the result; `json!` would copy them.
+        result["claims"] = Value::Array(claims);
+        result["quarantines"] = Value::Array(quarantines);
         if diagnostics {
             result.as_object_mut().unwrap().extend(
                 json!({"native_transitions":native_trace,"handled_ids":prepared.handled,"privacy":privacy,"holds":holds,"pair_inputs_before_holds":candidates,"pair_inputs":kept,"derived_pairs":derived})

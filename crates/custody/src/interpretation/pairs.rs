@@ -507,7 +507,11 @@ pub(super) fn compile_with_scopes(
             ));
         }
     }
-    Ok(json!({"claims":claims,"blocked_transaction_ids":blocked,"quarantines":quarantines}))
+    // The lists move into the result; `json!` would copy them.
+    let mut result = json!({"blocked_transaction_ids":blocked});
+    result["claims"] = Value::Array(claims);
+    result["quarantines"] = Value::Array(quarantines);
+    Ok(result)
 }
 fn sum(a: &Value, b: &Value) -> Value {
     use kassiber_pyjson::BigInt;

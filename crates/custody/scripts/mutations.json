@@ -24870,6 +24870,36 @@
     "rule": "Anchor validation reports its transaction coverage."
   },
   {
+    "id": "safety-claims-moved",
+    "file": "crates/custody/src/interpretation/safety.rs",
+    "find": "        result[\"claims\"] = Value::Array(claims);",
+    "replace": "        result[\"claims\"] = Value::Array(Vec::new());",
+    "expect_failing": [
+      "interpretation_full_vectors"
+    ],
+    "rule": "Interpretation results carry their claims."
+  },
+  {
+    "id": "pairs-quarantines-moved",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "    result[\"quarantines\"] = Value::Array(quarantines);",
+    "replace": "    result[\"quarantines\"] = Value::Array(Vec::new());",
+    "expect_failing": [
+      "pair_chronology"
+    ],
+    "rule": "Pair compilation carries its quarantines."
+  },
+  {
+    "id": "unscoped-group-new",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "        if at == next {",
+    "replace": "        if at != next {",
+    "expect_failing": [
+      "raw_observation_hold_vectors"
+    ],
+    "rule": "A new unscoped key opens a group."
+  },
+  {
     "id": "R4-evidence-alias-slot-index",
     "file": "crates/custody/src/evidence.rs",
     "find": "selected[*index] = keeper;",
