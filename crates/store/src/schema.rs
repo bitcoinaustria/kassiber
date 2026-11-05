@@ -538,6 +538,31 @@ mod tests {
         assert_ne!(fingerprint(&conn).unwrap(), fingerprint_before);
     }
     #[test]
+    fn newer_unknown_layouts_and_audits_are_refused() {
+        for drift in [
+            "CREATE TABLE future_storage(value INTEGER)",
+            "ALTER TABLE transactions ADD COLUMN future_column TEXT",
+            "CREATE INDEX idx_future_transactions ON transactions(asset)",
+            "CREATE TRIGGER trg_future BEFORE INSERT ON ai_provider_checks BEGIN SELECT 1; END",
+            "CREATE VIEW future_view AS SELECT 1",
+            "INSERT INTO schema_migration_audits VALUES('future-migration-v1','future-migration-v1',1,'{}','fixed')",
+            "INSERT INTO schema_migration_audits VALUES('at-fee-consumed-regime-v2','at-fee-consumed-regime-v2',1,'{}','fixed')",
+        ] {
+            let conn = current_schema();
+            verify(&conn).unwrap();
+            conn.execute_batch(drift).unwrap();
+            assert_eq!(
+                verify(&conn).unwrap_err().kind,
+                crate::ErrorKind::RequiresPythonMigration,
+                "{drift}"
+            );
+        }
+        // The retired audits Python may still hold remain admitted.
+        let conn = current_schema();
+        conn.execute_batch("INSERT INTO schema_migration_audits VALUES('at-fee-consumed-regime-v1','at-fee-consumed-regime-v1',1,'{}','fixed')").unwrap();
+        verify(&conn).unwrap();
+    }
+    #[test]
     fn historical_layout_uses_normalized_gate_and_still_refuses_constraint_drift() {
         let conn = current_schema();
         let manifest: Value = serde_json::from_str(MANIFEST).unwrap();

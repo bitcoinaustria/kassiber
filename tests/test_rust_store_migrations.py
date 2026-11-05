@@ -863,6 +863,8 @@ SCHEMA_STEPS = {
     "commercial": "_ensure_commercial_reconciliation_schema",
     "freshness": "_ensure_freshness_schema",
     "ai-refs": "_ensure_ai_provider_secret_refs_schema",
+    "ai-checks": "_ensure_ai_provider_checks_schema",
+    "ai-audit": "_ensure_custody_ai_audit_consent_schema",
     "graph-cache": "_ensure_transaction_graph_cache_schema",
     "projection-view": "_ensure_custody_projection_relation_view",
     "legacy-freeze": "_ensure_legacy_custody_write_freeze_triggers",
@@ -1012,6 +1014,188 @@ def test_legacy_schema_repairs_match_python(storage_probe, tmp_path, step):
     conn.commit()
     conn.close()
     compare_schema_step(storage_probe, tmp_path, source, step)
+
+
+def narrow_ai_audit(conn):
+    """Give a current book's custody AI audit #654's consent CHECK and two rows."""
+    import re
+    objects = {name: sql for name, sql in conn.execute(
+        "SELECT name, sql FROM sqlite_master WHERE tbl_name='custody_ai_assistance_audits' AND sql IS NOT NULL")}
+    table = objects.pop("custody_ai_assistance_audits")
+    narrow = re.sub(r"'mode_auto', 'mode_full_access',\s*'mcp_host', ", "", table)
+    assert narrow != table and "'mcp_host'" not in narrow
+    conn.commit()
+    conn.execute("PRAGMA foreign_keys=OFF")
+    conn.execute("DROP TABLE custody_ai_assistance_audits")
+    for sql in [narrow, *objects.values()]:
+        conn.execute(sql)
+    conn.execute("PRAGMA foreign_keys=ON")
+    conn.executescript("""
+        INSERT INTO workspaces VALUES('ws','Synthetic','fixed');
+        INSERT INTO profiles(id,workspace_id,label,created_at) VALUES('pf','ws','Synthetic','fixed');
+    """)
+    for ordinal, decision in enumerate(("allow_once", "deny")):
+        conn.execute(
+            "INSERT INTO custody_ai_assistance_audits(id,workspace_id,profile_id,tool_name,daemon_kind,call_id,provider_kind,model,"
+            "facts_sha256,model_proposal_json,consent_decision,consent_requested_at,consent_decided_at,execution_status,created_at) "
+            "VALUES(?,'ws','pf','tool','kind',?,'local','m',?,'{\"€\":1}',?,'t','t','executed',?)",
+            (f"audit-{ordinal}", f"call-{ordinal}", f"{ordinal:064x}", decision, f"2025-01-0{ordinal + 1}"))
+    conn.commit()
+
+
+def ai_audit_starting_point(source):
+    conn = reference_open(source)
+    narrow_ai_audit(conn)
+    conn.close()
+
+
+def test_custody_ai_audit_consent_widening_matches_python(storage_probe, tmp_path):
+    source = tmp_path / "source/data"
+    ai_audit_starting_point(source)
+    compare_schema_step(storage_probe, tmp_path, source, "ai-audit")
+    conn = sqlite3.connect(tmp_path / "rust/data/kassiber.sqlite3")
+    assert "'mcp_host'" in conn.execute("SELECT sql FROM sqlite_master WHERE name='custody_ai_assistance_audits'").fetchone()[0]
+    with pytest.raises(sqlite3.IntegrityError, match="custody_ai_assistance_immutable"):
+        conn.execute("UPDATE custody_ai_assistance_audits SET model='x'")
+    conn.close()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX killed-child schema fixture")
+@pytest.mark.parametrize("resume", ["python", "rust"])
+@pytest.mark.parametrize("checkpoint", ["ai-audit.after_rename", "ai-audit.after_copy", "ai-audit.after_restore_objects", "repair.before_commit", "repair.after_commit"])
+def test_killed_ai_audit_rebuild_keeps_every_record(storage_probe, tmp_path, resume, checkpoint):
+    source = tmp_path / "source/data"
+    ai_audit_starting_point(source)
+    control, root = tmp_path / "control/data", tmp_path / "interrupted/data"
+    shutil.copytree(source, control)
+    shutil.copytree(source, root)
+    expected = sqlite3.connect(control / "kassiber.sqlite3")
+    expected.row_factory = sqlite3.Row
+    expected.execute("PRAGMA foreign_keys=ON")
+    db._ensure_custody_ai_audit_consent_schema(expected)
+    child = subprocess.Popen([str(storage_probe)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        child.stdin.write(json.dumps(dict(op="schema-step", step="ai-audit", data_root=str(root), kill_at=checkpoint)) + "\n")
+        child.stdin.flush()
+        assert json.loads(child.stdout.readline()) == {"checkpoint": checkpoint}
+    finally:
+        child.kill()
+        child.communicate(timeout=10)
+    if resume == "rust":
+        assert invoke(storage_probe, root, op="schema-step", step="ai-audit")["ok"]
+    actual = sqlite3.connect(root / "kassiber.sqlite3")
+    actual.row_factory = sqlite3.Row
+    actual.execute("PRAGMA foreign_keys=ON")
+    if resume == "python":
+        db._ensure_custody_ai_audit_consent_schema(actual)
+    assert normalized_dump(actual) == normalized_dump(expected)
+    assert actual.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    actual.close()
+    expected.close()
+
+
+def populate_main_sync_storage(conn):
+    """Rows in every storage object main added after #654."""
+    conn.executescript("""
+        INSERT INTO workspaces VALUES('ws','Synthetic','fixed');
+        INSERT INTO profiles(id,workspace_id,label,created_at) VALUES('pf','ws','Synthetic','fixed');
+        INSERT INTO wallets(id,workspace_id,profile_id,label,kind,created_at) VALUES('wal','ws','pf','Wallet','manual','fixed');
+        INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,occurred_at,direction,asset,amount,
+            fiat_currency,fiat_rate,pricing_quality,pricing_review_accepted_price,created_at)
+            VALUES('tx','ws','pf','wal','tx','2025-01-01T00:00:00Z','inbound','BTC',100000,'EUR','51234.5','coarse','51234.5','fixed');
+        INSERT INTO ai_providers(name,base_url,kind,agent_access,created_at,updated_at)
+            VALUES('synthetic','http://127.0.0.1:9/v1','local','restricted','fixed','fixed');
+        INSERT INTO ai_provider_checks(provider_name,check_kind,base_url,checked_at,stale,error_json,value_json)
+            VALUES('synthetic','models','http://127.0.0.1:9/v1','fixed',1,NULL,'{"models":["m"]}');
+    """)
+    for ordinal, decision in enumerate(("mode_auto", "mode_full_access", "mcp_host")):
+        conn.execute(
+            "INSERT INTO custody_ai_assistance_audits(id,workspace_id,profile_id,tool_name,daemon_kind,call_id,provider_kind,model,"
+            "facts_sha256,consent_decision,consent_requested_at,consent_decided_at,execution_status,created_at) "
+            "VALUES(?,'ws','pf','tool','kind',?,'local','m',?,?,'t','t','executed','t')",
+            (f"audit-{ordinal}", f"call-{ordinal}", f"{ordinal:064x}", decision))
+    conn.commit()
+
+
+def open_raw(root, encrypted):
+    database = root / "kassiber.sqlite3"
+    return sqlcipher.open_encrypted(database, PASSPHRASE, enforce_operator_identity=False) if encrypted else sqlite3.connect(database)
+
+
+@pytest.mark.parametrize("encrypted", [False, True], ids=["sqlite", "sqlcipher"])
+def test_current_python_book_with_main_sync_storage_opens_in_rust(storage_probe, tmp_path, encrypted):
+    """A book the current Python created and wrote is admitted unchanged."""
+    root = tmp_path / "python/data"
+    conn = reference_open(root, encrypted)
+    populate_main_sync_storage(conn)
+    conn.close()
+    conn = reference_open(root, encrypted)
+    expected = normalized_dump(conn)
+    conn.close()
+    for op in ("open", "migrate", "open"):
+        result = invoke(storage_probe, root, encrypted=encrypted, op=op)
+        assert result["ok"], result
+        conn = open_raw(root, encrypted)
+        assert normalized_dump(conn) == expected, op
+        conn.close()
+    conn = reference_open(root, encrypted)
+    assert normalized_dump(conn) == expected
+    conn.close()
+
+
+@pytest.mark.parametrize("encrypted", [False, True], ids=["sqlite", "sqlcipher"])
+def test_rust_book_with_main_sync_storage_reopens_without_a_migration_loop(storage_probe, tmp_path, encrypted):
+    """Rust-created, Python-written, then alternately reopened: nothing changes."""
+    root = tmp_path / "rust/data"
+    assert invoke(storage_probe, root, encrypted=encrypted)["ok"]
+    conn = reference_open(root, encrypted)
+    populate_main_sync_storage(conn)
+    expected = normalized_dump(conn)
+    conn.close()
+    for side in ("rust", "python", "rust", "python"):
+        if side == "rust":
+            assert invoke(storage_probe, root, encrypted=encrypted, op="migrate")["ok"]
+            assert invoke(storage_probe, root, encrypted=encrypted, op="open")["ok"]
+            conn = open_raw(root, encrypted)
+        else:
+            conn = reference_open(root, encrypted)
+        assert normalized_dump(conn) == expected, side
+        conn.close()
+
+
+NEWER_LAYOUTS = {
+    "table": "CREATE TABLE future_storage(value INTEGER)",
+    "column": "ALTER TABLE transactions ADD COLUMN future_column TEXT",
+    "index": "CREATE INDEX idx_future_transactions ON transactions(asset)",
+    "audit": "INSERT INTO schema_migration_audits VALUES('future-migration-v1','future-migration-v1',1,'{}','fixed')",
+    "trigger": "CREATE TRIGGER trg_future BEFORE INSERT ON ai_provider_checks BEGIN SELECT 1; END",
+}
+
+
+@pytest.mark.parametrize("layout", NEWER_LAYOUTS)
+@pytest.mark.parametrize("encrypted", [False, True], ids=["sqlite", "sqlcipher"])
+def test_newer_unknown_layouts_are_refused_by_rust_without_writing(storage_probe, tmp_path, encrypted, layout):
+    """Rust refuses a layout it does not know, in both open modes, byte for byte.
+
+    The Python reference does not refuse these: its open is additive and
+    ignores objects and audits it does not know. That asymmetry is deliberate
+    on the Rust side (fail closed rather than run on an unknown schema); see
+    docs/reference/database-compatibility.md.
+    """
+    root = tmp_path / "book/data"
+    conn = reference_open(root, encrypted)
+    conn.execute(NEWER_LAYOUTS[layout])
+    conn.commit()
+    conn.close()
+    database = root / "kassiber.sqlite3"
+    before = database.read_bytes()
+    for op in ("open", "migrate"):
+        result = invoke(storage_probe, root, encrypted=encrypted, op=op)
+        assert not result["ok"] and result["error"]["code"] == "requires_python_migration", (op, result)
+        assert database.read_bytes() == before, op
+    conn = reference_open(root, encrypted)
+    assert conn.execute("SELECT count(*) FROM settings WHERE key='database_instance_id'").fetchone()[0] == 1
+    conn.close()
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX killed-child schema fixture")

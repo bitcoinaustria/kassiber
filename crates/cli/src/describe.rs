@@ -365,6 +365,10 @@ pub fn needs_database(path: &str) -> bool {
 fn effect(path: &str, capability: Option<Capability>) -> &'static str {
     if matches!(path, "chat" | "daemon" | "mcp.serve") {
         "interactive"
+    } else if path == "mcp.call" {
+        // Read-classified as a command, but the tool it runs may write within
+        // the user's External agents grant (the broker classifies each tool).
+        "mutating"
     } else if capability == Some(Capability::Read) {
         "read_only"
     } else {

@@ -189,6 +189,23 @@ natively; generic `cancel` keeps Python's refusal.
   forms, including HTTP probe prefix-only/large-body reads, before declaring
   full chain-client parity.
 
+## Rust main sync 1
+
+[Main sync 1](docs/reference/rust-main-sync.md) inventories main #672 to #714
+against the Rust port and slices the gaps; Python stays the reference.
+
+- [x] S1: the Rust store opens and migrates books the current Python wrote
+  (accepted coarse price, provider `agent_access`, `ai_provider_checks`, the
+  widened custody AI consent CHECK) and the command registry, `describe` and
+  capabilities follow main. New leaves and kinds stay `not_implemented`.
+- [ ] S2 to S11 as the inventory lists them: qualified transaction
+  references, coarse-price acceptance, the review workflow, quarantine root
+  causes, transfer dismissals, the Reports screen (including the empty-root
+  `jurisdictionCode`), wallet completeness, the transaction dashboard,
+  readiness definitions and custody component revision.
+- [ ] S12: rebase the R6 branches (AI catalog, providers, tools, MCP grants,
+  chat) onto the synced stack.
+
 ## Rust backend R5 dependency review
 
 The [dependency review](docs/reference/rust-shell.md#dependency-review-lwk-sshsig-and-http-plan-21-2026-11-04)

@@ -285,6 +285,7 @@ pub(crate) fn install_graph(conn: &mut Connection) -> Result<()> {
 #[cfg(any(test, feature = "test-hooks"))]
 pub(crate) fn finish_msat_columns(conn: &Connection) -> Result<()> {
     for (column, definition) in [
+        ("pricing_review_accepted_price", "TEXT"),
         ("amount_includes_fee", "INTEGER NOT NULL DEFAULT 0"),
         ("kind_override", "TEXT"),
         (
@@ -439,6 +440,22 @@ mod tests {
                 1
             );
         }
+    }
+    #[test]
+    fn ordered_pass_restores_the_accepted_price_the_msat_rebuild_drops() {
+        // The rebuild's fixed column list omits the accepted coarse price, as
+        // Python's does; the pass adds it before and again after the rebuild.
+        let (_root, mut book) = legacy_book("transactions", "migrate_transactions");
+        let conn = &mut book.connection;
+        ordered::migrate(conn, &mut |_| panic!("identity must survive"), &mut |_| {
+            Ok(())
+        })
+        .unwrap();
+        crate::schema::verify(conn).unwrap();
+        assert!(columns(conn, "transactions")
+            .unwrap()
+            .iter()
+            .any(|(name, _)| name == "pricing_review_accepted_price"));
     }
     #[test]
     fn interrupted_msat_steps_resume_without_double_scaling() {

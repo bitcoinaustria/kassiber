@@ -509,6 +509,66 @@ pub(crate) fn leg_roles(
     }
     custody_fk_check(conn)
 }
+/// Widen the custody AI audit's consent CHECK to the permission-mode and
+/// `mcp_host` decisions. Rows are copied unchanged; a current table is left
+/// alone, so a repeat open writes nothing.
+pub(crate) fn ai_audit_consent(
+    conn: &mut Connection,
+    observer: &mut impl FnMut(&str) -> Result<()>,
+) -> Result<()> {
+    let function = "_ensure_custody_ai_audit_consent_schema";
+    let Some(current) = table_sql(conn, "custody_ai_assistance_audits")? else {
+        return Ok(());
+    };
+    if ["mode_auto", "mode_full_access", "mcp_host"]
+        .iter()
+        .all(|decision| current.contains(&format!("'{decision}'")))
+    {
+        return Ok(());
+    }
+    let count = |conn: &Connection| -> Result<i64> {
+        conn.query_row(
+            "SELECT COUNT(*) FROM custody_ai_assistance_audits",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(map_sqlite_error)
+    };
+    let before = count(conn)?;
+    rebuild(conn, false, observer, |conn, observe| {
+        for prefix in ["DROP TRIGGER", "DROP INDEX", "ALTER TABLE"] {
+            execute(conn, statement(function, prefix))?;
+        }
+        observe("ai-audit.after_rename")?;
+        execute(conn, statement(function, "CREATE TABLE"))?;
+        let fields = data()["custody_ai_audit_columns"]
+            .as_str()
+            .expect("custody AI audit columns");
+        execute(
+            conn,
+            &format!(
+                "INSERT INTO custody_ai_assistance_audits ({fields}) SELECT {fields} FROM custody_ai_assistance_audits__pre_consent_widening"
+            ),
+        )?;
+        observe("ai-audit.after_copy")?;
+        let after = count(conn)?;
+        if after != before {
+            return Err(Error::new(
+                ErrorKind::CustodySchemaMigrationFailed,
+                "custody AI audit migration changed the number of records",
+            )
+            .details(serde_json::json!({
+                "migration": "custody_ai_audit_consent_decisions",
+                "before": before,
+                "after": after,
+            })));
+        }
+        for prefix in ["DROP TABLE", "CREATE INDEX", "CREATE TRIGGER"] {
+            execute(conn, statement(function, prefix))?;
+        }
+        observe("ai-audit.after_restore_objects")
+    })
+}
 pub(crate) fn direct_payout(conn: &Connection) -> Result<()> {
     let function = "_ensure_direct_swap_payout_schema";
     execute(conn, statement(function, "CREATE TABLE"))?;
@@ -609,9 +669,11 @@ pub(crate) fn step(
         "direct-payout" => direct_payout(conn),
         "commercial" => commercial(conn),
         "freshness" => freshness(conn),
-        "ai-refs" | "graph-cache" | "projection-view" | "legacy-freeze" | "source-target" => {
+        "ai-audit" => ai_audit_consent(conn, observer),
+        "ai-refs" | "ai-checks" | "graph-cache" | "projection-view" | "legacy-freeze" | "source-target" => {
             let function = match name {
                 "ai-refs" => "_ensure_ai_provider_secret_refs_schema",
+                "ai-checks" => "_ensure_ai_provider_checks_schema",
                 "graph-cache" => "_ensure_transaction_graph_cache_schema",
                 "projection-view" => "_ensure_custody_projection_relation_view",
                 "legacy-freeze" => "_ensure_legacy_custody_write_freeze_triggers",
@@ -746,6 +808,95 @@ mod tests {
         }
     }
     #[test]
+    fn ai_audit_consent_rebuild_copies_rows_and_rolls_back_on_failure() {
+        let function = "_ensure_custody_ai_audit_consent_schema";
+        for target in [
+            "ai-audit.after_rename",
+            "ai-audit.after_copy",
+            "ai-audit.after_restore_objects",
+            "repair.before_commit",
+            "repair.after_commit",
+            "",
+        ] {
+            let root = tempfile::tempdir().unwrap();
+            let mut book = crate::Book::create(root.path(), None).unwrap();
+            let conn = &mut book.connection;
+            let current = crate::schema::fingerprint(conn).unwrap();
+            execute(conn, "DROP TABLE custody_ai_assistance_audits").unwrap();
+            execute(
+                conn,
+                &statement(function, "CREATE TABLE")
+                    .replace("'mode_auto', 'mode_full_access',\n                        'mcp_host', ", ""),
+            )
+            .unwrap();
+            for prefix in ["CREATE INDEX", "CREATE TRIGGER"] {
+                execute(conn, statement(function, prefix)).unwrap();
+            }
+            execute(conn, "INSERT INTO workspaces VALUES('ws','Synthetic','fixed');INSERT INTO profiles(id,workspace_id,label,created_at) VALUES('pf','ws','Synthetic','fixed');").unwrap();
+            let facts = "f".repeat(64);
+            for (id, decision) in [("a", "allow_once"), ("b", "deny")] {
+                conn.execute("INSERT INTO custody_ai_assistance_audits(id,workspace_id,profile_id,tool_name,daemon_kind,call_id,provider_kind,model,facts_sha256,consent_decision,consent_requested_at,consent_decided_at,execution_status,created_at) VALUES(?1,'ws','pf','tool','kind','call','local','m',?2,?3,'t','t','executed','t')", [id, &facts, decision]).unwrap();
+            }
+            let insert_mode = "INSERT INTO custody_ai_assistance_audits(id,workspace_id,profile_id,tool_name,daemon_kind,call_id,provider_kind,model,facts_sha256,consent_decision,consent_requested_at,consent_decided_at,execution_status,created_at) VALUES('c','ws','pf','tool','kind','call','local','m',?1,'mcp_host','t','t','executed','t')";
+            assert!(conn.execute(insert_mode, [&facts]).is_err());
+            let rows = |conn: &Connection| -> Vec<(String, String)> {
+                conn.prepare("SELECT id,consent_decision FROM custody_ai_assistance_audits ORDER BY id")
+                    .unwrap()
+                    .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+                    .unwrap()
+                    .collect::<rusqlite::Result<_>>()
+                    .unwrap()
+            };
+            let before = rows(conn);
+            let result = ai_audit_consent(conn, &mut |label| {
+                if label == target {
+                    Err(Error::new(ErrorKind::Io, "injected audit rebuild failure"))
+                } else {
+                    Ok(())
+                }
+            });
+            assert_eq!(result.is_err(), !target.is_empty(), "{target}");
+            assert!(conn.is_autocommit());
+            assert_eq!(
+                conn.query_row("PRAGMA foreign_keys", [], |r| r.get::<_, i64>(0))
+                    .unwrap(),
+                1
+            );
+            assert_eq!(rows(conn), before, "{target}");
+            let widened = table_sql(conn, "custody_ai_assistance_audits")
+                .unwrap()
+                .unwrap()
+                .contains("'mcp_host'");
+            assert_eq!(
+                widened,
+                target.is_empty() || target == "repair.after_commit",
+                "{target}"
+            );
+            ai_audit_consent(conn, &mut |_| Ok(())).unwrap();
+            let version = conn
+                .query_row("PRAGMA schema_version", [], |r| r.get::<_, i64>(0))
+                .unwrap();
+            ai_audit_consent(conn, &mut |_| Ok(())).unwrap();
+            assert_eq!(
+                conn.query_row("PRAGMA schema_version", [], |r| r.get::<_, i64>(0))
+                    .unwrap(),
+                version
+            );
+            assert_eq!(rows(conn), before);
+            // The rebuilt table keeps the migration's own spelling, as in Python;
+            // the structural gate admits it.
+            assert_ne!(crate::schema::fingerprint(conn).unwrap(), current);
+            crate::schema::verify(conn).unwrap();
+            conn.execute(insert_mode, [&facts]).unwrap();
+            assert!(conn
+                .execute(
+                    "UPDATE custody_ai_assistance_audits SET model='x' WHERE id='a'",
+                    []
+                )
+                .is_err());
+        }
+    }
+    #[test]
     fn every_schema_step_is_idempotent_on_a_current_book() {
         let root = tempfile::tempdir().unwrap();
         let mut book = crate::Book::create(root.path(), None).unwrap();
@@ -760,7 +911,9 @@ mod tests {
             "direct-payout",
             "commercial",
             "freshness",
+            "ai-audit",
             "ai-refs",
+            "ai-checks",
             "graph-cache",
             "projection-view",
             "legacy-freeze",

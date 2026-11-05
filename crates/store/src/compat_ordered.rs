@@ -141,7 +141,7 @@ fn ensure_schema_compat(
     columns_between(
         conn,
         ("backends", "batch_size"),
-        ("transactions", "pricing_quality"),
+        ("transactions", "pricing_review_accepted_price"),
     )?;
     execute(
         conn,
@@ -162,7 +162,7 @@ fn ensure_schema_compat(
     columns_between(
         conn,
         ("source_funds_recipients", "active"),
-        ("ai_providers", "omit_store_field"),
+        ("ai_providers", "agent_access"),
     )?;
     execute(
         conn,
@@ -170,9 +170,15 @@ fn ensure_schema_compat(
     )?;
     commit(conn)?;
     repairs::step(conn, "ai-refs", observer)?;
+    repairs::step(conn, "ai-checks", observer)?;
     backfills::bip329(conn, observer)?;
     repairs::migrate_recipient_unique(conn)?;
     super::migrate_msat(conn, observer)?;
+    // Python adds the accepted coarse price again here: the msat rebuild's
+    // fixed column list drops it from a legacy REAL-typed transactions table.
+    if ensure_column(conn, "transactions", "pricing_review_accepted_price", "TEXT")? {
+        commit(conn)?;
+    }
     columns_between(
         conn,
         ("transactions", "amount_includes_fee"),
@@ -198,6 +204,7 @@ fn ensure_schema_compat(
     repairs::step(conn, "legacy-freeze", observer)?;
     custody::durable_evidence(conn, observer)?;
     repairs::leg_roles(conn, observer)?;
+    repairs::ai_audit_consent(conn, observer)?;
     // As in Python, create the view after renames can rewrite its references.
     repairs::step(conn, "projection-view", observer)?;
     custody::relation_schema(conn, observer)?;
@@ -252,6 +259,87 @@ fn transaction_page_index(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A current book taken back to main #654's storage: no accepted coarse
+    /// price, no provider `agent_access`, no `ai_provider_checks` and the
+    /// narrow custody AI consent CHECK, with one audit row.
+    fn pre_sync_book() -> (tempfile::TempDir, crate::Book) {
+        let root = tempfile::tempdir().unwrap();
+        let book = crate::Book::create(root.path(), None).unwrap();
+        let conn = &book.connection;
+        let objects: Vec<(String, String)> = conn
+            .prepare("SELECT name,sql FROM sqlite_master WHERE tbl_name='custody_ai_assistance_audits' AND sql IS NOT NULL ORDER BY type!='table',name")
+            .unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap();
+        let mut script = String::from("PRAGMA foreign_keys=OFF; DROP TABLE ai_provider_checks; ALTER TABLE ai_providers DROP COLUMN agent_access; ALTER TABLE transactions DROP COLUMN pricing_review_accepted_price; DROP TABLE custody_ai_assistance_audits;");
+        for (name, sql) in objects {
+            let sql = if name == "custody_ai_assistance_audits" {
+                let narrow = sql.replace("'mode_auto', 'mode_full_access',\n        'mcp_host', ", "");
+                assert_ne!(narrow, sql);
+                narrow
+            } else {
+                sql
+            };
+            script.push_str(&sql);
+            script.push(';');
+        }
+        script.push_str("PRAGMA foreign_keys=ON; INSERT INTO workspaces VALUES('ws','Synthetic','fixed'); INSERT INTO profiles(id,workspace_id,label,created_at) VALUES('pf','ws','Synthetic','fixed');");
+        conn.execute_batch(&script).unwrap();
+        conn.execute("INSERT INTO custody_ai_assistance_audits(id,workspace_id,profile_id,tool_name,daemon_kind,call_id,provider_kind,model,facts_sha256,consent_decision,consent_requested_at,consent_decided_at,execution_status,created_at) VALUES('audit','ws','pf','tool','kind','call','local','m',?1,'allow_once','t','t','executed','t')", [&"0".repeat(64)]).unwrap();
+        (root, book)
+    }
+
+    #[test]
+    fn main_sync_storage_upgrades_a_pre_sync_book_and_admits_it() {
+        let (_root, mut book) = pre_sync_book();
+        let conn = &mut book.connection;
+        assert!(crate::schema::verify(conn).is_err());
+        migrate(conn, &mut |_| panic!("identity must survive"), &mut |_| {
+            Ok(())
+        })
+        .unwrap();
+        crate::schema::verify(conn).unwrap();
+        let has = |table: &str, column: &str| {
+            super::super::columns(conn, table)
+                .unwrap()
+                .iter()
+                .any(|(name, _)| name == column)
+        };
+        assert!(has("transactions", "pricing_review_accepted_price"));
+        assert!(has("ai_providers", "agent_access"));
+        assert!(has("ai_provider_checks", "value_json"));
+        let audits: Vec<(String, String)> = conn
+            .prepare("SELECT id,consent_decision FROM custody_ai_assistance_audits")
+            .unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap();
+        assert_eq!(audits, [("audit".to_owned(), "allow_once".to_owned())]);
+        conn.execute("INSERT INTO custody_ai_assistance_audits(id,workspace_id,profile_id,tool_name,daemon_kind,call_id,provider_kind,model,facts_sha256,consent_decision,consent_requested_at,consent_decided_at,execution_status,created_at) VALUES('host','ws','pf','tool','kind','call','local','m',?1,'mcp_host','t','t','executed','t')", [&"1".repeat(64)]).unwrap();
+        conn.execute("INSERT INTO ai_providers(name,base_url,kind,created_at,updated_at) VALUES('p','http://127.0.0.1:9/v1','local','t','t')", []).unwrap();
+        assert_eq!(
+            conn.query_row("SELECT agent_access FROM ai_providers WHERE name='p'", [], |r| r
+                .get::<_, String>(0))
+                .unwrap(),
+            "full"
+        );
+        let version: i64 = conn
+            .query_row("PRAGMA schema_version", [], |r| r.get(0))
+            .unwrap();
+        migrate(conn, &mut |_| panic!("identity must survive"), &mut |_| {
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(
+            conn.query_row("PRAGMA schema_version", [], |r| r.get::<_, i64>(0))
+                .unwrap(),
+            version
+        );
+    }
 
     #[test]
     fn page_index_storage_errors_roll_back_and_retry() {

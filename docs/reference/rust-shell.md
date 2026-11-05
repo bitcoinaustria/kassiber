@@ -3841,6 +3841,19 @@ custody interpretation is guessed. Existing journals never change mode through
 this API; an unsafe mode is refused. New books conservatively use DELETE/FULL.
 The admission-only `Book::open` remains a separate library API.
 
+Main sync 1's S1 slice brought the store and the command registry to main
+#714. The ordered pass adds the accepted coarse price, provider
+`agent_access`, `ai_provider_checks` and the widened custody AI consent
+CHECK where Python does, so a book the current Python opened is admitted
+unchanged; see [database compatibility](database-compatibility.md#storage-added-by-main-675-to-708).
+Both opens still refuse unknown objects and audits, which Python leaves in
+place. `transfers dismissals` derives its kind from `transfers_dismissals_command`;
+`describe` reports `mcp call` as mutating; the capability tables carry
+`journals.quarantine.groups`, `transactions.verify`, `transfers.dismissals.list`
+and `.delete`, and the kinds `ui.transfers.dismissals.list` and `.delete`,
+`ui.chat.attachments.upload` and `ai.chat.permission_mode`. Those leaves and
+kinds answer `not_implemented` until their slices land.
+
 CLI fd input is bounded, consumed once, closed and zeroized by `UnlockSession`.
 Its remaining chain is bound unattended remembered unlock, then a no-echo TTY
 prompt when allowed; noninteractive manual unlock returns `interaction_required`.
