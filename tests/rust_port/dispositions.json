@@ -2482,9 +2482,13 @@
     "tests/test_rust_desktop_lightning_test.py": {
       "RustLightningBackendTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "network-egress", "reason": "compares the native Lightning backend test raw JSONL, owned fake-node requests and all 112 tables with Python, including refusals, failures and the product no-egress switch", "reviewed": true, "tests": 7}
     },
+    "tests/test_rust_desktop_projections_egress.py": {
+      "RustDesktopProjectionsNoEgressTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "network-egress", "reason": "proves the desktop projection reads open no connection without consent with the strict socket guard armed and product egress enabled", "reviewed": true, "tests": 2},
+      "RustReportReadRefreshEgressTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "network-egress", "reason": "proves the desktop projection reads open no connection without consent with the strict socket guard armed and product egress enabled", "reviewed": true, "tests": 1}
+    },
     "tests/test_rust_desktop_settings.py": {
-      "RustFreshnessSettingsTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "chain-sync", "reason": "compares native freshness status/configure and maintenance settings/configure raw JSONL and all 112 tables with Python, including policy shapes, refusals, commit order and SQLCipher books", "reviewed": true, "tests": 6},
-      "DesktopSettingsMutationCatalogTest": {"disposition": "oracle", "flags": ["subprocess"], "group": "chain-sync", "reason": "compares native freshness status/configure and maintenance settings/configure raw JSONL and all 112 tables with Python, including policy shapes, refusals, commit order and SQLCipher books", "reviewed": true, "tests": 1}
+      "RustFreshnessSettingsTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "network-egress", "reason": "compares native freshness and maintenance settings reads and configure writes with Python, including refusals and all 112 tables", "reviewed": true, "tests": 6},
+      "DesktopSettingsMutationCatalogTest": {"disposition": "oracle", "flags": ["subprocess"], "group": "network-egress", "reason": "compares native freshness and maintenance settings reads and configure writes with Python, including refusals and all 112 tables", "reviewed": true, "tests": 1}
     },
     "tests/test_rust_desktop_settings_egress.py": {
       "RustDesktopReadsNoEgressTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "network-egress", "reason": "proves desktop status, settings, backend list and UTXO reads open no connection under the strict test guard while matching Python bytes and tables", "reviewed": true, "tests": 1}
@@ -2867,6 +2871,10 @@
     "tests/test_rust_release_cli.py": {
       "test_update_preferences_and_refusals_match_python_without_contacting_github": {"disposition": "oracle", "flags": ["subprocess"], "group": "cli-shell", "reason": "compares native update preference/refusal and verify-download outputs with Python in JSON, table and plain formats under the strict socket guard, including every signature, manifest and artifact refusal", "reviewed": true, "tests": 1},
       "test_verify_download_matches_python_for_success_and_every_refusal": {"disposition": "oracle", "flags": ["subprocess"], "group": "cli-shell", "reason": "compares native update preference/refusal and verify-download outputs with Python in JSON, table and plain formats under the strict socket guard, including every signature, manifest and artifact refusal", "reviewed": true, "tests": 1}
+    },
+    "tests/test_rust_report_blockers.py": {
+      "RustReportBlockersTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares native report blockers raw JSONL and all 112 tables with Python for every barrier, cached counts, missing context and the stale-journal rebuild", "reviewed": true, "tests": 5},
+      "RustReportBlockersStaleBookTest": {"disposition": "oracle", "flags": ["sql", "subprocess"], "group": "reports", "reason": "compares native report blockers raw JSONL and all 112 tables with Python for every barrier, cached counts, missing context and the stale-journal rebuild", "reviewed": true, "tests": 1}
     },
     "tests/test_rust_report_capital_gains.py": {
       "RustReportCapitalGainsTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares native desktop capital gains raw JSONL and all tables with Python, including the stale-journal rebuild prelude and the report-read refresh before the read", "reviewed": true, "tests": 4}
