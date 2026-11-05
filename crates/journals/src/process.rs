@@ -331,10 +331,19 @@ fn build_in_transaction<'a>(
     }
     let ordered_payload = ordered::payload(&payload)?;
     writes.check()?;
+    let commit = kassiber_custody::timing::span("commit");
     conn.execute_batch("RELEASE journals_process; COMMIT")?;
+    drop(commit);
     drop(span);
     progress("complete");
     cache.restore()?;
+    let span = kassiber_custody::timing::span("drops");
+    drop(state);
+    drop(response);
+    drop(custody);
+    drop(stages);
+    drop(snapshot);
+    drop(span);
     Ok(Committed {
         payload,
         ordered_payload,
