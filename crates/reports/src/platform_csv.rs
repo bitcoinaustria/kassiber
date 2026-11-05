@@ -611,7 +611,7 @@ mod tests {
     use super::*;
     fn dump(conn: &Connection) -> Value {
         let tables = rows(conn,"SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name",[]).unwrap();
-        assert_eq!(tables.len(), 112);
+        assert_eq!(tables.len(), 113);
         dict(tables.iter().map(|t| {
             let name = text(t, "name");
             (

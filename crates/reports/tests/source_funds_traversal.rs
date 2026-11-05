@@ -12,7 +12,7 @@ fn dump(conn: &Connection) -> Vec<(String, Vec<String>)> {
         .unwrap()
         .map(Result::unwrap)
         .collect();
-    assert_eq!(names.len(), 112);
+    assert_eq!(names.len(), 113);
     names
         .into_iter()
         .map(|name| {

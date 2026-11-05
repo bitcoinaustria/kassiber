@@ -132,7 +132,7 @@ pub fn outcome(conn: &Connection, case: &Value) -> Value {
 pub fn dump(conn: &Connection) -> Value {
     let tables: Vec<String> = conn.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").unwrap()
         .query_map([], |row| row.get(0)).unwrap().map(Result::unwrap).collect();
-    assert_eq!(tables.len(), 112);
+    assert_eq!(tables.len(), 113);
     dict(tables.into_iter().map(|table| {
         let mut statement = conn.prepare(&format!("SELECT * FROM \"{table}\"")).unwrap();
         let names: Vec<_> = statement

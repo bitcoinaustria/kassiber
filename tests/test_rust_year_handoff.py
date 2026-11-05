@@ -28,7 +28,7 @@ CASES = json.loads((ROOT / "crates/reports/tests/data/year_handoff.json").read_t
 
 def _state(root, identities):
     tables = _dump(root, identities)
-    assert len(tables) == 112
+    assert len(tables) == 113
     return json.dumps(tables, sort_keys=True, separators=(",", ":")).encode()
 
 

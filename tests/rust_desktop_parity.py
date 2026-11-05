@@ -2,7 +2,7 @@
 
 Each comparison sends one JSONL session to the unchanged Python reference and
 to the Rust candidate, requires identical response bytes, and checks that all
-112 logical tables are unchanged by both. Served-by evidence is appended to
+113 logical tables are unchanged by both. Served-by evidence is appended to
 ``KASSIBER_DESKTOP_COUNTS`` when set.
 """
 from contextlib import closing
@@ -87,7 +87,7 @@ class DesktopParity:
         try:
             tables = sorted(row[0] for row in conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"))
-            self.assertEqual(len(tables), 112)
+            self.assertEqual(len(tables), 113)
             return {table: sorted(conn.execute('SELECT * FROM "' + table + '"').fetchall(), key=repr)
                     for table in tables}
         finally:
