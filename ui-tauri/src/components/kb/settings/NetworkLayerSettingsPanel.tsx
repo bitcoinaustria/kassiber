@@ -1,20 +1,15 @@
 import { BookNetworkSettings } from "./BookNetworkSettings";
-import { AlertTriangle, CheckCircle2, Pencil, Plus, ShieldCheck } from "lucide-react";
 
 import { useTranslation } from "react-i18next";
 import { ANALYSIS_NETWORKS, type AnalysisNetwork, useUiStore } from "@/store/ui";
 
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { cn } from "@/lib/utils";
-import { SettingsDisclosure } from "./SettingsControls";
+  SettingsDisclosure,
+  SettingsGroup,
+  SettingsRow,
+  SettingsSelect,
+} from "./SettingsControls";
 import {
   backendExplorerBaseUrl,
   backendProtocolLabel,
@@ -25,31 +20,10 @@ import {
   type NetworkLayer,
 } from "./SettingsModel";
 
-export const NETWORK_LAYER_META: Record<
-  NetworkLayer,
-  { blurb: string; empty: string; addLabel: string }
-> = {
-  bitcoin: {
-    blurb:
-      "Explorer API (Esplora / mempool.space-type HTTP REST), Electrum / Fulcrum (Electrum protocol over TCP/SSL), or Bitcoin Core RPC endpoints that serve on-chain history to your watch-only wallets. Silent Payments requires a backend or local scanner you deliberately mark as BIP352 capable.",
-    empty:
-      "No Bitcoin backends yet. Add one so on-chain wallets can refresh their balances.",
-    addLabel: "Add Bitcoin backend",
-  },
-  lightning: {
-    blurb:
-      "Read-only connections to your LND or Core Lightning node for channel accounting and profitability reports.",
-    empty:
-      "No Lightning nodes connected. Add a read-only LND or Core Lightning connection.",
-    addLabel: "Add Lightning node",
-  },
-  liquid: {
-    blurb:
-      "Explorer API (Esplora HTTP REST) or Electrum / Fulcrum (Electrum protocol over TCP/SSL) endpoints that serve Liquid (L-BTC) history to your watch-only wallets.",
-    empty:
-      "No Liquid backends yet. Add one so L-BTC wallets can refresh their balances.",
-    addLabel: "Add Liquid backend",
-  },
+/** Where transaction links go until an Explorer API backend is added. */
+const PUBLIC_EXPLORER: Record<"bitcoin" | "liquid", string> = {
+  bitcoin: "mempool.bitcoin-austria.at",
+  liquid: "Liquid Network",
 };
 
 export function NetworkLayerSettingsPanel({
@@ -69,46 +43,40 @@ export function NetworkLayerSettingsPanel({
   settingDefaultBackendId?: string | null;
   publicFallbacks?: boolean;
 }) {
-  const meta = NETWORK_LAYER_META[layer];
+  const { t } = useTranslation("settings");
   const layerBackends = backendsForLayer(backends, layer);
   const explorerLinkBase =
     layer === "lightning"
       ? null
       : layerBackends.map(backendExplorerBaseUrl).find(Boolean) ?? null;
+  const linksNote =
+    layer === "lightning"
+      ? t("networkLayer.readOnly")
+      : explorerLinkBase
+        ? t("networkLayer.explorerLinks", { host: explorerHostLabel(explorerLinkBase) })
+        : publicFallbacks
+          ? t("networkLayer.publicLinks", { host: PUBLIC_EXPLORER[layer] })
+          : t("networkLayer.noPublicLinks");
   return (
-    <section className="space-y-4">
+    <div className="space-y-6">
       {layer === "bitcoin" ? <BookNetworkSettings><AnalysisNetworkSettings /></BookNetworkSettings> : null}
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <p className="max-w-2xl text-sm text-muted-foreground">{meta.blurb}</p>
-        <Button type="button" size="sm" className="shrink-0" onClick={onAdd}>
-          <Plus className="size-4" aria-hidden="true" />
-          {meta.addLabel}
-        </Button>
-      </div>
-
-      {layer === "lightning" ? (
-        <div className="flex items-start gap-2 rounded-lg border border-sky-500/25 bg-sky-500/5 p-3 text-xs text-muted-foreground">
-          <ShieldCheck
-            className="mt-0.5 size-4 shrink-0 text-sky-600 dark:text-sky-400"
-            aria-hidden="true"
-          />
-          <span>
-            Lightning connections are strictly read-only. Node identity details —
-            operator pubkey, channel points, peer aliases, and short channel ids
-            — stay on this machine.
-          </span>
-        </div>
-      ) : null}
-
-      {layerBackends.length === 0 ? (
-        <div className="rounded-lg border border-dashed bg-muted/20 p-6 text-center text-sm text-muted-foreground">
-          {meta.empty}
-        </div>
-      ) : (
-        <div className="grid gap-3">
-          {layerBackends.map((backend) => (
-            <BackendLayerCard
+      <SettingsGroup
+        title={t(`networkLayer.${layer}.heading`)}
+        actions={
+          <Button type="button" size="sm" variant="outline" onClick={onAdd}>
+            {t(`networkLayer.${layer}.add`)}
+          </Button>
+        }
+        footer={`${t(`networkLayer.${layer}.blurb`)} ${linksNote}`}
+      >
+        {layerBackends.length === 0 ? (
+          <p className="px-4 py-3 text-sm text-muted-foreground">
+            {t(`networkLayer.${layer}.empty`)}
+          </p>
+        ) : (
+          layerBackends.map((backend) => (
+            <BackendLayerRow
               key={backend.id}
               backend={backend}
               onEdit={() => onEdit(backend)}
@@ -116,30 +84,14 @@ export function NetworkLayerSettingsPanel({
               setDefaultPending={settingDefaultBackendId === backend.id}
               setDefaultDisabled={settingDefaultBackendId !== null}
             />
-          ))}
-        </div>
-      )}
-
-      {layer === "bitcoin" || layer === "liquid" ? (
-        <p className="text-xs text-muted-foreground">
-          {explorerLinkBase
-            ? `Transaction links open on ${explorerHostLabel(
-                explorerLinkBase,
-              )}; this is derived from the Explorer API backend.`
-            : publicFallbacks
-              ? `Transaction links use the public ${
-                layer === "bitcoin"
-                  ? "mempool.bitcoin-austria.at"
-                  : "Liquid Network"
-                } default until you add an Explorer API backend. Electrum / Fulcrum backends are sync-only.`
-              : "No public explorer links are enabled. Add an Explorer API backend to create transaction links."}
-        </p>
-      ) : null}
-    </section>
+          ))
+        )}
+      </SettingsGroup>
+    </div>
   );
 }
 
-export function BackendLayerCard({
+export function BackendLayerRow({
   backend,
   onEdit,
   onSetDefault,
@@ -152,83 +104,60 @@ export function BackendLayerCard({
   setDefaultPending?: boolean;
   setDefaultDisabled?: boolean;
 }) {
+  const { t } = useTranslation(["settings", "common"]);
   const trust = backendTrust(backend);
-  const TrustIcon = trust.icon;
   const explorerBaseUrl = backendExplorerBaseUrl(backend);
+  const summary = [
+    backend.isDefault ? t("networkLayer.default") : null,
+    backendProtocolLabel(backend),
+    trust.label,
+    explorerBaseUrl
+      ? t("networkLayer.links", { host: explorerHostLabel(explorerBaseUrl) })
+      : null,
+    backend.silentPayments ? t("networkLayer.silentPayments") : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
   return (
-    <div className="rounded-lg border bg-background p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 space-y-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-medium">{backend.name}</span>
-            {backend.isDefault ? (
-              <span className="inline-flex items-center rounded-md border border-primary/25 bg-primary/10 px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wide text-primary">
-                Default
-              </span>
-            ) : null}
-            {!backend.on ? (
-              <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wide text-amber-700 dark:text-amber-300">
-                <AlertTriangle className="size-3" aria-hidden="true" />
-                No endpoint
-              </span>
-            ) : null}
-          </div>
-          <p className="truncate font-mono text-xs text-muted-foreground">
-            {backend.url}
-          </p>
-        </div>
-        <div className="flex shrink-0 gap-1">
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="ghost"
-            aria-label={`Edit ${backend.name}`}
-            onClick={onEdit}
-          >
-            <Pencil className="size-3.5" aria-hidden="true" />
-          </Button>
-        </div>
-      </div>
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <span className="inline-flex items-center rounded-md border bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-          {backendProtocolLabel(backend)}
+    <SettingsRow
+      label={backend.name}
+      description={
+        <>
+          <span className="block" title={trust.note}>
+            {summary}
+          </span>
+          <span className="block truncate font-mono text-xs">{backend.url}</span>
+        </>
+      }
+    >
+      {!backend.on ? (
+        <span className="text-sm text-amber-600 dark:text-amber-400">
+          {t("networkLayer.noEndpoint")}
         </span>
-        <span
-          className={cn(
-            "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium",
-            trust.className,
-          )}
+      ) : null}
+      {!backend.isDefault ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={setDefaultDisabled}
+          onClick={onSetDefault}
         >
-          <TrustIcon className="size-3" aria-hidden="true" />
-          {trust.label}
-        </span>
-        {explorerBaseUrl ? (
-          <span className="inline-flex items-center rounded-md border border-sky-500/25 bg-sky-500/10 px-2 py-0.5 text-xs font-medium text-sky-700 dark:text-sky-300">
-            Links: {explorerHostLabel(explorerBaseUrl)}
-          </span>
-        ) : null}
-        {backend.silentPayments ? (
-          <span className="inline-flex items-center rounded-md border border-violet-500/25 bg-violet-500/10 px-2 py-0.5 text-xs font-medium text-violet-700 dark:text-violet-300">
-            Silent Payments
-          </span>
-        ) : null}
-        {!backend.isDefault ? (
-          <div className="ml-auto flex items-center gap-1.5">
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              disabled={setDefaultDisabled}
-              onClick={onSetDefault}
-            >
-              <CheckCircle2 className="size-4" aria-hidden="true" />
-              {setDefaultPending ? "Setting default" : "Set as default"}
-            </Button>
-          </div>
-        ) : null}
-      </div>
-      <p className="mt-2 text-xs text-muted-foreground">{trust.note}</p>
-    </div>
+          {setDefaultPending
+            ? t("networkLayer.settingDefault")
+            : t("networkLayer.setDefault")}
+        </Button>
+      ) : null}
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        aria-label={t("networkLayer.editAria", { name: backend.name })}
+        onClick={onEdit}
+      >
+        {t("common:actions.edit")}
+      </Button>
+    </SettingsRow>
   );
 }
 
@@ -239,25 +168,18 @@ function AnalysisNetworkSettings() {
   const setNetwork = useUiStore((state) => state.setAnalysisNetwork);
   return (
     <SettingsDisclosure title={t("analysisNetwork.title")}>
-      <div className="flex max-w-sm flex-col gap-1.5">
-        <Label htmlFor="analysis-network">{t("analysisNetwork.label")}</Label>
-        <Select
+      <SettingsRow
+        label={t("analysisNetwork.label")}
+        description={t("analysisNetwork.help")}
+        htmlFor="analysis-network"
+      >
+        <SettingsSelect<AnalysisNetwork>
           value={network}
-          onValueChange={(value) => setNetwork(value as AnalysisNetwork)}
-        >
-          <SelectTrigger id="analysis-network" className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {ANALYSIS_NETWORKS.map((value) => (
-              <SelectItem key={value} value={value}>
-                {value}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <p className="max-w-2xl text-xs text-muted-foreground">{t("analysisNetwork.help")}</p>
+          onValueChange={setNetwork}
+          options={ANALYSIS_NETWORKS.map((value) => ({ value, label: value }))}
+          triggerProps={{ id: "analysis-network" }}
+        />
+      </SettingsRow>
     </SettingsDisclosure>
   );
 }

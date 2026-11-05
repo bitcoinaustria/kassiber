@@ -47,7 +47,7 @@ import {
   RotateCcw,
   Route,
   Settings,
-  ShieldAlert,
+  Inbox,
   Sun,
   SunMoon,
   TerminalSquare,
@@ -78,8 +78,6 @@ import {
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import {
   Sidebar,
   SidebarContent,
@@ -99,6 +97,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useRightPanelStore } from "@/store/rightPanel";
 import { bookIdentityKey, useUiStore } from "@/store/ui";
 import type { AppNotification, Identity, ThemePreference } from "@/store/ui";
 import { BOOK_REFRESH_PROGRESS_ID } from "@/lib/syncProgress";
@@ -124,12 +123,13 @@ import {
 } from "@/daemon/transport";
 import type { TouchIdPassphraseStatus } from "@/daemon/transport";
 import {
-  canEnrollTouchIdPassphrase,
+  appCanStartTouchIdPrompt,
   lockScreenConfig,
   shouldAutoPromptTouchId,
   shouldLockEncryptedWorkspaceOnLaunch,
   shouldStoreTouchIdPassphrase,
   shouldUseDaemonUnlock,
+  unlockFailureKey,
 } from "@/lib/appLock";
 import { formatShortcut, isMacPlatform } from "@/lib/shortcutLabel";
 import { cn } from "@/lib/utils";
@@ -141,17 +141,12 @@ import {
 } from "@/store/sessionLock";
 import type { OverviewSnapshot } from "@/mocks/seed";
 import type { ProfilesSnapshot } from "@/mocks/profiles";
+import type { BackendSettingsData } from "@/components/kb/settings/SettingsModel";
+import { SettingsModal } from "@/components/kb/settings/SettingsModal";
 import {
-  backendRowToSettingsBackend,
-  backendsForLayer,
-  type BackendSettingsData,
-} from "@/components/kb/settings/SettingsModel";
-import { SettingsSidebarNav } from "@/components/kb/settings/SettingsNavigation";
-import {
-  DEFAULT_SETTINGS_SECTION_ID,
-  settingsSectionForPathname,
-  type SettingsSectionId,
-} from "@/components/kb/settingsSections";
+  closeSettings,
+  useSettingsModalNavigation,
+} from "@/components/kb/settings/settingsModalNavigation";
 import { ShellSearch } from "@/components/kb/shell/ShellSearch";
 import { AssistantSessionProvider } from "@/components/ai/AssistantSessionProvider";
 import type { AssistantScreenContext } from "@/components/ai/assistantSession";
@@ -175,10 +170,13 @@ import { safeTauriUnlisten } from "@/lib/tauriUnlisten";
 import { useAgentAccessMasterSync } from "@/lib/agentAccess";
 import { dataModeForActiveBackend } from "@/components/kb/dataMode";
 import { isTypingTarget } from "@/lib/keymap";
+import { reviewTotal, type ReviewBadges } from "@/lib/reviewCount";
+import { shellReveal, shellRevealPlayed } from "@/lib/shellReveal";
 import { FirstSyncCard } from "./FirstSyncCard";
 import { AlphaNotice } from "./AlphaNotice";
+import { KassiberWordmark } from "./KassiberWordmark";
+import { ImportRootRestoreScreen, LockScreen } from "./LockScreen";
 import { AssistantLayout } from "./assistant-panel/AssistantLayout";
-import { ASSISTANT_PANEL_SHORTCUT } from "./assistant-panel/assistantPanelLayout";
 import { useClaimWindowTitlebar, useWindowChrome } from "./windowChromeContext";
 import {
   historyHotkeyDecision,
@@ -235,13 +233,7 @@ type NavGroup = {
 
 // Cheap unresolved-item counts for the active book, surfaced as side-nav hints
 // (ui.review.badges). `swaps` is null until the transfer matcher has run once.
-type ReviewBadgesSnapshot = {
-  quarantine: number;
-  /** Root causes: what needs the user. Older daemons send only the row count. */
-  quarantine_attention?: number;
-  journals_needs_processing: boolean;
-  swaps: number | null;
-};
+type ReviewBadgesSnapshot = ReviewBadges;
 
 type ProjectCatalogEntry = {
   id: string;
@@ -374,16 +366,6 @@ function useRailSubmenuTrigger(setSubmenuOpen: (open: boolean) => void) {
   };
 }
 
-function appCanStartTouchIdPrompt() {
-  if (typeof document === "undefined") {
-    return { appVisible: true, windowFocused: true };
-  }
-  const appVisible = document.visibilityState === "visible";
-  const windowFocused =
-    typeof document.hasFocus !== "function" || document.hasFocus();
-  return { appVisible, windowFocused };
-}
-
 function foregroundTouchIdAutoPrompt(autoPromptRequested: boolean) {
   const { appVisible, windowFocused } = appCanStartTouchIdPrompt();
   return shouldAutoPromptTouchId({
@@ -409,21 +391,21 @@ const NAV_GROUPS: NavGroup[] = [
       { labelKey: "book.overview", icon: Gauge, href: "/overview" },
       { labelKey: "book.transactions", icon: ClipboardList, href: "/transactions" },
       { labelKey: "book.wallets", icon: WalletCards, href: "/connections" },
+      { labelKey: "book.review", icon: Inbox, href: "/review" },
       { labelKey: "book.reports", icon: BarChart3, href: "/reports" },
       { labelKey: "book.assistant", icon: MessageSquareText, href: "/assistant" },
     ],
   },
-  {
-    titleKey: "section.review",
-    items: [
-      { labelKey: "book.quarantine", icon: ShieldAlert, href: "/quarantine" },
-      { labelKey: "book.reconcile", icon: Fingerprint, href: "/reconcile" },
-      { labelKey: "book.sourceFunds", icon: BadgeCheck, href: "/source-of-funds" },
-      { labelKey: "book.swaps", icon: ArrowLeftRight, href: "/swaps" },
-      { labelKey: "book.ledger", icon: BookOpen, href: "/journals" },
-    ],
-  },
 ];
+
+// Pages for occasional, deeper work. Review lists every decision; these keep
+// the full tools behind it, under Extras with the calculators.
+const EXTRA_BOOK_PAGES = [
+  { labelKey: "book.swaps", icon: ArrowLeftRight, href: "/swaps" },
+  { labelKey: "book.ledger", icon: BookOpen, href: "/journals" },
+  { labelKey: "book.reconcile", icon: Fingerprint, href: "/reconcile" },
+  { labelKey: "book.sourceFunds", icon: BadgeCheck, href: "/source-of-funds" },
+] as const;
 
 // `titleKey` is a fully-qualified i18n key (nav:* for breadcrumb titles that
 // reuse the sidebar names, chrome:routeMeta.* for shell-only titles).
@@ -546,11 +528,11 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
     },
   ],
   [
-    "/quarantine",
+    "/review",
     {
-      titleKey: "nav:book.quarantine",
-      icon: ShieldAlert,
-      searchKey: "routeMeta.quarantine",
+      titleKey: "nav:book.review",
+      icon: Inbox,
+      searchKey: "routeMeta.review",
     },
   ],
   [
@@ -657,13 +639,11 @@ function useWindowNarrowerThan(px: number) {
  * is cleared during render (React's "adjust state when a prop changes"
  * pattern) so the nav never paints a frame in the stale state.
  */
-function useShellNavOpen(assistantPanelDocked: boolean) {
+function useShellNavOpen() {
   const navCollapsed = useUiStore((s) => s.navCollapsed);
   const setNavCollapsed = useUiStore((s) => s.setNavCollapsed);
-  const assistantPanelWidth = useUiStore((s) => s.assistantPanelWidth);
-  const narrow = useWindowNarrowerThan(
-    navAutoCollapseBelowPx(assistantPanelDocked ? assistantPanelWidth : null),
-  );
+  const dockedPanelWidth = useRightPanelStore((s) => s.dockedWidth);
+  const narrow = useWindowNarrowerThan(navAutoCollapseBelowPx(dockedPanelWidth));
   const [narrowOpen, setNarrowOpen] = React.useState(false);
   const [lastNarrow, setLastNarrow] = React.useState(narrow);
   if (lastNarrow !== narrow) {
@@ -1050,13 +1030,18 @@ export function AppShell() {
           clearDaemonQueryCache();
           setLocked(true);
         }
+        const failureKey = unlockFailureKey(
+          "passphrase",
+          envelope.error?.code,
+        );
         return {
           ok: unlocked,
-          error:
-            formatDaemonEnvelopeError(envelope) ??
-            (envelope.kind === "auth_required"
-              ? t("lock.passphraseRequiredError")
-              : null),
+          error: failureKey
+            ? t(failureKey)
+            : (formatDaemonEnvelopeError(envelope) ??
+              (envelope.kind === "auth_required"
+                ? t("lock.passphraseRequiredError")
+                : null)),
         };
       }
 
@@ -1148,9 +1133,12 @@ export function AppShell() {
       setAppLockPolicy({ touchIdUnlock: false });
       await refreshTouchIdStatus();
     }
+    const failureKey = unlockFailureKey("touch-id", envelope.error?.code);
     return {
       ok: false,
-      error: formatDaemonEnvelopeError(envelope) ?? t("lock.touchIdNotFound"),
+      error: failureKey
+        ? t(failureKey)
+        : (formatDaemonEnvelopeError(envelope) ?? t("lock.touchIdFailed")),
     };
   }, [
     bumpDaemonSession,
@@ -1585,17 +1573,20 @@ export function AppShell() {
     return () => stopDaemonLogBridge();
   }, [daemonEnabled]);
 
+  // Settings sits over the page as a modal; while it is open, that is the
+  // screen the assistant is asked from.
+  const settingsOpen = useUiStore((s) => s.settingsSection !== null);
   React.useEffect(() => {
     if (!isAssistantRoute) {
       void routeSearch;
       setAssistantScreenContext(
         assistantScreenContextFor(
-          pathname,
-          typeof window === "undefined" ? "" : window.location.search,
+          settingsOpen ? "/settings" : pathname,
+          settingsOpen || typeof window === "undefined" ? "" : window.location.search,
         ),
       );
     }
-  }, [isAssistantRoute, pathname, routeSearch]);
+  }, [isAssistantRoute, pathname, routeSearch, settingsOpen]);
 
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -1796,14 +1787,12 @@ export function AppShell() {
   // The shell draws the window's title bar row itself (see WindowFrame), so
   // the traffic lights, navigation, and shell actions share one row.
   useClaimWindowTitlebar(identity !== null);
-  const assistantPanelOpen = useUiStore((s) => s.assistantPanelOpen);
-  const assistantColumnClaimed = useUiStore((s) => s.assistantColumnClaimed);
-  const nav = useShellNavOpen(
-    aiFeaturesEnabled &&
-      assistantPanelOpen &&
-      !assistantColumnClaimed &&
-      !isAssistantRoute,
-  );
+  const nav = useShellNavOpen();
+  useSettingsModalNavigation(shellUnlocked);
+  // Locking hides the page; Settings does not wait over the lock screen.
+  React.useEffect(() => {
+    if (!shellUnlocked) closeSettings();
+  }, [shellUnlocked]);
 
   if (!identity) return null;
 
@@ -1823,7 +1812,6 @@ export function AppShell() {
       >
         <a
           href="#app-main"
-          data-shell-chrome=""
           className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:text-foreground focus:ring-2 focus:ring-ring"
         >
           {t("shell.skipToContent")}
@@ -1837,20 +1825,17 @@ export function AppShell() {
           controlsVisible={shellUnlocked}
         />
         <div className="flex min-h-0 min-w-0 flex-1">
-          {/* Shell chrome: inert while the narrow-window assistant sheet is
-              open (see AssistantSidePanel). */}
-          <div data-shell-chrome="" className="contents">
-            <AppSidebar
-              pathname={pathname}
-              meta={routeMeta}
-              onLock={lockApp}
-              onProjectSelect={switchProject}
-              daemonEnabled={daemonEnabled}
-              aiFeaturesEnabled={aiFeaturesEnabled}
-              developerToolsEnabled={developerToolsEnabled}
-              searchEnabled={shellUnlocked}
-            />
-          </div>
+          <AppSidebar
+            pathname={pathname}
+            meta={routeMeta}
+            onLock={lockApp}
+            onProjectSelect={switchProject}
+            daemonEnabled={daemonEnabled}
+            aiFeaturesEnabled={aiFeaturesEnabled}
+            developerToolsEnabled={developerToolsEnabled}
+            searchEnabled={shellUnlocked}
+            unlocked={shellUnlocked}
+          />
           {/* The panel sits flush against the nav and keeps a small gutter on
               its free sides, so its rounded corners read against the chrome. */}
           <div className="min-h-0 w-full min-w-0 overflow-hidden md:pr-1.5 md:pb-1.5">
@@ -1892,9 +1877,9 @@ export function AppShell() {
               ) : (
                 aiFeaturesEnabled ? (
                   <AssistantSessionProvider screenContext={assistantScreenContext}>
-                    {/* The assistant takes its own layout space — a bar
-                        under the page or a panel beside it — so the page
-                        needs no padding reserve and nothing is covered. */}
+                    {/* The closed assistant takes its own layout space — a
+                        bar under the page — so the page needs no padding
+                        reserve; the right panel docks beside it. */}
                     <AssistantLayout enabled={!isAssistantRoute}>
                       <main
                         id="app-main"
@@ -1905,6 +1890,7 @@ export function AppShell() {
                         <RouteErrorBoundary>
                           <Outlet />
                         </RouteErrorBoundary>
+                        <SettingsModal daemonEnabled={daemonEnabled} />
                       </main>
                     </AssistantLayout>
                   </AssistantSessionProvider>
@@ -1918,6 +1904,7 @@ export function AppShell() {
                     <RouteErrorBoundary>
                       <Outlet />
                     </RouteErrorBoundary>
+                    <SettingsModal daemonEnabled={daemonEnabled} />
                   </main>
                 )
               )}
@@ -2010,12 +1997,10 @@ function RouteTopProgressLine({
 }
 
 /**
- * The app's single navigation surface.
- *
- * Two modes share one frame: the book navigation, and — on any `/settings/*`
- * route — the settings navigation, which takes over the whole nav rather than
- * squeezing a second rail into the page. The frame sits flush on the window
- * chrome under the title bar; only the page panel beside it is inset.
+ * The app's single navigation surface. Settings opens as a modal over the
+ * page with its own category rail (see SettingsModal), so this nav stays the
+ * book's. The frame sits flush on the window chrome under the title bar; only
+ * the page panel next to it is inset.
  */
 function AppSidebar({
   pathname,
@@ -2026,6 +2011,7 @@ function AppSidebar({
   aiFeaturesEnabled,
   developerToolsEnabled,
   searchEnabled,
+  unlocked,
 }: {
   pathname: string;
   meta: RouteMeta;
@@ -2036,11 +2022,10 @@ function AppSidebar({
   developerToolsEnabled: boolean;
   /** False while locked: the palette can run actions, so it must not open. */
   searchEnabled: boolean;
+  /** False while locked; the wordmark decrypts in each time it turns true. */
+  unlocked: boolean;
 }) {
   const { t } = useTranslation("nav");
-  const inSettings = pathname === "/settings" || pathname.startsWith("/settings/");
-  const settingsSectionId =
-    settingsSectionForPathname(pathname) ?? DEFAULT_SETTINGS_SECTION_ID;
   const navGroups = React.useMemo(
     () =>
       NAV_GROUPS.map((group) => ({
@@ -2062,24 +2047,19 @@ function AppSidebar({
     if (!badges) return map;
     // Signal, not reassurance: only surface a hint when there is something to
     // act on — never a "0" or an all-clear marker.
-    if (badges.quarantine > 0) {
-      // Quarantine blocks correct reports — same red as the bell's quarantine alert.
-      // It counts the causes to fix, not every row that only waits on one.
-      map["/quarantine"] = {
-        count: badges.quarantine_attention || badges.quarantine,
-        tone: "blocker",
-        labelKey: "badge.quarantine",
+    // One number for everything left to decide, the same the Review screen,
+    // the bell and the assistant show. Red while a quarantine holds rows
+    // back from the reports, amber for transfers alone; stale journals alone
+    // show a dot.
+    const total = reviewTotal(badges);
+    if (total > 0) {
+      map["/review"] = {
+        count: total,
+        tone: badges.quarantine > 0 ? "blocker" : "review",
+        labelKey: "badge.review",
       };
-    }
-    if (typeof badges.swaps === "number" && badges.swaps > 0) {
-      map["/swaps"] = {
-        count: badges.swaps,
-        tone: "review",
-        labelKey: "badge.swaps",
-      };
-    }
-    if (badges.journals_needs_processing) {
-      map["/journals"] = {
+    } else if (badges.journals_needs_processing) {
+      map["/review"] = {
         count: null,
         tone: "review",
         labelKey: "badge.journals",
@@ -2097,128 +2077,87 @@ function AppSidebar({
          the seam, so the nav drops the recipe's right border. */
       className="top-(--kb-toolbar-height) h-[calc(100svh-var(--kb-toolbar-height))] group-data-[side=left]:border-r-0"
     >
-      {/* Header stays mounted across both nav modes, so the wordmark and the ⌘K
-          palette are reachable from settings too. */}
       <SidebarHeader className="gap-1 px-2 pt-1 pb-1">
-        <SidebarBrand />
+        <SidebarBrand unlocked={unlocked} />
         <ShellSearch
           searchKey={meta.searchKey}
           daemonEnabled={daemonEnabled}
           enabled={searchEnabled}
         />
       </SidebarHeader>
-      {inSettings ? (
-        <SettingsNavSection
-          activeId={settingsSectionId}
+      <SidebarContent className="gap-0">
+        {navGroups.map((group) => (
+          <SidebarGroup key={group.titleKey} className="gap-1.5 px-2 py-1.5">
+            {/* T3Code's "Projects" label recipe: plain sentence-case text at
+                `text-xs font-medium` in the muted nav tone. This replaced a
+                9px uppercase-mono caption that read as noise at nav scale. */}
+            <SidebarGroupLabel className="mb-1 h-auto px-2 text-xs font-medium text-sidebar-muted-foreground/80">
+              {t(group.titleKey as never) /* dynamic key */}
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {group.items.map((item) => (
+                  <NavMenuItem
+                    key={item.labelKey}
+                    item={item}
+                    pathname={pathname}
+                    badge={navBadges[item.href]}
+                    locked={
+                      !developerToolsEnabled && isDevLockedRoute(item.href)
+                    }
+                  />
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ))}
+      </SidebarContent>
+      <SidebarFooter className="gap-1 p-2">
+        <SidebarActions
+          pathname={pathname}
+          developerToolsEnabled={developerToolsEnabled}
+        />
+        <SidebarUpdatePill />
+        <NavUser
+          onLock={onLock}
+          onProjectSelect={onProjectSelect}
           daemonEnabled={daemonEnabled}
         />
-      ) : (
-        <>
-          <SidebarContent className="gap-0">
-            {navGroups.map((group) => (
-              <SidebarGroup key={group.titleKey} className="gap-1.5 px-2 py-1.5">
-                {/* T3Code's "Projects" label recipe: plain sentence-case text at
-                    `text-xs font-medium` in the muted nav tone. This replaced a
-                    9px uppercase-mono caption that read as noise at nav scale. */}
-                <SidebarGroupLabel className="mb-1 h-auto px-2 text-xs font-medium text-sidebar-muted-foreground/80">
-                  {t(group.titleKey as never) /* dynamic key */}
-                </SidebarGroupLabel>
-                <SidebarGroupContent>
-                  <SidebarMenu>
-                    {group.items.map((item) => (
-                      <NavMenuItem
-                        key={item.labelKey}
-                        item={item}
-                        pathname={pathname}
-                        badge={navBadges[item.href]}
-                        locked={
-                          !developerToolsEnabled && isDevLockedRoute(item.href)
-                        }
-                      />
-                    ))}
-                  </SidebarMenu>
-                </SidebarGroupContent>
-              </SidebarGroup>
-            ))}
-          </SidebarContent>
-          <SidebarFooter className="gap-1 p-2">
-            <SidebarActions
-              pathname={pathname}
-              developerToolsEnabled={developerToolsEnabled}
-            />
-            <SidebarUpdatePill />
-            <NavUser
-              onLock={onLock}
-              onProjectSelect={onProjectSelect}
-              daemonEnabled={daemonEnabled}
-            />
-            <AppVersion />
-          </SidebarFooter>
-        </>
-      )}
+        <AppVersion />
+      </SidebarFooter>
       <SidebarRail className="after:hidden" />
     </Sidebar>
   );
 }
 
 /**
- * Settings navigation, with the per-layer backend counts the old in-page rail
- * showed. The backends query is the same key the settings panels use, so
- * react-query serves it from cache instead of issuing a second request.
- */
-function SettingsNavSection({
-  activeId,
-  daemonEnabled,
-}: {
-  activeId: SettingsSectionId;
-  daemonEnabled: boolean;
-}) {
-  const backendSettingsQuery = useDaemon<BackendSettingsData>(
-    "ui.backends.settings.list",
-    undefined,
-    { enabled: daemonEnabled, staleTime: 15_000 },
-  );
-  const counts = React.useMemo<Partial<Record<SettingsSectionId, number>>>(() => {
-    const backends = (backendSettingsQuery.data?.data?.backends ?? []).map(
-      backendRowToSettingsBackend,
-    );
-    return {
-      "network-bitcoin": backendsForLayer(backends, "bitcoin").length,
-      "network-lightning": backendsForLayer(backends, "lightning").length,
-      "network-liquid": backendsForLayer(backends, "liquid").length,
-      "network-market": backends.filter((backend) => backend.net === "FX").length,
-    };
-  }, [backendSettingsQuery.data]);
-
-  return <SettingsSidebarNav activeId={activeId} counts={counts} />;
-}
-
-/**
  * The wordmark row at the top of the nav.
  *
  * The collapse toggle and history buttons live in the title bar now, where
- * they hold still whichever way the nav is folded. Collapsed to the icon rail
- * the wordmark would not fit, so the row folds away with the shadcn group-label
- * recipe (negative margin + fade), which slides the rows below up in step with
- * the rail instead of jumping.
+ * they hold still whichever way the nav is folded. Folded to the icon rail,
+ * the wordmark narrows to its K in step with the rail, and the row's padding
+ * carries the K over the centre of the rail's icons: the K's middle, 4.5px
+ * in, lands 1.5rem from the edge, past the header's and this row's 0.5rem.
+ * The word decrypts in each time the shell opens or unlocks, and assembles
+ * instead the first time it opens on books setup has just created.
  */
-function SidebarBrand() {
+function SidebarBrand({ unlocked }: { unlocked: boolean }) {
   const { t } = useTranslation("chrome");
   const { state, isMobile } = useSidebar();
   const folded = state === "collapsed" && !isMobile;
   return (
-    <div
-      aria-hidden={folded || undefined}
-      className="flex h-8 min-w-0 items-center px-2 transition-[margin,opacity] duration-200 ease-linear group-data-[collapsible=icon]:pointer-events-none group-data-[collapsible=icon]:-mt-9 group-data-[collapsible=icon]:opacity-0"
-    >
+    <div className="flex h-8 min-w-0 items-center px-2 transition-[padding] duration-200 ease-linear group-data-[collapsible=icon]:pl-[calc(1rem-4.5px)]">
       <Link
         to="/overview"
-        // Faded out on the rail but still in the DOM, so keep Tab off it.
-        tabIndex={folded ? -1 : undefined}
         aria-label={t("shell.overviewLink")}
-        className="flex h-7 min-w-0 shrink items-center truncate rounded-md text-sm font-medium tracking-tight text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        className="flex h-7 shrink-0 items-center rounded-md text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
       >
-        Kassiber.app
+        <KassiberWordmark
+          animate={unlocked}
+          reveal={shellReveal()}
+          onRevealEnd={shellRevealPlayed}
+          folded={folded}
+        />
       </Link>
     </div>
   );
@@ -2293,6 +2232,7 @@ function SidebarActions({
   developerToolsEnabled: boolean;
 }) {
   const { t } = useTranslation(["chrome", "nav"]);
+  const settingsOpen = useUiStore((state) => state.settingsSection !== null);
   const dataMode = useUiStore((state) => state.dataMode);
   const setDataMode = useUiStore((state) => state.setDataMode);
   const explorerPublicFallbacks = useUiStore(
@@ -2360,7 +2300,23 @@ function SidebarActions({
     devLockProps(rowLocked(route), `${label} — ${t("nav:devLocked")}`);
   const activityLocked = rowLocked("/activity");
   const [supportOpen, setSupportOpen] = React.useState(supportActive);
-  const [extrasOpen, setExtrasOpen] = React.useState(false);
+  // Open on a page that lives there, so the current page shows in the nav.
+  const extrasActive = [
+    ...EXTRA_BOOK_PAGES.map((page) => page.href),
+    "/exit-tax",
+    "/privacy-mirror",
+    "/chain-analysis",
+    "/egress",
+  ].some((route) => pathname === route || pathname.startsWith(`${route}/`));
+  const [extrasOpen, setExtrasOpen] = React.useState(extrasActive);
+  // Arriving on one of its pages from elsewhere (a pill, a link on Reports)
+  // opens the fold too, not only on first load.
+  React.useEffect(() => {
+    if (extrasActive) setExtrasOpen(true);
+  }, [extrasActive]);
+  React.useEffect(() => {
+    if (supportActive) setSupportOpen(true);
+  }, [supportActive]);
   const onSupportClick = useRailSubmenuTrigger(setSupportOpen);
   const onExtrasClick = useRailSubmenuTrigger(setExtrasOpen);
 
@@ -2458,6 +2414,7 @@ function SidebarActions({
           <div>
             <CollapsibleTrigger asChild>
               <SidebarMenuButton
+                isActive={extrasActive}
                 tooltip={t("shell.extras.title")}
                 className={navRowClassName}
                 onClick={onExtrasClick}
@@ -2469,6 +2426,26 @@ function SidebarActions({
             </CollapsibleTrigger>
             <CollapsibleContent>
               <SidebarMenuSub>
+                {EXTRA_BOOK_PAGES.map((page) => {
+                  const label = t(`nav:${page.labelKey}`);
+                  const Icon = page.icon;
+                  return (
+                    <SidebarMenuSubItem key={page.href}>
+                      <SidebarMenuSubButton
+                        asChild
+                        className={cn(navSubRowClassName, rowLocked(page.href) && navLockClassName)}
+                        isActive={pathname === page.href}
+                      >
+                        <Link to={page.href} {...lockRow(page.href, label)}>
+                          <Icon className="size-3.5" aria-hidden="true" />
+                          <span>{label}</span>
+                        </Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                  );
+                })}
+                {/* The book's review tools above, the calculators below. */}
+                <li role="separator" aria-hidden="true" className="mx-2 my-1 h-px bg-sidebar-border" />
                 <SidebarMenuSubItem>
                   <SidebarMenuSubButton
                     asChild
@@ -2523,10 +2500,11 @@ function SidebarActions({
       <SidebarMenuItem className="mt-1 -mx-2 border-t border-sidebar-border/60 px-2 pt-1">
         <SidebarMenuButton
           asChild
-          isActive={pathname.startsWith("/settings")}
+          isActive={settingsOpen}
           tooltip={t("nav:book.settings")}
           className={navRowClassName}
         >
+          {/* Opens the Settings modal over this page (see settingsModal). */}
           <Link to="/settings">
             <Settings className="size-4" aria-hidden="true" />
             <span>{t("nav:book.settings")}</span>
@@ -2990,9 +2968,6 @@ function ShellTitlebar({
       className="relative z-20 flex h-(--kb-toolbar-height) w-full shrink-0 items-center select-none"
     >
       <div
-        // Shell chrome: inert under the narrow-window assistant sheet, while
-        // the row around it stays a drag region.
-        data-shell-chrome=""
         className={cn(
           // The collapsed width is the three buttons plus their gaps and the
           // trailing pad; `min-w-fit` covers a UI scale where they outgrow it.
@@ -3052,9 +3027,7 @@ function ShellTitlebar({
         ) : null}
       </div>
       {controlsVisible ? (
-        <div data-shell-chrome="" className="contents">
-          <ShellTitlebarControls {...controls} />
-        </div>
+        <ShellTitlebarControls {...controls} />
       ) : preAlphaBannerVisible ? (
         <div className="flex flex-1 justify-end pr-3">
           <AlphaNotice />
@@ -3088,37 +3061,39 @@ function ShellTitlebarControls({
   const headerBookKey = bookIdentityKey(identity);
   const { runJournalProcessing, isProcessingJournals } =
     useJournalProcessingAction();
-  const { data } = useDaemon<OverviewSnapshot>(
-    "ui.overview.snapshot",
+  // The same counts as the sidebar's Review badge, from the same read.
+  const { data } = useDaemon<ReviewBadges>(
+    "ui.review.badges",
     undefined,
     { enabled: daemonEnabled },
   );
-  const snapshot = data?.data;
+  const badges = data?.data;
+  const reviewCount = reviewTotal(badges);
+  const needsJournals = Boolean(badges?.journals_needs_processing);
+  const blocksReports = (badges?.quarantine ?? 0) > 0;
 
   const systemNotificationItems: NotificationItem[] = [
-    ...(snapshot?.status?.needsJournals
+    ...(needsJournals
       ? [
           {
             id: "journals-stale",
             title: t("notifications.ledgerStale.title"),
             body: t("notifications.ledgerStale.body"),
             tone: "warning" as const,
-            to: "/journals" as const,
+            to: "/review" as const,
             action: "process-journals" as const,
             actionLabel: t("notifications.ledgerStale.action"),
           },
         ]
       : []),
-    ...((snapshot?.status?.quarantines ?? 0) > 0
+    ...(reviewCount > 0
       ? [
           {
-            id: "quarantines",
-            title: t("notifications.quarantined.title"),
-            body: t("notifications.quarantined.body", {
-              count: snapshot?.status?.quarantines ?? 0,
-            }),
+            id: "review",
+            title: t("notifications.review.title"),
+            body: t("notifications.review.body", { count: reviewCount }),
             tone: "warning" as const,
-            to: "/quarantine" as const,
+            to: "/review" as const,
           },
         ]
       : []),
@@ -3138,12 +3113,10 @@ function ShellTitlebarControls({
   const notificationCount = notificationItems.filter(
     (item) => item.tone !== "info" || item.title.toLowerCase().includes("sync"),
   ).length;
-  const reviewCount = snapshot?.status?.quarantines ?? 0;
-  const needsJournals = Boolean(snapshot?.status?.needsJournals);
   const notificationAlertClassName =
-    reviewCount > 0
+    blocksReports
       ? "border border-red-500/35 bg-red-500/10 text-red-700 hover:bg-red-500/15 hover:text-red-700 dark:text-red-300 dark:hover:text-red-300"
-      : needsJournals
+      : needsJournals || reviewCount > 0
         ? "border border-amber-500/35 bg-amber-500/10 text-amber-700 hover:bg-amber-500/15 hover:text-amber-700 dark:text-amber-300 dark:hover:text-amber-300"
         : "";
   const notificationLabel =
@@ -3414,22 +3387,22 @@ function ShellTitlebarControls({
         >
           <LockKeyhole className="size-4" aria-hidden="true" />
         </Button>
-        <AssistantPanelToggle />
+        <RightPanelToggle />
       </div>
     </>
   );
 }
 
-/** Opens and closes the right-side assistant panel (T3 Code-style rail toggle). */
-function AssistantPanelToggle() {
+/** Shows and hides the right panel, keeping its tabs (T3 Code's panel toggle). */
+function RightPanelToggle() {
   const { t } = useTranslation("assistant");
   const aiFeaturesEnabled = useUiStore((state) => state.aiFeaturesEnabled);
   // What is on screen: a page holding the whole column hides an open panel,
   // and the toggle then shows it (the page gives the column back).
   const open = useUiStore(
-    (state) => state.assistantPanelOpen && !state.assistantColumnClaimed,
+    (state) => state.rightPanelOpen && !state.assistantColumnClaimed,
   );
-  const toggle = useUiStore((state) => state.toggleAssistantPanel);
+  const toggle = useUiStore((state) => state.toggleRightPanel);
   const onAssistantPage = useRouterState({
     select: (state) => state.location.pathname === "/assistant",
   });
@@ -3445,9 +3418,8 @@ function AssistantPanelToggle() {
       )}
       aria-label={t("panel.toggle")}
       aria-pressed={open}
-      title={t("panel.toggleTitle", {
-        shortcut: formatShortcut([...ASSISTANT_PANEL_SHORTCUT]),
-      })}
+      title={t("panel.toggle")}
+      data-right-panel-toggle=""
       onClick={toggle}
     >
       <Icon className="size-4" aria-hidden="true" />
@@ -3535,316 +3507,5 @@ function CurrencyToggle() {
         {symbol}
       </span>
     </Button>
-  );
-}
-
-/**
- * The lock and import-restore screens, drawn in the shell's own outline: the
- * chrome, the title bar row above (traffic lights and the alpha chip stay on
- * it), and an inset panel with the page panel's hairline and gutters, with the
- * card centred in it. A locked window keeps looking like this app, and nothing
- * of the book shows through: the panel covers the nav and the page.
- */
-function LockedFrame({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="fixed inset-x-0 top-(--kb-toolbar-height) bottom-0 z-50 flex bg-sidebar md:px-1.5 md:pb-1.5">
-      <div className="flex min-w-0 flex-1 items-center justify-center overflow-y-auto overscroll-none bg-background px-4 text-foreground md:rounded-(--kb-radius-window) md:border md:border-border/70">
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function LockScreen({
-  reason,
-  passphraseRequired = true,
-  onUnlock,
-  onTouchIdUnlock,
-  touchIdEnabled,
-  touchIdPlatformSupported,
-  touchIdStatus,
-  autoTouchIdPrompt,
-  onReset,
-}: {
-  reason?: string;
-  passphraseRequired?: boolean;
-  onUnlock: (
-    passphrase: string,
-    options?: { rememberWithTouchId?: boolean },
-  ) => Promise<{ ok: boolean; error?: string | null }>;
-  onTouchIdUnlock: () => Promise<{ ok: boolean; error?: string | null }>;
-  touchIdEnabled: boolean;
-  touchIdPlatformSupported: boolean;
-  touchIdStatus: TouchIdPassphraseStatus | null;
-  autoTouchIdPrompt: boolean;
-  onReset: () => void;
-}) {
-  const { t } = useTranslation("chrome");
-  const [passphrase, setPassphrase] = React.useState("");
-  const [error, setError] = React.useState<string | null>(null);
-  const [submitting, setSubmitting] = React.useState(false);
-  const [touchIdSubmitting, setTouchIdSubmitting] = React.useState(false);
-  const autoTouchIdPrompted = React.useRef(false);
-  const canEnrollTouchId = canEnrollTouchIdPassphrase({
-    platformSupported: touchIdPlatformSupported,
-    passphraseRequired,
-    touchIdEnabled,
-    touchIdAvailable: touchIdStatus?.available !== false,
-    touchIdStale: touchIdStatus?.stale === true,
-  });
-  const [enrollTouchId, setEnrollTouchId] = React.useState(
-    () => touchIdEnabled && canEnrollTouchId,
-  );
-  const inputRef = React.useRef<HTMLInputElement | null>(null);
-  const canUseTouchId =
-    touchIdEnabled &&
-    touchIdPlatformSupported &&
-    passphraseRequired &&
-    touchIdStatus?.available === true &&
-    touchIdStatus.configured;
-  React.useEffect(() => {
-    if (passphraseRequired) inputRef.current?.focus();
-  }, [passphraseRequired]);
-
-  React.useEffect(() => {
-    if (!canEnrollTouchId) {
-      setEnrollTouchId(false);
-    }
-  }, [canEnrollTouchId]);
-
-  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (submitting) return;
-    setError(null);
-    setSubmitting(true);
-    try {
-      const result = await onUnlock(passphrase, {
-        rememberWithTouchId: canEnrollTouchId ? enrollTouchId : undefined,
-      });
-      if (!result.ok) {
-        setError(result.error ?? t("lock.passphraseFailed"));
-        setPassphrase("");
-        if (passphraseRequired) inputRef.current?.focus();
-      }
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const submitTouchId = React.useCallback(async () => {
-    if (touchIdSubmitting || submitting) return;
-    let keepPending = false;
-    setError(null);
-    setTouchIdSubmitting(true);
-    try {
-      const result = await onTouchIdUnlock();
-      if (!result.ok) {
-        setError(result.error ?? t("lock.touchIdFailed"));
-      } else {
-        keepPending = true;
-      }
-    } finally {
-      if (!keepPending) {
-        setTouchIdSubmitting(false);
-      }
-    }
-  }, [onTouchIdUnlock, submitting, t, touchIdSubmitting]);
-
-  React.useEffect(() => {
-    if (!autoTouchIdPrompt || !canUseTouchId) return;
-    if (autoTouchIdPrompted.current) return;
-    const { appVisible, windowFocused } = appCanStartTouchIdPrompt();
-    autoTouchIdPrompted.current = true;
-    if (
-      !shouldAutoPromptTouchId({
-        autoPromptRequested: autoTouchIdPrompt,
-        canUseTouchId,
-        appVisible,
-        windowFocused,
-      })
-    ) {
-      return;
-    }
-    void submitTouchId();
-  }, [autoTouchIdPrompt, canUseTouchId, submitTouchId]);
-
-  return (
-    <LockedFrame>
-      <form
-        className="kb-surface w-full max-w-md p-5 text-card-foreground"
-        onSubmit={(event) => {
-          void submit(event);
-        }}
-      >
-        <div className="flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <LockKeyhole className="size-5" aria-hidden="true" />
-          </div>
-          <div>
-            <h2 className="text-base font-semibold">
-              {passphraseRequired
-                ? t("lock.passphraseRequiredTitle")
-                : t("lock.booksLocked")}
-            </h2>
-            <p className="m-0 text-xs text-muted-foreground">
-              {reason ?? t("lock.defaultReason")}
-            </p>
-          </div>
-        </div>
-        {/*
-         * The passphrase field stays mounted while Touch ID is pending — it used
-         * to be swapped out for a "Unlocking with Touch ID…" row, which said the
-         * same thing the Touch ID button below already says while it waits, and
-         * collapsed the card mid-interaction. Disabling it instead keeps one
-         * progress signal, holds the card's height steady, and leaves `inputRef`
-         * alive so a failed Touch ID attempt can still focus it.
-         */}
-        {passphraseRequired ? (
-          <div className="mt-5 space-y-2">
-            <label
-              htmlFor="lock-passphrase"
-              className="text-sm font-medium text-foreground"
-            >
-              {t("lock.passphrase")}
-            </label>
-            <Input
-              id="lock-passphrase"
-              ref={inputRef}
-              type="password"
-              autoComplete="current-password"
-              value={passphrase}
-              onChange={(event) => setPassphrase(event.target.value)}
-              disabled={submitting || touchIdSubmitting}
-            />
-            {error && <p className="m-0 text-xs text-destructive">{error}</p>}
-            {touchIdEnabled &&
-            touchIdPlatformSupported &&
-            touchIdStatus?.available === false ? (
-              <p className="m-0 text-xs text-muted-foreground">
-                {touchIdStatus.reason
-                  ? t("lock.touchIdUnavailableReason", {
-                      reason: touchIdStatus.reason,
-                    })
-                  : t("lock.touchIdUnavailable")}
-              </p>
-            ) : null}
-            {touchIdEnabled &&
-            touchIdPlatformSupported &&
-            touchIdStatus?.available === true &&
-            !touchIdStatus.configured ? (
-              <p className="m-0 text-xs text-muted-foreground">
-                {touchIdStatus.reason
-                  ? t("lock.touchIdNotSetUpReason", {
-                      reason: touchIdStatus.reason,
-                    })
-                  : t("lock.touchIdNotSetUp")}
-              </p>
-            ) : null}
-            {canEnrollTouchId ? (
-              <label
-                htmlFor="lock-touch-id-enroll"
-                className="flex items-center justify-between gap-3 rounded-md border bg-background p-3"
-              >
-                <span className="min-w-0">
-                  <span className="block text-sm font-medium text-foreground">
-                    {t("lock.useTouchIdNextTime")}
-                  </span>
-                  <span className="block text-xs leading-5 text-muted-foreground">
-                    {t("lock.useTouchIdNextTimeBody")}
-                  </span>
-                </span>
-                <Switch
-                  id="lock-touch-id-enroll"
-                  checked={enrollTouchId}
-                  disabled={submitting}
-                  onCheckedChange={setEnrollTouchId}
-                />
-              </label>
-            ) : null}
-          </div>
-        ) : (
-          error && (
-            <p className="mt-5 rounded-md border border-destructive/25 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-              {error}
-            </p>
-          )
-        )}
-        {canUseTouchId ? (
-          <Button
-            className="mt-5 w-full"
-            type="button"
-            variant="outline"
-            disabled={submitting || touchIdSubmitting}
-            onClick={() => {
-              void submitTouchId();
-            }}
-          >
-            <Fingerprint className="size-4" aria-hidden="true" />
-            {touchIdSubmitting
-              ? t("lock.waitingForTouchId")
-              : t("lock.unlockWithTouchId")}
-          </Button>
-        ) : null}
-        <Button
-          className="mt-5 w-full"
-          type="submit"
-          disabled={submitting || touchIdSubmitting}
-        >
-          {submitting
-            ? t("lock.unlocking")
-            : passphraseRequired
-              ? t("lock.unlock")
-              : t("lock.openBooks")}
-        </Button>
-        <Button
-          className="mt-2 w-full"
-          type="button"
-          variant="ghost"
-          disabled={submitting}
-          onClick={onReset}
-        >
-          {t("lock.backToSetup")}
-        </Button>
-      </form>
-    </LockedFrame>
-  );
-}
-
-function ImportRootRestoreScreen({
-  error,
-  onReset,
-}: {
-  error: string | null;
-  onReset: () => void;
-}) {
-  const { t } = useTranslation("chrome");
-  return (
-    <LockedFrame>
-      <div className="kb-surface w-full max-w-sm p-5 text-card-foreground">
-        <div className="flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <Database className="size-5" aria-hidden="true" />
-          </div>
-          <div>
-            <h2 className="text-base font-semibold">{t("importRoot.title")}</h2>
-            <p className="m-0 text-xs text-muted-foreground">
-              {t("importRoot.body")}
-            </p>
-          </div>
-        </div>
-        {error ? (
-          <>
-            <p className="mt-4 text-xs text-destructive">{error}</p>
-            <Button className="mt-5 w-full" type="button" onClick={onReset}>
-              {t("importRoot.backToSetup")}
-            </Button>
-          </>
-        ) : (
-          <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-muted">
-            <div className="h-full w-1/2 animate-pulse rounded-full bg-primary" />
-          </div>
-        )}
-      </div>
-    </LockedFrame>
   );
 }

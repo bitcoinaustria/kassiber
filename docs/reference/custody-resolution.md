@@ -175,7 +175,9 @@ summary always covers the whole book and reports `attention_count`,
 `waiting_count` and the listed scope's `scope_count`. The AI tool accepts the
 same `scope` and `offset`. `ui.review.badges` reports `quarantine_attention`
 beside the row count, split exactly like the `attention` scope, so the
-side-nav counts what needs the user.
+Review count (`review`: `quarantine_attention` plus transfer candidates)
+counts what needs the user. An ownership-graph candidate is proposed for a
+held transaction that already counts as a root, so it counts once, there.
 
 A `reviewed_residual_suspense` hold most often comes from a pair whose legs
 are not one movement: a pair review splits whatever the source sent beyond
@@ -190,7 +192,8 @@ market-value acquisition. Only the owner decides, pair by pair. Unpairing
 removes the suspense on the next journal run, and journal auto-pairing never
 recreates a pair the owner removed.
 
-The desktop's Quarantine page leads with a summary: how many rows need the
+The desktop's Review screen lists these first, under **Can't be booked yet**.
+The section leads with how many rows need the
 user, how many only wait on a cause (listed on request, one line each with the
 cause it waits on), whether reports are blocked, and **Fix with assistant**,
 which hands the causes to the assistant. Below, one card per cause says what
@@ -205,26 +208,29 @@ that pair and reading: a pair revised or replaced on the same row since
 loses its tick, and the card says so. Every check first reads the book
 again: a picked pair that cleared is left out, and one that was revised or
 re-pointed stops the step until the owner has looked at it again. The
-transaction sheet opened from this page unpairs only a listed pair case,
+transaction sheet opened from this section unpairs only a listed pair case,
 through the same step; it never removes a pair directly. It confirms the review it
 displays: `ui.transactions.resolve` names the review behind the sheet's pair
 (`reviewPairId`), its `pairFingerprint` as read and the book, and when the
-page reads that pair differently nothing is planned. The confirmation lists
+section reads that pair differently nothing is planned. The confirmation lists
 each pair's review (kind, amounts sent and received). An apply that fails without an answer is retried with the same
 proposal and idempotency key. Long lists fold (three rows, four causes). A
 cause with rows past the loaded page says how many and offers **Load more**,
 which reads the next page of what needs the user, so later rows can be opened
-without resolving earlier ones. The page offers the same below the causes
+without resolving earlier ones. The section offers the same below the causes
 whenever more is not loaded (also when the loaded page ends exactly at a
 cause's end) and retries a page that failed. The summary names at most 50
 causes; a cause beyond those gets its card from its loaded rows. "Save & next" walks the loaded rows of the
-cause it was opened from. The side-nav badge counts the causes. The page keeps the gap editor behind developer tools and
+cause it was opened from. The sidebar's Review badge counts the rows that need the user (`quarantine_attention`) plus the open transfer candidates. The gap editor stays behind developer tools, and the section
 offers exclusion only for price and decision questions.
 
 ## Desktop review
 
-The **Transfers & Custody** surface combines transfer/swap review with custody
-gaps and components. Gaps and components retain their developer-mode gate.
+The **Review** screen holds the everyday decisions: the quarantine causes
+above, and the transfer and swap candidates to pair or set aside, one at a
+time or the exact ones together (see [desktop](desktop.md)). The
+**Transfers & Custody** surface keeps the full matching tools (filters, rules,
+saved views, pair history) beside custody gaps and components. Gaps and components retain their developer-mode gate.
 Existing gap links open the selected case, including a case outside the first
 page. Component creation and revision use structured legs and allocations rather
 than a JSON text editor. Unsupported existing shapes are rejected explicitly.
@@ -257,19 +263,78 @@ The shared `core/review_workflow.py` module exposes four operations:
 | Operation | Contract |
 | --- | --- |
 | `review cases` / `ui.review.cases` | Current canonical quarantine cases, paginated with a book/version-bound cursor; rows that only wait on a case are counted in `waiting_count` instead of listed; recent execution receipts support continuation. |
-| `review plan` / `ui.review.plan` | Apply typed operations to an isolated in-memory book snapshot and rebuild with the canonical custody journal. Return a portable artifact containing scope, input version, operations, before/after effects and a digest. No live-book writes or network calls. |
+| `review plan` / `ui.review.plan` | Apply typed operations to an isolated in-memory book snapshot and rebuild with the canonical custody journal. Return a portable artifact containing scope, input version, operations, before/after effects (including per-year tax figures), the tax `delta` and a digest. No live-book writes or network calls. |
 | `review apply` / `ui.review.apply` | Revalidate scope, version and effects under one writer transaction, apply the exact operations, rebuild/store journals and append a durable receipt. Any failure rolls back the whole batch. |
 | `review receipt` / `ui.review.receipt` | Retrieve the historical execution and verification result by receipt ID or idempotency key in the active book. |
 
-Supported batch operations are exact price overrides, explicitly justified
-exclusions, pair-review removal (`unpair`), typed custody components, and local
-inbound `kind_override` declarations. The CLI accepts the existing component
-create/revise/state actions. AI batches create components; conversion components
-remain drafts until separately reviewed. Missing-wallet gap investigation keeps
-its existing local-provider-only tools (`ui.custody.review.plan/apply`) and is
-not smuggled into the general batch interface.
+One batch carries every write that changes journal meaning, so a single
+approval covers a whole repair and applies atomically. Each operation runs
+against the book as the previous ones left it, including expansion and validation
+of coarse-price acceptance targets after an earlier repair; any failure rolls back all of
+them. Applying a pair, unpair, dismissal or undismissal through the CLI,
+desktop or AI also refreshes the shared transfer-candidate count used by Review.
+Supported operations:
 
-Acquisition review is available in the desktop Tax tab and the local CLI. It
+| Type | Fields | Core service |
+| --- | --- | --- |
+| `price_override`, `exclude` | `transaction_id`, a price (exactly one of `fiat_rate`/`fiat_value`, in the book's fiat currency, which `review cases` reports as `fiat_currency`) for the former, `reason` | quarantine resolution, current cases only |
+| `unpair` | `pair_id`, `expected_fingerprint`, `reason` | pair-review removal (below) |
+| `pair` | `out_transaction_id`, `in_transaction_id`, optional `pair_kind`, `policy`, `out_amount_msat`, `reason` (stored as the pair's note) | `transfers pair` |
+| `dismiss_pair` | both legs, `reason`, `expires_in_days` 1 to 3650 (default 90) | `transfers dismiss`; journals are invalidated because dismissals also stop native transitions |
+| `undismiss_pair` | both legs, `reason` | `transfers dismissals delete`; removes that dismissal and invalidates journals; a missing dismissal fails with `not_found` |
+| `custody_component` | `request` with `action` `create`, `revise`, `undo`, `activate` or `supersede` | `transfers components plan/apply` |
+| `custody_gap` | `action` (`create`, `dismiss`, `revise`, `reopen`, `classify_residual` with `classification`), `gap_id`, `reason` | `custody review` |
+| `kind_override` | `transaction_id`, `kind` (inbound kind or null), optional `valuation_mode`, `reason` | acquisition review (below) |
+| `accept_coarse_prices` | `reason`, optional `transaction_ids` (1 to 5000) | coarse-price acceptance (below) |
+
+When a component's interpretation was wrong, supersede it and create the
+corrected component on the same anchors in one batch, or revise it. A
+permanent dismissal is not available in a batch; it stays an explicit
+`transfers dismiss --expires-in-days 0`.
+
+The AI may batch every type when its provider has full agent access. A
+restricted provider keeps price overrides, exclusions, unpairs and component
+creation, and is refused anything else with `agent_access_restricted`. The AI
+never activates a conversion component or attests its review: creating or
+revising one keeps it a draft with `conversion_reviewed` false until the owner
+reviews it in Custody Review.
+
+Every artifact's `before` and `after` carry `tax`: per tax year (latest 10;
+`years_omitted` counts the rest) the realized gain/loss and income in the
+profile currency as exact cent strings, read from the stored journal the way
+the tax summary reads it. Austrian EUR books add non-zero Kennzahlen in EUR
+cents and the indicative tax from `core/tax_estimate.py`. That figure follows
+the reports' rule: any report blocker of the previewed book withholds it, a
+year before 2022 has none (`not_applicable`, no crypto Kennzahlen yet), and
+previewing a book that is not the active one withholds it with
+`report_scope_not_active`. `delta` lists the years that change, after minus
+before; its `estimated_tax_eur_cents` is null when either side is withheld.
+The preview stores the computed journal inside a savepoint that is always
+rolled back, so it never persists. Apply recomputes both sides and refuses an
+artifact whose `delta` does not match them.
+
+Coarse-price acceptance answers `pricing_review_required`, the hold a book
+with `require_coarse_review` puts on a price from a daily or coarser source.
+It records that the owner accepts the price as it stands. The price keeps its
+source and its `coarse_fallback` quality, so reports still mark it as
+estimated. The acceptance is bound to that exact price
+(`pricing_review_accepted_price`, `rate:<exact>` or `value:<exact>`, rate
+first like the journals, taken from the transaction's own stored price before
+the custody projection re-slices it): a rate rebuild or new sample that changes
+the price holds the transaction again. Only a transaction with a coarse price
+of its own is accepted; a transfer's other leg held for the same reason clears
+with it. Each transaction gets an append-only history event that
+can be reverted on its own. Without `transaction_ids`, the plan names every
+current `pricing_review_required` case, so the artifact and receipt list each
+one. Naming a transaction that no longer waits on that review fails with
+`review_case_changed`. A chat plan holds about 1000 ids; the CLI takes up to
+5000 per operation. Cases with that reason whose transaction has a coarse
+price of its own list `accept_coarse_prices` first in `supported_operations`;
+a leg that clears with it does not. The accepted price is compared by value,
+so a rebuild that writes `3197.60` for `3197.6` does not hold it again. In the desktop, the cause's card offers it
+as **Accept these prices**, previewed and confirmed once.
+
+Acquisition review is available in the desktop Tax tab, the CLI and chat. It
 accepts a non-quarantined inbound transaction, using existing authored metadata
 and append-only history; clearing `kind` restores the importer's classification.
 It does not rewrite import evidence or use loan markers. Active custody legs must
@@ -292,7 +357,7 @@ basis, recognized income, disposal basis/proceeds and realized gain/loss by asse
 in the profile currency. These are accounting amounts, not estimated tax due;
 quarantine means the shown totals are incomplete. They are read-only until the
 explicit atomic apply, which rechecks the same evidence and appends a receipt.
-This financial preview is local desktop/CLI only, not a new AI tool surface.
+The assistant can propose it when its provider has full agent access.
 
 An external agent can save and inspect the same portable proposal:
 
@@ -337,7 +402,7 @@ of sibling pairs in a group re-slice the rest without counting as a change.
 Different txids are a hint, not
 proof: a hop through an untracked wallet has two, so an unpair needs the
 owner's explicit choice for that pair, and its reason records that choice.
-The Quarantine page uses it for the pairs the owner picked, one or several,
+The Review screen uses it for the pairs the owner picked, one or several,
 so the recalculated journals are stored in the same transaction.
 
 Prices are decimal strings. Payouts, overrides, imports, manual/cached rates,
@@ -367,7 +432,7 @@ Historical float-derived terms retain their stored value; correcting
 one requires an explicit replacement review, not an inferred rounding repair.
 
 The chat's bounded review capability pack is selected by English/German review
-requests or the Quarantine screen. It includes case pagination, transaction and
+requests or the Review screen. It includes case pagination, transaction and
 transfer context, evidence reads and the shared plan/apply tools. A review turn
 defaults to 16 model rounds (ordinary turns remain 8; explicit limits win).
 At budget exhaustion the answer retains a bounded continuation packet with

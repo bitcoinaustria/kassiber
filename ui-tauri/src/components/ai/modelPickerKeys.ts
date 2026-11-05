@@ -75,3 +75,24 @@ export const MODEL_PICKER_SHORTCUT = ["mod", "shift", "m"] as const;
  * the browsers' "bookmark this" key, so it reads as "add to favorites".
  */
 export const MODEL_PICKER_FAVORITE_SHORTCUT = ["mod", "d"] as const;
+
+/**
+ * Opens the picker on the reasoning levels, or moves there when it is open
+ * (T3 Code's `composer.effort` binding). T3 Code uses Mod+Shift+E, which the
+ * native menu already gives to Reports & Export.
+ */
+export const MODEL_PICKER_EFFORT_SHORTCUT = ["mod", "shift", "k"] as const;
+
+/**
+ * Composer shortcuts mark the picker trigger before opening it, so the open
+ * picker lands on the asked-for control (T3 Code's `takeOpenTarget`).
+ */
+export function markOpenToEffort(trigger: HTMLElement): void {
+  trigger.dataset.openToEffort = "true";
+}
+
+export function takeOpenToEffort(trigger: HTMLElement | null): boolean {
+  if (!trigger?.dataset.openToEffort) return false;
+  delete trigger.dataset.openToEffort;
+  return true;
+}

@@ -1,5 +1,5 @@
 /**
- * Display helpers for Settings → AI providers. Pure functions so the status
+ * Display helpers for Settings → Assistant. Pure functions so the status
  * language is testable without mounting the page.
  *
  * Layout and status vocabulary follow T3 Code's provider settings cards

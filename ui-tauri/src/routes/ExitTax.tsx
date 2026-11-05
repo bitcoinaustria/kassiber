@@ -285,7 +285,7 @@ function ExitTaxBody({
                   t={t}
                   i18nKey="exitTaxReadiness.quarantines"
                   count={report.status.quarantines}
-                  components={{ queue: <Link to="/quarantine" className="underline underline-offset-2" /> }}
+                  components={{ queue: <Link to="/review" className="underline underline-offset-2" /> }}
                 />
               </p>
             ) : null}

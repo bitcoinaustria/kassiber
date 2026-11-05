@@ -240,6 +240,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.transfers.update",
   "ui.transfers.bulk_pair",
   "ui.transfers.dismiss",
+  "ui.transfers.dismissals.delete",
   "ui.transfers.components.list",
   "ui.transfers.components.plan",
   "ui.transfers.components.apply",
@@ -324,7 +325,8 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "daemon.lock",
   "daemon.unlock",
   // AI provider config and chat kinds. The bridge keeps one daemon process so
-  // ai.chat, cancel, and consent all route through the same active registry.
+  // ai.chat, cancel, consent, and permission-mode changes all route through
+  // the same active registry.
   "ai.providers.list",
   "ai.providers.get",
   "ai.providers.create",
@@ -341,6 +343,8 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ai.chat",
   "ai.chat.cancel",
   "ai.tool_call.consent",
+  "ai.chat.permission_mode",
+  "ui.chat.attachments.upload",
   "ui.chat.sessions.list",
   "ui.chat.sessions.get",
   "ui.chat.sessions.delete",
@@ -988,7 +992,7 @@ async function handleBridgeFilePicker(
         kind: stageKind,
         args: {
           source_file: paths[0],
-          ...(analysisPurpose ? {purpose: analysisPurpose} : {}),
+          ...(analysisPurpose ? {purpose: analysisPurpose} : forChat ? { purpose: "chat_attachment" } : {}),
           ...(request.expected_scope === undefined ? {} : { expected_scope: request.expected_scope }),
           ...(request.review_case_id === undefined ? {} : { review_case_id: request.review_case_id }),
           ...(request.review_recipe === undefined ? {} : { review_recipe: request.review_recipe }),

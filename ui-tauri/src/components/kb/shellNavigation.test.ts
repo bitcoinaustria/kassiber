@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   historyHotkeyAction,
   historyHotkeyDecision,
+  navAutoCollapseBelowPx,
   resolveNavOpen,
 } from "./shellNavigation";
 
@@ -16,6 +17,13 @@ const key = (
   metaKey: false,
   shiftKey: false,
   ...overrides,
+});
+
+describe("navAutoCollapseBelowPx", () => {
+  it("folds the nav sooner by the docked panel's width", () => {
+    expect(navAutoCollapseBelowPx(null)).toBe(1100);
+    expect(navAutoCollapseBelowPx(760)).toBe(1860);
+  });
 });
 
 describe("resolveNavOpen", () => {

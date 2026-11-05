@@ -39,10 +39,10 @@ import {
 import { useTranslation } from "react-i18next";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 
-import bitcoinIcon from "@/assets/integrations/bitcoin.svg";
-import lightningIcon from "@/assets/integrations/lightning.svg";
-import liquidIcon from "@/assets/integrations/liquid.svg";
 import { Badge } from "@/components/ui/badge";
+import { BITCOIN_SWAP_KINDS, DISMISS_REASON } from "@/components/review/transferModel";
+import { RailBadge, RailIcon } from "@/components/kb/BitcoinRail";
+import { displayAssetLabel, railForLeg } from "@/lib/bitcoinRail";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -218,15 +218,7 @@ const ROUTE_PAIR_VALUES = new Set<string>(ROUTE_PAIR_OPTIONS.map((option) => opt
 
 type PairKind = (typeof PAIR_KIND_OPTIONS)[number];
 type PairPolicy = (typeof PAIR_POLICY_OPTIONS)[number];
-type SwapRail = "onchain" | "lightning" | "liquid";
-const BITCOIN_LAYER_TRANSITION_KINDS = new Set<PairKind>([
-  "chain-swap",
-  "peg-in",
-  "peg-out",
-  "reverse-submarine-swap",
-  "submarine-swap",
-  "swap-refund",
-]);
+const BITCOIN_LAYER_TRANSITION_KINDS = BITCOIN_SWAP_KINDS;
 
 interface SwapCandidate {
   out_id: string;
@@ -478,60 +470,6 @@ function pairPresentationType(pair: PairedSwap) {
 
 function pairReviewMode(pair: PairedSwap): PairingReviewMode {
   return pairPresentationType(pair) === "swap" ? "swaps" : "transfers";
-}
-
-const RAIL_DETAILS: Record<
-  SwapRail,
-  {
-    label: string;
-    shortLabel: string;
-    icon: string;
-    className: string;
-  }
-> = {
-  onchain: {
-    label: "On-chain",
-    shortLabel: "BTC",
-    icon: bitcoinIcon,
-    className:
-      "border-orange-200 bg-orange-50 text-orange-800 dark:border-orange-400/30 dark:bg-orange-950/40 dark:text-orange-100",
-  },
-  lightning: {
-    label: "Lightning",
-    shortLabel: "LN",
-    icon: lightningIcon,
-    className:
-      "border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-400/30 dark:bg-violet-950/40 dark:text-violet-100",
-  },
-  liquid: {
-    label: "Liquid",
-    shortLabel: "Liquid",
-    icon: liquidIcon,
-    className:
-      "border-cyan-200 bg-cyan-50 text-cyan-800 dark:border-cyan-400/30 dark:bg-cyan-950/40 dark:text-cyan-100",
-  },
-};
-
-function railForLeg(
-  asset: string | null | undefined,
-  walletKind: string | null | undefined,
-): SwapRail {
-  // Tolerate a daemon that predates the enriched pair payload (no wallet_kind):
-  // fall through to the on-chain default instead of throwing on .toLowerCase().
-  const assetKey = (asset ?? "").toUpperCase();
-  const kindKey = (walletKind ?? "").toLowerCase();
-  if (assetKey === "LBTC" || kindKey.includes("liquid")) return "liquid";
-  if (
-    kindKey.includes("phoenix") ||
-    kindKey.includes("lightning") ||
-    kindKey.includes("coreln") ||
-    kindKey.includes("core-ln") ||
-    kindKey === "lnd" ||
-    kindKey === "nwc"
-  ) {
-    return "lightning";
-  }
-  return "onchain";
 }
 
 export function SwapMatching() {
@@ -2056,10 +1994,10 @@ function PairingReview({
     await dismissMutation.mutateAsync({
       tx_out: candidate.out_id,
       tx_in: candidate.in_id,
-      reason: t("swap.dismissReason"),
+      reason: DISMISS_REASON,
     });
     void refetch();
-  }, [dismissMutation, refetch, t]);
+  }, [dismissMutation, refetch]);
 
   const openExactPreview = useCallback(() => {
     setPreviewError(null);
@@ -3745,79 +3683,6 @@ function DetailRow({ label, value }: { label: string; value: ReactNode }) {
       <dd className="min-w-0 text-right text-sm text-foreground">{value}</dd>
     </div>
   );
-}
-
-interface RailIconProps {
-  rail: SwapRail;
-  size?: "compact" | "regular" | "large";
-}
-
-function RailIcon({ rail, size = "regular" }: RailIconProps) {
-  const details = RAIL_DETAILS[rail];
-  const frameSize = {
-    compact: "size-6",
-    regular: "size-7",
-    large: "size-12",
-  }[size];
-  const iconSize = {
-    compact: "size-5",
-    regular: "size-6",
-    large: "size-11",
-  }[size];
-  return (
-    <span
-      className={cn(
-        "inline-flex shrink-0 items-center justify-center bg-white shadow-sm ring-1 ring-black/10 dark:ring-white/15",
-        size === "large" ? "rounded-md" : "rounded-full",
-        frameSize,
-      )}
-      title={details.label}
-    >
-      <img
-        src={details.icon}
-        alt=""
-        aria-hidden="true"
-        className={cn(
-          "object-contain drop-shadow-sm",
-          iconSize,
-          rail === "liquid" ? "scale-150" : null,
-        )}
-      />
-    </span>
-  );
-}
-
-interface RailBadgeProps {
-  rail: SwapRail;
-  asset: string;
-}
-
-function RailBadge({ rail, asset }: RailBadgeProps) {
-  const details = RAIL_DETAILS[rail];
-  const railLabel = details.shortLabel.toUpperCase();
-  const assetLabel = displayAssetLabel(asset).toUpperCase();
-  const labelParts = railLabel === assetLabel ? [assetLabel] : [railLabel, assetLabel];
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-2xs font-medium uppercase",
-        details.className,
-      )}
-      title={`${details.label} ${displayAssetLabel(asset)}`}
-    >
-      {labelParts.map((part, index) => (
-        <Fragment key={part}>
-          {index > 0 ? <span className="text-current/50">·</span> : null}
-          <span>{part}</span>
-        </Fragment>
-      ))}
-    </span>
-  );
-}
-
-function displayAssetLabel(asset: string) {
-  const normalized = asset.toUpperCase();
-  return normalized === "LBTC" || normalized === "L-BTC" ? "BTC" : normalized;
 }
 
 interface SwapStatusCellProps {

@@ -1,18 +1,24 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  ASSISTANT_CHAT_PERMISSION_MODES_LIMIT,
   ASSISTANT_PANEL_DEFAULT_WIDTH,
   ASSISTANT_PANEL_MAX_WIDTH,
   ASSISTANT_PANEL_MIN_WIDTH,
   DEFAULT_APP_SCALE,
+  DEFAULT_ASSISTANT_TOOL_PROFILE,
   DEFAULT_THEME,
   MAX_APP_SCALE,
   MIN_APP_SCALE,
   normalizeAppScale,
   normalizeAnalysisNetwork,
+  normalizeBookChartPeriods,
   migrateUiState,
+  normalizeAssistantChatPermissionModes,
   normalizeAssistantModelFavorites,
   normalizeAssistantPanelWidth,
+  normalizeAssistantPermissionMode,
+  normalizeAssistantProviderToolProfiles,
   uiStatePartialForStorage,
   useUiStore,
 } from "./ui";
@@ -111,19 +117,31 @@ describe("UI persistence", () => {
 
   it("persists overview chart periods per book", () => {
     useUiStore.setState({ bookChartPeriods: {} });
-    useUiStore.getState().setBookChartPeriod("db:/books/a.sqlite3", "5years");
-    useUiStore.getState().setBookChartPeriod("db:/books/b.sqlite3", "30days");
+    useUiStore.getState().setBookChartPeriod("db:/books/a.sqlite3", "4years");
+    useUiStore.getState().setBookChartPeriod("db:/books/b.sqlite3", "2033");
 
     expect(useUiStore.getState().bookChartPeriods).toMatchObject({
-      "db:/books/a.sqlite3": "5years",
-      "db:/books/b.sqlite3": "30days",
+      "db:/books/a.sqlite3": "4years",
+      "db:/books/b.sqlite3": "2033",
     });
 
     const encoded = JSON.stringify(
       uiStatePartialForStorage(useUiStore.getState()),
     );
     expect(encoded).toContain('"bookChartPeriods"');
-    expect(encoded).toContain('"db:/books/a.sqlite3":"5years"');
+    expect(encoded).toContain('"db:/books/a.sqlite3":"4years"');
+  });
+
+  it("lands a stored retired range on the closest one offered", () => {
+    expect(
+      normalizeBookChartPeriods({
+        a: "5years",
+        b: "6months",
+        c: "2033",
+        d: "fortnight",
+        e: 7,
+      }),
+    ).toEqual({ a: "4years", b: "1year", c: "2033" });
   });
 
   it("keeps active maintenance progress transient and clears by id", () => {
@@ -265,8 +283,82 @@ describe("assistant panel preferences", () => {
     useUiStore.getState().toggleAssistantPanel();
     expect(useUiStore.getState().assistantPanelOpen).toBe(true);
     expect(useUiStore.getState().assistantPanelFocusRequest).toBe(before + 1);
+    expect(useUiStore.getState().rightPanelOpen).toBe(true);
+    // Toggling again hides the panel; the assistant stays one of its tabs.
     useUiStore.getState().toggleAssistantPanel();
-    expect(useUiStore.getState().assistantPanelOpen).toBe(false);
+    expect(useUiStore.getState().rightPanelOpen).toBe(false);
+    expect(useUiStore.getState().assistantPanelOpen).toBe(true);
     expect(useUiStore.getState().assistantPanelFocusRequest).toBe(before + 1);
+    useUiStore.getState().setAssistantPanelOpen(false);
+  });
+
+  it("shows and hides the right panel without touching its tabs", () => {
+    useUiStore.getState().setAssistantPanelOpen(true);
+    useUiStore.getState().setRightPanelMaximized(true);
+    useUiStore.getState().toggleRightPanel();
+    expect(useUiStore.getState()).toMatchObject({
+      rightPanelOpen: false,
+      rightPanelMaximized: false,
+      assistantPanelOpen: true,
+    });
+    const reveal = useUiStore.getState().assistantPanelRevealRequest;
+    useUiStore.getState().toggleRightPanel();
+    expect(useUiStore.getState().rightPanelOpen).toBe(true);
+    // Showing it returns with whichever tab was in front.
+    expect(useUiStore.getState().assistantPanelRevealRequest).toBe(reveal);
+    // A page holding the column is asked to give it back.
+    useUiStore.getState().setAssistantColumnClaimed(true);
+    useUiStore.getState().toggleRightPanel();
+    expect(useUiStore.getState().assistantPanelRevealRequest).toBe(reveal + 1);
+    useUiStore.getState().setAssistantColumnClaimed(false);
+    // Closing the assistant tab leaves the panel (and its launcher) open.
+    useUiStore.getState().setAssistantPanelOpen(false);
+    expect(useUiStore.getState().rightPanelOpen).toBe(true);
+    useUiStore.getState().setRightPanelOpen(false);
+  });
+});
+
+describe("assistant permission preferences", () => {
+  it("starts new chats in Auto and keeps a bounded mode per saved chat", () => {
+    expect(useUiStore.getInitialState().assistantDefaultPermissionMode).toBe("auto");
+    expect(normalizeAssistantPermissionMode("root")).toBeNull();
+    expect(
+      normalizeAssistantChatPermissionModes({ a: "auto", b: "sudo", "": "approval", c: 3 }),
+    ).toEqual({ a: "auto" });
+
+    const store = useUiStore.getState();
+    for (let index = 0; index <= ASSISTANT_CHAT_PERMISSION_MODES_LIMIT; index += 1) {
+      store.rememberAssistantChatPermissionMode(`s-${index}`, "approval");
+    }
+    // Using the oldest chat again keeps it; the next oldest goes.
+    store.rememberAssistantChatPermissionMode("s-1", "full_access");
+    store.rememberAssistantChatPermissionMode("s-new", "auto");
+    const modes = useUiStore.getState().assistantChatPermissionModes;
+    expect(Object.keys(modes)).toHaveLength(ASSISTANT_CHAT_PERMISSION_MODES_LIMIT);
+    expect(modes["s-1"]).toBe("full_access");
+    expect(modes["s-2"]).toBeUndefined();
+    expect(uiStatePartialForStorage(useUiStore.getState()).assistantChatPermissionModes).toBe(modes);
+
+    store.forgetAssistantChatPermissionModes("s-1");
+    expect(useUiStore.getState().assistantChatPermissionModes["s-1"]).toBeUndefined();
+    store.forgetAssistantChatPermissionModes();
+    expect(useUiStore.getState().assistantChatPermissionModes).toEqual({});
+  });
+});
+
+describe("assistant tool set preferences", () => {
+  it("gives every provider all tools unless the user picked fewer", () => {
+    expect(DEFAULT_ASSISTANT_TOOL_PROFILE).toBe("full");
+    expect(useUiStore.getInitialState().assistantProviderToolProfiles).toEqual({});
+    expect(
+      normalizeAssistantProviderToolProfiles({ ollama: "core", codex: "huge", "": "scoped" }),
+    ).toEqual({ ollama: "core" });
+    const store = useUiStore.getState();
+    store.setAssistantProviderToolProfile("ollama", "scoped");
+    expect(
+      uiStatePartialForStorage(useUiStore.getState()).assistantProviderToolProfiles,
+    ).toEqual({ ollama: "scoped" });
+    store.setAssistantProviderToolProfile("ollama", null);
+    expect(useUiStore.getState().assistantProviderToolProfiles).toEqual({});
   });
 });

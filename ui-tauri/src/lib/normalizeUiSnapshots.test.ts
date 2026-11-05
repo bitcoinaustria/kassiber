@@ -115,5 +115,10 @@ describe("normalizeQuarantineSnapshot", () => {
     expect(snapshot.summary.by_reason).toEqual([]);
     expect(snapshot.items).toEqual([]);
     expect(snapshot.summary.count).toBe(0);
+    expect(snapshot.summary.fiat_currency).toBeNull();
+  });
+
+  it("keeps the book currency a price entered on a row is in", () => {
+    expect(normalizeQuarantineSnapshot({ summary: { fiat_currency: "EUR" } }).summary.fiat_currency).toBe("EUR");
   });
 });

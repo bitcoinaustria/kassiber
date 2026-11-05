@@ -9,6 +9,11 @@ import {
 } from "@/components/ui/tooltip";
 import { Suggestion, Suggestions } from "@/components/ai-elements";
 import { ProviderModelPicker } from "@/components/ai/ProviderModelPicker";
+import { markOpenToEffort } from "@/components/ai/modelPickerKeys";
+import { ChatAttachmentCard } from "@/components/ai/ChatAttachmentCard";
+import type { ChatAttachmentView } from "@/components/ai/chatAttachments";
+import { useChatFileDrop } from "@/components/ai/useChatFileDrop";
+import type { AiPermissionMode } from "@/daemon/stream";
 import { DEFAULT_COMPOSER_PROMPT_KEYS } from "@/components/ai/composerPrompts";
 import type { AssistantThinkingEffort } from "@/components/ai/assistantSession";
 import {
@@ -25,7 +30,6 @@ import {
   ListPlus,
   Paperclip,
   Plus,
-  X,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -35,6 +39,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type RefObject,
 } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -42,6 +47,12 @@ interface PromptOption {
   icon: LucideIcon;
   text: string;
   prompt: string;
+}
+
+/** A file card in the composer; `key` is what removing it names. */
+export interface ComposerAttachment extends ChatAttachmentView {
+  key: string;
+  state: "uploading" | "ready" | "sent";
 }
 
 interface Ai02Props {
@@ -82,12 +93,28 @@ interface Ai02Props {
   /** Fast serving mode; the toggle appears only for models that offer it. */
   fastMode?: boolean;
   onFastModeChange?: (on: boolean) => void;
+  /**
+   * The chat's permission mode; the picker appears with its change handler,
+   * and stays usable while an answer streams (it switches that answer too).
+   */
+  permissionMode?: AiPermissionMode;
+  onPermissionModeChange?: (mode: AiPermissionMode) => void;
   modelPickerEnabled?: boolean;
   /** Open the native picker to attach a file. Omit to disable the button. */
   onAttach?: () => void;
-  /** Filename of the currently attached file, shown as a removable chip. */
-  attachedFilename?: string | null;
-  onClearAttachment?: () => void;
+  /**
+   * The chat's files, shown as removable cards above the text: `uploading`
+   * while a pasted file is handed over, `sent` once a message carried it
+   * (it stays with the chat until removed).
+   */
+  attachments?: ComposerAttachment[];
+  onRemoveAttachment?: (key: string) => void;
+  /** Files pasted into the text, or dropped in the browser preview. */
+  onAttachFiles?: (files: File[]) => void;
+  /** A file dropped on the desktop window over the drop target. */
+  onNativeFileDrop?: () => void;
+  /** Where a file can be dropped; defaults to the composer itself. */
+  dropTargetRef?: RefObject<HTMLElement | null>;
   /**
    * The visible conversation, for terminal-style ArrowUp/ArrowDown recall of
    * earlier prompts. Only `user` messages are used; omit to disable recall.
@@ -126,10 +153,10 @@ function StopIcon() {
 }
 
 // Round action buttons, after T3 Code's ComposerPrimaryActions: a solid pill
-// that lifts on hover, sinks on press, and dims (rather than greys) when
-// disabled so its shape stays readable.
+// that lifts on hover and sinks on press. A send with nothing to send goes
+// to a faint foreground tint, as in T3 Code's redesign.
 const ACTION_BUTTON_CLASS =
-  "relative isolate flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full shadow-xs outline-none transition-all duration-150 hover:scale-105 active:scale-[0.94] active:shadow-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-40 disabled:shadow-none [&_svg]:pointer-events-none";
+  "relative isolate flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full shadow-xs outline-none transition-all duration-150 hover:scale-105 active:scale-[0.94] active:shadow-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:shadow-none [&_svg]:pointer-events-none";
 
 // Keep the textarea focused when a toolbar action is pressed with the pointer;
 // in compact mode losing focus would also fold the toolbar away mid-click.
@@ -159,16 +186,21 @@ export default function Ai02({
   showThinkingEffort = false,
   fastMode = false,
   onFastModeChange,
+  permissionMode = "approval",
+  onPermissionModeChange,
   modelPickerEnabled = true,
   onAttach,
-  attachedFilename,
-  onClearAttachment,
+  attachments = [],
+  onRemoveAttachment,
+  onAttachFiles,
+  onNativeFileDrop,
+  dropTargetRef,
   historyMessages,
 }: Ai02Props) {
   const { t } = useTranslation("assistant");
   const [internalValue, setInternalValue] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
-  // While the model picker or effort menu is open, focus sits in its portal,
+  // While the model picker is open, focus sits in its portal,
   // outside this composer; a compact composer would otherwise fold its
   // toolbar away under the open menu.
   const [overlayOpen, setOverlayOpen] = useState(false);
@@ -263,9 +295,10 @@ export default function Ai02({
     if (event.shiftKey || event.altKey || event.metaKey || event.ctrlKey) {
       return false;
     }
-    // An attached file makes the composer non-empty: recalling an old prompt
-    // into it would send that prompt with a new file, which ArrowUp never meant.
-    if (attachedFilename) return false;
+    // A newly attached file makes the composer non-empty: recalling an old
+    // prompt into it would send that prompt with a new file, which ArrowUp
+    // never meant. A file the chat already has is not new.
+    if (attachments.some((file) => file.state !== "sent")) return false;
     // A typed draft with no active recall can never step.
     if (historyPositionRef.current === null && inputValue.length > 0) {
       return false;
@@ -331,6 +364,25 @@ export default function Ai02({
       // A held shortcut would flip the picker on every key repeat.
       if (event.repeat) return;
       setPickerOpen((open) => !open);
+      return;
+    }
+    // Mod+Shift+K opens the picker on its reasoning levels, or moves there
+    // when it is open (T3 Code's composer.effort).
+    if (
+      (event.metaKey || event.ctrlKey) &&
+      event.shiftKey &&
+      !event.altKey &&
+      event.key.toLowerCase() === "k"
+    ) {
+      if (!modelPickerEnabled) return;
+      const trigger = surfaceRef.current?.querySelector<HTMLButtonElement>(
+        "[data-chat-provider-model-picker]",
+      );
+      if (!trigger) return;
+      event.preventDefault();
+      if (event.repeat) return;
+      markOpenToEffort(trigger);
+      trigger.click();
     }
   };
 
@@ -348,7 +400,7 @@ export default function Ai02({
             type="button"
             className={cn(
               ACTION_BUTTON_CLASS,
-              "bg-destructive/90 text-white shadow-destructive/25 hover:bg-destructive",
+              "bg-destructive/90 text-white shadow-destructive/24 hover:bg-destructive disabled:opacity-64",
               extraClass,
             )}
             onPointerDown={keepComposerFocus}
@@ -371,7 +423,7 @@ export default function Ai02({
             type="button"
             className={cn(
               ACTION_BUTTON_CLASS,
-              "bg-foreground text-background shadow-foreground/20 hover:bg-foreground/90",
+              "bg-primary text-primary-foreground shadow-primary/24 hover:bg-primary/90 disabled:bg-foreground/12 disabled:text-muted-foreground",
             )}
             disabled={!canSubmit}
             onPointerDown={keepComposerFocus}
@@ -401,6 +453,12 @@ export default function Ai02({
     </Tooltip>
   );
 
+  const surfaceRef = useRef<HTMLDivElement>(null);
+  const dropActive = useChatFileDrop(dropTargetRef ?? surfaceRef, {
+    onFiles: onAttachFiles,
+    onNativeDrop: onNativeFileDrop,
+  });
+
   return (
     <TooltipProvider delayDuration={300}>
       <div
@@ -415,8 +473,9 @@ export default function Ai02({
         onKeyDown={handleComposerKeyDown}
       >
         <div
+          ref={surfaceRef}
           className={cn(
-            "flex cursor-text flex-col rounded-[22px] transition-all duration-200 ease-out",
+            "relative flex cursor-text flex-col rounded-2xl transition-all duration-200 ease-out",
             // Focus lives on this whole surface (textarea + toolbar), not the
             // Textarea's own ring — otherwise the outline cuts off above the
             // model/send row. Uses `outline` (not `ring`) because the glass
@@ -452,23 +511,30 @@ export default function Ai02({
             inputRef.current?.focus();
           }}
         >
-          {attachedFilename ? (
-            <div className="relative z-10 flex items-center gap-1.5 px-4 pt-3">
-              <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground">
-                <Paperclip className="h-3 w-3 shrink-0" aria-hidden="true" />
-                <span className="truncate">{attachedFilename}</span>
-                {onClearAttachment ? (
-                  <button
-                    type="button"
-                    onClick={onClearAttachment}
-                    aria-label={t("composer.removeAttachment")}
-                    title={t("composer.removeAttachment")}
-                    className="shrink-0 rounded-full p-0.5 outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <X className="h-3 w-3" aria-hidden="true" />
-                  </button>
-                ) : null}
-              </span>
+          {dropActive ? (
+            <div
+              className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-ring/60 bg-background/85 text-sm font-medium text-foreground"
+              data-composer-drop-hint=""
+            >
+              <Paperclip className="h-4 w-4" aria-hidden="true" />
+              {t("composer.dropToAttach")}
+            </div>
+          ) : null}
+          {attachments.length ? (
+            <div className="relative z-10 flex flex-wrap items-center gap-1.5 px-3 pt-3">
+              {attachments.map((file) => (
+                <ChatAttachmentCard
+                  key={file.key}
+                  attachment={file}
+                  uploading={file.state === "uploading"}
+                  note={file.state === "sent" ? t("composer.attachmentInChat") : undefined}
+                  onRemove={
+                    file.state === "uploading" || !onRemoveAttachment
+                      ? undefined
+                      : () => onRemoveAttachment(file.key)
+                  }
+                />
+              ))}
             </div>
           ) : null}
           <div className="relative z-10 min-h-0 flex-1">
@@ -483,6 +549,13 @@ export default function Ai02({
                 setInputValue(event.target.value);
               }}
               onKeyDown={handleKeyDown}
+              onPaste={(event) => {
+                // A copied file or screenshot attaches; text pastes as usual.
+                const files = Array.from(event.clipboardData?.files ?? []);
+                if (!files.length || !onAttachFiles) return;
+                event.preventDefault();
+                onAttachFiles(files);
+              }}
               placeholder={resolvedPlaceholder}
               className={cn(
                 "max-h-44 min-h-0 w-full resize-none whitespace-pre-wrap break-words border-0 bg-transparent! text-base leading-relaxed text-foreground shadow-none outline-none transition-[padding,color] duration-200 ease-in-out placeholder:text-muted-foreground/45 focus-visible:border-transparent focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:shadow-none",
@@ -500,7 +573,7 @@ export default function Ai02({
 
           <div
             className={cn(
-              "relative z-10 flex items-center gap-1 px-2.5 pt-0 transition-all duration-200 ease-out",
+              "@container/composer-toolbar relative z-10 flex items-center gap-1 px-2.5 pt-0 transition-all duration-200 ease-out",
               compact
                 ? "max-h-0 min-h-0 overflow-hidden pb-0 opacity-0 group-focus-within/assistant:max-h-12 group-focus-within/assistant:min-h-[44px] group-focus-within/assistant:pb-2.5 group-focus-within/assistant:opacity-100"
                 : "min-h-[44px] pb-2.5",
@@ -524,7 +597,7 @@ export default function Ai02({
               </TooltipTrigger>
               <TooltipContent side="top">{t("composer.attach")}</TooltipContent>
             </Tooltip>
-            {/* T3Code-style provider/model picker plus adjacent reasoning menu. */}
+            {/* T3 Code-style picker: model, reasoning, speed and permission mode. */}
             <div className="flex min-w-0 flex-1 items-center gap-0.5">
               <ProviderModelPicker
                 value={selection}
@@ -540,6 +613,8 @@ export default function Ai02({
                 showThinkingEffort={showThinkingEffort}
                 fastMode={fastMode}
                 onFastModeChange={isStreaming ? undefined : onFastModeChange}
+                permissionMode={permissionMode}
+                onPermissionModeChange={onPermissionModeChange}
               />
             </div>
 

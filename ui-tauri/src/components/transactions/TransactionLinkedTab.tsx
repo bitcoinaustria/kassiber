@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TabsContent } from "@/components/ui/tabs";
+import { localizedEntryType } from "@/lib/journalEntryType";
 
 import { LedgerRow } from "./TransactionDetailSheetParts";
 import { blurClass, currencyFormatter, formatBtcAmount } from "./model";
@@ -26,6 +27,7 @@ function shortTransactionId(id: string): string {
 
 export function TransactionLinkedTab({ ctx }: { ctx: TransactionDetailTabContext }) {
   const { t } = useTranslation("transactions");
+  const { t: tJournals } = useTranslation("journals");
   const {
     transaction,
     pair,
@@ -246,7 +248,10 @@ export function TransactionLinkedTab({ ctx }: { ctx: TransactionDetailTabContext
                         journalEvents.map((entry) => (
                           <LedgerRow
                             key={entry.id}
-                            label={`${entry.entryType}${entry.atCategory ? ` · ${entry.atCategory}` : ""}`}
+                            label={[entry.entryType, entry.atCategory]
+                              .filter((code): code is string => Boolean(code))
+                              .map((code) => localizedEntryType(code, tJournals))
+                              .join(" · ")}
                             value={
                               <span className={blurClass(hideSensitive)}>
                                 {entry.quantity.toFixed(8)} {entry.asset} ·{" "}

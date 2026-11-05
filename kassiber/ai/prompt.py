@@ -5,7 +5,12 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from ..errors import AppError
-from .tools import CORE_TOOL_NAMES, responses_tool_definitions, select_tool_capabilities
+from .tools import (
+    CORE_TOOL_NAMES,
+    responses_tool_definitions,
+    select_tool_capabilities,
+    tool_area_index,
+)
 
 
 SystemPromptKind = Literal["kassiber", "raw"] | None
@@ -29,6 +34,14 @@ Request missing inputs via ui.review.request_input, then wait. After input,
 reinspect cases; an import does not prove resolution.
 After custody writes rebuild journals and verify blockers.
 
+Evidence: name only ids a tool returned in this chat, copied whole. Take
+totals from tools, never sums of sampled pages; amounts are integer msat.
+Before claiming value is missing, count the wallets' own rows or use
+ui.transactions.verify, never the audited component's legs. Mark outside facts
+(fees, rates, policies) from memory as unverified. Counters differ by
+definition; read definitions. Follow an error's remediation. For "what if"
+use ui.review.plan; batch fixes into one review.
+
 Use ui.workspace.overview.snapshot only for an explicit book-set request.
 Keep books separate; never sum mixed fiat. Use only
 advertised schemas; never add hidden arguments or make a local graph public.
@@ -46,6 +59,11 @@ Kassiber may automatically refresh stale local journals. Network refresh needs o
 consent. If costBasisComplete is false, call basis/gains incomplete and name blockers.
 Be concise; say when a fact is unavailable.
 """
+
+
+# The area index is static, so the system prompt stays byte-identical across
+# turns and a provider's prompt cache keeps working.
+KASSIBER_SYSTEM_PROMPT = f"{DEFAULT_KASSIBER_SYSTEM_PROMPT}\n{tool_area_index()}\n"
 
 
 def normalize_system_prompt_kind(raw: object, *, tools_enabled: bool) -> SystemPromptKind:
@@ -66,6 +84,7 @@ def build_chat_messages(
     *,
     system_prompt_kind: SystemPromptKind,
     system_prompt: str | None = None,
+    tools_enabled: bool = True,
 ) -> list[dict[str, Any]]:
     if system_prompt is not None and system_prompt_kind != "raw":
         raise AppError(
@@ -82,8 +101,23 @@ def build_chat_messages(
             )
         return [{"role": "system", "content": system_prompt}, *messages]
     if system_prompt_kind == "kassiber":
-        return [{"role": "system", "content": DEFAULT_KASSIBER_SYSTEM_PROMPT}, *messages]
+        prompt = KASSIBER_SYSTEM_PROMPT if tools_enabled else DEFAULT_KASSIBER_SYSTEM_PROMPT
+        return [{"role": "system", "content": prompt}, *messages]
     return list(messages)
+
+
+def build_area_tools(
+    areas: list[str] | tuple[str, ...],
+    *,
+    profile: str | None = None,
+) -> list[dict[str, Any]]:
+    """Schemas for explicitly requested areas, under the same profile limits."""
+
+    return responses_tool_definitions(
+        include_mutating=True,
+        capabilities=frozenset(areas),
+        allowed_names=CORE_TOOL_NAMES if profile == "core" else None,
+    )
 
 
 def build_responses_tools(

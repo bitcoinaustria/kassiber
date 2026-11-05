@@ -211,7 +211,11 @@ export function TransactionFlowSection({ ctx }: { ctx: TransactionDetailTabConte
       swapOutGraphArgs.transaction,
       swapOutGraphArgs.allowPublicLookup,
     ),
-    { enabled: Boolean(swapOutGraphArgs.transaction) },
+    {
+      enabled: Boolean(swapOutGraphArgs.transaction),
+      refetchOnMount: !swapOutGraphArgs.allowPublicLookup,
+      retryOnMount: !swapOutGraphArgs.allowPublicLookup,
+    },
   );
   const swapInGraphQuery = useDaemon<TransactionGraphPayload>(
     "ui.transactions.graph",
@@ -219,7 +223,11 @@ export function TransactionFlowSection({ ctx }: { ctx: TransactionDetailTabConte
       swapInGraphArgs.transaction,
       swapInGraphArgs.allowPublicLookup,
     ),
-    { enabled: Boolean(swapInGraphArgs.transaction) },
+    {
+      enabled: Boolean(swapInGraphArgs.transaction),
+      refetchOnMount: !swapInGraphArgs.allowPublicLookup,
+      retryOnMount: !swapInGraphArgs.allowPublicLookup,
+    },
   );
   const activeSwapGraphQuery =
     activeSwapLeg === "out"
@@ -358,7 +366,7 @@ function Fact({
         {copyValue ? (
           <button
             type="button"
-            className="ml-auto rounded-sm text-muted-foreground hover:text-foreground"
+            className="rounded-sm text-muted-foreground hover:text-foreground"
             aria-label={t("infoHint.copy", { label })}
             onClick={() => copyText(copyValue)}
           >

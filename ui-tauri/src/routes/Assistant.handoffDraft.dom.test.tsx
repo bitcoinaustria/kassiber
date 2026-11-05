@@ -28,21 +28,22 @@ vi.mock("@/components/ai/assistantSession", () => ({
     messages: [],
     isStreaming: false,
     error: null,
-    pendingConsent: null,
+    pendingConsents: [],
     queuedPrompts: [],
-    selection: null,
+    // Starter questions show only once a model is chosen.
+    selection: { provider: "claude", model: "default" },
     thinkingEffort: "auto",
     fastMode: false,
     returnPath: "/overview",
     sessionId: null,
     incognito: false,
-    attachment: null,
+    attachments: [],
     setSelection: vi.fn(),
     setThinkingEffort: vi.fn(),
     setFastMode: vi.fn(),
     setIncognito: vi.fn(),
     attachFile: vi.fn(),
-    clearAttachment: vi.fn(),
+    removeAttachment: vi.fn(),
     sendPrompt: vi.fn(),
     sendConsent: vi.fn(),
     abort: vi.fn(),
@@ -58,7 +59,7 @@ vi.mock("@/components/ai/assistantSession", () => ({
 vi.mock("@/components/ai/ChatHistoryPanel", () => ({ ChatHistoryPanel: () => null }));
 vi.mock("@/components/ai/ChatThread", () => ({ ChatThread: () => null }));
 vi.mock("@/components/ai/RecentChats", () => ({ RecentChats: () => null }));
-vi.mock("@/components/ai/ToolConsentDialog", () => ({ ToolConsentDialog: () => null }));
+vi.mock("@/components/ai/ModelSetupCard", () => ({ ModelSetupCard: () => null }));
 vi.mock("@/components/ai/ProviderModelPicker", () => ({ ProviderModelPicker: () => null }));
 vi.mock("@/components/ai/useReasoningEffortSupport", () => ({
   useSupportedReasoningEffort: () => false,
@@ -70,7 +71,7 @@ import { useAssistantDraftStore } from "@/store/assistantDraft";
 import { Assistant } from "./Assistant";
 
 const FIX_PROMPT = "Fix the cause that holds this transaction in quarantine.";
-const QUARANTINE = { route: "/quarantine" as const, capabilities: ["review" as const] };
+const QUARANTINE = { route: "/review" as const, capabilities: ["review" as const] };
 
 function parkQuarantineFix() {
   // "Fix with Assistant" with no model chosen yet.

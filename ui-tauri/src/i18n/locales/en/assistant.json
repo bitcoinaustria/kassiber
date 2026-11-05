@@ -25,7 +25,6 @@
   "dock": {
     "label": "Kassiber assistant",
     "conversation": "Conversation",
-    "openAssistantPage": "Open assistant page",
     "working": "Working",
     "workingQueued": "Working · {{count}} queued"
   },
@@ -53,9 +52,27 @@
     "queueMessage": "Queue message",
     "attach": "Attach a file",
     "removeAttachment": "Remove attachment",
+    "removeAttachmentNamed": "Remove {{filename}}",
+    "dropToAttach": "Drop to attach",
+    "attachmentUploading": "Attaching…",
+    "attachmentInChat": "Stays with this chat",
+    "attachmentLimit": {
+      "title": "A chat holds up to {{max}} files",
+      "body": "Some files weren't attached. Remove one, or start a new chat for more."
+    },
+    "attachmentUnsupported": {
+      "title": "This file can't be attached",
+      "body": "Attach a CSV, TSV, XLSX, PDF or image file."
+    },
+    "attachmentTooLarge": {
+      "title": "{{filename}} is too large to paste",
+      "body": "Pasted files can be up to 25 MB. Attach larger ones with the + button."
+    },
+    "attachmentFailed": "The file couldn't be attached",
     "modelContext": "Model context",
     "thinking": "Thinking",
     "reasoningEffort": "Reasoning effort",
+    "reasoning": "Reasoning",
     "effort": {
       "auto": "Auto",
       "low": "Low",
@@ -67,14 +84,53 @@
     },
     "effortDefault": "Default",
     "effortAutoHint": "Let the model decide",
+    "effortLevelsUnknown": "Use Check models to see this model's levels.",
     "newLine": "New line",
     "fastMode": {
-      "label": "Fast mode",
       "fast": "Fast",
       "standard": "Standard",
       "speed": "Speed",
       "hint": "Faster output, billed at a higher rate",
       "claudeHint": "Faster Opus output, billed at a higher rate"
+    },
+    "permission": {
+      "label": "Permission mode",
+      "approval": {
+        "label": "Approval",
+        "description": "Ask before every change."
+      },
+      "auto": {
+        "label": "Auto",
+        "description": "Approve changes that can be undone and stay on this device. Ask before network access and anything permanent."
+      },
+      "full_access": {
+        "label": "Full access",
+        "description": "Never ask. Runs every change without asking, syncs and other network actions included."
+      },
+      "notApplied": {
+        "title": "Permission mode not changed for this answer",
+        "body": "The running answer keeps its mode. The new one applies from your next message."
+      }
+    },
+    "toolProfile": {
+      "full": {
+        "label": "All tools",
+        "description": "Offers every Kassiber tool with each question."
+      },
+      "scoped": {
+        "label": "Focused",
+        "description": "Picks the tools for each question, and the model can load more areas. Suits small local models."
+      },
+      "core": {
+        "label": "Minimal",
+        "description": "Only the core tools, for the smallest context windows."
+      }
+    },
+    "attachmentExpired": {
+      "title_one": "An attached file expired",
+      "title_other": "{{count}} attached files expired",
+      "body_one": "{{filenames}} was attached too long ago and the assistant could no longer read it, so it left this chat. Attach it again if it is still needed.",
+      "body_other": "{{filenames}} were attached too long ago and the assistant could no longer read them, so they left this chat. Attach them again if they are still needed."
     }
   },
   "prompts": {
@@ -93,8 +149,7 @@
   },
   "thread": {
     "scrollToLatest": "Scroll to latest message",
-    "scrollToLatestShort": "Scroll to latest",
-    "scrollToTop": "Scroll to top"
+    "scrollToLatestShort": "Scroll to latest"
   },
   "message": {
     "imageReference": "Image reference",
@@ -195,6 +250,10 @@
       "basisStale": "cost basis outdated",
       "noMarketRate": "no market rate"
     },
+    "loadTools": {
+      "summary_one": "Loaded {{count}} tool for {{areas}}",
+      "summary_other": "Loaded {{count}} tools for {{areas}}"
+    },
     "workspaceHealth": {
       "noBooksSet": "No books set",
       "noBook": "No book",
@@ -220,6 +279,7 @@
       "withDefault": "{{backends}}; default {{default}}.",
       "withoutDefault": "{{backends}}."
     },
+    "journalsUnavailable": "Figures withheld: journals need processing first.",
     "quarantine": {
       "summary_one": "{{count}} quarantined transaction.",
       "summary_other": "{{count}} quarantined transactions."
@@ -314,6 +374,38 @@
       "buckets_one": "{{count}} {{interval}} balance bucket.",
       "buckets_other": "{{count}} {{interval}} balance buckets.",
       "intervalFallback": "history"
+    },
+    "visual": {
+      "summary_one": "Visual with {{count}} entry: {{source}}.",
+      "summary_other": "Visual with {{count}} entries: {{source}}."
+    },
+    "importAttachment": {
+      "ready_one": "Ready: {{count}} new transaction into {{wallet}}",
+      "ready_other": "Ready: {{count}} new transactions into {{wallet}}",
+      "blocked": "Not ready to import into {{wallet}}",
+      "applied_one": "Imported {{count}} transaction into {{wallet}}",
+      "applied_other": "Imported {{count}} transactions into {{wallet}}"
+    },
+    "importRollback": {
+      "done_one": "Deleted {{count}} imported transaction",
+      "done_other": "Deleted {{count}} imported transactions"
+    },
+    "approval": {
+      "auto": "Approved automatically (Auto)",
+      "full_access": "Approved automatically (Full access)",
+      "session": "Approved automatically (allowed for this chat)"
+    },
+    "undoHint": "Can be undone — ask the assistant",
+    "readDocument": {
+      "summary_one": "Read {{count}} row from the document: {{ready}} ready, {{held}} for review",
+      "summary_other": "Read {{count}} rows from the document: {{ready}} ready, {{held}} for review"
+    },
+    "importDocument": {
+      "ready_one": "Ready: {{count}} new transaction from the document into {{wallet}}",
+      "ready_other": "Ready: {{count}} new transactions from the document into {{wallet}}",
+      "blocked": "Not ready to import the document into {{wallet}}",
+      "applied_one": "Imported {{count}} transaction from the document into {{wallet}}",
+      "applied_other": "Imported {{count}} transactions from the document into {{wallet}}"
     }
   },
   "history": {
@@ -342,9 +434,6 @@
     "searchModels": "Search models…",
     "checkingProvider": "Checking local provider status…",
     "staleModels": "Showing last known models · {{error}}",
-    "privacyFilter": "Model privacy filter",
-    "allModels": "All",
-    "localModels": "Local",
     "unusableModelsHidden_one": "{{count}} model hidden that can't use tools or answer in text.",
     "unusableModelsHidden_other": "{{count}} models hidden that can't use tools or answer in text.",
     "unusableModelsShown_one": "Showing {{count}} model that can't use tools or answer in text.",
@@ -417,13 +506,34 @@
       "value": "Value in book fiat currency",
       "activate": "Activate",
       "draft": "Save as draft",
-      "assetFromReference": "asset resolved from reference"
+      "assetFromReference": "asset resolved from reference",
+      "pair": "Pair transfer",
+      "dismiss_pair": "Dismiss pair suggestion",
+      "custody_gap": "Review custody gap",
+      "kind_override": "Classify acquisition",
+      "kindCleared": "imported classification",
+      "expiresDays_one": "for {{count}} day",
+      "expiresDays_other": "for {{count}} days",
+      "undismiss_pair": "Restore pair suggestion",
+      "accept_coarse_prices": "Accept approximate prices",
+      "transactions_one": "{{count}} transaction",
+      "transactions_other": "{{count}} transactions",
+      "allCoarse": "every transaction waiting on its approximate price"
+    },
+    "tax": {
+      "title": "Tax change by year",
+      "unchanged": "No change to the tax figures",
+      "realized": "Gain/loss",
+      "income": "Income",
+      "indicative": "Indicative tax",
+      "indicativeAfter": "Indicative tax afterwards {{amount}}",
+      "withheld": "Indicative tax withheld until reports are ready"
     },
     "receipt": {
       "title": "Verified review receipt",
       "verified_one": "{{count}} correction applied; the resulting journal was rebuilt and verified.",
       "verified_other": "{{count}} corrections applied; the resulting journal was rebuilt and verified.",
-      "openQuarantine": "Open quarantine"
+      "openQuarantine": "Open Review"
     },
     "cases": {
       "more": "{{count}} cases inspected; more cases are available.",
@@ -431,7 +541,6 @@
     },
     "planSummary": "{{count}} corrections proposed; quarantine issues {{before}} → {{after}}",
     "progress": {
-      "confirmation": "Waiting for your review of the complete plan",
       "plan": "Computing the proposed journal effects",
       "apply": "Applying and verifying the approved plan",
       "read": "Reviewing local cases and evidence"
@@ -439,22 +548,91 @@
     "continuationDetails": "Continuation details"
   },
   "consent": {
-    "title": "Allow tool action?",
-    "toolAction": "Tool action",
-    "description": "This action needs approval before Kassiber runs it.",
     "arguments": "Arguments",
-    "deny": "Deny",
-    "allowSession": "Allow this session",
-    "allowOnce": "Allow once",
     "apply": {
-      "title": "Apply these corrections?",
       "description": "Review the effects recalculated by Kassiber. This approval covers the complete plan shown below.",
-      "cancel": "Cancel",
       "confirm": "Apply once",
       "alreadyApplied": "This plan was already applied. Continuing returns the same receipt without making new changes.",
       "returnReceipt": "Return receipt",
       "unavailable": "Kassiber could not verify this plan against the current book. Ask the assistant to prepare a new plan before approving."
-    }
+    },
+    "plan": {
+      "description": "Kassiber recalculated this plan from the current book and file. Approving runs exactly this plan once.",
+      "target": "Into",
+      "newWallet": "new connection {{label}}",
+      "existingWallet": "{{label}}",
+      "rowsToImport": "New transactions",
+      "rowsPresent": "Already in this connection",
+      "rowsUpdated": "Existing transactions re-priced",
+      "dateRange": "Dates",
+      "withheld": "Not shown to this provider",
+      "overlapRange": "Existing transactions in this period",
+      "overlapOther": "Transaction ids also in other connections",
+      "totals": "Totals",
+      "rowCount_one": "{{count}} transaction",
+      "rowCount_other": "{{count}} transactions",
+      "fee": "fee",
+      "direction": {
+        "inbound": "In",
+        "outbound": "Out"
+      },
+      "warnings": "Check before approving",
+      "warning": {
+        "type_map_decides_tax_kind": "The mapping translates the file's types into tax types. Check each one.",
+        "transfers_only_confirmed": "Every row imports as a deposit or withdrawal, as you confirmed.",
+        "rows_already_present": "Some rows are already in this connection and are skipped.",
+        "updates_existing_rows_not_rolled_back": "Existing transactions get the file's prices. A rollback does not undo that.",
+        "overlaps_existing_history": "This connection already has transactions in the same period.",
+        "external_ids_in_other_wallets": "Some transaction ids are also in other connections. Check this is the right connection.",
+        "history_starts_after_first_funding": "Afterwards the connection spends more than it received: earlier history is missing.",
+        "rows_held_for_review": "Rows the reader was unsure of are left out. Review them with OCR (Import from photo or PDF) on the Transactions page."
+      },
+      "blockers": "Cannot be approved",
+      "blocker": {
+        "target_not_file_wallet": "This connection takes its history from its own source. Choose a file or exchange connection.",
+        "wallet_label_taken": "A connection with this name already exists.",
+        "nothing_to_import": "There are no new transactions in this file.",
+        "amount_units_unconfirmed": "The file does not say which unit its amounts are in.",
+        "row_kinds_from_amount_sign": "The file has no type column. Confirm it holds transfers only, or map the type column.",
+        "rows_rejected": "Some rows would be rejected. Fix the column mapping first.",
+        "columns_not_recognized": "The columns were not recognized.",
+        "header_is_preamble": "The first row is not the header. Remove the lines above it.",
+        "attachment_not_tabular": "Photos and PDFs use the on-device document import.",
+        "rollback_removes_reviewed_work": "Rolling back would also delete reviewed work on these transactions.",
+        "nothing_to_roll_back": "This import has no transactions left.",
+        "nothing_ready": "The reader was not sure of any row. Review the document with OCR (Import from photo or PDF) on the Transactions page."
+      },
+      "desktopOnly": "Do this yourself in the desktop or CLI.",
+      "rowsToDelete": "Transactions deleted",
+      "importedAt": "Imported",
+      "sourceFormat": "Format",
+      "alsoRemoved": "Also deleted",
+      "stale": "The book or file changed since this plan was made. Ask the assistant to plan again.",
+      "unavailable": "Kassiber could not check this plan against the current book and file. Ask the assistant to plan again.",
+      "confirmImport": "Import once",
+      "confirmRollback": "Delete transactions"
+    },
+    "rowLabel": "Approval needed",
+    "waiting": "Waiting for approval",
+    "decline": "Decline",
+    "approve": "Approve",
+    "more": "More",
+    "moreOptions": "More approval options",
+    "allowChat": "Allow for this chat",
+    "stopAnswer": "Stop the answer",
+    "planDetails": "Plan",
+    "proposalDetails": "Proposed changes",
+    "risk": {
+      "network": "Contacts the network",
+      "permanent": "Can't be undone"
+    },
+    "notice": {
+      "label": "Approval waiting",
+      "waiting_one": "Waiting for your approval:",
+      "waiting_other": "{{count}} approvals waiting:",
+      "review": "Review"
+    },
+    "announce": "Approval needed: {{summary}}"
   },
   "evidence": {
     "label": "Evidence needed",
@@ -491,8 +669,10 @@
       "received": "The local setup or import finished; verify what data is now available.",
       "partial": "Some local changes were saved, but setup or sync did not finish. Inspect current data and the remaining blockers.",
       "attached": "The selected file was saved as evidence for this transaction and is available for analysis. No transaction history was imported; the case is not necessarily resolved.",
-      "unavailable": "I do not have the requested evidence. Keep the gap explicit and consider alternative evidence."
+      "unavailable": "I do not have the requested evidence. Keep the gap explicit and consider alternative evidence.",
+      "attachedNotInChat": "The selected file was saved as evidence for this transaction, but this chat already holds as many files as it can, so the file is not available for analysis here. No transaction history was imported; the case is not necessarily resolved."
     },
+    "attachedNotInChat": "The file was saved as evidence on the transaction but not added to this chat. Remove a file, or start a new chat, to analyze it here.",
     "continuePrompt": "Continue the evidence review. {{outcome}} Inspect the current cases again before making a proposal. Cases: {{cases}}",
     "sourceFundsContinuePrompt": "Continue the source-of-funds review for the same target, amount and purpose. {{outcome}} Read the current source-of-funds review context and evidence again. Keep recorded provenance separate from accounting and request consent before changes. Cases: {{cases}}",
     "importTarget": "Import into connection",
@@ -504,9 +684,8 @@
     "title": "Assistant",
     "open": "Open assistant panel",
     "close": "Close assistant panel",
-    "toggle": "Assistant panel",
-    "toggleTitle": "Assistant panel ({{shortcut}})",
-    "resize": "Resize assistant panel",
+    "toggle": "Side panel",
+    "resize": "Resize side panel",
     "emptyTitle": "Ask about your books",
     "emptyBody": "The assistant reads this book through Kassiber's tools and knows which page you are on. Your question goes to the model you pick below.",
     "launcher": "Ask Kassiber",
@@ -517,6 +696,384 @@
     "focusQuarantine": "Quarantined transaction · {{date}}",
     "askAbout": "Ask about this",
     "askAboutTransactionPrompt": "Explain this transaction and whether anything about it needs my attention.",
-    "askAboutQuarantinePrompt": "Why is this transaction in quarantine, and what do I need to provide to resolve it?"
+    "askAboutQuarantinePrompt": "Why is this transaction in quarantine, and what do I need to provide to resolve it?",
+    "sideLabel": "Side panel",
+    "tabs": "Side panel tabs",
+    "closeTab": "Close {{label}}",
+    "hide": "Hide side panel",
+    "maximize": "Maximize panel",
+    "restore": "Restore panel size",
+    "add": "Open in side panel",
+    "launcherTitle": "Open in this panel",
+    "surfaceDetails": "Transaction details",
+    "detailsHint": "Open a transaction to see its details here.",
+    "assistantUnavailable": "The assistant page is already open.",
+    "surfaceReview": "Review queue",
+    "surfaceChanges": "Changes",
+    "surfaceLogs": "Logs",
+    "developerOnly": "Turn on developer tools to open this here.",
+    "pin": "Keep open",
+    "pinHint": "Keep this transaction open in its own tab",
+    "previewHint": "preview, replaced by the next transaction you open; double-click to keep",
+    "retry": "Try again",
+    "review": {
+      "loading": "Loading what needs review",
+      "error": "The review queue could not be read.",
+      "emptyTitle": "Nothing needs review",
+      "emptyBody": "No transaction is held back, and every transfer is matched.",
+      "reportsBlocked": "Reports are blocked until these are resolved.",
+      "causes": "Needs you",
+      "alsoOpen": "Also open",
+      "transfers_one": "{{count}} transfer to match",
+      "transfers_other": "{{count}} transfers to match",
+      "journals": "Journals need processing",
+      "process": "Process",
+      "waiting_one": "{{count}} waiting",
+      "waiting_other": "{{count}} waiting",
+      "openPage": "Open Review"
+    },
+    "changes": {
+      "loading": "Loading recent changes",
+      "error": "Recent changes could not be read.",
+      "emptyTitle": "No changes yet",
+      "emptyBody": "Edits to transactions, from here, the CLI or the assistant, show up here.",
+      "emptyAssistant": "The assistant has not changed anything in this book.",
+      "filter": "Show changes by",
+      "all": "All",
+      "byAssistant": "Assistant",
+      "count_one": "{{count}} change",
+      "count_other": "{{count}} changes",
+      "openTransaction": "Open this transaction in a tab",
+      "undo": "Undo this change"
+    },
+    "logs": {
+      "level": "Level",
+      "levels": {
+        "all": "All",
+        "warning": "Warnings",
+        "error": "Errors"
+      },
+      "search": "Filter lines",
+      "redacted": "Redacted, in memory only",
+      "openPage": "Open Logs",
+      "follow": "Follow new lines",
+      "emptyTitle": "No log lines yet",
+      "emptyBody": "What the app does shows up here as it happens.",
+      "noMatch": "No lines match"
+    }
+  },
+  "visual": {
+    "source": {
+      "overview": "Your books at a glance",
+      "balance_history": "Balance over time",
+      "portfolio": "Holdings",
+      "tax_summary": "Tax years",
+      "cash_flow": "Cash flow",
+      "transactions": "Transactions",
+      "transaction_flow": "Transaction flow",
+      "readiness": "Report readiness",
+      "generic": "a visual"
+    },
+    "drawing": "Drawing {{source}} from your books…",
+    "provenance": "Drawn by Kassiber from your local books, not from the model's text.",
+    "asOf": "as of {{date}}",
+    "unknownValue": "unknown",
+    "measure": {
+      "quantity": "Amount",
+      "market_value": "Value",
+      "cost_basis": "Cost basis",
+      "unrealized_pnl": "Unrealized",
+      "gain_loss": "Gain/loss",
+      "proceeds": "Proceeds",
+      "compare": "Value vs cost basis",
+      "fiat_value": "Fiat value"
+    },
+    "range": {
+      "3m": "3M",
+      "1y": "1Y",
+      "all": "All"
+    },
+    "period": {
+      "30days": "Last 30 days",
+      "3months": "Last 3 months",
+      "6months": "Last 6 months",
+      "ytd": "Year to date",
+      "1year": "Last 12 months",
+      "5years": "Last 5 years",
+      "all": "All time"
+    },
+    "interval": {
+      "hour": "Hourly",
+      "day": "Daily",
+      "week": "Weekly",
+      "month": "Monthly"
+    },
+    "sort": {
+      "recent": "Most recent",
+      "oldest": "Oldest first",
+      "largest": "Largest first",
+      "smallest": "Smallest first"
+    },
+    "controls": {
+      "measure": "What to show",
+      "range": "Time range",
+      "groupBy": "Group by",
+      "unit": "Unit"
+    },
+    "actions": {
+      "showTable": "Show data as a table",
+      "hideTable": "Show the chart",
+      "copyCsv": "Copy as CSV",
+      "copied": "Copied",
+      "expand": "Open larger",
+      "openInApp": "Open in Kassiber"
+    },
+    "followUp": {
+      "balanceOverTime": "Show my balance over time",
+      "whatNeedsAttention": "What needs attention?",
+      "holdings": "Show my holdings by wallet",
+      "cashFlow": "Show my cash flow",
+      "largestTransactions": "Show my largest transactions",
+      "disposals": "Show my outgoing transactions this year",
+      "largestOutgoing": "Show my largest outgoing transactions",
+      "overview": "Give me an overview",
+      "recentTransactions": "Show my recent transactions"
+    },
+    "balance": {
+      "latest": "Latest · {{date}}",
+      "change": "{{change}} since {{date}}"
+    },
+    "overview": {
+      "portfolioValue": "Portfolio value",
+      "price": "BTC at {{price}}",
+      "btcPrice": "BTC price",
+      "complete": "Cost basis complete",
+      "incomplete": "Cost basis incomplete",
+      "incompleteShort": "Incomplete",
+      "costBasis": "Cost basis",
+      "unrealized": "Unrealized gain",
+      "realizedYtd": "Realized this year",
+      "transactions": "Transactions",
+      "allocation": "Where your bitcoin is",
+      "otherWallets_one": "{{count}} other wallet",
+      "otherWallets_other": "{{count}} other wallets"
+    },
+    "allocation": {
+      "total": {
+        "market_value": "Total value",
+        "quantity": "Total amount",
+        "cost_basis": "Total cost basis",
+        "unrealized_pnl": "Total unrealized gain"
+      },
+      "mixedAssets": "Amounts of different assets are not added up.",
+      "byWallet": "Wallets",
+      "byAsset": "Assets",
+      "share": "Share of the total",
+      "pricedOnly": "priced holdings only"
+    },
+    "tax": {
+      "pickYear": "Select a year for its breakdown",
+      "yearDetail": "{{year}} in detail",
+      "type": {
+        "short": "Short-term",
+        "long": "Long-term",
+        "sell": "Sale",
+        "spend": "Spending",
+        "fee": "Fee"
+      }
+    },
+    "cashFlow": {
+      "received": "Received",
+      "sent": "Sent",
+      "net": "Net",
+      "largest": "Largest received",
+      "count_one": "{{count}} transaction",
+      "count_other": "{{count}} transactions",
+      "receivedCount_one": "received · {{count}}",
+      "receivedCount_other": "received · {{count}}",
+      "sentCount_one": "sent · {{count}}",
+      "sentCount_other": "sent · {{count}}",
+      "transfers_one": "transfer",
+      "transfers_other": "transfers",
+      "unpriced_one": "{{count}} without a price",
+      "unpriced_other": "{{count}} without a price",
+      "transfersExcluded_one": "{{count}} transfer between your wallets not counted",
+      "transfersExcluded_other": "{{count}} transfers between your wallets not counted",
+      "swapsExcluded_one": "{{count}} swap not counted",
+      "swapsExcluded_other": "{{count}} swaps not counted"
+    },
+    "transactions": {
+      "shown_one": "{{count}} of {{total}} transaction",
+      "shown_other": "{{count}} of {{total}} transactions",
+      "open": "Open {{title}}",
+      "direction": {
+        "in": "Received",
+        "out": "Sent",
+        "none": "Transaction"
+      },
+      "status": {
+        "pending": "Pending",
+        "review": "Needs review",
+        "failed": "Failed"
+      }
+    },
+    "flow": {
+      "fee": "Miner fee",
+      "overflow_one": "+{{count}} more",
+      "overflow_other": "+{{count}} more",
+      "input": "Input {{position}}",
+      "output": "Output {{position}}",
+      "yourChange": "Change to your wallets",
+      "moved": "Moved in total",
+      "aria": "Transaction flow from {{inputs}} inputs to {{outputs}} outputs",
+      "yours": "Your wallets",
+      "others": "Other parties",
+      "fiatValue": "Value at the time",
+      "counterparty": "Counterparty",
+      "side": {
+        "input": "Input",
+        "output": "Output",
+        "fee": "Fee"
+      }
+    },
+    "readiness": {
+      "progress": "{{passed}} of {{total}} checks passed",
+      "ready": "Ready for reports",
+      "open_one": "{{count}} thing needs attention",
+      "open_other": "{{count}} things need attention",
+      "check": {
+        "transactions": "Transactions imported",
+        "journals": "Journals up to date",
+        "quarantine": "Quarantine",
+        "prices": "Prices",
+        "custody": "Custody between wallets",
+        "review_queue": "Review queue",
+        "blocker": "Blocker"
+      },
+      "status": {
+        "ok": "OK",
+        "warning": "Needs attention",
+        "blocked": "Blocks reports"
+      },
+      "detail": {
+        "transactions": {
+          "ok_one": "{{count}} active transaction",
+          "ok_other": "{{count}} active transactions",
+          "warning": "No transactions yet"
+        },
+        "journals": {
+          "ok": "Processed {{date}}",
+          "warning": "Last processed {{date}}; there is newer data",
+          "never": "Never processed"
+        },
+        "quarantine": {
+          "ok": "Nothing in quarantine",
+          "blocked_one": "{{count}} transaction in quarantine",
+          "blocked_other": "{{count}} transactions in quarantine"
+        },
+        "prices_one": "{{count}} transaction without a price ({{coverable}} can be filled from cached rates)",
+        "prices_other": "{{count}} transactions without a price ({{coverable}} can be filled from cached rates)",
+        "custody": {
+          "ok": "No known custody gaps",
+          "blocked_one": "{{count}} unresolved custody gap",
+          "blocked_other": "{{count}} unresolved custody gaps"
+        },
+        "review_queue": {
+          "ok": "Nothing waiting for review",
+          "warning_one": "{{count}} transaction needs review",
+          "warning_other": "{{count}} transactions need review"
+        },
+        "pricesOk": "Every transaction has a price"
+      },
+      "action": {
+        "process_journals": "Process journals",
+        "review_quarantine": "Review with me",
+        "fill_prices": "Fill prices",
+        "review_custody": "Resolve with me",
+        "open_review": "Show them",
+        "import": "How to import"
+      },
+      "prompt": {
+        "process_journals": "Process my journals so the reports are current.",
+        "review_quarantine": "Help me review the transactions in quarantine.",
+        "fill_prices": "Fill in the missing prices from cached rates where possible.",
+        "review_custody": "Help me resolve the custody gaps between my wallets.",
+        "open_review": "Show the transactions that need review.",
+        "import": "How do I import my transactions?"
+      }
+    },
+    "table": {
+      "metric": "Figure",
+      "value": "Value",
+      "period": "Period",
+      "asset": "Asset",
+      "wallet": "Wallet",
+      "year": "Year",
+      "count": "Transactions",
+      "date": "Date",
+      "description": "Description",
+      "amount": "Amount",
+      "fiat": "Fiat value",
+      "status": "Status",
+      "side": "Side",
+      "label": "Label",
+      "check": "Check"
+    },
+    "caveat": {
+      "journals_stale": "Journals were not current, so this may be out of date.",
+      "quarantines_one": "{{count}} transaction is in quarantine and not included.",
+      "quarantines_other": "{{count}} transactions are in quarantine and not included.",
+      "missing_prices_one": "{{count}} value has no price and is shown as unknown.",
+      "missing_prices_other": "{{count}} values have no price and are shown as unknown.",
+      "truncated": "Only the latest part of the data is shown.",
+      "truncated_one": "{{count}} more entry is not shown.",
+      "truncated_other": "{{count}} more entries are not shown.",
+      "graph_unavailable": "This transaction has no input and output data, so its flow cannot be drawn.",
+      "amounts_hidden_one": "{{count}} amount is confidential or unknown.",
+      "amounts_hidden_other": "{{count}} amounts are confidential or unknown.",
+      "transaction_quarantined": "This transaction is in quarantine.",
+      "custody_unresolved": "Custody between your wallets is not fully resolved.",
+      "market_rate_missing": "There is no current market price, so values are not shown.",
+      "basis_incomplete": "The cost basis is incomplete.",
+      "more_transactions_one": "{{count}} more transaction matches; ask to see more.",
+      "more_transactions_other": "{{count}} more transactions match; ask to see more.",
+      "other": "Note: {{code}}",
+      "unpriced_transactions_one": "{{count}} transaction has no price, so cost basis and gains may be incomplete.",
+      "unpriced_transactions_other": "{{count}} transactions have no price, so cost basis and gains may be incomplete.",
+      "sync_failed": "The last wallet sync failed, so recent transactions may be missing."
+    }
+  },
+  "walletRequest": {
+    "label": "Connection needed",
+    "why": "This connection needs wallet details or credentials that stay out of the chat. Add it in Kassiber's own setup.",
+    "action": "Add connection",
+    "otherBook": "This request belongs to another book.",
+    "status": {
+      "idle": "Not connected yet",
+      "open": "Waiting for your setup…",
+      "connected": "Connected. Ask the assistant to continue."
+    },
+    "source": {
+      "descriptor": "A watch-only wallet (descriptor or xpub) is needed.",
+      "address-list": "An address-list connection is needed.",
+      "silent-payment": "A Silent Payments connection is needed.",
+      "liquid-descriptor": "A Liquid wallet connection is needed.",
+      "samourai": "A Samourai wallet connection is needed.",
+      "core-ln": "A Core Lightning node connection is needed.",
+      "lnd": "An LND node connection is needed.",
+      "btcpay": "A BTCPay Server connection is needed.",
+      "kraken": "A Kraken API connection is needed.",
+      "coinbase": "A Coinbase API connection is needed.",
+      "binance": "A Binance API connection is needed."
+    }
+  },
+  "modelSetup": {
+    "title": "Choose a model to start",
+    "body": "A coding agent you're already signed into works best. Nothing is contacted until you choose one.",
+    "use": "Use",
+    "retry": "Check again",
+    "useAria": "Use {{name}}",
+    "other": "Local models, servers and API keys are set up in Settings.",
+    "openSettings": "Open Settings"
   }
 }

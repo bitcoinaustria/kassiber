@@ -34,6 +34,8 @@ describe("custody route aliases", () => {
 
   it("validates the unified route before selecting its view", () => {
     const validate = router.routesByPath["/swaps"].options.validateSearch as (raw: Record<string, unknown>) => Record<string, unknown>;
-    expect(validate({ tab: "gaps", mode: "swaps", view: "paired", focus: "tx-1" })).toEqual({ tab: "review", mode: "transfers", view: "review", focus: "tx-1" });
+    expect(validate({ tab: "gaps", mode: "transfers", view: "paired", focus: "tx-1" })).toEqual({ tab: "review", mode: "transfers", view: "review", focus: "tx-1" });
+    // A focused swap keeps the swaps tab, where its candidate is listed.
+    expect(validate({ tab: "gaps", mode: "swaps", view: "paired", focus: "tx-1" })).toEqual({ tab: "review", mode: "swaps", view: "review", focus: "tx-1" });
   });
 });

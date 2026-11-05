@@ -75,6 +75,26 @@ class ReviewCliAiTest(unittest.TestCase):
         self.assertEqual(retried, receipt)
         self.assertEqual(self.cli('review', 'cases', *scope)['data']['cases'], [])
 
+    def test_cli_batches_term_operations_through_the_same_core(self):
+        scope = ('--workspace', 'w', '--profile', 'p')
+        operations = [
+            {'type': 'price_override', 'transaction_id': 'a', 'fiat_rate': '20000', 'reason': 'Invoice reviewed'},
+            {'type': 'dismiss_pair', 'out_transaction_id': 'b', 'in_transaction_id': 'a',
+             'reason': 'Owner says these are unrelated', 'expires_in_days': 7},
+        ]
+        source = self.root / 'operations.json'
+        source.write_text(json.dumps(operations))
+        plan = self.cli('review', 'plan', '--operations-file', str(source),
+                        '--expected-input-version', '0', *scope)
+        self.assertEqual(plan['data']['operations'], operations)
+        self.assertIn('tax', plan['data']['after'])
+        self.assertIn('delta', plan['data'])
+        source.write_text(json.dumps(plan))
+        applied = self.cli('review', 'apply', '--artifact-file', str(source),
+                           '--idempotency-key', 'cli-terms', *scope)['data']
+        self.assertEqual(applied['status'], 'verified')
+        self.assertEqual(applied['transaction_ids'], ['a', 'b'])
+
     def test_chat_default_budget_defers_to_selected_capability(self):
         args = build_parser().parse_args(["chat", "quarantine"])
         self.assertNotIn("tool_loop_max_iterations", _build_chat_args(args, []))
@@ -95,7 +115,9 @@ class ReviewCliAiTest(unittest.TestCase):
                 schemas = build_responses_tools([{'role': 'user', 'content': question}], profile=profile)
                 names = {get_tool(schema['name']).name for schema in schemas}
                 self.assertTrue(REVIEW_TOOL_NAMES <= names)
-                self.assertLessEqual(len(names), 40)
+                # 42: the pack gained the root-cause rollup and the chain
+                # conservation check a quarantine investigation needs.
+                self.assertLessEqual(len(names), 42)
                 self.assertNotIn('ui.reports.export', names)
                 self.assertNotIn('ui.transfers.bulk_pair', names)
                 self.assertNotIn('ui.source_funds.assemble', names)
@@ -115,7 +137,7 @@ class ReviewCliAiTest(unittest.TestCase):
             for profile in ('core', 'scoped'):
                 names = {get_tool(tool['name']).name for tool in build_responses_tools(messages, profile=profile)}
                 self.assertTrue(REVIEW_TOOL_NAMES <= names)
-                self.assertLessEqual(len(names), 40)
+                self.assertLessEqual(len(names), 42)
 
     def test_continuation_requires_last_assistant_valid_bounded_checkpoint(self):
         checkpoint = '```json\n{"review_checkpoint":{"receipt_ids":["receipt-1"]}}\n```'
@@ -142,7 +164,7 @@ class ReviewCliAiTest(unittest.TestCase):
     def test_ai_schema_rejects_gap_and_revision_privilege_expansion(self):
         tool = get_tool('ui.review.plan')
         for operation in (
-            {'type':'custody_gap', 'request': {'action':'activate'}},
+            {'type':'custody_gap', 'action':'activate', 'gap_id':'g', 'reason':'reviewed'},
             {'type':'custody_component', 'request': {'action':'revise', 'components': []}},
             {'type':'exclude', 'transaction_id':'a', 'reason':'reviewed', 'workspace':'another'},
         ):

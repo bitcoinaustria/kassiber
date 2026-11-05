@@ -807,6 +807,22 @@ def _generic_cases() -> list[GoldenCase]:
     cases.append(
         _book("generic-coarse-events-accepted", ("generic", "pricing", "coarse", "fee"), fifo, coarse_rows, check=succeeds(absent=("pricing_review_required",)))
     )
+    # The owner accepted each coarse price (#708): a review profile holds
+    # nothing, unless the accepted price is no longer the one priced.
+    accepted_rows = [
+        {**item, "pricing_review_accepted_price": pricing.reviewed_price(item)} if item.get("pricing_quality") else item
+        for item in coarse_rows
+    ]
+    cases.append(
+        _book("generic-coarse-events-accepted-review", ("generic", "pricing", "coarse", "fee"), review, accepted_rows, check=succeeds(absent=("pricing_review_required",)))
+    )
+    stale_rows = [
+        {**item, "pricing_review_accepted_price": "rate:41999"} if item.get("pricing_quality") else item
+        for item in coarse_rows
+    ]
+    cases.append(
+        _book("generic-coarse-events-stale-acceptance", ("generic", "pricing", "coarse", "fee"), review, stale_rows, check=succeeds(reasons=("pricing_review_required",)))
+    )
     rows, pairs = ledger_history()
     for item in rows:
         if item["id"] == "move-out":
@@ -822,6 +838,16 @@ def _generic_cases() -> list[GoldenCase]:
             item.update(coarse)
     cases.append(
         _book("generic-coarse-move-in-priced", ("generic", "pricing", "coarse", "fee", "move"), review, rows, pairs, succeeds(reasons=("pricing_review_required",)))
+    )
+    rows, pairs = ledger_history()
+    for item in rows:
+        if item["id"] == "move-out":
+            item.update(fiat_rate=None, fiat_rate_exact=None)
+        if item["id"] == "move-in":
+            item.update(coarse)
+            item["pricing_review_accepted_price"] = pricing.reviewed_price(item)
+    cases.append(
+        _book("generic-coarse-move-in-accepted-review", ("generic", "pricing", "coarse", "fee", "move"), review, rows, pairs, succeeds(absent=("pricing_review_required",)))
     )
     rows, pairs = ledger_history()
     for item in rows:

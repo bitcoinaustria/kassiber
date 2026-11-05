@@ -175,7 +175,7 @@ export function useWalletSyncAction() {
               | "/logs"
               | "/connections"
               | "/journals"
-              | "/quarantine"
+              | "/review"
               | "/swaps"
               | "/settings/bitcoin"
               | undefined;
@@ -204,7 +204,7 @@ export function useWalletSyncAction() {
                 : "/connections";
             } else if (quarantineCount > 0) {
               title = t("bookRefresh.quarantineTitle", { count: quarantineCount });
-              target = "/quarantine";
+              target = "/review";
             } else if (transferReviewCount > 0) {
               title = t("bookRefresh.transferReviewTitle", {
                 count: transferReviewCount,
@@ -281,7 +281,7 @@ export function useWalletSyncAction() {
                 dedupeKey: "book-refresh",
                 progress: undefined,
                 // Failures route to the logs (settings when dev tools are off);
-                // set it explicitly so a stale /quarantine target from a prior
+                // set it explicitly so a stale /review target from a prior
                 // run's completion can't bypass that error fallback.
                 target: "/logs",
               });

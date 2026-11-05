@@ -249,6 +249,21 @@ describe("app search results", () => {
     });
   });
 
+  it("counts what is left to review as the sidebar does, in the app's language", () => {
+    const held = {
+      ...snapshot,
+      status: { workspace: null, profile: null, needsJournals: true, quarantines: 988 },
+    } as OverviewSnapshot;
+    const options = { query: "review", aiFeaturesEnabled: true, developerToolsEnabled: true };
+    const review = buildAppSearchResults({ ...options, snapshot: held, reviewCount: 986, t })
+      .find((result) => result.id === "review:quarantine");
+    expect(review).toMatchObject({ title: "Review", subtitle: "986 left to review", route: { to: "/review" } });
+
+    const journals = buildAppSearchResults({ ...options, snapshot: held, query: "Journale", t: deT })
+      .find((result) => result.id === "review:journals");
+    expect(journals?.title).toBe("Journale müssen verarbeitet werden");
+  });
+
   it("lets in-flight txid lookups open the transaction detail deep link", () => {
     const unknownTxid =
       "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd";

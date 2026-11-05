@@ -72,9 +72,15 @@ def dispatch_review(conn: Any, args: argparse.Namespace) -> dict[str, Any]:
             artifact = artifact.get("data")
         if not isinstance(artifact, dict):
             raise AppError("Review artifact file must contain a plan object", code="validation")
-        return review_workflow.apply_review(conn, profile, artifact=artifact,
-                                           idempotency_key=args.idempotency_key, hooks=hooks,
-                                           authored_source="cli")
+        receipt = review_workflow.apply_review(conn, profile, artifact=artifact,
+                                              idempotency_key=args.idempotency_key, hooks=hooks,
+                                              authored_source="cli")
+        if review_workflow.changes_transfer_candidates(artifact):
+            # The shared review count caches open moves; keep it with the book.
+            from ..daemon_freshness import recount_transfer_candidates
+
+            recount_transfer_candidates(conn, str(profile["id"]))
+        return receipt
     if command == "receipt":
         return review_workflow.get_receipt(conn, profile, receipt_id=args.receipt_id,
                                           idempotency_key=args.idempotency_key)

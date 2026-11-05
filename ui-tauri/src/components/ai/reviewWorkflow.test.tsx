@@ -3,14 +3,20 @@ import { describe, expect, it, vi } from "vitest";
 import type { ComponentProps } from "react";
 import "@/i18n";
 import type { AiChatMessage, AiToolConsentRequest } from "@/daemon/stream";
+import { AssistantSessionContext, type AssistantSessionContextValue } from "./assistantSession";
 import { ChatMessage } from "./ChatMessage";
-import { ReviewConsentBody, ToolConsentDialog } from "./ToolConsentDialog";
+import { PendingApprovalRow, ReviewConsentBody } from "./PendingApprovalRow";
 import { reviewApprovalAvailable, reviewToolResult } from "./reviewWorkflow";
 vi.mock("@tanstack/react-router", () => ({ Link: ({ children, to }: ComponentProps<"a"> & { to: string }) => <a href={to}>{children}</a> }));
-vi.mock("@/components/ui/dialog", () => {
-  const Wrapper = ({ children, id, role }: ComponentProps<"div">) => <div id={id} role={role}>{children}</div>;
-  return { Dialog: Wrapper, DialogContent: Wrapper, DialogHeader: Wrapper, DialogTitle: Wrapper, DialogDescription: Wrapper };
-});
+
+function approvalRow(consent: AiToolConsentRequest) {
+  const session = { sendConsent: vi.fn(), abort: vi.fn() } as unknown as AssistantSessionContextValue;
+  return renderToStaticMarkup(
+    <AssistantSessionContext.Provider value={session}>
+      <PendingApprovalRow request={consent} />
+    </AssistantSessionContext.Provider>,
+  );
+}
 
 const before = { entries_count: 3, quarantine_count: 2, report_ready: false,
   quarantines: [{ transaction_id: "held-1", reason: "missing_price" }], wallet_holdings: [], journal_digest: "before" };
@@ -24,7 +30,8 @@ const receipt = { schema_version: 1, id: "receipt-1", status: "verified", artifa
   before, verification: after, created_at: "2026-09-05T10:00:00Z" };
 function request(reviewPreview?: AiToolConsentRequest["reviewPreview"]): AiToolConsentRequest {
   return { targetRequestId: "chat-1", callId: "apply-1", name: "ui.review.apply", summary: "Apply",
-    argumentsPreview: { artifact: { ...artifact, operations: [{ type: "exclude", transaction_id: "FORGED", reason: "Model claim" }] } }, reviewPreview };
+    argumentsPreview: { artifact: { ...artifact, operations: [{ type: "exclude", transaction_id: "FORGED", reason: "Model claim" }] } }, reviewPreview,
+    reversible: false, egresses: false, canAllowSession: false };
 }
 
 describe("review workflow chat integration", () => {
@@ -63,11 +70,12 @@ describe("review workflow chat integration", () => {
   });
 
   it("offers one critical decision and disables apply when the server preview is unavailable", () => {
-    const unavailable = renderToStaticMarkup(<ToolConsentDialog request={request()} onDecision={() => {}} />);
-    expect(unavailable).toContain('role="alertdialog"');
+    const unavailable = approvalRow(request());
+    expect(unavailable).toContain('role="group"');
     expect(unavailable).toMatch(/<button[^>]*disabled=""[^>]*>Apply once<\/button>/);
-    expect(unavailable).not.toContain("Allow this session");
-    const ready = renderToStaticMarkup(<ToolConsentDialog request={request({ status: "ready", artifact })} onDecision={() => {}} />);
+    expect(unavailable).not.toContain("Allow for this chat");
+    expect(unavailable).not.toContain("FORGED");
+    const ready = approvalRow(request({ status: "ready", artifact }));
     expect(ready).not.toMatch(/<button[^>]*disabled=""[^>]*>Apply once<\/button>/);
     expect(ready.match(/>Apply once<\/button>/g)).toHaveLength(1);
   });
@@ -97,5 +105,37 @@ describe("review workflow chat integration", () => {
     const markup = renderToStaticMarkup(<ReviewConsentBody request={request({ status: "ready", artifact: custodyArtifact })} />);
     expect(markup).toContain("123456 msat (asset resolved from reference)");
     expect(markup).not.toContain("123456 BTC");
+  });
+
+  it("shows the server-computed tax change per year and every batched operation type", () => {
+    const tax = (years: unknown[]) => ({ fiat_currency: "EUR", jurisdiction: "AT", years, years_omitted: 0 });
+    const taxArtifact = { ...artifact,
+      before: { ...before, tax: tax([]) },
+      after: { ...after, tax: tax([{ year: 2024, realized_gain_loss: "11000.00", income: "0.00",
+        indicative_tax: { status: "indicative", estimated_tax_eur_cents: 302500, withheld_by: [] } }]) },
+      delta: { years: [
+        { year: 2024, realized_gain_loss: "11000.00", income: "0.00", estimated_tax_eur_cents: null, indicative_status: "indicative" },
+        { year: 2023, realized_gain_loss: "-5.00", income: "0.00", estimated_tax_eur_cents: -138, indicative_status: "indicative" },
+      ] },
+      operations: [
+        { type: "pair", out_transaction_id: "out-1", in_transaction_id: "in-1", policy: "carrying-value", reason: "Owner confirmed" },
+        { type: "dismiss_pair", out_transaction_id: "out-2", in_transaction_id: "in-2", expires_in_days: 30, reason: "Unrelated" },
+        { type: "custody_gap", action: "classify_residual", gap_id: "gap-1", classification: "external_payment", reason: "Paid" },
+        { type: "kind_override", transaction_id: "tx-1", kind: null, reason: "Restore import" },
+      ] };
+    expect(reviewApprovalAvailable({ status: "ready", artifact: taxArtifact })).toBe(true);
+    const markup = renderToStaticMarkup(<ReviewConsentBody request={request({ status: "ready", artifact: taxArtifact })} />);
+    expect(markup).toContain('aria-label="Tax change by year"');
+    // Withheld before: no difference to show, so the figure afterwards instead.
+    expect(markup).toMatch(/Indicative tax afterwards €\s3\.025,00/);
+    expect(markup).toMatch(/Gain\/loss \+€\s11\.000,00/);
+    expect(markup).toMatch(/Indicative tax -€\s1,38/);
+    for (const text of ["Pair transfer", "out-1 → in-1", "Dismiss pair suggestion", "for 30 days",
+      "Review custody gap", "classify_residual · external_payment", "Classify acquisition", "imported classification"]) {
+      expect(markup).toContain(text);
+    }
+    const unchanged = { ...taxArtifact, delta: { years: [] } };
+    expect(renderToStaticMarkup(<ReviewConsentBody request={request({ status: "ready", artifact: unchanged })} />))
+      .toContain("No change to the tax figures");
   });
 });

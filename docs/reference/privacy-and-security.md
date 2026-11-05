@@ -111,18 +111,19 @@ configurable.
 | `wallets sync` against a user-configured Electrum backend | your configured `ssl://` or `tcp://` URL | Electrum JSON-RPC over raw TCP/TLS | IP, queried scripthashes, query timing |
 | `wallets sync` against a `bitcoinrpc` backend | your configured URL | HTTP(S) POST with Basic auth | nothing leaves your machine if the node is local |
 | Successful daemon wallet sync explicitly requested by the user (including a consented Assistant sync), or sync under its enabled automatic-sync feature; follow-up starts after sync returns | only that synced wallet's selected backend, including an explicitly chosen default; no fallback to another server | existing Esplora HTTP(S), Core RPC, or Electrum transport, with its proxy policy and no redirects | transaction IDs and spent previous-transaction IDs from that wallet's incomplete graph rows, IP and request timing; at most 50 transactions and 250 uncached prevout fetches per pass; launch, display, status and idle paths do not grant this access |
-| Explicit **Acquire observations** confirmation, CLI `chain-analysis acquire apply --plan …`, or once-only consent to the on-device Assistant's acquisition tool | only the backend and proxy bound into that plan | bounded, genesis-checked Esplora HTTP(S), Core RPC, or Electrum requests; HTTP redirects refused | selected transaction IDs and queried ancestors/spenders, query timing and IP; the plan itself, local graph queries, PSBT analysis and dataset imports make no network requests |
+| Explicit **Acquire observations** confirmation, CLI `chain-analysis acquire apply --plan …`, or once-only consent to the Assistant's acquisition tool (full agent access only) | only the backend and proxy bound into that plan | bounded, genesis-checked Esplora HTTP(S), Core RPC, or Electrum requests; HTTP redirects refused | selected transaction IDs and queried ancestors/spenders, query timing and IP; the plan itself, local graph queries, PSBT analysis and dataset imports make no network requests |
 | `wallets sync` for a `silent-payment` wallet with a local scanner file | local filesystem path configured by you | local file read | no network request by Kassiber; scanner output and detected Taproot outputs stay local; on POSIX the scanner file must be user-owned and `0600` |
 | `wallets sync` for a `silent-payment` wallet in server-assisted mode | your explicitly configured HTTP(S) SP-capable backend URL/path | HTTP(S) POST through that backend's proxy setting, if any | IP, User-Agent, scan request timing, scan birthday/range, the watch-only `sp()` scan material needed by that backend, and scan completeness depends on that backend not omitting candidates |
 | Explicit CLI `rates sync`; desktop **Refresh BTC price** / **Rebuild pricing cache** after **Settings → Market data → Allow live minute-rate lookups** is enabled; or background freshness after that same narrowly scoped setting enables it | configured provider (`mempool` backend, Coinbase Exchange, or CoinGecko) | unauthenticated HTTP(S) GET | IP, User-Agent, which fiat pair and window. Dashboard display, report generation, and cached-rate reads never fetch a rate |
 | Explicit exchange API import/sync after configuring that exchange connection | the configured Kraken, Coinbase, or Binance API | authenticated HTTPS | IP, account/API-key identity, request timing, and the account-history range requested |
 | Explicit BTCPay, Lightning, or other configured service sync; or background freshness after its matching source class is enabled in Settings | the configured service | its configured HTTP(S), RPC, or proxy transport | IP, request timing, and the service/account identifiers required by that integration |
 | Explicit BTCPay **Check key and stores** during setup, or CLI `btcpay inspect` / `btcpay setup` | the BTCPay server of that instance | Greenfield HTTP(S) GET through the instance's proxy setting | IP, request timing, the API key, and that Kassiber read the server version, the key's own permissions, the store list, each store's enabled payment methods, and the first receive addresses BTCPay previews for on-chain store wallets. Kassiber never requests payment-method configuration (derivation schemes, Lightning connection strings); preview addresses stay in memory for local wallet recognition. BTCPay wallet and payment-ledger syncs also read that store's invoices, payment requests, and payouts. `btcpay key-url` and the desktop key link make no request; the user's browser opens BTCPay |
-| `ai models`, `chat`, or **Check** / **Check all** in Settings → AI providers against a configured remote/TEE provider after setup/settings acknowledgement | your configured provider URL or CLI provider | OpenAI-compatible HTTP(S) (the Responses API or Chat Completions, per the provider's API format) or the configured local CLI's own transport | prompt/tool context, model request metadata, IP/provider account context according to that provider. A Settings check sends no prompt; it starts that one provider's CLI (version, sign-in state, models) or lists an HTTP provider's models. An `auto` provider whose server has no `/responses` gets the same turn once at `/chat/completions` of the same base URL. The model picker and Settings do not auto-poll providers or run a timer; opening Settings reads only the daemon's cached results. Remote model discovery and checks fail closed until acknowledgement on both the desktop and the CLI (`kassiber ai providers update <name> --acknowledge`) |
+| `ai models`, `chat`, or **Check** / **Check all** in Settings → Assistant against a configured remote/TEE provider after setup/settings acknowledgement | your configured provider URL or CLI provider | OpenAI-compatible HTTP(S) (the Responses API or Chat Completions, per the provider's API format) or the configured local CLI's own transport | prompt/tool context (with full agent access, the attached images and PDF text or page images of the chat), model request metadata, IP/provider account context according to that provider. A Settings check sends no prompt; it starts that one provider's CLI (version, sign-in state, models) or lists an HTTP provider's models. An `auto` provider whose server has no `/responses` gets the same turn once at `/chat/completions` of the same base URL. The model picker and Settings do not auto-poll providers or run a timer; opening Settings reads only the daemon's cached results. Remote model discovery and checks fail closed until acknowledgement on both the desktop and the CLI (`kassiber ai providers update <name> --acknowledge`) |
 | Clicking **Test connection** in a Settings provider form (`ai.test_connection`, for the values in the form), or `kassiber ai providers test <name>` for a saved provider after acknowledgement | the base URL being tested, or the CLI provider | the provider's model listing, then, for an HTTP provider with a model to ask, one fixed request to `/responses` and, if the server does not speak that format, `/chat/completions`, each repeated once without the tool if the tool is refused | IP, the API key, request timing, the model listing request, and one fixed prompt, `Reply with OK`, with at most 16 output tokens, one trivial `connection_check` tool definition and no book data, which the provider bills as a tiny generation. A CLI provider gets only its status and model probe. Nothing is sent on its own: the click or command is the trigger, a switched-off saved provider is refused, and offline mode refuses every provider not marked local. A target off this device (anything but a provider marked local at a loopback URL, CLI agents included) is refused before any request until it is acknowledged: the form's checkbox, sent as `acknowledged: true`, or the saved remote or TEE provider's own acknowledgement. A Chat Completions endpoint that refuses `store: false` gets the fixed prompt once more without it, reported as `store_accepted: false`; no chat is sent that way unless the user chooses `omit_store_field` |
 | A Claude chat turn the user sends with **Fast** on (the `opus` alias, Claude Code 2.1.205 or later), in the desktop or with `kassiber chat --fast` | `api.anthropic.com`, Claude Code's own fast-mode availability check, in addition to the CLI's normal inference destination; the check does not follow `ANTHROPIC_BASE_URL`, so it leaves even when inference goes through a gateway | HTTPS from the Claude CLI process, through the CLI's configured HTTP proxy, with the CLI's credential | IP, request timing, the Claude account or key, and that fast mode was requested. Kassiber passes `fastMode: true` only on such a turn; status checks and model listing pass no fast setting, and every other turn passes `fastMode: false`, so none of them turns fast mode on in the CLI |
 | Clicking an external documentation, explorer, release, or evidence link | the selected URL in the system browser | browser HTTP(S) | normal browser IP, cookies, referrer policy, and request metadata; Kassiber never preloads those pages |
 | consented AI tools inside `chat` or the desktop Assistant: those that mutate the book (`ui.wallets.sync`, `ui.rates.rebuild`, `ui.maintenance.run`, `ui.rates.latest`) and those that only read but do so off-machine (`ui.connections.node.snapshot`, `ui.reports.lightning_profitability`) | the backends/rate sources of the rows above | as in those rows | as in those rows — tool consent is also network consent for that row. A tool that leaves the machine always prompts, even when it changes nothing, and is never chosen by the assistant's automatic context reads |
+| An external agent's MCP tool call, only at the user's chosen MCP grant of `operator` or above, approved by the agent host: `wallets_sync`, `maintenance_run`, `rates_rebuild`, `rates_latest`, `connections_node_snapshot`, `reports_lightning_profitability`, and with full agent access `chain_analysis_acquire_apply`, `chain_analysis_sources_run`. Two of them only grant later egress: `maintenance_configure` can turn on the book's background refresh and report-read sync, whose rows above then apply to the desktop, and `chain_analysis_sources_authorize` stores a recurring acquisition permission the desktop daemon then uses under the acquisition row above | the backends/rate sources of the rows above | as in those rows | as in those rows. These tools carry `openWorldHint: true`; offline mode and `KASSIBER_NO_EGRESS` still block them. Launch, `server/discover`, `tools/list`, and every other tool make no request at any grant, even with the book's report-read sync enabled, and a `read` grant reaches none of these tools. See [MCP](mcp.md) |
 
 Pending or recovered sync jobs are not stored network permission. Automatic
 jobs recheck the current source-class and triggering-feature settings before
@@ -462,6 +463,11 @@ until that process stops. `kassiber status` reports the effective root.
   in the book it started in: opening another book starts a fresh one, so an
   unsaved (Incognito or history-off) transcript, a saved chat or an attached
   file is never sent with another book's turns (see [AI](ai.md#tool-use)).
+- The last explicit check of each AI provider (`ai_provider_checks`: its
+  runtime status or model listing, the base URL it was made at and when) is
+  kept in the same database so Settings can show it after a restart. Only a
+  check the user started writes it, reading it contacts nothing, and a new
+  address, key, or other real edit of the provider deletes it.
 - CLI agent providers keep plaintext chat artifacts of their own, outside
   Kassiber's control: the prompts, answers, and the tool results that reached
   the provider. Codex, Claude, and OpenCode save their sessions in their own
@@ -474,7 +480,17 @@ until that process stops. `kassiber status` reports the effective root.
   desktop's Incognito) ask Codex for an ephemeral thread, Claude for
   `--no-session-persistence`, and OpenCode for an in-memory database, and
   fail before sending anything if the CLI cannot comply (OpenCode Incognito
-  is refused on Windows); they keep their tools. OpenCode's session sharing,
+  is refused on Windows); they keep their tools. OpenCode 2 also refuses
+  OAuth-backed private turns: a refresh in a copied in-memory credential store
+  could invalidate the original login. Key-backed private turns transfer only
+  the selected integration's active credential in RAM over authenticated
+  loopback APIs; the source server receives no prompt. Provider-only JSON/JSONC
+  configuration is read into RAM, while user plugins, ambient MCP servers,
+  project instructions, and provider-native tools are excluded. All version 2
+  logs go to a null-device sink installed before launch; Windows, unaudited
+  channel builds, and system-managed configuration that cannot be isolated are
+  refused. Its server runs only for an explicit provider check or chat, never
+  for picker display or cached restoration. OpenCode's session sharing,
   which would upload the conversation to a public link, is forced off for
   every turn whatever the user's config says. Copilot is not refused: its Incognito session still exists for the
   turn, in the per-turn directory, and the desktop and CLI say so. Selected-
@@ -504,6 +520,15 @@ until that process stops. `kassiber status` reports the effective root.
   protects the project directory with OS or volume encryption.
 - `<state-root>/projects/<project>/exports/` — generated reports and handoff
   artifacts. These are plaintext user outputs and are outside SQLCipher.
+- A file pasted into the chat has no path of its own, so the daemon writes it
+  to an owner-only file in a private `kassiber-chat-uploads-*` directory under
+  the OS temporary directory. It is deleted when the daemon drops its staging
+  grant: after 30 minutes unused, when more than sixteen files are staged, when
+  another project or profile opens, on a restore or lock, and when the daemon
+  exits. Removing the card or starting a new chat stops the chat using it at
+  once; the file itself goes by those rules. An unfinished upload is deleted
+  after five idle minutes. A picked or dropped file is read where it is and
+  never copied there. Attaching either fetches and sends nothing.
 - Liquid descriptor wallets embed **private SLIP77 blinding keys** in
   `wallets.config_json`. Anyone who can read the DB can unblind your
   confidential outputs.
@@ -630,8 +655,8 @@ prompt again after rebuilds or identity changes. On Windows and Linux, another
 process running as the same user can read the user-scoped item. This matches the
 existing boundary above: a compromised process running as the user is out of
 scope. Revoke only the CLI copy with `kassiber secrets forget-unlock`, revoke
-only the desktop copy in Settings, or use **Forget all unlock methods** to remove
-both plus the migration-only legacy item. The current credential names are
+only the desktop copy in Settings, or use **Saved unlock methods → Forget all**
+in Settings → Lock & encryption to remove both plus the migration-only legacy item. The current credential names are
 `Kassiber CLI Database Passphrase` and `Kassiber Desktop Biometric Passphrase`;
 `Kassiber Database Passphrase` is legacy migration input only. Revocation does not
 change the SQLCipher key or recover a lost passphrase.
@@ -844,7 +869,7 @@ The desktop app and `kassiber ai` CLI surface use `POST /v1/responses` or
 `POST /v1/chat/completions` against HTTP providers, per each provider's API
 format (see [the AI reference](ai.md#choosing-the-format)). The default seeded
 entry points at local Ollama (`http://localhost:11434/v1`); add remote providers
-through Settings → AI providers or `kassiber ai providers create`. OpenAI
+through Settings → Assistant or `kassiber ai providers create`. OpenAI
 stores Responses by default, so Kassiber explicitly sends `store: false` there,
 and asks for encrypted reasoning so a tool round can carry reasoning forward
 without provider storage. OpenAI also stores Chat Completions by default for
@@ -865,9 +890,33 @@ memory. Kassiber sends no app attribution headers, such as OpenRouter's
   remote provider sees that content. The provider/model picker tags each
   configured endpoint as `local`, `remote`, or `tee` so you can see at a
   glance whether a prompt is about to leave the device.
+- **Full agent access is the default; restriction is per provider.** Kassiber
+  is built for people who want the assistant to work their books, so every
+  provider starts with `agent_access: full`: all tools, including custody-gap,
+  lineage, chain-analysis source and dataset tools, unprojected chain-analysis
+  results, and an attached file's cell values and name. Attached images and
+  PDFs are shown to such a provider on the user's message: an image as itself,
+  a PDF as its text (extracted on this device) or, for a scan, as page images.
+  A restricted provider is shown none of them. Turning a photo or PDF into
+  rows (`ui_wallets_read_document`) uses only a local provider on a loopback
+  address, after consent, whatever provider serves the chat. The user can restrict
+  any off-device provider in its form or with
+  `kassiber ai providers update <name> --agent-access restricted`, which keeps
+  it to the projected surface those tools used to be limited to. A provider on
+  this device always has full access. Neither mode sends descriptors, xpubs,
+  wallet configuration, secrets, local paths or URLs, or offers a shell; see
+  [agent access](ai.md#agent-access).
+- **A chat's permission mode decides who approves its writes.** `approval`
+  asks before every consented tool call. `auto` approves only tools another
+  AI tool can undo that stay on this machine; anything that contacts the
+  network still asks. `full_access` approves every consented call, including
+  wallet sync, live-rate fetches, maintenance refreshes and chain-analysis
+  acquisition: choosing that mode for a chat is the user's consent for those
+  requests in that chat, and each run is still recorded in the egress ledger.
+  See [permission modes](ai.md#permission-modes).
 - **Remote chat only after explicit acknowledgement.** Remote providers
   start unacknowledged unless they are created or updated with
-  `--acknowledge`, or confirmed in Settings → AI providers. `ai.chat`
+  `--acknowledge`, or confirmed in Settings → Assistant. `ai.chat`
   refuses to send prompts to an unacknowledged off-device provider with
   `ai_remote_ack_required`.
 - **AI provider API keys have a narrow desktop native-store path.** CLI
@@ -914,10 +963,13 @@ memory. Kassiber sends no app attribution headers, such as OpenRouter's
 - **Mutating AI tools require explicit consent.** The mutating surface covers
   maintenance, metadata, transfer, loan, source-of-funds, review, and
   accounting tools; each is classified in the tool catalog. Each call emits a redacted preview and waits
-  for `allow_once`, `allow_session`, or `deny`; session consent lasts only for
-  that one chat request and only for the same tool name. If allowed, the tool
+  for `allow_once`, `allow_session`, or `deny`; session consent lasts for that
+  chat session while the daemon runs, only for the same tool name, and never
+  for once-only tools. If allowed, the tool
   result is fed back to the selected provider as chat context. Unknown tools
-  still return `tool_not_allowed` and never execute.
+  still return `tool_not_allowed` and never execute. External agents use the
+  same executors over MCP, within the user's grant, with the agent host's tool
+  approval as the consent (see [below](#external-agents-mcp)).
 
 ## External agents (MCP)
 
@@ -926,21 +978,35 @@ default: calls are refused until the user turns on External agents in Settings
 → AI or runs `kassiber mcp enable` in their own terminal, and never while the
 desktop's AI features switch is off. Launch,
 discovery, and listing touch nothing: no database, lock, project layout, or
-socket, loopback included. Exposed tools are the Assistant's local, read-only,
-redacted tools, with read-triggered journal rebuilds and freshness syncs
-disabled, so they make no network requests. The server writes nothing to
-stderr, which hosts may persist. Its results reach the host's model; that
-disclosure is the user's choice when registering the server, and Kassiber
-cannot control the host's provider. On brokered encrypted books the server
-never holds a passphrase: each call runs through the operator lease, and a
-call never starts a broker. Unattended books open per call with the
-remembered credential, like any CLI command in that mode. See [MCP](mcp.md).
+socket, loopback included. What agents may do is the user's grant: `read`
+(the default for preferences written before grants, and for a first CLI
+enable), `operator`, or `accounting_decisions`, each classified by the
+operator broker's registry; admin-class work is never exposed. The desktop
+preselects `accounting_decisions` with full access for a first enable and
+says what that allows; the CLI asks in the user's own terminal and refuses
+non-interactive callers, so an agent cannot widen its own grant. Reads never
+run the opt-in freshness sync, and at `read` they are strictly read-only and
+local. Writes go through the Assistant's executors with the
+agent host's tool approval as the consent, and custody decisions are recorded
+in the custody AI audit as `mcp_host`. Only the tools listed in the egress
+table above contact the network, and only at `operator` and above. Results
+pass the AI projections and redaction twice; no descriptors, xpubs, wallet
+configuration, secrets, local paths, or shell dispatch are reachable. The
+server writes nothing to stderr, which hosts may persist. Its results reach
+the host's model; that disclosure is the user's choice when registering the
+server, and Kassiber cannot control the host's provider or whether the host
+auto-approves tools. On brokered encrypted books the server never holds a
+passphrase: each call runs through the operator lease, whose capability must
+cover the tool, and a call never starts a broker. Unattended books open per
+call with the remembered credential, like any CLI command in that mode. See
+[MCP](mcp.md).
 
 **Unlock for agents** in that Settings row lets the desktop hand the open
 book's passphrase to the operator broker: on the user's click, the desktop
 daemon sends the passphrase it already holds to the per-user broker over the
-broker's secret frame, as an agent session. Unlike a terminal lease, it is not
-usable by every process of the same OS user. It admits only MCP tool calls,
+broker's secret frame, as an agent session at the user's External agents
+grant. Unlike a terminal lease, it is not usable by every process of the same
+OS user. It admits only MCP tool calls within that grant,
 only from `kassiber mcp serve` processes the user allowed in the desktop
 (bound to the process id the OS reports, not to a name), and it ends after 15
 minutes without a call, with the desktop session, or after at most 8 hours.

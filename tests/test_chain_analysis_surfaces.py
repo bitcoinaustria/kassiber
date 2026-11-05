@@ -117,13 +117,13 @@ def test_agent_tools_use_pinned_scope_projection_and_same_mutation_seam(book):
         assert not blocked["ok"]
 
 
-def test_cloud_and_lan_local_models_cannot_acquire(book):
+def test_restricted_cloud_and_lan_models_cannot_acquire(book):
     conn, root = book
     for kind in ("openai", "local"):
-        runtime = daemon.AiToolRuntime(str(root), {}, queue.Queue(), {"provider_kind": kind, "provider_on_device": False})
+        runtime = daemon.AiToolRuntime(str(root), {}, queue.Queue(), {"provider_kind": kind, "provider_on_device": False, "provider_full_access": False})
         with pytest.raises(AppError) as error:
             daemon._chain_analysis_ai_payload(conn, runtime, "ui.chain_analysis.acquire.apply", {"plan": {}})
-        assert error.value.code == "local_provider_required"
+        assert error.value.code == "agent_access_restricted"
     assert get_tool("ui.chain_analysis.acquire.apply").egresses
     assert get_tool("ui.chain_analysis.acquire.apply").requires_consent
     assert not get_tool("ui.chain_analysis.acquire.plan").requires_consent

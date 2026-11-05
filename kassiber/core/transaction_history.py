@@ -32,6 +32,7 @@ PRICING_FIELDS = {
     "pricing_method",
     "pricing_external_ref",
     "pricing_quality",
+    "pricing_review_accepted",
 }
 TAX_FIELDS = {"review_status", "taxable", "at_regime", "at_category", "kind"}
 METADATA_FIELDS = {"note", "tags", "excluded"}
@@ -66,6 +67,7 @@ FIELD_LABELS = {
     "pricing_method": "Pricing method",
     "pricing_external_ref": "Pricing evidence reference",
     "pricing_quality": "Pricing quality",
+    "pricing_review_accepted": "Approximate price accepted",
 }
 
 SOURCE_LABELS = {
@@ -133,6 +135,7 @@ _FIELD_SORT_ORDER = [
     "fiat_price_source",
     "pricing_source_kind",
     "pricing_quality",
+    "pricing_review_accepted",
     "pricing_provider",
     "pricing_pair",
     "pricing_timestamp",
@@ -236,6 +239,7 @@ def transaction_state(
         "pricing_method": _row_get(tx, "pricing_method"),
         "pricing_external_ref": _row_get(tx, "pricing_external_ref"),
         "pricing_quality": _row_get(tx, "pricing_quality"),
+        "pricing_review_accepted": _row_get(tx, "pricing_review_accepted_price"),
     }
 
 
@@ -294,6 +298,9 @@ def _label_for_value(field: str, value: Any) -> str:
         return PRICING_SOURCE_LABELS.get(str(value), str(value))
     if field == "pricing_quality":
         return PRICING_QUALITY_LABELS.get(str(value), str(value))
+    if field == "pricing_review_accepted":
+        kind, _, amount = str(value).partition(":")
+        return f"Accepted {'price per unit' if kind == 'rate' else 'value'} {amount}" if amount else str(value)
     if isinstance(value, bool):
         return "Yes" if value else "No"
     return str(value)

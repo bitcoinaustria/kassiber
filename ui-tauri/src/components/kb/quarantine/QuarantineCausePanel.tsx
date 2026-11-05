@@ -1,12 +1,16 @@
 import * as React from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { AlertTriangle, ArrowRight, Loader2, RefreshCw, Sparkles } from "lucide-react";
+import { AlertTriangle, ArrowDownLeft, ArrowRight, ArrowUpRight, Loader2, RefreshCw, Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { useAskAssistantAbout } from "@/components/ai/useAskAssistantAbout";
+import { InfoNote } from "@/components/reports/InfoNote";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useDaemonStreamMutation } from "@/daemon/client";
+import { localeForLanguage } from "@/i18n/config";
 import { formatShortDate } from "@/lib/date";
 import { formatSats } from "@/lib/localeFormat";
 import {
@@ -36,7 +40,10 @@ import {
   type QuarantineSheetTab,
 } from "./explain";
 import { FixWithAssistant } from "./FixWithAssistant";
+import { AcceptCoarsePricesDialog } from "./QuarantineAcceptPrices";
 import { QuarantineFixDialog, type QuarantineFixRequest } from "./QuarantineFix";
+import { formatExactDecimal, priceEntryOperations, type PriceEntryUnit } from "./priceEntry";
+import { ReviewProposalDialog, type ReviewProposalRequest } from "./ReviewProposalDialog";
 import type {
   QuarantineAction,
   QuarantineBookScope,
@@ -46,10 +53,14 @@ import type {
   QuarantineSnapshot,
 } from "./types";
 
+/** Actions whose button already says what to do, so the card need not spell it out. */
+const SELF_DESCRIBING_ACTIONS = new Set(["sync_wallet", "connect_wallet", "import_history", "set_price", "pair_transfer"]);
 /** Pairs or transactions a cause shows before the rest fold away. */
 const SHOWN_ROWS = 3;
 /** Cause cards shown before the rest fold away. */
 const SHOWN_CAUSES = 4;
+/** The hold a coarse price gets while the book requires reviewing it. */
+const COARSE_PRICE_REASON = "pricing_review_required";
 
 type OpenTransaction = (
   transactionId: string,
@@ -142,6 +153,8 @@ export function QuarantineCausePanel({
   const [lockedGapNotice, setLockedGapNotice] = React.useState<string | null>(null);
   const [allCauses, setAllCauses] = React.useState(false);
   const [ownFixing, setOwnFixing] = React.useState<QuarantineFixRequest | null>(null);
+  // The book the approximate prices are accepted in, while that step is open.
+  const [accepting, setAccepting] = React.useState<QuarantineBookScope | null>(null);
   const fixing = fixingProp !== undefined ? fixingProp : ownFixing;
   const setFixing = onFixingChange ?? setOwnFixing;
   const syncWallet = useDaemonStreamMutation<
@@ -266,6 +279,11 @@ export function QuarantineCausePanel({
     }
   };
 
+  const bookScope = quarantineBookScope(snapshot);
+  const shownGroups = allCauses ? groups : groups.slice(0, SHOWN_CAUSES);
+  // A card with rows past this page offers the next page itself; the page
+  // offers it too only when no card does, or for causes not named yet.
+  const cardOffersMore = shownGroups.some((group) => causeOffersMore(group, rootItems));
   const hasFreshnessWarning = Boolean(freshness?.needs_processing || freshness?.last_error);
   if (!summary.count && !hasFreshnessWarning) return null;
   // A cleared timestamp only means "changed since"; the rows still carry the
@@ -273,7 +291,7 @@ export function QuarantineCausePanel({
   const calculated = freshness?.last_processed_at || calculatedOn(items);
 
   return (
-    <section className="space-y-4" aria-label={t("quarantine.causes.title")}>
+    <section className="space-y-3" aria-label={t("quarantine.section.title")}>
       {hasFreshnessWarning ? (
         <div
           role="status"
@@ -317,15 +335,18 @@ export function QuarantineCausePanel({
 
       {summary.count ? (
         <div
-          className="kb-surface flex flex-col gap-4 p-(--kb-card-padding) sm:flex-row sm:items-center sm:justify-between"
+          className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"
           data-testid="quarantine-summary"
         >
-          <div className="min-w-0 space-y-1">
-            <p className="text-base font-semibold">
-              {t("quarantine.summary.needsYou", { count: attentionCount })}
-            </p>
+          <div className="min-w-0 space-y-0.5">
+            <h2 className="flex flex-wrap items-baseline gap-x-2 text-sm font-semibold">
+              {t("quarantine.section.title")}
+              <span className="text-xs font-normal text-muted-foreground">
+                {t("quarantine.summary.needsYou", { count: attentionCount })}
+              </span>
+            </h2>
             {waitingCount ? (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {t("quarantine.summary.waiting", { count: waitingCount })}
                 {waitingShown ? null : (
                   <>
@@ -334,7 +355,7 @@ export function QuarantineCausePanel({
                       type="button"
                       variant="link"
                       size="sm"
-                      className="h-auto p-0 text-sm"
+                      className="h-auto p-0 text-xs"
                       onClick={onShowWaiting}
                     >
                       {t("quarantine.summary.showWaiting")}
@@ -344,7 +365,7 @@ export function QuarantineCausePanel({
               </p>
             ) : null}
             {summary.reports_blocked ? (
-              <p className="text-sm text-red-700 dark:text-red-300">
+              <p className="text-xs text-red-700 dark:text-red-300">
                 {t("quarantine.summary.reportsBlocked")}
               </p>
             ) : null}
@@ -352,16 +373,15 @@ export function QuarantineCausePanel({
           {/* Kassiber decides no fix on its own: pairs go as the owner picks
               them on their card; the assistant works through the rest. */}
           <div className="flex shrink-0 flex-wrap gap-2">
-            <FixWithAssistant attentionCount={attentionCount} primary />
+            <FixWithAssistant attentionCount={attentionCount} />
           </div>
         </div>
       ) : null}
 
       {groups.length ? (
         <div className="space-y-2">
-          <h2 className="text-sm font-semibold">{t("quarantine.causes.title")}</h2>
           <ol className="space-y-2">
-            {(allCauses ? groups : groups.slice(0, SHOWN_CAUSES)).map((group) => (
+            {shownGroups.map((group) => (
               <QuarantineCauseCard
                 key={group.key}
                 group={group}
@@ -372,7 +392,14 @@ export function QuarantineCausePanel({
                 onOpenRoot={(transactionId) => openRoot(group, transactionId)}
                 rootItems={rootItems}
                 more={attentionMore}
-                onUnpair={(picked) => setFixing({ items: picked, scope: quarantineBookScope(snapshot) })}
+                onUnpair={(picked) => setFixing({ items: picked, scope: bookScope })}
+                onAcceptPrices={
+                  group.reason === COARSE_PRICE_REASON && bookScope
+                    ? () => setAccepting(bookScope)
+                    : undefined
+                }
+                priceScope={bookScope}
+                currency={summary.fiat_currency ?? null}
                 onAskAssistant={askAboutCause(group)}
               />
             ))}
@@ -394,7 +421,8 @@ export function QuarantineCausePanel({
       {/* Whether or not a loaded cause is incomplete, more of what needs the
           user can always be loaded from here, and a failed page retried. */}
       {summary.count &&
-      (unlistedCauses || attentionMore?.hasMore || (attentionMore?.error ?? null) !== null) ? (
+      (unlistedCauses ||
+        (!cardOffersMore && (attentionMore?.hasMore || (attentionMore?.error ?? null) !== null))) ? (
         <div data-testid="quarantine-load-more">
           <NotLoadedYet more={attentionMore}>
             {unlistedCauses
@@ -403,6 +431,7 @@ export function QuarantineCausePanel({
           </NotLoadedYet>
         </div>
       ) : null}
+      <AcceptCoarsePricesDialog hideSensitive={hideSensitive} scope={accepting} onClose={() => setAccepting(null)} />
       <QuarantineFixDialog
         request={fixing}
         onClose={() => setFixing(null)}
@@ -423,6 +452,9 @@ function QuarantineCauseCard({
   rootItems,
   more,
   onUnpair,
+  onAcceptPrices,
+  priceScope,
+  currency,
   onAskAssistant,
 }: {
   group: QuarantineGroup;
@@ -434,9 +466,15 @@ function QuarantineCauseCard({
   rootItems: Map<string, QuarantineItem>;
   more?: AttentionMore;
   onUnpair: (items: QuarantineItem[]) => void;
+  /** Accepts every approximate price this cause holds, in one reviewed step. */
+  onAcceptPrices?: () => void;
+  /** The book prices are entered in, for a cause a price answers. */
+  priceScope: QuarantineBookScope | null;
+  /** The book's currency, which entered prices are in. */
+  currency: string | null;
   onAskAssistant?: () => void;
 }) {
-  const { t } = useTranslation("journals");
+  const { t, i18n } = useTranslation("journals");
   const { t: tAssistant } = useTranslation("assistant");
   const copy = causeCopy(
     {
@@ -449,24 +487,63 @@ function QuarantineCauseCard({
     t,
   );
   const facts = causeFacts(group.evidence, t);
-  const rootIds = group.root_transaction_ids.length
-    ? group.root_transaction_ids
-    : group.root_transaction_id
-      ? [group.root_transaction_id]
-      : [];
-  const rootCount = Math.max(group.root_count, rootIds.length);
+  const { rootIds, rootCount, members, pairs } = causeRows(group, rootItems);
   const deprecated = (group.evidence.missing_source_wallets ?? []).filter(
     (wallet) => wallet.deprecated,
   );
-  // Every loaded row of this cause, not just the roots the summary names:
-  // a cause can hold more than that list carries.
-  const members = causeMembers(group, rootIds, rootItems);
-  // A suspense left by pairs is answered pair by pair: each one shown side by
-  // side, with its own way out.
-  const pairs = causePairs(group, members);
-  const actions = pairs.length
-    ? group.actions.filter((action) => action.kind !== "review_pair")
-    : group.actions;
+  // Prices are typed on the rows themselves, for rows this cause holds on
+  // its own account; rows that only wait on it clear with it.
+  const priceRows = React.useMemo(
+    () => (group.category === "missing_price" && priceScope ? members.filter((item) => !item.is_downstream) : []),
+    [group.category, priceScope, members],
+  );
+  const [entering, setEntering] = React.useState(false);
+  const [entries, setEntries] = React.useState<Record<string, string>>({});
+  const [unit, setUnit] = React.useState<PriceEntryUnit>("value");
+  const [checked, setChecked] = React.useState(false);
+  const [pricing, setPricing] = React.useState<EnteredPrices | null>(null);
+  const decimalSeparator = decimalSeparatorFor(i18n.language);
+  const entry = priceEntryOperations(
+    priceRows.map((item) => item.transaction_id),
+    entries,
+    unit,
+    decimalSeparator,
+  );
+  const filled = priceRows.filter((item) => entries[item.transaction_id]?.trim()).length;
+  const stopEntering = () => {
+    setEntering(false);
+    setEntries({});
+    setChecked(false);
+  };
+  const previewPrices = () => {
+    setChecked(true);
+    if (!entry.ok || !priceScope) return;
+    const labels = new Map(priceRows.map((item) => [item.transaction_id, {
+      label: quarantineRowMeta(item), asset: item.asset,
+    }]));
+    setPricing({
+      request: { scope: priceScope, operations: entry.operations },
+      lines: entry.operations.map((operation) => ({
+        transactionId: String(operation.transaction_id),
+        label: labels.get(String(operation.transaction_id))?.label ?? "",
+        asset: labels.get(String(operation.transaction_id))?.asset ?? "",
+        value: String(operation.fiat_value ?? operation.fiat_rate),
+      })),
+      unit,
+      currency,
+    });
+  };
+  // Typing a price replaces opening the first row's pricing tab.
+  const actions = (pairs.length ? group.actions.filter((action) => action.kind !== "review_pair") : group.actions)
+    .filter((action) => !(priceRows.length && action.kind === "set_price"));
+  const primaryTaken = Boolean(onAcceptPrices) || (priceRows.length > 0 && !entering);
+  // Spelled out where no button carries it, and where a pair decision needs
+  // its caution in view.
+  const provideInline =
+    pairs.length > 0 ||
+    (!onAcceptPrices &&
+      !priceRows.length &&
+      !(actions.length > 0 && actions.every((action) => SELF_DESCRIBING_ACTIONS.has(action.kind))));
   return (
     <li
       className={cn(
@@ -475,7 +552,7 @@ function QuarantineCauseCard({
       )}
       data-testid="quarantine-cause"
     >
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <p className="text-sm font-semibold">{copy.title}</p>
         {group.blocks_reports ? (
           <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800 dark:bg-red-950/50 dark:text-red-200">
@@ -487,26 +564,40 @@ function QuarantineCauseCard({
             {t("quarantine.causes.count", { count: rootCount })}
           </span>
         ) : null}
+        {group.downstream_count ? (
+          <span className="text-xs text-muted-foreground">
+            · {t("quarantine.causes.waitingShort", { count: group.downstream_count })}
+          </span>
+        ) : null}
+        {/* The buttons say what to do; the full instruction is one click away. */}
+        {provideInline ? null : (
+          <InfoNote
+            label={t("quarantine.causes.aboutLabel", { cause: copy.title })}
+            notes={[`${t("quarantine.causes.whatToDo")}: ${copy.provide}`]}
+          />
+        )}
       </div>
       <p
         className={cn(
-          "mt-1 max-w-3xl text-sm text-muted-foreground",
+          "mt-0.5 max-w-3xl text-sm text-muted-foreground",
           copy.whyQuotesAmounts && sensitiveClass(hideSensitive),
         )}
       >
         {copy.why}
       </p>
       {facts.length && !pairs.length ? (
-        <ul className="mt-2 list-disc space-y-0.5 pl-5 text-sm text-muted-foreground">
+        <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm text-muted-foreground">
           {facts.map((fact) => (
             <li key={fact}>{fact}</li>
           ))}
         </ul>
       ) : null}
-      <p className="mt-2 max-w-3xl text-sm">
-        <span className="font-medium">{t("quarantine.causes.whatToDo")}: </span>
-        {copy.provide}
-      </p>
+      {provideInline ? (
+        <p className="mt-1 max-w-3xl text-sm">
+          <span className="font-medium">{t("quarantine.causes.whatToDo")}: </span>
+          {copy.provide}
+        </p>
+      ) : null}
       {deprecated.map((wallet) => (
         <p key={wallet.id} className="mt-1 text-xs text-amber-700 dark:text-amber-300">
           {t("quarantine.panel.deprecatedWallet", { wallet: wallet.label })}
@@ -517,6 +608,7 @@ function QuarantineCauseCard({
       ) : null}
       {pairs.length ? (
         <QuarantinePairList
+          cause={copy.title}
           pairs={pairs}
           totalPairs={rootCount}
           more={more}
@@ -526,21 +618,69 @@ function QuarantineCauseCard({
         />
       ) : members.length ? (
         <CauseTransactionList
+          cause={copy.title}
           items={members}
           total={rootCount}
           more={more}
           hideSensitive={hideSensitive}
           onOpen={onOpenRoot}
+          priceEntry={
+            entering
+              ? {
+                  rows: new Set(priceRows.map((item) => item.transaction_id)),
+                  entries,
+                  invalid: checked && !entry.ok ? new Set(entry.invalid) : new Set(),
+                  currency,
+                  unit,
+                  onUnitChange: setUnit,
+                  onChange: (transactionId, value) =>
+                    setEntries((current) => ({ ...current, [transactionId]: value })),
+                }
+              : null
+          }
         />
       ) : null}
-      {actions.length || (!members.length && rootIds.length) || onAskAssistant ? (
+      {entering ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2" data-testid="quarantine-price-entry-actions">
+          <Button type="button" size="sm" disabled={!filled} onClick={previewPrices}>
+            {t("quarantine.price.preview", { count: filled })}
+          </Button>
+          <Button type="button" size="sm" variant="ghost" onClick={stopEntering}>
+            {t("quarantine.pair.cancel")}
+          </Button>
+          {checked && !entry.ok && entry.invalid.length ? (
+            <span className="text-xs text-destructive" role="alert">
+              {t("quarantine.price.invalid", { count: entry.invalid.length })}
+            </span>
+          ) : checked && !entry.ok && entry.tooMany ? (
+            <span className="text-xs text-destructive" role="alert">
+              {t("quarantine.price.tooMany", { count: MAX_FIX_OPERATIONS })}
+            </span>
+          ) : null}
+        </div>
+      ) : actions.length || (!members.length && rootIds.length) || onAskAssistant || onAcceptPrices || priceRows.length ? (
         <div className="mt-3 flex flex-wrap gap-2">
+          {onAcceptPrices ? (
+            <Button type="button" size="sm" onClick={onAcceptPrices}>
+              {t("quarantine.accept.action", { count: rootCount })}
+            </Button>
+          ) : null}
+          {priceRows.length ? (
+            <Button
+              type="button"
+              size="sm"
+              variant={onAcceptPrices ? "outline" : "default"}
+              onClick={() => setEntering(true)}
+            >
+              {onAcceptPrices ? t("quarantine.price.enterExact") : t("quarantine.price.enter")}
+            </Button>
+          ) : null}
           {actions.map((action, index) => (
             <Button
               key={`${action.kind}:${action.wallet_id ?? action.transaction_id ?? index}`}
               type="button"
               size="sm"
-              variant={index === 0 ? "default" : "outline"}
+              variant={index === 0 && !primaryTaken ? "default" : "outline"}
               disabled={
                 action.kind === "wait_for_confirmation" ||
                 (action.kind === "sync_wallet" && syncPending)
@@ -567,14 +707,20 @@ function QuarantineCauseCard({
           ) : null}
         </div>
       ) : null}
-
-      {group.downstream_count ? (
-        <p className="mt-2 text-xs text-muted-foreground">
-          {t("quarantine.causes.waiting", { count: group.downstream_count })}
-        </p>
-      ) : null}
+      <EnteredPricesDialog
+        prices={pricing}
+        hideSensitive={hideSensitive}
+        onClose={() => setPricing(null)}
+        onApplied={stopEntering}
+      />
     </li>
   );
+}
+
+/** In red or green by direction; neutral while values are hidden, since the colour shows through the blur. */
+function directionTone(direction: string | undefined, hideSensitive: boolean) {
+  if (hideSensitive) return "text-muted-foreground";
+  return direction === "outbound" ? "text-red-700 dark:text-red-300" : "text-emerald-700 dark:text-emerald-300";
 }
 
 function PairLegLine({
@@ -622,58 +768,318 @@ function causePairs(group: QuarantineGroup, members: QuarantineItem[]): Quaranti
 }
 
 /**
+ * What a cause card lists: its roots, how many the whole cause holds, every
+ * loaded row of it (a cause can hold more than the roots the summary names),
+ * and, for a suspense left by pairs, the pairs to answer one by one.
+ */
+function causeRows(group: QuarantineGroup, rootItems: Map<string, QuarantineItem>) {
+  const rootIds = group.root_transaction_ids.length
+    ? group.root_transaction_ids
+    : group.root_transaction_id
+      ? [group.root_transaction_id]
+      : [];
+  const members = causeMembers(group, rootIds, rootItems);
+  return {
+    rootIds,
+    rootCount: Math.max(group.root_count, rootIds.length),
+    members,
+    pairs: causePairs(group, members),
+  };
+}
+
+/** Whether a card offers more of its own rows than are loaded. */
+function causeOffersMore(group: QuarantineGroup, rootItems: Map<string, QuarantineItem>) {
+  const { rootCount, members, pairs } = causeRows(group, rootItems);
+  const listed = pairs.length || members.length;
+  return listed > 0 && rootCount > listed;
+}
+
+function decimalSeparatorFor(language: string): "." | "," {
+  const parts = new Intl.NumberFormat(localeForLanguage(language)).formatToParts(1.5);
+  return parts.find((part) => part.type === "decimal")?.value === "," ? "," : ".";
+}
+
+/** Prices typed on a card, as they are previewed. */
+interface EnteredPrices {
+  request: ReviewProposalRequest;
+  /** Each row's label and the exact decimal read from what was typed. */
+  lines: Array<{ transactionId: string; label: string; value: string; asset: string }>;
+  unit: PriceEntryUnit;
+  currency: string | null;
+}
+
+/**
+ * Previews the prices the owner typed on a card, then saves exactly those.
+ * Each price is shown back as read, so a misread separator is caught before
+ * it is saved.
+ */
+function EnteredPricesDialog({
+  prices,
+  hideSensitive,
+  onClose,
+  onApplied,
+}: {
+  prices: EnteredPrices | null;
+  hideSensitive: boolean;
+  onClose: () => void;
+  onApplied: () => void;
+}) {
+  const { t, i18n } = useTranslation("journals");
+  const count = prices?.lines.length ?? 0;
+  const locale = localeForLanguage(i18n.language);
+  const details = prices ? (
+    <ul className="max-h-48 divide-y overflow-y-auto text-sm" data-testid="entered-prices" aria-label={t("quarantine.price.listLabel")}>
+      {prices.lines.map((line) => (
+        <li key={line.transactionId} className="flex items-baseline justify-between gap-3 py-1.5">
+          <span className={cn("min-w-0 truncate text-muted-foreground", sensitiveClass(hideSensitive))}>{line.label}</span>
+          <span className={cn("shrink-0 font-medium tabular-nums", sensitiveClass(hideSensitive))}>
+            {t(prices.unit === "rate" ? "quarantine.price.lineRate" : "quarantine.price.lineValue", {
+              value: formatExactDecimal(line.value, locale),
+              currency: prices.currency ?? "",
+              asset: line.asset,
+            }).trim()}
+          </span>
+        </li>
+      ))}
+    </ul>
+  ) : null;
+  return (
+    <ReviewProposalDialog
+      request={prices?.request ?? null}
+      onClose={onClose}
+      onApplied={onApplied}
+      copy={{
+        title: () => t("quarantine.price.title", { count }),
+        body: t("quarantine.price.body"),
+        footnote: t("quarantine.price.undo"),
+        details,
+        confirm: () => t("quarantine.price.confirm", { count }),
+        applying: t("quarantine.price.applying"),
+        done: () => t("quarantine.price.doneTitle", { count }),
+        dedupeKey: "quarantine-enter-prices",
+      }}
+    />
+  );
+}
+
+/** Typing prices on a cause's rows, while the owner does. */
+interface PriceEntryProps {
+  /** The rows a price can be typed for. */
+  rows: Set<string>;
+  entries: Record<string, string>;
+  /** Rows whose input does not read as a price, once the owner asked for a preview. */
+  invalid: Set<string>;
+  currency: string | null;
+  unit: PriceEntryUnit;
+  onUnitChange: (unit: PriceEntryUnit) => void;
+  onChange: (transactionId: string, value: string) => void;
+}
+
+/**
  * The transactions behind a cause, one line each; clicking one opens it.
- * The card above says what to do for all of them.
+ * The card above says what to do for all of them. While the owner enters
+ * prices, each row the cause holds gets its own field.
  */
 function CauseTransactionList({
+  cause,
   items,
   total,
   more,
   hideSensitive,
   onOpen,
+  priceEntry,
 }: {
+  /** The cause's title, naming its Show more apart from other cards'. */
+  cause: string;
   items: QuarantineItem[];
   /** Transactions in the whole cause; more than listed when the rest are on later pages. */
   total: number;
   more?: AttentionMore;
   hideSensitive: boolean;
   onOpen: (transactionId: string) => void;
+  priceEntry: PriceEntryProps | null;
 }) {
   const { t } = useTranslation("journals");
   const [expanded, setExpanded] = React.useState(false);
-  const shown = expanded ? items : items.slice(0, SHOWN_ROWS);
+  // A row with a typed price stays in view when the list folds: what is
+  // previewed is never hidden.
+  const shown = expanded
+    ? items
+    : items.filter(
+        (item, index) => index < SHOWN_ROWS || Boolean(priceEntry?.entries[item.transaction_id]?.trim()),
+      );
+  const currency = priceEntry?.currency ?? "";
+  const assets = new Set(items.filter((item) => priceEntry?.rows.has(item.transaction_id)).map((item) => item.asset));
+  const rateUnitLabel = assets.size === 1
+    ? t("quarantine.price.unitRate", { asset: [...assets][0] })
+    : t("quarantine.price.unitRateGeneric");
+  const priceUnitLabel = (asset: string) =>
+    priceEntry?.unit === "rate"
+      ? t("quarantine.price.unitRate", { asset })
+      : t("quarantine.price.unitValue");
   return (
     <div className="mt-3 border-t pt-2" data-testid="quarantine-cause-transactions">
+      {priceEntry ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 pb-1">
+          <p className="text-xs text-muted-foreground">
+            {currency ? t("quarantine.price.hint", { currency }) : t("quarantine.price.hintNoCurrency")}
+          </p>
+          <Select value={priceEntry.unit} onValueChange={(value) => priceEntry.onUnitChange(value as PriceEntryUnit)}>
+            <SelectTrigger size="sm" className="h-7 text-xs" aria-label={t("quarantine.price.unitLabel")}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="value">{t("quarantine.price.unitValue")}</SelectItem>
+              <SelectItem value="rate">{rateUnitLabel}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      ) : null}
       <ul className="divide-y">
         {shown.map((item) => (
-          <li key={item.transaction_id}>
+          <li key={item.transaction_id} className="flex items-center gap-3">
             <button
               type="button"
-              className="flex w-full items-center gap-3 rounded-sm py-2 text-left text-sm hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+              className="flex min-w-0 flex-1 items-center gap-3 rounded-sm py-2 text-left text-sm hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
               onClick={() => onOpen(item.transaction_id)}
             >
+              {item.direction === "outbound" ? (
+                <ArrowUpRight
+                  className={cn("size-3.5 shrink-0", directionTone(item.direction, hideSensitive), sensitiveClass(hideSensitive))}
+                  aria-hidden="true"
+                />
+              ) : (
+                <ArrowDownLeft
+                  className={cn("size-3.5 shrink-0", directionTone(item.direction, hideSensitive), sensitiveClass(hideSensitive))}
+                  aria-hidden="true"
+                />
+              )}
               <span className={cn("min-w-0 flex-1 truncate text-muted-foreground", sensitiveClass(hideSensitive))}>
                 {quarantineRowMeta(item)}
               </span>
-              <span className={cn("shrink-0 tabular-nums", sensitiveClass(hideSensitive))}>
+              <span
+                className={cn(
+                  "shrink-0 tabular-nums",
+                  directionTone(item.direction, hideSensitive),
+                  sensitiveClass(hideSensitive),
+                )}
+              >
                 {quarantineRowAmount(item)}
               </span>
               <ArrowRight className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
             </button>
+            {priceEntry?.rows.has(item.transaction_id) ? (
+              <div className="flex shrink-0 flex-col items-end gap-0.5 py-1">
+                <Input
+                  inputMode="decimal"
+                  autoComplete="off"
+                  className={cn("h-8 w-36 shrink-0 text-right tabular-nums", sensitiveClass(hideSensitive))}
+                  placeholder={currency}
+                  aria-label={
+                    // Names what is typed: a total or a price per unit.
+                    currency
+                      ? t("quarantine.price.inputLabel", {
+                          unit: priceUnitLabel(item.asset),
+                          row: quarantineRowMeta(item),
+                          currency,
+                        })
+                      : t("quarantine.price.inputLabelNoCurrency", {
+                          unit: priceUnitLabel(item.asset),
+                          row: quarantineRowMeta(item),
+                        })
+                  }
+                  aria-invalid={priceEntry.invalid.has(item.transaction_id) || undefined}
+                  value={priceEntry.entries[item.transaction_id] ?? ""}
+                  onChange={(event) => priceEntry.onChange(item.transaction_id, event.target.value)}
+                />
+                {priceEntry.unit === "rate" ? (
+                  <span className="text-2xs text-muted-foreground">{priceUnitLabel(item.asset)}</span>
+                ) : null}
+              </div>
+            ) : null}
           </li>
         ))}
       </ul>
-      {items.length > SHOWN_ROWS ? (
-        <Button type="button" variant="ghost" size="sm" onClick={() => setExpanded((value) => !value)}>
-          {expanded
-            ? t("quarantine.causes.showFewerTransactions")
-            : t("quarantine.causes.showAllTransactions", { count: items.length })}
+      <ListFooter
+        cause={cause}
+        shown={shown.length}
+        loaded={items.length}
+        total={total}
+        expanded={expanded}
+        onExpandedChange={setExpanded}
+        more={more}
+      />
+    </div>
+  );
+}
+
+/**
+ * How much of a cause's list shows, and one way to see more: the rest of
+ * what is loaded first, then the next page of what needs the user, without
+ * resolving this one first.
+ */
+function ListFooter({
+  cause,
+  shown,
+  loaded,
+  total,
+  expanded,
+  onExpandedChange,
+  more,
+}: {
+  cause: string;
+  shown: number;
+  loaded: number;
+  /** Rows in the whole cause; more than loaded when the rest are on later pages. */
+  total: number;
+  expanded: boolean;
+  onExpandedChange: (expanded: boolean) => void;
+  more?: AttentionMore;
+}) {
+  const { t } = useTranslation("journals");
+  const hidden = loaded > shown;
+  const unloaded = total > loaded;
+  const canLoad = unloaded && Boolean(more?.hasMore);
+  const failed = unloaded && more?.error !== null && more?.error !== undefined;
+  if (!hidden && !unloaded && !(expanded && shown > SHOWN_ROWS)) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1 text-xs text-muted-foreground">
+      {Math.max(total, loaded) > shown ? (
+        <span>{t("quarantine.causes.shownOf", { shown, total: Math.max(total, loaded) })}</span>
+      ) : null}
+      {hidden || canLoad ? (
+        <Button
+          type="button"
+          variant="link"
+          size="sm"
+          className="h-auto p-0 text-xs"
+          disabled={!hidden && more?.loading}
+          aria-label={t("quarantine.causes.showMoreRowsOf", { cause })}
+          onClick={() => {
+            onExpandedChange(true);
+            if (!hidden) more?.onLoad();
+          }}
+        >
+          {!hidden && more?.loading ? <Loader2 className="size-3 animate-spin" aria-hidden="true" /> : null}
+          {t("quarantine.causes.showMoreRows")}
         </Button>
       ) : null}
-      {total > items.length ? (
-        <NotLoadedYet more={more}>
-          {t("quarantine.causes.moreLater", { count: total - items.length })}
-        </NotLoadedYet>
+      {expanded && shown > SHOWN_ROWS ? (
+        <Button
+          type="button"
+          variant="link"
+          size="sm"
+          className="h-auto p-0 text-xs"
+          aria-label={t("quarantine.causes.showFewerRowsOf", { cause })}
+          onClick={() => onExpandedChange(false)}
+        >
+          {t("quarantine.causes.showFewerTransactions")}
+        </Button>
+      ) : null}
+      {failed ? (
+        <span className="text-destructive" role="alert">
+          {t("quarantine.causes.loadMoreFailed", { message: more?.error })}
+        </span>
       ) : null}
     </div>
   );
@@ -686,6 +1092,7 @@ function CauseTransactionList({
  * ticks them. Different txids are shown as a hint and never pick a pair.
  */
 function QuarantinePairList({
+  cause,
   pairs,
   totalPairs,
   more,
@@ -693,6 +1100,7 @@ function QuarantinePairList({
   onOpen,
   onUnpair,
 }: {
+  cause: string;
   pairs: QuarantineItem[];
   /** Pairs in the whole cause; more than listed when the rest are on later pages. */
   totalPairs: number;
@@ -796,18 +1204,15 @@ function QuarantinePairList({
           ) : null}
         </div>
       ) : null}
-      {pairs.length > SHOWN_ROWS ? (
-        <Button type="button" variant="ghost" size="sm" onClick={() => setExpanded((value) => !value)}>
-          {expanded
-            ? t("quarantine.pair.showFewer")
-            : t("quarantine.pair.showAll", { count: pairs.length })}
-        </Button>
-      ) : null}
-      {totalPairs > pairs.length ? (
-        <NotLoadedYet more={more}>
-          {t("quarantine.pair.moreLater", { count: totalPairs - pairs.length })}
-        </NotLoadedYet>
-      ) : null}
+      <ListFooter
+        cause={cause}
+        shown={shown.length}
+        loaded={pairs.length}
+        total={totalPairs}
+        expanded={expanded}
+        onExpandedChange={setExpanded}
+        more={more}
+      />
     </div>
   );
 }

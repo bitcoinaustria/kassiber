@@ -2,7 +2,11 @@
  * Provider/model picker for the AI chat composer, laid out after T3 Code's
  * picker (see ModelPickerContent for the provenance note): a quiet trigger in
  * the composer toolbar, a provider rail with Favorites, ranked search across
- * every provider, keyboard navigation, and an adjacent reasoning-effort menu.
+ * every provider and keyboard navigation. Like T3 Code's composer picker it is
+ * the one place for the model's traits too: a reasoning column docked beside
+ * the list, and a footer with the speed toggle and the permission mode (see
+ * ComposerModelTraits). Each section shows only what the selected model
+ * supports per its capability data.
  *
  * Privacy contract (docs/reference/ai.md, docs/reference/privacy-and-security.md):
  * - Mounting, opening, hovering, searching and switching providers never start
@@ -23,18 +27,8 @@
 import * as React from "react";
 import { useQueries } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Brain, Zap } from "lucide-react";
+import { Zap } from "lucide-react";
 
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Popover,
   PopoverContent,
@@ -46,7 +40,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import type { AssistantThinkingEffort } from "./assistantSession";
+import { KNOWN_EFFORTS, type AssistantThinkingEffort } from "./assistantSession";
+import type { AiPermissionMode } from "@/daemon/stream";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import {
   providerEnabled,
@@ -58,25 +53,28 @@ import {
   type AiProvidersListData,
 } from "@/lib/aiCapabilities";
 import { formatShortcut } from "@/lib/shortcutLabel";
+import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
-import {
-  ComposerControl,
-  ComposerControlChevron,
-  ComposerControlSeparator,
-} from "./ComposerControl";
+import { ComposerControl, ComposerControlChevron } from "./ComposerControl";
+import { ModelPickerEffortColumn, ModelPickerFooter } from "./ComposerModelTraits";
 import {
   ModelPickerContent,
   type ModelPickerDiscoveryState,
 } from "./ModelPickerContent";
-import { MODEL_PICKER_SHORTCUT, modelPickerModelKey } from "./modelPickerKeys";
+import {
+  MODEL_PICKER_EFFORT_SHORTCUT,
+  MODEL_PICKER_SHORTCUT,
+  modelPickerModelKey,
+  takeOpenToEffort,
+} from "./modelPickerKeys";
+import { permissionModeOption } from "./permissionMode";
 import { PostureBadge, ProviderGlyph } from "./ProviderGlyph";
-import { providerModelsQueryOptions } from "./providerModelQuery";
+import { providerModelsQueryOptions, useRestoreProviderModelChecks } from "./providerModelQuery";
 import { isCliProvider, providerDisplayName } from "./providerIdentity";
 import {
   canonicalModelFavorites,
   dedupedProviderAliases,
   dedupeProviderRows,
-  filterModelsByPrivacy,
   httpModelRunsAssistant,
   modelPrivacyPosture,
   storedModelFavoritesFor,
@@ -88,32 +86,27 @@ interface ProviderModelPickerProps {
   onOverlayOpenChange?: (open: boolean) => void;
   enabled?: boolean;
   onActiveProviderKindChange?: (kind: AiProviderKind | null) => void;
-  /** When supported, render a separate reasoning-effort menu beside the picker. */
+  /**
+   * Reasoning effort. When the selected model takes one, its levels show in a
+   * column beside the list; omit the handler to show them locked (e.g. while
+   * a reply streams).
+   */
   thinkingEffort?: AssistantThinkingEffort;
   onThinkingEffortChange?: (effort: AssistantThinkingEffort) => void;
   showThinkingEffort?: boolean;
   /**
-   * Fast serving mode. The toggle shows only when the selected model offers
-   * it; omit the handler to hide it (e.g. while a reply streams).
+   * Fast serving mode. The footer's speed toggle shows only when the selected
+   * model offers it; omit the handler to show it locked.
    */
   fastMode?: boolean;
   onFastModeChange?: (on: boolean) => void;
+  /** The chat's permission mode, in the footer; omit the handler to leave it out. */
+  permissionMode?: AiPermissionMode;
+  onPermissionModeChange?: (mode: AiPermissionMode) => void;
   /** Controlled open state, e.g. for the composer's Mod+Shift+M shortcut. */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }
-
-// Levels we can label/type. When a model advertises a specific subset we show
-// only those; otherwise we offer all of them. "auto" is the default and means
-// "don't override the model" — it is always offered first.
-const KNOWN_EFFORTS: AssistantThinkingEffort[] = [
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-  "ultra",
-];
 
 export function ProviderModelPicker({
   value,
@@ -126,6 +119,8 @@ export function ProviderModelPicker({
   showThinkingEffort = false,
   fastMode = false,
   onFastModeChange,
+  permissionMode = "approval",
+  onPermissionModeChange,
   open: controlledOpen,
   onOpenChange,
 }: ProviderModelPickerProps) {
@@ -138,13 +133,10 @@ export function ProviderModelPicker({
   );
   const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false);
   const open = controlledOpen ?? uncontrolledOpen;
-  const [thinkingOpen, setThinkingOpen] = React.useState(false);
-  // Set while the effort menu closes because the picker took over (e.g.
-  // Mod+Shift+M pressed inside the open menu).
-  const effortHandoffRef = React.useRef(false);
-  const [localOnly, setLocalOnly] = React.useState(false);
   const [showAllModels, setShowAllModels] = React.useState(false);
   const searchInputRef = React.useRef<HTMLInputElement>(null);
+  const triggerRef = React.useRef<HTMLButtonElement>(null);
+  const contentRef = React.useRef<HTMLDivElement>(null);
   const acknowledgeProvider = useDaemonMutation("ai.providers.acknowledge");
   const providersQuery = useDaemon<AiProvidersListData>(
     "ai.providers.list",
@@ -226,6 +218,7 @@ export function ProviderModelPicker({
     onActiveProviderKindChange?.(selectedProvider?.kind ?? null);
   }, [onActiveProviderKindChange, selectedProvider?.kind]);
 
+  useRestoreProviderModelChecks(providers, enabled);
   const modelQueries = useQueries({
     queries: providers.map((provider) =>
       providerModelsQueryOptions(dataMode, daemonSession, provider),
@@ -361,7 +354,7 @@ export function ProviderModelPicker({
       ),
     [shownFavorites],
   );
-  const usableGroups = React.useMemo(
+  const visibleGroups = React.useMemo(
     () =>
       groupedRows.map(({ provider, models: providerModels }) => {
         if (isCliProvider(provider)) {
@@ -383,19 +376,6 @@ export function ProviderModelPicker({
       }),
     [groupedRows, keptModelKeys, showAllModels, value],
   );
-  const visibleGroups = React.useMemo(() => {
-    if (!localOnly) return usableGroups;
-    return usableGroups
-      .map(({ provider, models: providerModels, hiddenCount }) => ({
-        provider,
-        models: filterModelsByPrivacy(provider, providerModels, true),
-        hiddenCount,
-      }))
-      .filter(
-        ({ provider, models: providerModels }) =>
-          provider.kind === "local" || providerModels.length > 0,
-      );
-  }, [usableGroups, localOnly]);
 
   const selectedModelRow = value
     ? groupedRows
@@ -429,36 +409,41 @@ export function ProviderModelPicker({
       : currentProvider.kind
     : null;
 
-  // Show only the reasoning levels the selected model advertises; fall back to
-  // the full set when it advertises none.
+  // Only the levels the selected model advertises; none are made up for a
+  // model whose levels are not known yet.
   const advertisedEfforts = React.useMemo(
     () => selectedModelReasoningEfforts({ selection: value, providers, models }),
     [value, providers, models],
   );
-  const effortOptions = React.useMemo<AssistantThinkingEffort[]>(() => {
-    const advertisedKnown = KNOWN_EFFORTS.filter((effort) =>
-      advertisedEfforts.includes(effort),
-    );
-    return advertisedKnown.length > 0 ? advertisedKnown : KNOWN_EFFORTS;
-  }, [advertisedEfforts]);
+  const effortOptions = React.useMemo<AssistantThinkingEffort[]>(
+    () => KNOWN_EFFORTS.filter((effort) => advertisedEfforts.includes(effort)),
+    [advertisedEfforts],
+  );
+  // A Check models result lists the model, so what it advertises is all there is.
+  const effortLevelsKnown = Boolean(
+    value && models.some((model) => model.id === value.model),
+  );
 
   const fastSupport = selectedModelFastMode({ selection: value, providers, models });
-  const showEffortControl = showThinkingEffort && Boolean(onThinkingEffortChange);
-  const showFastControl = fastSupport.supported && Boolean(onFastModeChange);
+  const showEffortControl = showThinkingEffort;
+  const showFastControl = fastSupport.supported;
   const fastOn = showFastControl && fastMode;
   const fastHint =
     fastSupport.runtime === "claude"
       ? t("composer.fastMode.claudeHint")
       : (fastSupport.description ?? t("composer.fastMode.hint"));
-  const traitsLabel = showEffortControl
-    ? t(`composer.effort.${thinkingEffort}`)
-    : fastOn
-      ? t("composer.fastMode.fast")
-      : t("composer.fastMode.standard");
+  const showPermission = Boolean(onPermissionModeChange);
+  const fullAccess =
+    showPermission && permissionModeOption(permissionMode).value === "full_access";
+  // The column and footer stay beside the list while the popover is open, so
+  // picking a model moves on to its levels instead of closing.
+  const docked = showEffortControl || showFastControl || showPermission;
 
   // If a model switch leaves the current level unsupported, drop back to auto.
+  // A model whose levels are not known yet keeps the stored level.
   React.useEffect(() => {
     if (!showThinkingEffort || !onThinkingEffortChange) return;
+    if (effortOptions.length === 0) return;
     if (thinkingEffort !== "auto" && !effortOptions.includes(thinkingEffort)) {
       onThinkingEffortChange("auto");
     }
@@ -477,10 +462,17 @@ export function ProviderModelPicker({
     return next;
   }, [modelQueries, modelSnapshotsByProvider, providers]);
 
+  // A docked pick waiting for the host to commit the picked model.
+  const pendingPickRef = React.useRef<{ provider: string; model: string } | null>(
+    null,
+  );
   const setPickerOpen = (next: boolean) => {
     onOpenChange?.(next);
     if (controlledOpen === undefined) setUncontrolledOpen(next);
-    if (!next) acknowledgeProvider.reset();
+    if (!next) {
+      pendingPickRef.current = null;
+      acknowledgeProvider.reset();
+    }
   };
 
   const ensureAcknowledged = async (
@@ -500,12 +492,57 @@ export function ProviderModelPicker({
     return true;
   };
 
+  /**
+   * Focuses the selected reasoning level, else the first one (T3 Code's
+   * `focusEffort`). False when the column has no level to focus.
+   */
+  const focusEffort = () => {
+    const column = contentRef.current?.querySelector("[data-model-picker-effort]");
+    const level =
+      column?.querySelector<HTMLElement>(
+        '[data-effort-level][aria-checked="true"]:not(:disabled)',
+      ) ?? column?.querySelector<HTMLElement>("[data-effort-level]:not(:disabled)");
+    level?.focus({ preventScroll: true });
+    level?.scrollIntoView?.({ block: "nearest" });
+    return level != null;
+  };
+  const focusSearch = () => {
+    searchInputRef.current?.focus({ preventScroll: true });
+  };
+
+  // A docked pick moves to the new model's levels once the host commits it;
+  // a model without levels has nothing left to choose here, so the pick
+  // closes the picker.
+  const settlePick = () => {
+    pendingPickRef.current = null;
+    if (!focusEffort()) setPickerOpen(false);
+  };
+  const settlePickRef = React.useRef(settlePick);
+  settlePickRef.current = settlePick;
+  React.useLayoutEffect(() => {
+    const pending = pendingPickRef.current;
+    if (
+      pending &&
+      value?.provider === pending.provider &&
+      value.model === pending.model
+    ) {
+      settlePickRef.current();
+    }
+  }, [value, showEffortControl, effortOptions]);
+
   const selectModel = async (provider: AiProviderRow, model: string) => {
     if (!(await ensureAcknowledged(provider, "modelPicker.remoteConfirm"))) {
       return;
     }
+    const unchanged = value?.provider === provider.name && value.model === model;
+    pendingPickRef.current = docked ? { provider: provider.name, model } : null;
     onChange({ provider: provider.name, model });
-    setPickerOpen(false);
+    if (!docked) {
+      setPickerOpen(false);
+      return;
+    }
+    // The current model's column is already rendered; no commit will follow.
+    if (unchanged) settlePick();
   };
 
   const checkModels = async (provider: AiProviderRow) => {
@@ -522,30 +559,36 @@ export function ProviderModelPicker({
     await query.refetch();
   };
 
-  // Report open menus from state, not from the open handlers: the composer
-  // can open the picker itself (Mod+Shift+M) through the controlled prop.
-  // Only one composer menu at a time. When the picker opens over the effort
-  // menu, close the menu without its focus restoration: returning focus to
-  // the effort trigger lands outside the picker, which dismisses the picker
-  // before a click on a model can select it.
+  // Report the open picker from state, not from the open handlers: the
+  // composer can open it itself (Mod+Shift+M) through the controlled prop.
   React.useEffect(() => {
-    if (!open) return;
-    setThinkingOpen((wasOpen) => {
-      if (wasOpen) effortHandoffRef.current = true;
-      return false;
-    });
-  }, [open]);
-
-  const overlayOpen = open || thinkingOpen;
-  React.useEffect(() => {
-    onOverlayOpenChange?.(overlayOpen);
-  }, [onOverlayOpenChange, overlayOpen]);
+    onOverlayOpenChange?.(open);
+  }, [onOverlayOpenChange, open]);
   React.useEffect(
     () => () => onOverlayOpenChange?.(false),
     [onOverlayOpenChange],
   );
 
   const pickerShortcut = formatShortcut(MODEL_PICKER_SHORTCUT);
+  const effortShortcut = formatShortcut(MODEL_PICKER_EFFORT_SHORTCUT);
+  const effortLabel =
+    showEffortControl && thinkingEffort !== "auto"
+      ? t(`composer.effort.${thinkingEffort}`)
+      : null;
+  // What the trigger adds after the model, for the tooltip and screen readers.
+  const triggerDetail = [
+    effortLabel ? `${t("composer.reasoningEffort")}: ${effortLabel}` : null,
+    fastOn ? t("composer.fastMode.fast") : null,
+    fullAccess
+      ? `${t("composer.permission.label")}: ${t("composer.permission.full_access.label")}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
+  const modelLabel = value
+    ? selectedModelRow?.display_name || value.model
+    : triggerLabel;
+  const FullAccessIcon = permissionModeOption("full_access").icon;
   const postureHint = triggerPosture
     ? t(`modelPicker.postureHint.${triggerPosture}`)
     : null;
@@ -562,17 +605,59 @@ export function ProviderModelPicker({
           <TooltipTrigger asChild>
             <PopoverTrigger asChild disabled={!enabled}>
               <ComposerControl
+                ref={triggerRef}
                 aria-label={`${t("modelPicker.models")}: ${triggerLabel}${
                   postureHint ? ` (${postureHint})` : ""
-                }`}
+                }${triggerDetail ? `, ${triggerDetail}` : ""}`}
                 data-chat-provider-model-picker
+                data-fast-mode={fastOn || undefined}
                 className="min-w-0 max-w-full shrink justify-start"
+                onClick={(event) => {
+                  // Mod+Shift+K aimed at the open picker moves to its levels
+                  // instead of closing it.
+                  if (!open || !takeOpenToEffort(triggerRef.current)) return;
+                  event.preventDefault();
+                  if (!focusEffort()) focusSearch();
+                }}
               >
                 {currentProvider ? (
                   <ProviderGlyph provider={currentProvider} className="size-4" />
                 ) : null}
                 <span className="min-w-0 truncate">{triggerLabel}</span>
                 {triggerPosture ? <PostureBadge posture={triggerPosture} /> : null}
+                {effortLabel || fastOn ? (
+                  <span
+                    className="flex shrink-0 items-center gap-1 text-muted-foreground"
+                    data-composer-traits
+                  >
+                    {effortLabel ? (
+                      <span className="max-w-24 truncate">{effortLabel}</span>
+                    ) : null}
+                    {fastOn ? (
+                      // A bolt marks Fast, as on T3 Code's trigger.
+                      <Zap
+                        className="size-3.5 fill-current text-amber-500"
+                        aria-hidden="true"
+                        data-fast-mode-indicator
+                      />
+                    ) : null}
+                  </span>
+                ) : null}
+                {fullAccess ? (
+                  // The mode moved into the picker; Full access, which also
+                  // runs network actions without asking, stays in sight, named
+                  // where the toolbar has room.
+                  <span
+                    className="flex shrink-0 items-center gap-1"
+                    aria-hidden="true"
+                    data-full-access-indicator
+                  >
+                    <FullAccessIcon className="size-3.5 text-amber-600 dark:text-amber-400" />
+                    <span className="hidden text-xs text-amber-700 @sm/composer-toolbar:inline dark:text-amber-400">
+                      {t("composer.permission.full_access.label")}
+                    </span>
+                  </span>
+                ) : null}
                 <ComposerControlChevron />
               </ComposerControl>
             </PopoverTrigger>
@@ -582,156 +667,84 @@ export function ProviderModelPicker({
               <span>
                 {triggerLabel}
                 {postureHint ? ` · ${postureHint}` : ""}
+                {triggerDetail ? ` · ${triggerDetail}` : ""}
               </span>
               <span className="opacity-60">{pickerShortcut}</span>
+              {showEffortControl ? (
+                <span className="opacity-60">
+                  {t("composer.reasoning")} {effortShortcut}
+                </span>
+              ) : null}
             </span>
           </TooltipContent>
         </Tooltip>
         <PopoverContent
+          ref={contentRef}
           align="start"
           side="top"
           sideOffset={8}
-          className="w-[min(25rem,calc(100vw-2rem))] overflow-hidden rounded-xl p-0"
+          className={cn(
+            "overflow-hidden rounded-xl p-0",
+            showEffortControl
+              ? "w-[min(36rem,calc(100vw-2rem))]"
+              : "w-[min(25rem,calc(100vw-2rem))]",
+          )}
           onOpenAutoFocus={(event) => {
             // Focus the search field, as T3 Code does, so typing filters and
-            // the arrow keys drive the list straight away.
+            // the arrow keys drive the list straight away; Mod+Shift+K lands
+            // on the reasoning levels instead.
             event.preventDefault();
-            searchInputRef.current?.focus({ preventScroll: true });
+            if (takeOpenToEffort(triggerRef.current) && focusEffort()) return;
+            focusSearch();
           }}
         >
-          <ModelPickerContent
-            groups={visibleGroups}
-            value={value}
-            favorites={shownFavorites}
-            localOnly={localOnly}
-            onLocalOnlyChange={setLocalOnly}
-            showAllModels={showAllModels}
-            onShowAllModelsChange={setShowAllModels}
-            discoveryByProvider={discoveryByProvider}
-            checkDisabled={acknowledgeProvider.isPending}
-            selectDisabled={acknowledgeProvider.isPending}
-            footerError={ackError}
-            searchInputRef={searchInputRef}
-            onSelect={(provider, model) => void selectModel(provider, model)}
-            onToggleFavorite={toggleShownFavorite}
-            onCheckModels={(provider) => void checkModels(provider)}
-          />
+          <div className="flex max-h-(--radix-popover-content-available-height) flex-col">
+            <div className="flex min-h-0 flex-row">
+              <ModelPickerContent
+                groups={visibleGroups}
+                value={value}
+                favorites={shownFavorites}
+                showAllModels={showAllModels}
+                onShowAllModelsChange={setShowAllModels}
+                discoveryByProvider={discoveryByProvider}
+                checkDisabled={acknowledgeProvider.isPending}
+                selectDisabled={acknowledgeProvider.isPending}
+                footerError={ackError}
+                searchInputRef={searchInputRef}
+                onSelect={(provider, model) => void selectModel(provider, model)}
+                onToggleFavorite={toggleShownFavorite}
+                onCheckModels={(provider) => void checkModels(provider)}
+                docked={docked}
+                onFocusEffort={
+                  showEffortControl ? () => void focusEffort() : undefined
+                }
+              />
+              {showEffortControl ? (
+                <ModelPickerEffortColumn
+                  modelLabel={modelLabel}
+                  levels={effortOptions}
+                  levelsKnown={effortLevelsKnown}
+                  value={thinkingEffort}
+                  onChange={onThinkingEffortChange}
+                  onFocusSearch={focusSearch}
+                />
+              ) : null}
+            </div>
+            <ModelPickerFooter
+              fast={
+                showFastControl
+                  ? { on: fastOn, hint: fastHint, onChange: onFastModeChange }
+                  : null
+              }
+              permission={
+                onPermissionModeChange
+                  ? { value: permissionMode, onChange: onPermissionModeChange }
+                  : null
+              }
+            />
+          </div>
         </PopoverContent>
       </Popover>
-
-      {showEffortControl || showFastControl ? (
-        <>
-          <ComposerControlSeparator />
-          <DropdownMenu
-            open={thinkingOpen}
-            onOpenChange={setThinkingOpen}
-          >
-            <DropdownMenuTrigger asChild disabled={!enabled}>
-              <ComposerControl
-                aria-label={`${
-                  showEffortControl
-                    ? t("composer.reasoningEffort")
-                    : t("composer.fastMode.label")
-                }: ${traitsLabel}${
-                  showEffortControl && fastOn ? `, ${t("composer.fastMode.fast")}` : ""
-                }`}
-                title={
-                  showEffortControl
-                    ? t("composer.reasoningEffort")
-                    : t("composer.fastMode.label")
-                }
-                data-fast-mode={fastOn || undefined}
-              >
-                {showEffortControl ? (
-                  <Brain className="size-4" aria-hidden="true" />
-                ) : (
-                  <Zap className="size-4" aria-hidden="true" />
-                )}
-                <span>{traitsLabel}</span>
-                {showEffortControl && fastOn ? (
-                  // Compact "on" marker beside the effort, as in T3 Code's
-                  // traits trigger ("High · Fast").
-                  <Zap
-                    className="size-3.5 fill-current text-amber-500"
-                    aria-hidden="true"
-                    data-fast-mode-indicator
-                  />
-                ) : null}
-                <ComposerControlChevron />
-              </ComposerControl>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="start"
-              side="top"
-              className="min-w-44"
-              onCloseAutoFocus={(event) => {
-                if (!effortHandoffRef.current) return;
-                effortHandoffRef.current = false;
-                event.preventDefault();
-              }}
-            >
-              {showEffortControl && onThinkingEffortChange ? (
-              <>
-              <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
-                {t("composer.reasoningEffort")}
-              </DropdownMenuLabel>
-              <DropdownMenuRadioGroup
-                value={thinkingEffort}
-                onValueChange={(effort) =>
-                  onThinkingEffortChange(effort as AssistantThinkingEffort)
-                }
-              >
-                {(["auto", ...effortOptions] as AssistantThinkingEffort[]).map(
-                  (effort) => (
-                    <DropdownMenuRadioItem key={effort} value={effort}>
-                      <span className="flex min-w-0 flex-col">
-                        <span className="flex items-center gap-1.5">
-                          {t(`composer.effort.${effort}`)}
-                          {effort === "auto" ? (
-                            <span className="rounded-sm border border-border px-1 text-3xs leading-4 text-muted-foreground">
-                              {t("composer.effortDefault")}
-                            </span>
-                          ) : null}
-                        </span>
-                        {effort === "auto" ? (
-                          <span className="text-2xs text-muted-foreground">
-                            {t("composer.effortAutoHint")}
-                          </span>
-                        ) : null}
-                      </span>
-                    </DropdownMenuRadioItem>
-                  ),
-                )}
-              </DropdownMenuRadioGroup>
-              </>
-              ) : null}
-              {showFastControl && onFastModeChange ? (
-                <>
-                  {showEffortControl ? <DropdownMenuSeparator /> : null}
-                  <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
-                    {t("composer.fastMode.speed")}
-                  </DropdownMenuLabel>
-                  <DropdownMenuCheckboxItem
-                    checked={fastOn}
-                    onCheckedChange={(checked) => onFastModeChange(checked === true)}
-                    data-fast-mode-toggle
-                  >
-                    <span className="flex min-w-0 flex-col">
-                      <span className="flex items-center gap-1.5">
-                        <Zap className="size-3.5" aria-hidden="true" />
-                        {t("composer.fastMode.label")}
-                      </span>
-                      <span className="max-w-56 text-pretty text-2xs text-muted-foreground">
-                        {fastHint}
-                      </span>
-                    </span>
-                  </DropdownMenuCheckboxItem>
-                </>
-              ) : null}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </>
-      ) : null}
     </TooltipProvider>
   );
 }
