@@ -3106,11 +3106,7 @@ fn path_token_spans(text: &[char], offsets: &Offsets) -> Vec<Span> {
 /// fixed number of streams is linear, including overlaps between decoded and
 /// literal syntax. Ambiguous overlaps own their whole union.
 pub fn redact_credentials(text: &str) -> String {
-    let text = chars(text);
-    if text.len() > REDACTION_LIMIT {
-        return "[redacted-oversized]".to_owned();
-    }
-    string(&redact_credential_chars(&text))
+    string(&redact_credential_chars(&chars(text)))
 }
 
 /// [`redact_credentials`] over code points.
