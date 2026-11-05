@@ -975,8 +975,10 @@ class Lines {
   private depth: number[] = [];
   private below: number[] = [];
   private yaml: number[] = [];
+  private readonly text: string;
 
-  constructor(private readonly text: string) {
+  constructor(text: string) {
+    this.text = text;
     for (const match of text.matchAll(BREAK)) {
       this.ends.push(match.index);
       this.starts.push(match.index + match[0].length);
