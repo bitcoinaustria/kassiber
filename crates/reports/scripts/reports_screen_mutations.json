@@ -1,0 +1,370 @@
+[
+  {
+    "id": "kz-boundary-instant",
+    "file": "crates/reports/src/calendar.rs",
+    "find": "time::parse(\"2022-02-28T23:00:00Z\")",
+    "replace": "time::parse(\"2022-03-01T00:00:00Z\")",
+    "expect_failing": [
+      "calendar::tests::vienna_calendar_vectors",
+      "austrian_vectors"
+    ],
+    "rule": "The crypto Kennzahlen start at 00:00 on 1 March 2022 in Vienna (CET), 23:00 UTC the day before."
+  },
+  {
+    "id": "kz-boundary-inclusive",
+    "file": "crates/reports/src/calendar.rs",
+    "find": "Ok(instant(raw)? < time::parse",
+    "replace": "Ok(instant(raw)? <= time::parse",
+    "expect_failing": [
+      "calendar::tests::vienna_calendar_vectors",
+      "austrian_vectors"
+    ],
+    "rule": "An instant exactly at 1 March 2022 00:00 Vienna is already under the new rules."
+  },
+  {
+    "id": "kz-event-date",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "                && calendar::before_crypto_kennzahlen(occurred_at)? =>",
+    "replace": "                && false =>",
+    "expect_failing": [
+      "austrian_vectors",
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "A classified row before 1 March 2022 is stated in no crypto field."
+  },
+  {
+    "id": "kz-set",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "const E1KV_KENNZAHLEN: [i64; 3] = [172, 174, 176];",
+    "replace": "const E1KV_KENNZAHLEN: [i64; 3] = [172, 174, 801];",
+    "expect_failing": [
+      "austrian_vectors",
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "KZ 801 (E 1) is unaffected by the date; KZ 176 is a crypto field."
+  },
+  {
+    "id": "kz-stated-date",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "    if crypto && calendar::before_crypto_kennzahlen(occurred_at)? {",
+    "replace": "    if crypto && false {",
+    "expect_failing": [
+      "capital_gains_vectors",
+      "year_handoff_workbook_pins_observations_journals_rates_and_barriers"
+    ],
+    "rule": "Exports state a stored crypto Kennzahl before 1 March 2022 as no field."
+  },
+  {
+    "id": "kz-stated-empty",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "    if matches!(stored, Value::Null) || matches!(stored, Value::Str(raw) if raw.as_str() == Some(\"\")) {",
+    "replace": "    if matches!(stored, Value::Null) {",
+    "expect_failing": [
+      "capital_gains_vectors",
+      "year_handoff_workbook_pins_observations_journals_rates_and_barriers"
+    ],
+    "rule": "An empty stored Kennzahl is no field (and is dropped), not an int() error."
+  },
+  {
+    "id": "kz-detail-event",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "    let code = kennzahl_for_event(&category, &text(&row, \"occurred_at\"))?;",
+    "replace": "    let code = mapping(&category);",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "E 1kv detail rows state no crypto field before 1 March 2022."
+  },
+  {
+    "id": "e1kv-first-year",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "    year >= E1KV_FIRST_TAX_YEAR",
+    "replace": "    year > E1KV_FIRST_TAX_YEAR",
+    "expect_failing": [
+      "austrian_vectors",
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop",
+      "tax_estimate::tests::a_year_before_the_e1kv_gets_no_estimate"
+    ],
+    "rule": "Tax year 2022 is the first with the E 1kv crypto Kennzahlen."
+  },
+  {
+    "id": "e1kv-refuse-year",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "    if !e1kv_applies(year) {\n        // Fail closed",
+    "replace": "    if false {\n        // Fail closed",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "The E 1kv export refuses a tax year before 2022."
+  },
+  {
+    "id": "e1kv-refuse-rows",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "    if old_rule_rows > 0 {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "The E 1kv export refuses a 2022 with January or February crypto rows."
+  },
+  {
+    "id": "e1kv-count-rows",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "            matches!(value(row, \"kennzahl\"), Value::Null)\n                && mapping",
+    "replace": "            true\n                && mapping",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Only rows stated in no field count as predating the crypto Kennzahlen."
+  },
+  {
+    "id": "summary-pre-2022",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "    if !e1kv_applies(year) {\n        rows.retain",
+    "replace": "    if false {\n        rows.retain",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "A Kennzahl summary before 2022 states only KZ 801."
+  },
+  {
+    "id": "estimate-half-up",
+    "file": "crates/reports/src/tax_estimate.rs",
+    "find": "(base.max(0) * 275 + 500) / 1000",
+    "replace": "(base.max(0) * 275 + 499) / 1000",
+    "expect_failing": [
+      "tax_estimate::tests::rounds_half_up_to_the_cent"
+    ],
+    "rule": "The indicative tax rounds half up to the cent."
+  },
+  {
+    "id": "estimate-net-loss",
+    "file": "crates/reports/src/tax_estimate.rs",
+    "find": "(base.max(0) * 275",
+    "replace": "(base * 275",
+    "expect_failing": [
+      "tax_estimate::tests::a_net_loss_estimates_zero"
+    ],
+    "rule": "A net loss estimates zero tax."
+  },
+  {
+    "id": "estimate-old-rules-gate",
+    "file": "crates/reports/src/tax_estimate.rs",
+    "find": "    if applies && rows_before_crypto_kennzahlen != 0 {",
+    "replace": "    if rows_before_crypto_kennzahlen != 0 {",
+    "expect_failing": [
+      "tax_estimate::tests::a_year_before_the_e1kv_gets_no_estimate"
+    ],
+    "rule": "Old-rule rows withhold only a year that has the E 1kv."
+  },
+  {
+    "id": "estimate-not-applicable",
+    "file": "crates/reports/src/tax_estimate.rs",
+    "find": "(applies && blockers.is_empty()).then",
+    "replace": "blockers.is_empty().then",
+    "expect_failing": [
+      "tax_estimate::tests::a_year_before_the_e1kv_gets_no_estimate"
+    ],
+    "rule": "No estimate before 2022."
+  },
+  {
+    "id": "estimate-progressive",
+    "file": "crates/reports/src/tax_estimate.rs",
+    "find": "                .filter(|cents| **cents != 0)",
+    "replace": "                .filter(|_| true)",
+    "expect_failing": [
+      "tax_estimate::tests::income_and_gains_net_against_losses_at_the_special_rate"
+    ],
+    "rule": "Only a nonzero KZ 801 is listed for the progressive rate."
+  },
+  {
+    "id": "breakdown-tax-free",
+    "file": "crates/reports/src/gains_desktop.rs",
+    "find": "            if category == \"alt_taxfree\" {",
+    "replace": "            if category == \"alt_taxfree_\" {",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "Tax-free Altbestand has its own group."
+  },
+  {
+    "id": "breakdown-link-limit",
+    "file": "crates/reports/src/gains_desktop.rs",
+    "find": "const LINK_LIMIT: usize = 128;",
+    "replace": "const LINK_LIMIT: usize = 127;",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "Exact transaction links stop at the Transactions read cap of 128 ids."
+  },
+  {
+    "id": "breakdown-swap-entries",
+    "file": "crates/reports/src/gains_desktop.rs",
+    "find": "            (\"rowCount\", Value::Int(entries.len().into())),",
+    "replace": "            (\"rowCount\", Value::Int(swaps.len().into())),",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "A swap split across conversions counts once."
+  },
+  {
+    "id": "breakdown-order",
+    "file": "crates/reports/src/gains_desktop.rs",
+    "find": "        ORDER.iter().position(|k| *k == key).unwrap_or(ORDER.len())",
+    "replace": "        0",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "Groups appear in the fixed field order."
+  },
+  {
+    "id": "totals-whole-year",
+    "file": "crates/reports/src/gains_desktop.rs",
+    "find": "    let neutral = neutral(conn, &id, year, vienna)?;\n    let breakdown",
+    "replace": "    selected.truncate(150);\n    let neutral = neutral(conn, &id, year, vienna)?;\n    let breakdown",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "Totals and the breakdown cover the whole year, not the newest 200 rows."
+  },
+  {
+    "id": "empty-root-country",
+    "file": "crates/reports/src/gains_desktop.rs",
+    "find": "        (\"jurisdictionCode\", s(\"GENERIC\")),",
+    "replace": "        (\"jurisdictionCode\", s(\"AT\")),",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "A root without a book reports jurisdiction GENERIC."
+  },
+  {
+    "id": "country-fallback",
+    "file": "crates/reports/src/gains_desktop.rs",
+    "find": "        \"GENERIC\".into()",
+    "replace": "        \"AT\".into()",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "A book without a country reports GENERIC."
+  },
+  {
+    "id": "long-term-default",
+    "file": "crates/reports/src/gains_desktop.rs",
+    "find": "                365.into()",
+    "replace": "                366.into()",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "A generic book without a holding period uses 365 days."
+  },
+  {
+    "id": "rows-before-gate",
+    "file": "crates/reports/src/gains_desktop.rs",
+    "find": "    let before = if vienna && eur_book && applies {",
+    "replace": "    let before = if vienna && eur_book {",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "Rows before the crypto Kennzahlen are counted only for a year with the E 1kv."
+  },
+  {
+    "id": "lot-kennzahl-date",
+    "file": "crates/reports/src/gains_desktop.rs",
+    "find": "            austrian::kennzahl_for_event(&py_str(category), &text(&row, \"occurred_at\"))?",
+    "replace": "            austrian::mapping(&py_str(category))",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "A lot before 1 March 2022 states no crypto Kennzahl."
+  },
+  {
+    "id": "cli-gains-stated",
+    "file": "crates/reports/src/lib.rs",
+    "find": "        replace(row, \"at_kennzahl\", stated);\n",
+    "replace": "",
+    "expect_failing": [
+      "capital_gains_vectors"
+    ],
+    "rule": "The capital-gains report and its CSV exports state no crypto field before 1 March 2022."
+  },
+  {
+    "id": "exit-old-rules-day",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "    let old_rules = is_at && day.as_str() < \"2022-03-01\";",
+    "replace": "    let old_rules = is_at && day.as_str() <= \"2022-03-01\";",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "A departure on 1 March 2022 is under the new rules."
+  },
+  {
+    "id": "exit-old-rules-rate",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "    let estimated = if is_at && !old_rules {",
+    "replace": "    let estimated = if is_at {",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "No exit tax is estimated for a departure before 1 March 2022."
+  },
+  {
+    "id": "exit-old-rules-kennzahl",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "                    if is_at && regime == 0 && !old_rules {",
+    "replace": "                    if is_at && regime == 0 {",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "A departure before 1 March 2022 states no KZ 174/176."
+  },
+  {
+    "id": "exit-old-rules-note",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "        if old_rules {\n            assumptions.push",
+    "replace": "        if false {\n            assumptions.push",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "A departure before 1 March 2022 says why no tax is estimated."
+  },
+  {
+    "id": "events-reference-stale",
+    "file": "crates/journals/src/views.rs",
+    "find": "        if freshness.needs_processing || !explainable {",
+    "replace": "        if !explainable {",
+    "expect_failing": [
+      "explanation_tests::journal_events_reference_only_explainable_gains"
+    ],
+    "rule": "A stale journal explains nothing."
+  },
+  {
+    "id": "events-reference-swap",
+    "file": "crates/journals/src/views.rs",
+    "find": "            && !matches!(row.get(\"at_category\"), Sql::Text(c) if c == \"neu_swap\")\n",
+    "replace": "",
+    "expect_failing": [
+      "explanation_tests::journal_events_reference_only_explainable_gains"
+    ],
+    "rule": "A tax-neutral swap has no calculation to open."
+  },
+  {
+    "id": "events-reference-untaxed",
+    "file": "crates/journals/src/views.rs",
+    "find": "            && !matches!(row.get(\"taxability_override\"), Sql::Integer(0))\n",
+    "replace": "",
+    "expect_failing": [
+      "explanation_tests::journal_events_reference_only_explainable_gains"
+    ],
+    "rule": "A transaction excluded from tax has no calculation to open."
+  },
+  {
+    "id": "events-reference-kinds",
+    "file": "crates/journals/src/views.rs",
+    "find": "if t == \"disposal\" || t == \"income\")",
+    "replace": "if t == \"disposal\")",
+    "expect_failing": [
+      "explanation_tests::journal_events_reference_only_explainable_gains"
+    ],
+    "rule": "Income that counts for tax is explainable."
+  }
+]

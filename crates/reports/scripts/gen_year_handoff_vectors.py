@@ -75,6 +75,15 @@ def cases():
         ('cache-fraction-after', "INSERT INTO rates_cache(pair,timestamp,rate,rate_exact,source,fetched_at) VALUES('BTC-EUR','2024-12-31T23:59:59.5Z',77777,'77777','manual','fixed');"),
     ]
     result += [(name, {'year': 2024}, sql) for name, sql in changes]
+    # Main sync 1 (#706): a crypto Kennzahl before 1 March 2022 (Vienna) is
+    # stated in no field; KZ 801 is unaffected.
+    early = ("UPDATE journal_entries SET occurred_at='2022-02-28T22:59:59Z' WHERE id='a'; "
+             "UPDATE journal_entries SET occurred_at='2022-02-28T23:00:00Z',at_category='neu_gain',at_kennzahl=174 WHERE id='z'; "
+             "UPDATE journal_entries SET occurred_at='2022-02-10T00:00:00Z',at_category='alt_spekulation',at_kennzahl=801 WHERE id='first'; "
+             "UPDATE journal_entries SET occurred_at='2022-01-05T00:00:00Z' WHERE id='income'; "
+             "UPDATE journal_entries SET at_kennzahl='' WHERE id='fee';")
+    for country in ('at', 'generic'):
+        result.append((f'kennzahl-2022-{country}', {'year': 2022}, f"UPDATE profiles SET tax_country='{country}'; " + early))
     return result
 
 

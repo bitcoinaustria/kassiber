@@ -293,6 +293,10 @@ fn inventory(
         "EUR".into()
     };
     let (day, cutoff) = departure(conn, args, sources, is_at)?;
+    // The 27.5 % rate and KZ 174/176 cover realisations from 1 March 2022, by
+    // the departure day as the owner names it (not its UTC end, which is
+    // already 1 March in Vienna for 28 February).
+    let old_rules = is_at && day.as_str() < "2022-03-01";
     let overview = supplied.is_some();
     let entries = match supplied {
         Some(entries) => entries,
@@ -494,7 +498,7 @@ fn inventory(
                 ("category", s(if is_at { category } else { "unrealized" })),
                 (
                     "kennzahl",
-                    if is_at && regime == 0 {
+                    if is_at && regime == 0 && !old_rules {
                         Value::Int((if category == "neu_gain" { 174 } else { 176 }).into())
                     } else {
                         Value::Null
@@ -515,7 +519,7 @@ fn inventory(
     }
     let taxable = neu_gain.as_ref().map(|g| g.clone().max(Decimal::zero()));
     let rate: Decimal = "0.275".parse().unwrap();
-    let estimated = if is_at {
+    let estimated = if is_at && !old_rules {
         taxable
             .as_ref()
             .map(|g| g.mul(&rate, &DECIMAL).map_err(arithmetic))
@@ -564,6 +568,9 @@ fn inventory(
         }
         if untagged {
             assumptions.push(note("_ASSUMPTION_UNTAGGED_DISPOSAL"));
+        }
+        if old_rules {
+            assumptions.push(note("_ASSUMPTION_OLD_RULES"));
         }
     }
     if sources_out
@@ -634,7 +641,11 @@ fn inventory(
                 ("taxableGain", eur(taxable.as_ref())?),
                 (
                     "estimatedTaxRate",
-                    if is_at { float(&rate)? } else { Value::Null },
+                    if is_at && !old_rules {
+                        float(&rate)?
+                    } else {
+                        Value::Null
+                    },
                 ),
                 ("estimatedTax", eur(estimated.as_ref())?),
                 (

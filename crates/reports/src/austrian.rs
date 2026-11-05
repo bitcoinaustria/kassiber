@@ -43,7 +43,7 @@ fn add_integer(row: &mut Value, key: &str, amount: &Value) {
 fn zero() -> Value {
     Value::Int(0.into())
 }
-fn mapping(category: &str) -> Option<i64> {
+pub(super) fn mapping(category: &str) -> Option<i64> {
     match category {
         "income_general" | "income_capital_yield" => Some(172),
         "neu_gain" => Some(174),
@@ -51,6 +51,79 @@ fn mapping(category: &str) -> Option<i64> {
         "alt_spekulation" => Some(801),
         _ => None,
     }
+}
+
+// The E 1kv's crypto Kennzahlen and their 27.5 % rate cover income and
+// realisations from 1 March 2022 (Europe/Vienna). Earlier rows followed the
+// old rules; Kassiber states them in no crypto field. KZ 801 (E 1) is
+// unaffected, and the classification stays the tax engine's.
+pub(super) const E1KV_FIRST_TAX_YEAR: i64 = 2022;
+const E1KV_KENNZAHLEN: [i64; 3] = [172, 174, 176];
+
+/// Whether `year` has the E 1kv's crypto Kennzahlen at all.
+pub(super) fn e1kv_applies(year: i64) -> bool {
+    year >= E1KV_FIRST_TAX_YEAR
+}
+
+/// The field a classified row is stated in: none for a crypto Kennzahl
+/// before 1 March 2022.
+pub(super) fn kennzahl_for_event(category: &str, occurred_at: &str) -> Result<Option<i64>> {
+    Ok(match mapping(category) {
+        Some(code)
+            if E1KV_KENNZAHLEN.contains(&code)
+                && calendar::before_crypto_kennzahlen(occurred_at)? =>
+        {
+            None
+        }
+        code => code,
+    })
+}
+
+/// A journal row's stored field as an export states it (Python's `int()` of
+/// the stored value): a crypto Kennzahl dated before 1 March 2022 is none.
+pub(super) fn stated_kennzahl(stored: &Value, occurred_at: &str) -> Result<Value> {
+    if matches!(stored, Value::Null)
+        || matches!(stored, Value::Str(raw) if raw.as_str() == Some(""))
+    {
+        return Ok(Value::Null);
+    }
+    let code = py_int(stored)?;
+    let crypto = i64::try_from(code.clone()).is_ok_and(|code| E1KV_KENNZAHLEN.contains(&code));
+    if crypto && calendar::before_crypto_kennzahlen(occurred_at)? {
+        return Ok(Value::Null);
+    }
+    Ok(Value::Int(code))
+}
+
+/// Python's `int()` of a stored SQLite value.
+pub(super) fn py_int(stored: &Value) -> Result<kassiber_pyjson::BigInt> {
+    Ok(match stored {
+        Value::Int(n) => n.clone(),
+        Value::Bool(b) => i64::from(*b).into(),
+        Value::Float(n) if n.is_nan() => {
+            return Err(AppError::new(
+                "internal_error",
+                "cannot convert float NaN to integer",
+            ))
+        }
+        Value::Float(n) if n.is_infinite() => {
+            return Err(AppError::new(
+                "internal_error",
+                "cannot convert float infinity to integer",
+            ))
+        }
+        Value::Float(n) => kassiber_pytext::parse_int(&format!("{:.0}", n.trunc()))
+            .map_err(|_| AppError::new("internal_error", "invalid integer"))?,
+        other => kassiber_pytext::parse_int(&py_str(other)).map_err(|_| {
+            AppError::new(
+                "internal_error",
+                format!(
+                    "invalid literal for int() with base 10: {}",
+                    kassiber_pytext::repr_str(&py_str(other))
+                ),
+            )
+        })?,
+    })
 }
 fn section_id(category: &str) -> Option<&'static str> {
     match category {
@@ -146,7 +219,8 @@ fn detail(row: Value) -> Result<Value> {
         .with_hint("Re-run `journals process` with the current Kassiber version.")
         .with_details(dict([("at_category", s(category))])));
     }
-    let code = mapping(&category);
+    // Before 1 March 2022 a crypto Kennzahl is no field.
+    let code = kennzahl_for_event(&category, &text(&row, "occurred_at"))?;
     let quantity_msat = int(&row, "quantity").unsigned_abs();
     let quantity = decimal(&s(quantity_msat.to_string()))?
         .div(&Decimal::from(100_000_000_000_i64), &DECIMAL)
@@ -241,24 +315,61 @@ fn detail(row: Value) -> Result<Value> {
         ),
     ]))
 }
-pub fn report(
-    conn: &Connection,
-    workspace: &Value,
-    profile: &Value,
-    args: &Value,
-) -> Result<Value> {
-    let year = year(args)?;
+fn details(conn: &Connection, profile: &Value, year: i64) -> Result<Vec<Value>> {
     let (start, end) = calendar::window(year);
-    let id = text(profile, "id");
-    let raw = rows(conn,"SELECT je.occurred_at,je.transaction_id,je.entry_type,je.asset,je.quantity,COALESCE(je.cost_basis,0) AS cost_basis,COALESCE(je.proceeds,0) AS proceeds,COALESCE(je.gain_loss,0) AS gain_loss,COALESCE(je.description,'') AS description,je.at_category,je.at_kennzahl,w.label AS wallet,t.external_id AS transaction_external_id,COALESCE(NULLIF(t.kind_override,''),t.kind) AS transaction_kind,t.note AS transaction_note FROM journal_entries je JOIN wallets w ON w.id=je.wallet_id LEFT JOIN transactions t ON t.id=je.transaction_id WHERE je.profile_id=? AND je.at_category IS NOT NULL AND je.at_category!='neu_swap' AND je.entry_type NOT IN ('fee','transfer_fee') AND COALESCE(t.taxability_override,1)!=0 AND je.occurred_at>=? AND je.occurred_at<? ORDER BY je.occurred_at ASC,je.created_at ASC,je.id ASC",[&id,&start,&end])?;
+    let raw = rows(conn,"SELECT je.occurred_at,je.transaction_id,je.entry_type,je.asset,je.quantity,COALESCE(je.cost_basis,0) AS cost_basis,COALESCE(je.proceeds,0) AS proceeds,COALESCE(je.gain_loss,0) AS gain_loss,COALESCE(je.description,'') AS description,je.at_category,je.at_kennzahl,w.label AS wallet,t.external_id AS transaction_external_id,COALESCE(NULLIF(t.kind_override,''),t.kind) AS transaction_kind,t.note AS transaction_note FROM journal_entries je JOIN wallets w ON w.id=je.wallet_id LEFT JOIN transactions t ON t.id=je.transaction_id WHERE je.profile_id=? AND je.at_category IS NOT NULL AND je.at_category!='neu_swap' AND je.entry_type NOT IN ('fee','transfer_fee') AND COALESCE(t.taxability_override,1)!=0 AND je.occurred_at>=? AND je.occurred_at<? ORDER BY je.occurred_at ASC,je.created_at ASC,je.id ASC",[&text(profile, "id"),&start,&end])?;
     let mut details = Vec::new();
     for row in raw {
         if calendar::vienna(&text(&row, "occurred_at"))?.0 == year {
             details.push(detail(row)?);
         }
     }
+    Ok(details)
+}
+
+/// Rows classified for a crypto Kennzahl but dated before 1 March 2022, so
+/// stated in no field.
+fn count_before_crypto_kennzahlen(details: &[Value]) -> i64 {
+    details
+        .iter()
+        .filter(|row| {
+            matches!(value(row, "kennzahl"), Value::Null)
+                && mapping(&text(row, "at_category"))
+                    .is_some_and(|code| E1KV_KENNZAHLEN.contains(&code))
+        })
+        .count() as i64
+}
+
+/// `austrian_rows_before_crypto_kennzahlen`: the year's rows the E 1kv
+/// export refuses.
+pub(super) fn rows_before_crypto_kennzahlen(
+    conn: &Connection,
+    profile: &Value,
+    year: i64,
+) -> Result<i64> {
+    validate(profile)?;
+    Ok(count_before_crypto_kennzahlen(&details(
+        conn, profile, year,
+    )?))
+}
+
+/// `build_austrian_kennzahl_summary`: a year before 2022 states only the
+/// E 1's KZ 801.
+pub(super) fn kennzahl_summary(
+    conn: &Connection,
+    profile: &Value,
+    year: i64,
+) -> Result<Vec<Value>> {
+    validate(profile)?;
+    let mut rows = summary_rows(&details(conn, profile, year)?);
+    if !e1kv_applies(year) {
+        rows.retain(|row| !E1KV_KENNZAHLEN.contains(&int(row, "kennzahl")));
+    }
+    Ok(rows)
+}
+
+fn summary_rows(details: &[Value]) -> Vec<Value> {
     let mut summaries = Vec::new();
-    let mut totals = dict::<&str>([]);
     for code in [172, 174, 176, 801] {
         let mut summary = dict([
             ("kennzahl", Value::Int(code.into())),
@@ -275,7 +386,7 @@ pub fn report(
             ("row_count", zero()),
             ("amount_eur_cents", zero()),
         ]);
-        for row in &details {
+        for row in details {
             if value(row, "kennzahl") == &Value::Int(code.into()) {
                 add_integer(&mut summary, "row_count", &Value::Int(1.into()));
                 add_integer(
@@ -285,12 +396,57 @@ pub fn report(
                 );
             }
         }
-        let Value::Dict(fields) = &summary else {
+        summaries.push(summary);
+    }
+    summaries
+}
+
+pub fn report(
+    conn: &Connection,
+    workspace: &Value,
+    profile: &Value,
+    args: &Value,
+) -> Result<Value> {
+    let year = year(args)?;
+    if !e1kv_applies(year) {
+        // Fail closed: the crypto Kennzahlen did not exist that year.
+        return Err(AppError::new(
+            "validation",
+            format!("The Austrian crypto Kennzahlen (KZ 172, 174, 176) start with tax year {E1KV_FIRST_TAX_YEAR}"),
+        )
+        .with_hint("Earlier years followed the old rules (Spekulationsgeschäfte on the E 1). Export the bookkeeping handoff and have a Steuerberater state that year.")
+        .with_details(dict([
+            ("tax_year", Value::Int(year.into())),
+            ("first_tax_year", Value::Int(E1KV_FIRST_TAX_YEAR.into())),
+        ])));
+    }
+    let id = text(profile, "id");
+    let (start, end) = calendar::window(year);
+    let details = details(conn, profile, year)?;
+    let old_rule_rows = count_before_crypto_kennzahlen(&details);
+    if old_rule_rows > 0 {
+        // January-February 2022: the old rules applied unless the taxpayer
+        // opted for the new ones, which Kassiber cannot know.
+        return Err(AppError::new(
+            "validation",
+            format!("{old_rule_rows} row(s) of {year} predate the crypto Kennzahlen (1 March 2022)"),
+        )
+        .with_hint("They followed the old rules unless you opted for the new ones. Have a Steuerberater state them; the bookkeeping handoff lists every row.")
+        .with_details(dict([
+            ("tax_year", Value::Int(year.into())),
+            ("rows", Value::Int(old_rule_rows.into())),
+            ("from", s("2022-03-01")),
+        ])));
+    }
+    let summaries = summary_rows(&details);
+    let mut totals = dict::<&str>([]);
+    for summary in &summaries {
+        let Value::Dict(fields) = summary else {
             unreachable!()
         };
         replace(
             &mut totals,
-            &code.to_string(),
+            &text(summary, "kennzahl"),
             Value::Dict(
                 fields
                     .iter()
@@ -299,7 +455,6 @@ pub fn report(
                     .collect(),
             ),
         );
-        summaries.push(summary);
     }
     let mut sections = dict::<&str>([]);
     for section in list(value(metadata(), "AUSTRIAN_TAX_SECTION_ORDER")) {

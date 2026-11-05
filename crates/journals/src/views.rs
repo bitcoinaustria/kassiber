@@ -133,6 +133,17 @@ impl Row {
     }
 }
 
+/// A `profiles` row as the report crate's mapping.
+fn profile_value(profile: &Row) -> Py {
+    Py::Dict(
+        profile
+            .0
+            .iter()
+            .map(|(key, value)| (Key::from(key.as_str()), py(value)))
+            .collect(),
+    )
+}
+
 pub(crate) fn sql_error(error: kassiber_store::rusqlite::Error) -> AppError {
     AppError::new("internal_error", error.to_string())
 }
@@ -845,6 +856,7 @@ pub fn events(conn: &Connection, args: Option<&Py>) -> Result<Py, AppError> {
             COALESCE(a.label, '') AS account_label,
             t.external_id AS transaction_external_id,
             t.direction AS transaction_direction,
+            t.taxability_override AS taxability_override,
             {}
         FROM journal_entries je
         JOIN wallets w ON w.id = je.wallet_id
@@ -859,6 +871,19 @@ pub fn events(conn: &Connection, args: Option<&Py>) -> Result<Py, AppError> {
         ),
         &list_params,
     )?;
+    let reference_profile = profile_value(profile);
+    // The rows ui.reports.explain_capital_gain accepts: realized disposals and
+    // income that count for tax, from a current journal.
+    let explanation_reference = |row: &Row| -> Result<Py, AppError> {
+        let explainable = matches!(row.get("entry_type"), Sql::Text(t) if t == "disposal" || t == "income")
+            && !matches!(row.get("at_category"), Sql::Text(c) if c == "neu_swap")
+            && !matches!(row.get("taxability_override"), Sql::Integer(0))
+            && !matches!(row.get("taxability_override"), Sql::Real(n) if *n == 0.0);
+        if freshness.needs_processing || !explainable {
+            return Ok(Py::Null);
+        }
+        kassiber_reports::result_reference(conn, &reference_profile, &py(row.get("id")))
+    };
     let events = rows
         .iter()
         .map(|row| {
@@ -935,6 +960,7 @@ pub fn events(conn: &Connection, args: Option<&Py>) -> Result<Py, AppError> {
                 ("atCategory", py(row.get("at_category"))),
                 ("atKennzahl", py(row.get("at_kennzahl"))),
                 ("pair", pair(row)?.unwrap_or(Py::Null)),
+                ("explanationReference", explanation_reference(row)?),
             ]))
         })
         .collect::<Result<_, AppError>>()?;
@@ -1202,5 +1228,117 @@ pub fn override_prices(
             }
         },
         (None, None) => Ok((None, None)),
+    }
+}
+
+#[cfg(test)]
+mod explanation_tests {
+    use super::*;
+
+    const BOOK: &str = "
+        INSERT INTO workspaces(id, label, created_at) VALUES('ws-explain', 'Main', '2026-01-01T00:00:00Z');
+        INSERT INTO profiles(id, workspace_id, label, fiat_currency, tax_country, tax_long_term_days,
+            gains_algorithm, last_processed_at, last_processed_tx_count, created_at)
+        VALUES('pf-explain', 'ws-explain', 'Default', 'EUR', 'generic', 365, 'fifo',
+            '2026-01-01T01:00:00Z', 3, '2026-01-01T00:00:00Z');
+        INSERT INTO wallets(id, workspace_id, profile_id, label, kind, config_json, created_at)
+        VALUES('wal-explain', 'ws-explain', 'pf-explain', 'Cold', 'address', '{}', '2026-01-01T00:00:00Z');
+        INSERT INTO transactions(id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+            occurred_at, confirmed_at, direction, asset, amount, fee, fiat_currency, fiat_rate,
+            fiat_value, fiat_price_source, kind, description, excluded, raw_json, created_at)
+        SELECT 'tx-' || c, 'ws-explain', 'pf-explain', 'wal-explain', c, 'fp-' || c,
+            '2025-06-01T12:00:00Z', '2025-06-01T12:05:00Z', 'outbound', 'BTC', -10000000000, 0,
+            'EUR', 1400, 140, 'import', 'sell', c, 0, '{}', '2025-06-01T12:00:00Z'
+        FROM (SELECT 'sale' AS c UNION ALL SELECT 'swap' UNION ALL SELECT 'untaxed'
+              UNION ALL SELECT 'income');
+        UPDATE transactions SET taxability_override = 0 WHERE id = 'tx-untaxed';
+        INSERT INTO journal_entries(id, workspace_id, profile_id, transaction_id, wallet_id,
+            occurred_at, entry_type, asset, quantity, fiat_value, unit_cost, cost_basis, proceeds,
+            gain_loss, description, at_category, at_kennzahl, created_at)
+        SELECT 'je-' || c, 'ws-explain', 'pf-explain', 'tx-' || c, 'wal-explain',
+            '2025-06-01T12:00:00Z', CASE c WHEN 'income' THEN 'income' ELSE 'disposal' END, 'BTC',
+            -10000000000, -140, 1000, 100, 140, 40, c,
+            CASE c WHEN 'swap' THEN 'neu_swap' END, NULL, '2025-06-01T12:00:00Z'
+        FROM (SELECT 'sale' AS c UNION ALL SELECT 'swap' UNION ALL SELECT 'untaxed'
+              UNION ALL SELECT 'income');
+        INSERT INTO journal_entries(id, workspace_id, profile_id, transaction_id, wallet_id,
+            occurred_at, entry_type, asset, quantity, fiat_value, created_at)
+        VALUES('je-acquired', 'ws-explain', 'pf-explain', 'tx-sale', 'wal-explain',
+            '2025-01-01T00:00:00Z', 'acquisition', 'BTC', 10000000000, 100, '2025-01-01T00:00:00Z');
+        INSERT OR REPLACE INTO settings(key, value) VALUES('context_workspace', 'ws-explain'),
+            ('context_profile', 'pf-explain');
+        UPDATE profiles SET last_processed_tx_count =
+            (SELECT COUNT(*) FROM transactions WHERE excluded = 0);
+    ";
+
+    fn references(conn: &Connection) -> Vec<(String, Option<String>)> {
+        let snapshot = events(conn, None).unwrap();
+        let Some(Py::List(events)) = get(&snapshot, "events") else {
+            panic!("{snapshot:?}")
+        };
+        let mut result: Vec<_> = events
+            .iter()
+            .map(|event| {
+                let reference = get(event, "explanationReference").unwrap();
+                (
+                    kassiber_envelope::py_str(get(event, "id").unwrap()),
+                    match reference {
+                        Py::Null => None,
+                        reference => Some(kassiber_envelope::py_str(
+                            get(reference, "entry_id").unwrap(),
+                        )),
+                    },
+                )
+            })
+            .collect();
+        result.sort();
+        result
+    }
+
+    // tests/test_review_regressions.py::test_journal_events_reference_only_explainable_gains,
+    // ported: only a realized gain or income that counts for tax has a
+    // calculation to open, and a stale journal explains nothing.
+    #[test]
+    fn journal_events_reference_only_explainable_gains() {
+        let dir =
+            std::env::temp_dir().join(format!("kassiber-journal-events-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let book = kassiber_store::Book::create(&dir.join("data"), None).unwrap();
+        let conn = book.connection();
+        conn.execute_batch(BOOK).unwrap();
+        let some = |id: &str| Some(id.to_owned());
+        let expected = |sale, income| {
+            vec![
+                ("je-acquired".to_owned(), None),
+                ("je-income".to_owned(), income),
+                ("je-sale".to_owned(), sale),
+                ("je-swap".to_owned(), None),
+                ("je-untaxed".to_owned(), None),
+            ]
+        };
+        assert_eq!(
+            references(conn),
+            expected(some("je-sale"), some("je-income"))
+        );
+        let snapshot = events(conn, None).unwrap();
+        let Some(Py::List(events)) = get(&snapshot, "events") else {
+            unreachable!()
+        };
+        let sale = events
+            .iter()
+            .find(|e| get(e, "id") == Some(&s("je-sale")))
+            .unwrap();
+        let reference = get(sale, "explanationReference").unwrap();
+        let keys: Vec<_> = match reference {
+            Py::Dict(fields) => fields.iter().map(|(k, _)| format!("{k:?}")).collect(),
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(keys.len(), 6, "{keys:?}");
+        assert_eq!(get(reference, "profile_id"), Some(&s("pf-explain")));
+        conn.execute_batch("UPDATE profiles SET last_processed_at = NULL")
+            .unwrap();
+        assert_eq!(references(conn), expected(None, None));
+        drop(book);
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }
