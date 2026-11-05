@@ -15986,8 +15986,8 @@
   {
     "id": "QR-144",
     "file": "crates/custody/src/quantity/reviewed.rs",
-    "find": "        json!({\"$type\":\"ComponentClaimCompilation\",\"component_id\":id,\"claims\":claims,\"suspense_msat\":number(&suspense),\"reviewed_conversion_pairs\":pairs,\"reviewed_direct_payouts\":payouts}),",
-    "replace": "        json!({\"$type\":\"ComponentClaimCompilation\",\"component_id_mutated\":id,\"claims\":claims,\"suspense_msat\":number(&suspense),\"reviewed_conversion_pairs\":pairs,\"reviewed_direct_payouts\":payouts}),",
+    "find": "    result.insert(\"component_id\".into(), json!(id));",
+    "replace": "    result.insert(\"component_id_mutated\".into(), json!(id));",
     "expect_failing": [
       "quantity_reviewed_compilation_vectors"
     ],
@@ -15996,8 +15996,8 @@
   {
     "id": "QR-145",
     "file": "crates/custody/src/quantity/reviewed.rs",
-    "find": "        json!({\"$type\":\"ComponentClaimCompilation\",\"component_id\":id,\"claims\":claims,\"suspense_msat\":number(&suspense),\"reviewed_conversion_pairs\":pairs,\"reviewed_direct_payouts\":payouts}),",
-    "replace": "        json!({\"$type\":\"ComponentClaimCompilation\",\"component_id\":id,\"claims_mutated\":claims,\"suspense_msat\":number(&suspense),\"reviewed_conversion_pairs\":pairs,\"reviewed_direct_payouts\":payouts}),",
+    "find": "    result.insert(\"claims\".into(), Value::Array(claims));",
+    "replace": "    result.insert(\"claims_mutated\".into(), Value::Array(claims));",
     "expect_failing": [
       "quantity_reviewed_compilation_vectors"
     ],
@@ -16006,8 +16006,8 @@
   {
     "id": "QR-146",
     "file": "crates/custody/src/quantity/reviewed.rs",
-    "find": "        json!({\"$type\":\"ComponentClaimCompilation\",\"component_id\":id,\"claims\":claims,\"suspense_msat\":number(&suspense),\"reviewed_conversion_pairs\":pairs,\"reviewed_direct_payouts\":payouts}),",
-    "replace": "        json!({\"$type\":\"ComponentClaimCompilation\",\"component_id\":id,\"claims\":claims,\"suspense_msat_mutated\":number(&suspense),\"reviewed_conversion_pairs\":pairs,\"reviewed_direct_payouts\":payouts}),",
+    "find": "    result.insert(\"suspense_msat\".into(), number(&suspense));",
+    "replace": "    result.insert(\"suspense_msat_mutated\".into(), number(&suspense));",
     "expect_failing": [
       "quantity_reviewed_compilation_vectors"
     ],
@@ -16016,8 +16016,8 @@
   {
     "id": "QR-147",
     "file": "crates/custody/src/quantity/reviewed.rs",
-    "find": "        json!({\"$type\":\"ComponentClaimCompilation\",\"component_id\":id,\"claims\":claims,\"suspense_msat\":number(&suspense),\"reviewed_conversion_pairs\":pairs,\"reviewed_direct_payouts\":payouts}),",
-    "replace": "        json!({\"$type\":\"ComponentClaimCompilation\",\"component_id\":id,\"claims\":claims,\"suspense_msat\":number(&suspense),\"reviewed_conversion_pairs_mutated\":pairs,\"reviewed_direct_payouts\":payouts}),",
+    "find": "    result.insert(\"reviewed_conversion_pairs\".into(), Value::Array(pairs));",
+    "replace": "    result.insert(\"reviewed_conversion_pairs_mutated\".into(), Value::Array(pairs));",
     "expect_failing": [
       "quantity_reviewed_compilation_vectors"
     ],
@@ -16026,8 +16026,8 @@
   {
     "id": "QR-148",
     "file": "crates/custody/src/quantity/reviewed.rs",
-    "find": "        json!({\"$type\":\"ComponentClaimCompilation\",\"component_id\":id,\"claims\":claims,\"suspense_msat\":number(&suspense),\"reviewed_conversion_pairs\":pairs,\"reviewed_direct_payouts\":payouts}),",
-    "replace": "        json!({\"$type\":\"ComponentClaimCompilation\",\"component_id\":id,\"claims\":claims,\"suspense_msat\":number(&suspense),\"reviewed_conversion_pairs\":pairs,\"reviewed_direct_payouts_mutated\":payouts}),",
+    "find": "    result.insert(\"reviewed_direct_payouts\".into(), Value::Array(payouts));",
+    "replace": "    result.insert(\"reviewed_direct_payouts_mutated\".into(), Value::Array(payouts));",
     "expect_failing": [
       "quantity_reviewed_compilation_vectors"
     ],
@@ -24848,6 +24848,26 @@
       "sorted_dumps_keep_presorted_ties_and_sort_the_rest"
     ],
     "rule": "Only dicts whose text keys are in order skip sorting."
+  },
+  {
+    "id": "component-claims-list-order",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "        [claims, issues, conversions, payouts]",
+    "replace": "        [claims, conversions, issues, payouts]",
+    "expect_failing": [
+      "quantity_component_runtime_vectors"
+    ],
+    "rule": "Component claim results list claims, issues, conversions and payouts in order."
+  },
+  {
+    "id": "anchor-validation-coverage",
+    "file": "crates/custody/src/components/anchors.rs",
+    "find": "    result.insert(\"transaction_coverage\".into(), Value::Array(coverage));",
+    "replace": "    result.insert(\"transaction_coverage\".into(), Value::Array(Vec::new()));",
+    "expect_failing": [
+      "components_anchor_coverage"
+    ],
+    "rule": "Anchor validation reports its transaction coverage."
   },
   {
     "id": "R4-evidence-alias-slot-index",

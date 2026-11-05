@@ -507,7 +507,13 @@ fn component_claims_observed(
             json!({"component_id":id,"message":message,"compiler_details":details}),
         ));
     }
-    Ok(json!([claims, issues, conversions, payouts]))
+    // The lists move into the result; `json!` would copy them.
+    Ok(Value::Array(
+        [claims, issues, conversions, payouts]
+            .into_iter()
+            .map(Value::Array)
+            .collect(),
+    ))
 }
 // Mirror the fixture serializer for nonfinite diagnostic values. The raw
 // stage retains Py values directly; this helper belongs to the private seam.

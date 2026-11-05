@@ -738,9 +738,15 @@ pub fn compile_observed(c: &Value, observations: Option<&Observations>) -> Resul
             }
         }
     }
-    Ok(
-        json!({"$type":"ComponentClaimCompilation","component_id":id,"claims":claims,"suspense_msat":number(&suspense),"reviewed_conversion_pairs":pairs,"reviewed_direct_payouts":payouts}),
-    )
+    // The lists move into the result; `json!` would copy them.
+    let mut result = serde_json::Map::new();
+    result.insert("$type".into(), json!("ComponentClaimCompilation"));
+    result.insert("component_id".into(), json!(id));
+    result.insert("claims".into(), Value::Array(claims));
+    result.insert("suspense_msat".into(), number(&suspense));
+    result.insert("reviewed_conversion_pairs".into(), Value::Array(pairs));
+    result.insert("reviewed_direct_payouts".into(), Value::Array(payouts));
+    Ok(Value::Object(result))
 }
 
 /// Full reference diagnostics for the private JSONL comparison harness.

@@ -189,9 +189,13 @@ pub(super) fn validate(
     if by_transaction.is_empty() {
         issues.push(json!({"code":"transaction_anchor_missing","message":"an effective component requires at least one imported transaction anchor"}));
     }
-    Ok(
-        json!({"valid":issues.is_empty(),"issues":issues,"warnings":warnings,"transaction_coverage":coverage}),
-    )
+    // The lists move into the result; `json!` would copy them.
+    let mut result = serde_json::Map::new();
+    result.insert("valid".into(), Value::Bool(issues.is_empty()));
+    result.insert("issues".into(), Value::Array(issues));
+    result.insert("warnings".into(), Value::Array(warnings));
+    result.insert("transaction_coverage".into(), Value::Array(coverage));
+    Ok(Value::Object(result))
 }
 pub(super) fn principal(row: &Value) -> Result<BigInt, Error> {
     let amount = big(&integer(or(&row["amount"], &json!(0)))?);
