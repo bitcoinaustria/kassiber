@@ -2099,8 +2099,13 @@ def _prospective_negative_balance_events(conn, profile, wallet, fetch):
             for row in rows
             if str(row.get("external_id") or "").strip().lower() not in retracted
         ]
+    # A chain observation is one row per (txid, asset): a multi-asset Liquid
+    # transaction must not let one asset's record replace another's.
+    def overlay_key(external_id, asset):
+        return (str(external_id or "").strip().lower(), str(asset or ""))
+
     by_external_id = {
-        str(row.get("external_id") or "").strip().lower(): index
+        overlay_key(row.get("external_id"), row.get("asset")): index
         for index, row in enumerate(rows)
         if str(row.get("external_id") or "").strip()
     }
@@ -2111,6 +2116,7 @@ def _prospective_negative_balance_events(conn, profile, wallet, fetch):
             source_label=f"backend:{fetch.backend['name']}",
         )
         external_id = str(normalized.get("external_id") or "").strip().lower()
+        key = overlay_key(external_id, normalized["asset"])
         candidate = {
             "id": f"prefetched:{external_id or index}",
             "external_id": normalized.get("external_id"),
@@ -2123,11 +2129,11 @@ def _prospective_negative_balance_events(conn, profile, wallet, fetch):
             "fee": btc_to_msat(normalized["fee"]),
             "created_at": normalized["occurred_at"],
         }
-        existing_index = by_external_id.get(external_id) if external_id else None
+        existing_index = by_external_id.get(key) if external_id else None
         if existing_index is None:
             rows.append(candidate)
             if external_id:
-                by_external_id[external_id] = len(rows) - 1
+                by_external_id[key] = len(rows) - 1
         else:
             candidate["id"] = rows[existing_index]["id"]
             candidate["created_at"] = rows[existing_index]["created_at"]

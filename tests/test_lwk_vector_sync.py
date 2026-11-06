@@ -222,3 +222,16 @@ def test_rows_a_lagging_forced_rebuild_retracted_return_on_the_next_sync(tmp_pat
         repaired = sync(path, url, index=2)
     assert repaired[0]["status"] == "synced"
     assert live_rows(path) == before
+
+
+def test_multi_asset_history_does_not_force_a_repair_rescan(tmp_path):
+    path = book(tmp_path)
+    with electrum({"phase": VECTORS["phases"]["initial"]}) as url:
+        first = sync(path, url)
+        second = sync(path, url, index=1)
+    for outcome in (first, second):
+        assert outcome[0]["status"] == "synced"
+        assert not outcome[0].get("negative_balance_rescan", {}).get("triggered")
+    rows = live_rows(path)
+    assert rows[("fund", VECTORS["issued_asset"])] == ("inbound", 7_000_000, 0)
+    assert rows[("fund", "LBTC")] == ("inbound", 150_000_000, 0)
