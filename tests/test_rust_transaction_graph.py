@@ -88,6 +88,39 @@ class RustTransactionGraphTest(DesktopParity, unittest.TestCase):
         self.change(GRAPH + CURRENT)
         self.compare([{"transaction": ref} for ref in ("g1", "g2", "g3")])
 
+    def test_several_linked_groups_keep_one_order_under_every_hash_seed(self):
+        # tests/rust_port/repro_graph_group_order_hashseed.py: Python sorts the
+        # group ids (round r7-6) where it used set order; Rust always sorted.
+        extra = "".join(
+            "INSERT INTO journal_custody_decisions(decision_id,workspace_id,profile_id,source_transaction_id,"
+            "target_transaction_id,source_observation_hash,source_start_msat,source_end_msat,target_observation_hash,"
+            "target_start_msat,target_end_msat,source_wallet_id,target_wallet_id,source_network,target_network,"
+            "source_rail,target_rail,source_asset,target_asset,state,basis_state,reason,atomic_group_id,component_id,"
+            f"occurred_at,created_at) VALUES('{name * 64}','w','p','g1','{target}','{'a' * 64}',0,1000,'{'b' * 64}',"
+            "0,1000,'watch','watch','main','main','bitcoin','bitcoin','BTC','BTC','internal_verified','eligible',"
+            f"'owned_destination',NULL,NULL,'2025-05-01','2025');\n"
+            for name, target in (("1", "g2"), ("9", "g6"), ("5", "g2"), ("c", "g6"))
+        )
+        # Output 0 of g1 lands in another owned wallet: an owned destination.
+        extra += ("INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) VALUES"
+                  " ('second','w','p','Second','address','{\"chain\":\"bitcoin\",\"network\":\"mainnet\"}','2025');\n"
+                  "INSERT INTO wallet_utxos(workspace_id,profile_id,wallet_id,chain,network,asset,amount,txid,vout,outpoint,"
+                  "confirmation_status,first_seen_at,last_seen_at,address,script_pubkey,branch_label,block_height,spent_by)"
+                  f" VALUES('w','p','second','bitcoin','main','BTC',40000000,'{TX1}',0,'{TX1}:0','confirmed','2025','2025',"
+                  f"NULL,'{OTHER}','receive',NULL,NULL);\n")
+        self.change(GRAPH + CURRENT + extra)
+        # The merged book's open-time migration resets the built semantics:
+        # stamp them again so the custody projection is current.
+        self.change("UPDATE profiles SET journal_semantics_version=2 WHERE id='p';")
+        groups = []
+        for seed in ("0", "1", "2", "3"):
+            self.env["PYTHONHASHSEED"] = seed
+            responses = self.compare([{"transaction": "g1"}])
+            groups.append([[a.get("groupId") for a in node["annotations"] if a["code"] == "linked_transfer_group"]
+                           for node in responses[0]["data"]["outputs"]])
+        self.assertEqual(len({json.dumps(order) for order in groups}), 1)
+        self.assertGreaterEqual(max(len(order) for order in groups[0]), 2, groups[0])
+
     def test_public_lookup_is_refused_before_any_backend(self):
         self.change(GRAPH)
         requests = self.requests([{"transaction": "g2", "allowPublicLookup": True}])
