@@ -10981,9 +10981,9 @@ def _run_ai_chat_tool_loop(
     )
     response_context = responses_request_context(messages)
     finish_reason = None
-    content = ""
     # Every leg streams its text to the user, who sends all of it back as the
-    # assistant message; the provider cursor is bound to that visible answer.
+    # assistant message; the provider cursor and the saved answer are bound
+    # to that visible answer.
     shown_parts: list[str] = []
     review_checkpoint: dict[str, Any] = {}
     for _iteration in range(validated["tool_loop_max_iterations"]):
@@ -11005,7 +11005,6 @@ def _run_ai_chat_tool_loop(
         notices = _ai_chat_notices(runtime)
         notices.extend(phase for phase in turn.notices if phase not in notices)
         tool_calls = turn.tool_calls
-        content = turn.content
         shown_parts.append(turn.content)
         finish_reason = turn.finish_reason
         if cancel_event.is_set():
@@ -11288,7 +11287,6 @@ def _run_ai_chat_tool_loop(
                 "unapplied proposals must be planned again. Applied receipts remain available.\n"
                 "```json\n" + json.dumps({"review_checkpoint": review_checkpoint}, sort_keys=True) + "\n```"
             )
-            content = (content or "") + continuation
             shown_parts.append(continuation)
             out.write(_with_request_id(build_envelope(
                 "ai.chat.delta", {"delta": {"content": continuation}},
@@ -11316,7 +11314,7 @@ def _run_ai_chat_tool_loop(
         validated,
         finish_reason,
         runtime,
-        assistant_content=content or "",
+        assistant_content="".join(shown_parts),
     )
 
 
