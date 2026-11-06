@@ -13195,7 +13195,7 @@ class AiChatToolLoopProviderSessionTest(unittest.TestCase):
             "attachments": [],
         }
 
-    def _run(self, active_ai_chats, client, seen_options, messages=None, turns=None):
+    def _run(self, active_ai_chats, client, seen_options, messages=None, turns=None, saved=None):
         turns = list(turns or [daemon_module.AiToolTurnResult(
             tool_calls=[],
             content=self._REPLY,
@@ -13220,7 +13220,9 @@ class AiChatToolLoopProviderSessionTest(unittest.TestCase):
         ), patch.object(
             daemon_module, "_run_auto_read_tools", lambda **_kwargs: None
         ), patch.object(
-            daemon_module, "_write_ai_chat_terminal", lambda *a, **k: None
+            daemon_module,
+            "_write_ai_chat_terminal",
+            lambda *a, **k: (saved if saved is not None else []).append(k["assistant_content"]),
         ):
             daemon_module._run_ai_chat_tool_loop(
                 "req-1",
@@ -13324,6 +13326,36 @@ class AiChatToolLoopProviderSessionTest(unittest.TestCase):
         # A transcript holding only the last leg is a different branch.
         self._run(active_ai_chats, client, seen_options, self._FOLLOW_UP)
         self.assertIsNone(seen_options[-1].get("provider_session_id"))
+
+    def test_a_tool_turn_saves_the_whole_answer_the_user_saw(self):
+        # The saved history message is what reopening the chat shows and what
+        # the next request sends back; it is every leg, not the last one.
+        legs = [
+            daemon_module.AiToolTurnResult(
+                tool_calls=[{"id": "call-1", "type": "function", "function": {
+                    "name": "unknown_tool", "arguments": "{}"}}],
+                content="Let me check. ",
+                reasoning="",
+                finish_reason="tool_calls",
+                response_output=[],
+            ),
+            daemon_module.AiToolTurnResult(
+                tool_calls=[],
+                content=self._REPLY,
+                reasoning="",
+                finish_reason="stop",
+                response_output=[],
+            ),
+        ]
+        saved = []
+        self._run(
+            daemon_module.ActiveAiChats(),
+            SimpleNamespace(last_provider_session_id=None),
+            [],
+            turns=legs,
+            saved=saved,
+        )
+        self.assertEqual(saved, ["Let me check. " + self._REPLY])
 
     def test_a_request_not_ending_with_a_new_prompt_resumes_nothing(self):
         active_ai_chats = daemon_module.ActiveAiChats()
