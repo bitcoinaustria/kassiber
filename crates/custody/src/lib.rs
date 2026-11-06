@@ -32,6 +32,8 @@ pub mod ledger_request;
 mod liquid;
 mod par;
 mod python_text;
+#[cfg(test)]
+mod python_text_tests;
 pub mod quantity;
 pub mod snapshot;
 pub mod source_funds;

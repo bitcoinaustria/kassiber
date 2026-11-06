@@ -1569,20 +1569,3 @@ const DIGIT: &[(u32, u32)] = &[
     (0x1f100, 0x1f10a),
     (0x1fbf0, 0x1fbf9),
 ];
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn borrowed_case_mappings_match_python() {
-        for text in [
-            "", "main", "Main", "MAIN", "lbtc", "LBTC", "core-LN", "\u{130}x", "\u{3a3}a", "ß",
-        ] {
-            assert_eq!(lower(text), text.py_lower(), "{text:?}");
-            assert_eq!(upper(text), text.py_upper(), "{text:?}");
-        }
-        assert!(matches!(lower("main"), std::borrow::Cow::Borrowed(_)));
-        assert!(matches!(upper("LBTC"), std::borrow::Cow::Borrowed(_)));
-    }
-}
