@@ -212,13 +212,23 @@ against the Rust port and slices the gaps; Python stays the reference.
   and their kinds; suggestion `exclusions`.
 - [x] S11: custody component remediation on blocked plans and activations.
   The AI-only revision boundary stays with S12.
-- [ ] S4 and S7 to S10 as the inventory lists them: the review workflow,
-  the Reports screen (including the empty-root `jurisdictionCode`), wallet
-  completeness, the transaction dashboard and readiness definitions.
-- [ ] Refresh the transfer fixtures S1's added transaction column broke
-  (`component_reads.json`, `pairing_services.json`), and port the #684
-  result changes they will expose (`transfers rules delete` returns the
-  rule, `transfers unpair` the pair).
+- [x] S4: the review workflow's term operations (`pair`, `dismiss_pair`,
+  `undismiss_pair`, `custody_gap`) and `accept_coarse_prices`; per-year tax
+  figures in plan effects and the `delta` in artifacts and receipts; cases'
+  `fiat_currency`; badges' `review` and `definitions`; the cached transfer
+  candidate recounts and `ui.journals.process`'s `auto_pair`.
+- [x] Refresh the transfer fixtures S1's added transaction column broke
+  (`component_reads.json`, `pairing_services.json`) and port #684's results
+  (`transfers rules delete` returns the rule, `transfers unpair` the pair).
+- [ ] S7 to S10 as the inventory lists them: the Reports screen (including
+  the empty-root `jurisdictionCode`), wallet completeness, the transaction
+  dashboard and readiness definitions. S7 should share S4's port of the
+  indicative tax (`kassiber_journals` `review_tax`) and its Kennzahl rule
+  (`kassiber_reports::review_figures`) rather than add a second one.
+- [ ] Regenerate the stored Python dumps that predate S1's 113-table schema:
+  `crates/journals/tests/data/persistence.json` (journals `persistence`,
+  `process` and the prebuild binaries) and the `kassiber-reports` vectors
+  that assert 112 tables.
 - [ ] S12: rebase the R6 branches (AI catalog, providers, tools, MCP grants,
   chat) onto the synced stack.
 
