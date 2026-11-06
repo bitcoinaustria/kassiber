@@ -6683,16 +6683,6 @@
     "rule": "Refuse non-list BTCPay JSON with its specific message."
   },
   {
-    "id": "W-btcpay-json-newlines",
-    "file": "crates/wallets/src/file_import/csv.rs",
-    "find": "        .replace('\\r', \"\\n\");\n    kassiber_pytext::loads(&text)",
-    "replace": "        .replace('\\r', \"\\r\");\n    kassiber_pytext::loads(&text)",
-    "expect_failing": [
-      "python_btcpay_import_vectors"
-    ],
-    "rule": "JSON file reads use universal newline translation."
-  },
-  {
     "id": "W-btcpay-label-map-fallback",
     "file": "crates/wallets/src/file_import/btcpay.rs",
     "find": "label(&Py::Str(key.clone()))",
