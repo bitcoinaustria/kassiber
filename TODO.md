@@ -1215,11 +1215,37 @@ natively behind the `native-chat` gate (test-harness builds only).
   [R6-8 checkpoint](docs/reference/rust-shell.md#mcp-server-and-cooperative-chat-ctrl-c-r6-8).
 - [ ] Give `kassiber chat` line editing without a new dependency, or record
   the owner's decision to keep the difference.
-- [ ] Python's `kassiber chat` loses its daemon child on a terminal Ctrl-C
-  (`tests/rust_port/repro_chat_ctrl_c_kills_daemon.py`): decide whether to
-  start the child in its own process group, as Rust does.
+- [x] Python's `kassiber chat` lost its daemon child on a terminal Ctrl-C
+  (`tests/rust_port/repro_chat_ctrl_c_kills_daemon.py`); round r7-6 starts it
+  in its own process group, as Rust does, and `tests/test_rust_chat_interrupt.py`
+  runs the same terminal scenarios on both.
+- [ ] Save a tool turn's whole visible answer, not its last leg's text, as the
+  chat history message (Python and Rust alike;
+  `tests/rust_port/repro_chat_history_tool_turn_last_leg.py`).
 - [ ] Count the whole egress ledger in the privacy receipt once the daemon has
   a process-wide product ledger (`ui.egress.snapshot`).
+
+## Rust Python fix round r7-6
+
+The [r7-6 port](docs/reference/rust-pyfix-6.md) follows the round's nine
+Python fixes on `t3code/rust-pyfix-6`.
+
+- [x] Port the six differing behaviours (restore staging under a linked temp
+  root, chat cursor resume, wire-name journal refresh, `invalid_wallet_config`,
+  JSON-format import refusals, dashboard alias buckets) and the maintenance
+  `sync` refusal, which also differed.
+- [ ] When S8 to S10 (c62d918c4) merge, resolve the dashboard hunks as the
+  [port page](docs/reference/rust-pyfix-6.md#dashboard-merge-with-s8-to-s10)
+  says: size buckets by the canonical period inside `bucket_size` (with the
+  `4years` aliases) and measure "all" to `until` when given.
+- [ ] Replace the remaining hard-coded 112-table assertions in the Rust parity
+  tests with the store manifest's table list; the merged schema has 113.
+- [ ] Regenerate `crates/wallets/tests/vectors/python_wallet_publication.json`
+  for S1's `ai_provider_checks` table (its 102-round test fails on the merge).
+- [ ] Python: `wallets sync --wallet X` still crashes on X's unreadable
+  configuration (`tests/rust_port/repro_cli_wallet_sync_bad_config_explicit.py`).
+- [ ] Port main #679's AI tool-error remediation and allowlisted details;
+  r7-6's port adds only the hint to the mutating executor.
 
 ## Rust backend R6 AI tools
 
