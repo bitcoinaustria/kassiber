@@ -278,3 +278,27 @@ def test_malformed_component_plan_has_typed_error_without_writes(book, component
     assert caught.value.code == "validation"
     assert not conn.in_transaction
     assert conn.execute("SELECT COUNT(*) FROM review_workflow_receipts").fetchone()[0] == 0
+
+
+@pytest.mark.parametrize("authored_source", ["user", "ai_tool"])
+@pytest.mark.parametrize("kind", [[], {}, ["exclude"], {"type": "exclude"}])
+def test_unhashable_operation_type_is_a_validation_refusal(book, kind, authored_source):
+    conn, _runtime = book
+    with pytest.raises(AppError) as caught:
+        daemon._review_workflow_payload(conn, "ui.review.plan", {
+            "expected_input_version": 0,
+            "operations": [{"type": kind, "transaction_id": "in", "reason": "Confirmed"}],
+        }, authored_source=authored_source)
+    assert (caught.value.code, str(caught.value)) == ("validation", "Review operation type is unsupported")
+    assert not conn.in_transaction
+    assert conn.execute("SELECT COUNT(*) FROM review_workflow_receipts").fetchone()[0] == 0
+
+
+@pytest.mark.parametrize("full_access", [False, True])
+@pytest.mark.parametrize("kind", [[], {}])
+def test_ai_review_validation_refuses_an_unhashable_type(kind, full_access):
+    with pytest.raises(AppError) as caught:
+        daemon._validate_ai_review_operations(
+            [{"type": kind, "transaction_id": "in", "reason": "Confirmed"}], full_access=full_access
+        )
+    assert caught.value.code == "validation"

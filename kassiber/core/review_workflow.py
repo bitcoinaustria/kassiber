@@ -399,6 +399,9 @@ def _operations(operations):
         if not isinstance(operation, dict):
             raise _error("Each review operation must be an object")
         kind = operation.get("type")
+        if not isinstance(kind, str):
+            # Membership tests below need a hashable type name.
+            raise _error("Review operation type is unsupported")
         if kind == "custody_component":
             if set(operation) != {"type", "request"} or not isinstance(operation["request"], dict):
                 raise _error("Custody review requires a typed request")
