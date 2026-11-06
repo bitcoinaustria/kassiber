@@ -8995,6 +8995,17 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertNotIn("private-node.local", encoded)
             self.assertNotIn("secret-path", encoded)
 
+    def test_maintenance_run_refuses_a_non_string_sync_mode_as_validation(self):
+        # A list or object used to escape as an unhashable TypeError.
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-state-") as tmp:
+            conn = open_db(Path(tmp) / "data")
+            self.addCleanup(conn.close)
+            for value in ([], ["always"], {}, {"always": True}, 1, None, "sometimes"):
+                with self.assertRaises(AppError) as raised:
+                    _maintenance_run_payload(conn, {}, {"sync": value}, state={})
+                self.assertEqual(raised.exception.code, "validation", value)
+                self.assertEqual(raised.exception.details, {"sync": value})
+
     def test_daemon_safe_read_tool_kinds_return_workspace_state(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-daemon-state-") as tmp:
             data_root = Path(tmp) / "data"
