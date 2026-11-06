@@ -30,11 +30,25 @@ def _restore(root):
     return path
 
 
-def _authored(conn):
+# Later main migrations invalidate journals once before the pair fee review
+# (kassiber-tax-engine-v1) and add transactions columns, so compare only the
+# columns the fixture was written with.
+FIXTURE_INPUT_VERSION = 7
+PAIR_FEE_INPUT_VERSION = 9
+AUTHORED = ("transactions", "custody_components", "custody_component_legs",
+            "custody_component_allocations", "custody_component_economic_terms")
+
+
+def _columns(conn):
+    return {table: [row[1] for row in conn.execute(f"PRAGMA table_info({table})")] for table in AUTHORED}
+
+
+def _authored(conn, columns=None):
+    columns = columns or _columns(conn)
     return {
-        table: [tuple(row) for row in conn.execute(f"SELECT * FROM {table} ORDER BY id")]
-        for table in ("transactions", "custody_components", "custody_component_legs",
-                      "custody_component_allocations", "custody_component_economic_terms")
+        table: [tuple(row) for row in conn.execute(
+            f"SELECT {', '.join(columns[table])} FROM {table} ORDER BY id")]
+        for table in AUTHORED
     }
 
 
@@ -42,7 +56,8 @@ def test_base_code_pair_is_blocked_and_audited_once_without_rewriting_economics(
     root = tmp_path / "book"
     path = _restore(root)
     with sqlite3.connect(path) as original:
-        before = _authored(original)
+        columns = _columns(original)
+        before = _authored(original, columns)
     for _ in range(2):
         conn = open_db(root)
         try:
@@ -50,10 +65,10 @@ def test_base_code_pair_is_blocked_and_audited_once_without_rewriting_economics(
             assert component["state"] == "active"
             assert component["effective_state"] == "draft"
             assert ISSUE in {item["code"] for item in component["validation"]["issues"]}
-            assert _authored(conn) == before
+            assert _authored(conn, columns) == before
             profile = conn.execute("SELECT * FROM profiles WHERE id='profile'").fetchone()
-            assert profile["journal_input_version"] == 8
-            assert profile["last_processed_input_version"] == 7
+            assert profile["journal_input_version"] == PAIR_FEE_INPUT_VERSION
+            assert profile["last_processed_input_version"] == FIXTURE_INPUT_VERSION
             assert profile["last_processed_at"] is None
             assert profile["required_journal_semantics_version"] == 7
             audits = conn.execute("SELECT impact_json FROM schema_migration_audits WHERE migration_name=?", (MIGRATION,)).fetchall()
@@ -92,7 +107,7 @@ def test_older_binary_rebuild_cannot_clear_pair_fee_review_requirement(tmp_path)
     try:
         assert not projection_freshness(conn, "profile")["is_current"]
         profile = conn.execute("SELECT * FROM profiles WHERE id='profile'").fetchone()
-        assert profile["journal_input_version"] == 8
+        assert profile["journal_input_version"] == PAIR_FEE_INPUT_VERSION
         assert profile["required_journal_semantics_version"] == 7
         assert conn.execute("SELECT COUNT(*) FROM schema_migration_audits WHERE migration_name=?", (MIGRATION,)).fetchone()[0] == 1
     finally:
@@ -103,18 +118,21 @@ def test_pair_fee_audit_and_invalidation_roll_back_together_on_interruption(tmp_
     root = tmp_path / "book"
     path = _restore(root)
     with sqlite3.connect(path) as conn:
+        # Interrupt the pair fee review's own invalidation, after main's.
         conn.execute("""CREATE TRIGGER stop_pair_fee_migration BEFORE UPDATE ON profiles
             WHEN NEW.journal_input_version != OLD.journal_input_version
-            BEGIN SELECT RAISE(ABORT, 'injected migration interruption'); END""")
+            AND OLD.journal_input_version = ?
+            BEGIN SELECT RAISE(ABORT, 'injected migration interruption'); END"""
+            .replace("?", str(PAIR_FEE_INPUT_VERSION - 1)))
     with pytest.raises(Exception, match="injected migration interruption"):
         open_db(root)
     with sqlite3.connect(path) as conn:
         assert conn.execute("SELECT 1 FROM schema_migration_audits WHERE migration_name=?", (MIGRATION,)).fetchone() is None
-        assert conn.execute("SELECT journal_input_version FROM profiles").fetchone()[0] == 7
+        assert conn.execute("SELECT journal_input_version FROM profiles").fetchone()[0] == PAIR_FEE_INPUT_VERSION - 1
         conn.execute("DROP TRIGGER stop_pair_fee_migration")
     conn = open_db(root)
     try:
-        assert conn.execute("SELECT journal_input_version FROM profiles").fetchone()[0] == 8
+        assert conn.execute("SELECT journal_input_version FROM profiles").fetchone()[0] == PAIR_FEE_INPUT_VERSION
     finally:
         conn.close()
 
