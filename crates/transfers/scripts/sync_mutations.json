@@ -230,5 +230,245 @@
    "planner_transaction_references_match_python_vectors"
   ],
   "rule": "The planner's unresolved reference keeps its own not_found wording."
+ },
+ {
+  "id": "S4-pair-needs-two-legs",
+  "file": "crates/transfers/src/review_operations.rs",
+  "find": "            if get(operation, \"out_transaction_id\") == get(operation, \"in_transaction_id\") {\n",
+  "replace": "            if false && get(operation, \"out_transaction_id\") == get(operation, \"in_transaction_id\") {\n",
+  "expect_failing": [
+   "review_operations_match_python_normalization_digests_bounds_and_refusals"
+  ],
+  "rule": "A pair review names two different transactions."
+ },
+ {
+  "id": "S4-dismissal-day-bound",
+  "file": "crates/transfers/src/review_operations.rs",
+  "find": "pub const MAX_DISMISSAL_DAYS: i64 = 3650;",
+  "replace": "pub const MAX_DISMISSAL_DAYS: i64 = 3651;",
+  "expect_failing": [
+   "review_operations_match_python_normalization_digests_bounds_and_refusals"
+  ],
+  "rule": "A reviewed dismissal expires within 1 to 3650 days."
+ },
+ {
+  "id": "S4-accept-names-each-once",
+  "file": "crates/transfers/src/review_operations.rs",
+  "find": "    if cleaned.len() != ids.len() {\n",
+  "replace": "    if false && cleaned.len() != ids.len() {\n",
+  "expect_failing": [
+   "review_operations_match_python_normalization_digests_bounds_and_refusals"
+  ],
+  "rule": "An acceptance names each transaction once after stripping."
+ },
+ {
+  "id": "S4-unhashable-type",
+  "file": "crates/transfers/src/review_operations.rs",
+  "find": "        if let Some(value @ (Value::List(_) | Value::Dict(_))) = get(operation, \"type\") {\n",
+  "replace": "        if let Some(value @ Value::Dict(_)) = get(operation, \"type\") {\n",
+  "expect_failing": [
+   "review_operations_match_python_normalization_digests_bounds_and_refusals"
+  ],
+  "rule": "A list operation type escapes as Python's TypeError, not an unsupported type."
+ },
+ {
+  "id": "S4-gap-reason-bound",
+  "file": "crates/transfers/src/review_operations.rs",
+  "find": "reason.code_points().count() > 500)",
+  "replace": "reason.code_points().count() > 501)",
+  "expect_failing": [
+   "review_operations_match_python_normalization_digests_bounds_and_refusals"
+  ],
+  "rule": "A custody-gap review reason is at most 500 characters."
+ },
+ {
+  "id": "S4-money-half-up",
+  "file": "crates/transfers/src/review_delta.rs",
+  "find": "const CENTS: Context = Context::new(32, Rounding::HalfUp);",
+  "replace": "const CENTS: Context = Context::new(32, Rounding::HalfEven);",
+  "expect_failing": [
+   "tax_delta_matches_python_on_planned_and_untrusted_effects"
+  ],
+  "rule": "Tax figures round to cents half up."
+ },
+ {
+  "id": "S4-nan-payload-digits",
+  "file": "crates/transfers/src/review_delta.rs",
+  "find": "let start = payload.len().saturating_sub(32);",
+  "replace": "let start = payload.len().saturating_sub(31);",
+  "expect_failing": [
+   "tax_delta_matches_python_on_planned_and_untrusted_effects"
+  ],
+  "rule": "A NaN difference keeps the payload's last 32 digits, as _fix_nan does."
+ },
+ {
+  "id": "S4-estimate-change-listed",
+  "file": "crates/transfers/src/review_delta.rs",
+  "find": "        || estimate_changed\n",
+  "replace": "",
+  "expect_failing": [
+   "tax_delta_matches_python_on_planned_and_untrusted_effects"
+  ],
+  "rule": "A year whose estimated tax alone changes is listed."
+ },
+ {
+  "id": "S4-status-change-listed",
+  "file": "crates/transfers/src/review_delta.rs",
+  "find": "            &lookup(&old_tax, &status, Value::Null)?,\n",
+  "replace": "            &lookup(&new_tax, &status, Value::Null)?,\n",
+  "expect_failing": [
+   "tax_delta_matches_python_on_planned_and_untrusted_effects"
+  ],
+  "rule": "A year whose indicative status alone changes is listed."
+ },
+ {
+  "id": "S4-kennzahl-zero-dropped",
+  "file": "crates/transfers/src/review_delta.rs",
+  "find": "        if truthy(&change) {\n",
+  "replace": "        if true {\n",
+  "expect_failing": [
+   "tax_delta_matches_python_on_planned_and_untrusted_effects"
+  ],
+  "rule": "Unchanged Kennzahlen are left out of a year's delta."
+ },
+ {
+  "id": "S4-admission-checks-delta",
+  "file": "crates/transfers/src/review_artifact.rs",
+  "find": "    if !equal(&delta, &value(artifact, \"delta\")) {\n",
+  "replace": "    if false && !equal(&delta, &value(artifact, \"delta\")) {\n",
+  "expect_failing": [
+   "review_artifact_admission_matches_python_refusal_precedence_and_canonicality"
+  ],
+  "rule": "Apply refuses an artifact whose delta does not match its own effects."
+ },
+ {
+  "id": "S4-pair-directions",
+  "file": "crates/journals/src/review_simulation.rs",
+  "find": "            if value(&out_row, \"direction\") != s(\"outbound\")\n                || value(&in_row, \"direction\") != s(\"inbound\")\n",
+  "replace": "            if false\n",
+  "expect_failing": [
+   "review_plans_match_python_term_operations_and_coarse_acceptance"
+  ],
+  "rule": "A pair review needs an outbound and an inbound transaction."
+ },
+ {
+  "id": "S4-accept-rebuilds-after-earlier-operations",
+  "file": "crates/journals/src/review_simulation.rs",
+  "find": "                if index > 0 {\n",
+  "replace": "                if false {\n",
+  "expect_failing": [
+   "review_plans_match_python_term_operations_and_coarse_acceptance"
+  ],
+  "rule": "An acceptance after other operations reads the cases they leave."
+ },
+ {
+  "id": "S4-price-in-book-currency",
+  "file": "crates/journals/src/review_simulation.rs",
+  "find": "                    fiat_currency: book\n                        .first()\n                        .map_or(Value::Null, |row| value(row, \"fiat_currency\")),\n",
+  "replace": "                    fiat_currency: Value::Null,\n",
+  "expect_failing": [
+   "review_plans_preserve_raw_loader_scalars_and_downstream_serialization_refusals"
+  ],
+  "rule": "A reviewed price is stored in the book's currency (#711)."
+ },
+ {
+  "id": "S4-old-rules-withhold",
+  "file": "crates/journals/src/review_tax.rs",
+  "find": "    if applies && rows_before > 0 {\n",
+  "replace": "    if false && applies && rows_before > 0 {\n",
+  "expect_failing": [
+   "review_plans_carry_python_per_year_tax_figures_and_delta"
+  ],
+  "rule": "Rows before 1 March 2022 withhold the year's indicative tax."
+ },
+ {
+  "id": "S4-special-rate",
+  "file": "crates/journals/src/review_tax.rs",
+  "find": "&\"0.275\".parse()",
+  "replace": "&\"0.25\".parse()",
+  "expect_failing": [
+   "review_plans_carry_python_per_year_tax_figures_and_delta"
+  ],
+  "rule": "The indicative tax is 27.5 % of the special-rate base."
+ },
+ {
+  "id": "S4-ten-years",
+  "file": "crates/journals/src/review_tax.rs",
+  "find": "pub(crate) const MAX_TAX_YEARS: usize = 10;",
+  "replace": "pub(crate) const MAX_TAX_YEARS: usize = 11;",
+  "expect_failing": [
+   "review_plans_carry_python_per_year_tax_figures_and_delta"
+  ],
+  "rule": "A review lists at most the ten latest tax years."
+ },
+ {
+  "id": "S4-austrian-needs-eur",
+  "file": "crates/journals/src/review_tax.rs",
+  "find": "    let austrian = country == \"at\" && currency == \"EUR\";",
+  "replace": "    let austrian = country == \"at\";",
+  "expect_failing": [
+   "review_plans_carry_python_per_year_tax_figures_and_delta"
+  ],
+  "rule": "Kennzahlen and the indicative tax need an Austrian EUR book."
+ },
+ {
+  "id": "S4-inactive-book-withheld",
+  "file": "crates/journals/src/review_tax.rs",
+  "find": "        return Ok(vec![\"report_scope_not_active\".into()]);",
+  "replace": "        return Ok(Vec::new());",
+  "expect_failing": [
+   "review_plans_carry_python_per_year_tax_figures_and_delta"
+  ],
+  "rule": "Previewing a book other than the active one withholds the indicative tax."
+ },
+ {
+  "id": "S4-crypto-kennzahlen-from",
+  "file": "crates/reports/src/review_figures.rs",
+  "find": "const CRYPTO_KENNZAHLEN_FROM: &str = \"2022-03-01\";",
+  "replace": "const CRYPTO_KENNZAHLEN_FROM: &str = \"2022-01-01\";",
+  "expect_failing": [
+   "review_plans_carry_python_per_year_tax_figures_and_delta"
+  ],
+  "rule": "Rows before 1 March 2022 (Vienna) state no crypto Kennzahl."
+ },
+ {
+  "id": "S4-realized-is-sell",
+  "file": "crates/reports/src/review_figures.rs",
+  "find": "let index = usize::from(transaction_type != \"sell\");",
+  "replace": "let index = usize::from(transaction_type == \"sell\");",
+  "expect_failing": [
+   "review_plans_carry_python_per_year_tax_figures_and_delta"
+  ],
+  "rule": "Disposals are realized gain/loss; every other row is income."
+ },
+ {
+  "id": "S4-moves-exclude-ownership",
+  "file": "crates/transfers/src/pairing/service.rs",
+  "find": "    let moves = (n(&value(counts, \"total\"))? - n(&value(counts, \"ownership\"))?).max(0);",
+  "replace": "    let moves = n(&value(counts, \"total\"))?;",
+  "expect_failing": [
+   "pairing_services_match_python_seeded_complete_database_rows_and_ordered_results"
+  ],
+  "rule": "The cached review count leaves out ownership-graph moves (#707)."
+ },
+ {
+  "id": "S4-rule-delete-returns-rule",
+  "file": "crates/transfers/src/rules.rs",
+  "find": "(\"rule\", loaded(&row)?)",
+  "replace": "(\"rule\", Value::Null)",
+  "expect_failing": [
+   "authoring_sequences_match_python_rows_and_errors_byte_for_byte"
+  ],
+  "rule": "Rule deletion returns the deleted rule (#684)."
+ },
+ {
+  "id": "S4-unpair-returns-pair",
+  "file": "crates/transfers/src/pair_authoring.rs",
+  "find": "    set(&mut result, \"pair\", pair);\n",
+  "replace": "",
+  "expect_failing": [
+   "pair_sequences_match_python_complete_database_rows_and_refusals"
+  ],
+  "rule": "Unpair returns the removed pair (#684)."
  }
 ]

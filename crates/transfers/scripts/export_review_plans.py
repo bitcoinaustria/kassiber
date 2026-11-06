@@ -191,8 +191,9 @@ def export():
     record("tax-generic", "empty", [price("d")],
            [*tax, "UPDATE profiles SET tax_country='generic' WHERE id='p'"], group="tax")
     record("tax-many-years", "empty", [price("d")],
-           [*tax, *(row(f"y{year}", "outbound", 1000000, f"{year}-07-01T00:00:00Z", 1000 * year % 7 + 20000)
-                    for year in range(2010, 2021))], group="tax")
+           [*tax, row("y2009", "inbound", 100000000000, "2009-06-01T00:00:00Z", 300),
+            *(row(f"y{year}", "outbound", 1000000000, f"{year}-07-01T00:00:00Z", 1000 * year % 7 + 20000)
+              for year in range(2010, 2021))], group="tax")
     # Term operations (#680) and coarse-price acceptance (#708).
     def term(kind, out="b", inbound="c", **extra):
         return dict(type=kind, out_transaction_id=out, in_transaction_id=inbound, reason="Owner reviewed", **extra)
@@ -214,6 +215,8 @@ def export():
     record("term-accept-named", "empty", [{**accept, "transaction_ids": ["b"]}], coarse, group="terms")
     record("term-accept-stale", "empty", [{**accept, "transaction_ids": ["a", "b"]}], coarse, group="terms")
     record("term-accept-after-price", "empty", [price("b"), accept], coarse, group="terms")
+    # An earlier exclusion clears a coarse case the acceptance must not name.
+    record("term-accept-after-exclude", "empty", [exclude("b"), accept], coarse, group="terms")
     record("price-component", "empty", [price(), component], component_setup, group="components")
     record("component-price", "empty", [component, price()], component_setup, group="components")
     record("component-guards-acquisition", "empty", [component, kind("c")], component_setup, group="components")
