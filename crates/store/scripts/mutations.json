@@ -100,5 +100,15 @@
       "historical_layout_uses_normalized_gate_and_still_refuses_constraint_drift"
     ],
     "rule": "Unknown tables, columns, indexes, triggers and views are refused."
+  },
+  {
+    "id": "restore-staging-root-resolved",
+    "file": "crates/store/src/restore.rs",
+    "find": "    let staging = &staging_root(staging)?;\n",
+    "replace": "",
+    "expect_failing": [
+      "a_link_above_the_staging_root_installs_and_one_at_or_below_refuses"
+    ],
+    "rule": "A restore staged under a symlinked temp root (macOS /var) resolves the links above the staging directory and installs."
   }
 ]
