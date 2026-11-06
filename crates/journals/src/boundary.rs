@@ -44,9 +44,18 @@ pub struct RenderOperands<'a> {
     pub accounting_ignored: &'a Value,
     pub warnings: &'a Value,
     pub rates: &'a Value,
+    /// `projection["rows"]` as views of the finalized stage's rows.
+    pub projection_rows: Option<&'a [kassiber_custody::finalized_projection::RowView<'a>]>,
+    /// `quantity["projection"]`'s observations and postings as views.
+    pub quantity_views: Option<&'a kassiber_custody::quantity::runtime::QuantityViews<'a>>,
 }
 
 impl<'a> RenderOperands<'a> {
+    /// The quantity projection's observations and postings, from the views
+    /// when the caller supplies them.
+    fn quantity_refs(&self) -> (Vec<ObservationRef<'a>>, Vec<PostingRef<'a>>) {
+        crate::model::quantity_refs(self.quantity, self.quantity_views)
+    }
     pub fn from_json(c: &'a Value) -> Self {
         Self {
             rows: array(&c["rows"]),
@@ -64,6 +73,8 @@ impl<'a> RenderOperands<'a> {
             accounting_ignored: &c["gap_accounting_ignored_transaction_ids"],
             warnings: &c["warnings"],
             rates: &c["rates"],
+            projection_rows: None,
+            quantity_views: None,
         }
     }
 }
@@ -78,6 +89,7 @@ pub fn build_operands<'a>(
     let input = LedgerInputs {
         profile,
         projection: c.projection,
+        rows: c.projection_rows,
         wallets,
         direct_payout_records: c.direct_payout_records,
     };
@@ -99,7 +111,9 @@ pub fn finish_operands<'a>(
     ledger: LedgerState<'a>,
 ) -> Result<JournalState<'a>, Refusal> {
     let span = kassiber_custody::timing::span("balance_comparison");
-    let quantity_differences = joins::differences(c, &ledger.wallet_holdings)?;
+    let (observations, postings) = c.quantity_refs();
+    let quantity_differences =
+        joins::differences(c, &observations, &postings, &ledger.wallet_holdings)?;
     drop(span);
     let span = kassiber_custody::timing::span("ownership_review");
     let (counts, candidates) = joins::ownership_review(c, &ledger.quarantines)?;
@@ -140,6 +154,7 @@ pub fn finish_operands<'a>(
         warnings: c.warnings,
         custody_gap_ignored_transaction_ids: c.ignored,
         custody_gap_accounting_ignored_transaction_ids: c.accounting_ignored,
+        quantity_views: c.quantity_views,
     })
 }
 fn get<T: DeserializeOwned>(v: &Value, k: &str) -> Result<T, Refusal> {
@@ -395,6 +410,7 @@ pub fn response_refusal(
     let inputs = LedgerInputs {
         profile,
         projection: &c["finalized_tax_projection"],
+        rows: None,
         wallets,
         direct_payout_records: array(&c["direct_payout_records"]),
     };

@@ -3,6 +3,7 @@
 use crate::{codec, python_text::PythonText};
 use kassiber_pyjson::BigInt;
 use serde_json::{json, Value};
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::str::FromStr;
 mod config;
@@ -63,6 +64,43 @@ pub enum Outcome {
     Request(Value),
 }
 
+/// A finalized projection row as the builder reads it: its JSON object, or
+/// a view whose fields are that object's.
+pub trait RequestRow {
+    /// The field `key`; `None` when the row has none.
+    fn get(&self, key: &str) -> Option<&Value>;
+    /// Whether the row has a field whose name satisfies `test`.
+    fn any_key(&self, test: &dyn Fn(&str) -> bool) -> bool;
+    /// The row's JSON object.
+    fn json(&self) -> Cow<'_, Value>;
+    /// `row[key]`: the field, or null.
+    fn at(&self, key: &str) -> &Value {
+        self.get(key).unwrap_or(&Value::Null)
+    }
+}
+impl RequestRow for Value {
+    fn get(&self, key: &str) -> Option<&Value> {
+        Value::get(self, key)
+    }
+    fn any_key(&self, test: &dyn Fn(&str) -> bool) -> bool {
+        self.as_object().is_some_and(|m| m.keys().any(|k| test(k)))
+    }
+    fn json(&self) -> Cow<'_, Value> {
+        Cow::Borrowed(self)
+    }
+}
+impl RequestRow for crate::finalized_projection::RowView<'_> {
+    fn get(&self, key: &str) -> Option<&Value> {
+        crate::finalized_projection::RowView::get(self, key)
+    }
+    fn any_key(&self, test: &dyn Fn(&str) -> bool) -> bool {
+        crate::finalized_projection::RowView::any_key(self, test)
+    }
+    fn json(&self) -> Cow<'_, Value> {
+        Cow::Owned(crate::finalized_projection::RowView::json(self))
+    }
+}
+
 /// Ordered wallet references: mapping keys and values are both admission facts.
 /// These are compiler operands, never additions to snapshot v1.
 pub fn build_request(
@@ -71,12 +109,31 @@ pub fn build_request(
     wallets: &[(Value, Value)],
     operation: &str,
 ) -> Result<Outcome, Refusal> {
-    let rows = list(&projection["rows"]);
+    build_request_rows(
+        profile,
+        list(&projection["rows"]),
+        list(&projection["intra_pairs"]),
+        list(&projection["cross_asset_pairs"]),
+        wallets,
+        operation,
+    )
+}
+
+/// `build_request` of a projection whose rows, `intra_pairs` and
+/// `cross_asset_pairs` are given apart.
+pub fn build_request_rows<R: RequestRow>(
+    profile: &Value,
+    rows: &[R],
+    intra_pairs: &[Value],
+    cross_asset_pairs: &[Value],
+    wallets: &[(Value, Value)],
+    operation: &str,
+) -> Result<Outcome, Refusal> {
     if rows.is_empty() {
         return Ok(Outcome::Empty);
     }
     let (policy, names) = config::check(profile, wallets, rows)?;
-    for pair in list(&projection["intra_pairs"]) {
+    for pair in intra_pairs {
         if string(&pair["out"]["asset"]) != string(&pair["in"]["asset"]) {
             return Err(Refusal::new(
                 "crossed_assets",
@@ -86,7 +143,7 @@ pub fn build_request(
         }
     }
     config::pool_scope(profile)?;
-    let decimals = invariants(rows, list(&projection["intra_pairs"]), wallets)?;
+    let decimals = invariants(rows, intra_pairs, wallets)?;
     let holds = holds(rows)?;
     // Keep expression evaluation sequential. A deferred timestamp object does
     // not suppress the immediate cutoff conversion error of the same row.
@@ -101,11 +158,11 @@ pub fn build_request(
         .map(|(row, [rate, value])| request_row(row, &holds, rate, value))
         .collect::<Result<Vec<_>, _>>()?;
     let mut intra = Vec::new();
-    for pair in list(&projection["intra_pairs"]) {
+    for pair in intra_pairs {
         intra.push(json!({"out":string(required(&pair["out"],"id")?),"in":string(required(&pair["in"],"id")?),"source":text(&pair["source"]),"group_id":if empty(&pair["group_id"]) {Value::Null} else {json!(string(&pair["group_id"]))}}));
     }
     let mut cross = Vec::new();
-    for pair in list(&projection["cross_asset_pairs"]) {
+    for pair in cross_asset_pairs {
         let pair_id = text(&pair["pair_id"]);
         let out_id = string(required(pair, "out_id")?);
         let in_id = string(required(pair, "in_id")?);
@@ -263,7 +320,7 @@ pub fn request_json(request: &Value) -> String {
     out
 }
 
-fn required<'a>(value: &'a Value, key: &str) -> Result<&'a Value, Refusal> {
+fn required<'a>(value: &'a (impl RequestRow + ?Sized), key: &str) -> Result<&'a Value, Refusal> {
     value
         .get(key)
         .ok_or_else(|| Refusal::new("construction", "KeyError", repr(&json!(key))))
@@ -305,10 +362,10 @@ fn integer(v: &Value) -> Option<BigInt> {
         BigInt::from_str(&n).ok()
     }
 }
-fn privacy(row: &Value) -> bool {
-    !row["privacy_boundary"].is_null()
+fn privacy(row: &impl RequestRow) -> bool {
+    !row.at("privacy_boundary").is_null()
         && matches!(
-            string(&row["privacy_boundary"])
+            string(row.at("privacy_boundary"))
                 .py_strip()
                 .py_lower()
                 .replace('-', "_")
@@ -328,7 +385,7 @@ fn decimal(values: &[&Value]) -> Result<Value, ()> {
     Ok(Value::Null)
 }
 fn invariants(
-    rows: &[Value],
+    rows: &[impl RequestRow],
     pairs: &[Value],
     wallets: &[(Value, Value)],
 ) -> Result<Vec<[Value; 2]>, Refusal> {
@@ -353,7 +410,7 @@ fn invariants(
     }
     let ids: BTreeSet<_> = wallets.iter().map(|(key, _)| string(key)).collect();
     for row in rows {
-        let id = or_text(&row["id"]);
+        let id = or_text(row.at("id"));
         let quoted = Quoted(&id);
         let fail = |name, detail| Err(Refusal::contract(name, detail));
         if ![
@@ -372,7 +429,8 @@ fn invariants(
                 format!("row {quoted} is not a projection row"),
             );
         }
-        if row["journal_transaction_id"]
+        if row
+            .at("journal_transaction_id")
             .as_str()
             .is_none_or(str::is_empty)
         {
@@ -381,26 +439,26 @@ fn invariants(
                 format!("row {quoted} has no journal transaction"),
             );
         }
-        if !ids.contains(&string(&row["wallet_id"])) {
+        if !ids.contains(&string(row.at("wallet_id"))) {
             return fail(
                 "unknown_wallet",
                 format!("row {quoted} names a wallet the wallet references do not list"),
             );
         }
-        let direction = row["direction"].as_str().unwrap_or("");
+        let direction = row.at("direction").as_str().unwrap_or("");
         if !["inbound", "outbound"].contains(&direction) {
             return fail(
                 "unknown_direction",
-                format!("row {quoted} has direction {}", repr(&row["direction"])),
+                format!("row {quoted} has direction {}", repr(row.at("direction"))),
             );
         }
-        let (Some(amount), Some(fee)) = (integer(&row["amount"]), integer(&row["fee"])) else {
+        let (Some(amount), Some(fee)) = (integer(row.at("amount")), integer(row.at("fee"))) else {
             return fail(
                 "non_integer_msat",
                 format!(
                     "row {quoted} has amount {} and fee {}",
-                    repr(&row["amount"]),
-                    repr(&row["fee"])
+                    repr(row.at("amount")),
+                    repr(row.at("fee"))
                 ),
             );
         };
@@ -422,16 +480,13 @@ fn invariants(
                 format!("{direction} row {quoted} has amount {amount} and fee {fee}"),
             );
         }
-        if codec::truth(&row["amount_includes_fee"]) {
+        if codec::truth(row.at("amount_includes_fee")) {
             return fail(
                 "amount_includes_fee",
                 format!("row {quoted} includes its fee in its amount"),
             );
         }
-        if row
-            .as_object()
-            .is_some_and(|m| m.keys().any(|k| k.starts_with("custody_component_")))
-        {
+        if row.any_key(&|k| k.starts_with("custody_component_")) {
             return fail(
                 "custody_component_fields",
                 format!("row {quoted} carries custody component fields"),
@@ -445,7 +500,7 @@ fn invariants(
         .into_iter()
         .enumerate()
         {
-            let values = [&row[exact], &row[field]];
+            let values = [row.at(exact), row.at(field)];
             match decimal(&values) {
                 Ok(value) => row_decimals[index] = value,
                 Err(()) => {
@@ -502,19 +557,26 @@ fn invariants(
     }
     Ok(decimals)
 }
-fn holds(rows: &[Value]) -> Result<BTreeMap<String, &'static str>, Refusal> {
+fn holds(rows: &[impl RequestRow]) -> Result<BTreeMap<String, &'static str>, Refusal> {
     let mut groups: Vec<(String, Vec<Value>)> = Vec::new();
     for row in rows {
-        let asset = string(&row["asset"]);
+        let asset = string(row.at("asset"));
         let graphless = graphless_projection(row);
         if let Some((_, group)) = groups.iter_mut().find(|(a, _)| *a == asset) {
             if !graphless {
-                group.push(row.clone());
+                group.push(row.json().into_owned());
             }
         } else {
             // Retain the asset's first-seen position even when its first row
             // has no physical scope: later groups can refuse in that order.
-            groups.push((asset, if graphless { vec![] } else { vec![row.clone()] }));
+            groups.push((
+                asset,
+                if graphless {
+                    vec![]
+                } else {
+                    vec![row.json().into_owned()]
+                },
+            ));
         }
     }
     let mut holds = BTreeMap::new();
@@ -550,22 +612,23 @@ fn holds(rows: &[Value]) -> Result<BTreeMap<String, &'static str>, Refusal> {
 // fallback requires a parsed graph. Prove that graph absent before copying and
 // parsing ordinary commercial rows twice. Anything uncertain takes the full
 // detector, including malformed JSON, graph arrays and Liquid raw hex.
-fn graphless_projection(row: &Value) -> bool {
-    if !row["id"]
+fn graphless_projection(row: &impl RequestRow) -> bool {
+    if !row
+        .at("id")
         .as_str()
         .is_some_and(|id| id.starts_with("custody-tax:"))
     {
         return false;
     }
     let parsed;
-    let raw = if let Some(text) = row["raw_json"].as_str() {
+    let raw = if let Some(text) = row.at("raw_json").as_str() {
         let Ok(value) = serde_json::from_str::<Value>(text) else {
             return false;
         };
         parsed = value;
         &parsed
     } else {
-        &row["raw_json"]
+        row.at("raw_json")
     };
     if !raw.is_object() {
         return true;
@@ -576,24 +639,24 @@ fn graphless_projection(row: &Value) -> bool {
             .all(|payload| !payload["vin"].is_array() || !payload["vout"].is_array())
 }
 fn request_row(
-    row: &Value,
+    row: &impl RequestRow,
     holds: &BTreeMap<String, &str>,
     rate: Value,
     value: Value,
 ) -> Result<Value, Refusal> {
     let id = string(required(row, "id")?);
     let anchor = required(row, "journal_transaction_id")?;
-    let asset = string(&row["asset"]);
+    let asset = string(row.at("asset"));
     let wallet = string(required(row, "wallet_id")?);
     let direction = required(row, "direction")?;
-    let ts = time::timestamp(&row["occurred_at"]);
-    let cutoff = time::cutoff(&row["occurred_at"])?;
+    let ts = time::timestamp(row.at("occurred_at"));
+    let cutoff = time::cutoff(row.at("occurred_at"))?;
     let amount = required(row, "amount")?;
     let fee = required(row, "fee")?;
-    let kind = if empty(&row["kind_override"]) {
-        &row["kind"]
+    let kind = if empty(row.at("kind_override")) {
+        row.at("kind")
     } else {
-        &row["kind_override"]
+        row.at("kind_override")
     };
     let kind = if kind.is_null() {
         String::new()
@@ -602,24 +665,24 @@ fn request_row(
     };
     let row_text = ["note", "description", "kind"]
         .into_iter()
-        .find_map(|key| codec::truth(&row[key]).then(|| text(&row[key])))
+        .find_map(|key| codec::truth(row.at(key)).then(|| text(row.at(key))))
         .unwrap_or(Value::Null);
-    let regime = if row["at_regime_override"] == "alt" || row["at_regime_override"] == "neu" {
-        row["at_regime_override"].clone()
+    let regime = if row.at("at_regime_override") == "alt" || row.at("at_regime_override") == "neu" {
+        row.at("at_regime_override").clone()
     } else {
         Value::Null
     };
-    let category = if codec::truth(&row["at_category_override"]) {
-        text(&row["at_category_override"])
+    let category = if codec::truth(row.at("at_category_override")) {
+        text(row.at("at_category_override"))
     } else {
         Value::Null
     };
     let taxability = crate::graph::stored::equal(
-        &codec::from_json(&row["taxability_override"]).unwrap(),
+        &codec::from_json(row.at("taxability_override")).unwrap(),
         &kassiber_pyjson::Value::Int(BigInt::from(0)),
         false,
     );
-    let order = &row["custody_chain_order"];
+    let order = row.at("custody_chain_order");
     let order = if order.is_null() {
         Value::Null
     } else {
@@ -651,7 +714,7 @@ fn request_row(
         ("value".into(), value),
         (
             "coarse".into(),
-            Value::Bool(row["pricing_quality"] == "coarse_fallback"),
+            Value::Bool(row.at("pricing_quality") == "coarse_fallback"),
         ),
         ("kind".into(), Value::String(kind)),
         ("text".into(), row_text),
@@ -706,6 +769,26 @@ mod tests {
                 assert_eq!(holds(&rows).unwrap().get("custody-tax:pending"), expected);
             }
         }
+    }
+
+    #[test]
+    fn fusion_holds_read_whole_rows_through_views() {
+        let txid = "a".repeat(64);
+        let rows = vec![
+            json!({"id":"cross-split:pending", "external_id":txid, "external_id_kind":"txid",
+                "asset":"BTC", "raw_json":{"txid":txid,"status":{"confirmed":false}}}),
+            json!({"id":"custody-tax:graphless", "asset":"BTC", "raw_json":"{}"}),
+        ];
+        let projection = crate::finalized_projection::of_rows(rows.clone());
+        let (_, views) = projection
+            .json_with_views(&[], |py| Ok::<_, String>(codec::to_json(py)))
+            .unwrap();
+        let from_views = holds(&views).unwrap();
+        assert_eq!(from_views, holds(&rows).unwrap());
+        assert_eq!(
+            from_views.get("cross-split:pending"),
+            Some(&"pending_onchain_confirmation")
+        );
     }
 
     #[test]

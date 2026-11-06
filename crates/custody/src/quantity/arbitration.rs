@@ -935,13 +935,86 @@ impl Projection<'_> {
 pub(super) type Located = (u32, u32);
 
 /// A posting whose observation is located rather than borrowed.
-pub(super) struct PostingState {
+pub struct PostingState {
     id: String,
     observation: Located,
     kind: String,
     location: Value,
     amount: BigInt,
     state: Value,
+}
+
+impl PostingState {
+    /// The posting's JSON object (`postings_json`).
+    fn json<E: From<String>>(
+        &self,
+        o: LegRef<'_>,
+        exact: &impl Fn(&Value) -> Result<Value, E>,
+    ) -> Result<Value, E> {
+        let domain = &super::Domain::of_leg(o);
+        let mut domain_value = serde_json::Map::new();
+        domain_value.insert("$type".into(), json!("QuantityDomain"));
+        domain_value.insert("exposure".into(), Value::String(domain.exposure.clone()));
+        domain_value.insert("network".into(), Value::String(domain.network.clone()));
+        domain_value.insert("rail".into(), exact(&domain.rail)?);
+        domain_value.insert("unit".into(), json!("msat"));
+        let mut posting = serde_json::Map::new();
+        posting.insert("$type".into(), json!("QuantityPosting"));
+        posting.insert("amount_msat".into(), super::number(&self.amount));
+        posting.insert("asset".into(), exact(&o["asset"])?);
+        posting.insert("domain".into(), Value::Object(domain_value));
+        posting.insert("location_id".into(), exact(&self.location)?);
+        posting.insert("location_kind".into(), Value::String(self.kind.clone()));
+        posting.insert("observation_hash".into(), exact(&o["quantity_hash"])?);
+        posting.insert("posting_id".into(), Value::String(self.id.clone()));
+        posting.insert("state".into(), exact(&self.state)?);
+        Ok(Value::Object(posting))
+    }
+}
+
+/// A projection posting as `postings_json` writes it: read in place when
+/// every converted part is its own JSON, else its built object. A read
+/// posting holds the three fields it does not borrow; `$type` and `domain`,
+/// which no journal reads, are only in a built one.
+pub enum PostingView<'a> {
+    Read {
+        posting: &'a PostingState,
+        observation: LegRef<'a>,
+        amount: Value,
+        kind: Value,
+        id: Value,
+    },
+    Built(Value),
+}
+impl PostingView<'_> {
+    /// The field `key` of the posting's JSON object, or null; `$type` and
+    /// `domain` only when the posting was built.
+    pub fn at(&self, key: &str) -> &Value {
+        static NULL: Value = Value::Null;
+        let Self::Read {
+            posting: p,
+            observation: o,
+            amount,
+            kind,
+            id,
+        } = self
+        else {
+            let Self::Built(posting) = self else {
+                unreachable!("two variants")
+            };
+            return &posting[key];
+        };
+        match key {
+            "amount_msat" => amount,
+            "asset" => &o["asset"],
+            "location_id" => &p.location,
+            "location_kind" => kind,
+            "observation_hash" => &o["quantity_hash"],
+            "posting_id" => id,
+            "state" => &p.state,
+            _ => &NULL,
+        }
+    }
 }
 
 /// The arbitration result, owning everything but its observations.
@@ -981,26 +1054,44 @@ impl ProjectionState {
     ) -> Result<Vec<Value>, E> {
         self.postings
             .iter()
+            .map(|p| p.json(observation(p.observation), exact))
+            .collect()
+    }
+    /// Views of the postings `postings_json` writes, converting in its
+    /// order: a posting whose parts are all their own JSON is read in
+    /// place, any other is built as `postings_json` builds it.
+    pub fn posting_views<'v, E: From<String>>(
+        &'v self,
+        observation: impl Fn(Located) -> LegRef<'v>,
+        exact: &impl Fn(&Value) -> Result<Value, E>,
+    ) -> Result<Vec<PostingView<'v>>, E> {
+        use super::runtime::plain;
+        self.postings
+            .iter()
             .map(|p| {
                 let o = observation(p.observation);
-                let domain = &super::Domain::of_leg(o);
-                let mut domain_value = serde_json::Map::new();
-                domain_value.insert("$type".into(), json!("QuantityDomain"));
-                domain_value.insert("exposure".into(), Value::String(domain.exposure.clone()));
-                domain_value.insert("network".into(), Value::String(domain.network.clone()));
-                domain_value.insert("rail".into(), exact(&domain.rail)?);
-                domain_value.insert("unit".into(), json!("msat"));
-                let mut posting = serde_json::Map::new();
-                posting.insert("$type".into(), json!("QuantityPosting"));
-                posting.insert("amount_msat".into(), super::number(&p.amount));
-                posting.insert("asset".into(), exact(&o["asset"])?);
-                posting.insert("domain".into(), Value::Object(domain_value));
-                posting.insert("location_id".into(), exact(&p.location)?);
-                posting.insert("location_kind".into(), Value::String(p.kind.clone()));
-                posting.insert("observation_hash".into(), exact(&o["quantity_hash"])?);
-                posting.insert("posting_id".into(), Value::String(p.id.clone()));
-                posting.insert("state".into(), exact(&p.state)?);
-                Ok(Value::Object(posting))
+                let rail_plain = match o {
+                    LegRef::Typed(_) => true,
+                    LegRef::Json(_) => plain(&o["event_key"]["chain"]),
+                };
+                Ok(
+                    if rail_plain
+                        && plain(&o["asset"])
+                        && plain(&p.location)
+                        && plain(&o["quantity_hash"])
+                        && plain(&p.state)
+                    {
+                        PostingView::Read {
+                            posting: p,
+                            observation: o,
+                            amount: super::number(&p.amount),
+                            kind: Value::String(p.kind.clone()),
+                            id: Value::String(p.id.clone()),
+                        }
+                    } else {
+                        PostingView::Built(p.json(o, exact)?)
+                    },
+                )
             })
             .collect()
     }
@@ -1125,6 +1216,72 @@ pub(super) fn arbitrate<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn posting_views_read_what_postings_json_writes() {
+        let event_key = json!({"chain": "bitcoin", "network": "main"});
+        let legs = [
+            json!({"asset": "BTC", "quantity_hash": "h0", "event_key": event_key}),
+            json!({"asset": 1.5, "quantity_hash": "h1", "event_key": event_key}),
+            json!({"asset": "BTC", "quantity_hash": "h2",
+                   "event_key": {"chain": 2.5, "network": "main"}}),
+            json!({"asset": "BTC", "quantity_hash": 3.5, "event_key": event_key}),
+        ];
+        let posting = |at: u32, location: Value, state: Value| PostingState {
+            id: format!("p{at}"),
+            observation: (at, 0),
+            kind: "wallet".into(),
+            location,
+            amount: BigInt::from(-7),
+            state,
+        };
+        let projection = || ProjectionState {
+            observations: vec![],
+            decisions: vec![],
+            postings: vec![
+                posting(0, json!("w"), json!("active")),
+                posting(1, json!("w"), json!("active")),
+                posting(2, json!("w"), json!("active")),
+                posting(3, json!("w"), json!("active")),
+                posting(0, json!(4.5), json!("active")),
+                posting(0, json!("w"), json!(5.5)),
+            ],
+            errors: vec![],
+        };
+        let state = projection();
+        let exact = |v: &Value| -> Result<Value, String> {
+            if crate::quantity::runtime::plain(v) {
+                Ok(v.clone())
+            } else if v == &json!(9.5) || v == &json!(9.25) {
+                Err(format!("conversion of {v}"))
+            } else {
+                Ok(json!({"converted": v}))
+            }
+        };
+        let locate = |(at, _): Located| LegRef::Json(&legs[at as usize]);
+        let json = state.postings_json(locate, &exact).unwrap();
+        let views = state.posting_views(locate, &exact).unwrap();
+        assert_eq!(views.len(), json.len());
+        for (index, (view, posting)) in views.iter().zip(&json).enumerate() {
+            let read = matches!(view, PostingView::Read { .. });
+            assert_eq!(read, index == 0, "{index}");
+            for (key, value) in posting.as_object().unwrap() {
+                if read && matches!(key.as_str(), "$type" | "domain") {
+                    assert!(view.at(key).is_null(), "{key}");
+                    continue;
+                }
+                assert_eq!(view.at(key), value, "{index} {key}");
+            }
+            assert!(view.at("absent").is_null());
+        }
+        // The first failing conversion fails both, alike.
+        let mut failing = projection();
+        failing.postings[5].state = json!(9.25);
+        failing.postings[4].location = json!(9.5);
+        let views = failing.posting_views(locate, &exact).err();
+        assert_eq!(views, failing.postings_json(locate, &exact).err());
+        assert_eq!(views, Some("conversion of 9.5".to_owned()));
+    }
 
     #[test]
     fn domain_balance_matches_for_machine_and_big_integers() {

@@ -13,6 +13,25 @@ use std::thread;
 /// Upper bound on workers, so a large machine is not monopolized.
 const MAX_WORKERS: usize = 8;
 
+thread_local! {
+    /// Set inside [`sequential`]: every map of this thread stays on it.
+    static SEQUENTIAL: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Runs `f` with every parallel map it reaches on the calling thread. The
+/// results are the same; a caller that counts process CPU time saves the
+/// workers' overhead.
+pub fn sequential<R>(f: impl FnOnce() -> R) -> R {
+    struct Restore(bool);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            SEQUENTIAL.with(|flag| flag.set(self.0));
+        }
+    }
+    let _restore = Restore(SEQUENTIAL.with(|flag| flag.replace(true)));
+    f()
+}
+
 /// The outcome of one item: its value, or the panic it raised.
 pub(crate) type Outcome<R> = thread::Result<R>;
 
@@ -77,6 +96,9 @@ pub(crate) fn chunks<T: Sync, R: Send>(
 
 /// How many workers `len` items of at least `min_chunk` each keep busy.
 fn workers(len: usize, min_chunk: usize) -> usize {
+    if SEQUENTIAL.with(std::cell::Cell::get) {
+        return 1;
+    }
     static CORES: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
     let cores = *CORES.get_or_init(|| thread::available_parallelism().map_or(1, usize::from));
     cores.min(MAX_WORKERS).min(len / min_chunk.max(1)).max(1)
@@ -117,5 +139,31 @@ mod tests {
         });
         let first_error = outcomes.into_iter().map(unwrap).find_map(Result::err);
         assert_eq!(first_error, Some(10));
+    }
+
+    #[test]
+    fn sequential_maps_stay_on_the_calling_thread_and_keep_results() {
+        let items: Vec<usize> = (0..5_000).collect();
+        let caller = thread::current().id();
+        let threads = |items: &[usize]| -> Vec<thread::ThreadId> {
+            map(items, 16, |_| thread::current().id())
+                .into_iter()
+                .map(unwrap)
+                .collect()
+        };
+        let inside = sequential(|| {
+            assert_eq!(chunks(&items, 16, |chunk| chunk.len()).len(), 1);
+            threads(&items)
+        });
+        assert!(inside.iter().all(|id| *id == caller));
+        // The scope ends with `sequential`, also when it unwinds.
+        let _ = catch_unwind(|| sequential(|| panic!("inside")));
+        assert!(!SEQUENTIAL.with(std::cell::Cell::get));
+        if workers(items.len(), 16) > 1 {
+            assert!(threads(&items).iter().any(|id| *id != caller));
+        }
+        let doubled = sequential(|| map(&items, 16, |&i| i * 2));
+        let doubled: Vec<usize> = doubled.into_iter().map(unwrap).collect();
+        assert_eq!(doubled, items.iter().map(|i| i * 2).collect::<Vec<_>>());
     }
 }

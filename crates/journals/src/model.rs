@@ -347,4 +347,100 @@ pub struct JournalState<'a> {
     pub warnings: &'a Value,
     pub custody_gap_ignored_transaction_ids: &'a Value,
     pub custody_gap_accounting_ignored_transaction_ids: &'a Value,
+    /// Views of `custody_quantity`'s projection observations and postings,
+    /// which `custody_quantity` then leaves out; `None` reads them from it.
+    #[serde(skip)]
+    pub quantity_views: Option<&'a kassiber_custody::quantity::runtime::QuantityViews<'a>>,
+}
+impl<'a> JournalState<'a> {
+    /// The quantity projection's observations and postings.
+    pub fn quantity_refs(&self) -> (Vec<ObservationRef<'a>>, Vec<PostingRef<'a>>) {
+        quantity_refs(self.custody_quantity, self.quantity_views)
+    }
+}
+
+/// The observations and postings of `quantity["projection"]`, from `views`
+/// when given.
+pub(crate) fn quantity_refs<'a>(
+    quantity: &'a Value,
+    views: Option<&'a kassiber_custody::quantity::runtime::QuantityViews<'a>>,
+) -> (Vec<ObservationRef<'a>>, Vec<PostingRef<'a>>) {
+    match views {
+        Some(views) => (
+            views
+                .observations
+                .iter()
+                .map(ObservationRef::View)
+                .collect(),
+            views.postings.iter().map(PostingRef::View).collect(),
+        ),
+        None => {
+            let projection = &quantity["projection"];
+            let list = |key: &str| projection[key].as_array().map(Vec::as_slice).unwrap_or(&[]);
+            (
+                list("observations")
+                    .iter()
+                    .map(ObservationRef::Json)
+                    .collect(),
+                list("postings").iter().map(PostingRef::Json).collect(),
+            )
+        }
+    }
+}
+
+/// A quantity projection observation: its JSON object, or a view of it.
+#[derive(Clone, Copy)]
+pub enum ObservationRef<'a> {
+    Json(&'a Value),
+    View(&'a kassiber_custody::quantity::runtime::ObservationView<'a>),
+}
+impl<'a> ObservationRef<'a> {
+    /// The field `key`, or null.
+    pub fn at(self, key: &str) -> &'a Value {
+        match self {
+            Self::Json(o) => &o[key],
+            Self::View(o) => o.at(key),
+        }
+    }
+    /// Whether this is JSON null, the stand-in for a missing observation.
+    pub fn is_null(self) -> bool {
+        matches!(self, Self::Json(Value::Null))
+    }
+}
+impl std::ops::Index<&str> for ObservationRef<'_> {
+    type Output = Value;
+    fn index(&self, key: &str) -> &Value {
+        (*self).at(key)
+    }
+}
+impl std::fmt::Debug for ObservationRef<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("Observation")
+            .field(&self.at("quantity_hash"))
+            .finish()
+    }
+}
+
+/// A quantity projection posting: its JSON object, or a view of it.
+#[derive(Clone, Copy)]
+pub enum PostingRef<'a> {
+    Json(&'a Value),
+    View(&'a kassiber_custody::quantity::PostingView<'a>),
+}
+impl<'a> PostingRef<'a> {
+    /// The field `key`, or null. A view read in place has no `$type` or
+    /// `domain`, which no journal reads.
+    pub fn at(self, key: &str) -> &'a Value {
+        match self {
+            Self::Json(p) => &p[key],
+            Self::View(p) => p.at(key),
+        }
+    }
+}
+impl std::fmt::Debug for PostingRef<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("Posting")
+            .field(&self.at("posting_id"))
+            .finish()
+    }
 }

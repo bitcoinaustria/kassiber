@@ -14,6 +14,7 @@ fn check(group: &str) {
         let inputs = kassiber_journals::LedgerInputs {
             profile: &case["profile"],
             projection: &case["custody"]["finalized_tax_projection"],
+            rows: None,
             wallets: case["wallets"].as_array().unwrap(),
             direct_payout_records: case["custody"]["direct_payout_records"].as_array().unwrap(),
         };

@@ -45,3 +45,4 @@ pub mod timing;
 
 pub use api::{check_entry, compute, ledger, ledger_typed};
 pub use engine::Country;
+pub use par::sequential;

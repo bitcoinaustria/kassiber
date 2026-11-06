@@ -15,8 +15,12 @@ fn legacy_txid(v: &Value) -> String {
         text
     }
 }
+/// `observations` and `postings` are the quantity projection's, as JSON
+/// objects or views of them.
 pub(super) fn differences(
     c: &super::RenderOperands<'_>,
+    observations: &[ObservationRef<'_>],
+    postings: &[PostingRef<'_>],
     holdings: &Holdings,
 ) -> Result<Value, Refusal> {
     fn text(v: &Value) -> Cow<'_, str> {
@@ -64,34 +68,30 @@ pub(super) fn differences(
     // Borrow identities rather than building an intermediate JSON current-balance
     // table and cloning every observation hash. Only named non-event reasons
     // need the observation join; postings remain authoritative for quantities.
-    let projection = &c.quantity["projection"];
     let observations: HashMap<_, _> = if reasons.as_object().is_some_and(|m| !m.is_empty()) {
-        array(&projection["observations"])
+        observations
             .iter()
-            .map(|o| (text(&o["quantity_hash"]), o))
+            .map(|o| (text(o.at("quantity_hash")), o))
             .collect()
     } else {
         HashMap::new()
     };
     let mut canonical = BTreeMap::<_, BalanceSum>::new();
     let mut named = BTreeMap::<_, BTreeSet<String>>::new();
-    for posting in array(&projection["postings"]) {
-        if *field(posting, "location_kind") != "wallet" {
+    for posting in postings {
+        if *posting.at("location_kind") != "wallet" {
             continue;
         }
-        let key = (
-            text(field(posting, "location_id")),
-            text(field(posting, "asset")),
-        );
+        let key = (text(posting.at("location_id")), text(posting.at("asset")));
         canonical
             .entry(key.clone())
             .or_default()
-            .add(field(posting, "amount_msat"))?;
+            .add(posting.at("amount_msat"))?;
         if let Some(observation) = (!observations.is_empty())
-            .then(|| observations.get(&text(field(posting, "observation_hash"))))
+            .then(|| observations.get(&text(posting.at("observation_hash"))))
             .flatten()
         {
-            let reason = &reasons[text(&observation["transaction_id"]).as_ref()];
+            let reason = &reasons[text(observation.at("transaction_id")).as_ref()];
             if truth(reason) {
                 named.entry(key).or_default().insert(string(reason));
             }
@@ -549,6 +549,13 @@ fn candidate(
 mod tests {
     use super::*;
 
+    /// `differences` reading the observations and postings from `c`.
+    fn differences(c: &Value, holdings: &Holdings) -> Result<Value, Refusal> {
+        let operands = super::super::RenderOperands::from_json(c);
+        let (observations, postings) = operands.quantity_refs();
+        super::differences(&operands, &observations, &postings, holdings)
+    }
+
     #[test]
     fn balance_current_keys_preserve_python_stringification() {
         for wallet in [Value::Null, json!(false), json!(0), json!(""), json!("w")] {
@@ -571,10 +578,7 @@ mod tests {
                 &json!({}),
             )
             .unwrap();
-            assert_eq!(
-                differences(&super::super::RenderOperands::from_json(&c), &holdings).unwrap(),
-                expected
-            );
+            assert_eq!(differences(&c, &holdings).unwrap(), expected);
         }
     }
 
@@ -625,10 +629,7 @@ mod tests {
                 &reasons,
             )
             .unwrap();
-            assert_eq!(
-                differences(&super::super::RenderOperands::from_json(&c), &holdings).unwrap(),
-                expected
-            );
+            assert_eq!(differences(&c, &holdings).unwrap(), expected);
         }
     }
 }

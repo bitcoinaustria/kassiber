@@ -166,7 +166,7 @@ fn interpolate(
 pub(super) fn check(
     profile: &Value,
     wallets: &[(Value, Value)],
-    rows: &[Value],
+    rows: &[impl super::RequestRow],
 ) -> Result<(Value, Value), Refusal> {
     let mut labels = Vec::new();
     for (_, wallet) in wallets {
@@ -175,7 +175,7 @@ pub(super) fn check(
         }
     }
     labels.sort();
-    let assets: BTreeSet<_> = rows.iter().map(|r| string(&r["asset"])).collect();
+    let assets: BTreeSet<_> = rows.iter().map(|r| string(r.at("asset"))).collect();
     let mut assets = assets
         .iter()
         .map(|a| token(&json!(a), "asset"))

@@ -1,6 +1,9 @@
 //! R4-13 orchestration. R4-10 supplies the ordered pre-build implementation.
 use crate::{boundary, loader, persistence, prebuild, storage, Refusal};
-use kassiber_custody::{codec, ledger_request, snapshot::Snapshot, Stages};
+use kassiber_custody::{
+    codec, finalized_projection::RowView, ledger_request, quantity::runtime::QuantityViews,
+    snapshot::Snapshot, Stages,
+};
 use kassiber_store::rusqlite::Connection;
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -265,8 +268,15 @@ fn build_in_transaction<'a>(
     drop(span);
     let span = crate::timing::span("fusion_engine");
     let request_span = crate::timing::span("fusion_request");
-    let outcome = ledger_request::build_request(&profile, &custody.projection, &refs, "ledger")
-        .map_err(fusion_error)?;
+    let outcome = ledger_request::build_request_rows(
+        &profile,
+        &custody.projection_rows,
+        crate::array(&custody.projection["intra_pairs"]),
+        crate::array(&custody.projection["cross_asset_pairs"]),
+        &refs,
+        "ledger",
+    )
+    .map_err(fusion_error)?;
     drop(request_span);
     let engine_span = crate::timing::span("engine_boundary");
     let response = match outcome {
@@ -412,9 +422,14 @@ fn wallet_refs(snapshot: &Snapshot) -> Vec<Value> {
         .collect()
 }
 
-struct RenderContext {
+/// The custody operands as the JSON adapter's object holds them, except the
+/// finalized rows and the quantity observations and postings, which are views
+/// of the stages.
+struct RenderContext<'s> {
     quantity: Value,
+    quantity_views: QuantityViews<'s>,
     projection: Value,
+    projection_rows: Vec<RowView<'s>>,
     native_reconciliations: Value,
     roles: Value,
     loan_legs: Vec<Value>,
@@ -425,7 +440,7 @@ struct RenderContext {
     rates: Value,
 }
 
-impl RenderContext {
+impl<'s> RenderContext<'s> {
     fn operands<'a>(
         &'a self,
         snapshot: &'a Snapshot,
@@ -447,17 +462,19 @@ impl RenderContext {
             accounting_ignored: &self.accounting,
             warnings: &self.warnings,
             rates: &self.rates,
+            projection_rows: Some(&self.projection_rows),
+            quantity_views: Some(&self.quantity_views),
         }
     }
 }
 
-fn render_inputs(
-    snapshot: &Snapshot,
-    stages: &Stages,
+fn render_inputs<'s>(
+    snapshot: &'s Snapshot,
+    stages: &'s Stages,
     wallets: &[Value],
-) -> Result<RenderContext, Refusal> {
+) -> Result<RenderContext<'s>, Refusal> {
     let span = kassiber_custody::timing::span("render.quantity");
-    let quantity = stages.quantity.json_with(false, stage_value)?;
+    let (quantity, quantity_views) = stages.quantity.json_with_views(stage_value)?;
     drop(span);
     let projection = stages
         .finalized_projection
@@ -473,8 +490,9 @@ fn render_inputs(
             .map(|w| (crate::string(&w["id"]), w.clone()))
             .collect(),
     );
-    let transfers = kassiber_custody::quantity::transfers::canonical_internal_transfer_rows(
-        &quantity["projection"],
+    let transfers = kassiber_custody::quantity::transfers::transfer_rows(
+        &quantity_views.observations,
+        crate::array(&quantity["projection"]["decisions"]),
         crate::array(&quantity["tax_eligibility"]["eligible_decisions"]),
         &refs,
     )?;
@@ -489,11 +507,14 @@ fn render_inputs(
         .transpose()?
         .unwrap_or(Value::Null);
     let span = kassiber_custody::timing::span("render.projection");
-    let projection = projection.json_with(&snapshot.transactions, stage_value)?;
+    let (projection, projection_rows) =
+        projection.json_with_views(&snapshot.transactions, stage_value)?;
     drop(span);
     Ok(RenderContext {
         quantity,
+        quantity_views,
         projection,
+        projection_rows,
         native_reconciliations,
         roles,
         loan_legs: snapshot

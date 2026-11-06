@@ -10,7 +10,10 @@ pub fn ledger(request: &Value) -> Result<LedgerResponse, Refusal> {
     match typed {
         Ok(request) => {
             let _span = crate::timing::span("engine_compute");
-            kassiber_tax_core::ledger_typed(&request).map_err(boundary::staged_error)
+            // On the calling thread: the engine's workers cost process CPU
+            // time without shortening anything that counts.
+            kassiber_tax_core::sequential(|| kassiber_tax_core::ledger_typed(&request))
+                .map_err(boundary::staged_error)
         }
         Err(_) => {
             let _span = crate::timing::span("engine_text_refusal");
