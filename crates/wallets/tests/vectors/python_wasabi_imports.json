@@ -4,9 +4,9 @@
     "format": "wasabi_bundle",
     "text": "",
     "error": {
-      "code": "internal_error",
-      "message": "Expecting value: line 1 column 1 (char 0)",
-      "hint": null
+      "code": "validation",
+      "message": "Wasabi bundle is not valid UTF-8 JSON",
+      "hint": "Choose the import format that matches the file."
     }
   },
   {
@@ -16,9 +16,9 @@
       255
     ],
     "error": {
-      "code": "internal_error",
-      "message": "'utf-8' codec can't decode byte 0xff in position 0: invalid start byte",
-      "hint": null
+      "code": "validation",
+      "message": "Wasabi bundle is not valid UTF-8 JSON",
+      "hint": "Choose the import format that matches the file."
     }
   },
   {
@@ -26,9 +26,9 @@
     "format": "wasabi_bundle",
     "text": "\ufeff{}",
     "error": {
-      "code": "internal_error",
-      "message": "Unexpected UTF-8 BOM (decode using utf-8-sig): line 1 column 1 (char 0)",
-      "hint": null
+      "code": "validation",
+      "message": "Wasabi bundle is not valid UTF-8 JSON",
+      "hint": "Choose the import format that matches the file."
     }
   },
   {
@@ -36,9 +36,9 @@
     "format": "wasabi_bundle",
     "text": "{",
     "error": {
-      "code": "internal_error",
-      "message": "Expecting property name enclosed in double quotes: line 1 column 2 (char 1)",
-      "hint": null
+      "code": "validation",
+      "message": "Wasabi bundle is not valid UTF-8 JSON",
+      "hint": "Choose the import format that matches the file."
     }
   },
   {
