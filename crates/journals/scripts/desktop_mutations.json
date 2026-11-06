@@ -228,5 +228,65 @@
       "tests/test_rust_journal_quarantine_resolve.py::test_quarantine_resolve_matches_python_envelope_and_book[value-False-False]"
     ],
     "rule": "Derived override prices use Kassiber's 32-digit default decimal context."
+  },
+  {
+    "id": "S5-resolve-group-unsupported",
+    "file": "crates/kassiber/src/real_store/journals.rs",
+    "find": "        \"transaction\",\n        \"group_id\",\n        \"action\",",
+    "replace": "        \"transaction\",\n        \"action\",",
+    "expect_failing": [
+      "tests/test_rust_quarantine_groups.py::test_resolve_by_group_reports_the_same_effect_and_book[root-reprocess-False]"
+    ],
+    "rule": "Resolve accepts a root group in place of a transaction."
+  },
+  {
+    "id": "S5-resolve-effect-dropped",
+    "file": "crates/kassiber/src/real_store/journals.rs",
+    "find": "    payload.extend(effect);",
+    "replace": "    let _ = effect;",
+    "expect_failing": [
+      "tests/test_rust_quarantine_groups.py::test_resolve_by_group_reports_the_same_effect_and_book[root-unmeasured-False]"
+    ],
+    "rule": "Resolve reports which waiting rows cleared, or that the effect is unmeasured."
+  },
+  {
+    "id": "S5-groups-limit-zero",
+    "file": "crates/kassiber/src/real_store/journals.rs",
+    "find": "(1..=maximum).contains(n)",
+    "replace": "(0..=maximum).contains(n)",
+    "expect_failing": [
+      "tests/test_rust_quarantine_groups.py::test_groups_leaf_matches_python_byte_for_byte[False]"
+    ],
+    "rule": "The groups leaf refuses a --limit below 1."
+  },
+  {
+    "id": "S5-summary-definitions-missing",
+    "file": "crates/journals/src/quarantine.rs",
+    "find": "        Key::from(\"definitions\"),",
+    "replace": "        Key::from(\"definitions_unused\"),",
+    "expect_failing": [
+      "tests/test_rust_quarantine_groups.py::test_quarantine_summary_carries_currency_and_definitions[False]"
+    ],
+    "rule": "The quarantine summary defines each counter it reports."
+  },
+  {
+    "id": "S5-summary-currency-case",
+    "file": "crates/journals/src/quarantine.rs",
+    "find": "kassiber_pytext::upper(&py_str(&currency))",
+    "replace": "py_str(&currency)",
+    "expect_failing": [
+      "tests/test_rust_quarantine_groups.py::test_quarantine_summary_carries_currency_and_definitions[False]"
+    ],
+    "rule": "The summary names the book's currency upper-cased."
+  },
+  {
+    "id": "S5-summary-freshness-ignores-semantics",
+    "file": "crates/journals/src/quarantine.rs",
+    "find": "            let semantics = required == BigInt::from(0) || (built == version && built >= required);\n",
+    "replace": "            let semantics = true || required == BigInt::from(0) || (built == version && built >= required);\n",
+    "expect_failing": [
+      "tests/test_rust_quarantine_groups.py::test_quarantine_summary_carries_currency_and_definitions[False]"
+    ],
+    "rule": "The quarantine summary's freshness includes the calculation-semantics term."
   }
 ]

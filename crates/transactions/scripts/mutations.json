@@ -2388,5 +2388,65 @@
       "desktop_resolve_preserves_alias_precedence_focused_principal_and_queue_status"
     ],
     "rule": "Resolver queries strip Python whitespace."
+  },
+  {
+    "id": "S3-acceptance-not-recorded",
+    "file": "crates/transactions/src/metadata/grouped.rs",
+    "find": "        updates.insert(\"pricing_review_accepted_price\".into(), s(accepted));\n",
+    "replace": "        let _ = accepted;\n",
+    "expect_failing": [
+      "coarse_price_acceptance_binds_the_price_labels_history_and_reverts"
+    ],
+    "rule": "An accepted coarse price is recorded on the transaction."
+  },
+  {
+    "id": "S3-acceptance-any-quality",
+    "file": "crates/transactions/src/metadata/grouped.rs",
+    "find": "    if text(tx, \"pricing_quality\") != \"coarse_fallback\" {",
+    "replace": "    if text(tx, \"pricing_quality\") == \"never\" {",
+    "expect_failing": [
+      "coarse_price_acceptance_binds_the_price_labels_history_and_reverts"
+    ],
+    "rule": "Only a coarse price can be accepted."
+  },
+  {
+    "id": "S3-acceptance-value-first",
+    "file": "crates/transactions/src/metadata/grouped.rs",
+    "find": "        (\"rate\", \"fiat_rate_exact\", \"fiat_rate\"),\n        (\"value\", \"fiat_value_exact\", \"fiat_value\"),\n",
+    "replace": "        (\"value\", \"fiat_value_exact\", \"fiat_value\"),\n        (\"rate\", \"fiat_rate_exact\", \"fiat_rate\"),\n",
+    "expect_failing": [
+      "coarse_price_acceptance_binds_the_price_labels_history_and_reverts"
+    ],
+    "rule": "The acceptance names the positive rate first, as journals read the price."
+  },
+  {
+    "id": "S3-history-label-kind",
+    "file": "crates/transactions/src/metadata/history.rs",
+    "find": "                if kind == \"rate\" {\n                    \"price per unit\"\n",
+    "replace": "                if kind != \"rate\" {\n                    \"price per unit\"\n",
+    "expect_failing": [
+      "coarse_price_acceptance_binds_the_price_labels_history_and_reverts"
+    ],
+    "rule": "The history labels an accepted rate as a price per unit and a value as a value."
+  },
+  {
+    "id": "S3-revert-acceptance-column",
+    "file": "crates/transactions/src/metadata/history.rs",
+    "find": "                \"pricing_review_accepted\" => \"pricing_review_accepted_price\",\n",
+    "replace": "",
+    "expect_failing": [
+      "coarse_price_acceptance_binds_the_price_labels_history_and_reverts"
+    ],
+    "rule": "Reverting the acceptance writes the acceptance column."
+  },
+  {
+    "id": "S3-stale-family-default",
+    "file": "crates/transactions/src/metadata.rs",
+    "find": "            .map_or(\"metadata\", |(_, _, family)| *family);",
+    "replace": "            .map_or(\"metadata\", |_| \"metadata\");",
+    "expect_failing": [
+      "coarse_price_acceptance_binds_the_price_labels_history_and_reverts"
+    ],
+    "rule": "Stale edits count under each field's history family."
   }
 ]

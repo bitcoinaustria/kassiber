@@ -23363,5 +23363,90 @@
       "embedded_json_readers_keep_conversion_and_mutation_isolation"
     ],
     "rule": "Shared transfer parses retain nonfinite identity separately from generic object conversions."
+  },
+  {
+    "id": "S3-builder-ignores-acceptance",
+    "file": "crates/custody/src/ledger_request.rs",
+    "find": "crate::coarse_review::needs_review(row)\n",
+    "replace": "Ok::<bool, crate::coarse_review::Raised>(row[\"pricing_quality\"] == \"coarse_fallback\")\n",
+    "expect_failing": [
+      "ledger_request::tests::fusion_builder_field_choice"
+    ],
+    "rule": "The request builder holds only an unaccepted or changed coarse price for review."
+  },
+  {
+    "id": "S3-acceptance-ignored",
+    "file": "crates/custody/src/coarse_review.rs",
+    "find": "    let accepted = &row[\"pricing_review_accepted_price\"];\n",
+    "replace": "    let accepted = &Value::Null;\n",
+    "expect_failing": [
+      "coarse_review::tests::needs_review_holds_only_unaccepted_or_changed_coarse_prices",
+      "ledger_request::tests::fusion_builder_field_choice"
+    ],
+    "rule": "A coarse price the owner accepted at this exact price is not held again."
+  },
+  {
+    "id": "S3-projected-price-ignored",
+    "file": "crates/custody/src/coarse_review.rs",
+    "find": "match row.get(\"pricing_review_price\") {",
+    "replace": "match None::<&Value> {",
+    "expect_failing": [
+      "coarse_review::tests::needs_review_holds_only_unaccepted_or_changed_coarse_prices",
+      "ledger_request::tests::fusion_builder_field_choice"
+    ],
+    "rule": "A projected row is judged by its transaction's reviewed price, not its re-sliced rate."
+  },
+  {
+    "id": "S3-acceptance-by-digits",
+    "file": "crates/custody/src/coarse_review.rs",
+    "find": "(Ok(Money::Finite(a)), Ok(Money::Finite(b))) => a == b,",
+    "replace": "(Ok(Money::Finite(_)), Ok(Money::Finite(_))) => false,",
+    "expect_failing": [
+      "coarse_review::tests::same_reviewed_price_compares_kind_then_decimal_value",
+      "ledger_request::tests::fusion_builder_field_choice"
+    ],
+    "rule": "An accepted price matches the same decimal value with other trailing zeros."
+  },
+  {
+    "id": "S3-acceptance-kind-ignored",
+    "file": "crates/custody/src/coarse_review.rs",
+    "find": "    if accepted_kind != reviewed_kind {\n        return Ok(false);\n    }\n",
+    "replace": "",
+    "expect_failing": [
+      "coarse_review::tests::same_reviewed_price_compares_kind_then_decimal_value",
+      "ledger_request::tests::fusion_builder_field_choice"
+    ],
+    "rule": "An accepted value does not match a rate of the same digits."
+  },
+  {
+    "id": "S3-reviewed-value-first",
+    "file": "crates/custody/src/coarse_review.rs",
+    "find": "        (\"rate\", \"fiat_rate_exact\", \"fiat_rate\"),\n        (\"value\", \"fiat_value_exact\", \"fiat_value\"),\n",
+    "replace": "        (\"value\", \"fiat_value_exact\", \"fiat_value\"),\n        (\"rate\", \"fiat_rate_exact\", \"fiat_rate\"),\n",
+    "expect_failing": [
+      "coarse_review::tests::reviewed_price_prefers_a_positive_rate_and_keeps_its_digits"
+    ],
+    "rule": "The reviewed price is the rate when it is positive, as journals read it, and the value otherwise."
+  },
+  {
+    "id": "S3-reviewed-nonpositive",
+    "file": "crates/custody/src/coarse_review.rs",
+    "find": "        if positive {\n",
+    "replace": "        if positive || true {\n",
+    "expect_failing": [
+      "coarse_review::tests::reviewed_price_prefers_a_positive_rate_and_keeps_its_digits"
+    ],
+    "rule": "A zero or negative rate does not price the row; the value does."
+  },
+  {
+    "id": "S3-projection-drops-reviewed-price",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "    result[\"pricing_review_price\"] = crate::coarse_review::reviewed_price(&result)",
+    "replace": "    result[\"pricing_review_price_unused\"] = crate::coarse_review::reviewed_price(&result)",
+    "expect_failing": [
+      "projection_base_row_vectors",
+      "projection_slice_pricing_vectors"
+    ],
+    "rule": "Every projected row carries its transaction's reviewed coarse price."
   }
 ]

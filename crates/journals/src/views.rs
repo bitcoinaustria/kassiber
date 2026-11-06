@@ -131,6 +131,10 @@ impl Row {
     fn has(&self, name: &str) -> bool {
         self.0.iter().any(|(key, _)| key == name)
     }
+    /// The row as a Python mapping, in column order.
+    pub(crate) fn to_py(&self) -> Py {
+        dict(self.0.iter().map(|(key, value)| (key.as_str(), py(value))))
+    }
 }
 
 pub(crate) fn sql_error(error: kassiber_store::rusqlite::Error) -> AppError {

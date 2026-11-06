@@ -1364,3 +1364,147 @@ fn revert_cannot_exclude_a_newly_reviewed_custody_leg() {
         Some(&Value::Bool(false))
     );
 }
+
+#[test]
+fn coarse_price_acceptance_binds_the_price_labels_history_and_reverts() {
+    use kassiber_transactions::metadata::{GroupedUpdate, HistoryOptions, PricingUpdate};
+    let (_tmp, book) = book();
+    let accept = |book: &Book, pricing: bool| {
+        execute(
+            book.connection(),
+            &scope(),
+            &Command::Update(Box::new(GroupedUpdate {
+                accept_coarse_price: true,
+                pricing: pricing.then(|| PricingUpdate {
+                    fiat_rate: s("1"),
+                    ..Default::default()
+                }),
+                ..grouped()
+            })),
+        )
+    };
+    let refused = |error: kassiber_envelope::AppError| (error.code, error.message);
+    assert_eq!(
+        refused(accept(&book, false).unwrap_err()),
+        (
+            "validation".into(),
+            "only a coarse price can be accepted".into()
+        )
+    );
+    book.connection()
+        .execute(
+            "UPDATE transactions SET pricing_quality='coarse_fallback' WHERE id='tx'",
+            [],
+        )
+        .unwrap();
+    assert_eq!(
+        refused(accept(&book, true).unwrap_err()),
+        (
+            "validation".into(),
+            "accept the current coarse price or set a new one, not both".into()
+        )
+    );
+    assert_eq!(
+        refused(accept(&book, false).unwrap_err()),
+        (
+            "validation".into(),
+            "the coarse price has no value to accept".into()
+        )
+    );
+    // The rate prices the row first; a zero rate falls back to the value.
+    book.connection()
+        .execute(
+            "UPDATE transactions SET fiat_rate=0.0,fiat_rate_exact='0',fiat_value=12.5,fiat_value_exact='12.50' WHERE id='tx'",
+            [],
+        )
+        .unwrap();
+    let saved = accept(&book, false).unwrap();
+    assert_eq!(get(&saved, "updated"), Some(&Value::Bool(true)));
+    let stored = |book: &Book| -> Option<String> {
+        book.connection()
+            .query_row(
+                "SELECT pricing_review_accepted_price FROM transactions WHERE id='tx'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap()
+    };
+    assert_eq!(stored(&book).as_deref(), Some("value:12.50"));
+    book.connection()
+        .execute(
+            "UPDATE transactions SET fiat_rate=3197.6,fiat_rate_exact='3197.60' WHERE id='tx'",
+            [],
+        )
+        .unwrap();
+    accept(&book, false).unwrap();
+    assert_eq!(stored(&book).as_deref(), Some("rate:3197.60"));
+    // Accepting the same price again changes nothing.
+    let again = accept(&book, false).unwrap();
+    assert_eq!(get(&again, "updated"), Some(&Value::Bool(false)));
+    let history = run(
+        &book,
+        Command::History(HistoryOptions {
+            transaction: Some("tx".into()),
+            field_family: Some("pricing".into()),
+            ..Default::default()
+        }),
+    );
+    let Some(Value::List(events)) = get(&history, "events") else {
+        panic!("{history:?}")
+    };
+    // Both edits may share a second; the newest-first order then follows
+    // their random event ids, so compare the set.
+    let mut labels: Vec<_> = events
+        .iter()
+        .map(|event| {
+            let Some(Value::List(fields)) = get(event, "fields") else {
+                panic!()
+            };
+            (
+                get(&fields[0], "label").cloned(),
+                get(&fields[0], "after_label").cloned(),
+                get(&fields[0], "family").cloned(),
+            )
+        })
+        .collect();
+    labels.sort_by_key(|(_, after, _)| format!("{after:?}"));
+    let row = |after: &str| {
+        (
+            Some(s("Approximate price accepted")),
+            Some(s(after)),
+            Some(s("pricing")),
+        )
+    };
+    assert_eq!(
+        labels,
+        [
+            row("Accepted price per unit 3197.60"),
+            row("Accepted value 12.50")
+        ]
+    );
+    let stale = run(&book, Command::Stale);
+    assert_eq!(
+        get(&stale, "family_counts"),
+        Some(&kassiber_envelope::dict([("pricing", Value::from(2))]))
+    );
+    let latest: String = book
+        .connection()
+        .query_row(
+            "SELECT event_id FROM transaction_edit_fields WHERE field='pricing_review_accepted' AND after_value LIKE '%rate:%'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let reverted = run(
+        &book,
+        Command::Revert {
+            transaction: "tx".into(),
+            event: latest,
+            field: Some("pricing_review_accepted".into()),
+            source: "cli".into(),
+            reason: None,
+        },
+    );
+    assert_eq!(get(&reverted, "updated"), Some(&Value::Bool(true)));
+    assert_eq!(stored(&book).as_deref(), Some("value:12.50"));
+}

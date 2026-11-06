@@ -183,7 +183,7 @@ Main keeps moving while the stack grows. Each merge of main into the stack
 inventories the Python changes the port must follow and slices them;
 [main sync 1](../reference/rust-main-sync.md) covers #672 to #714; its
 slices land one branch each, and the inventory records each result (S1,
-S2, S6 and S11 so far).
+S2, S3, S5, S6 and S11 so far).
 
 ## Verification
 

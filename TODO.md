@@ -200,14 +200,21 @@ against the Rust port and slices the gaps; Python stays the reference.
   capabilities follow main. New leaves and kinds stay `not_implemented`.
 - [x] S2: qualified transaction references through one lookup, including
   `ui.transactions.resolve`'s shared-txid rows.
+- [x] S3: the request builder holds only an unaccepted or changed coarse
+  price; projected rows carry the reviewed price; the metadata service
+  records, lists and reverts an acceptance. `accept_coarse_prices` arrives
+  with S4.
+- [x] S5: quarantine rolled up by root cause: `journals quarantine groups`,
+  resolve by `root:` group with the measured or unmeasured effect, and the
+  summary's `fiat_currency`, counter definitions and semantics-aware
+  freshness. The AI-only `ui.journals.quarantine.groups` arrives with S12.
 - [x] S6: dismissals mark journals stale; `transfers dismissals list|delete`
   and their kinds; suggestion `exclusions`.
 - [x] S11: custody component remediation on blocked plans and activations.
   The AI-only revision boundary stays with S12.
-- [ ] S3 to S5 and S7 to S10 as the inventory lists them: coarse-price
-  acceptance, the review workflow, quarantine root causes, the Reports
-  screen (including the empty-root `jurisdictionCode`), wallet completeness,
-  the transaction dashboard and readiness definitions.
+- [ ] S4 and S7 to S10 as the inventory lists them: the review workflow,
+  the Reports screen (including the empty-root `jurisdictionCode`), wallet
+  completeness, the transaction dashboard and readiness definitions.
 - [ ] Refresh the transfer fixtures S1's added transaction column broke
   (`component_reads.json`, `pairing_services.json`), and port the #684
   result changes they will expose (`transfers rules delete` returns the

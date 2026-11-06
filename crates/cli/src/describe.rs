@@ -20,6 +20,7 @@ pub const IMPLEMENTED: &[&str] = &[
     "next-actions",
     "wallets.sync",
     "journals.process",
+    "journals.quarantine.groups",
     "diagnostics.collect",
     "backends.list",
     "backends.kinds",

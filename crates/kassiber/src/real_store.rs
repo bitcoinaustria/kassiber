@@ -1147,6 +1147,13 @@ impl Book for RealBook {
                 args,
             );
         }
+        if kind == "journals.quarantine.groups" {
+            // The CLI leaf; its arguments come from the parser, never a client.
+            let args = args.expect("parsed CLI arguments");
+            return journals::quarantine_groups_command(self.conn()?, args, &|w, p| {
+                self.resolve_scope(w, p)
+            });
+        }
         kassiber_journals::views::execute(self.conn()?, kind, args)
     }
     fn process_journals(

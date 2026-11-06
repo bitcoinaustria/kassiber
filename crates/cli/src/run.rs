@@ -671,6 +671,17 @@ fn book_command(
         if operation == "transactions.list" {
             return emit(crate::transactions::execute(book.as_mut(), namespace)?);
         }
+        if operation == "journals.quarantine.groups" {
+            let arg = |name: &str| namespace.get(name).cloned().unwrap_or(Value::Null);
+            let args = dict([
+                ("workspace", arg("workspace")),
+                ("profile", arg("profile")),
+                ("group_id", arg("group_id")),
+                ("cursor", arg("cursor")),
+                ("limit", arg("limit")),
+            ]);
+            return emit(book.journal_view(operation, Some(&args))?);
+        }
         if operation == "journals.process" {
             let result = book
                 .process_journals(

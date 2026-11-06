@@ -575,6 +575,11 @@ fn graphless_projection(row: &Value) -> bool {
             .into_iter()
             .all(|payload| !payload["vin"].is_array() || !payload["vout"].is_array())
 }
+/// `_coarse_needs_review`: only an unaccepted or changed coarse price is held.
+fn coarse_needs_review(row: &Value) -> Result<bool, Refusal> {
+    crate::coarse_review::needs_review(row)
+        .map_err(|(family, message)| Refusal::new("construction", family, message))
+}
 fn request_row(
     row: &Value,
     holds: &BTreeMap<String, &str>,
@@ -649,10 +654,7 @@ fn request_row(
         ("fee_msat".into(), fee.clone()),
         ("rate".into(), rate),
         ("value".into(), value),
-        (
-            "coarse".into(),
-            Value::Bool(row["pricing_quality"] == "coarse_fallback"),
-        ),
+        ("coarse".into(), Value::Bool(coarse_needs_review(row)?)),
         ("kind".into(), Value::String(kind)),
         ("text".into(), row_text),
         ("regime_override".into(), regime),
