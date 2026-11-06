@@ -178,6 +178,8 @@ pub const IMPLEMENTED: &[&str] = &[
     "transfers.rules.enable",
     "transfers.rules.disable",
     "transfers.dismiss",
+    "transfers.dismissals.list",
+    "transfers.dismissals.delete",
     "transfers.components.plan",
     "transfers.components.apply",
     "transfers.components.list",

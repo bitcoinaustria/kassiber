@@ -406,6 +406,92 @@ struct CacheKey {
     floor: i64,
     heuristics: bool,
 }
+/// `_active_paired_ids`: both legs of every pair that is not deleted.
+fn active_paired_ids(pairs: &[Value]) -> HashSet<String> {
+    pairs
+        .iter()
+        .filter(|r| !truthy(&value(r, "deleted_at")))
+        .flat_map(|r| [st(r, "out_transaction_id"), st(r, "in_transaction_id")])
+        .filter(|v| !v.is_empty())
+        .collect()
+}
+/// `_seconds_or_now(now_iso)`.
+fn now_seconds(now: &str) -> Option<f64> {
+    if now.is_empty() {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()
+            .map(|d| d.as_secs_f64())
+    } else {
+        instant(&s(now))
+    }
+}
+/// `dismissal_is_active`: an expiry at or before `now` lifts the veto; a
+/// missing or unreadable expiry never does.
+pub fn dismissal_is_active(expires_at: &Value, now: &str) -> bool {
+    !instant(expires_at)
+        .zip(now_seconds(now))
+        .is_some_and(|(expiry, now)| expiry <= now)
+}
+/// `_active_dismissals`: the (out, in) pairs still vetoed at `now`.
+fn active_dismissals(dismissals: &[Value], now: &str) -> HashSet<(String, String)> {
+    let now = now_seconds(now);
+    dismissals
+        .iter()
+        .filter(|r| {
+            !instant(&value(r, "expires_at"))
+                .zip(now)
+                .is_some_and(|(expiry, now)| expiry <= now)
+        })
+        .map(|r| (st(r, "out_transaction_id"), st(r, "in_transaction_id")))
+        .collect()
+}
+/// `candidate_exclusion_counts`: why an expected candidate can be absent,
+/// counted over the whole profile before any filter. Legs held by an active
+/// pair, other legs a current stored move already books, and unexpired
+/// dismissals whose two legs are otherwise still open (pairs, not legs).
+pub fn exclusion_counts(
+    pop: &Population,
+    pairs: &[Value],
+    dismissals: &[Value],
+    booked: &HashSet<String>,
+    now: &str,
+) -> Value {
+    let paired = active_paired_ids(pairs);
+    let legs: HashSet<&str> = pop.rows.iter().map(|r| r.id.as_str()).collect();
+    let unpaired: HashSet<&str> = legs
+        .iter()
+        .copied()
+        .filter(|id| !paired.contains(*id))
+        .collect();
+    let open: HashSet<&str> = unpaired
+        .iter()
+        .copied()
+        .filter(|id| !booked.contains(*id))
+        .collect();
+    let count = |n: usize| Value::Int(n.into());
+    kassiber_envelope::dict([
+        (
+            "excluded_by_active_pair",
+            count(legs.iter().filter(|id| paired.contains(**id)).count()),
+        ),
+        (
+            "excluded_already_journaled",
+            count(unpaired.iter().filter(|id| booked.contains(**id)).count()),
+        ),
+        (
+            "excluded_by_dismissal",
+            count(
+                active_dismissals(dismissals, now)
+                    .iter()
+                    .filter(|(out, inbound)| {
+                        open.contains(out.as_str()) && open.contains(inbound.as_str())
+                    })
+                    .count(),
+            ),
+        ),
+    ])
+}
 /// Match against full evidence populations; occupancy only removes emitted edges.
 pub fn suggest(
     pop: &Population,
@@ -415,29 +501,8 @@ pub fn suggest(
     options: &MatchOptions,
 ) -> Result<Vec<Candidate>> {
     let rows = &pop.rows;
-    let paired: HashSet<_> = pairs
-        .iter()
-        .filter(|r| !truthy(&value(r, "deleted_at")))
-        .flat_map(|r| [st(r, "out_transaction_id"), st(r, "in_transaction_id")])
-        .filter(|v| !v.is_empty())
-        .collect();
-    let now = if options.now.is_empty() {
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .ok()
-            .map(|d| d.as_secs_f64())
-    } else {
-        instant(&s(&options.now))
-    };
-    let dismissed: HashSet<_> = dismissals
-        .iter()
-        .filter(|r| {
-            !instant(&value(r, "expires_at"))
-                .zip(now)
-                .is_some_and(|(expiry, now)| expiry <= now)
-        })
-        .map(|r| (st(r, "out_transaction_id"), st(r, "in_transaction_id")))
-        .collect();
+    let paired = active_paired_ids(pairs);
+    let dismissed = active_dismissals(dismissals, &options.now);
     let key = CacheKey {
         paired: paired.clone(),
         dismissed: dismissed.clone(),

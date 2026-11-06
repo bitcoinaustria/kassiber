@@ -77,7 +77,9 @@ fn bytes(v: &Value) -> String {
 fn authoring_sequences_match_python_rows_and_errors_byte_for_byte() {
     let (_dir, book) = book();
     let fixture = kassiber_pytext::loads(include_str!("authoring.json")).unwrap();
-    let names:Vec<String>=book.connection().prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT IN ('swap_matching_rules','transaction_pair_dismissals','profiles') ORDER BY name").unwrap().query_map([],|r|r.get(0)).unwrap().collect::<Result<_,_>>().unwrap();
+    // Marking journals stale updates profiles, which the chain-analysis
+    // overlay triggers record in the chain index clock and dirty set.
+    let names:Vec<String>=book.connection().prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT IN ('swap_matching_rules','transaction_pair_dismissals','profiles','chain_index_clock','chain_index_dirty') ORDER BY name").unwrap().query_map([],|r|r.get(0)).unwrap().collect::<Result<_,_>>().unwrap();
     let original: Vec<_> = names
         .iter()
         .map(|name| (name, rows(book.connection(), name)))

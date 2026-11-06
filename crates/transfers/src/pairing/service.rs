@@ -453,7 +453,8 @@ fn suggestions_from(
     pop: &Population,
     o: &PairingOptions,
 ) -> Result<Value> {
-    let mut candidates = candidates(c, scope, pop, o, &ProjectionGuards::load(c, scope)?)?;
+    let guards = ProjectionGuards::load(c, scope)?;
+    let mut candidates = candidates(c, scope, pop, o, &guards)?;
     sort(&mut candidates, true);
     let candidates = filter(candidates, o, true)?;
     let rules = load_rules(c, scope)?;
@@ -476,9 +477,21 @@ fn suggestions_from(
             data
         })
         .collect();
+    // Profile-wide and before the filters: what the matcher skipped, so an
+    // empty or short candidate list can be told apart from "nothing to pair".
+    let refs = pair_authoring::active_refs(c, scope)?;
+    let dismissals=rows(c,"SELECT out_transaction_id,in_transaction_id,expires_at FROM transaction_pair_dismissals WHERE profile_id=?",[scope.profile_id])?;
+    let exclusions = matcher::exclusion_counts(
+        pop,
+        &refs,
+        &dismissals,
+        &guards.booked_move_transaction_ids,
+        &o.matching.now,
+    );
     Ok(dict([
         ("candidates", Value::List(result)),
         ("counts", counts(&candidates, &rules)),
+        ("exclusions", exclusions),
     ]))
 }
 fn suggestion_counts(

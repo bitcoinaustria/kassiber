@@ -10,6 +10,7 @@ from unittest.mock import patch
 ROOT=Path(__file__).resolve().parents[3]
 sys.path.insert(0,str(ROOT))
 from kassiber.cli import handlers
+from kassiber.core import custody_review_terms as terms
 from kassiber.db import open_db
 from kassiber.errors import AppError
 
@@ -56,7 +57,7 @@ def main():
             current=REAL_DATETIME(2025,6,1,tzinfo=datetime.timezone.utc)+datetime.timedelta(hours=i)
             FixedDatetime.current=current
             stamp=current.isoformat().replace('+00:00','Z')
-            with patch.object(handlers.uuid,'uuid4',return_value=f'id-{i}'),patch.object(handlers,'now_iso',return_value=stamp),patch.object(datetime,'datetime',FixedDatetime):
+            with patch.object(handlers.uuid,'uuid4',return_value=f'id-{i}'),patch.object(handlers,'now_iso',return_value=stamp),patch.object(terms,'now_iso',return_value=stamp),patch.object(datetime,'datetime',FixedDatetime):
                 try:
                     if operation=='transfers.rules.create':
                         result=handlers.create_transfer_rule(c,'w','p',**args)
