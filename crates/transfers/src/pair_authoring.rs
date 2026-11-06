@@ -8,7 +8,7 @@ use kassiber_store::rusqlite::params;
 use sql::{atomic, error};
 use std::collections::BTreeSet;
 
-const KINDS: &[&str] = &[
+pub(crate) const KINDS: &[&str] = &[
     "manual",
     "coinjoin",
     "whirlpool",
@@ -19,7 +19,7 @@ const KINDS: &[&str] = &[
     "submarine-swap",
     "swap-refund",
 ];
-const POLICIES: &[&str] = &["carrying-value", "taxable"];
+pub(crate) const POLICIES: &[&str] = &["carrying-value", "taxable"];
 const PUBLIC: &[&str] = &[
     "id",
     "component_id",

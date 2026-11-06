@@ -6,7 +6,7 @@
 //! Python base. Provider fetching requires a separate, exact-action grant.
 mod csv;
 mod desktop;
-pub use desktop::run as desktop_command;
+pub use desktop::{coverage, run as desktop_command};
 mod providers;
 pub mod time;
 pub use providers::{

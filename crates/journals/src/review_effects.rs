@@ -1,4 +1,5 @@
 //! Economic commitments over the canonical review build, independent of row IDs.
+use crate::review_workflow::Error;
 use crate::{JournalEntryRow, JournalState};
 use kassiber_custody::codec;
 use kassiber_envelope::{dict, get, s, set, AppError};
@@ -6,7 +7,7 @@ use kassiber_pydecimal::{Context, Decimal};
 use kassiber_pyjson::Value;
 use kassiber_store::rusqlite::Connection;
 use kassiber_transfers::review_support::sql;
-use kassiber_transfers::{review_operations, Scope};
+use kassiber_transfers::{review_operations, Scope, Sources};
 use std::collections::{BTreeMap, BTreeSet};
 
 type Result<T> = std::result::Result<T, AppError>;
@@ -280,8 +281,10 @@ fn acquisition(state: &JournalState<'_>, conn: &Connection, scope: &Scope<'_>) -
     ]))
 }
 
-/// Include live policy-bound acquisition totals only when the batch classifies an inbound.
-pub fn effects(
+/// Include live policy-bound acquisition totals only when the batch classifies
+/// an inbound. Everything a plan commits to except the per-year tax figures,
+/// which need the state stored (see [`effects`]).
+pub fn effects_without_tax(
     state: &JournalState<'_>,
     conn: &Connection,
     scope: &Scope<'_>,
@@ -302,5 +305,19 @@ pub fn effects(
         };
         set(&mut effects, key.as_str().expect("ASCII effect key"), value);
     }
+    Ok(effects)
+}
+
+/// `_effects`: [`effects_without_tax`] and the state's per-year tax figures.
+pub fn effects(
+    state: &JournalState<'_>,
+    conn: &Connection,
+    scope: &Scope<'_>,
+    operations: &Value,
+    sources: &dyn Sources,
+) -> std::result::Result<Value, Error> {
+    let mut effects = effects_without_tax(state, conn, scope, operations)?;
+    let tax = crate::review_tax::tax_effects(conn, scope, state, sources)?;
+    set(&mut effects, "tax", tax);
     Ok(effects)
 }

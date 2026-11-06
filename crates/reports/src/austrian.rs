@@ -241,13 +241,8 @@ fn detail(row: Value) -> Result<Value> {
         ),
     ]))
 }
-pub fn report(
-    conn: &Connection,
-    workspace: &Value,
-    profile: &Value,
-    args: &Value,
-) -> Result<Value> {
-    let year = year(args)?;
+/// `_austrian_e1kv_rows`: the year's classified rows, in journal order.
+pub(crate) fn e1kv_rows(conn: &Connection, profile: &Value, year: i64) -> Result<Vec<Value>> {
     let (start, end) = calendar::window(year);
     let id = text(profile, "id");
     let raw = rows(conn,"SELECT je.occurred_at,je.transaction_id,je.entry_type,je.asset,je.quantity,COALESCE(je.cost_basis,0) AS cost_basis,COALESCE(je.proceeds,0) AS proceeds,COALESCE(je.gain_loss,0) AS gain_loss,COALESCE(je.description,'') AS description,je.at_category,je.at_kennzahl,w.label AS wallet,t.external_id AS transaction_external_id,COALESCE(NULLIF(t.kind_override,''),t.kind) AS transaction_kind,t.note AS transaction_note FROM journal_entries je JOIN wallets w ON w.id=je.wallet_id LEFT JOIN transactions t ON t.id=je.transaction_id WHERE je.profile_id=? AND je.at_category IS NOT NULL AND je.at_category!='neu_swap' AND je.entry_type NOT IN ('fee','transfer_fee') AND COALESCE(t.taxability_override,1)!=0 AND je.occurred_at>=? AND je.occurred_at<? ORDER BY je.occurred_at ASC,je.created_at ASC,je.id ASC",[&id,&start,&end])?;
@@ -257,6 +252,21 @@ pub fn report(
             details.push(detail(row)?);
         }
     }
+    Ok(details)
+}
+pub(crate) fn kennzahl_for_category(category: &str) -> Option<i64> {
+    mapping(category)
+}
+pub fn report(
+    conn: &Connection,
+    workspace: &Value,
+    profile: &Value,
+    args: &Value,
+) -> Result<Value> {
+    let year = year(args)?;
+    let (start, end) = calendar::window(year);
+    let id = text(profile, "id");
+    let details = e1kv_rows(conn, profile, year)?;
     let mut summaries = Vec::new();
     let mut totals = dict::<&str>([]);
     for code in [172, 174, 176, 801] {

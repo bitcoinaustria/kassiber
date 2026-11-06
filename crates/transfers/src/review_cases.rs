@@ -571,6 +571,15 @@ pub fn inspect_with_error<E: From<AppError>>(
             })
             .collect();
         let waiting = waiting_roots(&held, &details);
+        // Transactions whose own stored price is coarse.
+        let coarse: BTreeSet<String> = rows(
+            conn,
+            "SELECT id FROM transactions WHERE profile_id=? AND pricing_quality=?",
+            [scope.profile_id, "coarse_fallback"],
+        )?
+        .iter()
+        .map(|row| text(row, "id"))
+        .collect();
         let mut waiting_counts = BTreeMap::<String, usize>::new();
         for root in waiting.values() {
             *waiting_counts.entry(root.clone()).or_default() += 1;
@@ -599,7 +608,9 @@ pub fn inspect_with_error<E: From<AppError>>(
                     ("status", s("unresolved")),
                 ])]),
             );
-            let mut operations = if reason.contains("price") {
+            let mut operations = if reason == "pricing_review_required" && coarse.contains(*id) {
+                vec![s("accept_coarse_prices"), s("price_override")]
+            } else if reason.contains("price") {
                 vec![s("price_override")]
             } else if ["custody", "privacy", "transfer", "swap"]
                 .iter()
@@ -673,6 +684,17 @@ pub fn inspect_with_error<E: From<AppError>>(
             ("workspace_id", value(&profile, "workspace_id")),
             ("profile_id", value(&profile, "id")),
             ("input_version", Value::Int(version)),
+            // What price_override's fiat_rate and fiat_value are stated in.
+            (
+                "fiat_currency",
+                s(kassiber_pytext::upper(kassiber_pytext::strip(
+                    &if truthy(&value(&profile, "fiat_currency")) {
+                        text(&profile, "fiat_currency")
+                    } else {
+                        String::new()
+                    },
+                ))),
+            ),
             ("freshness", freshness),
             ("cases", Value::List(cases)),
             ("next_cursor", next),

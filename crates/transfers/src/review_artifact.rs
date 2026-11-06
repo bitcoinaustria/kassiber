@@ -1,10 +1,10 @@
 //! Portable content construction and apply admission, without accounting authority.
-use crate::{review_operations as operations, value, Scope};
+use crate::{review_delta, review_operations as operations, value, Scope};
 use kassiber_envelope::{dict, get, s, set, AppError};
 use kassiber_pyjson::{Key, Value};
 
 type Result<T> = std::result::Result<T, AppError>;
-const FIELDS: [&str; 8] = [
+const FIELDS: [&str; 9] = [
     "schema_version",
     "workspace_id",
     "profile_id",
@@ -12,11 +12,20 @@ const FIELDS: [&str; 8] = [
     "operations",
     "before",
     "after",
+    "delta",
     "digest",
 ];
 
 fn invalid(message: &str) -> AppError {
     AppError::new("review_artifact_invalid", message)
+}
+
+/// `_tax_delta` over an artifact's own effects, refused as Python refuses it.
+pub fn tax_delta(before: &Value, after: &Value) -> Result<Value> {
+    review_delta::tax_delta(before, after).map_err(|fault| match fault {
+        review_delta::Fault::Malformed => invalid("Review artifact is malformed"),
+        review_delta::Fault::Internal(message) => AppError::new("internal_error", message),
+    })
 }
 fn bounded(artifact: &Value) -> Result<()> {
     if operations::canonical(artifact)?.len() > operations::MAX_ARTIFACT_BYTES {
@@ -37,6 +46,7 @@ pub fn assemble(
     before: Value,
     after: Value,
 ) -> Result<Value> {
+    let delta = tax_delta(&before, &after)?;
     let mut artifact = dict([
         ("schema_version", 1.into()),
         ("workspace_id", s(scope.workspace_id)),
@@ -45,6 +55,7 @@ pub fn assemble(
         ("operations", normalized_operations),
         ("before", before),
         ("after", after),
+        ("delta", delta),
     ]);
     let digest = operations::digest(&artifact)?;
     set(&mut artifact, "digest", s(digest));
@@ -102,7 +113,7 @@ pub fn admit(artifact: &Value, scope: &Scope<'_>, idempotency_key: &Value) -> Re
         return Err(invalid("Review artifact is malformed"));
     }
     bounded(artifact)?;
-    let payload = dict(FIELDS[..7].iter().map(|key| (*key, value(artifact, key))));
+    let payload = dict(FIELDS[..8].iter().map(|key| (*key, value(artifact, key))));
     if !equal(&value(artifact, "schema_version"), &1.into())
         || value(artifact, "digest") != s(operations::digest(&payload)?)
     {
@@ -119,6 +130,10 @@ pub fn admit(artifact: &Value, scope: &Scope<'_>, idempotency_key: &Value) -> Re
     let normalized = operations::normalize(&value(artifact, "operations"))?;
     if !equal(&normalized, &value(artifact, "operations")) {
         return Err(invalid("Review operations are not canonical"));
+    }
+    let delta = tax_delta(&value(artifact, "before"), &value(artifact, "after"))?;
+    if !equal(&delta, &value(artifact, "delta")) {
+        return Err(invalid("Review tax delta does not match its effects"));
     }
     if !matches!(idempotency_key, Value::Str(key) if (1..=200).contains(&kassiber_pytext::strip_py(key).code_points().count()))
     {

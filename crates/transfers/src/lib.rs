@@ -21,6 +21,7 @@ mod records;
 pub mod review_artifact;
 pub mod review_cases;
 mod review_context;
+pub mod review_delta;
 pub mod review_operations;
 pub mod review_reading;
 mod rules;

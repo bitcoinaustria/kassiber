@@ -189,6 +189,8 @@ fn ensure_tag(conn: &Connection, scope: &Scope<'_>, label: &str) -> Result<Strin
     Ok(id)
 }
 
+/// Python's bare `json.dumps`: a value it cannot encode escapes as an
+/// exception, which callers answer as `internal_error`.
 fn json(value: &Value) -> Result<String> {
     dumps(
         value,
@@ -198,7 +200,7 @@ fn json(value: &Value) -> Result<String> {
             ..Options::default()
         },
     )
-    .map_err(|e| AppError::new("validation", e.to_string()))
+    .map_err(|e| AppError::new("internal_error", e.to_string()))
 }
 
 fn append(

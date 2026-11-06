@@ -7,12 +7,16 @@ use kassiber_store::rusqlite::Connection;
 use kassiber_transactions::metadata::{self, Command, GroupedUpdate, PricingUpdate};
 use kassiber_transfers::review_support::sql;
 use kassiber_transfers::review_support::{text, value};
-use kassiber_transfers::{review_cases, review_support, Scope, Sources};
+use kassiber_transfers::{review_cases, review_operations, review_support, Scope, Sources};
 use std::collections::{BTreeMap, BTreeSet};
+
+pub(crate) const COARSE_PRICE_REASON: &str = "pricing_review_required";
 
 #[derive(Default)]
 pub(crate) struct Cases {
     quarantined: BTreeSet<String>,
+    /// Held because a coarse price waits for the owner.
+    coarse_review: BTreeSet<String>,
     suspense_components: BTreeSet<String>,
 }
 
@@ -22,6 +26,12 @@ impl Cases {
             quarantined: state
                 .quarantines
                 .iter()
+                .map(|row| codec::pystr(&row.transaction_id))
+                .collect(),
+            coarse_review: state
+                .quarantines
+                .iter()
+                .filter(|row| row.reason == COARSE_PRICE_REASON)
                 .map(|row| codec::pystr(&row.transaction_id))
                 .collect(),
             suspense_components: state.custody_quantity["projection"]["decisions"]
@@ -156,7 +166,17 @@ fn metadata_operation(
         match kind.as_str() {
             "exclude" => update.excluded = Some(Value::Bool(true)),
             "price_override" => {
+                // A reviewed price is in the book's currency, which the
+                // journals read it in, whatever an unpriced row was imported with.
+                let book = sql::rows(
+                    conn,
+                    "SELECT fiat_currency FROM profiles WHERE id=?",
+                    [scope.profile_id],
+                )?;
                 let pricing = PricingUpdate {
+                    fiat_currency: book
+                        .first()
+                        .map_or(Value::Null, |row| value(row, "fiat_currency")),
                     fiat_rate: value(operation, "fiat_rate"),
                     fiat_value: value(operation, "fiat_value"),
                     source_kind: s("manual_override"),
@@ -196,12 +216,293 @@ fn metadata_operation(
     ]))
 }
 
+fn current_version(conn: &Connection, scope: &Scope<'_>) -> Result<i64, Error> {
+    let row = sql::rows(
+        conn,
+        "SELECT journal_input_version FROM profiles WHERE id=?",
+        [scope.profile_id],
+    )?
+    .into_iter()
+    .next()
+    .ok_or_else(|| AppError::new("not_found", "Review profile was not found"))?;
+    Ok(review_support::input_version(&row))
+}
+
+/// `_msat.msat_to_btc` formatted as Python's `format(..., "f")`: the quotient
+/// at the 32-digit context, in fixed notation.
+fn btc_text(msat: &Value) -> Result<String, Error> {
+    use kassiber_pydecimal::{Context, Decimal, Rounding};
+    let arithmetic = |error: kassiber_pydecimal::DecimalError| {
+        AppError::new("internal_error", error.to_string())
+    };
+    let amount: Decimal = kassiber_envelope::py_str(msat)
+        .parse()
+        .map_err(|_| AppError::new("internal_error", "invalid msat amount"))?;
+    let btc = amount
+        .div(
+            &Decimal::from(100_000_000_000_i64),
+            &Context::new(32, Rounding::HalfEven),
+        )
+        .map_err(arithmetic)?;
+    Ok(btc.to_fixed_string().map_err(arithmetic)?)
+}
+
+/// Pair creation and candidate dismissal or its undo, over the existing
+/// services; custody-gap actions through the gap review.
+fn term_operation(
+    conn: &Connection,
+    scope: &Scope<'_>,
+    operation: &Value,
+    sources: &dyn Sources,
+    source: &str,
+) -> Result<Value, Error> {
+    let kind = text(operation, "type");
+    if kind == "custody_gap" {
+        let mut request = dict([
+            ("action", value(operation, "action")),
+            ("gap_id", value(operation, "gap_id")),
+            ("reason", value(operation, "reason")),
+            (
+                "expected_input_version",
+                current_version(conn, scope)?.into(),
+            ),
+            ("authored_source", s(source)),
+        ]);
+        if let Some(classification) = get(operation, "classification") {
+            set(&mut request, "classification", classification.clone());
+        }
+        return Ok(kassiber_transfers::execute_with_sources(
+            conn,
+            scope,
+            "transfers.gaps.apply",
+            &request,
+            sources,
+        )?);
+    }
+    let mut legs = Vec::new();
+    for key in ["out_transaction_id", "in_transaction_id"] {
+        legs.push(
+            sql::rows(
+                conn,
+                "SELECT * FROM transactions WHERE id=? AND profile_id=?",
+                kassiber_store::rusqlite::params![
+                    review_support::reference_bind(&value(operation, key), 1)?,
+                    scope.profile_id
+                ],
+            )?
+            .into_iter()
+            .next(),
+        );
+    }
+    let (Some(out_row), Some(in_row)) = (legs[0].take(), legs[1].take()) else {
+        return Err(AppError::new("not_found", "Review transaction was not found").into());
+    };
+    let ids = Value::List(vec![value(&out_row, "id"), value(&in_row, "id")]);
+    let legs = |extra: &[(&str, Value)]| {
+        let mut args = dict([
+            ("tx_out", value(&out_row, "id")),
+            ("tx_in", value(&in_row, "id")),
+        ]);
+        for (key, item) in extra {
+            set(&mut args, key, item.clone());
+        }
+        args
+    };
+    match kind.as_str() {
+        "undismiss_pair" => {
+            let removed = kassiber_transfers::execute_with_sources(
+                conn,
+                scope,
+                "transfers.dismissals.delete",
+                &legs(&[]),
+                sources,
+            )?;
+            Ok(dict([
+                ("dismissal_id", value(&removed, "deleted")),
+                ("transaction_ids", ids),
+            ]))
+        }
+        "dismiss_pair" => {
+            let row = kassiber_transfers::execute_with_sources(
+                conn,
+                scope,
+                "transfers.dismiss",
+                &legs(&[
+                    ("reason", value(operation, "reason")),
+                    (
+                        "expires_in_days",
+                        get(operation, "expires_in_days")
+                            .cloned()
+                            .unwrap_or(90.into()),
+                    ),
+                ]),
+                sources,
+            )?;
+            Ok(dict([
+                ("dismissal_id", value(&row, "id")),
+                ("transaction_ids", ids),
+                ("expires_at", value(&row, "expires_at")),
+            ]))
+        }
+        _ => {
+            if value(&out_row, "direction") != s("outbound")
+                || value(&in_row, "direction") != s("inbound")
+            {
+                return Err(AppError::new(
+                    "validation",
+                    "Pair review requires an outbound and an inbound transaction",
+                )
+                .into());
+            }
+            let amount = match get(operation, "out_amount_msat") {
+                Some(msat) => s(btc_text(msat)?),
+                None => Value::Null,
+            };
+            let pair = kassiber_transfers::execute_with_sources(
+                conn,
+                scope,
+                "transfers.pair",
+                &legs(&[
+                    (
+                        "kind",
+                        get(operation, "pair_kind")
+                            .cloned()
+                            .unwrap_or_else(|| s("manual")),
+                    ),
+                    ("policy", value(operation, "policy")),
+                    ("notes", value(operation, "reason")),
+                    ("out_amount", amount),
+                    ("authored_source", s(source)),
+                ]),
+                sources,
+            )?;
+            Ok(dict([
+                ("pair_id", value(&pair, "id")),
+                ("transaction_ids", ids),
+                ("kind", value(&pair, "kind")),
+                ("policy", value(&pair, "policy")),
+            ]))
+        }
+    }
+}
+
+/// Held transactions whose own coarse price waits for the owner. A transfer's
+/// other leg held for the same reason has no coarse price of its own to
+/// accept; it clears when the priced leg is accepted.
+fn coarse_price_cases(
+    conn: &Connection,
+    scope: &Scope<'_>,
+    cases: &Cases,
+) -> Result<Vec<String>, Error> {
+    let coarse: BTreeSet<String> = sql::rows(
+        conn,
+        "SELECT id FROM transactions WHERE profile_id=? AND pricing_quality=?",
+        [scope.profile_id, "coarse_fallback"],
+    )?
+    .iter()
+    .map(|row| text(row, "id"))
+    .collect();
+    Ok(cases
+        .coarse_review
+        .iter()
+        .filter(|id| coarse.contains(*id))
+        .cloned()
+        .collect())
+}
+
+fn accept_coarse_prices(
+    conn: &Connection,
+    scope: &Scope<'_>,
+    operation: &mut Value,
+    cases: &Cases,
+    resolve: bool,
+    source: &str,
+) -> Result<Value, Error> {
+    if resolve && get(operation, "transaction_ids").is_none() {
+        let ids = coarse_price_cases(conn, scope, cases)?;
+        if ids.is_empty() {
+            return Err(AppError::new(
+                "review_case_changed",
+                "No transaction waits on a coarse price review",
+            )
+            .into());
+        }
+        if ids.len() > review_operations::MAX_ACCEPTED_PRICES {
+            return Err(AppError::new(
+                "validation",
+                format!(
+                    "More than {} coarse prices wait; name them in batches",
+                    review_operations::MAX_ACCEPTED_PRICES
+                ),
+            )
+            .into());
+        }
+        set(
+            operation,
+            "transaction_ids",
+            Value::List(ids.into_iter().map(s).collect()),
+        );
+    }
+    let Some(Value::List(named)) = get(operation, "transaction_ids").cloned() else {
+        return Err(AppError::new(
+            "review_artifact_invalid",
+            "accept_coarse_prices must name its transactions",
+        )
+        .into());
+    };
+    let coarse: BTreeSet<String> = coarse_price_cases(conn, scope, cases)?
+        .into_iter()
+        .collect();
+    let missing: Vec<Value> = named
+        .iter()
+        .filter(|id| !coarse.contains(&kassiber_envelope::py_str(id)))
+        .take(20)
+        .cloned()
+        .collect();
+    if !missing.is_empty() {
+        return Err(AppError::new(
+            "review_case_changed",
+            "A named transaction no longer waits on a coarse price review",
+        )
+        .with_details(dict([("transaction_ids", Value::List(missing))]))
+        .into());
+    }
+    for id in &named {
+        metadata::execute(
+            conn,
+            &kassiber_transactions::Scope {
+                workspace_id: scope.workspace_id,
+                profile_id: scope.profile_id,
+            },
+            &Command::Update(Box::new(GroupedUpdate {
+                transaction: kassiber_envelope::py_str(id),
+                accept_coarse_price: true,
+                reason: match get(operation, "reason") {
+                    Some(Value::Str(reason)) => Some(reason.clone()),
+                    _ => None,
+                },
+                source: if source == "user" { "gui" } else { source }.into(),
+                ..Default::default()
+            })),
+        )?;
+    }
+    Ok(dict([
+        ("transaction_ids", Value::List(named.clone())),
+        ("accepted", named.len().into()),
+    ]))
+}
+
+/// Apply normalized operations in order. With `resolve_acceptance` (planning)
+/// an `accept_coarse_prices` that names no transaction is filled in place
+/// with the current cases, so the artifact names each one.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn apply(
     conn: &Connection,
     scope: &Scope<'_>,
-    operations: &[Value],
+    operations: &mut [Value],
     sources: &dyn Sources,
     source: &str,
+    resolve_acceptance: bool,
     mut state: Cases,
     mut rebuild: impl FnMut(&Connection) -> Result<Cases, Error>,
 ) -> Result<Value, Error> {
@@ -215,7 +516,7 @@ pub(crate) fn apply(
         .map(|op| exact_text(op, "pair_id"))
         .collect();
     let mut baseline = Baseline::read(conn, scope, &unpaired)?;
-    for operation in operations {
+    for operation in operations.iter() {
         if text(operation, "type") == "unpair"
             && baseline
                 .pairs
@@ -226,9 +527,20 @@ pub(crate) fn apply(
     }
     let mut changed = false;
     let mut results = Vec::new();
-    for operation in operations {
+    for (index, operation) in operations.iter_mut().enumerate() {
         let kind = text(operation, "type");
         let result = match kind.as_str() {
+            "pair" | "dismiss_pair" | "undismiss_pair" | "custody_gap" => {
+                term_operation(conn, scope, operation, sources, source)?
+            }
+            "accept_coarse_prices" => {
+                // Earlier operations can expose or clear coarse-price holds;
+                // target expansion and validation use this batch position.
+                if index > 0 {
+                    state = rebuild(conn)?;
+                }
+                accept_coarse_prices(conn, scope, operation, &state, resolve_acceptance, source)?
+            }
             "custody_component" => {
                 let mut request = value(operation, "request");
                 let version = sql::rows(
@@ -352,14 +664,15 @@ mod tests {
             crate::pipeline::Prepared::load(&conn, profile, "2026-10-31T12:00:00Z").unwrap();
         let state = prepared.review_state(&conn, || "derived".into()).unwrap();
         let cases = Cases::from_state(&state);
-        let operations = list(value(&plan, "operations"));
+        let mut operations = list(value(&plan, "operations"));
         let mut builds = 0;
         let error = apply(
             &conn,
             &scope,
-            &operations,
+            &mut operations,
             &kassiber_transfers::SystemSources,
             "user",
+            false,
             cases,
             |_| {
                 builds += 1;

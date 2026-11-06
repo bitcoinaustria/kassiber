@@ -684,6 +684,11 @@ pub fn badges(conn: &Connection, profile: Option<&Value>) -> Result<Value> {
             };
         }
     }
+    // One number for every surface that says how much is left to review.
+    let review = match &swaps {
+        Value::Int(swaps) => Value::Int(swaps + attention),
+        _ => attention.into(),
+    };
     Ok(dict([
         ("quarantine", val(&freshness, "quarantine_count")),
         ("quarantine_attention", attention.into()),
@@ -692,5 +697,18 @@ pub fn badges(conn: &Connection, profile: Option<&Value>) -> Result<Value> {
             Value::Bool(truthy(&val(&freshness, "needs_processing"))),
         ),
         ("swaps", swaps),
+        ("review", review),
+        (
+            "definitions",
+            dict(REVIEW_BADGE_DEFINITIONS.map(|(key, text)| (key, s(text)))),
+        ),
     ]))
 }
+
+const REVIEW_BADGE_DEFINITIONS: [(&str, &str); 5] = [
+    ("quarantine", "Every quarantined row in the active book; equals ui.journals.quarantine summary.count."),
+    ("quarantine_attention", "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out."),
+    ("journals_needs_processing", "True when journal inputs changed since the last processing; quarantine counts then describe that last processing."),
+    ("swaps", "Transfer/swap candidates cached by the last matcher run; null until it has run."),
+    ("review", "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."),
+];

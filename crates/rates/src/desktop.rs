@@ -86,7 +86,7 @@ fn summary(conn: &Connection) -> Result<Value> {
         ("summary", dict([("cached_pair_count", Value::from(count))])),
     ]))
 }
-fn coverage(conn: &Connection, args: &Value) -> Result<Value> {
+pub fn coverage(conn: &Connection, args: &Value) -> Result<Value> {
     if let Value::Dict(fields) = args {
         let mut unknown: Vec<_> = fields
             .iter()

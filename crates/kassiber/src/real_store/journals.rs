@@ -668,7 +668,19 @@ pub(super) fn quarantine_resolve(
         update.excluded = Some(Value::Bool(true));
     } else {
         let (rate, total) = kassiber_journals::views::override_prices(rate, total, amount)?;
+        // A reviewed price is in the book's currency, which the journals read
+        // it in, whatever currency an unpriced row was imported with.
+        use kassiber_store::rusqlite::OptionalExtension;
+        let currency: Option<Option<String>> = conn
+            .query_row(
+                "SELECT fiat_currency FROM profiles WHERE id = ?",
+                [profile_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(sql)?;
         update.pricing = Some(kassiber_transactions::metadata::PricingUpdate {
+            fiat_currency: currency.flatten().map_or(Value::Null, s),
             fiat_rate: rate.map_or(Value::Null, |v| s(v.to_string())),
             fiat_value: total.map_or(Value::Null, |v| s(v.to_string())),
             source_kind: s("manual_override"),

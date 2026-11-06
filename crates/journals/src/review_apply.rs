@@ -82,6 +82,17 @@ fn list(value: &Value) -> &[Value] {
 }
 
 fn summary(operation: &Value) -> Value {
+    if value(operation, "type") == s("accept_coarse_prices") {
+        // The receipt lists the transactions; the summary only counts them.
+        return dict([
+            ("type", value(operation, "type")),
+            ("reason", value(operation, "reason")),
+            (
+                "transaction_count",
+                list(&value(operation, "transaction_ids")).len().into(),
+            ),
+        ]);
+    }
     if value(operation, "type") != s("custody_component") {
         return operation.clone();
     }
@@ -176,17 +187,19 @@ pub fn apply(
         let before = prepare(conn, scope, as_of)?;
         let state = before.review_state(conn, derived_ids())?;
         if !review_artifact::equal(
-            &review_effects::effects(&state, conn, scope, &normalized)?,
+            &review_effects::effects(&state, conn, scope, &normalized, sources)?,
             &value(artifact, "before"),
         ) {
             return Err(stale("Review evidence changed; create a fresh preview"));
         }
+        let mut operations = list(&normalized).to_vec();
         let results = review_simulation::apply(
             conn,
             scope,
-            list(&normalized),
+            &mut operations,
             sources,
             request.authored_source,
+            false,
             review_simulation::Cases::from_state(&state),
             |conn| facts(conn, scope, as_of),
         )?;
@@ -194,7 +207,7 @@ pub fn apply(
         // Persistence derives canonical entry identities from their economic
         // keys; temporary render identities never enter the durable journal.
         let state = after.review_state(conn, derived_ids())?;
-        let mut effects = review_effects::effects(&state, conn, scope, &normalized)?;
+        let mut effects = review_effects::effects(&state, conn, scope, &normalized, sources)?;
         if !review_artifact::equal(&effects, &value(artifact, "after")) {
             return Err(stale("Review effects changed; create a fresh preview"));
         }
@@ -225,6 +238,7 @@ pub fn apply(
             ("operations", results),
             ("transaction_ids", affected),
             ("before", value(artifact, "before")),
+            ("delta", value(artifact, "delta")),
             (
                 "proposed_operations",
                 Value::List(list(&normalized).iter().map(summary).collect()),

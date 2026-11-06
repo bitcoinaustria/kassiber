@@ -29,13 +29,17 @@ fn recipe(fixture: &Value, recipe: &Value) -> Value {
         panic!("recipe length")
     };
     let count = usize::try_from(count.clone()).unwrap();
+    let tax = field(field(&payload, "before"), "tax").clone();
     set(
         &mut payload,
         "before",
-        dict([(
-            "padding",
-            s(py_str(field(recipe, "character")).repeat(count)),
-        )]),
+        dict([
+            (
+                "padding",
+                s(py_str(field(recipe, "character")).repeat(count)),
+            ),
+            ("tax", tax),
+        ]),
     );
     payload
 }
@@ -82,7 +86,7 @@ fn review_artifact_content_matches_python_bounds_digests_and_order() {
             assert_eq!(field(&artifact, "digest"), field(case, "digest"));
         }
     }
-    assert_eq!(cases.len(), 10);
+    assert_eq!(cases.len(), 11);
 }
 
 #[test]
@@ -124,7 +128,7 @@ fn review_artifact_admission_matches_python_refusal_precedence_and_canonicality(
         );
     }
     assert!(accepted > 10 && rejected > 60);
-    assert_eq!(cases.len(), 103);
+    assert_eq!(cases.len(), 116);
 }
 
 #[test]

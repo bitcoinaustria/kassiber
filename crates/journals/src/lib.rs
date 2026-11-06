@@ -20,6 +20,7 @@ pub mod report_blockers;
 mod review_apply;
 pub mod review_effects;
 mod review_simulation;
+mod review_tax;
 pub mod review_workflow;
 pub mod scalar;
 pub mod service;

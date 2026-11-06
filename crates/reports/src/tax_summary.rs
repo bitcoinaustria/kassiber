@@ -1,7 +1,7 @@
 //! Stored generic summaries and Vienna-year Austrian journal aggregation.
 use super::*;
 use std::collections::{BTreeMap, BTreeSet};
-type Key = (i64, String, String, String);
+pub(crate) type Key = (i64, String, String, String);
 const MONEY: [&str; 3] = ["proceeds", "cost_basis", "gain_loss"];
 #[derive(Clone)]
 struct Totals {
@@ -117,7 +117,7 @@ fn income_kind(kind: &str) -> &'static str {
         _ => "income",
     }
 }
-fn entry_key(row: &Value, vienna: bool) -> Result<Option<Key>> {
+pub(crate) fn entry_key(row: &Value, vienna: bool) -> Result<Option<Key>> {
     let at = text(row, "occurred_at");
     let year = if vienna {
         calendar::vienna(&at)?.0

@@ -52,6 +52,67 @@ def inputs():
     yield [dict(type="custody_component", request=dict(action="create"), extra=True)]
     yield [base, unpair, {**base, "type": "price_override", "fiat_value": "0"},
            {**base, "type": "kind_override", "kind": "income"}]
+    yield from term_inputs()
+
+
+def term_inputs():
+    """#680's term operations and #708's coarse-price acceptance."""
+    legs = dict(out_transaction_id=" out ", in_transaction_id=" in\n", reason=" reviewed ")
+    pair = dict(type="pair", **legs)
+    yield [pair]
+    yield [{**pair, "pair_kind": " coinjoin ", "policy": "taxable", "out_amount_msat": 1}]
+    for field in ("out_transaction_id", "in_transaction_id", "reason", "pair_kind", "policy"):
+        for value in (None, False, 7, [], "", " \x1f ", "\ud800", "x" * 2000, "x" * 2001):
+            yield [{**pair, field: value}]
+    for field in ("out_transaction_id", "in_transaction_id", "reason"):
+        yield [{key: value for key, value in pair.items() if key != field}]
+    yield [{**pair, "extra": 1}]
+    yield [{**pair, "expires_in_days": 5}]
+    yield [{**pair, "in_transaction_id": "out"}]
+    yield [{**pair, "in_transaction_id": "out", "out_transaction_id": " out\t"}]
+    for kind in ("manual", "whirlpool", "chain-swap", "swap-refund", "Manual", "direct-swap-payout"):
+        yield [{**pair, "pair_kind": kind}]
+    for policy in ("carrying-value", "taxable", "carrying_value", "Taxable"):
+        yield [{**pair, "policy": policy}]
+    for amount in (0, -1, 1, 10 ** 30, True, False, 1.0, "1", None, [1]):
+        yield [{**pair, "out_amount_msat": amount}]
+    dismiss = dict(type="dismiss_pair", **legs)
+    yield [dismiss]
+    for days in (0, 1, 90, 3650, 3651, -1, True, 1.0, "5", None, 10 ** 30):
+        yield [{**dismiss, "expires_in_days": days}]
+    yield [{**dismiss, "pair_kind": "manual"}]
+    yield [{**dismiss, "in_transaction_id": " out "}]
+    undismiss = dict(type="undismiss_pair", **legs)
+    yield [undismiss]
+    yield [{**undismiss, "expires_in_days": 5}]
+    yield [{key: value for key, value in undismiss.items() if key != "reason"}]
+    gap = dict(type="custody_gap", action=" create ", gap_id=" gap:1 ", reason=" bridge ")
+    yield [gap]
+    for action in (None, 1, "", "unsupported", "Create", *review.CUSTODY_GAP_ACTIONS):
+        yield [{**gap, "action": action}]
+    for action in ("classify_residual", "create"):
+        yield [{**gap, "action": action, "classification": " fee "}]
+        yield [{**gap, "action": action, "classification": ""}]
+        yield [{**gap, "action": action, "classification": None}]
+    for reason in ("x" * 500, "x" * 501, " " + "x" * 500 + " ", "x" * 2001):
+        yield [{**gap, "reason": reason}]
+    yield [{**gap, "gap_id": "g" * 2001}]
+    yield [{key: value for key, value in gap.items() if key != "gap_id"}]
+    accept = dict(type="accept_coarse_prices", reason=" accepted ")
+    yield [accept]
+    for ids in ([" b ", "a", " c"], ["a"], [], ["a", " a "], ["a", "a"], ["", "a"], [" "], [None],
+                [1], "a", None, {"a": 1}, [f"t{index}" for index in range(5000)],
+                [f"t{index}" for index in range(5001)], ["\ud800", "a"]):
+        yield [{**accept, "transaction_ids": ids}]
+    for reason in (None, "", " ", 7, "x" * 2000, "x" * 2001):
+        yield [{**accept, "reason": reason}]
+    yield [{key: value for key, value in accept.items() if key != "reason"}]
+    yield [{**accept, "transaction_id": "a"}]
+    yield [pair, dismiss, undismiss, gap, accept, {**base_operation(), "type": "exclude"}]
+
+
+def base_operation():
+    return dict(type="exclude", transaction_id="tx", reason="reviewed")
 
 
 def export():
@@ -63,6 +124,10 @@ def export():
             case.update(canonical=review._json(result), digest=review._digest(result))
         except AppError as error:
             case["error"] = dict(code=error.code, message=str(error), hint=error.hint, details=error.details)
+        except TypeError as error:
+            # A bare exception reaches the daemon's internal_error envelope
+            # (an unhashable operation type since #680).
+            case["error"] = dict(code="internal_error", message=str(error), hint=None, details=None)
         cases.append(case)
     for character in ("a", "é", "🦀"):
         operation = dict(type="custody_component", request=dict(action="create", spec=dict(notes="")))
