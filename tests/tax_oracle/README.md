@@ -56,6 +56,19 @@ module and those binding operations, so the switch stays on `rp2`; selecting
 `build_generic_policy` with its constants, and Austria comes from RP2's AT
 plugin, never from the product.
 
+## Edits since the freeze
+
+- `adapter.py`, Austrian disposals, fees and transfer fees: the journal
+  rows keep the regime of the lots RP2 consumed (`alt` or `neu`), taken
+  before category and taxability overrides are applied. One taxable event
+  splits into a row per category and consumed regime, so exit tax and
+  inventory follow the lots actually removed. The oracle edits are
+  `9dd068193` (exit-tax outflows) and `26bff7014` (disposals, and regimes
+  kept before tax overrides); the matching production change is the Rust
+  engine's `506c45a6c`. They landed in separate commits, against the freeze
+  rule below; `FROZEN.json` records the result, and the tax-shadow overlay
+  showed no exit-tax difference between the oracle and production.
+
 ## Freeze rule
 
 Any other edit is a bug fix. It lands in production and in the oracle in the
