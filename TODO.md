@@ -202,9 +202,12 @@ against the Rust port and slices the gaps; Python stays the reference.
   price; projected rows carry the reviewed price; the metadata service
   records, lists and reverts an acceptance. `accept_coarse_prices` arrives
   with S4.
-- [ ] S2 and S4 to S11 as the inventory lists them: qualified transaction
-  references, the review workflow, quarantine root causes, transfer
-  dismissals, the Reports screen (including the empty-root
+- [x] S5: quarantine rolled up by root cause: `journals quarantine groups`,
+  resolve by `root:` group with the measured or unmeasured effect, and the
+  summary's `fiat_currency`, counter definitions and semantics-aware
+  freshness. The AI-only `ui.journals.quarantine.groups` arrives with S12.
+- [ ] S2, S4 and S6 to S11 as the inventory lists them: qualified transaction
+  references, the review workflow, transfer dismissals, the Reports screen (including the empty-root
   `jurisdictionCode`), wallet completeness, the transaction dashboard,
   readiness definitions and custody component revision.
 - [ ] S12: rebase the R6 branches (AI catalog, providers, tools, MCP grants,

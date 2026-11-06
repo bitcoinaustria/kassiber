@@ -434,6 +434,54 @@ impl kassiber_wallets::freshness::execution::Handler for Refresh<'_> {
 #[cfg(feature = "test-harness")]
 mod hybrid;
 
+/// `journals quarantine groups` (`handlers.quarantine_groups`): the scope
+/// first, then the `--limit` bounds, then the rollup or one group's page.
+#[allow(clippy::type_complexity)]
+pub(super) fn quarantine_groups_command(
+    conn: &Connection,
+    args: &Value,
+    scope: &dyn Fn(
+        Option<&Value>,
+        Option<&Value>,
+    ) -> Result<(String, String), kassiber_envelope::AppError>,
+) -> Result<Value, kassiber_envelope::AppError> {
+    use kassiber_envelope::{get, AppError};
+    use kassiber_journals::quarantine::groups;
+    let (_, profile_id) = scope(get(args, "workspace"), get(args, "profile"))?;
+    let group_id = match get(args, "group_id") {
+        Some(Value::Str(text)) => Some(kassiber_envelope::py_str(&Value::Str(text.clone()))),
+        _ => None,
+    };
+    let cursor = match get(args, "cursor") {
+        Some(Value::Str(text)) => Some(text.clone()),
+        _ => None,
+    };
+    let limit = match get(args, "limit") {
+        Some(Value::Int(n)) => {
+            let maximum = if group_id.as_deref().is_some_and(|g| !g.is_empty()) {
+                groups::MAX_MEMBER_LIMIT
+            } else {
+                groups::MAX_GROUP_LIMIT
+            };
+            let bounded = i64::try_from(n).ok().filter(|n| (1..=maximum).contains(n));
+            Some(bounded.ok_or_else(|| {
+                AppError::new(
+                    "validation",
+                    format!("--limit must be between 1 and {maximum}"),
+                )
+            })?)
+        }
+        _ => None,
+    };
+    groups::quarantine_groups(
+        conn,
+        &profile_id,
+        group_id.as_deref(),
+        cursor.as_ref(),
+        limit,
+    )
+}
+
 /// `ui.journals.quarantine.resolve`: one audited price override or exclusion,
 /// then an optional plain rebuild, mirroring Python's
 /// `_quarantine_resolution_payload` with `default_source="gui"`.
@@ -450,6 +498,7 @@ pub(super) fn quarantine_resolve(
     };
     let allowed = [
         "transaction",
+        "group_id",
         "action",
         "fiat_rate",
         "fiat_value",
@@ -486,8 +535,29 @@ pub(super) fn quarantine_resolve(
         }
         _ => None,
     };
-    let transaction = stripped("transaction")
-        .ok_or_else(|| AppError::new("validation", format!("{KIND} requires a transaction")))?;
+    let transaction_arg = present("transaction");
+    let group_arg = present("group_id");
+    if transaction_arg.is_none() == group_arg.is_none() {
+        return Err(AppError::new(
+            "validation",
+            format!("{KIND} requires exactly one of transaction or group_id"),
+        ));
+    }
+    let transaction = match transaction_arg {
+        None => None,
+        Some(_) => Some(stripped("transaction").ok_or_else(|| {
+            AppError::new("validation", format!("{KIND} requires a transaction"))
+        })?),
+    };
+    let group_id = match group_arg {
+        None => None,
+        Some(_) => Some(stripped("group_id").ok_or_else(|| {
+            AppError::new(
+                "validation",
+                format!("{KIND} group_id must be a non-empty string"),
+            )
+        })?),
+    };
     let action = match get(args, "action") {
         Some(Value::Str(text)) if text.is("price_override") => "price_override",
         Some(Value::Str(text)) if text.is("exclude") => "exclude",
@@ -520,6 +590,23 @@ pub(super) fn quarantine_resolve(
             ))
         }
     };
+    // Python resolves the active book, a root group's root and the
+    // membership before the price checks.
+    let (workspace_id, profile_id) = scope()?;
+    let (workspace_id, profile_id) = (workspace_id.as_str(), profile_id.as_str());
+    let transaction = match &group_id {
+        // A root group acts on its root; what waits on it clears (or not) as
+        // a side effect of the reprocess, reported below.
+        // `transaction.strip()` applies to the root id too.
+        Some(group) => kassiber_pytext::strip(
+            &kassiber_journals::quarantine::groups::root_transaction_for_group(
+                conn, profile_id, group,
+            )?,
+        )
+        .to_owned(),
+        None => transaction.expect("exactly one target"),
+    };
+    let membership_before = kassiber_journals::quarantine::groups::membership(conn, profile_id)?;
     let (rate, total) = (present("fiat_rate"), present("fiat_value"));
     if action == "price_override" {
         if rate.is_none() && total.is_none() {
@@ -541,9 +628,6 @@ pub(super) fn quarantine_resolve(
         ));
     }
 
-    // Python resolves the active book only after every argument check.
-    let (workspace_id, profile_id) = scope()?;
-    let (workspace_id, profile_id) = (workspace_id.as_str(), profile_id.as_str());
     let sql =
         |error: kassiber_store::rusqlite::Error| AppError::new("internal_error", error.to_string());
     let rows = |query: &str,
@@ -736,13 +820,26 @@ pub(super) fn quarantine_resolve(
             ("created_at", scalar(created)),
         ])
     });
-    Ok(dict([
+    let effect = kassiber_journals::quarantine::groups::resolution_effect(
+        conn,
+        profile_id,
+        &transaction_id,
+        &membership_before,
+        reprocess,
+    )?;
+    let mut payload = vec![
         ("transaction_id", s(transaction_id.as_str())),
+        (
+            "group_id",
+            group_id.map_or(Value::Null, |group| s(group.as_str())),
+        ),
         ("action", s(action)),
         ("resolution", resolution),
         ("reprocessed", Value::Bool(reprocess)),
         ("journal_process", journal_process),
         ("cleared", Value::Bool(remaining.is_none())),
         ("remaining_quarantine", remaining.unwrap_or(Value::Null)),
-    ]))
+    ];
+    payload.extend(effect);
+    Ok(dict(payload))
 }

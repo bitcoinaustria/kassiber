@@ -14,7 +14,7 @@ pub mod persistence;
 pub mod pipeline;
 pub mod prebuild;
 pub mod process;
-mod quarantine;
+pub mod quarantine;
 mod render;
 pub mod report_blockers;
 mod review_apply;

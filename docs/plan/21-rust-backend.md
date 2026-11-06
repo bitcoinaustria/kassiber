@@ -182,7 +182,8 @@ reference while it still exists:
 Main keeps moving while the stack grows. Each merge of main into the stack
 inventories the Python changes the port must follow and slices them;
 [main sync 1](../reference/rust-main-sync.md) covers #672 to #714; its S1
-(store and registry) and S3 (coarse-price acceptance) slices are done.
+(store and registry), S3 (coarse-price acceptance) and S5 (quarantine root
+causes) slices are done.
 
 ## Verification
 
