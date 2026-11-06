@@ -126,7 +126,31 @@ The Rust side follows:
 
 ## State on this branch
 
-To be completed per step.
+### Providers (#675, #678, #690)
+
+- `providers/mod.rs`: `agent_access` (`full` by default, `restricted`) on
+  create, update, the stored row and the redacted output; an unknown stored
+  value reads as `restricted`. `ai.providers.list` adds `last_checked_at`
+  (the newest check at the current base URL) and `set_up` (a built-in row
+  still at its built-in address and name counts only once it is the
+  default, checked, or acknowledged off-device). An edit that changes the
+  address or the key deletes the saved checks.
+- `providers/checks.rs`: `ai_provider_checks` as Python writes it (JSON with
+  Python's default separators, models capped at 1000, bound to the base
+  URL, malformed rows read as nothing).
+- `service.rs`: `ai.provider_runtime.status` for one provider and
+  `ai.list_models` save every explicit check and seed the RAM cache from
+  the saved one, so a failed probe reports it stale; their `cached_only`
+  reads fall back to the saved check without contacting anything
+  (`ai.list_models` gained `cached_only`). Non-preference updates and
+  `set_api_key` clear the checks. `discovery::Cache::seed` holds a saved
+  snapshot already expired.
+- Hints say "Settings → Assistant" (#690).
+
+`tests/test_rust_ai_providers.py` now compares `ai_provider_checks` with
+the other provider tables, covers `agent_access` on create and update
+(daemon and CLI) and the cached and saved model listings, and adds an
+encrypted-book scenario; all 9 tests pass (all 8 failed on the merge).
 
 ## Python reference notes
 

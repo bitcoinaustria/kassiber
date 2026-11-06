@@ -22,8 +22,9 @@ pub struct Snapshot {
     pub value: Value,
     pub checked_at: String,
     pub stale: bool,
-    /// `{code, message}` of the failure a stale snapshot stands in for.
-    pub error: Option<(String, String)>,
+    /// `{code, message}` of the failure a stale snapshot stands in for (a
+    /// saved check reads back whatever dict was stored).
+    pub error: Option<Value>,
 }
 
 impl Snapshot {
@@ -32,12 +33,7 @@ impl Snapshot {
         vec![
             ("checked_at", s(&self.checked_at)),
             ("stale", Value::Bool(self.stale)),
-            (
-                "error",
-                self.error.as_ref().map_or(Value::Null, |(code, message)| {
-                    dict([("code", s(code)), ("message", s(message))])
-                }),
-            ),
+            ("error", self.error.clone().unwrap_or(Value::Null)),
         ]
     }
 }
@@ -80,13 +76,13 @@ impl Default for Cache {
 }
 
 /// `_safe_error(exc)`.
-fn safe_error(error: &AppError) -> (String, String) {
+fn safe_error(error: &AppError) -> Value {
     let code = if error.code.is_empty() {
-        "ai_unavailable".to_owned()
+        "ai_unavailable"
     } else {
-        error.code.clone()
+        error.code.as_str()
     };
-    (code, error.message.clone())
+    dict([("code", s(code)), ("message", s(&error.message))])
 }
 
 impl Cache {
@@ -117,6 +113,22 @@ impl Cache {
             .entries
             .get(key)
             .map(|entry| entry.snapshot.clone())
+    }
+
+    /// `seed(key, snapshot)`: hold a saved snapshot without probing, already
+    /// expired. `peek` reports it and the next `get` still probes; a failure
+    /// there returns it marked stale, as for any earlier result.
+    pub fn seed(&self, key: &str, snapshot: Snapshot) {
+        let mut state = self.lock();
+        if !state.entries.contains_key(key) {
+            state.entries.insert(
+                key.to_owned(),
+                Entry {
+                    snapshot,
+                    expires: Instant::now(),
+                },
+            );
+        }
     }
 
     /// The snapshot for `key`, probing with `fetch` on a cold or expired
@@ -243,11 +255,50 @@ mod tests {
             .unwrap();
         assert!(stale.stale);
         assert_eq!(stale.value, Value::List(vec![s("m")]));
-        assert_eq!(stale.error, Some(("ai_unavailable".into(), "down".into())));
+        assert_eq!(
+            stale.error,
+            Some(dict([
+                ("code", s("ai_unavailable")),
+                ("message", s("down"))
+            ]))
+        );
         assert_eq!(cache.peek("models"), Some(stale));
         assert_eq!(cache.peek("other"), None);
         cache.invalidate();
         assert_eq!(cache.peek("models"), None);
+    }
+
+    #[test]
+    fn a_seeded_snapshot_is_reported_but_never_spares_a_probe() {
+        let cache = Cache::new(Duration::from_secs(60));
+        let saved = Snapshot {
+            value: Value::List(vec![s("old")]),
+            checked_at: "2026-11-01T00:00:00Z".into(),
+            stale: false,
+            error: None,
+        };
+        cache.seed("models", saved.clone());
+        assert_eq!(cache.peek("models"), Some(saved.clone()));
+        // An entry this session wins over a later seed.
+        cache.seed(
+            "models",
+            Snapshot {
+                value: Value::Null,
+                ..saved.clone()
+            },
+        );
+        assert_eq!(cache.peek("models"), Some(saved));
+        // The next get still probes; its failure reports the seed as stale.
+        let calls = AtomicUsize::new(0);
+        let stale = cache
+            .get("models", false, || {
+                calls.fetch_add(1, Ordering::SeqCst);
+                Err(AppError::new("ai_unavailable", "down"))
+            })
+            .unwrap();
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert!(stale.stale);
+        assert_eq!(stale.value, Value::List(vec![s("old")]));
     }
 
     #[test]

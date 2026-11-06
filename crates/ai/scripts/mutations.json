@@ -1121,5 +1121,75 @@
       "messages_gain_one_system_message"
     ],
     "rule": "A tool-enabled turn's prompt carries the tool-area index."
+  },
+  {
+    "id": "S12-provider-access-output",
+    "file": "crates/ai/src/providers/mod.rs",
+    "find": "    \"omit_store_field\",\n    \"agent_access\",\n    \"created_at\",",
+    "replace": "    \"omit_store_field\",\n    \"created_at\",",
+    "expect_failing": [
+      "list_with_default_payload_shape"
+    ],
+    "rule": "Provider rows report their agent access (#678)."
+  },
+  {
+    "id": "S12-provider-access-unknown",
+    "file": "crates/ai/src/providers/mod.rs",
+    "find": "    s(normalize_agent_access(value).unwrap_or(AGENT_ACCESS_RESTRICTED))",
+    "replace": "    s(normalize_agent_access(value).unwrap_or(AGENT_ACCESS_FULL))",
+    "expect_failing": [
+      "agent_access_is_full_or_restricted_and_unknown_values_restrict"
+    ],
+    "rule": "An unknown stored agent access restricts rather than widening access."
+  },
+  {
+    "id": "S12-check-models-cap",
+    "file": "crates/ai/src/providers/checks.rs",
+    "find": "            Value::List(models.iter().take(MAX_SAVED_MODELS).cloned().collect())\n",
+    "replace": "            Value::List(models.to_vec())\n",
+    "expect_failing": [
+      "checks_are_bound_to_the_endpoint_and_capped"
+    ],
+    "rule": "A saved model list is capped at 1000 entries."
+  },
+  {
+    "id": "S12-check-endpoint",
+    "file": "crates/ai/src/providers/checks.rs",
+    "find": "    if stored_url != kassiber_envelope::s(base_url) {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "checks_are_bound_to_the_endpoint_and_capped"
+    ],
+    "rule": "A saved check is read back only at the base URL it was made at."
+  },
+  {
+    "id": "S12-check-clear-on-address",
+    "file": "crates/ai/src/providers/mod.rs",
+    "find": "        if base_changed || clear.contains(\"api_key\") || present(&updates.api_key) {",
+    "replace": "        if clear.contains(\"api_key\") || present(&updates.api_key) {",
+    "expect_failing": [
+      "a_check_marks_a_built_in_provider_set_up_until_its_address_changes"
+    ],
+    "rule": "A new address forgets what the old one's check found."
+  },
+  {
+    "id": "S12-set-up-checked",
+    "file": "crates/ai/src/providers/mod.rs",
+    "find": "    if !is_untouched_seed(provider) || is_default || truthy(last_checked_at) {",
+    "replace": "    if !is_untouched_seed(provider) || is_default {",
+    "expect_failing": [
+      "a_check_marks_a_built_in_provider_set_up_until_its_address_changes"
+    ],
+    "rule": "A built-in provider counts as set up once it was checked at its address."
+  },
+  {
+    "id": "S12-discovery-seed-expired",
+    "file": "crates/ai/src/discovery/mod.rs",
+    "find": "                    snapshot,\n                    expires: Instant::now(),",
+    "replace": "                    snapshot,\n                    expires: Instant::now() + self.ttl,",
+    "expect_failing": [
+      "a_seeded_snapshot_is_reported_but_never_spares_a_probe"
+    ],
+    "rule": "A saved check never spares the next explicit probe."
   }
 ]

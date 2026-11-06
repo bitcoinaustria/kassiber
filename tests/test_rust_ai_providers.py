@@ -32,6 +32,7 @@ from contextlib import closing
 from pathlib import Path
 
 from kassiber.ai.providers import ai_provider_secret_service_id
+from kassiber.secrets.migration import migrate_plaintext_to_encrypted
 from kassiber.db import open_db
 from tests.test_ai_core_http_transport import (
     Reply,
@@ -48,7 +49,8 @@ ROOT = Path(__file__).resolve().parent.parent
 RUST_BIN = os.environ.get("KASSIBER_RUST_BIN")
 TIME = "2026-11-05T12:00:00Z"
 CHECKED_AT = "2026-11-05T12:00:00.123456Z"
-TABLES = ("ai_providers", "ai_provider_secret_refs", "settings")
+# The last checks (#675) are kept in the book and compared too.
+TABLES = ("ai_providers", "ai_provider_secret_refs", "ai_provider_checks", "settings")
 
 
 # Answers status and model requests from fixed data, logging each request
@@ -154,10 +156,13 @@ class RustAiProvidersParityTest(unittest.TestCase):
         # A secret ref's service is bound to its data root, so each copy has
         # its own: compare it as "this root's service".
         own = ai_provider_secret_service_id(str(root.resolve()))
-        conn = sqlite3.connect(root / "kassiber.sqlite3")
+        if getattr(self, "passphrase", None):
+            conn = open_db(str(root), passphrase=self.passphrase, require_existing_schema=True)
+        else:
+            conn = sqlite3.connect(root / "kassiber.sqlite3")
         try:
             tables = {
-                table: sorted(conn.execute(f'SELECT * FROM "{table}"').fetchall(), key=repr)
+                table: sorted((tuple(row) for row in conn.execute(f'SELECT * FROM "{table}"')), key=repr)
                 for table in TABLES
             }
         finally:
@@ -207,9 +212,12 @@ class RustAiProvidersParityTest(unittest.TestCase):
             self.script(setup)
             result = self.run_side(runtime, root, ["daemon"], input=wire)
             self.assertEqual((result.returncode, result.stderr), (0, b""), result.stdout[-2000:])
-            outcomes.append(
-                (result.stdout.splitlines()[1:], self.tables(root), self.requests_seen(), self.broker_requests())
-            )
+            # Status payloads name each side's own copy of the book.
+            lines = [
+                line.replace(str(root.parent).encode(), b"<copy>")
+                for line in result.stdout.splitlines()[1:]
+            ]
+            outcomes.append((lines, self.tables(root), self.requests_seen(), self.broker_requests()))
         (python_lines, python_tables, python_hits, python_broker), (rust_lines, rust_tables, rust_hits, rust_broker) = outcomes
         self.assertEqual(len(rust_lines), len(python_lines))
         mismatches = [
@@ -264,6 +272,12 @@ class RustAiProvidersParityTest(unittest.TestCase):
                 {"kind": "ai.providers.create", "args": {"name": "k", "base_url": "https://x.test/v1", "kind": 5}},
                 {"kind": "ai.providers.create", "args": {"name": "lan", "base_url": "http://127.0.0.1:9/v1", "display_name": "LAN", "enabled": False, "api_format": "chat-completions", "detected_api_format": "responses", "omit_store_field": True, "default_model": "m", "notes": " n "}},
                 {"kind": "ai.providers.create", "args": {"name": "bad", "base_url": "codex-cli://default", "omit_store_field": True}},
+                # Agent access (#678): full unless the user restricts it.
+                {"kind": "ai.providers.create", "args": {"name": "narrow", "base_url": "https://n.test/v1", "agent_access": "restricted"}},
+                {"kind": "ai.providers.create", "args": {"name": "x", "base_url": "https://x.test/v1", "agent_access": 5}},
+                {"kind": "ai.providers.create", "args": {"name": "x", "base_url": "https://x.test/v1", "agent_access": "all"}},
+                {"kind": "ai.providers.update", "args": {"name": "narrow", "agent_access": "nope"}},
+                {"kind": "ai.providers.update", "args": {"name": "narrow", "agent_access": "full"}},
                 {"kind": "ai.providers.update", "args": {"name": "router", "default_model": "openai/gpt", "default_reasoning_effort": "HIGH", "api_format": "responses"}},
                 {"kind": "ai.providers.update", "args": {"name": "router"}},
                 {"kind": "ai.providers.update", "args": {"name": "router", "clear": ["kind", "notes"]}},
@@ -322,9 +336,20 @@ class RustAiProvidersParityTest(unittest.TestCase):
             [
                 {"kind": "ai.providers.create", "args": {"name": "lan", "base_url": local}},
                 {"kind": "ai.providers.create", "args": {"name": "far", "base_url": "https://far.invalid/v1"}},
+                # A display read before any check: nothing, and no contact.
+                {"kind": "ai.list_models", "args": {"provider": "lan", "cached_only": True}},
                 {"kind": "ai.list_models", "args": {"provider": "lan"}},
                 {"kind": "ai.list_models", "args": {"provider": "lan"}},
+                {"kind": "ai.list_models", "args": {"provider": "lan", "cached_only": True}},
+                {"kind": "ai.list_models", "args": {"provider": "lan", "cached_only": True, "refresh": True}},
+                {"kind": "ai.providers.list"},
                 {"kind": "ai.list_models", "args": {"provider": "lan", "refresh": True}},
+                # The failed refresh saved the stale result; a preference
+                # edit keeps it, a new address drops it (#675).
+                {"kind": "ai.providers.update", "args": {"name": "lan", "agent_access": "restricted"}},
+                {"kind": "ai.list_models", "args": {"provider": "lan", "cached_only": True}},
+                {"kind": "ai.providers.update", "args": {"name": "far", "notes": "n"}},
+                {"kind": "ai.providers.list"},
                 {"kind": "ai.list_models", "args": {"provider": "lan", "base_url": "http://127.0.0.1:1/v1"}},
                 {"kind": "ai.list_models", "args": {"provider": "lan", "refresh": "yes"}},
                 {"kind": "ai.list_models", "args": {"provider": "far"}},
@@ -335,6 +360,30 @@ class RustAiProvidersParityTest(unittest.TestCase):
             setup=setup,
         )
         self.assertEqual([r["path"] for r in self.provider.requests], ["/v1/models", "/v1/models"])
+
+    def test_encrypted_books_keep_checks_and_agent_access(self):
+        # The same provider rows and saved checks on a SQLCipher book.
+        passphrase = "correct horse battery staple"
+        migrate_plaintext_to_encrypted(self.root / "kassiber.sqlite3", passphrase)
+        self.passphrase = passphrase
+        local = self.provider.base_url
+
+        def setup(provider):
+            provider.queue("GET", "models", Reply(json_body={"data": [{"id": "a"}]}))
+
+        self.daemon(
+            [
+                {"kind": "daemon.unlock", "args": {"auth_response": {"passphrase_secret": passphrase}}},
+                {"kind": "ai.providers.create", "args": {"name": "lan", "base_url": local, "agent_access": "restricted"}},
+                {"kind": "ai.list_models", "args": {"provider": "lan", "cached_only": True}},
+                {"kind": "ai.list_models", "args": {"provider": "lan"}},
+                {"kind": "ai.providers.update", "args": {"name": "lan", "agent_access": "full"}},
+                {"kind": "ai.list_models", "args": {"provider": "lan", "cached_only": True}},
+                {"kind": "ai.providers.list"},
+            ],
+            setup=setup,
+        )
+        self.assertEqual([r["path"] for r in self.provider.requests], ["/v1/models"])
 
     def test_daemon_connection_tests_detect_and_record_the_format(self):
         local = self.provider.base_url
@@ -493,10 +542,11 @@ class RustAiProvidersParityTest(unittest.TestCase):
             [
                 (["ai", "providers", "list"], b""),
                 (["ai", "providers", "create", "Lan", "--base-url", local, "--api-key-stdin", "--default-effort", "high"], b"sk-cli-secret\n"),
-                (["ai", "providers", "create", "far", "--base-url", "https://far.invalid/v1", "--api-key", "sk-argv", "--api-format", "chat-completions", "--disabled"], b""),
+                (["ai", "providers", "create", "far", "--base-url", "https://far.invalid/v1", "--api-key", "sk-argv", "--api-format", "chat-completions", "--disabled", "--agent-access", "restricted"], b""),
                 (["ai", "providers", "get", "lan"], b""),
                 (["ai", "providers", "update", "far", "--enable", "--clear", "api_key", "--notes", "n", "--omit-store-field"], b""),
                 (["ai", "providers", "update", "far"], b""),
+                (["ai", "providers", "update", "far", "--agent-access", "full"], b""),
                 (["ai", "providers", "set-default", "lan"], b""),
                 (["ai", "providers", "delete", "lan"], b""),
                 (["ai", "models", "--provider", "far"], b""),

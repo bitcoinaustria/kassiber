@@ -21,10 +21,18 @@ use sha2::{Digest, Sha256};
 use crate::clock::now_iso;
 use crate::pyval::{field, opt, s, str_or_none};
 
+pub mod checks;
 pub mod gates;
 pub use gates::*;
 
 pub const PROVIDER_KINDS: &[&str] = &["local", "remote", "tee"];
+/// `AI_AGENT_ACCESS_FULL`: every tool and unprojected results (the default).
+pub const AGENT_ACCESS_FULL: &str = "full";
+/// `AI_AGENT_ACCESS_RESTRICTED`: an off-device provider keeps to the
+/// projected surface.
+pub const AGENT_ACCESS_RESTRICTED: &str = "restricted";
+/// `AI_AGENT_ACCESS_MODES`.
+pub const AGENT_ACCESS_MODES: &[&str] = &[AGENT_ACCESS_FULL, AGENT_ACCESS_RESTRICTED];
 pub const DEFAULT_PROVIDER_SETTING: &str = "default_ai_provider";
 pub const PROVIDERS_SEEDED_SETTING: &str = "ai_providers_seeded";
 const NATIVE_SEED_GENERATIONS: &[(&str, &[&str])] = &[
@@ -62,6 +70,7 @@ const SAFE_OUTPUT_FIELDS: &[&str] = &[
     "api_format",
     "detected_api_format",
     "omit_store_field",
+    "agent_access",
     "created_at",
     "updated_at",
 ];
@@ -904,6 +913,21 @@ pub fn redact_for_output(provider: &Value, default: Option<&str>) -> Value {
     dict(payload)
 }
 
+/// `normalize_agent_access(value)`.
+pub fn normalize_agent_access(value: &Value) -> Result<&'static str, AppError> {
+    AGENT_ACCESS_MODES
+        .iter()
+        .copied()
+        .find(|mode| *value == s(*mode))
+        .ok_or_else(|| validation("AI provider agent_access must be full or restricted"))
+}
+
+/// `_stored_agent_access(value)`: an unknown stored value restricts rather
+/// than widening access.
+fn stored_agent_access(value: &Value) -> Value {
+    s(normalize_agent_access(value).unwrap_or(AGENT_ACCESS_RESTRICTED))
+}
+
 fn stored_api_format(value: &Value) -> Value {
     if API_FORMATS.iter().any(|format| *value == s(format)) {
         value.clone()
@@ -972,6 +996,10 @@ fn row_to_dict(conn: &Connection, row: &Value) -> Result<Value, AppError> {
         (
             "omit_store_field",
             Value::Bool(truthy(field(row, "omit_store_field"))),
+        ),
+        (
+            "agent_access",
+            stored_agent_access(field(row, "agent_access")),
         ),
         ("created_at", field(row, "created_at").clone()),
         ("updated_at", field(row, "updated_at").clone()),
@@ -1182,6 +1210,7 @@ pub struct Create {
     pub api_format: Value,
     pub detected_api_format: Value,
     pub omit_store_field: bool,
+    pub agent_access: Value,
 }
 
 impl Default for Create {
@@ -1200,6 +1229,7 @@ impl Default for Create {
             api_format: Value::Null,
             detected_api_format: Value::Null,
             omit_store_field: false,
+            agent_access: s(AGENT_ACCESS_FULL),
         }
     }
 }
@@ -1225,6 +1255,7 @@ pub fn create(conn: &Connection, request: Create) -> Result<Value, AppError> {
     let detected = normalize_detected_api_format(&request.detected_api_format)?;
     validate_locator_api_format(&base_url, &api_format, detected.as_deref())?;
     validate_locator_omit_store(&base_url, request.omit_store_field)?;
+    let agent_access = normalize_agent_access(&request.agent_access)?;
     let api_key = request
         .api_key
         .as_deref()
@@ -1242,7 +1273,7 @@ pub fn create(conn: &Connection, request: Create) -> Result<Value, AppError> {
         let timestamp = now_iso();
         let acknowledged = (request.acknowledged || kind == "local").then(|| timestamp.clone());
         conn.execute(
-            "INSERT INTO ai_providers(name, display_name, base_url, api_key, default_model, kind, notes, acknowledged_at, enabled, default_reasoning_effort, api_format, detected_api_format, omit_store_field, created_at, updated_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO ai_providers(name, display_name, base_url, api_key, default_model, kind, notes, acknowledged_at, enabled, default_reasoning_effort, api_format, detected_api_format, omit_store_field, agent_access, created_at, updated_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             params![
                 name,
                 display,
@@ -1257,6 +1288,7 @@ pub fn create(conn: &Connection, request: Create) -> Result<Value, AppError> {
                 api_format,
                 detected,
                 i64::from(request.omit_store_field),
+                agent_access,
                 timestamp,
                 timestamp
             ],
@@ -1284,6 +1316,7 @@ pub struct Update {
     pub api_format: Value,
     pub detected_api_format: Value,
     pub omit_store_field: Value,
+    pub agent_access: Value,
     pub clear: Vec<String>,
     /// Whether `acknowledged` / `acknowledge_clear` keys were given, and
     /// their truth.
@@ -1305,6 +1338,7 @@ impl Default for Update {
             api_format: Value::Null,
             detected_api_format: Value::Null,
             omit_store_field: Value::Null,
+            agent_access: Value::Null,
             clear: Vec::new(),
             acknowledged: None,
             acknowledge_clear: None,
@@ -1359,6 +1393,7 @@ pub fn update(conn: &Connection, name: &str, updates: Update) -> Result<Value, A
         &updates.api_format,
         &updates.detected_api_format,
         &updates.omit_store_field,
+        &updates.agent_access,
     ]
     .into_iter()
     .any(present);
@@ -1368,7 +1403,7 @@ pub fn update(conn: &Connection, name: &str, updates: Update) -> Result<Value, A
         && updates.acknowledge_clear.is_none()
     {
         return Err(validation("ai providers update requires at least one field to change").with_hint(
-            "Pass --display-name, --base-url, --api-key, --default-model, --default-effort, --kind, --api-format, --omit-store-field, --send-store-field, --notes, --enable, --disable, --acknowledge, --clear FIELD, or --revoke-acknowledge",
+            "Pass --display-name, --base-url, --api-key, --default-model, --default-effort, --kind, --api-format, --omit-store-field, --send-store-field, --agent-access, --notes, --enable, --disable, --acknowledge, --clear FIELD, or --revoke-acknowledge",
         ));
     }
     let enabled = match &updates.enabled {
@@ -1389,6 +1424,11 @@ pub fn update(conn: &Connection, name: &str, updates: Update) -> Result<Value, A
         Value::Null => None,
         Value::Bool(omit) => Some(*omit),
         _ => return Err(validation("AI provider omit_store_field must be a boolean")),
+    };
+    let agent_access = if present(&updates.agent_access) {
+        Some(normalize_agent_access(&updates.agent_access)?)
+    } else {
+        None
     };
     let effort = if present(&updates.default_reasoning_effort) {
         normalize_reasoning_effort(&updates.default_reasoning_effort)?
@@ -1503,6 +1543,10 @@ pub fn update(conn: &Connection, name: &str, updates: Update) -> Result<Value, A
         None if base_changed => false,
         None => truthy(field(&row, "omit_store_field")),
     };
+    let merged_access = match agent_access {
+        Some(access) => s(access),
+        None => stored_agent_access(field(&row, "agent_access")),
+    };
     let base_text = kassiber_envelope::py_str(&merged_base);
     validate_locator_kind(&base_text, &kassiber_envelope::py_str(&merged_kind))?;
     validate_locator_api_format(
@@ -1513,7 +1557,7 @@ pub fn update(conn: &Connection, name: &str, updates: Update) -> Result<Value, A
     validate_locator_omit_store(&base_text, merged_omit)?;
     atomically(conn, || {
         conn.execute(
-            "UPDATE ai_providers SET display_name = ?, base_url = ?, api_key = ?, default_model = ?, kind = ?, notes = ?, acknowledged_at = ?, enabled = ?, default_reasoning_effort = ?, api_format = ?, detected_api_format = ?, omit_store_field = ?, updated_at = ? WHERE name = ?",
+            "UPDATE ai_providers SET display_name = ?, base_url = ?, api_key = ?, default_model = ?, kind = ?, notes = ?, acknowledged_at = ?, enabled = ?, default_reasoning_effort = ?, api_format = ?, detected_api_format = ?, omit_store_field = ?, agent_access = ?, updated_at = ? WHERE name = ?",
             params![
                 SqlValue(&display),
                 SqlValue(&merged_base),
@@ -1527,6 +1571,7 @@ pub fn update(conn: &Connection, name: &str, updates: Update) -> Result<Value, A
                 SqlValue(&merged_format),
                 SqlValue(&merged_detected),
                 i64::from(merged_omit),
+                SqlValue(&merged_access),
                 now_iso(),
                 name
             ],
@@ -1536,6 +1581,10 @@ pub fn update(conn: &Connection, name: &str, updates: Update) -> Result<Value, A
             upsert_secret_ref(conn, &name, SECRET_STORE_INLINE, "missing", None, None)?;
         } else if present(&updates.api_key) {
             upsert_secret_ref(conn, &name, SECRET_STORE_INLINE, "ok", None, None)?;
+        }
+        if base_changed || clear.contains("api_key") || present(&updates.api_key) {
+            // What the last check found belongs to the old endpoint or key.
+            checks::clear(conn, &name)?;
         }
         Ok(())
     })?;
@@ -1717,20 +1766,51 @@ pub fn clear_default(conn: &Connection) -> Result<Value, AppError> {
     ]))
 }
 
+/// `_is_untouched_seed(provider)`: a built-in row Kassiber added, still at
+/// its built-in address and name.
+fn is_untouched_seed(provider: &Value) -> bool {
+    let lower = |value: &Value| {
+        if truthy(value) {
+            kassiber_pytext::lower(&kassiber_envelope::py_str(value))
+        } else {
+            String::new()
+        }
+    };
+    let base_url = lower(field(provider, "base_url"));
+    bootstrap_providers().iter().any(|seed| {
+        lower(field(seed, "base_url")) == base_url
+            && field(seed, "display_name") == field(provider, "display_name")
+    })
+}
+
+/// `provider_is_set_up(provider, is_default=..., last_checked_at=...)`: a
+/// display grouping only, never a grant. A provider the user added counts;
+/// a built-in one once it is the default, has been checked at its address,
+/// or (off-device) has been acknowledged.
+pub fn is_set_up(provider: &Value, is_default: bool, last_checked_at: &Value) -> bool {
+    if !is_untouched_seed(provider) || is_default || truthy(last_checked_at) {
+        return true;
+    }
+    *field(provider, "kind") != s("local") && truthy(field(provider, "acknowledged_at"))
+}
+
 /// `list_with_default(conn)`.
 pub fn list_with_default(conn: &Connection) -> Result<Value, AppError> {
     let providers = list(conn)?;
     let default = default_name(conn)?;
+    let mut rows = Vec::with_capacity(providers.len());
+    for provider in &providers {
+        let mut row = redact_for_output(provider, default.as_deref());
+        let name = kassiber_envelope::py_str(field(provider, "name"));
+        let last_checked_at = checks::last_checked_at(conn, &name, field(provider, "base_url"))?;
+        let is_default = default.as_deref() == Some(name.as_str());
+        let set_up = is_set_up(provider, is_default, &last_checked_at);
+        set(&mut row, "last_checked_at", last_checked_at);
+        set(&mut row, "set_up", Value::Bool(set_up));
+        rows.push(row);
+    }
     Ok(dict([
-        (
-            "providers",
-            Value::List(
-                providers
-                    .iter()
-                    .map(|provider| redact_for_output(provider, default.as_deref()))
-                    .collect(),
-            ),
-        ),
+        ("providers", Value::List(rows)),
         ("default", opt(default)),
     ]))
 }

@@ -138,6 +138,46 @@ fn effort_arg(args: &Value, kind: &str) -> Result<Value, AppError> {
 }
 
 /// `_ai_provider_format_args`.
+/// `_ai_provider_agent_access_arg(args, kind)`: full or restricted, or
+/// absent.
+fn agent_access_arg(args: &Value, kind: &str) -> Result<Option<&'static str>, AppError> {
+    match field(args, "agent_access") {
+        Value::Null => Ok(None),
+        value @ Value::Str(_) => store::normalize_agent_access(value).map(Some),
+        _ => Err(validation(format!("{kind} agent_access must be a string"))),
+    }
+}
+
+/// `clear_provider_checks(conn, provider_name)`.
+fn clear_checks(conn: &Connection, provider: &Value) -> Result<(), AppError> {
+    store::checks::clear(conn, &kassiber_envelope::py_str(field(provider, "name")))?;
+    store::commit(conn)
+}
+
+/// `_discover_and_save(...)`: a user-started discovery whose result is kept
+/// for the next launch. A result an earlier launch saved backs the probe
+/// like any earlier result: a failure reports it marked stale.
+fn discover_and_save(
+    conn: &Connection,
+    host: &dyn Host,
+    key: &str,
+    provider: &Value,
+    check_kind: &str,
+    refresh: bool,
+    fetch: impl FnOnce() -> Result<Value, AppError>,
+) -> Result<crate::discovery::Snapshot, AppError> {
+    let name = kassiber_envelope::py_str(field(provider, "name"));
+    let base_url = kassiber_envelope::py_str(field(provider, "base_url"));
+    if host.discovery().peek(key).is_none() {
+        if let Some(saved) = store::checks::load(conn, &name, check_kind, &base_url)? {
+            host.discovery().seed(key, saved);
+        }
+    }
+    let snapshot = host.discovery().get(key, refresh, fetch)?;
+    store::checks::save(conn, &name, check_kind, &base_url, &snapshot)?;
+    Ok(snapshot)
+}
+
 fn format_args(args: &Value, kind: &str) -> Result<(Value, Value), AppError> {
     let mut values = Vec::new();
     for key in ["api_format", "detected_api_format"] {
@@ -520,6 +560,7 @@ pub fn daemon(
             let effort = effort_arg(&args, kind)?;
             let (api_format, detected) = format_args(&args, kind)?;
             let omit = bool_or_none(&args, "omit_store_field", kind)?;
+            let access = agent_access_arg(&args, kind)?;
             let created = store::create(
                 conn,
                 store::Create {
@@ -536,6 +577,7 @@ pub fn daemon(
                     api_format,
                     detected_api_format: detected,
                     omit_store_field: omit == Value::Bool(true),
+                    agent_access: s(access.unwrap_or(store::AGENT_ACCESS_FULL)),
                 },
             )?;
             cache(host);
@@ -564,6 +606,7 @@ pub fn daemon(
             let effort = effort_arg(&args, kind)?;
             let (api_format, detected) = format_args(&args, kind)?;
             let omit = bool_or_none(&args, "omit_store_field", kind)?;
+            let access = agent_access_arg(&args, kind)?;
             let updated = store::update(
                 conn,
                 &name,
@@ -579,13 +622,15 @@ pub fn daemon(
                     api_format,
                     detected_api_format: detected,
                     omit_store_field: omit,
+                    agent_access: opt(access),
                     clear: clear.clone(),
                     acknowledged: Some(truthy(field(&args, "acknowledged"))),
                     acknowledge_clear: Some(truthy(field(&args, "acknowledge_clear"))),
                 },
             )?;
-            // The enable switch, default effort, wire format and store
-            // choice do not change what a provider lists.
+            // The enable switch, default effort, wire format, store choice
+            // and agent access do not change which models a provider lists,
+            // so they keep earlier check results.
             let preference_only = crate::pyval::entries(&args).all(|(key, _)| {
                 [
                     "name",
@@ -594,6 +639,7 @@ pub fn daemon(
                     "api_format",
                     "detected_api_format",
                     "omit_store_field",
+                    "agent_access",
                     "clear",
                 ]
                 .contains(&key.as_str())
@@ -602,6 +648,8 @@ pub fn daemon(
                 .all(|field| field == "default_reasoning_effort" || field == "detected_api_format");
             if !preference_only {
                 cache(host);
+                // Its saved check goes the same way as this session's.
+                clear_checks(conn, &updated)?;
             }
             redacted(conn, &updated)
         }
@@ -618,6 +666,8 @@ pub fn daemon(
             };
             let updated = set_key(conn, host, &args, &name, key.as_deref())?;
             cache(host);
+            // A check made with the old key says nothing about the new one.
+            clear_checks(conn, &updated)?;
             redacted(conn, &updated)
         }
         "ai.providers.move_api_key" => {
@@ -735,6 +785,7 @@ fn runtime_status(conn: &Connection, host: &mut dyn Host, args: &Value) -> Resul
         ));
     }
     let mut scoped = None;
+    let mut scoped_provider = None;
     let mut probe: Vec<&'static str> = Vec::new();
     let mut single = None;
     let (key, nothing_to_probe) = match &provider_name {
@@ -761,13 +812,26 @@ fn runtime_status(conn: &Connection, host: &mut dyn Host, args: &Value) -> Resul
             if !cached_only {
                 store::require_contactable(&provider)?;
             }
+            scoped_provider = Some(provider);
             // Its probe starts only that runtime's CLI.
             single = Some(runtime);
             (cache_key(&["runtime", runtime]), false)
         }
     };
     let mut payload = if cached_only || nothing_to_probe {
-        match host.discovery().peek(&key) {
+        // A display read: what an earlier explicit check found, never a
+        // probe; with nothing this session, the last check made at this
+        // locator (kept across restarts).
+        let mut cached = host.discovery().peek(&key);
+        if let (None, Some(provider)) = (&cached, &scoped_provider) {
+            cached = store::checks::load(
+                conn,
+                &kassiber_envelope::py_str(field(provider, "name")),
+                store::checks::CHECK_KIND_RUNTIME,
+                &kassiber_envelope::py_str(field(provider, "base_url")),
+            )?;
+        }
+        match cached {
             Some(snapshot) => with_metadata(
                 vec![("providers", snapshot.value.clone())],
                 snapshot.metadata(),
@@ -780,13 +844,25 @@ fn runtime_status(conn: &Connection, host: &mut dyn Host, args: &Value) -> Resul
     } else {
         let gate = host.gate();
         let locate = host.broker();
-        let snapshot = host.discovery().get(&key, refresh, || {
+        let fetch = || {
             let scope = match single {
                 Some(runtime) => Scope::One(runtime),
                 None => Scope::Many(&probe),
             };
             crate::broker::runtime_status(&gate, &locate, scope)
-        })?;
+        };
+        let snapshot = match &scoped_provider {
+            Some(provider) => discover_and_save(
+                conn,
+                host,
+                &key,
+                provider,
+                store::checks::CHECK_KIND_RUNTIME,
+                refresh,
+                fetch,
+            )?,
+            None => host.discovery().get(&key, refresh, fetch)?,
+        };
         with_metadata(
             vec![("providers", snapshot.value.clone())],
             snapshot.metadata(),
@@ -807,16 +883,52 @@ fn list_models(conn: &Connection, host: &mut dyn Host, args: &Value) -> Result<V
     };
     let provider = store::resolve(conn, name.as_deref())?;
     store::require_endpoint(&provider, field(args, "base_url"))?;
-    store::require_contactable(&provider)?;
     let base_url = kassiber_envelope::py_str(field(&provider, "base_url"));
-    let key = resolve_key(conn, host, &provider, args)?;
     let provider_name = kassiber_envelope::py_str(field(&provider, "name"));
+    // Keyed by the endpoint as well as the name, so a result found for an
+    // earlier base_url is never reported for an edited one.
+    let models_key = cache_key(&["models", &provider_name, &base_url]);
+    if optional_bool(args, "cached_only")? {
+        if optional_bool(args, "refresh")? {
+            return Err(validation(
+                "ai.list_models refresh and cached_only are exclusive",
+            ));
+        }
+        // A display read: this session's result, else the last check's.
+        // Never a probe, so no contact gate.
+        let cached = match host.discovery().peek(&models_key) {
+            Some(snapshot) => Some(snapshot),
+            None => store::checks::load(
+                conn,
+                &provider_name,
+                store::checks::CHECK_KIND_MODELS,
+                &base_url,
+            )?,
+        };
+        let (models, metadata) = match cached {
+            Some(snapshot) => (snapshot.value.clone(), snapshot.metadata()),
+            None => (Value::List(Vec::new()), unchecked_metadata()),
+        };
+        return Ok(with_metadata(
+            vec![
+                ("provider", field(&provider, "name").clone()),
+                ("models", models),
+            ],
+            metadata,
+        ));
+    }
+    store::require_contactable(&provider)?;
+    let key = resolve_key(conn, host, &provider, args)?;
     let refresh = optional_bool(args, "refresh")?;
     let kind = string(field(&provider, "kind"));
     let cli = is_cli_locator(field(&provider, "base_url"));
     let host: &dyn Host = host;
-    let snapshot = host.discovery().get(
-        &cache_key(&["models", &provider_name, &base_url]),
+    let snapshot = discover_and_save(
+        conn,
+        host,
+        &models_key,
+        &provider,
+        store::checks::CHECK_KIND_MODELS,
         refresh,
         || {
             if cli {
@@ -1028,6 +1140,8 @@ pub fn cli(
                     api_format: field(args, "api_format").clone(),
                     detected_api_format: Value::Null,
                     omit_store_field: truthy(field(args, "omit_store_field")),
+                    // argparse defaults `--agent-access` to full.
+                    agent_access: field(args, "agent_access").clone(),
                 },
             )?;
             redacted(conn, &created)
@@ -1052,6 +1166,7 @@ pub fn cli(
                     api_format: field(args, "api_format").clone(),
                     detected_api_format: Value::Null,
                     omit_store_field: field(args, "omit_store_field").clone(),
+                    agent_access: field(args, "agent_access").clone(),
                     clear,
                     acknowledged: Some(truthy(field(args, "acknowledge"))),
                     acknowledge_clear: Some(truthy(field(args, "revoke_acknowledge"))),

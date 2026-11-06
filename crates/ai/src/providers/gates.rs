@@ -20,7 +20,7 @@ pub fn require_acknowledged(provider: &Value) -> Result<(), AppError> {
         format!("AI provider '{name}' requires explicit off-device acknowledgement before chat"),
     )
     .with_hint(format!(
-        "Run `kassiber ai providers update {name} --acknowledge`, or confirm the provider in Settings → AI providers."
+        "Run `kassiber ai providers update {name} --acknowledge`, or confirm the provider in Settings → Assistant."
     ))
     .with_details(dict([("provider", s(&name)), ("kind", s(kind))])))
 }
@@ -78,7 +78,7 @@ pub fn require_enabled(provider: &Value) -> Result<(), AppError> {
     Err(
         AppError::new("ai_provider_disabled", format!("AI provider '{name}' is disabled"))
             .with_hint(format!(
-                "Enable it with `kassiber ai providers update {name} --enable`, or switch it on in Settings → AI providers."
+                "Enable it with `kassiber ai providers update {name} --enable`, or switch it on in Settings → Assistant."
             ))
             .with_details(dict([("provider", s(name))])),
     )

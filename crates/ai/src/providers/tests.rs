@@ -472,20 +472,249 @@ fn list_with_default_payload_shape() {
                 "api_format",
                 "detected_api_format",
                 "omit_store_field",
+                "agent_access",
                 "created_at",
                 "updated_at",
                 "has_api_key",
                 "secret_ref",
                 "supports_reasoning_effort",
                 "effective_api_format",
-                "is_default"
+                "is_default",
+                "last_checked_at",
+                "set_up"
             ]
         );
+        let is_default = text(row, "name").as_deref() == Some("ollama");
+        assert_eq!(*field(row, "is_default"), Value::Bool(is_default));
+        // Untouched built-ins fold away until they are the default.
+        assert_eq!(*field(row, "set_up"), Value::Bool(is_default));
+        assert_eq!(*field(row, "agent_access"), s("full"));
+    }
+}
+
+fn snapshot(value: Value, stale: bool) -> crate::discovery::Snapshot {
+    crate::discovery::Snapshot {
+        value,
+        checked_at: "2026-11-05T12:00:00Z".into(),
+        stale,
+        error: stale.then(|| dict([("code", s("ai_unavailable")), ("message", s("down"))])),
+    }
+}
+
+fn row<'a>(payload: &'a Value, name: &str) -> &'a Value {
+    let Value::List(rows) = field(payload, "providers") else {
+        panic!()
+    };
+    rows.iter()
+        .find(|row| text(row, "name").as_deref() == Some(name))
+        .unwrap()
+}
+
+#[test]
+fn checks_are_bound_to_the_endpoint_and_capped() {
+    let book = book();
+    let conn = &book.conn;
+    // Checks belong to provider rows (a foreign key): seed them first.
+    ensure_seeded(conn).unwrap();
+    let url = "http://localhost:11434/v1";
+    let models = Value::List((0..1005).map(Value::from).collect());
+    checks::save(
+        conn,
+        "omlx",
+        checks::CHECK_KIND_MODELS,
+        url,
+        &snapshot(models, true),
+    )
+    .unwrap();
+    let loaded = checks::load(conn, "omlx", checks::CHECK_KIND_MODELS, url)
+        .unwrap()
+        .unwrap();
+    assert!(matches!(&loaded.value, Value::List(items) if items.len() == checks::MAX_SAVED_MODELS));
+    assert!(loaded.stale);
+    assert_eq!(loaded.error, snapshot(Value::Null, true).error);
+    // Another address, another kind, or another provider: nothing.
+    assert!(checks::load(
+        conn,
+        "omlx",
+        checks::CHECK_KIND_MODELS,
+        "http://127.0.0.1:8000/v1"
+    )
+    .unwrap()
+    .is_none());
+    assert!(checks::load(conn, "omlx", checks::CHECK_KIND_RUNTIME, url)
+        .unwrap()
+        .is_none());
+    // A runtime check caps each status's models.
+    let status = dict([
+        ("id", s("codex")),
+        ("models", Value::List((0..1001).map(Value::from).collect())),
+    ]);
+    checks::save(
+        conn,
+        "codex",
+        checks::CHECK_KIND_RUNTIME,
+        "codex-cli://default",
+        &snapshot(Value::List(vec![status, s("other")]), false),
+    )
+    .unwrap();
+    let runtime = checks::load(
+        conn,
+        "codex",
+        checks::CHECK_KIND_RUNTIME,
+        "codex-cli://default",
+    )
+    .unwrap()
+    .unwrap();
+    let Value::List(statuses) = &runtime.value else {
+        panic!()
+    };
+    assert!(matches!(field(&statuses[0], "models"), Value::List(m) if m.len() == 1000));
+    assert_eq!(statuses[1], s("other"));
+    assert_eq!(runtime.error, None);
+    // A malformed stored value reads as nothing.
+    conn.execute(
+        "UPDATE ai_provider_checks SET value_json = 'nope' WHERE provider_name = 'codex'",
+        [],
+    )
+    .unwrap();
+    assert!(checks::load(
+        conn,
+        "codex",
+        checks::CHECK_KIND_RUNTIME,
+        "codex-cli://default"
+    )
+    .unwrap()
+    .is_none());
+}
+
+#[test]
+fn a_check_marks_a_built_in_provider_set_up_until_its_address_changes() {
+    let book = book();
+    let conn = &book.conn;
+    let listed = list_with_default(conn).unwrap();
+    assert_eq!(*field(row(&listed, "omlx"), "last_checked_at"), Value::Null);
+    assert_eq!(*field(row(&listed, "omlx"), "set_up"), Value::Bool(false));
+    checks::save(
+        conn,
+        "omlx",
+        checks::CHECK_KIND_MODELS,
+        "http://127.0.0.1:8000/v1",
+        &snapshot(Value::List(Vec::new()), false),
+    )
+    .unwrap();
+    let listed = list_with_default(conn).unwrap();
+    assert_eq!(
+        *field(row(&listed, "omlx"), "last_checked_at"),
+        s("2026-11-05T12:00:00Z")
+    );
+    assert_eq!(*field(row(&listed, "omlx"), "set_up"), Value::Bool(true));
+    // Preference edits keep the check; a new address clears it.
+    update_with(conn, "omlx", |u| u.agent_access = s("restricted")).unwrap();
+    assert!(checks::load(
+        conn,
+        "omlx",
+        checks::CHECK_KIND_MODELS,
+        "http://127.0.0.1:8000/v1"
+    )
+    .unwrap()
+    .is_some());
+    // Same origin (the key stays), another path: the check still goes.
+    update_with(conn, "omlx", |u| u.base_url = s("http://127.0.0.1:8000/v2")).unwrap();
+    assert!(checks::load(
+        conn,
+        "omlx",
+        checks::CHECK_KIND_MODELS,
+        "http://127.0.0.1:8000/v1"
+    )
+    .unwrap()
+    .is_none());
+    let listed = list_with_default(conn).unwrap();
+    assert_eq!(*field(row(&listed, "omlx"), "last_checked_at"), Value::Null);
+    // Edited away from its built-in address, it counts as the user's own.
+    assert_eq!(*field(row(&listed, "omlx"), "set_up"), Value::Bool(true));
+    // An acknowledged off-device built-in counts; a local one needs more.
+    acknowledge(conn, "codex").unwrap();
+    let listed = list_with_default(conn).unwrap();
+    assert_eq!(*field(row(&listed, "codex"), "set_up"), Value::Bool(true));
+    assert_eq!(*field(row(&listed, "claude"), "set_up"), Value::Bool(false));
+    // A new API key clears the check.
+    checks::save(
+        conn,
+        "codex",
+        checks::CHECK_KIND_RUNTIME,
+        "codex-cli://default",
+        &snapshot(Value::List(Vec::new()), false),
+    )
+    .unwrap();
+    let created = create_simple(conn, "mine", "https://api.example/v1", None).unwrap();
+    assert_eq!(*field(&created, "agent_access"), s("full"));
+    checks::save(
+        conn,
+        "mine",
+        checks::CHECK_KIND_MODELS,
+        "https://api.example/v1",
+        &snapshot(Value::List(Vec::new()), false),
+    )
+    .unwrap();
+    update_with(conn, "mine", |u| u.api_key = s("sk-new")).unwrap();
+    assert!(checks::load(
+        conn,
+        "mine",
+        checks::CHECK_KIND_MODELS,
+        "https://api.example/v1"
+    )
+    .unwrap()
+    .is_none());
+}
+
+#[test]
+fn agent_access_is_full_or_restricted_and_unknown_values_restrict() {
+    let book = book();
+    let conn = &book.conn;
+    let restricted = create(
+        conn,
+        Create {
+            name: "remote-r".into(),
+            base_url: "https://api.example/v1".into(),
+            agent_access: s("restricted"),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(*field(&restricted, "agent_access"), s("restricted"));
+    for bad in [s("everything"), Value::Null, Value::Bool(true)] {
+        let error = create(
+            conn,
+            Create {
+                name: "remote-x".into(),
+                base_url: "https://api.example/v1".into(),
+                agent_access: bad,
+                ..Default::default()
+            },
+        )
+        .unwrap_err();
         assert_eq!(
-            *field(row, "is_default"),
-            Value::Bool(text(row, "name").as_deref() == Some("ollama"))
+            error.message,
+            "AI provider agent_access must be full or restricted"
         );
     }
+    let error = update_with(conn, "remote-r", |u| u.agent_access = s("all")).unwrap_err();
+    assert_eq!(error.code, "validation");
+    // `agent_access` alone is a change.
+    let full = update_with(conn, "remote-r", |u| u.agent_access = s("full")).unwrap();
+    assert_eq!(*field(&full, "agent_access"), s("full"));
+    conn.execute(
+        "UPDATE ai_providers SET agent_access = 'root' WHERE name = 'remote-r'",
+        [],
+    )
+    .unwrap();
+    assert_eq!(
+        *field(&get(conn, "remote-r").unwrap(), "agent_access"),
+        s("restricted")
+    );
+    // An update that leaves it alone keeps the stored (restricted) reading.
+    let kept = update_with(conn, "remote-r", |u| u.notes = s("n")).unwrap();
+    assert_eq!(*field(&kept, "agent_access"), s("restricted"));
 }
 
 #[test]
