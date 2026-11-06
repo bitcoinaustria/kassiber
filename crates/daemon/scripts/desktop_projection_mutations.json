@@ -218,5 +218,15 @@
       "tests/test_rust_maintenance_run.py::RustMaintenanceRunTest::test_unhashable_sync_is_the_typed_validation_refusal"
     ],
     "rule": "A list or object maintenance sync mode is the ordinary validation refusal."
+  },
+  {
+    "id": "dashboard-alias-buckets",
+    "file": "crates/transactions/src/desktop/dashboard.rs",
+    "find": "        let (key, start) = bucket(date, canonical_period(&period));",
+    "replace": "        let (key, start) = bucket(date, &period);",
+    "expect_failing": [
+      "tests/test_rust_transaction_dashboard.py::RustTransactionDashboardTest::test_period_aliases_bucket_like_their_canonical_names"
+    ],
+    "rule": "Dashboard transactions bucket by the canonical period, whatever its spelling."
   }
 ]

@@ -1,3 +1,4 @@
+import json
 import unittest
 
 from tests.rust_desktop_parity import RUST_BIN, DesktopParity
@@ -17,6 +18,18 @@ VALUES('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','w','p
 UPDATE profiles SET last_processed_at='2025',last_processed_tx_count=13,journal_input_version=2,last_processed_input_version=2 WHERE id='p'; UPDATE profiles SET journal_semantics_version=2 WHERE id='p';
 """
 WINDOW = {"since": "2025-01-01T00:00:00Z", "until": "2025-06-30T23:59:59Z"}
+
+
+def _without_main_sync_fields(line):
+    """Drop the fields main #672 to #714 added and slices S8 to S10 port
+    (`bucketSize`, `history.years`), so the alias buckets compare on this base."""
+    value = json.loads(line)
+    data = value.get("data")
+    if isinstance(data, dict):
+        data.pop("bucketSize", None)
+        if isinstance(data.get("history"), dict):
+            data["history"].pop("years", None)
+    return json.dumps(value, sort_keys=True)
 
 
 @unittest.skipUnless(RUST_BIN, "set KASSIBER_RUST_BIN to the harness build")
@@ -52,6 +65,22 @@ class RustTransactionDashboardTest(DesktopParity, unittest.TestCase):
         responses = self.compare(args)
         self.assertTrue(all(response["kind"] == self.KIND for response in responses))
         self.assertEqual(responses[0]["data"]["candidates"][0]["out_id"], "h")
+
+    def test_period_aliases_bucket_like_their_canonical_names(self):
+        # tests/rust_port/repro_dashboard_bucket_aliases.py: 30d buckets by day,
+        # 3m by week and 5y by quarter, like 30days, 3months and 5years.
+        self.change(ACTIVITY)
+        args = []
+        for period in ("30d", "30day", "3m", "3month", "6m", "1y", "1years", "5y", "5year", "10y", "15year"):
+            args.append({"period": period, **WINDOW})
+            args.append({"period": period, "since": "2024-10-20T00:00:00Z",
+                         "until": "2025-04-10T12:00:00Z", "timezone": "Europe/Vienna"})
+        responses = self.compare(args, mask=_without_main_sync_fields)
+        keys = {arg["period"]: [bucket["bucketKey"] for bucket in response["data"]["buckets"]]
+                for arg, response in zip(args[::2], responses[::2])}
+        self.assertEqual(keys["30d"][:2], ["2025-01-01", "2025-01-02"])
+        self.assertEqual(keys["3m"][:2], ["2024-12-30", "2025-01-06"])
+        self.assertEqual(keys["5y"], ["2025-Q1", "2025-Q2"])
 
     def test_auto_period_selection_matches_wire_bytes(self):
         self.change(ACTIVITY)

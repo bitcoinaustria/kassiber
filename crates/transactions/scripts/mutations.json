@@ -2388,5 +2388,15 @@
       "desktop_resolve_preserves_alias_precedence_focused_principal_and_queue_status"
     ],
     "rule": "Resolver queries strip Python whitespace."
+  },
+  {
+    "id": "dashboard-alias-canonical",
+    "file": "crates/transactions/src/desktop/dashboard.rs",
+    "find": "        \"30day\" | \"30d\" => \"30days\",",
+    "replace": "        \"30day\" => \"30days\",",
+    "expect_failing": [
+      "every_period_spelling_buckets_like_its_canonical_name"
+    ],
+    "rule": "Every accepted spelling of a dashboard period buckets like its canonical name."
   }
 ]

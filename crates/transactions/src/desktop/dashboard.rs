@@ -157,6 +157,42 @@ fn isoformat(zone: &Zone, at: Wall) -> String {
     }
     text
 }
+/// `_UI_TRANSACTION_PERIOD_BY_DAYS`: every accepted spelling of a period
+/// sizes buckets like its canonical name.
+fn canonical_period(period: &str) -> &str {
+    match period {
+        "30day" | "30d" => "30days",
+        "3month" | "3m" => "3months",
+        "6month" | "6m" => "6months",
+        "1years" | "1y" => "1year",
+        "5year" | "5y" => "5years",
+        "10year" | "10y" => "10years",
+        "15year" | "15y" => "15years",
+        other => other,
+    }
+}
+#[cfg(test)]
+mod period_tests {
+    /// tests/rust_port/repro_dashboard_bucket_aliases.py
+    #[test]
+    fn every_period_spelling_buckets_like_its_canonical_name() {
+        for (canonical, aliases) in [
+            ("30days", &["30days", "30day", "30d"][..]),
+            ("3months", &["3months", "3month", "3m"]),
+            ("6months", &["6months", "6month", "6m"]),
+            ("1year", &["1year", "1years", "1y"]),
+            ("5years", &["5years", "5year", "5y"]),
+            ("10years", &["10years", "10year", "10y"]),
+            ("15years", &["15years", "15year", "15y"]),
+            ("ytd", &["ytd"]),
+            ("all", &["all"]),
+        ] {
+            for alias in aliases {
+                assert_eq!(super::canonical_period(alias), canonical, "{alias}");
+            }
+        }
+    }
+}
 fn empty_stats() -> Value {
     dict([
         ("count", Value::Int(0.into())),
@@ -761,15 +797,15 @@ pub(super) fn execute(
                 parse(&until, "until")?
             },
         )?;
-        let mut cursor = bucket(start, &period).1;
+        let mut cursor = bucket(start, canonical_period(&period)).1;
         while cursor <= end {
-            let (key, start) = bucket(cursor, &period);
+            let (key, start) = bucket(cursor, canonical_period(&period));
             let entry = new_bucket(&key, start);
             match buckets.iter_mut().find(|(k, _)| *k == key) {
                 Some(slot) => slot.1 = entry,
                 None => buckets.push((key, entry)),
             }
-            cursor = next(cursor, &period);
+            cursor = next(cursor, canonical_period(&period));
         }
     }
     let mut external = 0;
@@ -789,7 +825,7 @@ pub(super) fn execute(
             py_str(&val(tx, "date"))
         };
         let date = wall(&zone, parse(&raw_date, "occurredAt")?)?;
-        let (key, start) = bucket(date, &period);
+        let (key, start) = bucket(date, canonical_period(&period));
         let index = match buckets.iter().position(|(k, _)| *k == key) {
             Some(index) => index,
             None => {
