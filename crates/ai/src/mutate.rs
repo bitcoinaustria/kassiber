@@ -131,7 +131,14 @@ pub fn execute_mutating(
                 Some(message) => (**message).clone(),
                 None => PyStr::from(error.message.as_str()),
             };
-            tool_result_denied(code, Some(&message))
+            let mut result = tool_result_denied(code, Some(&message));
+            // `_tool_result_from_app_error`: a refusal's hint reaches the
+            // model redacted. Remediation and allowlisted details are main
+            // #679's and not ported yet (docs/reference/rust-main-sync.md).
+            if let Some(hint) = error.hint.as_deref().filter(|hint| !hint.is_empty()) {
+                set(&mut result, "hint", redact_ai_tool_result(&s(hint)));
+            }
+            result
         }
         // The mutating executor has no lock-contention branch: Python's
         // `except Exception` answers every other failure the same way.

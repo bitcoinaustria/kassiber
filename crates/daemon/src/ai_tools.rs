@@ -299,9 +299,12 @@ fn ai_wallets_sync(daemon: &mut Daemon, args: &Value) -> Result<Value, AppError>
     let mut invocation = crate::freshness::product::parse("ui.wallets.sync", args, &id)?;
     invocation.request.auto_pair = false;
     // As the desktop route's admission does, any source the native plan
-    // cannot take (an unsupported source, a malformed wallet configuration)
-    // needs Python's direct-sync path.
-    let plan = book.freshness_plan(&invocation.request).ok();
+    // cannot take needs Python's direct-sync path. An unreadable wallet
+    // configuration is the planner's own typed refusal.
+    let plan = match book.freshness_plan(&invocation.request) {
+        Err(error) if error.code == "invalid_wallet_config" => return Err(error),
+        plan => plan.ok(),
+    };
     let Some(plan) = plan.filter(|plan| plan.supports_wallets_sync()) else {
         return Err(AppError::new(
             "not_implemented",

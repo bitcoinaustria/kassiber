@@ -382,7 +382,7 @@ impl Plan {
                 return Err(fallback("freshness_ambiguous_wallet"));
             }
             for wallet in wallets {
-                let config = sources::wallet_config(wallet)?;
+                let config = sources::stored_wallet_config(wallet)?;
                 if request.wallet.is_none() && crate::config::boolean(config.get("deprecated"))? {
                     continue;
                 }

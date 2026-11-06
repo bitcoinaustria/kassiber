@@ -1061,5 +1061,25 @@
       "wire_name_reads_refresh_like_catalog_names"
     ],
     "rule": "A read called by its wire name refreshes stale journals like its catalog name."
+  },
+  {
+    "id": "wire-ai-wallet-sync-invalid-config",
+    "file": "crates/daemon/src/ai_tools.rs",
+    "find": "        Err(error) if error.code == \"invalid_wallet_config\" => return Err(error),\n",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_unreadable_wallet_config_refuses_wallet_sync_typed"
+    ],
+    "rule": "The AI wallet sync answers the planner's invalid_wallet_config, not the direct-sync refusal."
+  },
+  {
+    "id": "wire-ai-write-refusal-hint",
+    "file": "crates/ai/src/mutate.rs",
+    "find": "                set(&mut result, \"hint\", redact_ai_tool_result(&s(hint)));",
+    "replace": "                let _ = hint;",
+    "expect_failing": [
+      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_unreadable_wallet_config_refuses_wallet_sync_typed"
+    ],
+    "rule": "A refused AI write carries the error's hint to the model, redacted."
   }
 ]

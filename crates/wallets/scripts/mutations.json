@@ -8673,6 +8673,36 @@
     "rule": "Renderer output must have the PNG signature before image encoding."
   },
   {
+    "id": "invalid-wallet-config-code",
+    "file": "crates/wallets/src/freshness/sources.rs",
+    "find": "            \"invalid_wallet_config\",",
+    "replace": "            \"internal_error\",",
+    "expect_failing": [
+      "sync::tests::sync_service_preflight_rejects_malformed_inputs_and_node_routes_without_io"
+    ],
+    "rule": "An unreadable stored wallet configuration is the typed invalid_wallet_config refusal naming the wallet."
+  },
+  {
+    "id": "invalid-wallet-config-planner",
+    "file": "crates/wallets/src/freshness/sources.rs",
+    "find": "        let mut config = stored_wallet_config(&wallet)?;",
+    "replace": "        let mut config = wallet_config(&wallet)?;",
+    "expect_failing": [
+      "sync::tests::sync_service_preflight_rejects_malformed_inputs_and_node_routes_without_io"
+    ],
+    "rule": "The freshness source plan refuses an unreadable wallet configuration as invalid_wallet_config."
+  },
+  {
+    "id": "invalid-wallet-config-cli-all",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "        .filter_map(|row| match crate::freshness::sources::stored_wallet_config(&row) {",
+    "replace": "        .filter_map(|row| match config(&row) {",
+    "expect_failing": [
+      "sync::tests::sync_service_preflight_rejects_malformed_inputs_and_node_routes_without_io"
+    ],
+    "rule": "wallets sync --all refuses an unreadable wallet configuration as invalid_wallet_config."
+  },
+  {
     "id": "json-import-decode-refusal",
     "file": "crates/wallets/src/file_import/csv.rs",
     "find": "        .map_err(|_| refuse())?",

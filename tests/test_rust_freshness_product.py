@@ -309,6 +309,40 @@ def test_product_argument_errors_match_reference_without_effects(tmp_path, kind,
         assert dump_bytes(books[1]) == before
 
 
+@pytest.mark.parametrize("kind", KINDS)
+@pytest.mark.parametrize("stored", ["bad", "[]", "null", '"text"'])
+def test_product_unreadable_wallet_config_is_a_typed_refusal(tmp_path, kind, stored):
+    # tests/rust_port/repro_ai_wallets_sync_bad_config.py: the planner refuses
+    # the whole sync with invalid_wallet_config, naming the wallet.
+    from kassiber.envelope import build_error_envelope
+    from kassiber.errors import AppError
+
+    config, chain, _ = _fixture("empty")
+    roots, books = _books(tmp_path, config)
+    for book in books:
+        with connect(book) as conn:
+            conn.execute("INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) "
+                         "SELECT 'bad',workspace_id,profile_id,'Bad',kind,?,created_at FROM wallets WHERE id='a'",
+                         (stored,))
+    args = arguments(kind)
+    route = {KINDS[0]: df._wallets_sync_payload, KINDS[1]: df._freshness_run_payload,
+             KINDS[2]: df._workspace_freshness_run_payload}[kind]
+    with connect(books[0]) as conn, pytest.raises(AppError) as error:
+        route(conn, {}, args, **({"strict": False} if kind == KINDS[0] else {}))
+    error = error.value
+    assert (error.code, error.details) == ("invalid_wallet_config", {"wallet": "Bad"})
+    expected = {**build_error_envelope(error.code, str(error), details=error.details,
+                                      hint=error.hint, retryable=error.retryable), "request_id": "sync"}
+    with Session(roots[1], _environment(tmp_path)) as session:
+        before = dump_bytes(books[1])
+        session.send(kind, "sync", args)
+        assert session.until("sync") == expected
+        session.finish()
+        assert dump_bytes(books[1]) == before
+    assert dump_bytes(books[1]) == dump_bytes(books[0])
+    assert chain.hits == []
+
+
 @pytest.mark.parametrize("kind", KINDS[1:])
 @pytest.mark.parametrize("run", [False, True])
 def test_product_enqueue_only_and_run_limit(tmp_path, kind, run):

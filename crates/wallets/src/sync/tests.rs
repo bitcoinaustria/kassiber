@@ -704,18 +704,45 @@ fn sync_service_preflight_rejects_malformed_inputs_and_node_routes_without_io() 
     ] {
         conn.execute("UPDATE wallets SET config_json=?", [raw])
             .unwrap();
-        assert!(Sync::new(
+        let error = Sync::new(
             &conn,
             &Request {
                 profile_id: "p",
                 wallet: None,
                 all: true,
                 force_full: false,
-                version: "test"
+                version: "test",
             },
-            |_, _| panic!("malformed config before backend")
+            |_, _| panic!("malformed config before backend"),
         )
-        .is_err());
+        .err()
+        .unwrap();
+        if raw.starts_with('{') {
+            continue;
+        }
+        // tests/rust_port/repro_ai_wallets_sync_bad_config.py: the typed
+        // refusal names the wallet, in the CLI selection and the planner.
+        let label: String = conn
+            .query_row("SELECT label FROM wallets WHERE id='a'", [], |row| row.get(0))
+            .unwrap();
+        let expected = AppError::new(
+            "invalid_wallet_config",
+            format!("Wallet '{label}' has an unreadable stored configuration"),
+        )
+        .with_hint("Edit or remove this wallet, then sync again.")
+        .with_details(kassiber_envelope::dict([("wallet", s(label.as_str()))]));
+        assert_eq!(error, expected, "{raw}");
+        for wallet in [None, Some("a".to_owned())] {
+            let options = crate::freshness::sources::Options {
+                wallet,
+                ..Default::default()
+            };
+            assert_eq!(
+                crate::freshness::sources::build(&conn, "p", &options).err(),
+                Some(expected.clone()),
+                "{raw}"
+            );
+        }
     }
     for kind in ["coreln", "lnd"] {
         conn.execute(

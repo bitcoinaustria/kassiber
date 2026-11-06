@@ -590,6 +590,34 @@ class AiToolExecutorParityTest(unittest.TestCase):
                     records = self.compare_writes("reports", requests, seed)
                     self.assertIn("auto_journal_process", json.dumps(records[0]), called)
 
+    def test_unreadable_wallet_config_refuses_wallet_sync_typed(self):
+        """tests/rust_port/repro_ai_wallets_sync_bad_config.py: one wallet whose
+        stored configuration is not a JSON object makes the consented sync a
+        typed ``invalid_wallet_config`` refusal naming it, before any source."""
+        from kassiber.ai.tools import get_tool
+
+        tool = get_tool("ui.wallets.sync")
+        ids = FIXTURE_IDS["desktop"]
+        scope = {"scope_workspace_id": ids["ws"], "scope_profile_id": ids["profile"]}
+        requests = []
+        for arguments in ({}, {"wallet": "Bad"}, {"all": True}):
+            call_id = f"call_{len(requests) + 1}"
+            requests.append({"kind": "test.ai_tool", "args": {
+                "name": tool.provider_name, "arguments": arguments, "call_id": call_id,
+                "state": {**REMOTE, **scope, "consented_call_ids": [call_id]}}})
+        for stored in ("bad", "[]", "null", '"text"'):
+            with self.subTest(stored=stored):
+                seed = self.base / "bad-config" / str(len(list(self.base.glob("bad-config/*")))) / "seed"
+                shutil.copytree(self.seed("desktop"), seed)
+                with closing(sqlite3.connect(seed / "kassiber.sqlite3")) as conn, conn:
+                    conn.execute(
+                        "INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) "
+                        "VALUES('bad',?,?,'Bad','custom',?,'2025-01-01T00:00:00Z')",
+                        (ids["ws"], ids["profile"], stored))
+                records = self.compare_writes("desktop", requests, seed, unchanged=True)
+                self.assertEqual(len(records), 3)
+                self.assertTrue(all("invalid_wallet_config" in json.dumps(record) for record in records), records)
+
     def test_custody_writes_are_audited_or_rolled_back(self):
         """Consented custody writes commit with their audit row; refused ones
         roll back and commit a failed row; neither runs without the audit
