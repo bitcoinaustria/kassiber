@@ -552,6 +552,16 @@ fn delete(c: &Connection, scope: &Scope<'_>, args: &Value, sources: &dyn Sources
         }
     }
     store::invalidate(c, scope.profile_id)?;
+    // The removed pair's legs and terms, so it can be paired again.
+    let mut pair = project(row, PUBLIC);
+    for key in ["swap_fee_msat", "out_amount"] {
+        let amount = value(&pair, key);
+        if !matches!(amount, Value::Null) {
+            set(&mut pair, key, Value::Int(integer(&amount)?));
+        }
+    }
+    let mut result = result;
+    set(&mut result, "pair", pair);
     Ok(result)
 }
 
