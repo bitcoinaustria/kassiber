@@ -7291,9 +7291,12 @@ def _ai_read_wants_maintenance(call: ParsedAiToolCall) -> bool:
     for one never starts a sync the matching page would not.
     """
 
-    if call.name not in _AI_AUTO_JOURNAL_REFRESH_TOOL_NAMES:
+    # Models call tools by wire name (`ui_reports_summary`); decide on the
+    # catalog name the refresh set uses.
+    entry = get_tool(call.name)
+    if entry is None or entry.name not in _AI_AUTO_JOURNAL_REFRESH_TOOL_NAMES:
         return False
-    if call.name == "ui.visuals.render":
+    if entry.name == "ui.visuals.render":
         source = call.arguments.get("source") if isinstance(call.arguments, dict) else None
         return source in core_chat_visuals.JOURNAL_SOURCES
     return True
