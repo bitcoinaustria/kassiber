@@ -72,7 +72,7 @@ fn replay(group: &str, projection: &str) {
                 |r| r.get(0),
             )
             .unwrap();
-        assert_eq!(tables, 112);
+        assert_eq!(tables, 113);
         conn.execute_batch("ROLLBACK TO workspace_case; RELEASE workspace_case")
             .unwrap();
     }
