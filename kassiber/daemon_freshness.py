@@ -2919,7 +2919,8 @@ def _maintenance_run_payload(
             retryable=False,
         )
     sync_mode = args.get("sync", "if_enabled")
-    if sync_mode not in {"never", "if_enabled", "always"}:
+    # A list or object is unhashable: check the type before set membership.
+    if not isinstance(sync_mode, str) or sync_mode not in {"never", "if_enabled", "always"}:
         raise AppError(
             "ui.maintenance.run sync must be never, if_enabled, or always",
             code="validation",
