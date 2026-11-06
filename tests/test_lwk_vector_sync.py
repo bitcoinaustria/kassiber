@@ -12,10 +12,14 @@ import socketserver
 import threading
 from unittest.mock import patch
 
+import pytest
+
 from kassiber.cli import handlers
 from kassiber.core.chain_observer.contract import ObserverPrepareRequest
 from kassiber.core.chain_observer.identity import identities_for_wallet
 from kassiber.core.chain_observer.lwk import LwkObserver
+from kassiber.core.esplora_history import full_scan_checkpoint
+from kassiber.errors import AppError
 from kassiber.wallet_descriptors import load_descriptor_plan
 from tests.rust_sync_parity import connect, create_book, deterministic_sources, runtime
 from tests.test_lwk_observer import wallet_row
@@ -168,3 +172,53 @@ def test_book_synced_without_explicit_outputs_is_repaired_by_the_next_ordinary_s
     assert rows[("lbtc_mixed", "LBTC")] == ("outbound", 21_000_000, 0)
     assert sum(amount if direction == "inbound" else -amount - fee
                for direction, amount, fee in rows.values()) == 93_000_000
+
+
+def test_forced_rebuild_refuses_a_backend_behind_the_book(tmp_path):
+    path = book(tmp_path)
+    state = {"phase": VECTORS["phases"]["lbtc_initial"]}
+    with electrum(state) as url:
+        sync(path, url)
+        before = live_rows(path)
+        state["phase"] = VECTORS["phases"]["lbtc_lagging"]
+        with pytest.raises(AppError) as raised:
+            sync(path, url, index=1, force_full=True)
+    assert raised.value.code == "backend_tip_behind"
+    assert raised.value.details["persisted_height"] == VECTORS["phases"]["lbtc_initial"]["tip"]
+    assert live_rows(path) == before
+
+
+def test_full_scan_checkpoint_keeps_only_each_observer_rebuild_baseline():
+    checkpoint = {
+        "highest_used": {"0": 9},
+        "esplora_tip_hash": "aa",
+        "observer_instances": {
+            "lwk:b": {"observer": "lwk", "tip_height": 6, "tip_hash": "bb", "highest_used": {"0": 4},
+                      "canonical_txids": ["11"]},
+            "bdk:a": {"tip_height": 7},
+            "broken": "not a mapping",
+        },
+    }
+    retained = full_scan_checkpoint(checkpoint)
+    assert retained == {"observer_instances": {"bdk:a": {"tip_height": 7},
+                                               "lwk:b": {"tip_height": 6, "canonical_txids": ["11"]}}}
+    assert full_scan_checkpoint(retained) == retained
+    assert full_scan_checkpoint({"highest_used": {"0": 1}}) == {}
+
+
+def test_rows_a_lagging_forced_rebuild_retracted_return_on_the_next_sync(tmp_path):
+    path = book(tmp_path)
+    state = {"phase": VECTORS["phases"]["lbtc_initial"]}
+    with electrum(state) as url:
+        sync(path, url)
+        before = live_rows(path)
+        # Model a book damaged before the fix: the lag guard never fired.
+        state["phase"] = VECTORS["phases"]["lbtc_lagging"]
+        with patch("kassiber.core.chain_observer.lwk._require_lwk_tip_not_behind"):
+            damaged = sync(path, url, index=1, force_full=True)
+        assert damaged[0]["retracted"] == 4
+        assert {name for name, _asset in live_rows(path)} == {"lbtc_fund", "lbtc_spend"}
+        state["phase"] = VECTORS["phases"]["lbtc_initial"]
+        repaired = sync(path, url, index=2)
+    assert repaired[0]["status"] == "synced"
+    assert live_rows(path) == before
