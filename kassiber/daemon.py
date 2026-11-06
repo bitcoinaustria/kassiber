@@ -8012,6 +8012,8 @@ def _validate_ai_review_operations(
         if not isinstance(operation, dict):
             raise AppError("Review operation must be an object", code="validation")
         kind = operation.get("type")
+        if not isinstance(kind, str):
+            raise AppError("Review operation type is unsupported", code="validation")
         request = operation.get("request")
         action = request.get("action", "create") if isinstance(request, dict) else None
         if not full_access and (
