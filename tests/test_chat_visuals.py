@@ -10,6 +10,7 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from kassiber.ai.prompt import build_responses_tools
 from kassiber.ai.tools import CORE_TOOL_NAMES, get_tool, redact_ai_tool_result
@@ -576,6 +577,39 @@ class DaemonVisualToolTest(unittest.TestCase):
         self.assertTrue(wants("tax_summary"))
         for source in ("transactions", "transaction_flow", "cash_flow", "readiness"):
             self.assertFalse(wants(source), source)
+
+    def test_wire_names_run_the_same_read_maintenance(self):
+        # Models call tools by wire name; the refresh must not depend on it.
+        from kassiber import daemon
+
+        arguments = {"source": "balance_history"}
+        for name in daemon._AI_AUTO_JOURNAL_REFRESH_TOOL_NAMES:
+            entry = get_tool(name)
+            self.assertIsNotNone(entry, name)
+            for called in (entry.name, entry.provider_name):
+                self.assertTrue(
+                    daemon._ai_read_wants_maintenance(ParsedAiToolCall("c", called, arguments)),
+                    called,
+                )
+        self.assertFalse(daemon._ai_read_wants_maintenance(ParsedAiToolCall("c", "ui_transactions_list", {})))
+        self.assertFalse(daemon._ai_read_wants_maintenance(ParsedAiToolCall("c", "no_such_tool", {})))
+
+    def test_a_model_read_by_wire_name_refreshes_stale_journals(self):
+        from kassiber import daemon
+
+        refreshed = []
+        original = daemon._auto_maintain_for_read
+
+        def counting(*args, **kwargs):
+            refreshed.append(1)
+            return original(*args, **kwargs)
+
+        with mock.patch.object(daemon, "_auto_maintain_for_read", counting):
+            for name in ("ui.reports.summary", "ui_reports_summary"):
+                refreshed.clear()
+                result = _execute_on_conn(ParsedAiToolCall("c", name, {}), self.runtime, self.conn)
+                self.assertTrue(result["ok"], result)
+                self.assertEqual(refreshed, [1], name)
 
     def test_transaction_flow_without_graph_still_names_the_transaction(self):
         row = self.conn.execute("SELECT id FROM transactions ORDER BY occurred_at LIMIT 1").fetchone()
