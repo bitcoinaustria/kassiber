@@ -703,6 +703,7 @@ pub fn auto_pair_before_journals(
         };
         o.matching.now = sources.now_precise(c)?;
         let before = suggestion_counts(c, scope, &pop, &o)?;
+        exclusion_clock(c, sources)?;
         let guards = ProjectionGuards::load(c, scope)?;
         o.matching.now = sources.now_precise(c)?;
         let rules = mutate(c, scope, &pop, &o, &guards, true, sources)?;
@@ -710,6 +711,7 @@ pub fn auto_pair_before_journals(
         let bulk = mutate(c, scope, &pop, &o, &guards, false, sources)?;
         o.matching.now = sources.now_precise(c)?;
         let remaining = suggestion_counts(c, scope, &pop, &o)?;
+        exclusion_clock(c, sources)?;
         // Pairs applied here make the projection stale; the refresh counts
         // again after its rebuild.
         cache_move_count(c, scope, &remaining)?;
@@ -747,6 +749,13 @@ pub fn auto_pair_before_journals(
     })
 }
 
+/// Python's `suggest_transfer_candidates` also summarizes its exclusions,
+/// which reads the clock again after the counts; the counts never use that
+/// reading, but a clock that fails there fails the call.
+fn exclusion_clock(c: &Connection, sources: &dyn Sources) -> Result<()> {
+    sources.now_precise(c).map(drop)
+}
+
 /// Moves left to review, each decision once. An ownership-graph move is
 /// proposed for a held transaction that already counts as a quarantine root,
 /// so the shared review total leaves it out.
@@ -770,6 +779,7 @@ pub fn recount_candidates(c: &Connection, scope: &Scope<'_>, sources: &dyn Sourc
         let mut o = PairingOptions::default();
         o.matching.now = sources.now_precise(c)?;
         let remaining = suggestion_counts(c, scope, &pop, &o)?;
+        exclusion_clock(c, sources)?;
         cache_move_count(c, scope, &remaining)
     })
     .and_then(|()| c.execute_batch("COMMIT").map_err(sql::error));
