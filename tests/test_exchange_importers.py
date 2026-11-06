@@ -26,6 +26,7 @@ from kassiber.errors import AppError
 from kassiber.log_ring import LogRing, RingHandler, sanitize_traceback_text
 from kassiber.importers import (
     load_binance_supplemental_csv_records,
+    load_import_records,
     load_ledgerlive_csv_records,
     load_river_csv_records,
     normalize_bullbitcoin_record,
@@ -567,6 +568,30 @@ class ExchangeCredentialEchoTest(unittest.TestCase):
                     fetch(self._backend(), opener=_Opener(status=401, body=body[190:]))
                 self.assertIn("<redacted>", str(raised.exception))
                 self._assert_withheld(raised.exception)
+
+
+class JsonImportFormatTest(unittest.TestCase):
+    """A JSON format chosen for a non-JSON file is a typed refusal."""
+
+    def test_csv_or_non_utf8_file_under_a_json_format_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            csv_file = Path(tmp) / "export.csv"
+            csv_file.write_text("date,txid,direction,asset,amount\n2025-01-02,ab,inbound,BTC,0.1\n")
+            latin = Path(tmp) / "latin.json"
+            latin.write_bytes(b'[{"description": "caf\xe9"}]')
+            for path in (csv_file, latin):
+                for input_format in ("json", "btcpay_json", "wasabi_bundle"):
+                    with self.subTest(file=path.name, input_format=input_format):
+                        with self.assertRaises(AppError) as raised:
+                            load_import_records(str(path), input_format)
+                        self.assertEqual(raised.exception.code, "validation")
+                        self.assertIn("not valid UTF-8 JSON", str(raised.exception))
+
+    def test_valid_json_still_loads(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "rows.json"
+            path.write_text(json.dumps({"transactions": [{"txid": "ab", "amount": "0.1"}]}))
+            self.assertEqual(load_import_records(str(path), "json"), [{"txid": "ab", "amount": "0.1"}])
 
 
 if __name__ == "__main__":

@@ -82,6 +82,25 @@ from .wallet_descriptors import normalize_asset_code
 # -- generic coordinator -----------------------------------------------------
 
 
+def _read_json_file(file_path, label):
+    """Parse a JSON import file, refusing one that is not UTF-8 JSON.
+
+    A CSV export imported with a JSON format, or a file in another encoding,
+    is a wrong-format choice, not an internal error.
+    """
+    try:
+        with open(file_path, "r", encoding="utf-8") as handle:
+            return json.load(handle)
+    except ValueError:
+        # Covers both JSONDecodeError and UnicodeDecodeError.
+        raise AppError(
+            f"{label} is not valid UTF-8 JSON",
+            code="validation",
+            hint="Choose the import format that matches the file.",
+            retryable=False,
+        ) from None
+
+
 def _read_csv_rows(file_path, *, encoding="utf-8", skip_blank=False):
     with open(file_path, "r", encoding=encoding, newline="") as handle:
         rows = list(csv.DictReader(handle))
@@ -109,8 +128,7 @@ def load_import_records(file_path, input_format, column_map=None):
             hint="Check the wallet source_file or pass an existing --file path.",
         )
     if input_format == "json":
-        with open(file_path, "r", encoding="utf-8") as handle:
-            payload = json.load(handle)
+        payload = _read_json_file(file_path, "JSON import")
         if isinstance(payload, dict):
             payload = payload.get("transactions", [])
         if not isinstance(payload, list):
@@ -572,8 +590,7 @@ def load_wasabi_bundle(file_path: str) -> dict[str, Any]:
     top-level ``result`` key. A bare list is treated as ``gethistory`` for
     backwards-compatible one-shot exports.
     """
-    with open(file_path, "r", encoding="utf-8") as handle:
-        payload = json.load(handle)
+    payload = _read_json_file(file_path, "Wasabi bundle")
     return load_wasabi_bundle_payload(payload)
 
 
@@ -724,8 +741,7 @@ def normalize_btcpay_record(record):
 def load_btcpay_export_records(file_path, input_format):
     """Load a BTCPay export file (JSON list or CSV) and normalize every row."""
     if input_format == "json":
-        with open(file_path, "r", encoding="utf-8") as handle:
-            payload = json.load(handle)
+        payload = _read_json_file(file_path, "BTCPay JSON export")
         if not isinstance(payload, list):
             raise AppError("BTCPay JSON export must be a list of transaction objects")
         rows = payload
