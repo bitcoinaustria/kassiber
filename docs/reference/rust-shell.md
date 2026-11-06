@@ -3854,6 +3854,20 @@ and `.delete`, and the kinds `ui.transfers.dismissals.list` and `.delete`,
 `ui.chat.attachments.upload` and `ai.chat.permission_mode`. Those leaves and
 kinds answer `not_implemented` until their slices land.
 
+S2, S6 and S11 followed (see the [inventory](rust-main-sync.md#after-s2-s6-and-s11)).
+Every transaction reference resolves through `kassiber_transactions::lookup`,
+the port of `core/transaction_lookup.py`: an exact id, a unique external id,
+or a qualified `<txid>:<wallet id or label>:<in|out>`; a txid several rows
+share fails closed with `ambiguous_reference`, every candidate and a
+`retry_with_full_transaction_id` remediation, and an unmatched qualifier
+with `reference_qualifier_unmatched`. `ui.transactions.resolve` falls back to
+the qualified lookup and lists the rows sharing the shown txid. The shared
+`details.remediation` shape is `kassiber_envelope::remediation`. `transfers
+dismiss` marks journals stale; `transfers dismissals list|delete` and
+`ui.transfers.dismissals.list|delete` are native; suggestions and the
+transfer review context report `exclusions`. Blocked component plans,
+revisions and activations carry the remediation Python names.
+
 CLI fd input is bounded, consumed once, closed and zeroized by `UnlockSession`.
 Its remaining chain is bound unattended remembered unlock, then a no-echo TTY
 prompt when allowed; noninteractive manual unlock returns `interaction_required`.

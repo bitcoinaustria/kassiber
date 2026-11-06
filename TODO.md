@@ -198,11 +198,20 @@ against the Rust port and slices the gaps; Python stays the reference.
   (accepted coarse price, provider `agent_access`, `ai_provider_checks`, the
   widened custody AI consent CHECK) and the command registry, `describe` and
   capabilities follow main. New leaves and kinds stay `not_implemented`.
-- [ ] S2 to S11 as the inventory lists them: qualified transaction
-  references, coarse-price acceptance, the review workflow, quarantine root
-  causes, transfer dismissals, the Reports screen (including the empty-root
-  `jurisdictionCode`), wallet completeness, the transaction dashboard,
-  readiness definitions and custody component revision.
+- [x] S2: qualified transaction references through one lookup, including
+  `ui.transactions.resolve`'s shared-txid rows.
+- [x] S6: dismissals mark journals stale; `transfers dismissals list|delete`
+  and their kinds; suggestion `exclusions`.
+- [x] S11: custody component remediation on blocked plans and activations.
+  The AI-only revision boundary stays with S12.
+- [ ] S3 to S5 and S7 to S10 as the inventory lists them: coarse-price
+  acceptance, the review workflow, quarantine root causes, the Reports
+  screen (including the empty-root `jurisdictionCode`), wallet completeness,
+  the transaction dashboard and readiness definitions.
+- [ ] Refresh the transfer fixtures S1's added transaction column broke
+  (`component_reads.json`, `pairing_services.json`), and port the #684
+  result changes they will expose (`transfers rules delete` returns the
+  rule, `transfers unpair` the pair).
 - [ ] S12: rebase the R6 branches (AI catalog, providers, tools, MCP grants,
   chat) onto the synced stack.
 
