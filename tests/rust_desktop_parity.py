@@ -109,6 +109,13 @@ class DesktopParity:
         generated identifiers or clocks legitimately differ between the runs.
         """
         requests = self.requests(args, kind)
+        # Without an unlock an encrypted book answers every kind auth_required,
+        # so both daemons would agree without reading anything. Subclasses that
+        # send their own unlock keep its response.
+        unlock = bool(self.passphrase) and not (requests and requests[0]["kind"] == "daemon.unlock")
+        if unlock:
+            requests.insert(0, dict(request_id="unlock", kind="daemon.unlock",
+                                    args={"auth_response": {"passphrase_secret": self.passphrase}}))
         requests.append(dict(request_id="stop", kind="daemon.shutdown"))
         wire = "".join(json.dumps(request) + "\n" for request in requests).encode()
         baseline = self.snapshot()
@@ -140,6 +147,10 @@ class DesktopParity:
         self.assertEqual(len(actual), len(expected))
         normalize = mask or (lambda line: line)
         for request, got, wanted in zip(requests, actual[1:], expected[1:]):
+            if unlock and request is requests[0] and candidate_root != self.root:
+                # The unlock reply names the book it opened; a mutating
+                # session runs Rust on a copy.
+                got = got.replace(os.fsencode(candidate_root.parent), os.fsencode(self.root.parent))
             self.assertEqual(normalize(got), normalize(wanted), request)
         if mutates:
             reshape = tables or (lambda snapshot: snapshot)
@@ -154,4 +165,7 @@ class DesktopParity:
                         kind=request["kind"], served_by="rust", request_id=response["request_id"],
                         ok=response["kind"] != "error",
                         error_code=response.get("error", {}).get("code"))) + "\n")
+        if unlock:
+            self.assertEqual(responses[0]["kind"], "daemon.unlock", responses[0])
+            responses = responses[1:]
         return responses
