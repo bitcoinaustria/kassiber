@@ -640,7 +640,7 @@
   {
     "id": "R67-cursor-branch",
     "file": "crates/ai/src/chat/registry.rs",
-    "find": "(recorded == fingerprint).then(|| cursor.clone())",
+    "find": "(recorded.as_str() == fingerprint).then(|| cursor.clone())",
     "replace": "Some(cursor.clone())",
     "expect_failing": [
       "provider_resume_cursor_is_bound_to_the_visible_chat_branch"
@@ -1011,5 +1011,45 @@
       "display_reads_never_probe_and_cli_runtimes_go_through_the_broker"
     ],
     "rule": "A CLI connection test reports binary_presence when the broker's rows say so."
+  },
+  {
+    "id": "A-chat-resume-before-prompt",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "    Some(history_fingerprint(prior))\n}",
+    "replace": "    let _ = prior;\n    Some(history_fingerprint(messages))\n}",
+    "expect_failing": [
+      "the_next_prompt_resumes_the_branch_before_it"
+    ],
+    "rule": "The next request resumes the cursor recorded for the transcript before its new prompt."
+  },
+  {
+    "id": "A-chat-resume-needs-a-prompt",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "    if !matches!(last, Value::Dict(_)) || get(last, \"role\") != Some(&s(\"user\")) {",
+    "replace": "    if !matches!(last, Value::Dict(_)) {",
+    "expect_failing": [
+      "the_next_prompt_resumes_the_branch_before_it"
+    ],
+    "rule": "A request that does not end with a new user prompt resumes nothing."
+  },
+  {
+    "id": "wire-chat-cursor-binds-every-leg",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "            self.remember_provider_session(&shown);",
+    "replace": "            self.remember_provider_session(&content);",
+    "expect_failing": [
+      "tests/test_rust_ai_chat.py::RustAiChatParityTest::test_broker_chat_tool_round_and_resumed_cursor"
+    ],
+    "rule": "A tool turn binds its provider cursor to every leg's text the user saw."
+  },
+  {
+    "id": "wire-chat-stream-resume-lookup",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "                    resume_fingerprint(&self.turn.validated.messages).as_deref(),",
+    "replace": "                    Some(history_fingerprint(&self.turn.validated.messages).as_str()),",
+    "expect_failing": [
+      "tests/test_rust_ai_chat.py::RustAiChatParityTest::test_broker_chat_tool_round_and_resumed_cursor"
+    ],
+    "rule": "A tool-free turn looks its cursor up by the transcript before the new prompt."
   }
 ]

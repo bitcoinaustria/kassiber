@@ -146,6 +146,19 @@ pub fn history_fingerprint(messages: &[Value]) -> String {
     digest.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
+/// `_provider_session_resume_fingerprint(messages)`: the branch a resumable
+/// cursor was recorded against. A cursor is remembered after a turn under
+/// the transcript plus its answer; the next request carries that transcript
+/// followed by one new user prompt, so look up everything before the prompt.
+/// Any other shape resumes nothing.
+pub fn resume_fingerprint(messages: &[Value]) -> Option<String> {
+    let (last, prior) = messages.split_last()?;
+    if !matches!(last, Value::Dict(_)) || get(last, "role") != Some(&s("user")) {
+        return None;
+    }
+    Some(history_fingerprint(prior))
+}
+
 /// `_ai_chat_seed_prefix(messages)`: the turns before the current prompt.
 pub fn seed_prefix(messages: &[Value]) -> Vec<Value> {
     let last_user = messages.iter().rposition(
@@ -540,7 +553,7 @@ impl Worker {
                         .map(lossy)
                         .as_deref(),
                     &self.turn.provider.name,
-                    &history_fingerprint(&self.turn.validated.messages),
+                    resume_fingerprint(&self.turn.validated.messages).as_deref(),
                 )
             } else {
                 None
@@ -634,7 +647,7 @@ impl Worker {
                     .map(lossy)
                     .as_deref(),
                 &self.turn.provider.name,
-                &history_fingerprint(&self.turn.validated.messages),
+                resume_fingerprint(&self.turn.validated.messages).as_deref(),
             )
         } else {
             None
@@ -766,6 +779,9 @@ impl Worker {
         let mut response_context = RequestContext::from_messages(&messages);
         let mut finish_reason: Option<String> = None;
         let mut content = String::new();
+        // Every leg streams its text to the user, who sends all of it back as
+        // the assistant message; the provider cursor is bound to that answer.
+        let mut shown = String::new();
         let mut checkpoint = Value::Dict(Vec::new());
         let mut exhausted = true;
         let consent_timeout = self.turn.consent_timeout.unwrap_or(CONSENT_TIMEOUT);
@@ -792,6 +808,7 @@ impl Worker {
                     }
                 }
             }
+            shown.push_str(&leg.content);
             content = leg.content;
             finish_reason = leg.finish_reason;
             if chat.is_cancelled() {
@@ -945,6 +962,7 @@ impl Worker {
                     "\n\nReview paused at the tool budget. Continue with the current cases; unapplied proposals must be planned again. Applied receipts remain available.\n```json\n{json}\n```"
                 );
                 content.push_str(&continuation);
+                shown.push_str(&continuation);
                 if !host.emit(delta_record(dict([("content", s(&continuation))]))) {
                     return Err(Stop::Closed);
                 }
@@ -956,7 +974,7 @@ impl Worker {
         if finish_reason.as_deref() != Some("cancelled")
             && self.turn.validated.keeps_provider_session()
         {
-            self.remember_provider_session(&content);
+            self.remember_provider_session(&shown);
         }
         self.remember_detected_format(host);
         self.terminal(host, finish_reason, &content);
@@ -1127,5 +1145,26 @@ mod tests {
             2
         );
         assert!(seed_prefix(&[message("user", "only")]).is_empty());
+    }
+
+    /// tests/rust_port/repro_chat_cursor_never_resumes.py: the next request
+    /// is the remembered branch plus one new prompt.
+    #[test]
+    fn the_next_prompt_resumes_the_branch_before_it() {
+        let message =
+            |role: &str, content: &str| dict([("role", s(role)), ("content", s(content))]);
+        let prior = [message("user", "a"), message("assistant", "b")];
+        let next = [prior[0].clone(), prior[1].clone(), message("user", "c")];
+        assert_eq!(
+            resume_fingerprint(&next),
+            Some(history_fingerprint(&prior))
+        );
+        assert_eq!(resume_fingerprint(&prior), None);
+        assert_eq!(resume_fingerprint(&[]), None);
+        assert_eq!(resume_fingerprint(&[s("user")]), None);
+        assert_eq!(
+            resume_fingerprint(&[message("user", "only")]),
+            Some(history_fingerprint(&[]))
+        );
     }
 }
