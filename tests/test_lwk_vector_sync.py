@@ -9,6 +9,8 @@ from contextlib import contextmanager
 import json
 from pathlib import Path
 import socketserver
+import subprocess
+import sys
 import threading
 from unittest.mock import patch
 
@@ -21,6 +23,7 @@ from kassiber.core.chain_observer.lwk import LwkObserver
 from kassiber.core.esplora_history import full_scan_checkpoint
 from kassiber.errors import AppError
 from kassiber.wallet_descriptors import load_descriptor_plan
+from tests.rust_sync_env import child_env
 from tests.rust_sync_parity import connect, create_book, deterministic_sources, runtime
 from tests.test_lwk_observer import wallet_row
 
@@ -235,3 +238,26 @@ def test_multi_asset_history_does_not_force_a_repair_rescan(tmp_path):
     rows = live_rows(path)
     assert rows[("fund", VECTORS["issued_asset"])] == ("inbound", 7_000_000, 0)
     assert rows[("fund", "LBTC")] == ("inbound", 150_000_000, 0)
+
+
+_PROBE = """
+import json, sys
+sys.path.insert(0, sys.argv[1])
+from tests.test_lwk_vector_sync import prepare
+update = prepare(sys.argv[2])
+print(json.dumps(update, sort_keys=True))
+"""
+
+
+def test_output_order_is_the_same_in_every_process(tmp_path):
+    # LWK lists UTXOs in hash-map order, independent of PYTHONHASHSEED.
+    env = {**child_env(tmp_path), "PYTHONHASHSEED": "0"}
+    updates = set()
+    with electrum({"phase": VECTORS["phases"]["initial"]}) as url:
+        for _ in range(8):
+            result = subprocess.run([sys.executable, "-c", _PROBE, str(ROOT), url], capture_output=True,
+                                    text=True, timeout=120, env=env, cwd=tmp_path, check=True)
+            updates.add(result.stdout.strip().splitlines()[-1])
+    assert len(updates) == 1
+    order = [[o["txid"], o["vout"]] for o in json.loads(updates.pop())["facts"]["outputs"]]
+    assert order == sorted(order) and len(order) == 4

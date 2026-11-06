@@ -630,6 +630,8 @@ class LwkObserver:
                     "raw": {"source": "lwk_wollet", "confidential": not secrets.is_explicit()},
                 }
             )
+        # LWK lists UTXOs in hash-map order, which differs between processes.
+        outputs.sort(key=lambda output: (output["txid"], output["vout"]))
         coverage = _lwk_coverage(
             branch_keys=self.identity.branch_keys,
             scan_to_index=scan_to_index,
