@@ -198,13 +198,18 @@ against the Rust port and slices the gaps; Python stays the reference.
   (accepted coarse price, provider `agent_access`, `ai_provider_checks`, the
   widened custody AI consent CHECK) and the command registry, `describe` and
   capabilities follow main. New leaves and kinds stay `not_implemented`.
-- [ ] S2 to S11 as the inventory lists them: qualified transaction
-  references, coarse-price acceptance, the review workflow, quarantine root
-  causes, transfer dismissals, the Reports screen (including the empty-root
-  `jurisdictionCode`), wallet completeness, the transaction dashboard,
-  readiness definitions and custody component revision.
+- [x] S7: the Reports screen payload and indicative tax (including the
+  empty-root `jurisdictionCode`), the crypto Kennzahlen from 1 March 2022 in
+  every report and export, the E 1kv refusals, the exit-tax old rules and
+  `explanationReference` on journal events.
+- [ ] S2 to S6 and S8 to S11 as the inventory lists them: qualified
+  transaction references, coarse-price acceptance, the review workflow,
+  quarantine root causes, transfer dismissals, wallet completeness, the
+  transaction dashboard, readiness definitions and custody component revision.
 - [ ] S12: rebase the R6 branches (AI catalog, providers, tools, MCP grants,
-  chat) onto the synced stack.
+  chat) onto the synced stack. Its AI projections drop the desktop-only
+  `indicativeTax`, breakdown `transactionIds` and `explanationReference`, as
+  `daemon.py` does.
 
 ## Rust backend R5 dependency review
 

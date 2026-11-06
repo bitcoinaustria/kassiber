@@ -94,10 +94,11 @@ Rust code was read instead.
 
 | PR | Python | Kinds and leaves | Rust state | Rust location |
 | --- | --- | --- | --- | --- |
-| #706 | `ui_snapshot.build_capital_gains_snapshot`, `tax_estimate.py`: the Reports screen payload: `breakdown` by Kennzahl, `indicativeTax`, `e1kvApplies`, `rowsBeforeCryptoKennzahlen`, `fiatCurrency`, `longTermDays`, `totals`, lots with asset, category, entry type, Kennzahl and exact quantity. A root with no book, or a missing profile, reports `jurisdictionCode` `GENERIC`, and a profile without a country falls back to `generic`; Rust hard-codes `AT` in the empty payload (`gains_desktop.rs` `empty`) and falls back to `AT`. Not a store or setup default, so S1 left it to S7 | `ui.reports.capital_gains` | **Differs** on every book, with and without `year` | `crates/reports/src/gains_desktop.rs` |
-| #706 | `austrian.py`, `reports.py`: E 1kv crypto Kennzahlen start in 2022; earlier disposals state no Kennzahl | `ui.reports.export_austrian_e1kv_csv/xlsx`, `reports export-austrian-e1kv*`, `ui.reports.export_capital_gains_csv` | **Differs, tax-relevant**: for 2021 Python refuses the E 1kv export ("The Austrian crypto Kennzahlen (KZ 172, 174, 176) start with tax year 2022"); Rust writes both files. The 2021 capital-gains CSV has an empty Kennzahl column in Python and 172/174 in Rust. 2025 matches | `crates/reports` (Austrian export, `full_csv.rs`, `tax_summary.rs`) |
-| #706 | `ui_snapshot.build_journal_events_list_snapshot`: each event carries an `explanationReference` for `ui.reports.explain_capital_gain` | `ui.journals.events.list` | **Differs**: field missing | `crates/journals/src/views.rs` |
-| #706 | `year_handoff.py`: asset presentation | `ui.reports.export_year_handoff` | Inspection: XLSX bytes differ in both runs (timestamps), contents not compared | `crates/reports` |
+| #706 | `ui_snapshot.build_capital_gains_snapshot`, `tax_estimate.py`: the Reports screen payload: `breakdown` by Kennzahl, `indicativeTax`, `e1kvApplies`, `rowsBeforeCryptoKennzahlen`, `fiatCurrency`, `longTermDays`, `totals`, lots with asset, category, entry type, Kennzahl and exact quantity. A root with no book, or a missing profile, reports `jurisdictionCode` `GENERIC`, and a profile without a country falls back to `generic`; Rust hard-coded `AT` in the empty payload (`gains_desktop.rs` `empty`) and fell back to `AT`. Not a store or setup default, so S1 left it to S7 | `ui.reports.capital_gains` | **Done (S7)**. Before: differed on every book, with and without `year` | `crates/reports/src/gains_desktop.rs` |
+| #706 | `austrian.py`, `reports.py`: E 1kv crypto Kennzahlen start in 2022; earlier disposals state no Kennzahl | `ui.reports.export_austrian_e1kv_csv/xlsx`, `reports export-austrian-e1kv*`, `ui.reports.export_capital_gains_csv` | **Done (S7)**. Before, tax-relevant: for 2021 Python refuses the E 1kv export ("The Austrian crypto Kennzahlen (KZ 172, 174, 176) start with tax year 2022") and a 2022 with January or February crypto rows; Rust wrote both files. The 2021 capital-gains CSV has an empty Kennzahl column in Python and had 172/174 in Rust. 2025 matched | `crates/reports` (Austrian export, `full_csv.rs`, `tax_summary.rs`) |
+| #706 | `ui_snapshot.build_journal_events_list_snapshot`: each event carries an `explanationReference` for `ui.reports.explain_capital_gain` | `ui.journals.events.list` | **Done (S7)**. Before: field missing | `crates/journals/src/views.rs` |
+| #706 | `year_handoff.py`: the journal sheet's `tax_form_field` states no crypto Kennzahl before 1 March 2022 (the only change there; asset presentation was already ported) | `ui.reports.export_year_handoff`, `reports export-year-handoff` | **Done (S7)**. Before: Rust wrote 174 for such rows. XLSX bytes differ in both runs (timestamps), so the contents are compared | `crates/reports/src/year_handoff.rs` |
+| #706 | `exit_tax.py`: a departure before 1 March 2022 has no 27.5 % rate, no estimated tax, no KZ 174/176 and the EXIT-011 assumption | `ui.reports.exit_tax_preview`, `reports exit-tax`, the exit-tax exports | **Done (S7)**. Not in the first inventory: the books' default departure is in 2025 | `crates/reports/src/exit_tax.rs` |
 | #677 | `ui_snapshot.py`, `tax_estimate.py`: core tax figures | `ui.workspace.health`, `ui.next_actions` | **Differs**: `definitions` missing | `crates/workspace/src/readiness.rs`, `crates/daemon/src/workspace_reads.rs` |
 
 Unchanged in every run: `ui.overview.snapshot` (#713 changed only the
@@ -218,7 +219,7 @@ XL above.
    `reprocess`. Needs S1.
 6. ★ **S6 Transfer dismissals** (M). Stale journals on dismiss, list and
    delete leaves and kinds, suggestion exclusions. Needs S2.
-7. ★ **S7 Reports screen** (L). The capital-gains payload and indicative tax
+7. ★ **S7 Reports screen** (L). **Done**; see [after S7](#after-s7). The capital-gains payload and indicative tax
    (including the empty-root `jurisdictionCode` and country fallback),
    the E 1kv refusal before 2022 and the empty Kennzahl before 1 March 2022
    in the exports, `explanationReference` on journal events, the year handoff
@@ -228,7 +229,8 @@ XL above.
    and `scan_bounds` on `ui.wallets.list`, `transactions verify`. Needs S1.
 9. ★ **S9 Transaction dashboard** (S). Bucket size and the years index.
 10. **S10 Readiness definitions** (S). `definitions` on `ui.workspace.health`
-    and `ui.next_actions`.
+    and `ui.next_actions`, and on `ui.report.blockers` through its embedded
+    health.
 11. **S11 Custody component revision** (S). Activation remediation and the
     planner changes. Needs S2.
 12. ★ **S12 R6 rebase** (XL, on the R6 branches). Regenerate the AI catalog
@@ -257,8 +259,8 @@ refused. The 12, each with its slice:
 | `ui.review.badges` | `definitions` missing | S4 |
 | `ui.journals.quarantine` | `summary.definitions` missing | S5 |
 | `ui.transfers.suggest` | `exclusions` missing | S6 |
-| `ui.reports.capital_gains` | `asset` and the Reports payload | S7 |
-| `ui.journals.events.list` | `explanationReference` missing | S7 |
+| `ui.reports.capital_gains` | `asset` and the Reports payload | S7 (done) |
+| `ui.journals.events.list` | `explanationReference` missing | S7 (done) |
 | `ui.wallets.list` | `completeness_class` missing | S8 |
 | `ui.workspace.health` | `definitions` missing | S10 |
 | `ui.next_actions` | `health.definitions` missing | S10 |
@@ -278,6 +280,67 @@ the remaining Python lanes.
 The comparison is plaintext: the harness does not unlock SQLCipher books.
 Encrypted admission is covered by the store differential tests, which open a
 current Python SQLCipher book in both Rust open modes without changing it.
+
+## After S7
+
+S7 ports #706's report data: the Reports screen payload of
+`ui.reports.capital_gains` and the core's indicative tax
+(`kassiber_reports::tax_estimate`, which S4's per-year delta and S12's AI
+tax summary can reuse), the empty-root and country-less `jurisdictionCode`
+`GENERIC`, and the crypto Kennzahlen from 1 March 2022 (Europe/Vienna) in
+every report that states a field: the capital-gains report and its CSV,
+full CSV/XLSX and verification exports, the E 1kv detail rows and Kennzahl
+summary, the year handoff and the exit-tax preview. The E 1kv report and its
+text, CSV and XLSX exports refuse a year before 2022 and a 2022 with January
+or February crypto rows. Journal events carry `explanationReference`. The
+cherry-picked 172c5a8c7 (from `t3code/r6-5b-ai-tools`) counts calculation
+semantics in the journal views' freshness, which decides when an event has a
+reference. Rendering stays with `t3code/r5-pdf-1`.
+
+`desktop_read_diff.py` on the Python-built `austria` book (this checkout's
+Python CLI, `report_design_books.py`'s steps), release binary, the same 113
+kinds as after S1: 104 the same, 9 differing, none refused. Before S7: 101
+the same, 12 differing. `ui.reports.capital_gains`, `ui.journals.events.list`
+and `ui.journals.snapshot` (the cherry-pick) now match. Targeted runs of
+`ui.reports.capital_gains`, `ui.reports.exit_tax_preview` (departure on
+15 February of the year), `ui.reports.tax_summary` and
+`ui.journals.events.list` for each tax year 2020 to 2025 match; that book
+states 2020 and 2021 in KZ 801 and `unassigned` only, withholds 2022's
+figure for one January/February row and estimates 2025.
+
+Verification of S7:
+
+- `kassiber-reports` lib (61), `vectors` (20), `gain_reads` (3) and
+  `artifact_vectors` (1), and the `kassiber-journals` lib (95), pass against vectors regenerated from the merged
+  Python. The generators gained cases for the cutoff instant, the E 1kv
+  refusals, stored Kennzahl spellings, the breakdown and its link cap,
+  swaps split across conversions, holding periods, countries and exit-tax
+  departures around 1 March 2022.
+- New Rust tests: `tax_estimate::tests` (the eight
+  `AustrianIndicativeTaxTest` cases of `tests/test_tax_estimate.py`, ported,
+  and a zero KZ 801),
+  the calendar cutoff cases and
+  `views::explanation_tests::journal_events_reference_only_explainable_gains`
+  (from `test_review_regressions.py`).
+- `tests/test_rust_reports_screen.py` (new, 8 tests) and
+  `tests/test_rust_report_capital_gains.py` compare response bytes and all
+  113 tables against the Python daemon, plaintext and SQLCipher; the
+  report lanes (`test_rust_reports`, `_report_exports`, `_austrian_xlsx`,
+  `_year_handoff`, `_exit_tax`, `_gain_reads`, `_full_xlsx`,
+  `_export_preview`) pass where they run without the XLSX service probe.
+  `test_rust_journal_views.py` matches for every events request; its
+  quarantine comparisons fail on S5's `definitions`. `test_rust_reports.py`
+  expected a 2020 E 1kv to succeed and now expects the refusal both sides
+  answer.
+- `crates/reports/scripts/reports_screen_mutations.json` (36 entries: 32 in
+  `crates/reports`, 4 in `crates/journals`; `reports_screen_mutation_check.py
+  --crate reports|journals` builds only the targets the entries name) is
+  fully killed.
+
+Found on the way, not S7: `ui.report.blockers` lacks `definitions` through
+its embedded workspace health (four `test_rust_report_blockers.py` tests);
+it follows S10. S1's 113th table broke the reports crate's 112-table
+assertions and export-sequence fixtures, now updated.
 
 ## Verification of the merge
 

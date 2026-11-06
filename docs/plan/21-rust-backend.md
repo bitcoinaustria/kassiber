@@ -181,7 +181,9 @@ reference while it still exists:
 
 Main keeps moving while the stack grows. Each merge of main into the stack
 inventories the Python changes the port must follow and slices them;
-[main sync 1](../reference/rust-main-sync.md) covers #672 to #714.
+[main sync 1](../reference/rust-main-sync.md) covers #672 to #714. Its
+slices land one branch each; S1 (store and registry) and S7 (Reports screen
+and the 1 March 2022 Kennzahl rule) are done.
 
 ## Verification
 

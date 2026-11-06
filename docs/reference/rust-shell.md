@@ -3854,6 +3854,27 @@ and `.delete`, and the kinds `ui.transfers.dismissals.list` and `.delete`,
 `ui.chat.attachments.upload` and `ai.chat.permission_mode`. Those leaves and
 kinds answer `not_implemented` until their slices land.
 
+Main sync 1's S7 slice brought the Reports screen to main #706.
+`ui.reports.capital_gains` carries `fiatCurrency`, `longTermDays`, whole-year
+`totals`, a `breakdown` (Austrian rows by E 1 / E 1kv field with `tax_free`,
+`unassigned` and `swaps` beside them; generic rows by holding period and
+income; exact `transactionIds` up to the Transactions read's 128-id cap),
+lots with asset, category, entry type, exact quantity and Kennzahl, the
+core's `indicativeTax` for Austrian EUR books (`kassiber_reports::tax_estimate`,
+computed without the report blockers) and `rowsBeforeCryptoKennzahlen`. A root
+without a book and a book without a country report `GENERIC`. The crypto
+Kennzahlen (KZ 172, 174, 176) start on 1 March 2022 in Vienna
+(`calendar::before_crypto_kennzahlen`): earlier rows are stated in no field in
+the capital-gains report and its CSV and full exports, the E 1kv detail rows
+and the year handoff; the Kennzahl summary before 2022 lists only KZ 801; the
+E 1kv report, its text, CSV and XLSX forms refuse a year before 2022 and a 2022
+with January or February crypto rows; an exit-tax departure before that day
+has no rate, no estimated tax, no KZ 174/176 and EXIT-011.
+`ui.journals.events.list` events carry the `explanationReference`
+`ui.reports.explain_capital_gain` accepts (`kassiber_reports::result_reference`)
+for current, taxable disposals and income. The AI projections that drop these
+desktop fields follow with S12.
+
 CLI fd input is bounded, consumed once, closed and zeroized by `UnlockSession`.
 Its remaining chain is bound unattended remembered unlock, then a no-echo TTY
 prompt when allowed; noninteractive manual unlock returns `interaction_required`.
