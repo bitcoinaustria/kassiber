@@ -10,7 +10,135 @@ fn compact(source: &str) -> String {
     source.chars().filter(|c| !c.is_whitespace()).collect()
 }
 
+/// Rust source with its comments and string, byte and char literals blanked
+/// to spaces, newlines kept, so prose ("losses net within", "hypervisor")
+/// cannot match while every path, import and call stays where it was.
+/// Lifetimes and labels (`'a`) are code, not literals.
+fn code_only(source: &str) -> String {
+    let chars: Vec<char> = source.chars().collect();
+    let mut out = String::with_capacity(source.len());
+    let blank = |out: &mut String, c: char| out.push(if c == '\n' { '\n' } else { ' ' });
+    let ident = |c: char| c.is_alphanumeric() || c == '_';
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        let next = chars.get(i + 1).copied();
+        if c == '/' && next == Some('/') {
+            while i < chars.len() && chars[i] != '\n' {
+                blank(&mut out, chars[i]);
+                i += 1;
+            }
+            continue;
+        }
+        if c == '/' && next == Some('*') {
+            let mut depth = 0;
+            while i < chars.len() {
+                if chars[i] == '/' && chars.get(i + 1) == Some(&'*') {
+                    depth += 1;
+                    out.push_str("  ");
+                    i += 2;
+                } else if chars[i] == '*' && chars.get(i + 1) == Some(&'/') {
+                    depth -= 1;
+                    out.push_str("  ");
+                    i += 2;
+                    if depth == 0 {
+                        break;
+                    }
+                } else {
+                    blank(&mut out, chars[i]);
+                    i += 1;
+                }
+            }
+            continue;
+        }
+        // A literal's prefix (b, c, r, br, cr) only follows a non-identifier.
+        let start = i == 0 || !ident(chars[i - 1]);
+        let mut j = i;
+        if start && matches!(c, 'b' | 'c') {
+            j += 1;
+        }
+        let raw = start && chars.get(j) == Some(&'r');
+        if raw {
+            let mut k = j + 1;
+            while chars.get(k) == Some(&'#') {
+                k += 1;
+            }
+            if chars.get(k) == Some(&'"') {
+                let hashes = k - j - 1;
+                let mut end = k + 1;
+                while end < chars.len()
+                    && !(chars[end] == '"'
+                        && (1..=hashes).all(|h| chars.get(end + h) == Some(&'#')))
+                {
+                    end += 1;
+                }
+                let end = (end + 1 + hashes).min(chars.len());
+                for &ch in &chars[i..end] {
+                    blank(&mut out, ch);
+                }
+                i = end;
+                continue;
+            }
+        }
+        let quote = if start && j > i {
+            chars.get(j).copied()
+        } else {
+            Some(c)
+        };
+        if quote == Some('"') {
+            let mut end = j + 1;
+            while end < chars.len() && chars[end] != '"' {
+                end += if chars[end] == '\\' { 2 } else { 1 };
+            }
+            let end = (end + 1).min(chars.len());
+            for &ch in &chars[i..end] {
+                blank(&mut out, ch);
+            }
+            i = end;
+            continue;
+        }
+        if quote == Some('\'') {
+            // 'x', '\n', '\u{..}' are char literals; 'a without a closing
+            // quote right after one char is a lifetime or label.
+            let end = if chars.get(j + 1) == Some(&'\\') {
+                let mut end = j + 2;
+                while end < chars.len() && chars[end] != '\'' {
+                    end += 1;
+                }
+                Some(end)
+            } else if chars.get(j + 2) == Some(&'\'') {
+                Some(j + 2)
+            } else {
+                None
+            };
+            if let Some(end) = end {
+                let end = (end + 1).min(chars.len());
+                for &ch in &chars[i..end] {
+                    blank(&mut out, ch);
+                }
+                i = end;
+                continue;
+            }
+        }
+        out.push(c);
+        i += 1;
+    }
+    out
+}
+
+/// The hyper crate family as a token (`hyper::`, `hyper =`, `hyper_util`,
+/// `"hyper"`, `use hyper as h`), not the prefix of a word like hypervisor.
+fn hyper_reference(source: &str) -> bool {
+    source.match_indices("hyper").any(|(at, _)| {
+        !source[at + 5..]
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+    })
+}
+
 fn bypass(source: &str) -> bool {
+    let hyper = hyper_reference(source);
     // Parsing an address literal is pure; keep every connector/import check below.
     let source = compact(source)
         .replace(
@@ -57,7 +185,6 @@ fn bypass(source: &str) -> bool {
         ",net,",
         ",net}",
         ",netas",
-        "hyper",
         "isahc",
         "surf::",
         "attohttpc",
@@ -90,6 +217,7 @@ fn bypass(source: &str) -> bool {
     ]
     .iter()
     .any(|needle| source.contains(needle))
+        || hyper
         || (source.contains("tokio")
             && (source.contains("net::")
                 || source.contains("netas")
@@ -203,6 +331,13 @@ fn manifest_invalid(source: &str, own: bool) -> bool {
 // File, enclosing function, exact call line. Each entry grants one occurrence,
 // not permission to launch arbitrary children elsewhere in a reviewed file.
 fn source_without_reviewed_children(relative: &Path, source: &str) -> String {
+    reviewed_children_in(relative, source, source)
+}
+
+/// Reviewed calls are bound to their exact source line, literals included;
+/// `checked` is the same file line for line (or its code-only view), which is
+/// what the rest of the scan reads.
+fn reviewed_children_in(relative: &Path, source: &str, checked: &str) -> String {
     let calls = include_str!("reviewed-process-calls.txt");
     let mut remaining: Vec<_> = calls
         .lines()
@@ -211,7 +346,8 @@ fn source_without_reviewed_children(relative: &Path, source: &str) -> String {
     let mut function = "";
     source
         .lines()
-        .map(|line| {
+        .zip(checked.lines())
+        .map(|(line, checked)| {
             if let Some((_, definition)) = line.split_once("fn ") {
                 function = definition.split(['(', '<']).next().unwrap().trim();
             }
@@ -227,9 +363,9 @@ fn source_without_reviewed_children(relative: &Path, source: &str) -> String {
             );
             if let Some(index) = remaining.iter().position(|allowed| *allowed == entry) {
                 remaining.remove(index);
-                line.replacen("Command::new", "ReviewedChild", 1)
+                checked.replacen("Command::new", "ReviewedChild", 1)
             } else {
-                line.to_owned()
+                checked.to_owned()
             }
         })
         .collect::<Vec<_>>()
@@ -338,7 +474,13 @@ fn walk(path: &Path, root: &Path, own: &Path, in_crate: bool, failures: &mut Vec
         {
             let bytes = fs::read(path).unwrap();
             let source = String::from_utf8_lossy(&bytes);
-            let source = source_without_reviewed_children(relative, &source);
+            // Rust is checked as code: prose in its comments and literals is
+            // not a network reference. Other covered files stay whole.
+            let source = if path.extension().is_some_and(|ext| ext == "rs") {
+                reviewed_children_in(relative, &source, &code_only(&source))
+            } else {
+                source_without_reviewed_children(relative, &source)
+            };
             let source = if relative.starts_with(IPC_SOURCE) {
                 local_ipc_allowance(&source)
             } else {
@@ -595,6 +737,63 @@ fn scanner_finds_includes_nested_build_directories_and_symlinks() {
         if cfg!(unix) { 7 } else { 6 },
         "{failures:?}"
     );
+}
+
+#[test]
+fn prose_passes_while_real_network_use_in_a_non_net_crate_still_fails() {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(
+        root.path().join("Cargo.toml"),
+        "[package]\nname = \"example\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    let passing = [
+        (
+            "prose.rs",
+            "/// Fees are shown net of the hypervisor's share.\n\
+             pub const NOTE: &str = \"Losses net within the deemed disposal; see hyper links\";\n\
+             pub const RAW: &str = r#\"std::net::TcpStream \"quoted\" net\"#;\n\
+             /* nested /* comment */ use std::net::TcpStream; */\n\
+             pub fn f<'a>(x: &'a str) -> &'a str { let _ = b'n'; x }\n",
+        ),
+        ("record.json", "{\"perf\": \"kernel/hypervisor excluded\"}"),
+    ];
+    let failing = [
+        (
+            "connect.rs",
+            "use std::net::TcpStream;\npub fn f() { let _ = TcpStream::connect(\"127.0.0.1:9\"); }",
+        ),
+        ("client.rs", "use hyper::Client;"),
+        ("alias.rs", "use hyper as client;"),
+        ("gap.rs", "use std::{/* gap */ net as wire};"),
+        (
+            "lifetime.rs",
+            "pub fn f<'a>(x: &'a str) -> &'a str { let _ = std::net::TcpStream::connect(x); x }",
+        ),
+        (
+            "quote.rs",
+            "pub fn f() { let _ = '\"'; let _ = std::net::UdpSocket::bind(\"0.0.0.0:0\"); }",
+        ),
+    ];
+    for (name, source) in passing.iter().chain(&failing) {
+        fs::write(root.path().join(name), source).unwrap();
+    }
+    let mut failures = Vec::new();
+    scan(root.path(), &root.path().join("net"), &mut failures);
+    let mut found: Vec<String> = failures
+        .iter()
+        .map(|failure| {
+            Path::new(failure)
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect();
+    found.sort();
+    let mut expected: Vec<String> = failing.iter().map(|(name, _)| name.to_string()).collect();
+    expected.sort();
+    assert_eq!(found, expected, "{failures:?}");
 }
 
 #[test]
