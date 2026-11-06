@@ -205,6 +205,14 @@ against the Rust port and slices the gaps; Python stays the reference.
   readiness definitions and custody component revision.
 - [ ] S12: rebase the R6 branches (AI catalog, providers, tools, MCP grants,
   chat) onto the synced stack.
+- [x] S1b: every workspace crate's tests pass on the S1 schema. Whole-book
+  checks compare table names with the store manifest, and frozen oracle
+  dumps are upgraded by `tests/rust_port/upgrade_schema_dumps.py`; see
+  [after S1](docs/reference/rust-main-sync.md#after-s1).
+- [ ] Assign the two differences S1b found that no slice lists: `assetId` on
+  foreign-asset legs in `ui.transactions.graph` (#679), and the cached swap
+  count leaving out ownership-graph moves (#707,
+  `daemon_freshness._review_move_count`).
 
 ## Rust backend R5 dependency review
 

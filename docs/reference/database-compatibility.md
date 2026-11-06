@@ -281,6 +281,15 @@ Rust-created book with no migration loop.
 one at a time (`crates/store/scripts/mutation_check.py`); every entry fails
 a Rust store test.
 
+Rust tests that rebuild their books from the manifest carry frozen Python
+dumps cut from the older schema. `tests/rust_port/upgrade_schema_dumps.py`
+upgraded them for these steps, filling in each added column's default and
+the empty table, as this compatibility pass does. A later additive column
+can extend its `ADDED` list. A step that backfills other values, drops a
+column or reorders one needs its vectors regenerated instead. Whole-book
+checks compare their table names with `kassiber_store::table_names()` or
+`tests/rust_port/book_schema.py`, not with a fixed count.
+
 **Newer layouts.** The Rust store refuses a book carrying any object, column
 or migration audit it does not know (`requires_python_migration`), in both its
 admission-only and migrating opens, before writing anything. Python does not:

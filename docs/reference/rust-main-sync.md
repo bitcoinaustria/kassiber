@@ -275,6 +275,64 @@ SQLCipher. The store mutation catalog (ten entries) is fully killed. The
 preflight shard passes. Not rerun for S1: the other workspace crates and
 the remaining Python lanes.
 
+S1b brought the other crates' fixtures up to that schema. On 6159f8f39,
+running each crate's test binaries one cargo command at a time (178 targets)
+failed 139 tests in 35 targets, all from S1 except the egress chokepoint:
+
+- Whole-book comparisons asserted 112 tables, but current books have 113.
+  The kassiber privacy and PSBT tests, the reports lightning, platform CSV
+  and source-funds tests, and the Python harnesses and generators behind
+  them now compare table names with the store manifest
+  (`kassiber_store::table_names()`, `tests/rust_port/book_schema.py`).
+  Checks over the frozen `privacy_hygiene_seed.sql` book keep 112.
+- 17 test binaries in journals, wallets, transfers, setup and reports
+  rebuild their books from the manifest. They failed against Python dumps
+  and `iterdump()` seeds cut from the old schema: 47 values for 48
+  transaction columns, or no `ai_provider_checks`, `agent_access` or
+  `pricing_review_accepted_price`. The journals `crash.rs` test
+  `killed_writes_recover_complete_stale_books_on_sqlite_and_sqlcipher` is
+  one of them, and it passes on a0b4d0342.
+  `tests/rust_port/upgrade_schema_dumps.py` upgrades such vectors the way
+  Python's compatibility pass upgrades a book: the declared added columns
+  read their defaults and whole-book dumps gain the empty table. It refuses
+  anything else. Regenerating these vectors would also take in behaviour
+  other slices port: S2's qualified references in `component_reads.json`
+  and `source_funds_passes.json`, and S3's custody record fields in the
+  journal oracles, along with those generators' clock and UUID churn.
+  `pairing_services.json` would take in S6's suggestion `exclusions` and
+  #707's `ownership` candidate count. The inventory doesn't list the second
+  yet: `daemon_freshness._review_move_count` leaves ownership-graph moves
+  out of the cached `profiles.swap_candidate_count`, which drops from 2 to 1
+  in 72 stored rows.
+  On every schema column the generators agree with the upgrade, and the
+  wallets generators agree byte for byte. Run the tool only on vectors whose
+  tests replay into a manifest-built book; `loader.json` and the transfer
+  review vectors carry their own schema.
+- `lightning.json` and `python_networks.json` are regenerated. Apart from
+  the schema, only the partition plans' `authored_digest` and `plan_id`
+  change. They hash the wider transaction rows, and Rust computes the same
+  new values.
+- The chokepoint refused two journals files that open no connection: an
+  IPv4 literal parse and a comment naming the egress crate. Both came with
+  2e263cbcd, before S1.
+
+Every workspace crate's test binaries then pass (178 targets, 2259 tests),
+including the owned-loopback tests in chain, net, rates and wallets, which
+this machine allows.
+
+`DesktopParity`'s SQLCipher variants never unlocked the book, so the 29
+encrypted tests only ever compared two `auth_required` refusals.
+`compare()` now sends `daemon.unlock` first unless the session already does,
+as `SyncParity` on the S2/S6/S11 branch and the wallet onboarding and reveal
+tests do. 17 of the 29 then pass. The other 12 fail on the same differences
+their plaintext twins show (41 plaintext failures in those files, debug
+harness binary): `definitions` (S10), the capital-gains payload (S7),
+`fiat_currency` and the plan's `tax` delta (S4, which also makes Rust refuse
+Python's apply artifact), the dashboard `years` (S9), transfer `exclusions`
+(S6), and an `assetId` beside the label of foreign-asset legs in
+`ui.transactions.graph`. The last one came with #679
+(`transaction_graph._apply_foreign_asset`) and no slice lists it yet.
+
 The comparison is plaintext: the harness does not unlock SQLCipher books.
 Encrypted admission is covered by the store differential tests, which open a
 current Python SQLCipher book in both Rust open modes without changing it.
