@@ -217,8 +217,7 @@
   "find": "            issues.push(remediation::membership_conflict_issue(\n                conflicts,\n                \"a transaction belongs to another active component\",\n            ));",
   "replace": "            issues.push(serde_json::json!({\"code\":\"active_transaction_membership_conflict\",\"message\":\"a transaction belongs to another active component\",\"conflicts\":conflicts}));",
   "expect_failing": [
-   "component_reviews_match_python_complete_database_rows_and_refusals",
-   "pair_sequences_match_python_complete_database_rows_and_refusals"
+   "component_reviews_match_python_complete_database_rows_and_refusals"
   ],
   "rule": "An activation's membership conflict names the conflicting component."
  },

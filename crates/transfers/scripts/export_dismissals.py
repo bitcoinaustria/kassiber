@@ -89,6 +89,8 @@ OPERATIONS = [
     ("list", {"limit": 1}),
     ("list", {"limit": 2, "include_expired": True}),
     ("list", {"limit": 500}),
+    ("list", {"limit": 5}),
+    ("list", {"limit": 7, "include_expired": True}),
     ("list", {"limit": 0}),
     ("list", {"limit": 501}),
     ("list", {"limit": True}),

@@ -1680,6 +1680,631 @@
   {
    "operation": "list",
    "args": {
+    "limit": 5
+   },
+   "id": "00000000-0000-0000-0000-000000000002",
+   "result": {
+    "dismissals": [
+     {
+      "id": "d-cross",
+      "workspace_id": "w",
+      "profile_id": "p",
+      "out_transaction_id": "o2",
+      "in_transaction_id": "q1",
+      "reason": null,
+      "created_at": "2026-10-04T00:00:00Z",
+      "expires_at": null,
+      "active": true,
+      "permanent": true,
+      "out": {
+       "transaction_id": "o2",
+       "external_id": "ext-o2",
+       "wallet_id": "b",
+       "wallet": "Cold B",
+       "direction": "outbound",
+       "asset": "BTC",
+       "amount_msat": 50000,
+       "occurred_at": "2026-10-04T00:00:00Z"
+      },
+      "in": {
+       "transaction_id": "q1",
+       "external_id": null,
+       "wallet_id": null,
+       "wallet": null,
+       "direction": null,
+       "asset": null,
+       "amount_msat": null,
+       "occurred_at": null
+      }
+     },
+     {
+      "id": "d-bad",
+      "workspace_id": "w",
+      "profile_id": "p",
+      "out_transaction_id": "o2",
+      "in_transaction_id": "i1",
+      "reason": null,
+      "created_at": "2026-10-04T00:00:00Z",
+      "expires_at": "soon",
+      "active": true,
+      "permanent": false,
+      "out": {
+       "transaction_id": "o2",
+       "external_id": "ext-o2",
+       "wallet_id": "b",
+       "wallet": "Cold B",
+       "direction": "outbound",
+       "asset": "BTC",
+       "amount_msat": 50000,
+       "occurred_at": "2026-10-04T00:00:00Z"
+      },
+      "in": {
+       "transaction_id": "i1",
+       "external_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+       "wallet_id": "b",
+       "wallet": "Cold B",
+       "direction": "inbound",
+       "asset": "BTC",
+       "amount_msat": 299000,
+       "occurred_at": "2026-10-02T00:00:00Z"
+      }
+     },
+     {
+      "id": "d-empty",
+      "workspace_id": "w",
+      "profile_id": "p",
+      "out_transaction_id": "o2",
+      "in_transaction_id": "i2",
+      "reason": null,
+      "created_at": "2026-10-03T00:00:00Z",
+      "expires_at": "",
+      "active": true,
+      "permanent": true,
+      "out": {
+       "transaction_id": "o2",
+       "external_id": "ext-o2",
+       "wallet_id": "b",
+       "wallet": "Cold B",
+       "direction": "outbound",
+       "asset": "BTC",
+       "amount_msat": 50000,
+       "occurred_at": "2026-10-04T00:00:00Z"
+      },
+      "in": {
+       "transaction_id": "i2",
+       "external_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+       "wallet_id": "a",
+       "wallet": "Mixer Out",
+       "direction": "inbound",
+       "asset": "BTC",
+       "amount_msat": 1000,
+       "occurred_at": "2026-10-03T00:00:00Z"
+      }
+     },
+     {
+      "id": "d-future",
+      "workspace_id": "w",
+      "profile_id": "p",
+      "out_transaction_id": "o1",
+      "in_transaction_id": "i2",
+      "reason": null,
+      "created_at": "2026-10-02T00:00:00Z",
+      "expires_at": "2026-11-30T00:00:00Z",
+      "active": true,
+      "permanent": false,
+      "out": {
+       "transaction_id": "o1",
+       "external_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+       "wallet_id": "a",
+       "wallet": "Mixer Out",
+       "direction": "outbound",
+       "asset": "BTC",
+       "amount_msat": 300000,
+       "occurred_at": "2026-10-01T00:00:00Z"
+      },
+      "in": {
+       "transaction_id": "i2",
+       "external_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+       "wallet_id": "a",
+       "wallet": "Mixer Out",
+       "direction": "inbound",
+       "asset": "BTC",
+       "amount_msat": 1000,
+       "occurred_at": "2026-10-03T00:00:00Z"
+      }
+     },
+     {
+      "id": "d-perm",
+      "workspace_id": "w",
+      "profile_id": "p",
+      "out_transaction_id": "o1",
+      "in_transaction_id": "i1",
+      "reason": "reviewed",
+      "created_at": "2026-10-01T00:00:00Z",
+      "expires_at": null,
+      "active": true,
+      "permanent": true,
+      "out": {
+       "transaction_id": "o1",
+       "external_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+       "wallet_id": "a",
+       "wallet": "Mixer Out",
+       "direction": "outbound",
+       "asset": "BTC",
+       "amount_msat": 300000,
+       "occurred_at": "2026-10-01T00:00:00Z"
+      },
+      "in": {
+       "transaction_id": "i1",
+       "external_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+       "wallet_id": "b",
+       "wallet": "Cold B",
+       "direction": "inbound",
+       "asset": "BTC",
+       "amount_msat": 299000,
+       "occurred_at": "2026-10-02T00:00:00Z"
+      }
+     }
+    ],
+    "counts": {
+     "active": 5,
+     "expired": 2,
+     "permanent": 3
+    },
+    "has_more": false,
+    "limit": 5,
+    "include_expired": false,
+    "as_of": "2026-10-30T12:00:00Z"
+   },
+   "rows": {
+    "transaction_pair_dismissals": [
+     {
+      "id": "d-bad",
+      "workspace_id": "w",
+      "profile_id": "p",
+      "out_transaction_id": "o2",
+      "in_transaction_id": "i1",
+      "reason": null,
+      "created_at": "2026-10-04T00:00:00Z",
+      "expires_at": "soon"
+     },
+     {
+      "id": "d-cross",
+      "workspace_id": "w",
+      "profile_id": "p",
+      "out_transaction_id": "o2",
+      "in_transaction_id": "q1",
+      "reason": null,
+      "created_at": "2026-10-04T00:00:00Z",
+      "expires_at": null
+     },
+     {
+      "id": "d-empty",
+      "workspace_id": "w",
+      "profile_id": "p",
+      "out_transaction_id": "o2",
+      "in_transaction_id": "i2",
+      "reason": null,
+      "created_at": "2026-10-03T00:00:00Z",
+      "expires_at": ""
+     },
+     {
+      "id": "d-equal",
+      "workspace_id": "w",
+      "profile_id": "p",
+      "out_transaction_id": "xo",
+      "in_transaction_id": "i1",
+      "reason": null,
+      "created_at": "2026-10-03T00:00:00Z",
+      "expires_at": "2026-10-30T12:00:00Z"
+     },
+     {
+      "id": "d-future",
+      "workspace_id": "w",
+      "profile_id": "p",
+      "out_transaction_id": "o1",
+      "in_transaction_id": "i2",
+      "reason": null,
+      "created_at": "2026-10-02T00:00:00Z",
+      "expires_at": "2026-11-30T00:00:00Z"
+     },
+     {
+      "id": "d-other",
+      "workspace_id": "w",
+      "profile_id": "q",
+      "out_transaction_id": "q1",
+      "in_transaction_id": "q1",
+      "reason": null,
+      "created_at": "2026-10-05T00:00:00Z",
+      "expires_at": null
+     },
+     {
+      "id": "d-past",
+      "workspace_id": "w",
+      "profile_id": "p",
+      "out_transaction_id": "xo",
+      "in_transaction_id": "xi",
+      "reason": "old",
+      "created_at": "2026-10-02T00:00:00Z",
+      "expires_at": "2026-10-01T00:00:00Z"
+     },
+     {
+      "id": "d-perm",
+      "workspace_id": "w",
+      "profile_id": "p",
+      "out_transaction_id": "o1",
+      "in_transaction_id": "i1",
+      "reason": "reviewed",
+      "created_at": "2026-10-01T00:00:00Z",
+      "expires_at": null
+     }
+    ],
+    "profiles": [
+     {
+      "id": "p",
+      "last_processed_at": "2026-10-30T12:00:00Z",
+      "last_processed_tx_count": 8,
+      "journal_input_version": 4,
+      "ownership_review_counts_json": null
+     },
+     {
+      "id": "q",
+      "last_processed_at": null,
+      "last_processed_tx_count": 0,
+      "journal_input_version": 0,
+      "ownership_review_counts_json": null
+     }
+    ]
+   }
+  },
+  {
+   "operation": "list",
+   "args": {
+    "limit": 7,
+    "include_expired": true
+   },
+   "id": "00000000-0000-0000-0000-000000000002",
+   "result": {
+    "dismissals": [
+     {
+      "id": "d-cross",
+      "workspace_id": "w",
+      "profile_id": "p",
+      "out_transaction_id": "o2",
+      "in_transaction_id": "q1",
+      "reason": null,
+      "created_at": "2026-10-04T00:00:00Z",
+      "expires_at": null,
+      "active": true,
+      "permanent": true,
+      "out": {
+       "transaction_id": "o2",
+       "external_id": "ext-o2",
+       "wallet_id": "b",
+       "wallet": "Cold B",
+       "direction": "outbound",
+       "asset": "BTC",
+       "amount_msat": 50000,
+       "occurred_at": "2026-10-04T00:00:00Z"
+      },
+      "in": {
+       "transaction_id": "q1",
+       "external_id": null,
+       "wallet_id": null,
+       "wallet": null,
+       "direction": null,
+       "asset": null,
+       "amount_msat": null,
+       "occurred_at": null
+      }
+     },
+     {
+      "id": "d-bad",
+      "workspace_id": "w",
+      "profile_id": "p",
+      "out_transaction_id": "o2",
+      "in_transaction_id": "i1",
+      "reason": null,
+      "created_at": "2026-10-04T00:00:00Z",
+      "expires_at": "soon",
+      "active": true,
+      "permanent": false,
+      "out": {
+       "transaction_id": "o2",
+       "external_id": "ext-o2",
+       "wallet_id": "b",
+       "wallet": "Cold B",
+       "direction": "outbound",
+       "asset": "BTC",
+       "amount_msat": 50000,
+       "occurred_at": "2026-10-04T00:00:00Z"
+      },
+      "in": {
+       "transaction_id": "i1",
+       "external_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+       "wallet_id": "b",
+       "wallet": "Cold B",
+       "direction": "inbound",
+       "asset": "BTC",
+       "amount_msat": 299000,
+       "occurred_at": "2026-10-02T00:00:00Z"
+      }
+     },
+     {
+      "id": "d-equal",
+      "workspace_id": "w",
+      "profile_id": "p",
+      "out_transaction_id": "xo",
+      "in_transaction_id": "i1",
+      "reason": null,
+      "created_at": "2026-10-03T00:00:00Z",
+      "expires_at": "2026-10-30T12:00:00Z",
+      "active": false,
+      "permanent": false,
+      "out": {
+       "transaction_id": "xo",
+       "external_id": "ext-xo",
+       "wallet_id": "a",
+       "wallet": "Mixer Out",
+       "direction": "outbound",
+       "asset": "BTC",
+       "amount_msat": 70000,
+       "occurred_at": "2026-10-05T00:00:00Z"
+      },
+      "in": {
+       "transaction_id": "i1",
+       "external_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+       "wallet_id": "b",
+       "wallet": "Cold B",
+       "direction": "inbound",
+       "asset": "BTC",
+       "amount_msat": 299000,
+       "occurred_at": "2026-10-02T00:00:00Z"
+      }
+     },
+     {
+      "id": "d-empty",
+      "workspace_id": "w",
+      "profile_id": "p",
+      "out_transaction_id": "o2",
+      "in_transaction_id": "i2",
+      "reason": null,
+      "created_at": "2026-10-03T00:00:00Z",
+      "expires_at": "",
+      "active": true,
+      "permanent": true,
+      "out": {
+       "transaction_id": "o2",
+       "external_id": "ext-o2",
+       "wallet_id": "b",
+       "wallet": "Cold B",
+       "direction": "outbound",
+       "asset": "BTC",
+       "amount_msat": 50000,
+       "occurred_at": "2026-10-04T00:00:00Z"
+      },
+      "in": {
+       "transaction_id": "i2",
+       "external_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+       "wallet_id": "a",
+       "wallet": "Mixer Out",
+       "direction": "inbound",
+       "asset": "BTC",
+       "amount_msat": 1000,
+       "occurred_at": "2026-10-03T00:00:00Z"
+      }
+     },
+     {
+      "id": "d-past",
+      "workspace_id": "w",
+      "profile_id": "p",
+      "out_transaction_id": "xo",
+      "in_transaction_id": "xi",
+      "reason": "old",
+      "created_at": "2026-10-02T00:00:00Z",
+      "expires_at": "2026-10-01T00:00:00Z",
+      "active": false,
+      "permanent": false,
+      "out": {
+       "transaction_id": "xo",
+       "external_id": "ext-xo",
+       "wallet_id": "a",
+       "wallet": "Mixer Out",
+       "direction": "outbound",
+       "asset": "BTC",
+       "amount_msat": 70000,
+       "occurred_at": "2026-10-05T00:00:00Z"
+      },
+      "in": {
+       "transaction_id": "xi",
+       "external_id": "ext-xi",
+       "wallet_id": "b",
+       "wallet": "Cold B",
+       "direction": "inbound",
+       "asset": "BTC",
+       "amount_msat": 69000,
+       "occurred_at": "2026-10-06T00:00:00Z"
+      }
+     },
+     {
+      "id": "d-future",
+      "workspace_id": "w",
+      "profile_id": "p",
+      "out_transaction_id": "o1",
+      "in_transaction_id": "i2",
+      "reason": null,
+      "created_at": "2026-10-02T00:00:00Z",
+      "expires_at": "2026-11-30T00:00:00Z",
+      "active": true,
+      "permanent": false,
+      "out": {
+       "transaction_id": "o1",
+       "external_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+       "wallet_id": "a",
+       "wallet": "Mixer Out",
+       "direction": "outbound",
+       "asset": "BTC",
+       "amount_msat": 300000,
+       "occurred_at": "2026-10-01T00:00:00Z"
+      },
+      "in": {
+       "transaction_id": "i2",
+       "external_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+       "wallet_id": "a",
+       "wallet": "Mixer Out",
+       "direction": "inbound",
+       "asset": "BTC",
+       "amount_msat": 1000,
+       "occurred_at": "2026-10-03T00:00:00Z"
+      }
+     },
+     {
+      "id": "d-perm",
+      "workspace_id": "w",
+      "profile_id": "p",
+      "out_transaction_id": "o1",
+      "in_transaction_id": "i1",
+      "reason": "reviewed",
+      "created_at": "2026-10-01T00:00:00Z",
+      "expires_at": null,
+      "active": true,
+      "permanent": true,
+      "out": {
+       "transaction_id": "o1",
+       "external_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+       "wallet_id": "a",
+       "wallet": "Mixer Out",
+       "direction": "outbound",
+       "asset": "BTC",
+       "amount_msat": 300000,
+       "occurred_at": "2026-10-01T00:00:00Z"
+      },
+      "in": {
+       "transaction_id": "i1",
+       "external_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+       "wallet_id": "b",
+       "wallet": "Cold B",
+       "direction": "inbound",
+       "asset": "BTC",
+       "amount_msat": 299000,
+       "occurred_at": "2026-10-02T00:00:00Z"
+      }
+     }
+    ],
+    "counts": {
+     "active": 5,
+     "expired": 2,
+     "permanent": 3
+    },
+    "has_more": false,
+    "limit": 7,
+    "include_expired": true,
+    "as_of": "2026-10-30T12:00:00Z"
+   },
+   "rows": {
+    "transaction_pair_dismissals": [
+     {
+      "id": "d-bad",
+      "workspace_id": "w",
+      "profile_id": "p",
+      "out_transaction_id": "o2",
+      "in_transaction_id": "i1",
+      "reason": null,
+      "created_at": "2026-10-04T00:00:00Z",
+      "expires_at": "soon"
+     },
+     {
+      "id": "d-cross",
+      "workspace_id": "w",
+      "profile_id": "p",
+      "out_transaction_id": "o2",
+      "in_transaction_id": "q1",
+      "reason": null,
+      "created_at": "2026-10-04T00:00:00Z",
+      "expires_at": null
+     },
+     {
+      "id": "d-empty",
+      "workspace_id": "w",
+      "profile_id": "p",
+      "out_transaction_id": "o2",
+      "in_transaction_id": "i2",
+      "reason": null,
+      "created_at": "2026-10-03T00:00:00Z",
+      "expires_at": ""
+     },
+     {
+      "id": "d-equal",
+      "workspace_id": "w",
+      "profile_id": "p",
+      "out_transaction_id": "xo",
+      "in_transaction_id": "i1",
+      "reason": null,
+      "created_at": "2026-10-03T00:00:00Z",
+      "expires_at": "2026-10-30T12:00:00Z"
+     },
+     {
+      "id": "d-future",
+      "workspace_id": "w",
+      "profile_id": "p",
+      "out_transaction_id": "o1",
+      "in_transaction_id": "i2",
+      "reason": null,
+      "created_at": "2026-10-02T00:00:00Z",
+      "expires_at": "2026-11-30T00:00:00Z"
+     },
+     {
+      "id": "d-other",
+      "workspace_id": "w",
+      "profile_id": "q",
+      "out_transaction_id": "q1",
+      "in_transaction_id": "q1",
+      "reason": null,
+      "created_at": "2026-10-05T00:00:00Z",
+      "expires_at": null
+     },
+     {
+      "id": "d-past",
+      "workspace_id": "w",
+      "profile_id": "p",
+      "out_transaction_id": "xo",
+      "in_transaction_id": "xi",
+      "reason": "old",
+      "created_at": "2026-10-02T00:00:00Z",
+      "expires_at": "2026-10-01T00:00:00Z"
+     },
+     {
+      "id": "d-perm",
+      "workspace_id": "w",
+      "profile_id": "p",
+      "out_transaction_id": "o1",
+      "in_transaction_id": "i1",
+      "reason": "reviewed",
+      "created_at": "2026-10-01T00:00:00Z",
+      "expires_at": null
+     }
+    ],
+    "profiles": [
+     {
+      "id": "p",
+      "last_processed_at": "2026-10-30T12:00:00Z",
+      "last_processed_tx_count": 8,
+      "journal_input_version": 4,
+      "ownership_review_counts_json": null
+     },
+     {
+      "id": "q",
+      "last_processed_at": null,
+      "last_processed_tx_count": 0,
+      "journal_input_version": 0,
+      "ownership_review_counts_json": null
+     }
+    ]
+   }
+  },
+  {
+   "operation": "list",
+   "args": {
     "limit": 0
    },
    "id": "00000000-0000-0000-0000-000000000002",

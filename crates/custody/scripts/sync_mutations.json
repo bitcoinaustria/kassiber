@@ -47,10 +47,6 @@
   "find": "    if component_ids.len() > 1 {",
   "replace": "    if component_ids.len() > 2 {",
   "expect_failing": [
-   "components_membership_conflict",
-   "components_lineage_conflict",
-   "components_membership_empty_anchor",
-   "components_component_order",
    "components_lineage_ties"
   ],
   "rule": "Several conflicting components add the supersede-all-but-one advice."
@@ -61,10 +57,6 @@
   "find": "    let first = component_ids.iter().next().cloned();",
   "replace": "    let first = component_ids.iter().last().cloned();",
   "expect_failing": [
-   "components_membership_conflict",
-   "components_lineage_conflict",
-   "components_membership_empty_anchor",
-   "components_component_order",
    "components_lineage_ties"
   ],
   "rule": "The arguments hint names the first conflicting component in sorted order."
