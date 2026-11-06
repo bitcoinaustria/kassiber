@@ -1084,9 +1084,9 @@ class ActiveAiChats:
         *,
         chat_session_id: str | None,
         provider_name: str,
-        history_fingerprint: str,
+        history_fingerprint: str | None,
     ) -> str | None:
-        if not chat_session_id:
+        if not chat_session_id or history_fingerprint is None:
             return None
         with self._lock:
             entry = self._provider_sessions.get((chat_session_id, provider_name))
@@ -10414,6 +10414,19 @@ def _provider_session_history_fingerprint(messages: list[dict[str, Any]]) -> str
     ).hexdigest()
 
 
+def _provider_session_resume_fingerprint(messages: list[dict[str, Any]]) -> str | None:
+    """Fingerprint the branch a resumable cursor was recorded against.
+
+    A cursor is remembered after a turn under the transcript plus its answer.
+    The next request carries that transcript followed by one new user prompt,
+    so look up everything before the prompt. Any other shape resumes nothing.
+    """
+
+    if not messages or not isinstance(messages[-1], dict) or messages[-1].get("role") != "user":
+        return None
+    return _provider_session_history_fingerprint(messages[:-1])
+
+
 # Finish reasons of an answer that was cut off before it ended on its own.
 _AI_CUT_OFF_FINISH_REASONS = frozenset({"length", "content_filter"})
 
@@ -10838,7 +10851,7 @@ def _run_ai_chat_tool_loop(
         active_ai_chats.provider_session(
             chat_session_id=validated["session_id"],
             provider_name=provider_snapshot["name"],
-            history_fingerprint=_provider_session_history_fingerprint(
+            history_fingerprint=_provider_session_resume_fingerprint(
                 validated["messages"]
             ),
         )
@@ -10962,6 +10975,9 @@ def _run_ai_chat_tool_loop(
     response_context = responses_request_context(messages)
     finish_reason = None
     content = ""
+    # Every leg streams its text to the user, who sends all of it back as the
+    # assistant message; the provider cursor is bound to that visible answer.
+    shown_parts: list[str] = []
     review_checkpoint: dict[str, Any] = {}
     for _iteration in range(validated["tool_loop_max_iterations"]):
         if cancel_event.is_set():
@@ -10983,6 +10999,7 @@ def _run_ai_chat_tool_loop(
         notices.extend(phase for phase in turn.notices if phase not in notices)
         tool_calls = turn.tool_calls
         content = turn.content
+        shown_parts.append(turn.content)
         finish_reason = turn.finish_reason
         if cancel_event.is_set():
             finish_reason = "cancelled"
@@ -11249,6 +11266,7 @@ def _run_ai_chat_tool_loop(
                 "```json\n" + json.dumps({"review_checkpoint": review_checkpoint}, sort_keys=True) + "\n```"
             )
             content = (content or "") + continuation
+            shown_parts.append(continuation)
             out.write(_with_request_id(build_envelope(
                 "ai.chat.delta", {"delta": {"content": continuation}},
             ), request_id))
@@ -11263,7 +11281,7 @@ def _run_ai_chat_tool_loop(
             history_fingerprint=_provider_session_history_fingerprint(
                 [
                     *validated["messages"],
-                    {"role": "assistant", "content": content or ""},
+                    {"role": "assistant", "content": "".join(shown_parts)},
                 ]
             ),
         )
@@ -11368,7 +11386,7 @@ def _run_ai_chat_stream(
                 active_ai_chats.provider_session(
                     chat_session_id=validated["session_id"],
                     provider_name=provider_snapshot["name"],
-                    history_fingerprint=_provider_session_history_fingerprint(
+                    history_fingerprint=_provider_session_resume_fingerprint(
                         validated["messages"]
                     ),
                 )
