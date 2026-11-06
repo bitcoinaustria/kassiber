@@ -16,17 +16,40 @@ from .onchain import input_script, output_script
 MEMBERSHIP_VERSION = 1
 
 
+_OBSERVER_REBUILD_BASELINE = ("tip_height", "canonical_txids")
+
+
 def full_scan_checkpoint(checkpoint):
     """Discard scan caches while preserving candidates for absence comparison.
 
     Membership is observation history, including positives from incomplete
     rounds, rather than permission to skip fetching. The observer still checks
     its version, source binding and full current coverage before any retraction.
+
+    Dependency observers keep their persisted tip and canonical txids: a forced
+    rebuild must refuse a backend behind the book instead of retracting newer
+    transactions, and retracts only against what it published before.
     """
-    saved = checkpoint.get("esplora_history_memberships") if isinstance(checkpoint, Mapping) else None
-    if not isinstance(saved, Mapping) or type(saved.get("version")) is not int or saved["version"] != MEMBERSHIP_VERSION:
+    if not isinstance(checkpoint, Mapping):
         return {}
-    return {"esplora_history_memberships": deepcopy(dict(saved))}
+    retained = {}
+    saved = checkpoint.get("esplora_history_memberships")
+    if isinstance(saved, Mapping) and type(saved.get("version")) is int and saved["version"] == MEMBERSHIP_VERSION:
+        retained["esplora_history_memberships"] = deepcopy(dict(saved))
+    instances = checkpoint.get("observer_instances")
+    if isinstance(instances, Mapping):
+        baselines = {
+            str(identity_id): {
+                key: deepcopy(instance[key])
+                for key in _OBSERVER_REBUILD_BASELINE
+                if instance.get(key) is not None
+            }
+            for identity_id, instance in instances.items()
+            if isinstance(instance, Mapping)
+        }
+        if baselines:
+            retained["observer_instances"] = dict(sorted(baselines.items()))
+    return retained
 
 
 def explicit_history_count(stats):

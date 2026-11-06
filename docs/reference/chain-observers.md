@@ -398,7 +398,9 @@ separate display metadata. The pinned binding declares
 `WalletTxOut.wildcard_index() -> int`, so fixed-descriptor outputs do not expose
 an optional-index state in this version. Forced rebuilds compare the backend
 tip height with the persisted checkpoint before scanning, preventing a lagging
-backend from retracting newer facts.
+backend from retracting newer facts. `full_scan_checkpoint` keeps each observer
+instance's `tip_height` and `canonical_txids` for this guard and the retraction
+baseline while discarding scan caches such as `highest_used`.
 
 ## Manual observer inventory
 
