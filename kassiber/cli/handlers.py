@@ -42,9 +42,11 @@ from ..core import custody_journal as core_custody_journal
 from ..core import journal_calculation as core_journal_calculation
 from ..core import quarantine_resolution as core_quarantine_resolution
 from ..core import quarantine_review as core_quarantine_review
+from ..core import transaction_verify as core_transaction_verify
 from ..core import custody_review_terms as core_custody_review_terms
 from ..core import freshness as core_freshness
 from ..core import exchange_imports as core_exchange_imports
+from ..core import transaction_lookup as core_transaction_lookup
 from ..core.ui_snapshot import transaction_status_sql as core_transaction_status_sql
 from ..core import imports as core_imports
 from ..core.lightning import cln as core_lightning_cln
@@ -208,30 +210,15 @@ def cache_swap_candidate_count(conn, workspace_ref, profile_ref, total):
 
 
 def resolve_transaction(conn, profile_id, ref, direction=None):
-    id_query = ["SELECT * FROM transactions WHERE profile_id = ? AND id = ?"]
-    id_params = [profile_id, ref]
-    if direction is not None:
-        id_query.append("AND direction = ?")
-        id_params.append(direction)
-    row = conn.execute(" ".join(id_query), tuple(id_params)).fetchone()
-    if row:
-        return row
+    """Resolve an id, an unambiguous external id, or a qualified txid.
 
-    external_query = ["SELECT * FROM transactions WHERE profile_id = ? AND external_id = ?"]
-    external_params = [profile_id, ref]
-    if direction is not None:
-        external_query.append("AND direction = ?")
-        external_params.append(direction)
-    external_query.append("ORDER BY occurred_at DESC, created_at DESC, id DESC LIMIT 2")
-    rows = conn.execute(" ".join(external_query), tuple(external_params)).fetchall()
-    if len(rows) > 1:
-        direction_hint = f" {direction}" if direction else ""
-        raise AppError(
-            f"Transaction external_id '{ref}' matches multiple{direction_hint} transactions",
-            code="ambiguous_reference",
-            hint="Use the Kassiber transaction id from `transactions list` or narrow the command to an unambiguous row.",
-        )
-    row = rows[0] if rows else None
+    Several rows sharing one txid (CoinJoins, batched deposits) raise
+    ``ambiguous_reference`` with every candidate; see
+    ``core.transaction_lookup``.
+    """
+    row = core_transaction_lookup.find_transaction(
+        conn, profile_id, ref, direction=direction
+    )
     if not row:
         if direction is None:
             raise AppError(f"Transaction '{ref}' not found")
@@ -668,13 +655,14 @@ def suggest_transfer_candidates(
         "SELECT out_transaction_id, in_transaction_id, expires_at FROM transaction_pair_dismissals WHERE profile_id = ?",
         (profile["id"],),
     ).fetchall()
+    booked_move_transaction_ids = core_custody_journal.stored_move_transaction_ids(
+        conn, profile["id"]
+    )
     candidates = core_transfer_matching.suggest_swap_candidates(
         rows,
         pair_records=pair_records,
         dismissals=dismissals,
-        booked_move_transaction_ids=core_custody_journal.stored_move_transaction_ids(
-            conn, profile["id"]
-        ),
+        booked_move_transaction_ids=booked_move_transaction_ids,
         time_window_seconds=int(time_window_seconds),
         fee_pct_max=float(fee_pct_max),
         fee_sats_min=int(fee_sats_min),
@@ -728,6 +716,15 @@ def suggest_transfer_candidates(
     return {
         "candidates": _candidate_dicts_with_rule_matches(candidates, rules, rule_matches),
         "counts": counts,
+        # Profile-wide and before the filters above: what the matcher skipped,
+        # so an empty or short candidate list can be told apart from "nothing
+        # to pair". Read the dismissals with `transfers dismissals list`.
+        "exclusions": core_transfer_matching.candidate_exclusion_counts(
+            rows,
+            pair_records=pair_records,
+            dismissals=dismissals,
+            booked_move_transaction_ids=booked_move_transaction_ids,
+        ),
     }
 
 
@@ -999,43 +996,156 @@ def dismiss_transfer_candidate(
     workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
     out_row = resolve_transaction(conn, profile["id"], out_ref)
     in_row = resolve_transaction(conn, profile["id"], in_ref)
-    expires_at = None
-    if expires_in_days and int(expires_in_days) > 0:
-        from datetime import datetime, timedelta, timezone
-
-        expires_at = (
-            datetime.now(timezone.utc) + timedelta(days=int(expires_in_days))
-        ).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-    dismissal_id = str(uuid.uuid4())
-    conn.execute(
-        """
-        INSERT INTO transaction_pair_dismissals(
-            id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
-            reason, created_at, expires_at
-        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(profile_id, out_transaction_id, in_transaction_id)
-        DO UPDATE SET
-            reason = COALESCE(excluded.reason, transaction_pair_dismissals.reason),
-            expires_at = excluded.expires_at
-        """,
-        (
-            dismissal_id,
-            workspace["id"],
-            profile["id"],
-            out_row["id"],
-            in_row["id"],
-            reason,
-            now_iso(),
-            expires_at,
-        ),
+    row = core_custody_review_terms.dismiss_pair_candidate(
+        conn,
+        workspace_id=workspace["id"],
+        profile_id=profile["id"],
+        out_transaction_id=out_row["id"],
+        in_transaction_id=in_row["id"],
+        reason=reason,
+        expires_in_days=expires_in_days,
+        # Journal builds read dismissals (they stop native transitions), so
+        # the book's journals are stale after one.
+        invalidate=True,
     )
-    conn.commit()
-    row = conn.execute(
-        "SELECT * FROM transaction_pair_dismissals "
-        "WHERE profile_id = ? AND out_transaction_id = ? AND in_transaction_id = ?",
-        (profile["id"], out_row["id"], in_row["id"]),
-    ).fetchone()
     return _dismissal_to_dict(row)
+
+
+def delete_transfer_dismissal(
+    conn,
+    workspace_ref,
+    profile_ref,
+    *,
+    dismissal_id=None,
+    out_ref=None,
+    in_ref=None,
+):
+    """Undo one dismissal so the matcher may suggest that pair again.
+
+    Takes the dismissal id that `transfers dismissals list` and `dismiss`
+    return, or both legs.
+    """
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    if dismissal_id:
+        if out_ref or in_ref:
+            raise AppError(
+                "Pass a dismissal id or both legs, not both",
+                code="validation",
+            )
+        return core_custody_review_terms.delete_pair_dismissal(
+            conn, profile_id=profile["id"], dismissal_id=str(dismissal_id)
+        )
+    if not out_ref or not in_ref:
+        raise AppError(
+            "Deleting a dismissal needs its id or both legs",
+            code="validation",
+            hint="Read ids with `kassiber transfers dismissals list`.",
+        )
+    out_row = resolve_transaction(conn, profile["id"], out_ref)
+    in_row = resolve_transaction(conn, profile["id"], in_ref)
+    return core_custody_review_terms.delete_pair_dismissal(
+        conn,
+        profile_id=profile["id"],
+        out_transaction_id=out_row["id"],
+        in_transaction_id=in_row["id"],
+    )
+
+
+_DISMISSAL_LIST_MAX = 500
+
+
+def _dismissal_leg(row, side):
+    return {
+        "transaction_id": row[f"{side}_transaction_id"],
+        "external_id": row[f"{side}_external_id"],
+        "wallet_id": row[f"{side}_wallet_id"],
+        "wallet": row[f"{side}_wallet"],
+        "direction": row[f"{side}_direction"],
+        "asset": row[f"{side}_asset"],
+        "amount_msat": (
+            int(row[f"{side}_amount"]) if row[f"{side}_amount"] is not None else None
+        ),
+        "occurred_at": row[f"{side}_occurred_at"],
+    }
+
+
+def list_transfer_dismissals(
+    conn,
+    workspace_ref,
+    profile_ref,
+    *,
+    include_expired=False,
+    limit=200,
+):
+    """Read back the "not a transfer" vetoes the matcher applies.
+
+    A dismissal silently removes one exact (out, in) pair from every candidate
+    list, so without this read an empty candidate list cannot be interpreted.
+    Activity uses the matcher's own expiry rule; ``expires_at`` null means the
+    dismissal never expires. Expired rows are kept in the table and listed only
+    on request. Ids are full and resolvable.
+    """
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    if type(limit) is not int or not 1 <= limit <= _DISMISSAL_LIST_MAX:
+        raise AppError(
+            f"Dismissal list limit must be an integer between 1 and {_DISMISSAL_LIST_MAX}",
+            code="validation",
+        )
+    leg_columns = ", ".join(
+        f"{alias}.{column} AS {side}_{name}"
+        for side, alias in (("out", "tout"), ("in", "tin"))
+        for column, name in (
+            ("external_id", "external_id"),
+            ("wallet_id", "wallet_id"),
+            ("direction", "direction"),
+            ("asset", "asset"),
+            ("amount", "amount"),
+            ("occurred_at", "occurred_at"),
+        )
+    )
+    rows = conn.execute(
+        f"""
+        SELECT d.*, {leg_columns},
+               wout.label AS out_wallet, win.label AS in_wallet
+        FROM transaction_pair_dismissals d
+        LEFT JOIN transactions tout
+          ON tout.id = d.out_transaction_id AND tout.profile_id = d.profile_id
+        LEFT JOIN wallets wout ON wout.id = tout.wallet_id
+        LEFT JOIN transactions tin
+          ON tin.id = d.in_transaction_id AND tin.profile_id = d.profile_id
+        LEFT JOIN wallets win ON win.id = tin.wallet_id
+        WHERE d.profile_id = ?
+        ORDER BY d.created_at DESC, d.id DESC
+        """,
+        (profile["id"],),
+    ).fetchall()
+    now = now_iso()
+    dismissals = []
+    counts = {"active": 0, "expired": 0, "permanent": 0}
+    for row in rows:
+        active = core_transfer_matching.dismissal_is_active(row, now_iso=now)
+        counts["active" if active else "expired"] += 1
+        if active and not row["expires_at"]:
+            counts["permanent"] += 1
+        if not active and not include_expired:
+            continue
+        dismissals.append(
+            {
+                **_dismissal_to_dict(row),
+                "active": active,
+                "permanent": not row["expires_at"],
+                "out": _dismissal_leg(row, "out"),
+                "in": _dismissal_leg(row, "in"),
+            }
+        )
+    return {
+        "dismissals": dismissals[:limit],
+        "counts": counts,
+        "has_more": len(dismissals) > limit,
+        "limit": limit,
+        "include_expired": bool(include_expired),
+        "as_of": now,
+    }
 
 
 def _dismissal_to_dict(row):
@@ -1138,7 +1248,8 @@ def delete_transfer_rule(conn, workspace_ref, profile_ref, rule_id):
         raise AppError(f"Rule '{rule_id}' not found", code="not_found")
     conn.execute("DELETE FROM swap_matching_rules WHERE id = ?", (rule_id,))
     conn.commit()
-    return {"deleted": rule_id}
+    # The removed rule, so it can be created again.
+    return {"deleted": rule_id, "rule": _rule_row_to_dict(row)}
 
 
 def set_transfer_rule_enabled(conn, workspace_ref, profile_ref, rule_id, enabled):
@@ -2427,7 +2538,7 @@ def sync_wallet(
             wallet
             for wallet in wallet_rows
             if not core_wallets.wallet_is_deprecated(
-                json.loads(wallet["config_json"] or "{}")
+                core_wallets.stored_wallet_config(wallet)
             )
         ]
     else:
@@ -5105,6 +5216,86 @@ def clear_quarantine(conn, workspace_ref, profile_ref, tx_ref):
         "resolution": "clear",
         "note": "Run `kassiber journals process` to re-evaluate.",
     }
+
+
+def quarantine_groups(conn, workspace_ref, profile_ref, *, group_id=None, cursor=None, limit=None):
+    """Quarantine rollup by reason and root cause; pages one group's members."""
+
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    if limit is not None:
+        maximum = (
+            core_quarantine_review.MAX_MEMBER_LIMIT
+            if group_id
+            else core_quarantine_review.MAX_GROUP_LIMIT
+        )
+        if limit < 1 or limit > maximum:
+            raise AppError(f"--limit must be between 1 and {maximum}", code="validation")
+    return core_quarantine_review.quarantine_groups(
+        conn, profile, group_id=group_id, cursor=cursor, limit=limit
+    )
+
+
+def resolve_quarantine_with_effect(
+    conn,
+    workspace_ref,
+    profile_ref,
+    *,
+    action,
+    tx_ref=None,
+    group_id=None,
+    fiat_rate=None,
+    fiat_value=None,
+    reprocess=False,
+):
+    """Resolve one quarantined row, optionally reprocess, and report the effect.
+
+    ``group_id`` names a ``root:`` group and resolves its root. With
+    ``reprocess`` the journals are rebuilt and ``dependents_cleared`` lists the
+    rows that waited on the root and are no longer held.
+    """
+
+    if (tx_ref is None) == (group_id is None):
+        raise AppError("Give exactly one of --transaction or --group-id", code="validation")
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    if group_id is not None:
+        tx_ref = core_quarantine_review.root_transaction_for_group(
+            conn, str(profile["id"]), group_id
+        )
+    before = core_quarantine_review.quarantine_membership(conn, str(profile["id"]))
+    if action == "price-override":
+        result = resolve_quarantine_price_override(
+            conn, workspace_ref, profile_ref, tx_ref,
+            fiat_rate=fiat_rate, fiat_value=fiat_value,
+        )
+    else:
+        result = resolve_quarantine_exclude(conn, workspace_ref, profile_ref, tx_ref)
+    payload = {**result, "group_id": group_id, "reprocessed": bool(reprocess)}
+    if reprocess:
+        payload["journal_process"] = process_journals(conn, workspace_ref, profile_ref)
+        payload.pop("note", None)
+        remaining = conn.execute(
+            "SELECT reason FROM journal_quarantines WHERE profile_id = ? AND transaction_id = ?",
+            (profile["id"], result["transaction_id"]),
+        ).fetchone()
+        payload["cleared"] = remaining is None
+        payload["remaining_reason"] = remaining["reason"] if remaining is not None else None
+    payload.update(
+        core_quarantine_review.resolution_effect(
+            conn,
+            str(profile["id"]),
+            str(result["transaction_id"]),
+            before,
+            reprocessed=bool(reprocess),
+        )
+    )
+    return payload
+
+
+def verify_transaction_against_graph(conn, workspace_ref, profile_ref, tx_ref):
+    """Compare one transaction with its stored chain graph. Local only."""
+
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    return core_transaction_verify.verify_transaction(conn, str(profile["id"]), tx_ref)
 
 
 def show_status(conn, data_root):

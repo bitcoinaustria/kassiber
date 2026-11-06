@@ -4,6 +4,7 @@ import type { EvidenceRequest, EvidenceRequestState } from "./evidenceRequest";
 
 import type {
   AiChatMessage,
+  AiPermissionMode,
   AiToolConsentDecision,
   AiToolConsentRequest,
 } from "@/daemon/stream";
@@ -22,7 +23,7 @@ export type AssistantReturnPath =
   | "/journals"
   | "/swaps"
   | "/custody-gaps"
-  | "/quarantine"
+  | "/review"
   | "/reconcile"
   | "/egress"
   | "/imports"
@@ -138,12 +139,34 @@ export type AssistantThinkingEffort =
   | "max"
   | "ultra";
 
+/** Every level Kassiber can label and send, lowest first. */
+export const KNOWN_EFFORTS: readonly AssistantThinkingEffort[] = [
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+  "ultra",
+];
+
 export interface AssistantAttachment {
   /** Opaque daemon staging grant; expires with the daemon's staging TTL. */
   token: string;
   filename: string;
   kind?: string;
   sizeBytes?: number;
+  /** A small data: URL thumbnail of a pasted image; never a path. */
+  previewUrl?: string;
+}
+
+/**
+ * A file of this chat as the composer shows it: `uploading` while a pasted
+ * file is handed over, `ready` until a message carries it, `sent` after.
+ */
+export interface AssistantChatFile extends AssistantAttachment {
+  /** Stable while the file is listed; the token once staged. */
+  key: string;
+  state: "uploading" | "ready" | "sent";
 }
 
 export interface AssistantSessionContextValue {
@@ -153,7 +176,11 @@ export interface AssistantSessionContextValue {
   messages: AiChatMessage[];
   isStreaming: boolean;
   error: { code: string; message: string } | null;
-  pendingConsent: AiToolConsentRequest | null;
+  /**
+   * Approvals the running answer waits on, each shown as a row in the chat
+   * work log beside its tool call. Rarely more than one.
+   */
+  pendingConsents: AiToolConsentRequest[];
   queuedPrompts: string[];
   selection: AssistantModelSelection | null;
   thinkingEffort: AssistantThinkingEffort;
@@ -169,11 +196,11 @@ export interface AssistantSessionContextValue {
   /** When true, turns are sent with persist=false (nothing stored). */
   incognito: boolean;
   /**
-   * File attached to this conversation, for the assistant's file-analysis tool.
-   * Holds a staging token and the display filename — never a path, and never
-   * the file's contents.
+   * Files attached to this conversation, in the order attached (the daemon
+   * names them file-1, file-2, ...). Each holds a staging token and the
+   * display filename — never a path, and never the file's contents.
    */
-  attachment: AssistantAttachment | null;
+  attachments: AssistantChatFile[];
   setSelection: (next: AssistantModelSelection | null) => void;
   setThinkingEffort: (next: AssistantThinkingEffort) => void;
   /**
@@ -185,7 +212,12 @@ export interface AssistantSessionContextValue {
   setIncognito: (next: boolean) => void;
   /** Open the native picker and attach the chosen file to this conversation. */
   attachFile: () => Promise<void>;
-  clearAttachment: () => void;
+  /** Attach pasted files, or files dropped in the browser preview. */
+  attachFiles?: (files: File[]) => Promise<void>;
+  /** Attach the files just dropped on the desktop window. */
+  attachDroppedFiles?: () => Promise<void>;
+  /** Take one file (by `key`) off this conversation. */
+  removeAttachment: (key: string) => void;
   /**
    * Send a prompt; `handoff` marks a page's own request (see AssistantHandoff).
    * A plain prompt belongs to the book open when this is called, the user's
@@ -200,7 +232,17 @@ export interface AssistantSessionContextValue {
    * while its ids are not known, and the action is then not taken.
    */
   captureBook?: () => BookStamp | null;
-  sendConsent: (decision: AiToolConsentDecision) => Promise<void>;
+  sendConsent: (callId: string, decision: AiToolConsentDecision) => Promise<void>;
+  /**
+   * This chat's permission mode, sent with every turn. A new chat starts in
+   * the Settings default; a reopened chat in the mode it last used.
+   */
+  permissionMode?: AiPermissionMode;
+  /**
+   * Choose this chat's mode. While an answer streams it also switches that
+   * answer, and the daemon releases waiting approvals the new mode covers.
+   */
+  setPermissionMode?: (mode: AiPermissionMode) => void;
   abort: () => void;
   reset: () => void;
   /** Load a persisted session into the conversation. */

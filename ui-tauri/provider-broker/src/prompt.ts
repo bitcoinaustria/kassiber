@@ -1,16 +1,33 @@
-import type { ChatRequest } from "./protocol.js";
+import { messageImages, type BrokerImage, type ChatMessage, type ChatRequest } from "./protocol.js";
 
-export function promptFromMessages(
-  messages: Array<{ role: string; content: string }>,
-  resumed: boolean,
-): string {
+function promptMessages(messages: ChatMessage[], resumed: boolean): ChatMessage[] {
   // Resuming replays only the newest user turn; the provider still holds the rest.
   const lastUser = messages.findLast((message) => message.role === "user");
-  const source = resumed ? (lastUser ? [lastUser] : messages.slice(-1)) : messages;
-  return source
+  return resumed ? (lastUser ? [lastUser] : messages.slice(-1)) : messages;
+}
+
+export function promptFromMessages(messages: ChatMessage[], resumed: boolean): string {
+  return promptMessages(messages, resumed)
     .filter((message) => message.content.trim())
     .map((message) => `${message.role.toUpperCase()}:\n${message.content}`)
     .join("\n\n");
+}
+
+/** The attached images the prompt carries, from the messages it replays. */
+export function promptImages(messages: ChatMessage[], resumed: boolean): BrokerImage[] {
+  return messageImages(promptMessages(messages, resumed));
+}
+
+/**
+ * Said in the prompt when a provider cannot take the attached images, so the
+ * model does not answer as if it had seen them.
+ */
+export function imagesNotShownNote(count: number): string {
+  return (
+    `\n\n[Kassiber: ${count} attached image${count === 1 ? " was" : "s were"} ` +
+    "not shown to you because this agent cannot receive images. Tell the user, " +
+    "and do not describe the image.]"
+  );
 }
 
 export const CHAT_ONLY_INSTRUCTIONS =

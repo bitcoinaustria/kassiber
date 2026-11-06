@@ -10,10 +10,10 @@ describe("notificationRouteFor", () => {
   });
 
   it("routes domain titles to their own screens", () => {
-    expect(notificationRouteFor("Transactions quarantined")).toBe("/quarantine");
+    expect(notificationRouteFor("Transactions quarantined")).toBe("/review");
     expect(
       notificationRouteFor("2 Transaktionen in Quarantäne prüfen"),
-    ).toBe("/quarantine");
+    ).toBe("/review");
     expect(notificationRouteFor("Journal processing complete")).toBe("/journals");
   });
 });
@@ -38,13 +38,13 @@ describe("notificationTarget", () => {
 
   it("routes non-/logs titles to their screen regardless of dev tools", () => {
     expect(notificationTarget("Transactions quarantined", "warning", false)).toBe(
-      "/quarantine",
+      "/review",
     );
     expect(
       notificationTarget("2 Transaktionen in Quarantäne prüfen", "warning", false),
-    ).toBe("/quarantine");
+    ).toBe("/review");
     expect(notificationTarget("Transactions quarantined", "warning", true)).toBe(
-      "/quarantine",
+      "/review",
     );
   });
 
@@ -74,8 +74,8 @@ describe("notificationTarget", () => {
       notificationTarget(germanAttention, "warning", false, "/logs"),
     ).toBe("/settings/developer");
     expect(
-      notificationTarget(germanAttention, "warning", false, "/quarantine"),
-    ).toBe("/quarantine");
+      notificationTarget(germanAttention, "warning", false, "/review"),
+    ).toBe("/review");
 
     const germanTransferReview = "2 Swap-/Transfer-Kandidaten prüfen";
     expect(

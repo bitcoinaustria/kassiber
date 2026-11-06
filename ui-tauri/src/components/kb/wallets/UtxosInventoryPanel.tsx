@@ -4,11 +4,9 @@ import {
   useState,
   type KeyboardEvent,
   type ReactNode,
-  type UIEvent,
 } from "react";
 import { useTranslation } from "react-i18next";
 
-import { UtxoBlocks3D } from "./utxo3d/UtxoBlocks3D";
 import type { TFunction } from "i18next";
 
 import i18n from "@/i18n";
@@ -17,7 +15,6 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
-  Coins,
   RefreshCw,
   ShieldAlert,
 } from "lucide-react";
@@ -26,11 +23,7 @@ import { openExternalUrl } from "@/daemon/transport";
 import { CopyButton } from "@/components/kb/CopyButton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogClose,
@@ -147,11 +140,10 @@ type UtxoSortValue =
   | "outpoint-desc";
 type SortableUtxoColumn = "outpoint" | "amount" | "status" | "confirmed";
 
-// Reveal rows incrementally so wallets with hundreds of coins stay responsive;
-// the header total stays accurate because the server reports the full set.
+// Reveal rows a page at a time so wallets with hundreds of coins stay
+// responsive; the header total stays accurate because the server reports the
+// full set.
 export const UTXO_PAGE_SIZE = 50;
-const WALLET_TABLE_VIEWPORT_CLASS =
-  "max-h-[clamp(18rem,36dvh,28rem)] min-h-0 overflow-auto";
 
 const UTXO_COLUMN_SORTS: Record<
   SortableUtxoColumn,
@@ -716,13 +708,6 @@ export function UtxosInventoryPanel({
       Math.min(sortedRows.length, count + UTXO_PAGE_SIZE),
     );
   };
-  const handleRowsScroll = (event: UIEvent<HTMLDivElement>) => {
-    if (visibleCount >= sortedRows.length) return;
-    const target = event.currentTarget;
-    const distanceFromBottom =
-      target.scrollHeight - target.scrollTop - target.clientHeight;
-    if (distanceFromBottom < 96) revealMoreRows();
-  };
   const visibleRows = sortedRows.slice(0, visibleCount);
   const explorerTarget = explorerRow
     ? explorerTargetForUtxo(explorerRow, explorerSettings)
@@ -759,35 +744,11 @@ export function UtxosInventoryPanel({
 
   return (
     <Card variant="flush">
-      <div className="flex flex-col gap-3 border-b bg-muted/[0.08] p-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-5 sm:py-3.5">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-background/70 text-muted-foreground">
-            <Coins className="size-4" aria-hidden="true" />
-          </span>
-          <div className="min-w-0">
-            <CardTitle className="text-sm sm:text-base">
-              {t("utxos.title")}
-            </CardTitle>
-            <p className="mt-0.5 truncate text-xs font-medium text-muted-foreground">
-              {inventorySummary}
-            </p>
-          </div>
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="icon-xs"
-          className="shrink-0 self-start rounded-full transition-transform duration-200 active:scale-95 motion-reduce:transition-none sm:self-auto"
-          disabled={isRefreshing}
-          aria-label={isRefreshing ? t("utxos.refreshing") : t("utxos.refresh")}
-          title={isRefreshing ? t("utxos.refreshing") : t("utxos.refresh")}
-          onClick={onRefresh}
-        >
-          <RefreshCw
-            className={cn("size-3", isRefreshing && "animate-spin")}
-            aria-hidden="true"
-          />
-        </Button>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b px-3 py-2.5 sm:px-4">
+        <span className="text-sm font-medium">{t("utxos.title")}</span>
+        <span className="truncate text-xs text-muted-foreground">
+          {inventorySummary}
+        </span>
       </div>
       <CardContent className="p-0">
         {isLoading ? (
@@ -830,8 +791,7 @@ export function UtxosInventoryPanel({
           />
         ) : (
           <>
-            <UtxoBlocks3D rows={rows} hideSensitive={hideSensitive} />
-            <div className={WALLET_TABLE_VIEWPORT_CLASS} onScroll={handleRowsScroll}>
+            <div>
               {stale ? (
                 <div className="flex items-start gap-2 border-b bg-amber-50 px-4 py-2.5 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
                   <AlertTriangle
@@ -911,7 +871,7 @@ export function UtxosInventoryPanel({
                               t={t}
                             />
                           </TableCell>
-                          <TableCell className="font-mono text-xs text-muted-foreground">
+                          <TableCell className="text-xs text-muted-foreground tabular-nums">
                             {primaryDateLabel(row) ?? "—"}
                           </TableCell>
                           <TableCell>
@@ -1012,7 +972,7 @@ export function UtxosInventoryPanel({
                           hideSensitive={hideSensitive}
                           className="text-sm font-medium"
                         />
-                        <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                        <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
                           {primaryDateLabel(row) ?? "—"}
                         </span>
                       </div>
@@ -1027,15 +987,33 @@ export function UtxosInventoryPanel({
               </div>
             </div>
             {visibleRows.length < sortedRows.length || serverTruncated ? (
-              <div className="border-t px-4 py-2.5 text-xs text-muted-foreground">
-                {t("utxos.loadedRows", {
-                  loaded: formatCount(
-                    serverTruncated ? returnedCount : visibleRows.length,
-                  ),
-                  total: formatCount(
-                    serverTruncated ? totalCount : sortedRows.length,
-                  ),
-                })}
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-2 text-xs text-muted-foreground">
+                <span>
+                  {t("utxos.loadedRows", {
+                    loaded: formatCount(
+                      serverTruncated ? returnedCount : visibleRows.length,
+                    ),
+                    total: formatCount(
+                      serverTruncated ? totalCount : sortedRows.length,
+                    ),
+                  })}
+                </span>
+                {visibleRows.length < sortedRows.length ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={revealMoreRows}
+                  >
+                    {t("utxos.showMore", {
+                      count: Math.min(
+                        UTXO_PAGE_SIZE,
+                        sortedRows.length - visibleRows.length,
+                      ),
+                    })}
+                  </Button>
+                ) : null}
               </div>
             ) : null}
             <UtxoExplorerOpenDialog

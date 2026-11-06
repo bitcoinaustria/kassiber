@@ -183,7 +183,7 @@ describe("quarantine cause panel", () => {
     expect(html).toContain("An intermediate wallet is missing");
     expect(html).toContain("Coins left Cold and a similar amount came back later");
     expect(html).toContain("Blocks reports");
-    expect(html).toContain("2 later transactions wait on this and clear once it is fixed.");
+    expect(html).toContain("2 more wait on this");
     // The card says how many, and which.
     expect(html).toContain("1 transaction");
     expect(html).toContain("2024-01-01 · Cold · out");
@@ -289,8 +289,17 @@ describe("quarantine cause panel", () => {
     expect(sensitiveCount(render(oversell))).toBe(0);
     // Only the explanation: none of that cause's rows are loaded.
     expect(sensitiveCount(render(oversell, { hideSensitive: true }))).toBe(1);
-    // The gap's explanation quotes nothing; its listed row's line and amount do.
-    expect(sensitiveCount(render(snapshot(), { hideSensitive: true }))).toBe(2);
+    // The gap's explanation quotes nothing; its listed row's direction, line and amount do.
+    expect(sensitiveCount(render(snapshot(), { hideSensitive: true }))).toBe(3);
+  });
+
+  it("spells out what to do unless every button already says it", () => {
+    // Review custody gap does not say what to do, so the instruction stays in view.
+    expect(render(snapshot())).toContain("What to do: </span>");
+    // Connect wallet alone does: the instruction moves behind the card's info button.
+    const named = render(snapshot({ groups: [{ ...GAP_GROUP, actions: [{ kind: "connect_wallet" }] }] }));
+    expect(named).not.toContain("What to do: </span>");
+    expect(named).toContain("About “An intermediate wallet is missing”");
   });
 
   it("opens a cause's first transaction when it offers no action and lists none", () => {
@@ -312,7 +321,7 @@ describe("quarantine cause panel", () => {
     const [focus, prompt] = askAbout.mock.calls[0];
     expect(focus).toEqual({
       context: {
-        route: "/quarantine",
+        route: "/review",
         entityType: "transaction",
         entityId: "out",
         capabilities: ["review"],

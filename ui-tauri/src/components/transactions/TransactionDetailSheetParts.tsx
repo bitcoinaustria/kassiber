@@ -11,6 +11,7 @@ import {
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 
+import type { ResultReference } from "@/components/reports/CapitalGainExplanation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -524,6 +525,8 @@ export type JournalEventItem = {
   marketDeltaEur?: number | null;
   atCategory?: string | null;
   description?: string;
+  /** Opens the tax engine's calculation for a realized disposal or income. */
+  explanationReference?: ResultReference | null;
 };
 
 export type CommercialBtcpayRecord = {

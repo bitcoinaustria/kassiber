@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import queue
 import subprocess
 import sys
@@ -79,6 +80,19 @@ class ChatSessionResult:
         }
 
 
+def _away_from_terminal_interrupts() -> dict[str, Any]:
+    """Keep the terminal's Ctrl-C for the chat, which cancels cooperatively.
+
+    A terminal sends SIGINT to its whole foreground process group; a daemon
+    child in that group would die mid-turn before the cancel reaches it.
+    """
+    if os.name == "nt":
+        return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+    if sys.version_info >= (3, 11):
+        return {"process_group": 0}
+    return {"start_new_session": True}
+
+
 class _DaemonChatClient:
     def __init__(self, args: Any, *, transcript: TextIO | None = None) -> None:
         self._transcript = transcript
@@ -103,6 +117,7 @@ class _DaemonChatClient:
             stderr=subprocess.PIPE,
             text=True,
             bufsize=1,
+            **_away_from_terminal_interrupts(),
         )
         if self._proc.stderr is not None:
             self._stderr_thread = threading.Thread(
@@ -383,7 +398,8 @@ def _build_chat_args(
         "model": args.model,
         "messages": messages,
         "tools_enabled": tools_enabled,
-        "tool_profile": getattr(args, "tool_profile", "core"),
+        "tool_profile": getattr(args, "tool_profile", "full"),
+        "permission_mode": getattr(args, "permission_mode", "approval"),
         "timeout_seconds": _timeout_seconds(args),
         "persist": False if getattr(args, "incognito", False) else "auto",
         "session_id": session_id,
@@ -391,9 +407,13 @@ def _build_chat_args(
     loop_budget = getattr(args, "tool_loop_max_iterations", None)
     if loop_budget is not None:
         payload["tool_loop_max_iterations"] = loop_budget
-    attachment = getattr(args, "chat_attachment", None)
-    if attachment:
-        payload["attachment"] = attachment
+    attachments = getattr(args, "chat_attachments", None)
+    if attachments:
+        # The first turn sends the files; a provider that resumes its own
+        # session already holds them after that.
+        first = not getattr(args, "chat_attachments_sent", False)
+        payload["attachments"] = [{**attachment, "new": first} for attachment in attachments]
+        args.chat_attachments_sent = True
     system = getattr(args, "system", None)
     if system:
         payload["system_prompt_kind"] = "raw"
@@ -503,48 +523,61 @@ def _resolve_continuation(
     return requested, messages, session
 
 
-def _stage_chat_attachment(
+def _stage_chat_attachments(
     client: _DaemonChatClient,
     args: Any,
-) -> dict[str, Any] | None:
-    """Stage `--file` with the daemon and return the chat attachment grant.
+) -> list[dict[str, Any]]:
+    """Stage each `--file` with the daemon and return the chat's file grants.
 
     Staged rather than passed as a path so the CLI and the desktop reach the
-    assistant's file tool the same way, and so the model only ever holds an
+    assistant's file tools the same way, and so the model only ever holds an
     opaque token it cannot point at another file.
     """
-    source_file = getattr(args, "file", None)
-    if not source_file:
-        return None
-    path = Path(str(source_file)).expanduser().resolve()
-    if not path.is_file():
+    sources = list(getattr(args, "file", None) or [])
+    contexts = list(getattr(args, "file_context", None) or [])
+    if len(contexts) > len(sources):
         raise AppError(
-            f"Attachment not found: {path}",
-            code="not_found",
-            hint="Pass an existing export file with --file.",
+            "More --file-context values than --file values",
+            code="validation",
+            hint="Each --file-context describes the --file in the same position.",
             retryable=False,
         )
-    request_id = f"chat-attach-{uuid.uuid4().hex}"
-    client.send(
-        {
-            "request_id": request_id,
-            "kind": "internal.document_import.stage",
-            "args": {"source_file": str(path)},
-        }
-    )
-    response = _read_control_response(client, request_id)
-    data = response.get("data") if isinstance(response.get("data"), dict) else {}
-    token = data.get("token")
-    if not isinstance(token, str) or not token:
+    if len(sources) > 8:
         raise AppError(
-            "could not attach the file to this chat",
-            code="ai_attachment_failed",
+            "A chat holds up to 8 files",
+            code="validation",
             retryable=False,
         )
-    return {
-        "token": token,
-        "label": (getattr(args, "file_context", None) or "").strip() or None,
-    }
+    grants = []
+    for index, source_file in enumerate(sources):
+        path = Path(str(source_file)).expanduser().resolve()
+        if not path.is_file():
+            raise AppError(
+                f"Attachment not found: {path}",
+                code="not_found",
+                hint="Pass an existing file with --file.",
+                retryable=False,
+            )
+        request_id = f"chat-attach-{uuid.uuid4().hex}"
+        client.send(
+            {
+                "request_id": request_id,
+                "kind": "internal.document_import.stage",
+                "args": {"source_file": str(path), "purpose": "chat_attachment"},
+            }
+        )
+        response = _read_control_response(client, request_id)
+        data = response.get("data") if isinstance(response.get("data"), dict) else {}
+        token = data.get("token")
+        if not isinstance(token, str) or not token:
+            raise AppError(
+                "could not attach the file to this chat",
+                code="ai_attachment_failed",
+                retryable=False,
+            )
+        label = (contexts[index] if index < len(contexts) else "") or ""
+        grants.append({"token": token, "label": label.strip() or None})
+    return grants
 
 
 def _selected_provider_row(
@@ -824,7 +857,7 @@ def _render_turn_footer(terminal: dict[str, Any], chrome: TextIO) -> None:
 
 
 def _active_tool_catalog(args: Any) -> list[Any]:
-    if getattr(args, "tool_profile", "core") == "core":
+    if getattr(args, "tool_profile", "full") == "core":
         return [entry for entry in TOOL_CATALOG if entry.name in CORE_TOOL_NAMES]
     return list(TOOL_CATALOG)
 
@@ -832,7 +865,7 @@ def _active_tool_catalog(args: Any) -> list[Any]:
 def _render_tool_listing(args: Any, out: TextIO) -> None:
     catalog = _active_tool_catalog(args)
     width = max(len(entry.name) for entry in catalog)
-    _write(f"Tool profile: {getattr(args, 'tool_profile', 'core')}\n", out)
+    _write(f"Tool profile: {getattr(args, 'tool_profile', 'full')}\n", out)
     for entry in sorted(catalog, key=lambda e: (e.kind_class, e.name)):
         consent = (
             "mutating (asks consent)"
@@ -1248,7 +1281,7 @@ def run_chat_command(
         # Staged once for the whole session, so a REPL can keep discussing the
         # same file across turns. The grant expires with the daemon's staging
         # TTL; the analysis tool then reports that rather than reading a stale path.
-        args.chat_attachment = _stage_chat_attachment(client, args)
+        args.chat_attachments = _stage_chat_attachments(client, args)
         session = ChatSessionResult(
             provider=getattr(args, "provider", None),
             model=args.model,

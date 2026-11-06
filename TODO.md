@@ -210,6 +210,23 @@ natively; generic `cancel` keeps Python's refusal.
   forms, including HTTP probe prefix-only/large-body reads, before declaring
   full chain-client parity.
 
+## Rust main sync 1
+
+[Main sync 1](docs/reference/rust-main-sync.md) inventories main #672 to #714
+against the Rust port and slices the gaps; Python stays the reference.
+
+- [x] S1: the Rust store opens and migrates books the current Python wrote
+  (accepted coarse price, provider `agent_access`, `ai_provider_checks`, the
+  widened custody AI consent CHECK) and the command registry, `describe` and
+  capabilities follow main. New leaves and kinds stay `not_implemented`.
+- [ ] S2 to S11 as the inventory lists them: qualified transaction
+  references, coarse-price acceptance, the review workflow, quarantine root
+  causes, transfer dismissals, the Reports screen (including the empty-root
+  `jurisdictionCode`), wallet completeness, the transaction dashboard,
+  readiness definitions and custody component revision.
+- [ ] S12: rebase the R6 branches (AI catalog, providers, tools, MCP grants,
+  chat) onto the synced stack.
+
 ## Rust backend R5 dependency review
 
 The [dependency review](docs/reference/rust-shell.md#dependency-review-lwk-sshsig-and-http-plan-21-2026-11-04)
@@ -1509,9 +1526,10 @@ operator leaves, brokered routing and `ui.agent_access.*` kinds and R6-8's
   address beyond the wallet's synced depth (the ownership index derives deeper
   than the sync gap limit) and offer that wallet's scoped rescan; done when the
   quarantine row carries the used index and the rescan is a user action.
-- [ ] Bound `ui.journals.quarantine` for very large quarantines: page items in
-  SQL and compute the whole-book groups, counts and assumptions with aggregate
-  queries; done when the first page no longer parses every stored row.
+- [ ] Bound `ui.journals.quarantine` and `ui.journals.quarantine.groups` for
+  very large quarantines: page items in SQL and compute the whole-book groups,
+  counts and assumptions with aggregate queries; done when the first page no
+  longer parses every stored row.
   Carry downstream rows (`at_swap_basis_carry_unresolved`,
   `bitcoin_rail_carry_basis_unresolved`) and `basis_provenance_incomplete`
   should record their causal transaction ids so the root is exact.
@@ -1529,18 +1547,27 @@ operator leaves, brokered routing and `ui.agent_access.*` kinds and R6-8's
   own basis is their market value, but the pool timeline is cut at the
   barrier. Done when the policy is written down in the tax reference and the
   barrier follows it.
-- [ ] Show journal staleness and quarantine once in the shell: the bell keeps
-  standing "needs processing"/"quarantined" items that repeat the side-nav
-  hints, staleness has several verbs ("Process", "Reprocess", "Recalculate",
-  "Process ledger"), and a book with any quarantine shows the first-sync card
-  on every refresh. Done when the bell carries events only and one verb is
-  used everywhere.
+- [ ] Show journal staleness once in the shell: the bell and the sidebar now
+  share the Review count, but the bell still keeps standing "needs processing"
+  and "to review" items, staleness has several verbs ("Process", "Reprocess",
+  "Recalculate", "Process ledger"), and a book with any quarantine shows the
+  first-sync card on every refresh. Done when the bell carries events only and
+  one verb is used everywhere.
+- [ ] Finish folding the old review pages into Review and its neighbours: the
+  sidebar's Tools group is gone (its pages sit under Extras), but paired-transfer
+  history still lives on Transfers & Custody rather than as a Transactions
+  filter, matching rules are not in book settings yet, and the address/txid
+  ownership lookup is not reachable from Search.
 
 ## Imports, source evidence, and wallet workflows
 
 - [ ] Offer a stored import run's `column_map` as the default for a repeat
   platform export, with review before reuse. Generic mapping already exists;
   this task is persistence/reuse in the next import flow.
+- [ ] Extend the assistant's plan-bound attachment import
+  (`core/attachment_import.py`) from `generic_ledger` to the dedicated file
+  formats, each with its own target-wallet and mode rules. Done when a known
+  export attached in chat imports through its own importer, not a column map.
 - [ ] Identify any remaining rates/manual-adjustment workflow gap against the
   existing surfaces before defining an implementation.
 - [ ] Add CLI parity for the desktop's bare-xpub script-type probe, reusing
@@ -1611,16 +1638,23 @@ operator leaves, brokered routing and `ui.agent_access.*` kinds and R6-8's
 
 ## Daemon, contracts, and performance
 
+- [ ] Support OpenCode 2 OAuth-backed private turns once credentials can be
+  refreshed safely without persisting the session or invalidating the original
+  login. Key-backed private turns and ordinary sessions use the 2.x API now.
+- [ ] Replace OpenCode 2's tool-catalog settlement delay with an explicit
+  readiness barrier when its API provides one; the awaited MCP handshake and
+  listing do not await its separate debounced tool-registry reload.
 - [ ] Enforce AI consent, advertisement, and scope in one daemon-owned
-  `authorize_and_execute` path shared by chat and MCP. Executors fail open
-  when the runtime state is empty, and fresh human review for `review.apply`
-  is enforced only by the CLI client. Add per-tool
-  approval modes (`none` / `consent` / `local_human`), explicit per-tool
-  network/destructive/idempotent metadata pinned to the egress table (four
-  mutating tools egress with `egresses=False`), and per-call capability
-  checks, before any mutating tool is exposed through `kassiber mcp`. Consent
-  for MCP mutations must bind a plan digest and input version and must not
-  trust a host-answered elicitation alone.
+  `authorize_and_execute` path shared by chat and MCP. MCP now runs within the
+  user's External agents grant (per-call checks against the broker registry,
+  the Assistant's plan-bound executors, the host's tool approval as consent;
+  see [MCP](docs/reference/mcp.md)), but direct executor callers still fail
+  open when the runtime state is empty, and fresh human review for
+  `review.apply` is enforced only by the CLI client. Network, destructive, and
+  idempotent metadata lives in `kassiber/mcp/tools.py` (`MUTATING_TOOL_HINTS`,
+  `_EGRESS_WITHOUT_FLAG`) instead of the catalog, where four mutating tools
+  that egress still carry `egresses=False`; move it onto `ToolEntry`, pinned
+  to the egress table, and have chat and MCP share it.
 - [ ] Give brokered operations a full agent lifecycle: caller-supplied
   operation ids (reusing the broker's dedupe), `operator operations list`,
   `--no-wait` plus `operator operation result`, precise failed-vs-unknown for

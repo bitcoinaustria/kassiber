@@ -73,6 +73,7 @@ def payload():
         except ValueError:pass
     return dict(base_schema=db.SCHEMA,custody_schema=db.CUSTODY_COMPONENT_SCHEMA,functions=functions,msat=msat,
                 ownership_private_fields=sorted(db._POLICY_EPOCH_PRIVATE_FIELDS),
+                custody_ai_audit_columns=db._CUSTODY_AI_AUDIT_COLUMNS,
                 custody_migration_explanations=db._CUSTODY_MIGRATION_EXPLANATIONS,
                 normalization=dict(chain=wallet_descriptors.CHAIN_ALIASES,bitcoin_network=wallet_descriptors.BITCOIN_NETWORK_ALIASES,liquid_network=wallet_descriptors.LIQUID_NETWORK_ALIASES,policy_assets=wallet_descriptors.LIQUID_POLICY_ASSET_IDS),
                 unicode_decimal=decimal_digits,

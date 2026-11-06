@@ -8,6 +8,7 @@ import {
   shouldRefreshTouchIdPassphrase,
   shouldStoreTouchIdPassphrase,
   shouldUseDaemonUnlock,
+  unlockFailureKey,
 } from "./appLock";
 
 describe("app lock decisions", () => {
@@ -48,7 +49,7 @@ describe("app lock decisions", () => {
         encryptedWorkspace: false,
       }),
     ).toEqual({
-      reason: "Open the local daemon session to continue.",
+      reason: "session",
       passphraseRequired: false,
     });
   });
@@ -60,8 +61,19 @@ describe("app lock decisions", () => {
         encryptedWorkspace: false,
       }),
     ).toEqual({
-      reason:
-        "The daemon needs the database passphrase before it can return live books data.",
+      reason: "daemon-auth",
+      passphraseRequired: true,
+    });
+  });
+
+  it("asks encrypted books for their passphrase", () => {
+    expect(
+      lockScreenConfig({
+        daemonAuthRequired: false,
+        encryptedWorkspace: true,
+      }),
+    ).toEqual({
+      reason: "encrypted",
       passphraseRequired: true,
     });
   });
@@ -199,5 +211,22 @@ describe("app lock decisions", () => {
         windowFocused: true,
       }),
     ).toBe(false);
+  });
+
+  it("words the refusals a user can act on, by how they tried to unlock", () => {
+    expect(unlockFailureKey("passphrase", "local_auth_denied")).toBe(
+      "lock.passphraseFailed",
+    );
+    expect(unlockFailureKey("touch-id", "local_auth_denied")).toBe(
+      "lock.touchIdStale",
+    );
+    expect(
+      unlockFailureKey("touch-id", "touch_id_passphrase_not_found"),
+    ).toBe("lock.touchIdNotFound");
+    expect(
+      unlockFailureKey("passphrase", "touch_id_passphrase_not_found"),
+    ).toBeNull();
+    expect(unlockFailureKey("passphrase", "daemon_unavailable")).toBeNull();
+    expect(unlockFailureKey("touch-id", undefined)).toBeNull();
   });
 });

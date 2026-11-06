@@ -42,14 +42,14 @@ const CLI_READ_PATHS: &str = "
     workspaces.list profiles.list profiles.get accounts.list wallets.list
     wallets.kinds wallets.get wallets.preview-document wallets.identify
     wallets.analyze-file
-    transactions.list attachments.list attachments.verify metadata.tags.list
+    transactions.list transactions.verify transfers.dismissals.list attachments.list attachments.verify metadata.tags.list
     metadata.bip329.preview metadata.bip329.list metadata.records.list
     metadata.records.get metadata.records.history.list
     metadata.records.history.activity metadata.records.history.stale
     imports.list
     review.cases review.plan review.receipt
     journals.list journals.quarantined journals.transfers.list
-    journals.events.list journals.events.get journals.quarantine.show loans.list
+    journals.events.list journals.events.get journals.quarantine.show journals.quarantine.groups loans.list
     transfers.list transfers.gaps.list transfers.gaps.history transfers.gaps.plan
     transfers.components.list transfers.components.show transfers.components.plan
     transfers.payouts.list transfers.suggest transfers.rules.list views.list
@@ -118,7 +118,7 @@ const CLI_ACCOUNTING_DECISION_PATHS: &str = "
     journals.quarantine.resolve.exclude loans.mark loans.unmark loans.link
     transfers.pair transfers.unpair transfers.update transfers.gaps.review
     transfers.gaps.apply transfers.components.apply transfers.payouts.create
-    transfers.payouts.delete transfers.bulk-pair transfers.dismiss
+    transfers.payouts.delete transfers.bulk-pair transfers.dismiss transfers.dismissals.delete
     transfers.rules.create transfers.rules.delete transfers.rules.enable
     transfers.rules.disable transfers.rules.apply views.create views.delete
     btcpay.provenance.review source-funds.links.review
@@ -165,7 +165,7 @@ const DAEMON_READ_KINDS: &str = "
     ui.source_funds.recipients.list ui.btcpay.provenance.list
     ui.btcpay.provenance.links ui.transactions.commercial_context
     ui.documents.list ui.journals.snapshot ui.journals.events.list
-    ui.journals.quarantine ui.journals.transfers.list ui.transfers.suggest
+    ui.journals.quarantine ui.journals.transfers.list ui.transfers.suggest ui.transfers.dismissals.list
     ui.transfers.list ui.transfers.payouts.list
     ui.transfers.components.list ui.transfers.components.get
     ui.transfers.components.plan ui.custody.coverage.snapshot
@@ -236,7 +236,7 @@ const DAEMON_OPERATOR_KINDS: &str = "
     ui.connections.btcpay.create ui.connections.bullbitcoin_wallet.create
     ui.connections.btcpay.discover ui.connections.btcpay.test
     ui.metadata.bip329.import ui.metadata.bip329.export ui.wallets.update
-    ui.wallets.sync ai.chat ai.chat.cancel ai.tool_call.consent
+    ui.wallets.sync ai.chat ai.chat.cancel ai.chat.permission_mode ai.tool_call.consent ui.chat.attachments.upload
 ";
 
 const DAEMON_ACCOUNTING_DECISION_KINDS: &str = "
@@ -246,7 +246,7 @@ const DAEMON_ACCOUNTING_DECISION_KINDS: &str = "
     ui.source_funds.links.bulk_review ui.btcpay.provenance.review
     ui.journals.quarantine.resolve ui.review.apply ui.transfers.payouts.create
     ui.transfers.payouts.delete ui.transfers.pair ui.transfers.unpair
-    ui.transfers.update ui.transfers.bulk_pair ui.transfers.dismiss
+    ui.transfers.update ui.transfers.bulk_pair ui.transfers.dismiss ui.transfers.dismissals.delete
     ui.transfers.components.apply ui.custody.review.apply ui.transfers.rules.create
     ui.transfers.rules.delete ui.transfers.rules.set_enabled
     ui.transfers.rules.apply

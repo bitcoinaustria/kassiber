@@ -33,8 +33,7 @@ describe("acquisition preview scope and authority", () => {
       await expect(planAcquisitionReview(input)).rejects.toThrow("Invalid preview");
     }
   });
-  it("does not enable acquisition approval on the AI review surface", () => {
-    expect(reviewArtifact(artifact)).toBeNull();
-    expect(reviewArtifact(artifact, true)?.after.accounting_totals).toEqual(effects.accounting_totals);
+  it("renders acquisition artifacts on every review surface; the daemon decides authority", () => {
+    expect(reviewArtifact(artifact)?.after.accounting_totals).toEqual(effects.accounting_totals);
   });
 });

@@ -6,8 +6,10 @@ import {
   DEFAULT_EXPLORER_SETTINGS,
   type ExplorerSettings,
 } from "@/lib/explorer";
+import type { SettingsSectionId } from "@/components/kb/settingsSections";
 import type { AppUpdateCheck } from "@/lib/appUpdate";
-import type { PeriodKey } from "@/lib/period";
+import { normalizePeriodParam, type PeriodKey } from "@/lib/period";
+import type { AiPermissionMode, AiToolProfile } from "@/daemon/stream";
 
 // The supported language set lives in `@/i18n/config` so adding a language is
 // a one-place change; the store type follows it.
@@ -185,12 +187,75 @@ export const ASSISTANT_PANEL_DEFAULT_WIDTH = 380;
 export const ASSISTANT_PANEL_MIN_WIDTH = 320;
 export const ASSISTANT_PANEL_MAX_WIDTH = 640;
 
+/** The right panel's width while a transaction's details are in front. */
+export const DETAIL_PANEL_DEFAULT_WIDTH = 760;
+export const DETAIL_PANEL_MIN_WIDTH = 480;
+export const DETAIL_PANEL_MAX_WIDTH = 1680;
+
+export function normalizeDetailPanelWidth(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return DETAIL_PANEL_DEFAULT_WIDTH;
+  }
+  return Math.round(
+    Math.min(DETAIL_PANEL_MAX_WIDTH, Math.max(DETAIL_PANEL_MIN_WIDTH, value)),
+  );
+}
+
 export function normalizeAssistantPanelWidth(value: unknown): number {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return ASSISTANT_PANEL_DEFAULT_WIDTH;
   }
   return Math.round(
     Math.min(ASSISTANT_PANEL_MAX_WIDTH, Math.max(ASSISTANT_PANEL_MIN_WIDTH, value)),
+  );
+}
+
+/** Permission mode a new chat starts in until the user picks another. */
+export const DEFAULT_ASSISTANT_PERMISSION_MODE: AiPermissionMode = "auto";
+/** Saved chats whose permission mode is remembered; older ones use the default. */
+export const ASSISTANT_CHAT_PERMISSION_MODES_LIMIT = 200;
+
+export function normalizeAssistantPermissionMode(
+  value: unknown,
+): AiPermissionMode | null {
+  return value === "approval" || value === "auto" || value === "full_access"
+    ? value
+    : null;
+}
+
+/** Keep only well-formed entries, newest last, within the limit. */
+export function normalizeAssistantChatPermissionModes(
+  value: unknown,
+): Record<string, AiPermissionMode> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const entries = Object.entries(value as Record<string, unknown>).flatMap(
+    ([id, mode]) => {
+      const normalized = normalizeAssistantPermissionMode(mode);
+      return id && normalized ? [[id, normalized] as const] : [];
+    },
+  );
+  return Object.fromEntries(
+    entries.slice(-ASSISTANT_CHAT_PERMISSION_MODES_LIMIT),
+  );
+}
+
+/** Tool set every provider starts with: all tools, whatever the model. */
+export const DEFAULT_ASSISTANT_TOOL_PROFILE: AiToolProfile = "full";
+
+export function normalizeAssistantToolProfile(value: unknown): AiToolProfile | null {
+  return value === "full" || value === "scoped" || value === "core" ? value : null;
+}
+
+/** Keep only well-formed provider → tool set entries. */
+export function normalizeAssistantProviderToolProfiles(
+  value: unknown,
+): Record<string, AiToolProfile> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).flatMap(([provider, profile]) => {
+      const normalized = normalizeAssistantToolProfile(profile);
+      return provider && normalized ? [[provider, normalized] as const] : [];
+    }),
   );
 }
 
@@ -241,10 +306,37 @@ export interface UiState {
   /** Horizontal alignment of the closed-panel bar within the page column. */
   assistantDockPosition: AssistantDockPosition;
   assistantClosedBar: AssistantClosedBarMode;
-  /** The right-side assistant panel is open; the page column shrinks beside it. */
+  /**
+   * The assistant is a tab of the right panel. It shows while the panel is
+   * open too (`rightPanelOpen`); hiding the panel keeps the tab.
+   */
   assistantPanelOpen: boolean;
-  /** Panel width in CSS px, clamped to the min/max above. */
+  /** Panel width in CSS px while the assistant is in front, clamped to the min/max above. */
   assistantPanelWidth: number;
+  /** Permission mode a new chat starts in (Settings → AI). */
+  assistantDefaultPermissionMode: AiPermissionMode;
+  /**
+   * The permission mode each saved chat last used, by its daemon session id
+   * (an opaque id, nothing else), so a reopened chat keeps it. Bounded; a
+   * chat that is not here starts in the default.
+   */
+  assistantChatPermissionModes: Record<string, AiPermissionMode>;
+  /**
+   * The tool set each provider's chats start with, by provider row name (the
+   * same identifier as `assistantModelSelection`; never endpoints or keys).
+   * A provider that is not here gets all tools. A chat can override it in
+   * the composer.
+   */
+  assistantProviderToolProfiles: Record<string, AiToolProfile>;
+  /**
+   * The right panel beside the page is open, after T3 Code's right panel:
+   * its tabs, or the launcher when it has none.
+   */
+  rightPanelOpen: boolean;
+  /** The open right panel takes the whole page column. Ephemeral. */
+  rightPanelMaximized: boolean;
+  /** Panel width in CSS px while a transaction's details are in front. */
+  detailPanelWidth: number;
   /**
    * Bumped to ask the open panel to focus its composer (keyboard shortcut,
    * launcher, "Ask about this"). Ephemeral — never persisted.
@@ -257,10 +349,17 @@ export interface UiState {
   assistantColumnClaimed: boolean;
   /**
    * Bumped when the user asks to see the assistant (shortcut, title-bar
-   * toggle, Ask about this, a page's handoff) or a turn fails. A page holding
-   * the column gives it back. Ephemeral — never persisted.
+   * toggle, Ask about this, a page's handoff), a turn fails, or a tool waits
+   * for approval. A page holding the column gives it back. Ephemeral — never
+   * persisted.
    */
   assistantPanelRevealRequest: number;
+  /**
+   * The settings category open in the Settings modal over the current page,
+   * or null while it is closed. Ephemeral — never persisted; `/settings/*`
+   * navigations set it (see `useSettingsModalNavigation`).
+   */
+  settingsSection: SettingsSectionId | null;
   daemonSession: number;
   notifications: AppNotification[];
   activeMaintenanceProgress: ActiveMaintenanceProgress | null;
@@ -310,17 +409,42 @@ export interface UiState {
   toggleAssistantModelFavorite: (favorite: AiModelSelection) => void;
   setAssistantDockPosition: (position: AssistantDockPosition) => void;
   setAssistantClosedBar: (mode: AssistantClosedBarMode) => void;
-  /** Open or close without asking a page to give the column back. */
+  /**
+   * Open or close the assistant tab without asking a page to give the
+   * column back. Opening it opens the panel.
+   */
   setAssistantPanelOpen: (open: boolean) => void;
   /**
    * The user asks for the panel; `focusComposer` also moves focus into its
    * composer. A page holding the column gives it back.
    */
   openAssistantPanel: (options?: { focusComposer?: boolean }) => void;
-  /** Shortcut and title-bar toggle: shows the panel while a page holds the column. */
+  /**
+   * The shortcut: hides the panel while the assistant is in it and in view,
+   * otherwise shows the panel with the assistant. Shows it while a page holds
+   * the column.
+   */
   toggleAssistantPanel: () => void;
+  setRightPanelOpen: (open: boolean) => void;
+  /** The title-bar toggle: shows or hides the panel, keeping its tabs. */
+  toggleRightPanel: () => void;
+  setRightPanelMaximized: (maximized: boolean) => void;
+  setDetailPanelWidth: (width: number) => void;
   setAssistantColumnClaimed: (claimed: boolean) => void;
   setAssistantPanelWidth: (width: number) => void;
+  setSettingsSection: (section: SettingsSectionId | null) => void;
+  setAssistantDefaultPermissionMode: (mode: AiPermissionMode) => void;
+  rememberAssistantChatPermissionMode: (
+    sessionId: string,
+    mode: AiPermissionMode,
+  ) => void;
+  /** Forget one saved chat's mode, or every chat's when `sessionId` is omitted. */
+  forgetAssistantChatPermissionModes: (sessionId?: string) => void;
+  /** Set a provider's tool set; null returns it to all tools. */
+  setAssistantProviderToolProfile: (
+    provider: string,
+    profile: AiToolProfile | null,
+  ) => void;
   bumpDaemonSession: () => void;
   addNotification: (
     notification: Omit<AppNotification, "id" | "createdAt">,
@@ -419,29 +543,17 @@ function stripNotificationProgress(
   });
 }
 
-const BOOK_CHART_PERIODS = new Set<BookChartPeriod>([
-  "auto",
-  "30days",
-  "3months",
-  "6months",
-  "ytd",
-  "1year",
-  "5years",
-  "10years",
-  "15years",
-  "all",
-]);
-
-function normalizeBookChartPeriods(
+// A range the picker no longer offers lands on the closest one it does,
+// rather than the book forgetting its choice.
+export function normalizeBookChartPeriods(
   periods: unknown,
 ): Record<string, BookChartPeriod> {
   if (!periods || typeof periods !== "object") return {};
   return Object.fromEntries(
-    Object.entries(periods as Record<string, unknown>).filter(
-      (entry): entry is [string, BookChartPeriod] =>
-        typeof entry[1] === "string" &&
-        BOOK_CHART_PERIODS.has(entry[1] as BookChartPeriod),
-    ),
+    Object.entries(periods as Record<string, unknown>).flatMap(([book, value]) => {
+      const period = typeof value === "string" ? normalizePeriodParam(value) : null;
+      return period ? [[book, period]] : [];
+    }),
   );
 }
 
@@ -509,6 +621,11 @@ export function uiStatePartialForStorage(state: UiState) {
     assistantClosedBar: state.assistantClosedBar,
     assistantPanelOpen: state.assistantPanelOpen,
     assistantPanelWidth: state.assistantPanelWidth,
+    rightPanelOpen: state.rightPanelOpen,
+    detailPanelWidth: state.detailPanelWidth,
+    assistantDefaultPermissionMode: state.assistantDefaultPermissionMode,
+    assistantChatPermissionModes: state.assistantChatPermissionModes,
+    assistantProviderToolProfiles: state.assistantProviderToolProfiles,
     daemonSession: state.daemonSession,
     notifications: stripNotificationProgress(state.notifications),
     firstSyncDone: state.firstSyncDone,
@@ -599,9 +716,16 @@ export const useUiStore = create<UiState>()(
       assistantClosedBar: "composer",
       assistantPanelOpen: false,
       assistantPanelWidth: ASSISTANT_PANEL_DEFAULT_WIDTH,
+      rightPanelOpen: false,
+      rightPanelMaximized: false,
+      detailPanelWidth: DETAIL_PANEL_DEFAULT_WIDTH,
+      assistantDefaultPermissionMode: DEFAULT_ASSISTANT_PERMISSION_MODE,
+      assistantChatPermissionModes: {},
+      assistantProviderToolProfiles: {},
       assistantPanelFocusRequest: 0,
       assistantColumnClaimed: false,
       assistantPanelRevealRequest: 0,
+      settingsSection: null,
       daemonSession: 0,
       notifications: [],
       activeMaintenanceProgress: null,
@@ -699,10 +823,11 @@ export const useUiStore = create<UiState>()(
       setAssistantClosedBar: (assistantClosedBar) =>
         set({ assistantClosedBar }),
       setAssistantPanelOpen: (assistantPanelOpen) =>
-        set({ assistantPanelOpen }),
+        set(assistantPanelOpen ? { assistantPanelOpen, rightPanelOpen: true } : { assistantPanelOpen }),
       openAssistantPanel: (options) =>
         set((state) => ({
           assistantPanelOpen: true,
+          rightPanelOpen: true,
           assistantPanelFocusRequest: options?.focusComposer
             ? state.assistantPanelFocusRequest + 1
             : state.assistantPanelFocusRequest,
@@ -712,18 +837,83 @@ export const useUiStore = create<UiState>()(
         set((state) =>
           // While a page holds the column the panel is out of view, so the
           // toggle shows it rather than closing something unseen.
-          state.assistantPanelOpen && !state.assistantColumnClaimed
-            ? { assistantPanelOpen: false }
+          state.rightPanelOpen &&
+          state.assistantPanelOpen &&
+          !state.assistantColumnClaimed
+            ? { rightPanelOpen: false, rightPanelMaximized: false }
             : {
                 assistantPanelOpen: true,
+                rightPanelOpen: true,
                 assistantPanelFocusRequest: state.assistantPanelFocusRequest + 1,
                 assistantPanelRevealRequest: state.assistantPanelRevealRequest + 1,
               },
         ),
+      setRightPanelOpen: (rightPanelOpen) =>
+        set(rightPanelOpen ? { rightPanelOpen } : { rightPanelOpen, rightPanelMaximized: false }),
+      toggleRightPanel: () =>
+        set((state) =>
+          state.rightPanelOpen && !state.assistantColumnClaimed
+            ? { rightPanelOpen: false, rightPanelMaximized: false }
+            : state.assistantColumnClaimed
+              ? // A page holding the column gives it back for a reveal
+                // request, which brings the assistant forward.
+                {
+                  rightPanelOpen: true,
+                  assistantPanelRevealRequest: state.assistantPanelRevealRequest + 1,
+                }
+              : // Otherwise the panel returns with the tab that was in front.
+                { rightPanelOpen: true },
+        ),
+      setRightPanelMaximized: (rightPanelMaximized) => set({ rightPanelMaximized }),
+      setDetailPanelWidth: (width) =>
+        set({ detailPanelWidth: normalizeDetailPanelWidth(width) }),
       setAssistantColumnClaimed: (assistantColumnClaimed) =>
         set({ assistantColumnClaimed }),
       setAssistantPanelWidth: (width) =>
         set({ assistantPanelWidth: normalizeAssistantPanelWidth(width) }),
+      setSettingsSection: (settingsSection) => set({ settingsSection }),
+      setAssistantDefaultPermissionMode: (assistantDefaultPermissionMode) =>
+        set({ assistantDefaultPermissionMode }),
+      rememberAssistantChatPermissionMode: (sessionId, mode) =>
+        set((state) => {
+          if (state.assistantChatPermissionModes[sessionId] === mode) return {};
+          // Re-inserted last, so the limit drops the chats used longest ago.
+          const rest = Object.fromEntries(
+            Object.entries(state.assistantChatPermissionModes).filter(
+              ([id]) => id !== sessionId,
+            ),
+          );
+          return {
+            assistantChatPermissionModes: normalizeAssistantChatPermissionModes({
+              ...rest,
+              [sessionId]: mode,
+            }),
+          };
+        }),
+      setAssistantProviderToolProfile: (provider, profile) =>
+        set((state) => {
+          const rest = Object.fromEntries(
+            Object.entries(state.assistantProviderToolProfiles).filter(
+              ([name]) => name !== provider,
+            ),
+          );
+          return {
+            assistantProviderToolProfiles: profile
+              ? { ...rest, [provider]: profile }
+              : rest,
+          };
+        }),
+      forgetAssistantChatPermissionModes: (sessionId) =>
+        set((state) => ({
+          assistantChatPermissionModes:
+            sessionId === undefined
+              ? {}
+              : Object.fromEntries(
+                  Object.entries(state.assistantChatPermissionModes).filter(
+                    ([id]) => id !== sessionId,
+                  ),
+                ),
+        })),
       bumpDaemonSession: () =>
         set((state) => ({ daemonSession: state.daemonSession + 1 })),
       addNotification: (notification) => {
@@ -903,6 +1093,26 @@ export const useUiStore = create<UiState>()(
           assistantPanelOpen: restored.assistantPanelOpen === true,
           assistantPanelWidth: normalizeAssistantPanelWidth(
             restored.assistantPanelWidth ?? current.assistantPanelWidth,
+          ),
+          // Saved before the panel held more than the assistant: it was open
+          // exactly when the assistant was.
+          rightPanelOpen:
+            typeof restored.rightPanelOpen === "boolean"
+              ? restored.rightPanelOpen
+              : restored.assistantPanelOpen === true,
+          rightPanelMaximized: false,
+          detailPanelWidth: normalizeDetailPanelWidth(
+            restored.detailPanelWidth ?? current.detailPanelWidth,
+          ),
+          assistantDefaultPermissionMode:
+            normalizeAssistantPermissionMode(
+              restored.assistantDefaultPermissionMode,
+            ) ?? current.assistantDefaultPermissionMode,
+          assistantChatPermissionModes: normalizeAssistantChatPermissionModes(
+            restored.assistantChatPermissionModes,
+          ),
+          assistantProviderToolProfiles: normalizeAssistantProviderToolProfiles(
+            restored.assistantProviderToolProfiles,
           ),
           assistantPanelFocusRequest: 0,
           assistantColumnClaimed: false,

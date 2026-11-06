@@ -719,7 +719,17 @@ def _transfer_candidate_counts(payload: Mapping[str, Any]) -> dict[str, int]:
         "strong": int(counts.get("strong") or 0),
         "conflicts": int(counts.get("conflicts") or 0),
         "rule_matches": int(counts.get("rule_matches") or 0),
+        "ownership": int(counts.get("ownership") or 0),
     }
+
+
+def _review_move_count(counts: Mapping[str, int]) -> int:
+    """Moves left to review, each decision once.
+
+    An ownership-graph move is proposed for a held transaction that already
+    counts as a quarantine root, so the shared review total leaves it out.
+    """
+    return max(0, counts["total"] - counts["ownership"])
 
 
 def _skipped_auto_pair_summary(exc: BaseException) -> dict[str, Any]:
@@ -771,13 +781,12 @@ def _auto_pair_before_journals(
         suggest_transfer_candidates(conn, workspace_ref, profile_ref)
     )
     # Cache the post-pairing candidate count so the side-nav swaps hint can be
-    # served cheaply (build_review_badges_snapshot reads it without re-running the
-    # heavy matcher). This is the only writer, so the badge reflects the last
-    # journal run: after a manual pair/dismiss the count can briefly over-state
-    # until the next refresh reprocesses journals. Part of the atomic auto-pair +
-    # journal step: committed on success, rolled back with the pairings if journal
-    # processing fails.
-    cache_swap_candidate_count(conn, workspace_ref, profile_ref, remaining["total"])
+    # served cheaply (build_review_badges_snapshot reads it without re-running
+    # the heavy matcher). Pairs applied here make the projection stale, so
+    # `refresh_journals_step` counts again after its rebuild. Part of the
+    # atomic auto-pair + journal step: committed on success, rolled back with
+    # the pairings if journal processing fails.
+    cache_swap_candidate_count(conn, workspace_ref, profile_ref, _review_move_count(remaining))
     rules_summary = (
         rules.get("summary") if isinstance(rules.get("summary"), AbcMapping) else {}
     )
@@ -894,7 +903,43 @@ def refresh_journals_step(
     payload.setdefault("rebuilt", True)
     if auto_pair_summary is not None:
         payload["auto_pair"] = auto_pair_summary
+    if auto_pair_summary is None or pairs_applied:
+        # Counted on the rebuilt projection: the pairing pass counted before
+        # its own pairs were booked.
+        _recount_transfer_candidates(conn, job_scope)
     return payload
+
+
+def recount_transfer_candidates(conn: sqlite3.Connection, profile_id: str) -> None:
+    """Cache the open candidate count after a pair, unpair or dismissal.
+
+    For writers outside the journal step (a review apply from the assistant
+    or the CLI); commits on its own.
+    """
+    _recount_transfer_candidates(conn, {"profile_id": profile_id})
+
+
+def _recount_transfer_candidates(
+    conn: sqlite3.Connection,
+    job: Mapping[str, Any],
+) -> None:
+    """Cache the open candidate count on a current projection.
+
+    Without it, a pair or dismissal the owner made would leave the review
+    badge counting it until the next automatic run. A failed recount keeps
+    the previous count.
+    """
+
+    try:
+        workspace_ref, profile_ref = _job_scope_refs(conn, job)
+        remaining = _transfer_candidate_counts(
+            suggest_transfer_candidates(conn, workspace_ref, profile_ref)
+        )
+        cache_swap_candidate_count(conn, workspace_ref, profile_ref, _review_move_count(remaining))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        _LOGGER.exception("Recounting transfer candidates after the journal rebuild failed")
 
 
 def _active_profile_row(conn: sqlite3.Connection) -> sqlite3.Row | None:
@@ -993,7 +1038,7 @@ def _freshness_wallet_source_specs(
         return payload
 
     for wallet in _load_wallets_for_freshness(conn, profile_id, wallet_ref):
-        config = json.loads(wallet["config_json"] or "{}")
+        config = core_wallets.stored_wallet_config(wallet)
         if wallet_ref is None and core_wallets.wallet_is_deprecated(config):
             continue
         if core_wallets.wallet_btcpay_sync_config(config):
@@ -2874,7 +2919,8 @@ def _maintenance_run_payload(
             retryable=False,
         )
     sync_mode = args.get("sync", "if_enabled")
-    if sync_mode not in {"never", "if_enabled", "always"}:
+    # A list or object is unhashable: check the type before set membership.
+    if not isinstance(sync_mode, str) or sync_mode not in {"never", "if_enabled", "always"}:
         raise AppError(
             "ui.maintenance.run sync must be never, if_enabled, or always",
             code="validation",

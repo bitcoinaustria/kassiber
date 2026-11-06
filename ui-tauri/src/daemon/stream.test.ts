@@ -7,12 +7,15 @@ import {
   applyToolConsentResponseToMessage,
   aiChatStatusLabel,
   buildAiChatStreamArgs,
+  buildAiToolConsentRequest,
   buildChatCancelArgs,
+  buildPermissionModeArgs,
   buildToolConsentArgs,
   chatMessageRounds,
   completedAiMutationKind,
   terminalAiChatStatus,
   type AiChatMessage,
+  storedChatEntries,
 } from "./stream";
 import { ThinkParser } from "@/lib/thinkParser";
 
@@ -316,13 +319,7 @@ describe("AI stream reducer helpers", () => {
     expect(withDenied.toolCalls?.[0].reason).toBe("user_denied");
     expect(
       buildToolConsentArgs(
-        {
-          targetRequestId: "chat-1",
-          callId: "call_1",
-          name: "ui.wallets.sync",
-          summary: "Refresh all watch-only sources",
-          argumentsPreview: {},
-        },
+        { targetRequestId: "chat-1", callId: "call_1" },
         "allow_session",
       ),
     ).toEqual({
@@ -471,17 +468,17 @@ describe("buildAiChatStreamArgs", () => {
     });
   });
 
-  it("forwards a file attachment as a token, never a path or contents", () => {
+  it("forwards attached files as tokens, never a path or contents", () => {
     const args = buildAiChatStreamArgs({
       model: "mock-model",
       messages: [{ role: "user", content: "What is in this export?" }],
-      attachment: { token: "stage-token-1" },
+      attachments: [{ token: "stage-token-1" }, { token: "stage-token-2", new: true }],
     });
 
-    expect(args.attachment).toEqual({
-      token: "stage-token-1",
-      label: undefined,
-    });
+    expect(args.attachments).toEqual([
+      { token: "stage-token-1", label: undefined, new: undefined },
+      { token: "stage-token-2", label: undefined, new: true },
+    ]);
     // The daemon reads the file itself; the renderer must not ship bytes or a
     // filesystem path through the chat request.
     const serialized = JSON.stringify(args);
@@ -489,13 +486,114 @@ describe("buildAiChatStreamArgs", () => {
     expect(serialized).not.toContain("source_file");
   });
 
-  it("omits the attachment field when nothing is attached", () => {
+  it("omits the attachments field when nothing is attached", () => {
     const args = buildAiChatStreamArgs({
       model: "mock-model",
       messages: [{ role: "user", content: "hi" }],
     });
 
-    expect(args.attachment).toBeUndefined();
+    expect(args.attachments).toBeUndefined();
+  });
+
+  it("names the chat's permission mode and tool set", () => {
+    const args = buildAiChatStreamArgs({
+      model: "mock-model",
+      messages: [{ role: "user", content: "hi" }],
+      permissionMode: "full_access",
+      toolProfile: "core",
+    });
+    expect(args).toMatchObject({ permission_mode: "full_access", tool_profile: "core" });
+    expect(buildPermissionModeArgs("chat-7", "auto")).toEqual({
+      target_request_id: "chat-7",
+      permission_mode: "auto",
+    });
+  });
+});
+
+describe("approval records", () => {
+  it("reads the risk flags and session offer, absent ones as no", () => {
+    const legacy = buildAiToolConsentRequest("chat-1", {
+      call_id: "c1",
+      name: "ui.wallets.sync",
+    });
+    expect(legacy).toMatchObject({
+      reversible: false,
+      egresses: false,
+      canAllowSession: true,
+    });
+    expect(
+      buildAiToolConsentRequest("chat-1", {
+        call_id: "c2",
+        name: "ui.wallets.sync",
+        reversible: true,
+        egresses: true,
+        can_allow_session: false,
+      }),
+    ).toMatchObject({ reversible: true, egresses: true, canAllowSession: false });
+    // A once-only tool never offers it, whatever the record says.
+    expect(
+      buildAiToolConsentRequest("chat-1", {
+        call_id: "c3",
+        name: "ui.review.apply",
+        can_allow_session: true,
+      }).canAllowSession,
+    ).toBe(false);
+  });
+
+  it("keeps why a call ran without asking across its updates", () => {
+    const parser = new ThinkParser();
+    const record = (data: Record<string, unknown>) => ({
+      kind: "ai.chat.tool_call",
+      schema_version: 1,
+      data: { call_id: "c1", name: "ui.transactions.metadata_update", kind_class: "mutating", ...data },
+    });
+    const auto = applyAiChatStreamRecordToMessage(
+      assistantMessage(),
+      record({ needs_consent: false, approval: "auto" }),
+      parser,
+      false,
+    );
+    expect(auto.toolCalls?.[0]).toMatchObject({ status: "running", approval: "auto" });
+    // An older daemon's update without `approval` keeps the earlier one;
+    // an unknown value is ignored.
+    const update = applyAiChatStreamRecordToMessage(
+      auto,
+      record({ needs_consent: false, approval: "bogus" }),
+      parser,
+      false,
+    );
+    expect(update.toolCalls?.[0].approval).toBe("auto");
+
+    const asked = applyAiChatStreamRecordToMessage(
+      assistantMessage(),
+      {
+        kind: "ai.chat.tool_consent_required",
+        schema_version: 1,
+        data: { call_id: "c2", name: "ui.wallets.sync", summary: "Sync" },
+      },
+      parser,
+      false,
+    );
+    expect(asked.toolCalls?.[0]).toMatchObject({
+      status: "awaiting_consent",
+      approval: "required",
+    });
+    // Released by a new permission mode while it waited.
+    const released = applyAiChatStreamRecordToMessage(
+      asked,
+      {
+        kind: "ai.chat.tool_call",
+        schema_version: 1,
+        data: { call_id: "c2", name: "ui.wallets.sync", needs_consent: false, approval: "full_access" },
+      },
+      parser,
+      false,
+    );
+    expect(released.toolCalls).toHaveLength(1);
+    expect(released.toolCalls?.[0]).toMatchObject({
+      status: "running",
+      approval: "full_access",
+    });
   });
 });
 
@@ -627,5 +725,33 @@ describe("completedAiMutationKind", () => {
     );
     expect(rounds).toHaveLength(1);
     expect(rounds[0]!.toolCalls.map((call) => call.callId)).toEqual(["legacy"]);
+  });
+});
+
+describe("storedChatEntries attachments", () => {
+  it("restores the files a stored user message sent, and nothing else", () => {
+    expect(
+      storedChatEntries([
+        {
+          role: "user",
+          content: "What is on it?",
+          provenance: {
+            attachments: [
+              { filename: "receipt.png", kind: "image", size_bytes: 812 },
+              { filename: "", kind: "image" },
+              { path: "/home/user/x.png" },
+            ],
+          },
+        },
+        { role: "assistant", content: "A receipt.", provenance: { attachments: [{ filename: "no.png" }] } },
+      ]),
+    ).toEqual([
+      {
+        role: "user",
+        content: "What is on it?",
+        attachments: [{ filename: "receipt.png", kind: "image", sizeBytes: 812 }],
+      },
+      { role: "assistant", content: "A receipt." },
+    ]);
   });
 });

@@ -30,3 +30,54 @@ class AppError(Exception):
         self.details = details
         self.hint = hint
         self.retryable = retryable
+
+
+# A blocking error names a condition; ``details["remediation"]`` names what
+# resolves it, on which record, and with which tool. Callers (the CLI envelope,
+# the desktop, and the in-app AI's tool results) can act on it without
+# inferring the target from free text. ``tool`` is the in-app AI's function
+# name, or ``None`` when no tool can take the step; ``desktop_only`` marks a
+# step only the user can take in the desktop.
+REMEDIATION_KEY = "remediation"
+
+
+def build_remediation(
+    action,
+    *,
+    target=None,
+    tool=None,
+    arguments_hint=None,
+    desktop_only=False,
+    message=None,
+    alternatives=None,
+):
+    """Return the shared remediation shape for ``AppError.details``.
+
+    ``target`` holds full, resolvable ids only (never display forms), and
+    ``arguments_hint`` is a starting point the caller must still review; it
+    never replaces the plan and consent steps the named tool requires.
+    """
+
+    remediation = {
+        "action": str(action),
+        "target": dict(target or {}),
+        "tool": tool,
+        "arguments_hint": dict(arguments_hint or {}),
+        "desktop_only": bool(desktop_only),
+    }
+    if message:
+        remediation["message"] = str(message)
+    if alternatives:
+        remediation["alternatives"] = [dict(item) for item in alternatives]
+    return remediation
+
+
+def error_remediation(error):
+    """The remediation an ``AppError`` carries, or ``None``."""
+
+    details = getattr(error, "details", None)
+    if isinstance(details, dict):
+        value = details.get(REMEDIATION_KEY)
+        if isinstance(value, dict):
+            return value
+    return None

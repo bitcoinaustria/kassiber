@@ -517,12 +517,31 @@ def update_transaction_metadata(
     at_category_set=False,
     kind=None,
     kind_set=False,
+    accept_coarse_price=False,
     source="cli",
     reason=None,
     commit=True,
 ):
     workspace, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     tx = hooks.resolve_transaction(conn, profile["id"], tx_ref)
+    accepted_value = None
+    if accept_coarse_price:
+        if pricing_update is not None:
+            raise AppError(
+                "accept the current coarse price or set a new one, not both",
+                code="validation",
+                retryable=False,
+            )
+        if tx["pricing_quality"] != pricing.QUALITY_COARSE_FALLBACK:
+            raise AppError(
+                "only a coarse price can be accepted",
+                code="validation",
+                details={"pricing_quality": tx["pricing_quality"]},
+                retryable=False,
+            )
+        accepted_value = pricing.reviewed_price(tx)
+        if accepted_value is None:
+            raise AppError("the coarse price has no value to accept", code="validation", retryable=False)
     clean_note = _clean_transaction_note(note) if note_set else None
     clean_tags = _clean_transaction_tags(tags)
     if excluded is not None and not isinstance(excluded, bool):
@@ -601,6 +620,11 @@ def update_transaction_metadata(
     if kind_set:
         tx_updates["kind_override"] = clean_kind
         state_updates["kind"] = clean_kind
+
+    if accepted_value is not None:
+        # Bound to this exact value: a changed price is reviewed again.
+        tx_updates["pricing_review_accepted_price"] = accepted_value
+        state_updates["pricing_review_accepted"] = accepted_value
 
     if clean_pricing is not None:
         tx_updates.update(
@@ -1086,6 +1110,8 @@ def _tx_updates_for_revert_field(field, before_value):
     }
     if field in column_fields:
         return {field: before_value}, {field: before_value}
+    if field == "pricing_review_accepted":
+        return {"pricing_review_accepted_price": before_value}, {field: before_value}
     raise AppError(
         "history field cannot be reverted",
         code="validation",

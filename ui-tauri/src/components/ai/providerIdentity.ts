@@ -4,7 +4,10 @@ import {
   type AiProviderRow,
 } from "@/lib/aiCapabilities";
 
-export function providerDisplayName(provider: AiProviderRow): string {
+/** What naming and marking a provider reads: a saved row, or a draft of one. */
+type ProviderIdentity = Pick<AiProviderRow, "name" | "display_name" | "base_url">;
+
+export function providerDisplayName(provider: ProviderIdentity): string {
   return provider.display_name?.trim() || provider.name;
 }
 
@@ -24,7 +27,7 @@ const LOCAL_SERVER_NAMES: ReadonlyArray<[RegExp, string]> = [
  * whose name or display name starts with one. Purely cosmetic — it never
  * decides routing, posture, or whether a provider may be contacted.
  */
-export function providerIconKey(provider: AiProviderRow): string | null {
+export function providerIconKey(provider: ProviderIdentity): string | null {
   const runtime = nativeAiProviderRuntime(provider.base_url);
   if (runtime) return runtime;
   for (const label of [provider.name, provider.display_name ?? ""]) {

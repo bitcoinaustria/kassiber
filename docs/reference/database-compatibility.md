@@ -249,3 +249,42 @@ decimal refusal during processing, including rollback of earlier pricing writes.
 The private comparison dump preserves infinite REAL bits rather than substituting
 null; this adds no database or product format. See the
 [uncovered numeric paths](r4-journal-pipeline.md#r4-10-uncovered-numeric-paths).
+
+## Storage added by main #675 to #708
+
+Main after #654 added four storage changes. Python fresh creation includes
+them; existing books receive them in `ensure_schema_compat`, and the Rust
+store runs the same steps at the same positions of its ordered pass:
+
+| Change | Existing books |
+| --- | --- |
+| `transactions.pricing_review_accepted_price` (#708) | Added after `pricing_quality`, and again after the msat rebuild, whose fixed column list drops it from a legacy REAL-typed table |
+| `ai_providers.agent_access TEXT NOT NULL DEFAULT 'full'` | Added after `omit_store_field`; every existing provider stays `full` |
+| `ai_provider_checks` | Created by the base schema, then by `_ensure_ai_provider_checks_schema` after the secret-reference table |
+| Custody AI audit `consent_decision` CHECK widened to `mode_auto`, `mode_full_access`, `mcp_host` | Rebuilt once after the custody leg-role rebuild and before the projection view: foreign keys off, one immediate transaction, rows copied by Python's exact column list, row count checked (`custody_schema_migration_failed` if it changes), index and immutability trigger restored. A table that already admits all three values is left alone |
+
+None of them writes a migration audit; they are schema steps, not semantic
+migrations, so books keep the same ledger. A rebuilt or altered table keeps
+the migration's own SQL spelling, as in Python, and the structural admission
+gate accepts it.
+
+Coverage: `pre_sync_bae01537b.sqlite3.gz.b64` (a processed Austrian book
+with an AI provider and narrow-CHECK audit rows, written by main #654) joins
+the historical fixtures, so the exact first-pass dump, Python reopen and Rust
+re-migration comparisons run on it in plaintext and SQLCipher.
+`tests/test_rust_store_migrations.py` also compares the audit rebuild with
+Python's step, kills it at each checkpoint and resumes in either runtime,
+opens a current Python book holding rows in every new object with Rust (both
+open modes) without any change, and alternates Rust and Python opens of a
+Rust-created book with no migration loop.
+`crates/store/scripts/mutations.json` breaks each step and the refusal rules
+one at a time (`crates/store/scripts/mutation_check.py`); every entry fails
+a Rust store test.
+
+**Newer layouts.** The Rust store refuses a book carrying any object, column
+or migration audit it does not know (`requires_python_migration`), in both its
+admission-only and migrating opens, before writing anything. Python does not:
+its open is additive and leaves unknown tables, columns, indexes, triggers
+and audits in place. The asymmetry is deliberate. A Rust binary must not run
+accounting on a schema written by a newer build, and an older Python build
+keeps its existing behaviour. Upgrade the Rust binary together with Python.

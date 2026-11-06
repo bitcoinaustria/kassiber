@@ -142,6 +142,41 @@ class FreshnessTest(unittest.TestCase):
         )
         self.assertEqual([spec["payload"]["wallet_label"] for spec in explicit], ["Old"])
 
+    def test_unreadable_wallet_config_refuses_the_sync_plan_with_a_typed_error(self):
+        for stored in ("bad", "[]", "null", '"text"'):
+            conn = self._db()
+            profile_id = _seed_profile(conn)
+            conn.executemany(
+                """
+                INSERT INTO wallets(
+                    id, workspace_id, profile_id, account_id, label, kind,
+                    config_json, created_at
+                )
+                VALUES(?, 'ws', ?, NULL, ?, 'address', ?, '2026-06-04T00:00:00Z')
+                """,
+                [
+                    ("good", profile_id, "Good", json.dumps({"addresses": ["bc1qgood"]})),
+                    ("bad", profile_id, "Bad", stored),
+                ],
+            )
+            conn.execute("INSERT INTO settings(key, value) VALUES('context_workspace', 'ws'), ('context_profile', ?)", (profile_id,))
+            conn.commit()
+            for plan in (
+                lambda: daemon_freshness._freshness_wallet_source_specs(
+                    conn, profile_id, include_rates=False, include_journals=False
+                ),
+                lambda: cli_handlers.sync_wallet(conn, {}, None, None, sync_all=True),
+            ):
+                with self.assertRaises(AppError) as raised:
+                    plan()
+                self.assertEqual(raised.exception.code, "invalid_wallet_config", stored)
+                self.assertEqual(raised.exception.details, {"wallet": "Bad"})
+            # The healthy wallet alone still plans.
+            specs = daemon_freshness._freshness_wallet_source_specs(
+                conn, profile_id, wallet_ref="Good", include_rates=False, include_journals=False
+            )
+            self.assertEqual([spec["payload"]["wallet_label"] for spec in specs], ["Good"])
+
     def test_cli_wallet_sync_reuses_persisted_freshness_checkpoint(self):
         conn = self._db()
         profile_id = _seed_profile(conn)
@@ -2420,6 +2455,68 @@ class FreshnessTest(unittest.TestCase):
             (profile_id,),
         ).fetchone()[0]
         self.assertEqual(cached, 1)
+
+    def test_review_count_leaves_ownership_moves_to_their_cause(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        counts = {"counts": {"total": 3, "exact": 1, "strong": 2, "ownership": 1}}
+
+        with patch(
+            "kassiber.daemon_freshness.suggest_transfer_candidates",
+            return_value=counts,
+        ), patch(
+            "kassiber.daemon_freshness.apply_transfer_rules",
+            return_value={"summary": {"count": 0}},
+        ), patch(
+            "kassiber.daemon_freshness.bulk_pair_transfers",
+            return_value={"summary": {"count": 0}},
+        ):
+            daemon_freshness._auto_pair_before_journals(conn, {"profile_id": profile_id})
+
+        cached = conn.execute(
+            "SELECT swap_candidate_count FROM profiles WHERE id = ?",
+            (profile_id,),
+        ).fetchone()[0]
+        # The ownership move's held transaction already counts as a cause.
+        self.assertEqual(cached, 2)
+
+    def test_refresh_journals_step_counts_again_after_its_own_pairs(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+
+        def run(applied):
+            with patch(
+                "kassiber.daemon_freshness.core_custody_journal.projection_freshness",
+                return_value={"is_current": True},
+            ), patch(
+                "kassiber.daemon_freshness._auto_pair_before_journals",
+                return_value={"enabled": True, "applied": applied},
+            ), patch(
+                "kassiber.daemon_freshness._journals_process_payload",
+                return_value={"quarantined": 0},
+            ), patch(
+                "kassiber.daemon_freshness._recount_transfer_candidates",
+            ) as recount:
+                daemon_freshness.refresh_journals_step(conn, profile_id, auto_pair=True)
+            return recount.call_count
+
+        # Counted before its pairs were booked, so the step counts again.
+        self.assertEqual(run(2), 1)
+        # Nothing paired: the pairing pass counted on a current projection.
+        self.assertEqual(run(0), 0)
+
+    def test_review_applies_that_pair_or_dismiss_change_the_open_moves(self):
+        from kassiber.core import review_workflow
+
+        def artifact(*types):
+            return {"operations": [{"type": operation_type} for operation_type in types]}
+
+        for operation_type in ("pair", "unpair", "dismiss_pair", "undismiss_pair"):
+            with self.subTest(operation_type=operation_type):
+                self.assertTrue(review_workflow.changes_transfer_candidates(artifact("price_override", operation_type)))
+        self.assertFalse(review_workflow.changes_transfer_candidates(artifact("price_override")))
+        self.assertFalse(review_workflow.changes_transfer_candidates({"operations": [{"type": "kind_override", "kind": "pair"}]}))
+        self.assertFalse(review_workflow.changes_transfer_candidates({}))
 
     def test_workspace_freshness_run_honors_each_book_market_rate_policy(self):
         conn = self._db()

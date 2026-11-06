@@ -7,6 +7,12 @@ describe("Transfers and custody navigation", () => {
       tab: "review", mode: "transfers", view: "review", focus: "tx-1", method: "ownership_graph",
     });
   });
+  it("opens a focused swap on the swaps tab", () => {
+    expect(parseTransfersCustodySearch({ focus: "tx-1", mode: "swaps" })).toEqual({
+      tab: "review", mode: "swaps", view: "review", focus: "tx-1",
+    });
+    expect(parseTransfersCustodySearch({ focus: "tx-1" }).mode).toBe("transfers");
+  });
   it("uses review defaults when navigating back to the bare route", () => {
     expect(transfersCustodyView({}, true)).toEqual({ tab: "review", mode: "transfers", view: "review" });
   });

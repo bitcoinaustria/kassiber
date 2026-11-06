@@ -141,8 +141,6 @@
       "title": "Quarantine unavailable",
       "fallback": "The daemon did not return quarantine data."
     },
-    "emptyTitle": "Nothing in quarantine",
-    "emptyBody": "When Kassiber can't book a transaction, it shows up here with what to do.",
     "actions": {
       "fixWithAssistant": "Fix with assistant"
     },
@@ -492,9 +490,6 @@
       "previous": "Previous",
       "next": "Next"
     },
-    "page": {
-      "description": "Transactions Kassiber can't book yet are held out of your tax journals and reports until their cause is fixed. They stay in their wallets, and wallet balances still include them."
-    },
     "summary": {
       "needsYou_one": "{{count}} transaction needs you",
       "needsYou_other": "{{count}} transactions need you",
@@ -504,10 +499,7 @@
       "showWaiting": "Show them"
     },
     "causes": {
-      "title": "What to fix",
       "whatToDo": "What to do",
-      "waiting_one": "{{count}} later transaction waits on this and clears once it is fixed.",
-      "waiting_other": "{{count}} later transactions wait on this and clear once it is fixed.",
       "more_one": "{{count}} more cause is not loaded yet.",
       "more_other": "{{count}} more causes are not loaded yet.",
       "count_one": "{{count}} transaction",
@@ -515,13 +507,17 @@
       "showMore_one": "Show {{count}} more cause",
       "showMore_other": "Show {{count}} more causes",
       "showFewer": "Show fewer causes",
-      "showAllTransactions": "Show all {{count}} transactions",
       "showFewerTransactions": "Show fewer",
-      "moreLater_one": "{{count}} more transaction of this cause is not loaded yet.",
-      "moreLater_other": "{{count}} more transactions of this cause are not loaded yet.",
       "loadMore": "Load more",
       "loadMoreFailed": "More could not be loaded. {{message}}",
-      "pageMore": "More of what needs you is not loaded yet."
+      "pageMore": "More of what needs you is not loaded yet.",
+      "waitingShort_one": "{{count}} more waits on this",
+      "waitingShort_other": "{{count}} more wait on this",
+      "shownOf": "{{shown}} of {{total}} shown",
+      "showMoreRows": "Show more",
+      "showMoreRowsOf": "Show more of “{{cause}}”",
+      "showFewerRowsOf": "Show fewer of “{{cause}}”",
+      "aboutLabel": "About “{{cause}}”"
     },
     "queue": {
       "waitsOn": "Waits on {{root}}",
@@ -545,10 +541,6 @@
       "cancel": "Cancel",
       "confirmTitle": "Unpair these two transactions?",
       "confirm": "Unpair and recalculate",
-      "showAll": "Show all {{count}} pairs",
-      "showFewer": "Show fewer",
-      "moreLater_one": "{{count}} more pair of this cause is not loaded yet.",
-      "moreLater_other": "{{count}} more pairs of this cause are not loaded yet.",
       "andMore_one": "and {{count}} more pair",
       "andMore_other": "and {{count}} more pairs",
       "pick": "Pick the pair from {{outWallet}} to {{inWallet}}",
@@ -589,6 +581,53 @@
       "notACase": "This pair is not one of the pairs to review here. Unpair it from Transfers & Custody.",
       "sheetChanged": "This pair reads differently now than the sheet showed it. Nothing was unpaired; look at it again.",
       "reviewLine": "Reviewed as {{kind}}: {{sent}} sent, {{received}} received"
+    },
+    "section": {
+      "title": "Can't be booked yet"
+    },
+    "accept": {
+      "action_one": "Accept this price",
+      "action_other": "Accept these {{count}} prices",
+      "titlePending": "Accept the approximate prices?",
+      "title_one": "Accept {{count}} approximate price?",
+      "title_other": "Accept {{count}} approximate prices?",
+      "body": "Each transaction keeps the daily price it has, and reports still show it as approximate. If a price changes later, that transaction is held for review again.",
+      "undo": "Each acceptance shows in the transaction's history and can be reverted there.",
+      "confirm_one": "Accept {{count}} price",
+      "confirm_other": "Accept {{count}} prices",
+      "doneTitle_one": "{{count}} approximate price accepted",
+      "doneTitle_other": "{{count}} approximate prices accepted",
+      "confirmPending": "Accept prices",
+      "applying": "Accepting…"
+    },
+    "price": {
+      "enter": "Enter prices",
+      "enterExact": "Enter exact prices",
+      "hint": "In {{currency}}. Empty rows stay as they are.",
+      "hintNoCurrency": "In the book's currency. Empty rows stay as they are.",
+      "unitLabel": "What you enter",
+      "unitValue": "Total value",
+      "unitRate": "Price per {{asset}}",
+      "unitRateGeneric": "Price per unit",
+      "inputLabel": "{{unit}} for {{row}}, in {{currency}}",
+      "preview_one": "Check {{count}} price",
+      "preview_other": "Check {{count}} prices",
+      "invalid_one": "{{count}} price is not a number above zero. Fix or clear it.",
+      "invalid_other": "{{count}} prices are not numbers above zero. Fix or clear them.",
+      "tooMany": "Up to {{count}} prices at a time.",
+      "title_one": "Save {{count}} price?",
+      "title_other": "Save {{count}} prices?",
+      "body": "Each transaction takes the price you entered as exact, and its approximate or missing price is replaced.",
+      "undo": "Each price shows in the transaction's history and can be reverted there.",
+      "confirm_one": "Save {{count}} price",
+      "confirm_other": "Save {{count}} prices",
+      "applying": "Saving…",
+      "doneTitle_one": "{{count}} price saved",
+      "doneTitle_other": "{{count}} prices saved",
+      "inputLabelNoCurrency": "{{unit}} for {{row}}, in the book currency",
+      "listLabel": "Prices to save",
+      "lineValue": "{{value}} {{currency}} total",
+      "lineRate": "{{value}} {{currency}} per {{asset}}"
     }
   },
   "review": {

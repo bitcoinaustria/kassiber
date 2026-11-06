@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   dedupeProviderRows,
-  filterModelsByPrivacy,
   httpModelRunsAssistant,
   modelIdNamesNonChatModel,
   modelPrivacyPosture,
@@ -202,7 +201,7 @@ describe("provider runtime selector state", () => {
   });
 });
 
-describe("model privacy filtering", () => {
+describe("model privacy posture", () => {
   const provider = {
     name: "opencode",
     base_url: "opencode-cli://default",
@@ -219,10 +218,9 @@ describe("model privacy filtering", () => {
     },
   ];
 
-  it("keeps unverified OpenCode sources remote and filters only proven-local rows", () => {
+  it("keeps unverified OpenCode sources remote and trusts explicit posture", () => {
     expect(modelPrivacyPosture(provider, models[0])).toBe("remote");
-    expect(filterModelsByPrivacy(provider, models, true)).toEqual([models[1]]);
-    expect(filterModelsByPrivacy(provider, models, false)).toEqual(models);
+    expect(modelPrivacyPosture(provider, models[1])).toBe("local");
   });
 });
 

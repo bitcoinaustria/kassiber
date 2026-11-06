@@ -63,6 +63,9 @@ from .handlers import (
     _metadata_hooks,
     _report_hooks,
     clear_quarantine,
+    quarantine_groups,
+    resolve_quarantine_with_effect,
+    verify_transaction_against_graph,
     cmd_context_set,
     cmd_context_show,
     cmd_init,
@@ -84,7 +87,9 @@ from .handlers import (
     delete_saved_view_cli,
     delete_transaction_pair,
     delete_transfer_rule,
+    delete_transfer_dismissal,
     dismiss_transfer_candidate,
+    list_transfer_dismissals,
     list_chat_sessions_cli,
     list_saved_views_cli,
     show_chat_session_cli,
@@ -152,6 +157,7 @@ from ..core import source_funds_diagram
 from ..core import source_funds_recipients as core_source_funds_recipients
 from ..core import transaction_formats as core_transaction_formats
 from ..core import wallets as core_wallets
+from ..core import wallet_completeness as core_wallet_completeness
 from ..core import year_handoff as core_year_handoff
 from ..core import cross_check as core_cross_check
 from ..core import export_range as core_export_range
@@ -225,6 +231,13 @@ _AI_PROVIDER_CLEARABLE_FIELDS = (
     "notes",
     "default_reasoning_effort",
     "detected_api_format",
+)
+_AI_AGENT_ACCESS_HELP = (
+    "What the assistant may use with this provider: full (default) offers every "
+    "tool, including custody-gap, lineage and source-acquisition tools, and sends "
+    "unprojected results and attachment cell values; restricted keeps an "
+    "off-device provider to projected results. A provider on this device always "
+    "has full access. Neither mode sends descriptors, xpubs, secrets or paths"
 )
 _AI_OMIT_STORE_FIELD_HELP = (
     "Send this HTTP provider's Chat Completions requests without Kassiber's "
@@ -1179,21 +1192,25 @@ def build_parser() -> argparse.ArgumentParser:
     chat.add_argument(
         "--file",
         metavar="PATH",
+        action="append",
         help=(
-            "Attach a local export (CSV/XLSX/PDF/image) to this chat so the "
-            "assistant can analyze it — use for an exchange with no dedicated "
-            "importer. For a CSV the assistant sees the column headers and row "
-            "counts; cell values stay on this device unless the AI provider also "
-            "runs here. PDFs and photos require a loopback local vision model."
+            "Attach a local file (CSV/TSV/XLSX/PDF/image) to this chat; repeat "
+            "for up to 8 files. An export from an exchange with no dedicated "
+            "importer can be analyzed and imported. A provider with full agent "
+            "access sees the CSV's cell values, the images, and the PDFs' text "
+            "(or page images of a scan); a restricted provider sees the CSV's "
+            "headers and row counts and none of the images or PDFs."
         ),
     )
     chat.add_argument(
         "--file-context",
         metavar="TEXT",
+        action="append",
         help=(
-            "Tell the assistant what the attached file is, e.g. \"2024 export "
-            "from exchange XYZ, custodial account\". Context for the assistant, "
-            "not a claim Kassiber books: values still come from the file."
+            "Tell the assistant what an attached file is, e.g. \"2024 export "
+            "from exchange XYZ, custodial account\"; the nth --file-context "
+            "describes the nth --file. Context for the assistant, not a claim "
+            "Kassiber books: values still come from the file."
         ),
     )
     chat.add_argument("--provider", help="Provider name (defaults to the stored default)")
@@ -1242,11 +1259,23 @@ def build_parser() -> argparse.ArgumentParser:
     chat.add_argument(
         "--tool-profile",
         choices=("core", "scoped", "full"),
-        default="core",
+        default="full",
         help=(
-            "Tool schema to expose to the model: core keeps common accounting "
-            "tools small for local models; scoped adds the specialist tools "
-            "behind the current question; full exposes the complete catalog."
+            "Tool schema to expose to the model: full (default) offers the "
+            "complete catalog; scoped offers the tools behind the current "
+            "question and lets the model load more; core keeps a small common "
+            "set for small local models."
+        ),
+    )
+    chat.add_argument(
+        "--permission-mode",
+        choices=("approval", "auto", "full_access"),
+        default="approval",
+        help=(
+            "Who approves the assistant's changes: approval (default) asks "
+            "before each one; auto approves changes another tool can undo and "
+            "that stay on this machine, and asks for the rest; full_access "
+            "approves everything, network actions such as syncs included."
         ),
     )
     chat.add_argument(
@@ -2173,6 +2202,14 @@ def build_parser() -> argparse.ArgumentParser:
     tx_list.add_argument("--order", choices=("asc", "desc"), default="desc")
     tx_list.add_argument("--limit", type=int, default=100)
 
+    tx_verify = tx_sub.add_parser(
+        "verify",
+        help="Check a transaction against its locally stored chain graph (no network)",
+    )
+    tx_verify.add_argument("--workspace")
+    tx_verify.add_argument("--profile")
+    tx_verify.add_argument("--transaction", required=True, help="Transaction id or txid")
+
     tx_export = tx_sub.add_parser("export")
     tx_export.add_argument("--workspace")
     tx_export.add_argument("--profile")
@@ -2509,20 +2546,40 @@ def build_parser() -> argparse.ArgumentParser:
     q_clear.add_argument("--profile")
     q_clear.add_argument("--transaction", required=True)
 
+    q_groups = qsub.add_parser(
+        "groups",
+        help="Quarantine counts and msat totals by reason and root cause",
+    )
+    q_groups.add_argument("--workspace")
+    q_groups.add_argument("--profile")
+    q_groups.add_argument(
+        "--group-id",
+        help="root:<transaction>, unrooted:<reason> or reason:<reason>; lists that group's members",
+    )
+    q_groups.add_argument("--cursor", help="Opaque cursor from a previous group page")
+    q_groups.add_argument("--limit", type=int)
+
     q_resolve = qsub.add_parser("resolve")
     qrsub = q_resolve.add_subparsers(dest="quarantine_resolve_command", required=True)
 
     q_price = qrsub.add_parser("price-override")
-    q_price.add_argument("--workspace")
-    q_price.add_argument("--profile")
-    q_price.add_argument("--transaction", required=True)
+    q_exclude = qrsub.add_parser("exclude")
+    for q_action in (q_price, q_exclude):
+        q_action.add_argument("--workspace")
+        q_action.add_argument("--profile")
+        q_target = q_action.add_mutually_exclusive_group(required=True)
+        q_target.add_argument("--transaction")
+        q_target.add_argument(
+            "--group-id",
+            help="A root:<transaction> group from `journals quarantine groups`; resolves its root",
+        )
+        q_action.add_argument(
+            "--reprocess",
+            action="store_true",
+            help="Process journals afterwards and report which waiting rows cleared",
+        )
     q_price.add_argument("--fiat-rate")
     q_price.add_argument("--fiat-value")
-
-    q_exclude = qrsub.add_parser("exclude")
-    q_exclude.add_argument("--workspace")
-    q_exclude.add_argument("--profile")
-    q_exclude.add_argument("--transaction", required=True)
 
     loans_p = sub.add_parser("loans", help="Mark transactions as Bitcoin-backed-loan legs")
     loans_sub = loans_p.add_subparsers(dest="loans_command", required=True)
@@ -2851,6 +2908,31 @@ def build_parser() -> argparse.ArgumentParser:
         default=90,
         help="0 = never expire",
     )
+
+    transfers_dismissals = transfers_sub.add_parser("dismissals")
+    transfers_dismissals_sub = transfers_dismissals.add_subparsers(
+        dest="transfers_dismissals_command", required=True
+    )
+    tr_dismissals_list = transfers_dismissals_sub.add_parser("list")
+    tr_dismissals_list.add_argument("--workspace")
+    tr_dismissals_list.add_argument("--profile")
+    tr_dismissals_list.add_argument(
+        "--include-expired",
+        dest="include_expired",
+        action="store_true",
+        help="Also list dismissals whose expiry has passed",
+    )
+    tr_dismissals_list.add_argument("--limit", type=int, default=200)
+    tr_dismissals_delete = transfers_dismissals_sub.add_parser(
+        "delete", help="Undo one dismissal so the pair can be suggested again"
+    )
+    tr_dismissals_delete.add_argument("--workspace")
+    tr_dismissals_delete.add_argument("--profile")
+    tr_dismissals_delete.add_argument(
+        "--id", dest="dismissal_id", help="Dismissal id from `dismissals list`"
+    )
+    tr_dismissals_delete.add_argument("--tx-out", dest="tx_out")
+    tr_dismissals_delete.add_argument("--tx-in", dest="tx_in")
 
     transfers_rules = transfers_sub.add_parser("rules")
     transfers_rules_sub = transfers_rules.add_subparsers(
@@ -3676,6 +3758,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help=_AI_OMIT_STORE_FIELD_HELP,
     )
+    ai_providers_create.add_argument(
+        "--agent-access",
+        choices=("full", "restricted"),
+        default="full",
+        help=_AI_AGENT_ACCESS_HELP,
+    )
     ai_providers_create.add_argument("--api-key", help="Deprecated argv bearer token shim; prefer --api-key-stdin or --api-key-fd")
     add_secret_stdin_options(ai_providers_create, "api-key", label="AI provider API key")
     ai_providers_create.add_argument("--default-model")
@@ -3725,6 +3813,9 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_const",
         const=False,
         help="Send store: false with every Chat Completions request again (the default)",
+    )
+    ai_providers_update.add_argument(
+        "--agent-access", choices=("full", "restricted"), help=_AI_AGENT_ACCESS_HELP
     )
     ai_providers_update.add_argument("--api-key", help="Deprecated argv bearer token shim; prefer --api-key-stdin or --api-key-fd")
     add_secret_stdin_options(ai_providers_update, "api-key", label="AI provider API key")
@@ -4089,7 +4180,15 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             )
     if args.command == "wallets":
         if args.wallets_command == "list":
-            return emit(args, core_wallets.list_wallets(conn, args.workspace, args.profile))
+            _, list_profile = resolve_scope(conn, args.workspace, args.profile)
+            return emit(
+                args,
+                core_wallet_completeness.annotate_wallet_rows(
+                    conn,
+                    list_profile["id"],
+                    core_wallets.list_wallets(conn, args.workspace, args.profile),
+                ),
+            )
         if args.wallets_command == "create":
             _prepare_wallet_secret_args(args)
             return emit(
@@ -4603,6 +4702,13 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 transactions_payload,
                 envelope_meta=transactions_meta,
             )
+        if args.transactions_command == "verify":
+            return emit(
+                args,
+                verify_transaction_against_graph(
+                    conn, args.workspace, args.profile, args.transaction
+                ),
+            )
         if args.transactions_command == "export":
             export_range = None
             # Presence, not truthiness: `--from "" --to ""` (an unset shell
@@ -5062,7 +5168,12 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
     if args.command == "journals":
         if args.journals_command == "process":
             if not args.auto_pair:
-                return emit(args, process_journals(conn, args.workspace, args.profile))
+                processed = process_journals(conn, args.workspace, args.profile)
+                _, journal_profile = resolve_scope(conn, args.workspace, args.profile)
+                # A pair or dismissal made since the last run leaves the
+                # shared review count's cached moves behind otherwise.
+                daemon_freshness.recount_transfer_candidates(conn, str(journal_profile["id"]))
+                return emit(args, processed)
             _, journal_profile = resolve_scope(conn, args.workspace, args.profile)
             return emit(
                 args,
@@ -5112,7 +5223,34 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 return emit(args, show_quarantine(conn, args.workspace, args.profile, args.transaction))
             if args.quarantine_command == "clear":
                 return emit(args, clear_quarantine(conn, args.workspace, args.profile, args.transaction))
+            if args.quarantine_command == "groups":
+                return emit(
+                    args,
+                    quarantine_groups(
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        group_id=args.group_id,
+                        cursor=args.cursor,
+                        limit=args.limit,
+                    ),
+                )
             if args.quarantine_command == "resolve":
+                if args.group_id is not None or args.reprocess:
+                    return emit(
+                        args,
+                        resolve_quarantine_with_effect(
+                            conn,
+                            args.workspace,
+                            args.profile,
+                            action=args.quarantine_resolve_command,
+                            tx_ref=args.transaction,
+                            group_id=args.group_id,
+                            fiat_rate=getattr(args, "fiat_rate", None),
+                            fiat_value=getattr(args, "fiat_value", None),
+                            reprocess=args.reprocess,
+                        ),
+                    )
                 if args.quarantine_resolve_command == "price-override":
                     return emit(
                         args,
@@ -5393,6 +5531,29 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     args.tx_in,
                     reason=getattr(args, "reason", None),
                     expires_in_days=args.expires_in_days,
+                ),
+            )
+        if args.transfers_command == "dismissals":
+            if args.transfers_dismissals_command == "delete":
+                return emit(
+                    args,
+                    delete_transfer_dismissal(
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        dismissal_id=args.dismissal_id,
+                        out_ref=args.tx_out,
+                        in_ref=args.tx_in,
+                    ),
+                )
+            return emit(
+                args,
+                list_transfer_dismissals(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    include_expired=args.include_expired,
+                    limit=args.limit,
                 ),
             )
         if args.transfers_command == "rules":
@@ -6523,6 +6684,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     default_reasoning_effort=args.default_reasoning_effort,
                     api_format=args.api_format,
                     omit_store_field=args.omit_store_field,
+                    agent_access=args.agent_access,
                 )
                 return emit(args, _ai_provider_redacted(conn, created))
             if args.ai_providers_command == "update":
@@ -6542,6 +6704,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     "default_reasoning_effort": args.default_reasoning_effort,
                     "api_format": args.api_format,
                     "omit_store_field": args.omit_store_field,
+                    "agent_access": args.agent_access,
                 }
                 updated = update_db_ai_provider(conn, args.name, updates)
                 return emit(args, _ai_provider_redacted(conn, updated))
@@ -6625,6 +6788,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 1
         return 0
     parser = build_parser()
+    if not raw_argv:
+        from .banner import interactive_banner
+
+        banner = interactive_banner()
+        if banner is not None:
+            print(banner, end="\n\n")
+            parser.print_help()
+            return 0
     if "--machine" in raw_argv:
         # Agents parse stdout: an invalid command line must still be one
         # machine envelope, not argparse usage text on stderr.

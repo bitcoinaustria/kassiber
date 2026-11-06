@@ -582,6 +582,53 @@ def active_dismissed_pairs(
     return _active_dismissals(dismissals, _seconds_or_now(now_iso))
 
 
+def dismissal_is_active(record: Mapping, *, now_iso: Optional[str] = None) -> bool:
+    """Whether one dismissal still suppresses its pair, by the matcher's rule."""
+    return bool(_active_dismissals([record], _seconds_or_now(now_iso)))
+
+
+def candidate_exclusion_counts(
+    rows: Sequence[Mapping],
+    *,
+    pair_records: Iterable[Mapping] = (),
+    dismissals: Iterable[Mapping] = (),
+    booked_move_transaction_ids: Iterable[str] = (),
+    now_iso: Optional[str] = None,
+) -> dict[str, int]:
+    """Why an expected candidate can be absent, counted before any filter.
+
+    ``suggest_swap_candidates`` silently skips three populations, so "zero
+    candidates" alone cannot be interpreted:
+
+    * ``excluded_by_active_pair``: inbound/outbound legs held by an active
+      reviewed pair;
+    * ``excluded_already_journaled``: other legs a current stored custody move
+      already books (deterministic self-transfers);
+    * ``excluded_by_dismissal``: unexpired dismissals whose two legs are
+      otherwise still open. A dismissal suppresses that exact pair only, so
+      this counts pairs, not legs.
+
+    Leg counts exclude rows marked excluded from accounting.
+    """
+    paired_ids = _active_paired_ids(pair_records)
+    booked_ids = {str(item) for item in booked_move_transaction_ids}
+    leg_ids = {
+        str(_record_get(row, "id"))
+        for row in _select_eligible_rows(rows, set())
+    }
+    open_ids = leg_ids - paired_ids - booked_ids
+    dismissed = _active_dismissals(dismissals, _seconds_or_now(now_iso))
+    return {
+        "excluded_by_active_pair": len(leg_ids & paired_ids),
+        "excluded_already_journaled": len((leg_ids - paired_ids) & booked_ids),
+        "excluded_by_dismissal": sum(
+            1
+            for out_id, in_id in dismissed
+            if out_id in open_ids and in_id in open_ids
+        ),
+    }
+
+
 def _select_eligible_rows(rows: Sequence[Mapping], paired_ids: set[str]) -> list[Mapping]:
     eligible: list[Mapping] = []
     for row in rows:

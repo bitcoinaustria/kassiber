@@ -753,6 +753,9 @@ def _apply_foreign_asset(
     if _same_asset(leg_asset, axis_asset):
         return False
     node["asset"] = _short_asset_label(leg_asset)
+    # `asset` may be a shortened display label for a 64-hex Liquid asset id;
+    # the full id travels separately so nothing passes the label on as an id.
+    node["assetId"] = leg_asset
     node["valueSats"] = None
     node["valueBtc"] = None
     node["valueState"] = "other_asset"
@@ -2600,7 +2603,11 @@ def _annotate_graph(
 
     row_id = str(_row_get(row, "id"))
     row_annotations = semantics.get("by_row", {}).get(row_id, [])
-    group_ids = {annotation.get("groupId") for annotation in row_annotations if annotation.get("groupId")}
+    # Sorted, not set order: the annotation order must not follow PYTHONHASHSEED.
+    group_ids = sorted(
+        {annotation.get("groupId") for annotation in row_annotations if annotation.get("groupId")},
+        key=str,
+    )
     for node in graph["outputs"]:
         if node.get("role") == "owned_destination":
             for group_id in group_ids:
