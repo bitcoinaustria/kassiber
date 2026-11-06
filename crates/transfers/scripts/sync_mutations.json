@@ -1,0 +1,235 @@
+[
+ {
+  "id": "dismiss-invalidates-journals",
+  "file": "crates/transfers/src/dismissals.rs",
+  "find": "        // the book's journals are stale after one.\n        super::component_store::invalidate(conn, scope.profile_id)?;\n",
+  "replace": "        // the book's journals are stale after one.\n",
+  "expect_failing": [
+   "dismissal_services_match_python_results_errors_and_rows",
+   "authoring_sequences_match_python_rows_and_errors_byte_for_byte"
+  ],
+  "rule": "A dismissal marks the book's journals stale."
+ },
+ {
+  "id": "dismissal-delete-invalidates-journals",
+  "file": "crates/transfers/src/dismissals.rs",
+  "find": "        .map_err(error)?;\n        super::component_store::invalidate(conn, scope.profile_id)?;\n        Ok(dict([",
+  "replace": "        .map_err(error)?;\n        Ok(dict([",
+  "expect_failing": [
+   "dismissal_services_match_python_results_errors_and_rows"
+  ],
+  "rule": "Undoing a dismissal marks the book's journals stale."
+ },
+ {
+  "id": "dismissal-list-limit-range",
+  "file": "crates/transfers/src/dismissals.rs",
+  "find": ".filter(|n| (1..=DISMISSAL_LIST_MAX).contains(n)),",
+  "replace": ".filter(|n| (0..=DISMISSAL_LIST_MAX).contains(n)),",
+  "expect_failing": [
+   "dismissal_services_match_python_results_errors_and_rows"
+  ],
+  "rule": "The dismissal list limit is an integer from 1 to 500."
+ },
+ {
+  "id": "dismissal-list-hides-expired",
+  "file": "crates/transfers/src/dismissals.rs",
+  "find": "        if !active && !include_expired {",
+  "replace": "        if !active && include_expired {",
+  "expect_failing": [
+   "dismissal_services_match_python_results_errors_and_rows"
+  ],
+  "rule": "Expired dismissals are listed only on request."
+ },
+ {
+  "id": "dismissal-list-permanent-count",
+  "file": "crates/transfers/src/dismissals.rs",
+  "find": "                permanent_count += 1;",
+  "replace": "                permanent_count += 0;",
+  "expect_failing": [
+   "dismissal_services_match_python_results_errors_and_rows"
+  ],
+  "rule": "Active dismissals without an expiry count as permanent."
+ },
+ {
+  "id": "dismissal-list-permanent-flag",
+  "file": "crates/transfers/src/dismissals.rs",
+  "find": "set(&mut item, \"permanent\", Value::Bool(!truthy(&expires_at)));",
+  "replace": "set(&mut item, \"permanent\", Value::Bool(expires_at == Value::Null));",
+  "expect_failing": [
+   "dismissal_services_match_python_results_errors_and_rows"
+  ],
+  "rule": "An empty expiry is permanent too (not expires_at)."
+ },
+ {
+  "id": "dismissal-list-has-more",
+  "file": "crates/transfers/src/dismissals.rs",
+  "find": "    let has_more = dismissals.len() as i64 > limit;",
+  "replace": "    let has_more = dismissals.len() as i64 >= limit;",
+  "expect_failing": [
+   "dismissal_services_match_python_results_errors_and_rows"
+  ],
+  "rule": "has_more reports rows beyond the limit, not at it."
+ },
+ {
+  "id": "dismissal-delete-id-or-legs",
+  "file": "crates/transfers/src/dismissals.rs",
+  "find": "            if truthy(&out_ref) || truthy(&in_ref) {",
+  "replace": "            if truthy(&out_ref) && truthy(&in_ref) {",
+  "expect_failing": [
+   "dismissal_services_match_python_results_errors_and_rows"
+  ],
+  "rule": "An id with any leg is refused."
+ },
+ {
+  "id": "dismissal-delete-needs-both-legs",
+  "file": "crates/transfers/src/dismissals.rs",
+  "find": "            if !truthy(&out_ref) || !truthy(&in_ref) {",
+  "replace": "            if !truthy(&out_ref) && !truthy(&in_ref) {",
+  "expect_failing": [
+   "dismissal_services_match_python_results_errors_and_rows"
+  ],
+  "rule": "Deleting by legs needs both legs."
+ },
+ {
+  "id": "dismissal-expiry-at-now-lifts",
+  "file": "crates/transfers/src/pairing/matcher.rs",
+  "find": "pub fn dismissal_is_active(expires_at: &Value, now: &str) -> bool {\n    !instant(expires_at)\n        .zip(now_seconds(now))\n        .is_some_and(|(expiry, now)| expiry <= now)",
+  "replace": "pub fn dismissal_is_active(expires_at: &Value, now: &str) -> bool {\n    !instant(expires_at)\n        .zip(now_seconds(now))\n        .is_some_and(|(expiry, now)| expiry < now)",
+  "expect_failing": [
+   "dismissal_services_match_python_results_errors_and_rows"
+  ],
+  "rule": "A dismissal expiring exactly now is no longer active."
+ },
+ {
+  "id": "exclusion-dismissal-needs-open-legs",
+  "file": "crates/transfers/src/pairing/matcher.rs",
+  "find": "open.contains(out.as_str()) && open.contains(inbound.as_str())",
+  "replace": "open.contains(out.as_str()) || open.contains(inbound.as_str())",
+  "expect_failing": [
+   "dismissal_exclusion_counts_match_python"
+  ],
+  "rule": "A dismissal counts only while both legs are otherwise open."
+ },
+ {
+  "id": "exclusion-booked-not-open",
+  "file": "crates/transfers/src/pairing/matcher.rs",
+  "find": "        .filter(|id| !booked.contains(*id))",
+  "replace": "        .filter(|_| true)",
+  "expect_failing": [
+   "dismissal_exclusion_counts_match_python"
+  ],
+  "rule": "Legs a stored move books are not open."
+ },
+ {
+  "id": "exclusion-active-pair-legs",
+  "file": "crates/transfers/src/pairing/matcher.rs",
+  "find": "count(legs.iter().filter(|id| paired.contains(**id)).count())",
+  "replace": "count(paired.len())",
+  "expect_failing": [
+   "dismissal_exclusion_counts_match_python"
+  ],
+  "rule": "Paired legs count only when they are eligible rows."
+ },
+ {
+  "id": "exclusion-journaled-excludes-paired",
+  "file": "crates/transfers/src/pairing/matcher.rs",
+  "find": "count(unpaired.iter().filter(|id| booked.contains(**id)).count())",
+  "replace": "count(legs.iter().filter(|id| booked.contains(**id)).count())",
+  "expect_failing": [
+   "dismissal_exclusion_counts_match_python"
+  ],
+  "rule": "Booked legs held by a pair count as paired, not journaled."
+ },
+ {
+  "id": "suggest-reports-exclusions",
+  "file": "crates/transfers/src/pairing/service.rs",
+  "find": "        (\"exclusions\", exclusions),\n",
+  "replace": "",
+  "expect_failing": [
+   "dismissal_services_match_python_results_errors_and_rows"
+  ],
+  "rule": "Suggestions report what the matcher excluded."
+ },
+ {
+  "id": "review-context-reports-exclusions",
+  "file": "crates/transfers/src/review_context.rs",
+  "find": "match value(&suggestion, \"exclusions\") {\n                Value::Null => dict::<&str>([]),\n                exclusions => exclusions,\n            },",
+  "replace": "dict::<&str>([]),",
+  "expect_failing": [
+   "dismissal_services_match_python_results_errors_and_rows"
+  ],
+  "rule": "The review context carries the suggestion's exclusions."
+ },
+ {
+  "id": "planner-issue-remediation",
+  "file": "crates/transfers/src/component_review.rs",
+  "find": "        details.push((\"remediation\", remediation));",
+  "replace": "",
+  "expect_failing": [
+   "component_reviews_match_python_complete_database_rows_and_refusals"
+  ],
+  "rule": "A non-activatable plan carries its issues' remediation."
+ },
+ {
+  "id": "activation-error-remediation",
+  "file": "crates/transfers/src/component_rows.rs",
+  "find": "        details.push((\"remediation\", remediation));",
+  "replace": "",
+  "expect_failing": [
+   "component_reviews_match_python_complete_database_rows_and_refusals",
+   "pair_sequences_match_python_complete_database_rows_and_refusals"
+  ],
+  "rule": "An activation refusal carries its issues' remediation."
+ },
+ {
+  "id": "draft-exists-remediation",
+  "file": "crates/transfers/src/component_review.rs",
+  "find": "                (\"remediation\", existing_draft_remediation(&text(draft, \"id\"))),\n",
+  "replace": "",
+  "expect_failing": [
+   "component_reviews_match_python_complete_database_rows_and_refusals"
+  ],
+  "rule": "A second draft names the existing one to revise."
+ },
+ {
+  "id": "planned-batch-merge-remediation",
+  "file": "crates/transfers/src/component_review.rs",
+  "find": "                        \"merge_planned_components\",",
+  "replace": "                        \"merge_components\",",
+  "expect_failing": [
+   "component_reviews_match_python_complete_database_rows_and_refusals"
+  ],
+  "rule": "One transaction anchored twice in a batch is fixed in the document."
+ },
+ {
+  "id": "plan-conflict-remediation",
+  "file": "crates/transfers/src/component_rows.rs",
+  "find": "        issues.push(remediation::membership_conflict_issue(\n            conflicts,\n            \"a transaction belongs to another active component\",\n        ));\n        validation[\"issues\"]",
+  "replace": "        issues.push(serde_json::json!({\"code\":\"active_transaction_membership_conflict\",\"message\":\"a transaction belongs to another active component\",\"conflicts\":conflicts}));\n        validation[\"issues\"]",
+  "expect_failing": [
+   "component_reviews_match_python_complete_database_rows_and_refusals"
+  ],
+  "rule": "A plan's membership conflict names the conflicting component."
+ },
+ {
+  "id": "activation-conflict-remediation",
+  "file": "crates/transfers/src/component_rows.rs",
+  "find": "            issues.push(remediation::membership_conflict_issue(\n                conflicts,\n                \"a transaction belongs to another active component\",\n            ));",
+  "replace": "            issues.push(serde_json::json!({\"code\":\"active_transaction_membership_conflict\",\"message\":\"a transaction belongs to another active component\",\"conflicts\":conflicts}));",
+  "expect_failing": [
+   "component_reviews_match_python_complete_database_rows_and_refusals",
+   "pair_sequences_match_python_complete_database_rows_and_refusals"
+  ],
+  "rule": "An activation's membership conflict names the conflicting component."
+ },
+ {
+  "id": "planner-reference-not-found",
+  "file": "crates/transfers/src/component_review.rs",
+  "find": "format!(\"Transaction '{}' was not found\", reference(raw)),",
+  "replace": "format!(\"Transaction '{}' not found\", reference(raw)),",
+  "expect_failing": [
+   "planner_transaction_references_match_python_vectors"
+  ],
+  "rule": "The planner's unresolved reference keeps its own not_found wording."
+ }
+]

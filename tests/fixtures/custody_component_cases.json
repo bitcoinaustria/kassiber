@@ -97744,7 +97744,43 @@
                     "transaction_id": "out"
                   }
                 ],
-                "message": "a transaction belongs to another authored active component"
+                "message": "a transaction belongs to another authored active component",
+                "remediation": {
+                  "action": "revise_conflicting_component",
+                  "alternatives": [
+                    {
+                      "action": "supersede",
+                      "arguments_hint": {
+                        "action": "supersede",
+                        "component_id": "other",
+                        "reason": "<why the old interpretation was wrong>"
+                      },
+                      "tool": "ui_transfers_components_plan"
+                    }
+                  ],
+                  "arguments_hint": {
+                    "action": "revise",
+                    "activate": true,
+                    "component_id": "other",
+                    "spec": {
+                      "allocations": "<if N:M>",
+                      "legs": "<corrected legs>"
+                    }
+                  },
+                  "desktop_only": false,
+                  "message": "These transactions already belong to an active custody component. To replace that interpretation, revise the conflicting component (same anchors allowed) with activate=true; to retire it without a replacement, supersede it.",
+                  "target": {
+                    "component_ids": [
+                      "other"
+                    ],
+                    "transaction_ids": [
+                      "in-1",
+                      "in-2",
+                      "out"
+                    ]
+                  },
+                  "tool": "ui_transfers_components_plan"
+                }
               }
             ],
             "owned_destination_msat": 99,
@@ -97985,7 +98021,43 @@
                     "transaction_id": "out"
                   }
                 ],
-                "message": "a transaction belongs to another authored active component"
+                "message": "a transaction belongs to another authored active component",
+                "remediation": {
+                  "action": "revise_conflicting_component",
+                  "alternatives": [
+                    {
+                      "action": "supersede",
+                      "arguments_hint": {
+                        "action": "supersede",
+                        "component_id": "generated-authored-0",
+                        "reason": "<why the old interpretation was wrong>"
+                      },
+                      "tool": "ui_transfers_components_plan"
+                    }
+                  ],
+                  "arguments_hint": {
+                    "action": "revise",
+                    "activate": true,
+                    "component_id": "generated-authored-0",
+                    "spec": {
+                      "allocations": "<if N:M>",
+                      "legs": "<corrected legs>"
+                    }
+                  },
+                  "desktop_only": false,
+                  "message": "These transactions already belong to an active custody component. To replace that interpretation, revise the conflicting component (same anchors allowed) with activate=true; to retire it without a replacement, supersede it.",
+                  "target": {
+                    "component_ids": [
+                      "generated-authored-0"
+                    ],
+                    "transaction_ids": [
+                      "in-1",
+                      "in-2",
+                      "out"
+                    ]
+                  },
+                  "tool": "ui_transfers_components_plan"
+                }
               }
             ],
             "owned_destination_msat": 99,
@@ -105736,7 +105808,43 @@
                     "transaction_id": "out"
                   }
                 ],
-                "message": "a transaction belongs to another authored active component"
+                "message": "a transaction belongs to another authored active component",
+                "remediation": {
+                  "action": "revise_conflicting_component",
+                  "alternatives": [
+                    {
+                      "action": "supersede",
+                      "arguments_hint": {
+                        "action": "supersede",
+                        "component_id": "other",
+                        "reason": "<why the old interpretation was wrong>"
+                      },
+                      "tool": "ui_transfers_components_plan"
+                    }
+                  ],
+                  "arguments_hint": {
+                    "action": "revise",
+                    "activate": true,
+                    "component_id": "other",
+                    "spec": {
+                      "allocations": "<if N:M>",
+                      "legs": "<corrected legs>"
+                    }
+                  },
+                  "desktop_only": false,
+                  "message": "These transactions already belong to an active custody component. To replace that interpretation, revise the conflicting component (same anchors allowed) with activate=true; to retire it without a replacement, supersede it.",
+                  "target": {
+                    "component_ids": [
+                      "other"
+                    ],
+                    "transaction_ids": [
+                      "in-1",
+                      "in-2",
+                      "out"
+                    ]
+                  },
+                  "tool": "ui_transfers_components_plan"
+                }
               }
             ],
             "owned_destination_msat": 99,
@@ -105967,7 +106075,43 @@
                     "transaction_id": "out"
                   }
                 ],
-                "message": "a transaction belongs to another authored active component"
+                "message": "a transaction belongs to another authored active component",
+                "remediation": {
+                  "action": "revise_conflicting_component",
+                  "alternatives": [
+                    {
+                      "action": "supersede",
+                      "arguments_hint": {
+                        "action": "supersede",
+                        "component_id": "generated-authored-0",
+                        "reason": "<why the old interpretation was wrong>"
+                      },
+                      "tool": "ui_transfers_components_plan"
+                    }
+                  ],
+                  "arguments_hint": {
+                    "action": "revise",
+                    "activate": true,
+                    "component_id": "generated-authored-0",
+                    "spec": {
+                      "allocations": "<if N:M>",
+                      "legs": "<corrected legs>"
+                    }
+                  },
+                  "desktop_only": false,
+                  "message": "These transactions already belong to an active custody component. To replace that interpretation, revise the conflicting component (same anchors allowed) with activate=true; to retire it without a replacement, supersede it.",
+                  "target": {
+                    "component_ids": [
+                      "generated-authored-0"
+                    ],
+                    "transaction_ids": [
+                      "in-1",
+                      "in-2",
+                      "out"
+                    ]
+                  },
+                  "tool": "ui_transfers_components_plan"
+                }
               }
             ],
             "owned_destination_msat": 99,
@@ -107216,7 +107360,43 @@
                     "transaction_id": "out"
                   }
                 ],
-                "message": "a transaction belongs to another authored active component"
+                "message": "a transaction belongs to another authored active component",
+                "remediation": {
+                  "action": "revise_conflicting_component",
+                  "alternatives": [
+                    {
+                      "action": "supersede",
+                      "arguments_hint": {
+                        "action": "supersede",
+                        "component_id": "other",
+                        "reason": "<why the old interpretation was wrong>"
+                      },
+                      "tool": "ui_transfers_components_plan"
+                    }
+                  ],
+                  "arguments_hint": {
+                    "action": "revise",
+                    "activate": true,
+                    "component_id": "other",
+                    "spec": {
+                      "allocations": "<if N:M>",
+                      "legs": "<corrected legs>"
+                    }
+                  },
+                  "desktop_only": false,
+                  "message": "These transactions already belong to an active custody component. To replace that interpretation, revise the conflicting component (same anchors allowed) with activate=true; to retire it without a replacement, supersede it.",
+                  "target": {
+                    "component_ids": [
+                      "other"
+                    ],
+                    "transaction_ids": [
+                      "in-1",
+                      "in-2",
+                      "out"
+                    ]
+                  },
+                  "tool": "ui_transfers_components_plan"
+                }
               }
             ],
             "owned_destination_msat": 99,
@@ -107451,7 +107631,43 @@
                     "transaction_id": "out"
                   }
                 ],
-                "message": "a transaction belongs to another authored active component"
+                "message": "a transaction belongs to another authored active component",
+                "remediation": {
+                  "action": "revise_conflicting_component",
+                  "alternatives": [
+                    {
+                      "action": "supersede",
+                      "arguments_hint": {
+                        "action": "supersede",
+                        "component_id": "generated-authored-0",
+                        "reason": "<why the old interpretation was wrong>"
+                      },
+                      "tool": "ui_transfers_components_plan"
+                    }
+                  ],
+                  "arguments_hint": {
+                    "action": "revise",
+                    "activate": true,
+                    "component_id": "generated-authored-0",
+                    "spec": {
+                      "allocations": "<if N:M>",
+                      "legs": "<corrected legs>"
+                    }
+                  },
+                  "desktop_only": false,
+                  "message": "These transactions already belong to an active custody component. To replace that interpretation, revise the conflicting component (same anchors allowed) with activate=true; to retire it without a replacement, supersede it.",
+                  "target": {
+                    "component_ids": [
+                      "generated-authored-0"
+                    ],
+                    "transaction_ids": [
+                      "in-1",
+                      "in-2",
+                      "out"
+                    ]
+                  },
+                  "tool": "ui_transfers_components_plan"
+                }
               }
             ],
             "owned_destination_msat": 99,
@@ -108696,7 +108912,43 @@
                     "transaction_id": "out"
                   }
                 ],
-                "message": "a transaction belongs to another authored active component"
+                "message": "a transaction belongs to another authored active component",
+                "remediation": {
+                  "action": "revise_conflicting_component",
+                  "alternatives": [
+                    {
+                      "action": "supersede",
+                      "arguments_hint": {
+                        "action": "supersede",
+                        "component_id": "generated-authored-0",
+                        "reason": "<why the old interpretation was wrong>"
+                      },
+                      "tool": "ui_transfers_components_plan"
+                    }
+                  ],
+                  "arguments_hint": {
+                    "action": "revise",
+                    "activate": true,
+                    "component_id": "generated-authored-0",
+                    "spec": {
+                      "allocations": "<if N:M>",
+                      "legs": "<corrected legs>"
+                    }
+                  },
+                  "desktop_only": false,
+                  "message": "These transactions already belong to an active custody component. To replace that interpretation, revise the conflicting component (same anchors allowed) with activate=true; to retire it without a replacement, supersede it.",
+                  "target": {
+                    "component_ids": [
+                      "generated-authored-0"
+                    ],
+                    "transaction_ids": [
+                      "in-1",
+                      "in-2",
+                      "out"
+                    ]
+                  },
+                  "tool": "ui_transfers_components_plan"
+                }
               }
             ],
             "owned_destination_msat": 99,
@@ -108927,7 +109179,43 @@
                     "transaction_id": "out"
                   }
                 ],
-                "message": "a transaction belongs to another authored active component"
+                "message": "a transaction belongs to another authored active component",
+                "remediation": {
+                  "action": "revise_conflicting_component",
+                  "alternatives": [
+                    {
+                      "action": "supersede",
+                      "arguments_hint": {
+                        "action": "supersede",
+                        "component_id": "aaa-other",
+                        "reason": "<why the old interpretation was wrong>"
+                      },
+                      "tool": "ui_transfers_components_plan"
+                    }
+                  ],
+                  "arguments_hint": {
+                    "action": "revise",
+                    "activate": true,
+                    "component_id": "aaa-other",
+                    "spec": {
+                      "allocations": "<if N:M>",
+                      "legs": "<corrected legs>"
+                    }
+                  },
+                  "desktop_only": false,
+                  "message": "These transactions already belong to an active custody component. To replace that interpretation, revise the conflicting component (same anchors allowed) with activate=true; to retire it without a replacement, supersede it.",
+                  "target": {
+                    "component_ids": [
+                      "aaa-other"
+                    ],
+                    "transaction_ids": [
+                      "in-1",
+                      "in-2",
+                      "out"
+                    ]
+                  },
+                  "tool": "ui_transfers_components_plan"
+                }
               }
             ],
             "owned_destination_msat": 99,
@@ -132840,7 +133128,44 @@
                     "transaction_id": "out"
                   }
                 ],
-                "message": "a transaction belongs to another authored active component"
+                "message": "a transaction belongs to another authored active component",
+                "remediation": {
+                  "action": "revise_conflicting_component",
+                  "alternatives": [
+                    {
+                      "action": "supersede",
+                      "arguments_hint": {
+                        "action": "supersede",
+                        "component_id": "aaa-revision",
+                        "reason": "<why the old interpretation was wrong>"
+                      },
+                      "tool": "ui_transfers_components_plan"
+                    }
+                  ],
+                  "arguments_hint": {
+                    "action": "revise",
+                    "activate": true,
+                    "component_id": "aaa-revision",
+                    "spec": {
+                      "allocations": "<if N:M>",
+                      "legs": "<corrected legs>"
+                    }
+                  },
+                  "desktop_only": false,
+                  "message": "These transactions already belong to an active custody component. To replace that interpretation, revise the conflicting component (same anchors allowed) with activate=true; to retire it without a replacement, supersede it. Several components conflict: supersede all but one, then revise the remaining one to the full corrected interpretation.",
+                  "target": {
+                    "component_ids": [
+                      "aaa-revision",
+                      "other"
+                    ],
+                    "transaction_ids": [
+                      "in-1",
+                      "in-2",
+                      "out"
+                    ]
+                  },
+                  "tool": "ui_transfers_components_plan"
+                }
               }
             ],
             "owned_destination_msat": 99,
@@ -133097,7 +133422,44 @@
                     "transaction_id": "out"
                   }
                 ],
-                "message": "a transaction belongs to another authored active component"
+                "message": "a transaction belongs to another authored active component",
+                "remediation": {
+                  "action": "revise_conflicting_component",
+                  "alternatives": [
+                    {
+                      "action": "supersede",
+                      "arguments_hint": {
+                        "action": "supersede",
+                        "component_id": "generated-authored-0",
+                        "reason": "<why the old interpretation was wrong>"
+                      },
+                      "tool": "ui_transfers_components_plan"
+                    }
+                  ],
+                  "arguments_hint": {
+                    "action": "revise",
+                    "activate": true,
+                    "component_id": "generated-authored-0",
+                    "spec": {
+                      "allocations": "<if N:M>",
+                      "legs": "<corrected legs>"
+                    }
+                  },
+                  "desktop_only": false,
+                  "message": "These transactions already belong to an active custody component. To replace that interpretation, revise the conflicting component (same anchors allowed) with activate=true; to retire it without a replacement, supersede it. Several components conflict: supersede all but one, then revise the remaining one to the full corrected interpretation.",
+                  "target": {
+                    "component_ids": [
+                      "generated-authored-0",
+                      "other"
+                    ],
+                    "transaction_ids": [
+                      "in-1",
+                      "in-2",
+                      "out"
+                    ]
+                  },
+                  "tool": "ui_transfers_components_plan"
+                }
               }
             ],
             "owned_destination_msat": 99,
@@ -133354,7 +133716,44 @@
                     "transaction_id": "out"
                   }
                 ],
-                "message": "a transaction belongs to another authored active component"
+                "message": "a transaction belongs to another authored active component",
+                "remediation": {
+                  "action": "revise_conflicting_component",
+                  "alternatives": [
+                    {
+                      "action": "supersede",
+                      "arguments_hint": {
+                        "action": "supersede",
+                        "component_id": "aaa-revision",
+                        "reason": "<why the old interpretation was wrong>"
+                      },
+                      "tool": "ui_transfers_components_plan"
+                    }
+                  ],
+                  "arguments_hint": {
+                    "action": "revise",
+                    "activate": true,
+                    "component_id": "aaa-revision",
+                    "spec": {
+                      "allocations": "<if N:M>",
+                      "legs": "<corrected legs>"
+                    }
+                  },
+                  "desktop_only": false,
+                  "message": "These transactions already belong to an active custody component. To replace that interpretation, revise the conflicting component (same anchors allowed) with activate=true; to retire it without a replacement, supersede it. Several components conflict: supersede all but one, then revise the remaining one to the full corrected interpretation.",
+                  "target": {
+                    "component_ids": [
+                      "aaa-revision",
+                      "generated-authored-0"
+                    ],
+                    "transaction_ids": [
+                      "in-1",
+                      "in-2",
+                      "out"
+                    ]
+                  },
+                  "tool": "ui_transfers_components_plan"
+                }
               }
             ],
             "owned_destination_msat": 99,

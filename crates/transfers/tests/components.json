@@ -13003,7 +13003,32 @@
             "message": "Component lineage already has a draft revision",
             "hint": null,
             "details": {
-              "draft_component_id": "0aae4f91-1cde-5b1f-9175-03101805886d"
+              "draft_component_id": "0aae4f91-1cde-5b1f-9175-03101805886d",
+              "remediation": {
+                "action": "revise_existing_draft",
+                "target": {
+                  "component_ids": [
+                    "0aae4f91-1cde-5b1f-9175-03101805886d"
+                  ]
+                },
+                "tool": "ui_transfers_components_plan",
+                "arguments_hint": {
+                  "action": "revise",
+                  "component_id": "0aae4f91-1cde-5b1f-9175-03101805886d"
+                },
+                "desktop_only": false,
+                "message": "A lineage holds one draft at a time. Revise or activate that draft, or supersede it before revising this revision.",
+                "alternatives": [
+                  {
+                    "action": "supersede",
+                    "tool": "ui_transfers_components_plan",
+                    "arguments_hint": {
+                      "action": "supersede",
+                      "component_id": "0aae4f91-1cde-5b1f-9175-03101805886d"
+                    }
+                  }
+                ]
+              }
             }
           },
           "rows": {
@@ -15777,7 +15802,32 @@
             "message": "Component lineage already has a draft revision",
             "hint": null,
             "details": {
-              "draft_component_id": "5e4b6ab2-9142-5554-b675-4bb7bbb5e133"
+              "draft_component_id": "5e4b6ab2-9142-5554-b675-4bb7bbb5e133",
+              "remediation": {
+                "action": "revise_existing_draft",
+                "target": {
+                  "component_ids": [
+                    "5e4b6ab2-9142-5554-b675-4bb7bbb5e133"
+                  ]
+                },
+                "tool": "ui_transfers_components_plan",
+                "arguments_hint": {
+                  "action": "revise",
+                  "component_id": "5e4b6ab2-9142-5554-b675-4bb7bbb5e133"
+                },
+                "desktop_only": false,
+                "message": "A lineage holds one draft at a time. Revise or activate that draft, or supersede it before revising this revision.",
+                "alternatives": [
+                  {
+                    "action": "supersede",
+                    "tool": "ui_transfers_components_plan",
+                    "arguments_hint": {
+                      "action": "supersede",
+                      "component_id": "5e4b6ab2-9142-5554-b675-4bb7bbb5e133"
+                    }
+                  }
+                ]
+              }
             }
           },
           "rows": {
@@ -19116,9 +19166,77 @@
                       "transaction_id": "e",
                       "component_id": "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3"
                     }
-                  ]
+                  ],
+                  "remediation": {
+                    "action": "revise_conflicting_component",
+                    "target": {
+                      "component_ids": [
+                        "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3"
+                      ],
+                      "transaction_ids": [
+                        "e"
+                      ]
+                    },
+                    "tool": "ui_transfers_components_plan",
+                    "arguments_hint": {
+                      "action": "revise",
+                      "component_id": "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3",
+                      "activate": true,
+                      "spec": {
+                        "legs": "<corrected legs>",
+                        "allocations": "<if N:M>"
+                      }
+                    },
+                    "desktop_only": false,
+                    "message": "These transactions already belong to an active custody component. To replace that interpretation, revise the conflicting component (same anchors allowed) with activate=true; to retire it without a replacement, supersede it.",
+                    "alternatives": [
+                      {
+                        "action": "supersede",
+                        "tool": "ui_transfers_components_plan",
+                        "arguments_hint": {
+                          "action": "supersede",
+                          "component_id": "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3",
+                          "reason": "<why the old interpretation was wrong>"
+                        }
+                      }
+                    ]
+                  }
                 }
-              ]
+              ],
+              "remediation": {
+                "action": "revise_conflicting_component",
+                "target": {
+                  "component_ids": [
+                    "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3"
+                  ],
+                  "transaction_ids": [
+                    "e"
+                  ]
+                },
+                "tool": "ui_transfers_components_plan",
+                "arguments_hint": {
+                  "action": "revise",
+                  "component_id": "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3",
+                  "activate": true,
+                  "spec": {
+                    "legs": "<corrected legs>",
+                    "allocations": "<if N:M>"
+                  }
+                },
+                "desktop_only": false,
+                "message": "These transactions already belong to an active custody component. To replace that interpretation, revise the conflicting component (same anchors allowed) with activate=true; to retire it without a replacement, supersede it.",
+                "alternatives": [
+                  {
+                    "action": "supersede",
+                    "tool": "ui_transfers_components_plan",
+                    "arguments_hint": {
+                      "action": "supersede",
+                      "component_id": "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3",
+                      "reason": "<why the old interpretation was wrong>"
+                    }
+                  }
+                ]
+              }
             }
           },
           "rows": {
@@ -19200,9 +19318,77 @@
                       "transaction_id": "e",
                       "component_id": "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3"
                     }
-                  ]
+                  ],
+                  "remediation": {
+                    "action": "revise_conflicting_component",
+                    "target": {
+                      "component_ids": [
+                        "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3"
+                      ],
+                      "transaction_ids": [
+                        "e"
+                      ]
+                    },
+                    "tool": "ui_transfers_components_plan",
+                    "arguments_hint": {
+                      "action": "revise",
+                      "component_id": "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3",
+                      "activate": true,
+                      "spec": {
+                        "legs": "<corrected legs>",
+                        "allocations": "<if N:M>"
+                      }
+                    },
+                    "desktop_only": false,
+                    "message": "These transactions already belong to an active custody component. To replace that interpretation, revise the conflicting component (same anchors allowed) with activate=true; to retire it without a replacement, supersede it.",
+                    "alternatives": [
+                      {
+                        "action": "supersede",
+                        "tool": "ui_transfers_components_plan",
+                        "arguments_hint": {
+                          "action": "supersede",
+                          "component_id": "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3",
+                          "reason": "<why the old interpretation was wrong>"
+                        }
+                      }
+                    ]
+                  }
                 }
-              ]
+              ],
+              "remediation": {
+                "action": "revise_conflicting_component",
+                "target": {
+                  "component_ids": [
+                    "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3"
+                  ],
+                  "transaction_ids": [
+                    "e"
+                  ]
+                },
+                "tool": "ui_transfers_components_plan",
+                "arguments_hint": {
+                  "action": "revise",
+                  "component_id": "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3",
+                  "activate": true,
+                  "spec": {
+                    "legs": "<corrected legs>",
+                    "allocations": "<if N:M>"
+                  }
+                },
+                "desktop_only": false,
+                "message": "These transactions already belong to an active custody component. To replace that interpretation, revise the conflicting component (same anchors allowed) with activate=true; to retire it without a replacement, supersede it.",
+                "alternatives": [
+                  {
+                    "action": "supersede",
+                    "tool": "ui_transfers_components_plan",
+                    "arguments_hint": {
+                      "action": "supersede",
+                      "component_id": "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3",
+                      "reason": "<why the old interpretation was wrong>"
+                    }
+                  }
+                ]
+              }
             }
           },
           "rows": {
@@ -19276,9 +19462,41 @@
                   "component_ids": [
                     "23fd74cc-a710-53ac-8d3b-c1da43fbafc3",
                     "dfbfd541-7121-55da-99af-5532ff390a12"
-                  ]
+                  ],
+                  "remediation": {
+                    "action": "merge_planned_components",
+                    "target": {
+                      "transaction_ids": [
+                        "d"
+                      ],
+                      "planned_component_ids": [
+                        "23fd74cc-a710-53ac-8d3b-c1da43fbafc3",
+                        "dfbfd541-7121-55da-99af-5532ff390a12"
+                      ]
+                    },
+                    "tool": "ui_transfers_components_plan",
+                    "arguments_hint": {},
+                    "desktop_only": false,
+                    "message": "One transaction is anchored by several components of this batch. Put all of its legs in one component and plan the batch again."
+                  }
                 }
-              ]
+              ],
+              "remediation": {
+                "action": "merge_planned_components",
+                "target": {
+                  "transaction_ids": [
+                    "d"
+                  ],
+                  "planned_component_ids": [
+                    "23fd74cc-a710-53ac-8d3b-c1da43fbafc3",
+                    "dfbfd541-7121-55da-99af-5532ff390a12"
+                  ]
+                },
+                "tool": "ui_transfers_components_plan",
+                "arguments_hint": {},
+                "desktop_only": false,
+                "message": "One transaction is anchored by several components of this batch. Put all of its legs in one component and plan the batch again."
+              }
             }
           },
           "rows": {
@@ -19350,9 +19568,41 @@
                   "component_ids": [
                     "23fd74cc-a710-53ac-8d3b-c1da43fbafc3",
                     "dfbfd541-7121-55da-99af-5532ff390a12"
-                  ]
+                  ],
+                  "remediation": {
+                    "action": "merge_planned_components",
+                    "target": {
+                      "transaction_ids": [
+                        "d"
+                      ],
+                      "planned_component_ids": [
+                        "23fd74cc-a710-53ac-8d3b-c1da43fbafc3",
+                        "dfbfd541-7121-55da-99af-5532ff390a12"
+                      ]
+                    },
+                    "tool": "ui_transfers_components_plan",
+                    "arguments_hint": {},
+                    "desktop_only": false,
+                    "message": "One transaction is anchored by several components of this batch. Put all of its legs in one component and plan the batch again."
+                  }
                 }
-              ]
+              ],
+              "remediation": {
+                "action": "merge_planned_components",
+                "target": {
+                  "transaction_ids": [
+                    "d"
+                  ],
+                  "planned_component_ids": [
+                    "23fd74cc-a710-53ac-8d3b-c1da43fbafc3",
+                    "dfbfd541-7121-55da-99af-5532ff390a12"
+                  ]
+                },
+                "tool": "ui_transfers_components_plan",
+                "arguments_hint": {},
+                "desktop_only": false,
+                "message": "One transaction is anchored by several components of this batch. Put all of its legs in one component and plan the batch again."
+              }
             }
           },
           "rows": {
@@ -20545,9 +20795,77 @@
                       "transaction_id": "e",
                       "component_id": "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3"
                     }
-                  ]
+                  ],
+                  "remediation": {
+                    "action": "revise_conflicting_component",
+                    "target": {
+                      "component_ids": [
+                        "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3"
+                      ],
+                      "transaction_ids": [
+                        "e"
+                      ]
+                    },
+                    "tool": "ui_transfers_components_plan",
+                    "arguments_hint": {
+                      "action": "revise",
+                      "component_id": "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3",
+                      "activate": true,
+                      "spec": {
+                        "legs": "<corrected legs>",
+                        "allocations": "<if N:M>"
+                      }
+                    },
+                    "desktop_only": false,
+                    "message": "These transactions already belong to an active custody component. To replace that interpretation, revise the conflicting component (same anchors allowed) with activate=true; to retire it without a replacement, supersede it.",
+                    "alternatives": [
+                      {
+                        "action": "supersede",
+                        "tool": "ui_transfers_components_plan",
+                        "arguments_hint": {
+                          "action": "supersede",
+                          "component_id": "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3",
+                          "reason": "<why the old interpretation was wrong>"
+                        }
+                      }
+                    ]
+                  }
                 }
-              ]
+              ],
+              "remediation": {
+                "action": "revise_conflicting_component",
+                "target": {
+                  "component_ids": [
+                    "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3"
+                  ],
+                  "transaction_ids": [
+                    "e"
+                  ]
+                },
+                "tool": "ui_transfers_components_plan",
+                "arguments_hint": {
+                  "action": "revise",
+                  "component_id": "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3",
+                  "activate": true,
+                  "spec": {
+                    "legs": "<corrected legs>",
+                    "allocations": "<if N:M>"
+                  }
+                },
+                "desktop_only": false,
+                "message": "These transactions already belong to an active custody component. To replace that interpretation, revise the conflicting component (same anchors allowed) with activate=true; to retire it without a replacement, supersede it.",
+                "alternatives": [
+                  {
+                    "action": "supersede",
+                    "tool": "ui_transfers_components_plan",
+                    "arguments_hint": {
+                      "action": "supersede",
+                      "component_id": "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3",
+                      "reason": "<why the old interpretation was wrong>"
+                    }
+                  }
+                ]
+              }
             }
           },
           "rows": {
@@ -20606,9 +20924,77 @@
                       "transaction_id": "e",
                       "component_id": "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3"
                     }
-                  ]
+                  ],
+                  "remediation": {
+                    "action": "revise_conflicting_component",
+                    "target": {
+                      "component_ids": [
+                        "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3"
+                      ],
+                      "transaction_ids": [
+                        "e"
+                      ]
+                    },
+                    "tool": "ui_transfers_components_plan",
+                    "arguments_hint": {
+                      "action": "revise",
+                      "component_id": "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3",
+                      "activate": true,
+                      "spec": {
+                        "legs": "<corrected legs>",
+                        "allocations": "<if N:M>"
+                      }
+                    },
+                    "desktop_only": false,
+                    "message": "These transactions already belong to an active custody component. To replace that interpretation, revise the conflicting component (same anchors allowed) with activate=true; to retire it without a replacement, supersede it.",
+                    "alternatives": [
+                      {
+                        "action": "supersede",
+                        "tool": "ui_transfers_components_plan",
+                        "arguments_hint": {
+                          "action": "supersede",
+                          "component_id": "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3",
+                          "reason": "<why the old interpretation was wrong>"
+                        }
+                      }
+                    ]
+                  }
                 }
-              ]
+              ],
+              "remediation": {
+                "action": "revise_conflicting_component",
+                "target": {
+                  "component_ids": [
+                    "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3"
+                  ],
+                  "transaction_ids": [
+                    "e"
+                  ]
+                },
+                "tool": "ui_transfers_components_plan",
+                "arguments_hint": {
+                  "action": "revise",
+                  "component_id": "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3",
+                  "activate": true,
+                  "spec": {
+                    "legs": "<corrected legs>",
+                    "allocations": "<if N:M>"
+                  }
+                },
+                "desktop_only": false,
+                "message": "These transactions already belong to an active custody component. To replace that interpretation, revise the conflicting component (same anchors allowed) with activate=true; to retire it without a replacement, supersede it.",
+                "alternatives": [
+                  {
+                    "action": "supersede",
+                    "tool": "ui_transfers_components_plan",
+                    "arguments_hint": {
+                      "action": "supersede",
+                      "component_id": "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3",
+                      "reason": "<why the old interpretation was wrong>"
+                    }
+                  }
+                ]
+              }
             }
           },
           "rows": {
@@ -20739,7 +21125,41 @@
                           "transaction_id": "e",
                           "component_id": "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3"
                         }
-                      ]
+                      ],
+                      "remediation": {
+                        "action": "revise_conflicting_component",
+                        "target": {
+                          "component_ids": [
+                            "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3"
+                          ],
+                          "transaction_ids": [
+                            "e"
+                          ]
+                        },
+                        "tool": "ui_transfers_components_plan",
+                        "arguments_hint": {
+                          "action": "revise",
+                          "component_id": "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3",
+                          "activate": true,
+                          "spec": {
+                            "legs": "<corrected legs>",
+                            "allocations": "<if N:M>"
+                          }
+                        },
+                        "desktop_only": false,
+                        "message": "These transactions already belong to an active custody component. To replace that interpretation, revise the conflicting component (same anchors allowed) with activate=true; to retire it without a replacement, supersede it.",
+                        "alternatives": [
+                          {
+                            "action": "supersede",
+                            "tool": "ui_transfers_components_plan",
+                            "arguments_hint": {
+                              "action": "supersede",
+                              "component_id": "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3",
+                              "reason": "<why the old interpretation was wrong>"
+                            }
+                          }
+                        ]
+                      }
                     }
                   ],
                   "suspense_msat": 0,
@@ -21060,7 +21480,41 @@
                         "transaction_id": "e",
                         "component_id": "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3"
                       }
-                    ]
+                    ],
+                    "remediation": {
+                      "action": "revise_conflicting_component",
+                      "target": {
+                        "component_ids": [
+                          "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3"
+                        ],
+                        "transaction_ids": [
+                          "e"
+                        ]
+                      },
+                      "tool": "ui_transfers_components_plan",
+                      "arguments_hint": {
+                        "action": "revise",
+                        "component_id": "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3",
+                        "activate": true,
+                        "spec": {
+                          "legs": "<corrected legs>",
+                          "allocations": "<if N:M>"
+                        }
+                      },
+                      "desktop_only": false,
+                      "message": "These transactions already belong to an active custody component. To replace that interpretation, revise the conflicting component (same anchors allowed) with activate=true; to retire it without a replacement, supersede it.",
+                      "alternatives": [
+                        {
+                          "action": "supersede",
+                          "tool": "ui_transfers_components_plan",
+                          "arguments_hint": {
+                            "action": "supersede",
+                            "component_id": "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3",
+                            "reason": "<why the old interpretation was wrong>"
+                          }
+                        }
+                      ]
+                    }
                   }
                 ],
                 "suspense_msat": 0,
@@ -21122,6 +21576,40 @@
                     }
                   ]
                 }
+              },
+              "remediation": {
+                "action": "revise_conflicting_component",
+                "target": {
+                  "component_ids": [
+                    "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3"
+                  ],
+                  "transaction_ids": [
+                    "e"
+                  ]
+                },
+                "tool": "ui_transfers_components_plan",
+                "arguments_hint": {
+                  "action": "revise",
+                  "component_id": "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3",
+                  "activate": true,
+                  "spec": {
+                    "legs": "<corrected legs>",
+                    "allocations": "<if N:M>"
+                  }
+                },
+                "desktop_only": false,
+                "message": "These transactions already belong to an active custody component. To replace that interpretation, revise the conflicting component (same anchors allowed) with activate=true; to retire it without a replacement, supersede it.",
+                "alternatives": [
+                  {
+                    "action": "supersede",
+                    "tool": "ui_transfers_components_plan",
+                    "arguments_hint": {
+                      "action": "supersede",
+                      "component_id": "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3",
+                      "reason": "<why the old interpretation was wrong>"
+                    }
+                  }
+                ]
               }
             }
           },
@@ -21169,7 +21657,41 @@
                         "transaction_id": "e",
                         "component_id": "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3"
                       }
-                    ]
+                    ],
+                    "remediation": {
+                      "action": "revise_conflicting_component",
+                      "target": {
+                        "component_ids": [
+                          "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3"
+                        ],
+                        "transaction_ids": [
+                          "e"
+                        ]
+                      },
+                      "tool": "ui_transfers_components_plan",
+                      "arguments_hint": {
+                        "action": "revise",
+                        "component_id": "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3",
+                        "activate": true,
+                        "spec": {
+                          "legs": "<corrected legs>",
+                          "allocations": "<if N:M>"
+                        }
+                      },
+                      "desktop_only": false,
+                      "message": "These transactions already belong to an active custody component. To replace that interpretation, revise the conflicting component (same anchors allowed) with activate=true; to retire it without a replacement, supersede it.",
+                      "alternatives": [
+                        {
+                          "action": "supersede",
+                          "tool": "ui_transfers_components_plan",
+                          "arguments_hint": {
+                            "action": "supersede",
+                            "component_id": "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3",
+                            "reason": "<why the old interpretation was wrong>"
+                          }
+                        }
+                      ]
+                    }
                   }
                 ],
                 "suspense_msat": 0,
@@ -21231,6 +21753,40 @@
                     }
                   ]
                 }
+              },
+              "remediation": {
+                "action": "revise_conflicting_component",
+                "target": {
+                  "component_ids": [
+                    "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3"
+                  ],
+                  "transaction_ids": [
+                    "e"
+                  ]
+                },
+                "tool": "ui_transfers_components_plan",
+                "arguments_hint": {
+                  "action": "revise",
+                  "component_id": "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3",
+                  "activate": true,
+                  "spec": {
+                    "legs": "<corrected legs>",
+                    "allocations": "<if N:M>"
+                  }
+                },
+                "desktop_only": false,
+                "message": "These transactions already belong to an active custody component. To replace that interpretation, revise the conflicting component (same anchors allowed) with activate=true; to retire it without a replacement, supersede it.",
+                "alternatives": [
+                  {
+                    "action": "supersede",
+                    "tool": "ui_transfers_components_plan",
+                    "arguments_hint": {
+                      "action": "supersede",
+                      "component_id": "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3",
+                      "reason": "<why the old interpretation was wrong>"
+                    }
+                  }
+                ]
               }
             }
           },
@@ -25582,7 +26138,42 @@
                         "transaction_id": "e",
                         "component_id": "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3"
                       }
-                    ]
+                    ],
+                    "remediation": {
+                      "action": "revise_conflicting_component",
+                      "target": {
+                        "component_ids": [
+                          "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3"
+                        ],
+                        "transaction_ids": [
+                          "d",
+                          "e"
+                        ]
+                      },
+                      "tool": "ui_transfers_components_plan",
+                      "arguments_hint": {
+                        "action": "revise",
+                        "component_id": "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3",
+                        "activate": true,
+                        "spec": {
+                          "legs": "<corrected legs>",
+                          "allocations": "<if N:M>"
+                        }
+                      },
+                      "desktop_only": false,
+                      "message": "These transactions already belong to an active custody component. To replace that interpretation, revise the conflicting component (same anchors allowed) with activate=true; to retire it without a replacement, supersede it.",
+                      "alternatives": [
+                        {
+                          "action": "supersede",
+                          "tool": "ui_transfers_components_plan",
+                          "arguments_hint": {
+                            "action": "supersede",
+                            "component_id": "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3",
+                            "reason": "<why the old interpretation was wrong>"
+                          }
+                        }
+                      ]
+                    }
                   }
                 ],
                 "suspense_msat": 0,
@@ -42170,7 +42761,32 @@
             "message": "Component lineage already has a draft revision",
             "hint": null,
             "details": {
-              "draft_component_id": "4fd09001-6c17-575c-897f-ee6c5228e405"
+              "draft_component_id": "4fd09001-6c17-575c-897f-ee6c5228e405",
+              "remediation": {
+                "action": "revise_existing_draft",
+                "target": {
+                  "component_ids": [
+                    "4fd09001-6c17-575c-897f-ee6c5228e405"
+                  ]
+                },
+                "tool": "ui_transfers_components_plan",
+                "arguments_hint": {
+                  "action": "revise",
+                  "component_id": "4fd09001-6c17-575c-897f-ee6c5228e405"
+                },
+                "desktop_only": false,
+                "message": "A lineage holds one draft at a time. Revise or activate that draft, or supersede it before revising this revision.",
+                "alternatives": [
+                  {
+                    "action": "supersede",
+                    "tool": "ui_transfers_components_plan",
+                    "arguments_hint": {
+                      "action": "supersede",
+                      "component_id": "4fd09001-6c17-575c-897f-ee6c5228e405"
+                    }
+                  }
+                ]
+              }
             }
           },
           "rows": {
@@ -42246,7 +42862,32 @@
             "message": "Component lineage already has a draft revision",
             "hint": null,
             "details": {
-              "draft_component_id": "4fd09001-6c17-575c-897f-ee6c5228e405"
+              "draft_component_id": "4fd09001-6c17-575c-897f-ee6c5228e405",
+              "remediation": {
+                "action": "revise_existing_draft",
+                "target": {
+                  "component_ids": [
+                    "4fd09001-6c17-575c-897f-ee6c5228e405"
+                  ]
+                },
+                "tool": "ui_transfers_components_plan",
+                "arguments_hint": {
+                  "action": "revise",
+                  "component_id": "4fd09001-6c17-575c-897f-ee6c5228e405"
+                },
+                "desktop_only": false,
+                "message": "A lineage holds one draft at a time. Revise or activate that draft, or supersede it before revising this revision.",
+                "alternatives": [
+                  {
+                    "action": "supersede",
+                    "tool": "ui_transfers_components_plan",
+                    "arguments_hint": {
+                      "action": "supersede",
+                      "component_id": "4fd09001-6c17-575c-897f-ee6c5228e405"
+                    }
+                  }
+                ]
+              }
             }
           },
           "rows": {
@@ -42282,7 +42923,32 @@
             "message": "Component lineage already has a draft revision",
             "hint": null,
             "details": {
-              "draft_component_id": "4fd09001-6c17-575c-897f-ee6c5228e405"
+              "draft_component_id": "4fd09001-6c17-575c-897f-ee6c5228e405",
+              "remediation": {
+                "action": "revise_existing_draft",
+                "target": {
+                  "component_ids": [
+                    "4fd09001-6c17-575c-897f-ee6c5228e405"
+                  ]
+                },
+                "tool": "ui_transfers_components_plan",
+                "arguments_hint": {
+                  "action": "revise",
+                  "component_id": "4fd09001-6c17-575c-897f-ee6c5228e405"
+                },
+                "desktop_only": false,
+                "message": "A lineage holds one draft at a time. Revise or activate that draft, or supersede it before revising this revision.",
+                "alternatives": [
+                  {
+                    "action": "supersede",
+                    "tool": "ui_transfers_components_plan",
+                    "arguments_hint": {
+                      "action": "supersede",
+                      "component_id": "4fd09001-6c17-575c-897f-ee6c5228e405"
+                    }
+                  }
+                ]
+              }
             }
           },
           "rows": {
@@ -43085,7 +43751,32 @@
             "message": "Component lineage already has a draft revision",
             "hint": null,
             "details": {
-              "draft_component_id": "547cfcf5-28ae-55ed-8ca3-9b292e839ec3"
+              "draft_component_id": "547cfcf5-28ae-55ed-8ca3-9b292e839ec3",
+              "remediation": {
+                "action": "revise_existing_draft",
+                "target": {
+                  "component_ids": [
+                    "547cfcf5-28ae-55ed-8ca3-9b292e839ec3"
+                  ]
+                },
+                "tool": "ui_transfers_components_plan",
+                "arguments_hint": {
+                  "action": "revise",
+                  "component_id": "547cfcf5-28ae-55ed-8ca3-9b292e839ec3"
+                },
+                "desktop_only": false,
+                "message": "A lineage holds one draft at a time. Revise or activate that draft, or supersede it before revising this revision.",
+                "alternatives": [
+                  {
+                    "action": "supersede",
+                    "tool": "ui_transfers_components_plan",
+                    "arguments_hint": {
+                      "action": "supersede",
+                      "component_id": "547cfcf5-28ae-55ed-8ca3-9b292e839ec3"
+                    }
+                  }
+                ]
+              }
             }
           },
           "rows": {

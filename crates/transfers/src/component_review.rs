@@ -5,6 +5,7 @@ use super::component_store as store;
 use super::*;
 use bitcoin_hashes::{sha1, Hash};
 use kassiber_custody::components::review;
+use kassiber_envelope::remediation::{build_remediation, Remediation};
 use kassiber_envelope::{set, truthy};
 use kassiber_pydecimal::{Context, Decimal, Rounding};
 use kassiber_store::rusqlite::params;
@@ -56,6 +57,39 @@ fn refuse(message: impl Into<String>, code: &str, details: Vec<(&str, Value)>) -
     } else {
         error.with_details(dict(details))
     }
+}
+const COMPONENT_PLAN_TOOL: &str = "ui_transfers_components_plan";
+/// `**_issue_remediation(issues)`: append the issues' remediation, if any.
+fn with_remediation(mut details: Vec<(&str, Value)>) -> Vec<(&str, Value)> {
+    let found = details
+        .iter()
+        .find(|(key, _)| *key == "issues")
+        .and_then(|(_, issues)| rows_::issues_remediation(issues));
+    if let Some(remediation) = found {
+        details.push(("remediation", remediation));
+    }
+    details
+}
+/// A lineage holds one draft at a time: revise that draft, or supersede it.
+fn existing_draft_remediation(draft: &str) -> Value {
+    build_remediation(
+        "revise_existing_draft",
+        Remediation {
+            target: Some(dict([("component_ids", Value::List(vec![s(draft)]))])),
+            tool: Some(COMPONENT_PLAN_TOOL),
+            arguments_hint: Some(dict([("action", s("revise")), ("component_id", s(draft))])),
+            message: Some("A lineage holds one draft at a time. Revise or activate that draft, or supersede it before revising this revision."),
+            alternatives: vec![dict([
+                ("action", s("supersede")),
+                ("tool", s(COMPONENT_PLAN_TOOL)),
+                (
+                    "arguments_hint",
+                    dict([("action", s("supersede")), ("component_id", s(draft))]),
+                ),
+            ])],
+            ..Remediation::default()
+        },
+    )
 }
 fn field<'a>(v: &'a Value, key: &str) -> &'a Value {
     get(v, key).unwrap_or(&Value::Null)
@@ -791,10 +825,10 @@ fn plan_batch(
             return Err(refuse(
                 "Custody component plan cannot activate",
                 "custody_component_not_activatable",
-                vec![
+                with_remediation(vec![
                     ("component_id", s(&id)),
                     ("issues", issues(&check.validation)),
-                ],
+                ]),
             ));
         }
         let mut spec_out = without(&head, &["authored_source"]);
@@ -873,7 +907,7 @@ fn plan_batch(
             return Err(refuse(
                 "Custody component batch cannot activate",
                 "custody_component_not_activatable",
-                vec![("issues", Value::List(batch))],
+                with_remediation(vec![("issues", Value::List(batch))]),
             ));
         }
     }
@@ -923,8 +957,28 @@ fn batch_issues(
                     "message",
                     s("a transaction belongs to multiple planned active components"),
                 ),
-                ("transaction_id", s(tx)),
+                ("transaction_id", s(&tx)),
                 ("component_ids", Value::List(ids.iter().map(s).collect())),
+                // These are ids of the same unsaved batch, so the fix is in
+                // the submitted document, not a stored component.
+                (
+                    "remediation",
+                    build_remediation(
+                        "merge_planned_components",
+                        Remediation {
+                            target: Some(dict([
+                                ("transaction_ids", Value::List(vec![s(&tx)])),
+                                (
+                                    "planned_component_ids",
+                                    Value::List(ids.iter().map(s).collect()),
+                                ),
+                            ])),
+                            tool: Some(COMPONENT_PLAN_TOOL),
+                            message: Some("One transaction is anchored by several components of this batch. Put all of its legs in one component and plan the batch again."),
+                            ..Remediation::default()
+                        },
+                    ),
+                ),
             ]));
         }
     }
@@ -1267,7 +1321,10 @@ fn plan_revision(
         return Err(refuse(
             "Component lineage already has a draft revision",
             "custody_component_draft_exists",
-            vec![("draft_component_id", value(draft, "id"))],
+            vec![
+                ("draft_component_id", value(draft, "id")),
+                ("remediation", existing_draft_remediation(&text(draft, "id"))),
+            ],
         ));
     }
     let next = rows(
@@ -1498,10 +1555,10 @@ fn plan_revision(
         return Err(refuse(
             "Custody component revision cannot activate",
             "custody_component_not_activatable",
-            vec![
+            with_remediation(vec![
                 ("component_id", s(&new_id)),
                 ("issues", issues(&check.validation)),
-            ],
+            ]),
         ));
     }
     legs = check.legs;

@@ -30,13 +30,12 @@ pub fn validate_activation(snapshot: &Snapshot, component: &Component) -> Result
         .collect();
     if !conflicts.is_empty() {
         result["validation"]["activatable"] = json!(false);
-        result["validation"]["issues"]
-            .as_array_mut()
-            .unwrap()
-            .push(json!({
-                "code":"active_transaction_membership_conflict",
-                "message":"a transaction belongs to another active component", "conflicts":conflicts
-            }));
+        result["validation"]["issues"].as_array_mut().unwrap().push(
+            super::remediation::membership_conflict_issue(
+                conflicts,
+                "a transaction belongs to another active component",
+            ),
+        );
     }
     Ok(result["validation"].clone())
 }
@@ -299,6 +298,11 @@ pub fn validation_projection(value: &Value) -> Result<kassiber_pyjson::Value, St
                     "anchors" => "valid issues warnings transaction_coverage",
                     "transaction_coverage" => "transaction_id direction partial_review raw_economic_msat reviewed_component_msat reviewed_minus_raw_msat",
                     "conflicts" => "transaction_id component_id",
+                    "remediation" => "action target tool arguments_hint desktop_only message alternatives",
+                    "target" => "component_ids transaction_ids planned_component_ids",
+                    "arguments_hint" => "action component_id activate spec reason",
+                    "spec" => "legs allocations",
+                    "alternatives" => "action tool arguments_hint",
                     "source_scope" | "sink_scope" | "fee_scope" => "valid rail chain network domain",
                     _ => "",
                 };

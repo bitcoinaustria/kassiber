@@ -340,18 +340,11 @@ pub(super) fn activate(
         .unwrap();
     let validation = review::validate_activation(&snap, component).map_err(convert_error)?;
     if validation["activatable"] != true {
-        return Err(AppError::new(
-            "custody_component_incomplete",
-            "custody component is incomplete or does not conserve",
-        )
-        .with_details(dict([
-            ("component_id", s(&id)),
-            (
-                "validation",
-                review::validation_projection(&validation)
-                    .map_err(|e| AppError::new("internal_error", e))?,
-            ),
-        ])));
+        return Err(super::component_rows::activation_error(
+            &id,
+            review::validation_projection(&validation)
+                .map_err(|e| AppError::new("internal_error", e))?,
+        ));
     }
     let review::ActivationEvidence {
         snapshots,
