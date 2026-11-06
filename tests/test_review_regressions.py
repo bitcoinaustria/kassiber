@@ -11569,6 +11569,35 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(four_years["bucketSize"], "quarter")
         self.assertEqual(four_years["counts"]["all"], 1)
 
+        # Every accepted spelling of a period buckets like its canonical name.
+        for period, size in (
+            ("4y", "quarter"), ("4year", "quarter"), ("4 Year", "quarter"), ("10y", "quarter"),
+            ("30d", "day"), ("30 days", "day"), ("3m", "week"), ("1y", "month"), ("6m", "month"),
+        ):
+            aliased = build_transactions_dashboard_snapshot(
+                conn,
+                {
+                    "period": period,
+                    "since": "2024-01-01T00:00:00Z",
+                    "until": "2024-06-30T23:59:59Z",
+                    "timezone": "UTC",
+                },
+            )
+            self.assertEqual(aliased["bucketSize"], size, period)
+
+        # "All" ending before a decade of history stays quarterly, whatever
+        # today's date: the window's end decides, not the wall clock.
+        ending_early = build_transactions_dashboard_snapshot(
+            conn,
+            {"period": "all", "until": "2020-12-31T23:59:59Z", "timezone": "UTC"},
+        )
+        self.assertEqual(ending_early["bucketSize"], "quarter")
+        ending_late = build_transactions_dashboard_snapshot(
+            conn,
+            {"period": "all", "until": "2022-06-01T00:00:00Z", "timezone": "UTC"},
+        )
+        self.assertEqual(ending_late["bucketSize"], "year")
+
     def test_report_journal_entries_is_not_truncated_to_internal_page_size(self):
         self._bootstrap_wallet(label="Ledger")
         self._insert_transaction(
