@@ -3325,6 +3325,16 @@ also native and registered, so every journal desktop kind is served natively. Re
 campaigns, census/shadow, inherited mutation and performance acceptance are
 still required. Python retains production authority until R4-16.
 
+### R4 end-to-end performance (prepared-book pipeline)
+
+The [end-to-end performance record](../reference/r4-e2e-performance.md)
+measures the stack's prepared-book pipeline against Python's `journals
+process`. At `06e253ea6` generic 20k was 3.50×, below the 4× target. With
+the finalized projection and quantity stage read through views instead of
+rendered JSON and the in-process engine on the calling thread, every bench
+book is at least 4.68× (median of eleven pairs), with stored books
+byte-identical.
+
 ### R4-11 rendering checkpoint (partial)
 
 `crates/journals` renders the typed tax-engine `LedgerResponse` and joins the

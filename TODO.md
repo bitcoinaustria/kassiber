@@ -1148,7 +1148,9 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   AI no-pairing behavior. Track speed acceptance separately;
   unregistered probe results do not authorize production routing. The fresh
   four-book CPU record includes real native pre-build and 20 exact paired
-  dumps; the 4× target remains open on the separate performance track.
+  dumps. The prepared-book pipeline now meets the 4× target on all four bench
+  books (4.68–6.94×; [record](docs/reference/r4-e2e-performance.md)); recheck
+  it on the registered route.
   The fourth continuation integrates the later renderer audit/native scalar
   ledger and retained-row persistence tips, repairing their borrowed model
   compatibility. Full lossless builder/joins/persistence handoff remains open;
