@@ -5,23 +5,8 @@ use kassiber_envelope::truthy;
 use kassiber_store::rusqlite::params;
 
 fn resolve(conn: &Connection, scope: &Scope<'_>, reference: &Value) -> Result<Value> {
-    let row = rows(
-        conn,
-        "SELECT id FROM transactions WHERE profile_id=? AND id=?",
-        params![scope.profile_id, bind(reference, 2)?],
-    )?;
-    if let Some(row) = row.into_iter().next() {
-        return Ok(value(&row, "id"));
-    }
-    let found=rows(conn,"SELECT id FROM transactions WHERE profile_id=? AND external_id=? ORDER BY occurred_at DESC,created_at DESC,id DESC LIMIT 2",params![scope.profile_id,bind(reference,2)?])?;
-    let reference = py_str(reference);
-    if found.len() > 1 {
-        return Err(AppError::new("ambiguous_reference",format!("Transaction external_id '{reference}' matches multiple transactions")).with_hint("Use the Kassiber transaction id from `transactions list` or narrow the command to an unambiguous row."));
-    }
-    found
-        .first()
-        .map(|r| value(r, "id"))
-        .ok_or_else(|| AppError::new("app_error", format!("Transaction '{reference}' not found")))
+    kassiber_transactions::lookup::resolve_transaction(conn, scope.profile_id, reference, None)
+        .map(|row| value(&row, "id"))
 }
 pub(super) fn dismiss(
     conn: &Connection,

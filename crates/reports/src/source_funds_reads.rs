@@ -185,24 +185,8 @@ pub(super) fn resolve_transaction(
     profile: &str,
     reference: &str,
 ) -> Result<String> {
-    if let Some(row) = rows(
-        conn,
-        "SELECT id FROM transactions WHERE profile_id=? AND id=?",
-        [profile, reference],
-    )?
-    .first()
-    {
-        return Ok(text(row, "id"));
-    }
-    let found = rows(conn, "SELECT id FROM transactions WHERE profile_id=? AND external_id=? ORDER BY occurred_at DESC,created_at DESC,id DESC LIMIT 2", [profile, reference])?;
-    if found.len() > 1 {
-        return Err(AppError::new("ambiguous_reference", format!("Transaction external_id '{reference}' matches multiple transactions"))
-            .with_hint("Use the Kassiber transaction id from `transactions list` or narrow the command to an unambiguous row."));
-    }
-    found
-        .first()
-        .map(|row| text(row, "id"))
-        .ok_or_else(|| AppError::new("app_error", format!("Transaction '{reference}' not found")))
+    kassiber_transactions::lookup::resolve_transaction_str(conn, profile, reference, None)
+        .map(|row| kassiber_transactions::lookup::row_id(&row))
 }
 
 fn filter_text(args: &Value, key: &str, desktop: bool) -> Option<String> {

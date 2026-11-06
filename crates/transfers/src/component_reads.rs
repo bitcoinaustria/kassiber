@@ -2,30 +2,11 @@
 use super::component_rows as cr;
 use super::*;
 use kassiber_envelope::{s, set, truthy};
-use kassiber_store::rusqlite::{params, params_from_iter};
+use kassiber_store::rusqlite::params_from_iter;
 
 fn transaction(c: &Connection, scope: &Scope<'_>, reference: &Value) -> Result<Value> {
-    let raw = reference_bind(reference, 2)?;
-    if let Some(row) = rows(
-        c,
-        "SELECT id FROM transactions WHERE profile_id=? AND id=?",
-        params![scope.profile_id, &raw],
-    )?
-    .into_iter()
-    .next()
-    {
-        return Ok(value(&row, "id"));
-    }
-    let found = rows(c,"SELECT id FROM transactions WHERE profile_id=? AND external_id=? ORDER BY occurred_at DESC,created_at DESC,id DESC LIMIT 2",params![scope.profile_id,&raw])?;
-    if found.len() > 1 {
-        return Err(AppError::new("ambiguous_reference",format!("Transaction external_id '{}' matches multiple transactions",py_str(reference))).with_hint("Use the Kassiber transaction id from `transactions list` or narrow the command to an unambiguous row."));
-    }
-    found.first().map(|r| value(r, "id")).ok_or_else(|| {
-        AppError::new(
-            "app_error",
-            format!("Transaction '{}' not found", py_str(reference)),
-        )
-    })
+    kassiber_transactions::lookup::resolve_transaction(c, scope.profile_id, reference, None)
+        .map(|row| value(&row, "id"))
 }
 
 pub(super) fn reference_bind(

@@ -5,7 +5,7 @@ use kassiber_custody::{codec, components::review};
 use kassiber_envelope::{set, truthy};
 use kassiber_pydecimal::{Context, Rounding};
 use kassiber_store::rusqlite::params;
-use sql::{atomic, bind, error};
+use sql::{atomic, error};
 use std::collections::BTreeSet;
 
 const KINDS: &[&str] = &[
@@ -60,28 +60,13 @@ pub(super) fn resolve(
     reference: &Value,
     direction: &str,
 ) -> Result<Value> {
-    let id=rows(c,"SELECT t.*,w.kind AS wallet_kind,w.config_json FROM transactions t JOIN wallets w ON w.id=t.wallet_id WHERE t.profile_id=? AND t.id=? AND t.direction=?",params![scope.profile_id,bind(reference,2)?,direction])?;
-    if let Some(r) = id.into_iter().next() {
-        return Ok(r);
-    }
-    let found=rows(c,"SELECT t.*,w.kind AS wallet_kind,w.config_json FROM transactions t JOIN wallets w ON w.id=t.wallet_id WHERE t.profile_id=? AND t.external_id=? AND t.direction=? ORDER BY t.occurred_at DESC,t.created_at DESC,t.id DESC LIMIT 2",params![scope.profile_id,bind(reference,2)?,direction])?;
-    if found.len() > 1 {
-        return Err(AppError::new("ambiguous_reference",format!("Transaction external_id '{}' matches multiple {direction} transactions",py_str(reference))).with_hint("Use the Kassiber transaction id from `transactions list` or narrow the command to an unambiguous row."));
-    }
-    found.into_iter().next().ok_or_else(|| {
-        AppError::new(
-            "app_error",
-            format!(
-                "{} transaction '{}' not found",
-                if direction == "outbound" {
-                    "Outbound"
-                } else {
-                    "Inbound"
-                },
-                py_str(reference)
-            ),
-        )
-    })
+    let found = kassiber_transactions::lookup::resolve_transaction(
+        c,
+        scope.profile_id,
+        reference,
+        Some(direction),
+    )?;
+    tx(c, &text(&found, "id"))
 }
 fn tx(c: &Connection, id: &str) -> Result<Value> {
     rows(c,"SELECT t.*,w.kind AS wallet_kind,w.config_json FROM transactions t JOIN wallets w ON w.id=t.wallet_id WHERE t.id=?",[id])?.into_iter().next().ok_or_else(||AppError::new("not_found","Custody review boundary was not found"))

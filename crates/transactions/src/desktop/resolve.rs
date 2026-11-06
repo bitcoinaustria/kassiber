@@ -50,6 +50,47 @@ pub(super) fn execute(
             break;
         }
     }
+    if selected.is_none() && query.contains(':') {
+        // A qualified txid (`<txid>:<wallet>`, `<txid>:in|out`) selects one
+        // of several rows sharing a txid; it still fails closed when it does not.
+        if let Some(found) =
+            crate::lookup::find_transaction(conn, scope.profile_id, &s(query), None)?
+        {
+            let sql = format!(
+                "SELECT {COLUMNS},{} AS payment_method {FROM} WHERE t.profile_id=? AND t.id=?",
+                sql::PAYMENT
+            );
+            selected = rows(
+                conn,
+                &sql,
+                [scope.profile_id, crate::lookup::row_id(&found).as_str()],
+            )?
+            .into_iter()
+            .next();
+        }
+    }
+    let shared = match &selected {
+        Some(row) if truthy(&val(row, "external_id")) => rows(
+            conn,
+            "SELECT t.*, w.label AS lookup_wallet_label FROM transactions t LEFT JOIN wallets w ON w.id = t.wallet_id WHERE t.profile_id = ? AND t.external_id = ? ORDER BY t.occurred_at DESC, t.created_at DESC, t.id DESC LIMIT 21",
+            params_from_iter([
+                SqlValue::Text(scope.profile_id.into()),
+                stored(&val(row, "external_id")),
+            ]),
+        )?,
+        _ => Vec::new(),
+    };
+    // Rows sharing the shown row's txid (a CoinJoin, a batched deposit, a
+    // self-transfer), listed with their full ids so a caller can pick one.
+    let shared_matches = match &selected {
+        Some(row) if shared.len() > 1 => shared
+            .iter()
+            .take(20)
+            .filter(|item| val(item, "id") != val(row, "id"))
+            .map(crate::lookup::reference_candidate)
+            .collect::<Result<Vec<_>>>()?,
+        _ => Vec::new(),
+    };
     let transaction = if let Some(row) = selected {
         let current = current(conn, scope)?;
         let pairs = render::pairs(conn, std::slice::from_ref(&row), current)?;
@@ -130,7 +171,24 @@ pub(super) fn execute(
     Ok(dict([
         ("transaction", transaction),
         ("query", s(query)),
+        ("sharedExternalIdCount", Value::Int(shared.len().into())),
+        ("sharedExternalIdMatches", Value::List(shared_matches)),
         ("workspaceId", s(scope.workspace_id)),
         ("profileId", s(scope.profile_id)),
     ]))
+}
+
+/// A stored value bound back as itself.
+fn stored(value: &Value) -> SqlValue {
+    match value {
+        Value::Int(n) => n
+            .to_string()
+            .parse()
+            .map(SqlValue::Integer)
+            .unwrap_or(SqlValue::Null),
+        Value::Float(f) => SqlValue::Real(*f),
+        Value::Bytes(b) => SqlValue::Blob(b.clone()),
+        Value::Str(t) => SqlValue::Text(t.as_str().unwrap_or_default().into()),
+        _ => SqlValue::Null,
+    }
 }

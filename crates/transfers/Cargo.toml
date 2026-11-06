@@ -20,6 +20,8 @@ kassiber-envelope = { path = "../envelope" }
 kassiber-pyjson = { path = "../pyjson" }
 kassiber-pytext = { path = "../pytext" }
 kassiber-store = { path = "../store" }
+# Transaction references resolve through the one shared lookup.
+kassiber-transactions = { path = "../transactions" }
 # Reuse the ported custody validator and exact decimal/JSON boundaries. UUIDv5
 # identities require SHA-1, supplied by the already locked Bitcoin hash library.
 kassiber-custody = { path = "../custody" }

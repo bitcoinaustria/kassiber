@@ -551,34 +551,9 @@ fn tags(conn: &Connection, id: &str) -> Result<Vec<String>> {
     .collect())
 }
 
-/// `resolve_transaction(conn, profile_id, ref)`: an id, then a unique
-/// external id.
+/// `hooks.resolve_transaction(conn, profile_id, ref)`.
 fn resolve_transaction(conn: &Connection, profile: &str, reference: &str) -> Result<Value> {
-    if let Some(row) = rows(
-        conn,
-        "SELECT * FROM transactions WHERE profile_id = ? AND id = ?",
-        [profile, reference],
-    )?
-    .into_iter()
-    .next()
-    {
-        return Ok(row);
-    }
-    let mut found = rows(
-        conn,
-        "SELECT * FROM transactions WHERE profile_id = ? AND external_id = ? ORDER BY occurred_at DESC, created_at DESC, id DESC LIMIT 2",
-        [profile, reference],
-    )?;
-    if found.len() > 1 {
-        return Err(AppError::new(
-            "ambiguous_reference",
-            format!("Transaction external_id '{reference}' matches multiple transactions"),
-        )
-        .with_hint("Use the Kassiber transaction id from `transactions list` or narrow the command to an unambiguous row."));
-    }
-    found
-        .pop()
-        .ok_or_else(|| AppError::new("app_error", format!("Transaction '{reference}' not found")))
+    kassiber_transactions::lookup::resolve_transaction_str(conn, profile, reference, None)
 }
 
 fn source_summary(conn: &Connection, profile: &str, id: &str, root: &Path) -> Result<Value> {

@@ -5,6 +5,7 @@ pub mod desktop;
 pub mod documents;
 pub mod listing;
 pub mod loans;
+pub mod lookup;
 pub mod metadata;
 mod mime;
 mod sql;

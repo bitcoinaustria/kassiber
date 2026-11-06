@@ -147,36 +147,15 @@ fn profile_row(c: &Connection, scope: &Scope<'_>) -> Result<Value> {
     })
 }
 fn resolve_transaction(c: &Connection, scope: &Scope<'_>, raw: &Value) -> Result<Value> {
-    let text = reference(raw);
-    if let Some(row) = rows(
-        c,
-        "SELECT * FROM transactions WHERE profile_id=? AND id=?",
-        [scope.profile_id, &text],
-    )?
-    .into_iter()
-    .next()
-    {
-        return Ok(row);
-    }
-    let found = rows(
-        c,
-        "SELECT * FROM transactions WHERE profile_id=? AND external_id=? ORDER BY occurred_at DESC,created_at DESC,id DESC LIMIT 2",
-        [scope.profile_id, &text],
-    )?;
-    if found.len() > 1 {
-        return Err(refuse(
-            format!("Transaction external_id '{text}' is ambiguous"),
-            "ambiguous_reference",
-            vec![],
-        ));
-    }
-    found.into_iter().next().ok_or_else(|| {
-        refuse(
-            format!("Transaction '{text}' was not found"),
-            "not_found",
-            vec![],
-        )
-    })
+    kassiber_transactions::lookup::find_transaction(c, scope.profile_id, raw, None)?.ok_or_else(
+        || {
+            refuse(
+                format!("Transaction '{}' was not found", reference(raw)),
+                "not_found",
+                vec![],
+            )
+        },
+    )
 }
 fn resolve_wallet(c: &Connection, scope: &Scope<'_>, raw: &Value) -> Result<Value> {
     let text = reference(raw);
@@ -1756,6 +1735,60 @@ fn apply_review(
                     rows_::get_component(c, scope, &a.component_id, false)?,
                 ),
             ]))
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The planner's `_resolve_transaction`: the shared lookup, with its own
+    /// `not_found` wording (`gen_lookup_vectors.py`, mode `planner`).
+    #[test]
+    fn planner_transaction_references_match_python_vectors() {
+        let vectors = kassiber_pytext::loads(include_str!(
+            "../../transactions/tests/data/lookup-vectors.json"
+        ))
+        .unwrap();
+        let tmp = tempfile::tempdir().unwrap();
+        let book = kassiber_store::Book::create(tmp.path(), None).unwrap();
+        let Some(Value::List(sql)) = get(&vectors, "sql") else {
+            panic!()
+        };
+        for statement in sql {
+            let Value::Str(sql) = statement else { panic!() };
+            book.connection()
+                .execute(sql.as_str().unwrap(), [])
+                .unwrap();
+        }
+        let scope = Scope {
+            workspace_id: "ws",
+            profile_id: "profile",
+        };
+        let Some(Value::List(cases)) = get(&vectors, "cases") else {
+            panic!()
+        };
+        for case in cases {
+            let reference = field(case, "reference");
+            let actual = match resolve_transaction(book.connection(), &scope, reference) {
+                Ok(row) => dict([("id", value(&row, "id"))]),
+                Err(error) => dict([(
+                    "error",
+                    dict([
+                        ("code", s(error.code.as_str())),
+                        ("message", s(error.message.as_str())),
+                        ("hint", error.hint.as_deref().map_or(Value::Null, s)),
+                        ("details", error.details.unwrap_or(Value::Null)),
+                    ]),
+                )]),
+            };
+            assert_eq!(
+                &actual,
+                field(case, "planner"),
+                "{}",
+                kassiber_envelope::py_repr(reference)
+            );
         }
     }
 }

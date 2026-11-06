@@ -32987,8 +32987,52 @@
           "error": {
             "code": "ambiguous_reference",
             "message": "Transaction external_id 'd-ext' matches multiple outbound transactions",
-            "hint": "Use the Kassiber transaction id from `transactions list` or narrow the command to an unambiguous row.",
-            "details": null
+            "hint": "Several rows share this reference, which is normal for CoinJoins and batched deposits. Use the full transaction id of the intended row, or qualify the reference as '<txid>:<wallet>' and/or ':in' / ':out'.",
+            "details": {
+              "reference": "d-ext",
+              "candidate_count": 2,
+              "candidates": [
+                {
+                  "transaction_id": "f",
+                  "external_id": "d-ext",
+                  "wallet_id": "source",
+                  "wallet": "source",
+                  "direction": "outbound",
+                  "asset": "BTC",
+                  "amount_msat": 1010,
+                  "fee_msat": 10,
+                  "occurred_at": "2025-02-01T00:00:00Z"
+                },
+                {
+                  "transaction_id": "d",
+                  "external_id": "d-ext",
+                  "wallet_id": "source",
+                  "wallet": "source",
+                  "direction": "outbound",
+                  "asset": "BTC",
+                  "amount_msat": 1000,
+                  "fee_msat": 0,
+                  "occurred_at": "2025-02-01T00:00:00Z"
+                }
+              ],
+              "candidates_truncated": false,
+              "remediation": {
+                "action": "retry_with_full_transaction_id",
+                "target": {
+                  "transaction_ids": [
+                    "f",
+                    "d"
+                  ]
+                },
+                "tool": null,
+                "arguments_hint": {
+                  "transaction_id": "<one candidate's transaction_id>",
+                  "qualified_reference": "d-ext:<wallet id or label>:<in|out>"
+                },
+                "desktop_only": false,
+                "message": "Retry the same call with one candidate's full transaction_id. Do not choose between candidates yourself when the user's intent does not single one out; ask."
+              }
+            }
           },
           "rows": {
             "chain_index_clock": "4ac9f1a3b90ce21813d5954b63c19f09c4eb38e31d19eda88c6a7b789073c1b6",

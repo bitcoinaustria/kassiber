@@ -31846,9 +31846,53 @@
           "now": "2025-06-01T22:00:00Z",
           "error": {
             "code": "ambiguous_reference",
-            "message": "Transaction external_id 'j-ext' is ambiguous",
-            "hint": null,
-            "details": null
+            "message": "Transaction external_id 'j-ext' matches multiple transactions",
+            "hint": "Several rows share this reference, which is normal for CoinJoins and batched deposits. Use the full transaction id of the intended row, or qualify the reference as '<txid>:<wallet>' and/or ':in' / ':out'.",
+            "details": {
+              "reference": "j-ext",
+              "candidate_count": 2,
+              "candidates": [
+                {
+                  "transaction_id": "l",
+                  "external_id": "j-ext",
+                  "wallet_id": "target",
+                  "wallet": "target",
+                  "direction": "inbound",
+                  "asset": "BTC",
+                  "amount_msat": 200,
+                  "fee_msat": 0,
+                  "occurred_at": "2025-02-01T00:00:00Z"
+                },
+                {
+                  "transaction_id": "j",
+                  "external_id": "j-ext",
+                  "wallet_id": "source",
+                  "wallet": "source",
+                  "direction": "outbound",
+                  "asset": "BTC",
+                  "amount_msat": 1000,
+                  "fee_msat": 0,
+                  "occurred_at": "2025-02-01T00:00:00Z"
+                }
+              ],
+              "candidates_truncated": false,
+              "remediation": {
+                "action": "retry_with_full_transaction_id",
+                "target": {
+                  "transaction_ids": [
+                    "l",
+                    "j"
+                  ]
+                },
+                "tool": null,
+                "arguments_hint": {
+                  "transaction_id": "<one candidate's transaction_id>",
+                  "qualified_reference": "j-ext:<wallet id or label>:<in|out>"
+                },
+                "desktop_only": false,
+                "message": "Retry the same call with one candidate's full transaction_id. Do not choose between candidates yourself when the user's intent does not single one out; ask."
+              }
+            }
           },
           "rows": {
             "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
