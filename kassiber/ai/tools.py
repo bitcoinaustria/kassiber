@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 import json
 import re
@@ -63,6 +63,10 @@ class ToolEntry:
     # "does this leave the machine?". They are independent: a tool can read
     # nothing but a live node and still owe the user a consent prompt.
     egresses: bool = False
+    # Whether the change can be taken back with another AI tool, so the Auto
+    # permission mode may approve it without asking. Assigned in one place,
+    # `REVERSIBLE_TOOLS`, never per entry.
+    reversible: bool = False
 
     @property
     def provider_name(self) -> str:
@@ -104,6 +108,14 @@ TOOL_PROFILE_NAMES = ("core", "scoped", "full")
 # (kassiber.ai must not depend on kassiber.core); the daemon clamps regardless.
 MAX_FILE_ANALYSIS_SAMPLE_ROWS = 25
 
+WALLET_IMPORT_TOOL_NAMES = frozenset(
+    {
+        "ui.wallets.import_attachment.plan", "ui.wallets.import_attachment.apply",
+        "ui.wallets.request_input", "ui.imports.list",
+        "ui.imports.rollback.plan", "ui.imports.rollback",
+    }
+)
+
 CORE_TOOL_NAMES = frozenset(
     {
         "status", "ui.overview.snapshot", "ui.transactions.list",
@@ -112,6 +124,7 @@ CORE_TOOL_NAMES = frozenset(
         "ui.reports.capital_gains", "ui.reports.summary",
         "ui.reports.balance_sheet", "ui.reports.portfolio_summary",
         "ui.reports.tax_summary", "ui.reports.balance_history",
+        "ui.visuals.render",
         "ui.journals.snapshot", "ui.journals.quarantine",
         # The default CLI profile must be able to inspect the evidence and
         # perform the same consented, audited price/exclusion repair as chat.
@@ -129,17 +142,24 @@ CORE_TOOL_NAMES = frozenset(
         # keeps the audit row; the desktop review screen exposes it).
         #
         # `bulk_pair` is deliberately kept out: one approval must not sweep a
-        # whole queue. `dismiss` is kept out too, on stronger grounds — it is the
-        # one write with neither a read-back nor an undo. transaction_pair_dismissals
-        # has a single upsert and no DELETE anywhere, no list/read daemon kind and
-        # no AI tool, so after dismissing, neither the assistant nor the user can
-        # discover that the dismissal exists — while the matcher silently stops
-        # offering the pair. Add it once a read path exists.
-        "ui.transfers.pair",
+        # whole queue. A dismissal has a read-back (ui.transfers.dismissals.list,
+        # and the exclusion counts on suggest) and an undo
+        # (ui.transfers.dismissals.delete). Each is one exact pair. Every
+        # reversible tool here keeps its inverse in the profile, so a result's
+        # `undo` hint can always be called.
+        "ui.transfers.pair", "ui.transfers.unpair",
+        "ui.transfers.dismiss", "ui.transfers.dismissals.list",
+        "ui.transfers.dismissals.delete", "ui.transactions.history.revert",
         # Onboarding an unsupported exchange is a common first task, and the tool
         # is inert without an attachment, so it belongs in the default profile
         # rather than behind `full`.
         "ui.wallets.analyze_file",
+        # Inert without an attached file, like the analysis tool.
+        "ui.attachments.add_from_chat",
+        # The import is the other half of that onboarding: plan, consented
+        # apply, and the rollback that makes an AI import undoable. Without
+        # them the default profile can only print a CLI command.
+        *WALLET_IMPORT_TOOL_NAMES,
         "ui.custody.coverage.snapshot",
         "ui.custody.lineage.snapshot",
         "ui.custody.gaps.list", "ui.custody.gaps.review_context",
@@ -155,7 +175,8 @@ REVIEW_TOOL_NAMES = frozenset({
     "ui.review.cases", "ui.review.request_input", "ui.review.plan", "ui.review.apply", "ui.review.receipt",
     "ui.review.worklist", "ui.journals.quarantine", "ui.journals.snapshot",
     "ui.transactions.review_context", "ui.transactions.resolve",
-    "ui.transactions.graph", "ui.transactions.history", "ui.transactions.list",
+    "ui.transactions.graph", "ui.transactions.verify", "ui.transactions.history", "ui.transactions.list",
+    "ui.journals.quarantine.groups",
     "ui.attachments.list", "ui.audit.evidence.summary", "ui.documents.list",
     "ui.wallets.list", "ui.wallets.identify", "ui.rates.coverage",
     "ui.transfers.review_context", "ui.transfers.list", "ui.transfers.pair",
@@ -168,6 +189,64 @@ REVIEW_TOOL_NAMES = frozenset({
 })
 CORE_TOOL_NAMES = CORE_TOOL_NAMES | REVIEW_TOOL_NAMES
 
+
+# Sources the assistant may only hand to the desktop setup dialog: each needs
+# wallet material or credentials that must never pass through chat. Values are
+# the desktop connection catalog ids.
+WALLET_INPUT_SOURCES = (
+    "descriptor", "address-list", "silent-payment", "liquid-descriptor",
+    "samourai", "core-ln", "lnd", "btcpay", "kraken", "coinbase", "binance",
+)
+
+# Which of the chat's files a tool reads: the id from the turn's note, never
+# a path. The daemon resolves it against the chat's staging grants.
+_CHAT_FILE_PROPERTY: dict[str, Any] = {
+    "type": "string",
+    "pattern": "^file-[1-9]$",
+    "description": "Attached file id from this turn's note; optional if only one fits.",
+}
+
+_IMPORT_ATTACHMENT_REQUEST_PROPERTIES: dict[str, Any] = {
+    "file": _CHAT_FILE_PROPERTY,
+    "wallet": {
+        "type": "string", "minLength": 1,
+        "description": "Existing file or exchange wallet (id or label). Omit with new_wallet.",
+    },
+    "new_wallet": {
+        "type": "object", "additionalProperties": False, "required": ["label"],
+        "description": "Create a new file wallet (kind custom) for this import.",
+        "properties": {
+            "label": {"type": "string", "minLength": 1, "maxLength": 120},
+            "account": {"type": "string", "minLength": 1},
+        },
+    },
+    "column_map": {
+        "type": "object", "additionalProperties": True,
+        "description": "The column plan ui_wallets_analyze_file validated; no asset hints.",
+    },
+    "transfers_only_confirmed": {
+        "type": "boolean",
+        "description": "Only after the user confirmed a file with no Type column is transfers only.",
+    },
+}
+
+# A document draft's id from ui_wallets_read_document, with the import target.
+_IMPORT_DOCUMENT_REQUEST_PROPERTIES: dict[str, Any] = {
+    "draft": {"type": "string", "minLength": 16, "maxLength": 128},
+    "wallet": _IMPORT_ATTACHMENT_REQUEST_PROPERTIES["wallet"],
+    "new_wallet": _IMPORT_ATTACHMENT_REQUEST_PROPERTIES["new_wallet"],
+}
+
+# Offered on a turn whose chat holds an image or PDF, never by a capability
+# pack: without one they can do nothing.
+CHAT_DOCUMENT_TOOL_NAMES = frozenset(
+    {
+        "ui.wallets.read_document",
+        "ui.wallets.import_document.plan",
+        "ui.wallets.import_document.apply",
+    }
+)
+CHAT_DOCUMENT_CAPABILITY = "chat_documents"
 
 _EMPTY_OBJECT_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -453,6 +532,76 @@ _CUSTODY_COMPONENT_SPEC_SCHEMA: dict[str, Any] = {
         },
     },
 }
+CUSTODY_COMPONENT_ACTIONS = ("create", "revise", "supersede", "undo", "activate")
+# Not advertised: `revise` takes one spec of the same shape as a create item
+# with every field optional. The daemon validates an AI spec against this
+# schema at execution, so the exact contract holds without paying for a
+# second copy of the leg schema on every routed question.
+CUSTODY_COMPONENT_REVISION_SPEC_SCHEMA: dict[str, Any] = {
+    key: value
+    for key, value in _CUSTODY_COMPONENT_SPEC_SCHEMA.items()
+    if key != "required"
+}
+_CUSTODY_COMPONENT_ACTION_GLOSS = (
+    "action (default create): create = new components[] (activate defaults "
+    "true); revise = component_id + spec, a new revision of that lineage, "
+    "same anchors allowed; with activate=true it atomically supersedes the "
+    "active revision — the normal fix when an existing interpretation is "
+    "wrong or a plan fails with active_transaction_membership_conflict; "
+    "supersede = component_id (+reason), retires it so its anchors book or "
+    "quarantine as raw rows again; undo = component_id of a superseded "
+    "revision, restored as a new draft; activate = component_id of a draft. "
+    "Ids come from ui.transfers.components.list or an error's remediation."
+)
+
+
+def _custody_component_review_schema(*, apply: bool) -> dict[str, Any]:
+    properties: dict[str, Any] = {
+        "action": {"type": "string", "enum": list(CUSTODY_COMPONENT_ACTIONS)},
+        "components": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 50,
+            "items": _CUSTODY_COMPONENT_SPEC_SCHEMA,
+            "description": "create only: typed leg/allocation specifications.",
+        },
+        "component_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Full component revision id; every action but create.",
+        },
+        "spec": {
+            "type": "object",
+            "description": (
+                "revise only: same shape as one components[] item, every field "
+                "optional; omitted fields inherit. Sending legs without "
+                "allocations drops the old allocations."
+            ),
+        },
+        "activate": {
+            "type": "boolean",
+            "description": (
+                "create (default true) and revise (default false) only. "
+                "Conversion components must remain drafts for human review."
+            ),
+        },
+        "reason": {
+            "type": "string",
+            "maxLength": 500,
+            "description": "revise, supersede, undo: the user's reviewed reason.",
+        },
+    }
+    schema: dict[str, Any] = {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": properties,
+    }
+    if apply:
+        properties["expected_input_version"] = {"type": "integer", "minimum": 0}
+        schema["required"] = ["expected_input_version"]
+    return schema
+
+
 _REVIEW_WORKLIST_CATEGORIES = (
     "readiness",
     "quarantine",
@@ -693,7 +842,14 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         name="ui.wallets.list",
         description=(
             "Read configured wallets, labels, kinds, safe backend names/kinds, "
-            "and transaction/sync status without descriptors or wallet config JSON."
+            "and transaction/sync status without descriptors or wallet config JSON. "
+            "Each wallet has completeness_class (descriptor-derived, address-list, "
+            "lightning-node, provider-api, exchange-export, file-import, manual, "
+            "untracked) and scan_bounds (first/last transaction, last sync, "
+            "history_before_first_transaction, warnings such as "
+            "incomplete_by_construction, never_synced, "
+            "history_starts_after_first_funding). Use them to state what is "
+            "unknown; the list is never proof the user has no other wallets."
         ),
         parameters=_EMPTY_OBJECT_SCHEMA,
         kind_class="read_only",
@@ -771,23 +927,22 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ToolEntry(
         name="ui.wallets.analyze_file",
         description=(
-            "Inspect the file the user attached to THIS chat and report whether "
-            "Kassiber's generic ledger importer can read it. Use this for an "
-            "export from an exchange, broker, or platform that has no dedicated "
-            "importer. Returns the file's column headers, the column plan "
-            "Kassiber inferred from them, how many rows would import, and which "
-            "rows would be rejected and why. There is no file argument: it always "
-            "reads the attachment, and you cannot point it at another file.\n\n"
+            "Inspect a CSV, TSV or XLSX export the user attached to this chat "
+            "and report whether Kassiber's generic ledger importer can read it. "
+            "Use this for an export from an exchange, broker, or platform that "
+            "has no dedicated importer. Returns the file's column headers, the "
+            "column plan Kassiber inferred from them, how many rows would "
+            "import, and which rows would be rejected and why. Name the file by "
+            "its id from this turn's note (`file`); it cannot read any other "
+            "file.\n\n"
             "How to use the result: if `confident` is false, or rows are rejected "
             "because a Type value is not recognized, work out the mapping FROM THE "
             "HEADERS and call this tool again with `column_map`. Map `date` plus "
             "one amount column at minimum; add `type_map` when the file labels "
             "rows in another language or house style (e.g. {\"Kauf\": \"Buy\"}). "
-            "When it reports `next_step.action = import`, hand the finished plan "
-            "to the user to run — there is no import tool here, so give them the "
-            "exact command (`kassiber wallets import-ledger --wallet <wallet> "
-            "--file <path> --column-map '<the plan as JSON>'`) and never claim "
-            "you imported anything.\n\n"
+            "When it reports `next_step.action = import`, plan the import with "
+            "ui_wallets_import_attachment_plan using the same column_map; this "
+            "tool itself never imports anything.\n\n"
             "If `row_kinds_from_amount_sign` is true, no Type or direction "
             "column was recognized, so every row would import as a plain "
             "transfer chosen by the amount's sign — a sale would book as a "
@@ -800,13 +955,14 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
             "from the file, which is what makes the result auditable. When the "
             "provider is not running on this device, cell values are withheld "
             "from you by design (`cell_values_withheld`) and the headers are all "
-            "you need. Photos and PDFs are not handled here and route to the "
-            "on-device document importer instead."
+            "you need. Images and PDFs are not read here: when the provider may "
+            "see them they are shown to you on the user's message."
         ),
         parameters={
             "type": "object",
             "additionalProperties": False,
             "properties": {
+                "file": _CHAT_FILE_PROPERTY,
                 "column_map": {
                     "type": "object",
                     "additionalProperties": True,
@@ -840,6 +996,142 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         summary_template="Analyze attached file",
     ),
     ToolEntry(
+        name="ui.wallets.import_attachment.plan",
+        description=(
+            "Plan importing an export attached to this chat (`file`) through the generic "
+            "ledger importer, without changing the book. Target an existing file "
+            "or exchange wallet (`wallet`) or a new one (`new_wallet`); chain, "
+            "node and API wallets are refused. Pass the column_map that "
+            "ui_wallets_analyze_file validated. Returns the rows to import, rows "
+            "already present, date range, per-asset totals in msat, overlap with "
+            "existing rows, warnings, blockers, and `apply_with` (plan_digest, "
+            "content hash, input version). Show the user the plan; when `ready`, "
+            "call ui_wallets_import_attachment_apply with the same target, "
+            "column_map and apply_with values. Never alter or invent figures."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": _IMPORT_ATTACHMENT_REQUEST_PROPERTIES,
+        },
+        kind_class="read_only",
+        wire_name="ui_wallets_import_attachment_plan",
+        daemon_kind="ui.wallets.import_attachment.plan",
+        summary_template="Plan attachment import",
+    ),
+    ToolEntry(
+        name="ui.wallets.import_attachment.apply",
+        description=(
+            "Import the attached file exactly as an unchanged ready plan from "
+            "ui_wallets_import_attachment_plan describes, after the user's "
+            "consent. Refused when the file, the book or the effect changed "
+            "since planning; then plan again. The run can be undone with "
+            "ui_imports_rollback_plan and ui_imports_rollback."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["plan_digest", "expected_content_sha256", "expected_input_version"],
+            "properties": {
+                **_IMPORT_ATTACHMENT_REQUEST_PROPERTIES,
+                "plan_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "expected_content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "expected_input_version": {"type": "integer", "minimum": 0},
+            },
+        },
+        kind_class="mutating",
+        wire_name="ui_wallets_import_attachment_apply",
+        daemon_kind="ui.wallets.import_attachment.apply",
+        summary_template="Import attached file",
+    ),
+    ToolEntry(
+        name="ui.wallets.request_input",
+        description=(
+            "Ask the user to connect a wallet you must not set up yourself: "
+            "descriptor, xpub, address-list, Silent Payments, Liquid, Samourai, "
+            "Lightning node, BTCPay or exchange API sources need wallet material "
+            "or credentials that never belong in chat. Returns a typed handoff the "
+            "desktop turns into a setup button; it creates nothing. Never ask the "
+            "user to paste descriptors, xpubs, addresses or keys."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["source"],
+            "properties": {
+                "source": {"type": "string", "enum": list(WALLET_INPUT_SOURCES)},
+                "explanation": {
+                    "type": "string", "minLength": 1, "maxLength": 500,
+                    "description": "One or two sentences for the card: what is missing and why.",
+                },
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_wallets_request_input",
+        daemon_kind="ui.wallets.request_input",
+        summary_template="Request a wallet connection",
+    ),
+    ToolEntry(
+        name="ui.imports.list",
+        description=(
+            "List this book's file-import runs, newest first: id, wallet_id, "
+            "format, rows inserted/updated/skipped, rows still present, column map."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "wallet": {"type": "string", "minLength": 1},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 200},
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_imports_list",
+        daemon_kind="ui.imports.list",
+        summary_template="List import runs",
+    ),
+    ToolEntry(
+        name="ui.imports.rollback.plan",
+        description=(
+            "Show what rolling back one import run would delete: its rows and any "
+            "reviewed work attached to them, plus plan_digest and input_version. "
+            "Runs whose rollback would delete reviewed work are blocked here and "
+            "stay with the desktop."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["batch"],
+            "properties": {"batch": {"type": "string", "minLength": 1}},
+        },
+        kind_class="read_only",
+        wire_name="ui_imports_rollback_plan",
+        daemon_kind="ui.imports.rollback.plan",
+        summary_template="Plan import rollback",
+    ),
+    ToolEntry(
+        name="ui.imports.rollback",
+        description=(
+            "Delete the rows one import run created, after the user's consent, "
+            "exactly as an unchanged ready plan from ui_imports_rollback_plan "
+            "describes. Rows the run only enriched stay. Journals are invalidated."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["batch", "plan_digest", "expected_input_version"],
+            "properties": {
+                "batch": {"type": "string", "minLength": 1},
+                "plan_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "expected_input_version": {"type": "integer", "minimum": 0},
+            },
+        },
+        kind_class="mutating",
+        wire_name="ui_imports_rollback",
+        daemon_kind="ui.imports.rollback",
+        summary_template="Roll back import run",
+    ),
+    ToolEntry(
         name="ui.backends.list",
         description=(
             "Read sync backends referenced by the active profile with coarse URL "
@@ -866,8 +1158,37 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ),
     ToolEntry(
         name="ui.reports.capital_gains",
-        description="Read the current capital gains report snapshot for the active profile.",
-        parameters=_EMPTY_OBJECT_SCHEMA,
+        description=(
+            "Read realized gains for one tax year: full-year totals, a breakdown "
+            "by Austrian field or holding period, Austrian Kennzahl rows, and the "
+            "newest disposal/income rows with transaction id, asset, msat, cost, "
+            "proceeds, gain and Austrian category. Rows are journal entries, not "
+            "acquisition lots. With an asset, totals, breakdown and rows cover that "
+            "asset; Kennzahl rows stay book-wide. Defaults to the latest year."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "tax_year": {
+                    "type": "integer",
+                    "minimum": 1900,
+                    "maximum": 9999,
+                    "description": "Tax year; Austrian books use the Europe/Vienna calendar.",
+                },
+                "asset": {
+                    "type": "string",
+                    "maxLength": 16,
+                    "description": "Optional asset code such as BTC or LBTC.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 200,
+                    "description": "Newest rows to return (default 50).",
+                },
+            },
+        },
         kind_class="read_only",
         wire_name="ui_reports_capital_gains",
         daemon_kind="ui.reports.capital_gains",
@@ -1002,9 +1323,13 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ToolEntry(
         name="ui.reports.tax_summary",
         description=(
-            "Read processed tax-summary rows by year and asset, including "
-            "proceeds, cost basis, and gain/loss. Provisional while quarantines "
-            "or report blockers exist."
+            "Read processed tax-summary rows by year, asset and type (disposals "
+            "and income such as mining or staking), with proceeds, cost basis and "
+            "gain/loss, provisional while report blockers exist. Austrian EUR "
+            "books also get indicative_tax: the core's "
+            "27.5% estimate, withheld while report blockers exist and "
+            "not_applicable (no rate) for years before 2022. Quote it with "
+            "its notes; never apply a tax rate yourself."
         ),
         parameters={
             "type": "object",
@@ -1070,6 +1395,123 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         wire_name="ui_reports_balance_history",
         daemon_kind="ui.reports.balance_history",
         summary_template="Read balance history",
+    ),
+    ToolEntry(
+        name="ui.visuals.render",
+        description=(
+            "Show the user an interactive visual in the chat, drawn by Kassiber "
+            "from local book data. Prefer it whenever an answer involves a trend, "
+            "several figures, a list of transactions or what needs attention. "
+            "Sources: overview (dashboard: value, balance, cost basis, gains, "
+            "allocation, completeness); balance_history (balance over time; "
+            "interval, start, end, wallet, asset, limit); portfolio (holdings by "
+            "wallet or asset; group_by, asset); tax_summary (realized result per "
+            "tax year with breakdown); cash_flow (received vs sent per period, "
+            "as on the Transactions page; period, wallet); transactions (a "
+            "clickable list; query, direction, wallet, period, status, sort "
+            "recent/oldest/largest/smallest, limit up to 25); transaction_flow "
+            "(one transaction's inputs, outputs and fee; transaction id or txid); "
+            "readiness (checklist of what blocks reports). You choose what to "
+            "show, never the numbers; the user can switch measures and ranges "
+            "themselves. The result is a digest of what was drawn: describe it "
+            "from that, state every caveat, and never redraw it as text or ASCII. "
+            "Read-only and local."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["source"],
+            "properties": {
+                "source": {
+                    "type": "string",
+                    "enum": [
+                        "overview",
+                        "balance_history",
+                        "portfolio",
+                        "tax_summary",
+                        "cash_flow",
+                        "transactions",
+                        "transaction_flow",
+                        "readiness",
+                    ],
+                },
+                "title": {
+                    "type": "string",
+                    "maxLength": 80,
+                    "description": "Optional short title in the user's language.",
+                },
+                "measure": {
+                    "type": "string",
+                    "enum": [
+                        "quantity",
+                        "market_value",
+                        "cost_basis",
+                        "unrealized_pnl",
+                        "gain_loss",
+                        "proceeds",
+                        "fiat_value",
+                        "amount",
+                        "status",
+                    ],
+                    "description": (
+                        "Initial measure, one the source supports: balance_history "
+                        "quantity/market_value/cost_basis; portfolio market_value/"
+                        "quantity/cost_basis/unrealized_pnl; tax_summary gain_loss/"
+                        "proceeds/cost_basis; cash_flow quantity/fiat_value."
+                    ),
+                },
+                "interval": {
+                    "type": "string",
+                    "enum": ["hour", "day", "week", "month"],
+                    "description": "balance_history bucket size (default month).",
+                },
+                "start": {"type": "string", "maxLength": 200, "description": "balance_history start date."},
+                "end": {"type": "string", "maxLength": 200, "description": "balance_history end date."},
+                "period": {
+                    "type": "string",
+                    "enum": ["30days", "3months", "6months", "ytd", "1year", "5years", "all"],
+                    "description": "cash_flow window (default 1year) or transactions filter.",
+                },
+                "wallet": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "balance_history, cash_flow or transactions wallet id or label.",
+                },
+                "asset": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "balance_history or portfolio asset code filter.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 240,
+                    "description": "balance_history buckets (default 60) or transactions rows (default 10, at most 25).",
+                },
+                "group_by": {
+                    "type": "string",
+                    "enum": ["wallet", "asset"],
+                    "description": "portfolio grouping the user sees first (default wallet).",
+                },
+                "query": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "transactions text search over notes, descriptions, counterparties and tags.",
+                },
+                "direction": {"type": "string", "enum": ["inbound", "outbound"]},
+                "status": {"type": "string", "enum": ["completed", "pending", "failed", "review"]},
+                "sort": {"type": "string", "enum": ["recent", "oldest", "largest", "smallest"]},
+                "transaction": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "transaction_flow transaction id or txid.",
+                },
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_visuals_render",
+        daemon_kind="ui.visuals.render",
+        summary_template="Render visual",
     ),
     ToolEntry(
         name="ui.reports.privacy_hygiene",
@@ -1156,10 +1598,42 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         summary_template="Read journal quarantine",
     ),
     ToolEntry(
+        name="ui.journals.quarantine.groups",
+        description=(
+            "Read whole-book quarantine counts and msat totals grouped by reason and by "
+            "root cause (a root transaction plus every downstream row that waits on it, "
+            "e.g. custody_basis_barrier). Without group_id: the groups, largest first. "
+            "With a group_id (root:, unrooted: or reason:): that group's members in "
+            "stable order; follow next_cursor until null. A cursor fails with "
+            "quarantine_cursor_stale once the quarantine changed; read again."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "group_id": {"type": "string", "minLength": 1, "maxLength": 200},
+                "cursor": {"type": "string", "minLength": 1, "maxLength": 1000},
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 200,
+                    "description": "Groups (max 100) or members (max 200) per page.",
+                },
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_journals_quarantine_groups",
+        daemon_kind="ui.journals.quarantine.groups",
+        summary_template="Read quarantine groups",
+    ),
+    ToolEntry(
         name="ui.journals.quarantine.resolve",
         description=(
             "Resolve one currently quarantined transaction after explicit consent, then "
-            "reprocess journals by default and report whether it actually cleared. "
+            "reprocess journals by default and report whether it actually cleared and "
+            "which rows waiting on it cleared too (dependents_cleared). Target it by "
+            "transaction or by a root: group_id from ui.journals.quarantine.groups, "
+            "which acts on that group's root. "
             "Use price_override only with user-reviewed pricing evidence; never invent a "
             "rate or fiat value. Use exclude only when the user explicitly confirms the "
             "transaction is outside the book. Ownership, transfer, swap, missing-wallet, "
@@ -1168,11 +1642,21 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         parameters={
             "type": "object",
             "additionalProperties": False,
-            "required": ["transaction", "action", "reason"],
+            "required": ["action", "reason"],
             "properties": {
                 "transaction": {
                     "type": "string",
-                    "description": "Internal transaction id or public txid currently in quarantine.",
+                    "description": (
+                        "Internal transaction id or public txid currently in quarantine. "
+                        "Give this or group_id, not both."
+                    ),
+                },
+                "group_id": {
+                    "type": "string",
+                    "minLength": 6,
+                    "maxLength": 200,
+                    "pattern": "^root:",
+                    "description": "A root: group id; resolves that group's root transaction.",
                 },
                 "action": {
                     "type": "string",
@@ -1241,13 +1725,9 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
             "without changing journal state. This is where deterministic "
             "same-asset self-transfers already booked by the journal appear — "
             "ui.transfers.suggest deliberately excludes them, so their absence "
-            "there is expected.\n"
-            "IMPORTANT: when the journal needs processing this returns "
-            "summary.projection_status == 'stale' with every count at 0 and an "
-            "empty pairs list. An empty result is therefore NOT evidence that no "
-            "transfers were booked. Always check projection_status before "
-            "answering; if it is stale, say the journal must be reprocessed "
-            "rather than reporting zero transfers."
+            "there is expected. When journals need processing it returns "
+            "status 'unavailable' with null counts: say the journal must be "
+            "reprocessed rather than reporting zero transfers."
         ),
         parameters={
             "type": "object",
@@ -1330,6 +1810,7 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         },
         kind_class="mutating",
         wire_name="ui_rates_rebuild",
+        egresses=True,
         daemon_kind="ui.rates.rebuild",
         summary_template="Fetch spot prices",
     ),
@@ -1552,6 +2033,7 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         },
         kind_class="mutating",
         wire_name="ui_wallets_sync",
+        egresses=True,
         daemon_kind="ui.wallets.sync",
         summary_template="Refresh watch-only sources",
     ),
@@ -1635,6 +2117,7 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         },
         kind_class="mutating",
         wire_name="ui_maintenance_run",
+        egresses=True,
         daemon_kind="ui.maintenance.run",
         summary_template="Run AI maintenance",
     ),
@@ -1857,10 +2340,13 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
             "outbound network fee shrank across the swap (normal); negative means "
             "the inbound exceeded it, which is an anomaly and a do-not-auto-pair "
             "signal.\n"
-            "Expected pairs can be absent by design: legs already in an active "
-            "pair, legs under an unexpired dismissal, and deterministic same-asset "
-            "self-transfers the journal already books (those appear in "
-            "ui.journals.transfers.list instead). Prefer "
+            "Expected pairs can be absent by design; `exclusions` counts them "
+            "profile-wide before filters: excluded_by_active_pair (legs in a "
+            "reviewed pair, see ui.transfers.list), excluded_by_dismissal (pairs, "
+            "see ui.transfers.dismissals.list), excluded_already_journaled "
+            "(legs the journal books as self-transfers, see "
+            "ui.journals.transfers.list). Never read zero candidates as nothing "
+            "to pair without them. Prefer "
             "ui.transfers.review_context for a human-facing review; use this for "
             "counts or a filtered sweep. Call "
             "read_skill_reference('swap-matching') for the full review policy."
@@ -1960,8 +2446,8 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
             "Read privacy-safe, deterministic long-horizon custody-gap suggestions "
             "for the active profile. A suggestion may connect Bitcoin leaving a known "
             "wallet to later returns after missing wallet history; it is not evidence "
-            "and never activates a custody bridge automatically. Available to local AI "
-            "providers only because the result links wallet history."
+            "and never activates a custody bridge automatically. Unavailable when the "
+            "provider's agent access is restricted, because the result links wallet history."
         ),
         parameters={
             "type": "object",
@@ -1988,7 +2474,7 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
             "reason codes, and downstream basis impact. "
             "No descriptors, addresses, scripts, xpubs, or raw transaction "
             "graph are exposed. "
-            "Available to local AI providers only."
+            "Unavailable when the provider's agent access is restricted."
         ),
         parameters={
             "type": "object",
@@ -2179,37 +2665,17 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ToolEntry(
         name="ui.transfers.components.plan",
         description=(
-            "Purely validate one or more reviewed custody components. This is the review "
-            "planner for missing wallets and "
-            "1:N, N:1, or explicit N:M custody flows that cannot be represented by one pair. "
-            "Pass its input_version unchanged as expected_input_version to "
-            "ui.transfers.components.apply. Activation "
-            "remains fail-closed: every anchor, amount, "
-            "fee, network, asset, chronology, and allocation must conserve exactly. The result "
-            "omits local-only evidence and location references. AI output is not evidence: "
-            "suspense may only preserve an exact user-reviewed residual in a manual bridge."
+            "Purely validate a custody component action; no writes. Pass its "
+            "input_version unchanged as expected_input_version to "
+            "ui.transfers.components.apply with the same other arguments.\n"
+            + _CUSTODY_COMPONENT_ACTION_GLOSS
+            + "\nActivation stays fail-closed: every anchor, amount, fee, network, "
+            "asset, chronology, and allocation must conserve exactly. The result "
+            "omits local-only evidence and location references. AI output is not "
+            "evidence: suspense may only preserve an exact user-reviewed residual "
+            "in a manual bridge."
         ),
-        parameters={
-            "type": "object",
-            "additionalProperties": False,
-            "required": ["components"],
-            "properties": {
-                "components": {
-                    "type": "array",
-                    "minItems": 1,
-                    "maxItems": 50,
-                    "items": _CUSTODY_COMPONENT_SPEC_SCHEMA,
-                    "description": "Custody component specifications using the documented typed leg/allocation contract.",
-                },
-                "activate": {
-                    "type": "boolean",
-                    "description": (
-                        "Activate complete quantity-conserving components. Defaults to true. "
-                        "Conversion components must remain drafts for separate human review."
-                    ),
-                },
-            },
-        },
+        parameters=_custody_component_review_schema(apply=False),
         kind_class="read_only",
         wire_name="ui_transfers_components_plan",
         daemon_kind="ui.transfers.components.plan",
@@ -2218,29 +2684,13 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ToolEntry(
         name="ui.transfers.components.apply",
         description=(
-            "Atomically persist the exact custody component plan previously returned by "
-            "ui.transfers.components.plan. Requires explicit consent and rejects changed "
-            "journal inputs. Conversion components must remain "
-            "drafts until separately reviewed by a human."
+            "Atomically persist the exact custody component action previously "
+            "returned by ui.transfers.components.plan (same action and "
+            "arguments). Requires explicit consent and rejects changed journal "
+            "inputs. Conversion components must remain drafts until separately "
+            "reviewed by a human."
         ),
-        parameters={
-            "type": "object",
-            "additionalProperties": False,
-            "required": ["components", "expected_input_version"],
-            "properties": {
-                "components": {
-                    "type": "array",
-                    "minItems": 1,
-                    "maxItems": 50,
-                    "items": _CUSTODY_COMPONENT_SPEC_SCHEMA,
-                },
-                "activate": {"type": "boolean"},
-                "expected_input_version": {
-                    "type": "integer",
-                    "minimum": 0,
-                },
-            },
-        },
+        parameters=_custody_component_review_schema(apply=True),
         kind_class="mutating",
         wire_name="ui_transfers_components_apply",
         daemon_kind="ui.transfers.components.apply",
@@ -2364,9 +2814,7 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
             "Pair one outbound + one inbound transaction after explicit consent. "
             "Computes swap_fee_msat at pair time for swap-like pairs and "
             "invalidates the journal so the next report read reflects the change. "
-            "A pair is undoable, but ui.transfers.unpair may not be available in "
-            "the current tool profile — do not promise the user that you can undo "
-            "it yourself; they can always unpair from the desktop review screen.\n"
+            "The result's undo names the ui.transfers.unpair call that takes it back.\n"
             "BEFORE asking for consent, check conflict_size on the candidate. "
             "Unlike ui.transfers.bulk_pair — which refuses any conflicted "
             "candidate — this tool will pair one member of a conflict cluster, "
@@ -2391,8 +2839,9 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
                     "description": (
                         "Outbound leg. Prefer the internal transaction id (the "
                         "`out_id` from suggest/review_context). A raw on-chain "
-                        "txid also resolves via external_id, but fails with "
-                        "ambiguous_reference when several rows share it."
+                        "txid also resolves via external_id; when several rows "
+                        "share it, ambiguous_reference lists the candidates and "
+                        "'<txid>:<wallet>:out' selects one."
                     ),
                 },
                 "tx_in": {
@@ -2506,7 +2955,10 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         name="ui.transfers.dismiss",
         description=(
             "Record a dismissal so the matcher stops "
-            "suggesting this exact pair. Default expiry 90 days."
+            "suggesting this exact pair. Default expiry 90 days. "
+            "ui.transfers.dismissals.list reads it back and "
+            "ui.transfers.dismissals.delete undoes it. Prefer an "
+            "expiry over 0 (never) unless the user asks for a permanent one."
         ),
         parameters={
             "type": "object",
@@ -2527,6 +2979,53 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         wire_name="ui_transfers_dismiss",
         daemon_kind="ui.transfers.dismiss",
         summary_template="Dismiss swap candidate",
+    ),
+    ToolEntry(
+        name="ui.transfers.dismissals.list",
+        description=(
+            "Read the dismissals that suppress exact (out, in) candidate pairs, "
+            "newest first, with both legs' full transaction ids, wallet, "
+            "direction, asset, amount_msat and time, and expires_at (null = "
+            "never). Read this before saying a pair has no candidate; "
+            "ui.transfers.suggest exclusions.excluded_by_dismissal counts them."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "include_expired": {
+                    "type": "boolean",
+                    "description": "Also list expired dismissals. Default false.",
+                },
+                "limit": {"type": "integer", "minimum": 1, "maximum": 500},
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_transfers_dismissals_list",
+        daemon_kind="ui.transfers.dismissals.list",
+        summary_template="Read transfer dismissals",
+    ),
+    ToolEntry(
+        name="ui.transfers.dismissals.delete",
+        description=(
+            "Undo one dismissal after explicit consent, so the matcher may "
+            "suggest that exact pair again. Pass the dismissal id from "
+            "ui.transfers.dismissals.list (or the dismiss result), or both legs. "
+            "Journals become stale and rebuild on the next read."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "dismissal_id": {"type": "string", "minLength": 1},
+                "tx_out": {"type": "string"},
+                "tx_in": {"type": "string"},
+            },
+        },
+        kind_class="mutating",
+        wire_name="ui_transfers_dismissals_delete",
+        daemon_kind="ui.transfers.dismissals.delete",
+        summary_template="Undo transfer dismissal",
     ),
     ToolEntry(
         name="ui.transfers.rules.create",
@@ -2670,7 +3169,14 @@ _EXPANDED_TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ),
     ToolEntry(
         name="ui.transactions.resolve",
-        description="Resolve one internal transaction id or public txid to a safe transaction display row.",
+        description=(
+            "Resolve one internal transaction id or public txid to a safe "
+            "transaction display row. When several rows share the txid "
+            "(CoinJoin, batched deposit, self-transfer) it shows the newest and "
+            "lists the others in sharedExternalIdMatches with full ids. A "
+            "qualified '<txid>:<wallet id or label>' or '<txid>:in|out' selects "
+            "one; prefixes never resolve."
+        ),
         parameters={
             "type": "object",
             "additionalProperties": False,
@@ -2698,6 +3204,27 @@ _EXPANDED_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         wire_name="ui_transactions_graph",
         daemon_kind="ui.transactions.graph",
         summary_template="Read transaction graph",
+    ),
+    ToolEntry(
+        name="ui.transactions.verify",
+        description=(
+            "Check one transaction against its locally stored chain graph: inputs minus "
+            "outputs equals the recorded fee, and every wallet of this book owning an "
+            "input or output has an imported row with a matching wallet delta (and no "
+            "on-chain wallet has a row without an owned leg). Returns ok, mismatch, "
+            "partial or unverifiable with expected/actual msat, plus per-input/output "
+            "owned, wallet and keychain (receive/change/unknown). Local only; no addresses."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["transaction"],
+            "properties": {"transaction": {"type": "string", "minLength": 1, "maxLength": 200}},
+        },
+        kind_class="read_only",
+        wire_name="ui_transactions_verify",
+        daemon_kind="ui.transactions.verify",
+        summary_template="Verify transaction against its chain graph",
     ),
     ToolEntry(
         name="ui.transactions.review_context",
@@ -2777,7 +3304,7 @@ _EXPANDED_TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ),
     ToolEntry(
         name="ui.review.badges",
-        description="Read cheap unresolved quarantine, stale-journal, and transfer-review counts.",
+        description="Read cheap unresolved quarantine, stale-journal, and transfer-review counts, and the Review screen's total.",
         parameters=_EMPTY_OBJECT_SCHEMA,
         kind_class="read_only",
         wire_name="ui_review_badges",
@@ -2963,6 +3490,123 @@ _EXPANDED_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         wire_name="ui_attachments_copy",
         daemon_kind="ui.attachments.copy",
         summary_template="Copy transaction evidence",
+    ),
+    ToolEntry(
+        name="ui.attachments.add_from_chat",
+        description=(
+            "Keep a file the user attached to this chat as evidence on one "
+            "transaction, after the user's consent: a receipt, invoice, "
+            "statement or screenshot that documents it. Name the file by its id "
+            "from this turn's note. It stores a managed copy like attaching it "
+            "in the transaction's evidence; it changes no accounting, and the "
+            "user can remove it there."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["transaction"],
+            "properties": {
+                "transaction": {"type": "string", "minLength": 1},
+                "file": _CHAT_FILE_PROPERTY,
+                "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "description": "What the evidence is; the file's own name when left out.",
+                },
+            },
+        },
+        kind_class="mutating",
+        wire_name="ui_attachments_add_from_chat",
+        daemon_kind="ui.attachments.add_from_chat",
+        summary_template="Keep attached file as evidence",
+    ),
+    ToolEntry(
+        name="ui.wallets.read_document",
+        description=(
+            "Read a photo or PDF the user attached to this chat (`file`) with "
+            "the local vision model on this computer, into a draft of "
+            "transaction rows: each with its values, a confidence, and status "
+            "`ready` or held for review. Use it when the user wants rows from a "
+            "receipt, statement or screenshot added to the book. It runs only "
+            "against a local model (never a remote one) and can take a minute. "
+            "Show the user what was read; then plan the import of the ready "
+            "rows with ui_wallets_import_document_plan, passing the returned "
+            "`draft`. Rows held for review are imported only in the desktop's "
+            "document import, where the user checks them against the page."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "file": _CHAT_FILE_PROPERTY,
+                "pages": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]{0,3}(-[1-9][0-9]{0,3})?$",
+                    "description": "PDF pages to read, e.g. \"2\" or \"1-3\"; all (up to 8) when left out.",
+                },
+                "provider": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "A local provider by name; the first local one when left out.",
+                },
+            },
+        },
+        kind_class="read_only",
+        egresses=True,
+        wire_name="ui_wallets_read_document",
+        daemon_kind="ui.wallets.read_document",
+        summary_template="Read the attached document on this computer",
+    ),
+    ToolEntry(
+        name="ui.wallets.import_document.plan",
+        description=(
+            "Plan importing the ready rows of a document draft from "
+            "ui_wallets_read_document into a file or exchange wallet "
+            "(`wallet`) or a new one (`new_wallet`), without changing the book. "
+            "Returns the rows to import and already present, date range, "
+            "per-asset totals in msat, overlap with existing rows, warnings, "
+            "blockers and `apply_with`. Show the user the plan; when `ready`, "
+            "call ui_wallets_import_document_apply with the same draft, target "
+            "and apply_with values. Never alter or invent figures."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["draft"],
+            "properties": _IMPORT_DOCUMENT_REQUEST_PROPERTIES,
+        },
+        kind_class="read_only",
+        wire_name="ui_wallets_import_document_plan",
+        daemon_kind="ui.wallets.import_document.plan",
+        summary_template="Plan document import",
+    ),
+    ToolEntry(
+        name="ui.wallets.import_document.apply",
+        description=(
+            "Import a document draft's ready rows exactly as an unchanged ready "
+            "plan from ui_wallets_import_document_plan describes, after the "
+            "user's consent, and keep the document as evidence on each row. "
+            "Refused when the document, the book or the effect changed since "
+            "planning; then plan again. The run is recorded in the import "
+            "history; because the document stays attached as evidence, rolling "
+            "it back is done in the desktop, not with a tool."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["draft", "plan_digest", "expected_source_sha256", "expected_input_version"],
+            "properties": {
+                **_IMPORT_DOCUMENT_REQUEST_PROPERTIES,
+                "plan_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "expected_source_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "expected_input_version": {"type": "integer", "minimum": 0},
+            },
+        },
+        kind_class="mutating",
+        wire_name="ui_wallets_import_document_apply",
+        daemon_kind="ui.wallets.import_document.apply",
+        summary_template="Import rows from the attached document",
     ),
     ToolEntry(
         name="ui.source_funds.evidence.list",
@@ -3241,7 +3885,11 @@ _EXPANDED_TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ),
     ToolEntry(
         name="ui.reports.exit_tax_preview",
-        description="Read the deterministic Austrian exit-tax preview for a departure date and destination class.",
+        description=(
+            "Read the deterministic Austrian exit-tax preview: tax on unrealized "
+            "Neubestand gains as if all holdings were sold at market value on the "
+            "departure date (YYYY-MM-DD), for an EU/EEA or third-country move."
+        ),
         parameters={
             "type": "object",
             "additionalProperties": False,
@@ -3275,6 +3923,7 @@ _EXPANDED_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         },
         kind_class="mutating",
         wire_name="ui_rates_latest",
+        egresses=True,
         daemon_kind="ui.rates.latest",
         summary_template="Fetch latest market rate",
     ),
@@ -3338,30 +3987,43 @@ _REVIEW_OPERATIONS_SCHEMA = {
     "items": {
         "type": "object", "additionalProperties": False, "required": ["type"],
         "properties": {
-            "type": {"type": "string", "enum": ["price_override", "exclude", "custody_component", "unpair"]},
+            "type": {"type": "string", "enum": ["price_override", "exclude", "custody_component", "unpair", "pair", "dismiss_pair", "undismiss_pair", "custody_gap", "kind_override", "accept_coarse_prices"]},
             "transaction_id": {"type": "string", "minLength": 1},
+            "transaction_ids": {"type": "array", "minItems": 1, "maxItems": 1000, "items": {"type": "string", "minLength": 1}, "description": "accept_coarse_prices only: cases with reason pricing_review_required whose coarse price the user accepted as it stands. Omit to accept every such case; the plan names them. A plan for chat holds about 1000 ids; name batches for larger books. Propose it only after the user said the approximate prices are acceptable."},
             "pair_id": {"type": "string", "minLength": 1, "description": "For unpair only: the case's pair.pair_id. Propose it only after the user explicitly confirmed this pair is not one movement. pair_txids_differ is a hint, not proof: a hop through a wallet the book does not track also has two txids, and unpairing it books a disposal plus a new acquisition. Never unpair to clear a hold."},
             "expected_fingerprint": {"type": "string", "minLength": 1, "description": "For unpair only: the case's pair.pair_fingerprint, unchanged, as the user confirmed it. A pair revised or replaced since is refused with review_case_changed; read the case again and ask the user again."},
-            "fiat_rate": {"type": "string", "description": "Exact positive decimal; use this OR fiat_value."},
-            "fiat_value": {"type": "string", "description": "Exact nonnegative decimal; use this OR fiat_rate."},
-            "reason": {"type": "string", "minLength": 1, "description": "Required audit reason for price/exclusion/unpair. Cite inspected evidence, never invent it; for unpair, record the user's choice rather than claiming the transactions are unrelated."},
+            "fiat_rate": {"type": "string", "description": "Exact positive decimal per unit, in the book's fiat currency (the cases' fiat_currency) whatever the row was imported in; use this OR fiat_value."},
+            "fiat_value": {"type": "string", "description": "Exact nonnegative decimal total, in the book's fiat currency (the cases' fiat_currency) whatever the row was imported in; use this OR fiat_rate."},
+            "out_transaction_id": {"type": "string", "minLength": 1, "description": "pair/dismiss_pair/undismiss_pair: outbound leg."},
+            "in_transaction_id": {"type": "string", "minLength": 1, "description": "pair/dismiss_pair/undismiss_pair: inbound leg."},
+            "pair_kind": {"type": "string", "description": "pair: a ui_transfers_pair kind (default manual)."},
+            "policy": {"type": "string", "enum": ["carrying-value", "taxable"], "description": "pair: take the candidate's default_policy; carrying-value realizes nothing, taxable books a disposal."},
+            "out_amount_msat": {"type": "integer", "minimum": 1, "description": "pair, cross-asset only: swapped part of the outbound, msat."},
+            "expires_in_days": {"type": "integer", "minimum": 1, "maximum": 3650, "description": "dismiss_pair: default 90."},
+            "action": {"type": "string", "enum": ["create", "dismiss", "revise", "reopen", "classify_residual"], "description": "custody_gap: the ui_custody_review_plan action."},
+            "gap_id": {"type": "string", "minLength": 1},
+            "classification": {"type": "string", "enum": list(_CUSTODY_RESIDUAL_CLASSIFICATIONS), "description": "custody_gap classify_residual only."},
+            "kind": {"type": ["string", "null"], "description": "kind_override: inbound kind (income, mining, staking, interest, buy, ...) for a non-quarantined inbound transaction outside active custody; null restores the import's kind."},
+            "reason": {"type": "string", "minLength": 1, "description": "Required audit reason for every type except custody_component (which uses request.reason). Cite inspected evidence, never invent it; for unpair/dismiss_pair, record the user's choice rather than claiming the transactions are unrelated."},
             "request": {
                 "type": "object", "additionalProperties": False,
-                "required": ["action", "components"],
+                "required": ["action"],
                 "properties": {
-                    "action": {"type": "string", "enum": ["create"]},
+                    "action": {"type": "string", "enum": ["create", "revise", "undo", "activate", "supersede"]},
                     "components": {"type": "array", "minItems": 1, "maxItems": 50, "items": _CUSTODY_COMPONENT_SPEC_SCHEMA},
+                    "component_id": {"type": "string", "minLength": 1},
+                    "spec": {"type": "object", "description": "revise: changed component fields (legs, allocations, change_reason, ...)."},
                     "activate": {"type": "boolean"},
                     "reason": {"type": "string", "minLength": 1},
                 },
-                "description": "Create evidence-backed custody components only. Missing-wallet gap reviews remain in their local-provider tools; reviewed conversion approval is unavailable.",
+                "description": "create takes components (+activate); revise takes component_id+spec (+activate); undo/supersede take component_id+reason; activate takes component_id. When an interpretation was wrong, supersede it and create the corrected one on the same anchors in one batch, or revise it. Conversion components stay drafts for human review.",
             },
         },
     },
 }
 _REVIEW_EFFECTS_SCHEMA = {
     "type": "object", "additionalProperties": False,
-    "required": ["entries_count", "quarantine_count", "quarantines", "wallet_holdings", "report_ready", "journal_digest"],
+    "required": ["entries_count", "quarantine_count", "quarantines", "wallet_holdings", "report_ready", "journal_digest", "tax"],
     "properties": {
         "entries_count": {"type": "integer", "minimum": 0},
         "quarantine_count": {"type": "integer", "minimum": 0},
@@ -3374,18 +4036,22 @@ _REVIEW_EFFECTS_SCHEMA = {
             "properties": {key: {"type": "string"} for key in ("wallet_id", "asset", "quantity", "cost_basis")},
         }},
         "report_ready": {"type": "boolean"}, "journal_digest": {"type": "string"},
+        "tax": {"type": "object"}, "acquisition_context": {"type": "object"},
+        "accounting_totals": {"type": "array"},
     },
 }
 _REVIEW_ARTIFACT_SCHEMA = {
     "type": "object", "additionalProperties": False,
-    "required": ["schema_version", "workspace_id", "profile_id", "base_input_version", "operations", "before", "after", "digest"],
+    "required": ["schema_version", "workspace_id", "profile_id", "base_input_version", "operations", "before", "after", "delta", "digest"],
     "properties": {
         "schema_version": {"type": "integer", "enum": [1]},
         "workspace_id": {"type": "string", "minLength": 1},
         "profile_id": {"type": "string", "minLength": 1},
         "base_input_version": {"type": "integer", "minimum": 0},
-        "operations": _REVIEW_OPERATIONS_SCHEMA,
-        "before": _REVIEW_EFFECTS_SCHEMA, "after": _REVIEW_EFFECTS_SCHEMA,
+        # Copied unchanged from the plan, whose schema documents each type; the
+        # core revalidates every operation, so apply need not repeat the docs.
+        "operations": {"type": "array", "minItems": 1, "maxItems": 50, "items": {"type": "object"}},
+        "before": _REVIEW_EFFECTS_SCHEMA, "after": _REVIEW_EFFECTS_SCHEMA, "delta": {"type": "object"},
         "digest": {"type": "string", "minLength": 64, "maxLength": 64},
     },
     "description": "Exact unchanged artifact returned by ui.review.plan. Do not reconstruct quantities, effects, scope or digest.",
@@ -3414,7 +4080,7 @@ _REVIEW_TOOL_CATALOG = (
     ),
     ToolEntry(
         name="ui.review.plan", wire_name="ui_review_plan", daemon_kind="ui.review.plan",
-        description="Preview a bounded batch of evidence-backed accounting repairs without changing the book. Use the cases input_version. Inspect evidence first and include audit reasons. Exclude only when the user establishes the row belongs outside accounting, never to clear missing evidence. A case with `unpair` in supported_operations names its pair. Different same-asset txids are a hint to show the user, never a reason to unpair on your own: propose unpair (type unpair, pair_id, expected_fingerprint) only for pairs the user explicitly confirmed, one by one, are not one movement; those may share one proposal. Returns an exact portable artifact and canonical before/after effects for consent.",
+        description="THE what-if path: preview a batch of journal changes on an in-memory copy, never persisted, no consent needed. Answers \"what does this change do to my taxes?\": before/after carry per-year realized gain/loss, income and, for Austrian EUR books, Kennzahlen and indicative tax (withheld while report blockers remain); delta lists only changed years (after minus before). Batch every write the user agreed to (prices, exclusions, pair/unpair/dismiss_pair/undismiss_pair, custody components incl. supersede+recreate, custody_gap actions, kind_override) so one consented ui.review.apply applies them atomically. Use the cases input_version. Inspect evidence first; give audit reasons. Exclude only when the user establishes the row is outside accounting, never to clear missing evidence. Propose unpair (pair_id, expected_fingerprint) only for pairs the user confirmed, one by one, are not one movement; different txids are a hint, not proof. Returns the exact artifact for consent.",
         parameters={"type": "object", "additionalProperties": False, "required": ["operations", "expected_input_version"], "properties": {
             "operations": _REVIEW_OPERATIONS_SCHEMA,
             "expected_input_version": {"type": "integer", "minimum": 0},
@@ -3439,12 +4105,52 @@ _REVIEW_TOOL_CATALOG = (
 )
 
 
-TOOL_CATALOG: tuple[ToolEntry, ...] = (
-    *_BASE_TOOL_CATALOG,
-    *_EXPANDED_TOOL_CATALOG,
-    *_REVIEW_TOOL_CATALOG,
-    *(ToolEntry(**spec) for spec in chain_analysis_tool_specs()),
-    *(ToolEntry(**spec) for spec in source_tool_specs()),
+# Mutating tools whose change another AI tool can take back, with that
+# inverse. The Auto permission mode approves these without asking (unless they
+# egress); every other mutating tool asks. Reversible means the result carries
+# what the inverse needs (see `kassiber.ai.undo`). Deliberately irreversible:
+# bulk writes (bulk_pair, rules.apply, the review batch), deletes without a
+# restore (payouts, saved views, chain-analysis cases/labels/watches/datasets),
+# a pair update or loan unmark whose old values the result does not carry,
+# rollbacks, exports, evidence/document/source-funds writes, policy changes
+# (maintenance.configure, source authorizations) and everything that egresses.
+REVERSIBLE_TOOLS: dict[str, str] = {
+    # Rebuilds derived journal state only; no authored fact changes.
+    "ui.journals.process": "rerun; derived state only",
+    "ui.transfers.pair": "ui.transfers.unpair",
+    "ui.transfers.unpair": "ui.transfers.pair with the removed pair's legs",
+    "ui.transfers.dismiss": "ui.transfers.dismissals.delete",
+    "ui.transfers.dismissals.delete": "ui.transfers.dismiss with the same legs",
+    "ui.transfers.rules.create": "ui.transfers.rules.delete",
+    "ui.transfers.rules.delete": "ui.transfers.rules.create with the removed rule",
+    "ui.transfers.rules.set_enabled": "ui.transfers.rules.set_enabled",
+    "ui.transfers.payouts.create": "ui.transfers.payouts.delete",
+    "ui.transfers.components.apply": "ui.transfers.components.plan supersede/undo",
+    "ui.custody.review.apply": "ui.custody.review.plan reopen",
+    "ui.saved_views.create": "ui.saved_views.delete",
+    "ui.loans.mark": "ui.loans.unmark",
+    "ui.transactions.metadata.update": "ui.transactions.history.revert",
+    "ui.transactions.history.revert": "ui.transactions.history.revert",
+    "ui.journals.quarantine.resolve": "ui.transactions.history.revert",
+    "ui.wallets.import_attachment.apply": "ui.imports.rollback.plan",
+    "ui.chain_analysis.cases.save": "ui.chain_analysis.cases.delete",
+    "ui.chain_analysis.watches.create": "ui.chain_analysis.watches.delete",
+}
+
+
+def _with_reversibility(entry: ToolEntry) -> ToolEntry:
+    return replace(entry, reversible=True) if entry.name in REVERSIBLE_TOOLS else entry
+
+
+TOOL_CATALOG: tuple[ToolEntry, ...] = tuple(
+    _with_reversibility(entry)
+    for entry in (
+        *_BASE_TOOL_CATALOG,
+        *_EXPANDED_TOOL_CATALOG,
+        *_REVIEW_TOOL_CATALOG,
+        *(ToolEntry(**spec) for spec in chain_analysis_tool_specs()),
+        *(ToolEntry(**spec) for spec in source_tool_specs()),
+    )
 )
 
 TOOL_CAPABILITY_NAMES = (
@@ -3462,6 +4168,74 @@ TOOL_CAPABILITY_NAMES = (
     "operations",
 )
 
+# One line per loadable area. The system prompt carries this index instead of
+# every schema, so a small local model knows what exists without spending its
+# context window on tools the question does not need.
+TOOL_AREA_SUMMARIES: dict[str, str] = {
+    "reports": (
+        "totals, holdings, balance history, capital gains by tax year, tax summary "
+        "with indicative Austrian tax, exit-tax preview, rates, charts"
+    ),
+    "transactions": (
+        "list, search, largest/smallest, one transaction's context and flow, "
+        "notes/tags, attachments, edit history"
+    ),
+    "wallets": "wallets, backends, sync, UTXOs, attached import files, node connections",
+    "transfers": "transfer/swap pairing, payouts, custody gaps, auto-pair rules, saved views",
+    "review": "quarantine cases: evidence, repair plans, consented fixes, receipts",
+    "operations": "health, next actions, readiness, maintenance, review worklist",
+    "privacy": "Privacy Mirror, privacy hygiene, egress, local chain analysis",
+    "source_funds": "source-of-funds cases, links, evidence and exports",
+    "merchant": "BTCPay provenance, invoices, commercial documents",
+    "loans": "loan and collateral markers",
+    "workspace": "overview across all books (only when the user asks for all books)",
+}
+LOADABLE_TOOL_AREAS = tuple(TOOL_AREA_SUMMARIES)
+
+LOAD_TOOLS_NAME = "load_tools"
+# Loading is per turn and bounded by the catalog; four areas cover any single
+# question without letting one call re-create the full-catalog dump.
+LOAD_TOOLS_MAX_AREAS = 4
+LOAD_TOOLS_ENTRY = ToolEntry(
+    name=LOAD_TOOLS_NAME,
+    description=(
+        "Add tool areas from the system prompt's area list to this turn when the "
+        "tools you need are not offered. Their tools are callable right after."
+    ),
+    parameters={
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["areas"],
+        "properties": {
+            "areas": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": LOAD_TOOLS_MAX_AREAS,
+                "items": {"type": "string", "enum": list(LOADABLE_TOOL_AREAS)},
+            },
+        },
+    },
+    kind_class="read_only",
+    summary_template="Load tool areas",
+)
+
+
+def tool_area_index() -> str:
+    """The compact area index appended to the Kassiber system prompt."""
+
+    lines = "\n".join(
+        f"- {area}: {summary}" for area, summary in TOOL_AREA_SUMMARIES.items()
+    )
+    return (
+        "Tool areas. Each turn offers only the areas the question needs; the "
+        "offered tools are the ones you can call.\n"
+        f"{lines}\n"
+        f"If you need an area that is not offered, call {LOAD_TOOLS_NAME} when it "
+        "is offered; otherwise name the area so the user can ask about it. Never "
+        "fill in a figure a missing tool would provide, and never apply a tax rate "
+        "yourself."
+    )
+
 _CORE_TOOL_NAMES = {
     "status",
     "ui.overview.snapshot",
@@ -3476,6 +4250,8 @@ def tool_capabilities(tool: ToolEntry) -> frozenset[str]:
     """Return the small-model capability packs that should advertise a tool."""
 
     name = tool.name
+    if name in CHAT_DOCUMENT_TOOL_NAMES:
+        return frozenset({CHAT_DOCUMENT_CAPABILITY})
     capabilities: set[str] = set()
     if name in REVIEW_TOOL_NAMES:
         capabilities.add("review")
@@ -3489,12 +4265,20 @@ def tool_capabilities(tool: ToolEntry) -> frozenset[str]:
         capabilities.update({"transactions", "operations"})
     if name.startswith("ui.loans."):
         capabilities.add("loans")
+    if name == "ui.visuals.render":
+        # Charts plot report and transaction reads. A review turn keeps its
+        # bounded pack; asking for a chart by name selects `reports`.
+        capabilities.update({"reports", "transactions"})
     if name.startswith(("ui.reports.", "ui.rates.")) or name in {
         "ui.report.blockers",
         "ui.audit.changes_since_last_answer",
     }:
         capabilities.add("reports")
-    if name.startswith(("ui.wallets.", "ui.backends.")) or name in {
+    if name in WALLET_IMPORT_TOOL_NAMES:
+        # File import, its rollback and the connect handoff are wallet work;
+        # keeping them out of `operations` keeps health questions small.
+        capabilities.add("wallets")
+    elif name.startswith(("ui.wallets.", "ui.backends.")) or name in {
         "ui.maintenance.settings",
         "ui.maintenance.configure",
         "ui.maintenance.run",
@@ -3556,8 +4340,9 @@ def select_tool_capabilities(
 ) -> frozenset[str] | None:
     """Select bounded tool packs from the question and current typed screen context.
 
-    ``None`` means advertise the full catalog. This is reserved for explicit
-    capability-discovery questions and keeps the public helper backward compatible.
+    ``None`` means advertise the full catalog. It is returned only when no
+    messages are supplied, which keeps the public helper backward compatible;
+    a live question always gets bounded packs.
     """
 
     if messages is None:
@@ -3568,8 +4353,9 @@ def select_tool_capabilities(
         if message.get("role") == "user" and isinstance(message.get("content"), str)
     ][-3:]
     latest = recent_user_messages[-1] if recent_user_messages else ""
-    if any(phrase in latest for phrase in ("what can you do", "all tools", "capabilities", "tool catalog")):
-        return None
+    # "What can you do?" used to advertise every schema (~36k tokens), more than
+    # a small local model's whole context. The system prompt's area index
+    # answers it, and `load_tools` reaches any area the answer leads to.
 
     selected = {"core"}
     route = str((screen_context or {}).get("route") or "").lower()
@@ -3578,7 +4364,7 @@ def select_tool_capabilities(
         selected.update(str(item) for item in requested if str(item) in TOOL_CAPABILITY_NAMES)
 
     haystack = f"{route} {' '.join(recent_user_messages)}"
-    if _continues_review_checkpoint(messages, latest) or any(
+    if route == "/review" or _continues_review_checkpoint(messages, latest) or any(
         word in haystack for word in ("quarantine", "quarantäne", "quarantaene", "review cases", "review receipt", "accounting review")
     ):
         # Evidence, wallet and report words within a repair request should not
@@ -3593,7 +4379,15 @@ def select_tool_capabilities(
             "gesamtvermögen", "gesamtvermoegen",
         ),
         "transactions": ("transaction", "txid", "note", "tag", "metadata", "evidence", "attachment", "quarantine", "edit"),
-        "reports": ("report", "summary", "total", "journal", "tax", "gain", "balance", "portfolio", "price", "rate", "export", "steuer", "e1kv", "exit tax", "lightning", "routing", "profitable", "profitability"),
+        "reports": ("report", "summary", "total", "journal", "tax", "gain", "balance", "portfolio", "price", "rate", "export", "steuer", "e1kv", "exit tax", "lightning", "routing", "profitable", "profitability",
+                    "chart", "plot", "graph", "diagram", "visuali", "grafik", "schaubild",
+                    # Gains, income and holdings questions that name neither
+                    # "tax" nor "report" ("lot-by-lot 2024", "my staking income").
+                    "lot-by-lot", "per lot", "per-lot", "tax lot", "disposal",
+                    "cost basis", "loss", "income", "mining", "staking",
+                    "unrealized", "unrealised", "pnl", "holdings", "worth",
+                    "gewinn", "verlust", "einkünfte", "einkuenfte", "einkommen",
+                    "anschaffungskosten", "kennzahl", "spekulation", "bestand"),
         "wallets": (
             "wallet", "backend", "sync", "source", "utxo", "connection",
             # Onboarding an unlisted exchange from a file: the attachment
@@ -3641,7 +4435,7 @@ def select_tool_capabilities(
     return frozenset(selected)
 
 TOOL_BY_NAME: dict[str, ToolEntry] = {}
-for tool in TOOL_CATALOG:
+for tool in (*TOOL_CATALOG, LOAD_TOOLS_ENTRY):
     TOOL_BY_NAME[tool.name] = tool
     TOOL_BY_NAME[tool.provider_name] = tool
 TOOL_BY_NAME["ui_reports_report_blockers"] = TOOL_BY_NAME["ui.report.blockers"]
@@ -3660,7 +4454,9 @@ def responses_tool_definitions(
     return [
         tool.to_responses_tool()
         for tool in TOOL_CATALOG
-        if (include_mutating or tool.kind_class == "read_only")
+        # `load_tools` is added per transport by the chat loop, never by a pack.
+        if tool.name != LOAD_TOOLS_NAME
+        and (include_mutating or tool.kind_class == "read_only")
         and (allowed_names is None or tool.name in allowed_names)
         and (capabilities is None or bool(tool_capabilities(tool) & capabilities))
     ]
@@ -3743,11 +4539,39 @@ def summarize_tool_call(tool: ToolEntry, arguments: dict[str, Any]) -> str:
         return "Refresh all watch-only sources"
     if tool.name == "ui.journals.process":
         return "Process journals"
+    if tool.name == "ui.wallets.import_attachment.apply":
+        new_wallet = arguments.get("new_wallet")
+        label = (
+            new_wallet.get("label") if isinstance(new_wallet, dict) else arguments.get("wallet")
+        )
+        if isinstance(label, str) and label.strip():
+            return f"Import the attached file into {label.strip()}"
+        return "Import the attached file"
+    if tool.name == "ui.imports.rollback":
+        return "Delete the rows an import run created"
+    if tool.name == "ui.wallets.import_document.apply":
+        new_wallet = arguments.get("new_wallet")
+        label = (
+            new_wallet.get("label") if isinstance(new_wallet, dict) else arguments.get("wallet")
+        )
+        if isinstance(label, str) and label.strip():
+            return f"Import rows from the attached document into {label.strip()}"
+        return "Import rows from the attached document"
+    if tool.name == "ui.attachments.add_from_chat":
+        transaction = arguments.get("transaction")
+        file_id = arguments.get("file")
+        what = f"attached {file_id.strip()}" if isinstance(file_id, str) and file_id.strip() else "the attached file"
+        if isinstance(transaction, str) and transaction.strip():
+            return f"Keep {what} as evidence on {transaction.strip()}"
+        return f"Keep {what} as evidence"
     if tool.name == "ui.journals.quarantine.resolve":
         target = arguments.get("transaction")
+        group = arguments.get("group_id")
         transaction = (
             target.strip()
             if isinstance(target, str) and target.strip()
+            else f"the root of {group.strip()}"
+            if isinstance(group, str) and group.strip()
             else "quarantined transaction"
         )
         if arguments.get("action") == "exclude":
@@ -3914,6 +4738,27 @@ def summarize_tool_call(tool: ToolEntry, arguments: dict[str, Any]) -> str:
         "ui.transfers.components.plan",
         "ui.transfers.components.apply",
     }:
+        action = arguments.get("action", "create")
+        if action != "create":
+            target = arguments.get("component_id")
+            component = (
+                f"custody component {target.strip()}"
+                if isinstance(target, str) and target.strip()
+                else "custody component"
+            )
+            effect = {
+                "revise": (
+                    f"Replace {component} with a new active revision"
+                    if arguments.get("activate") is True
+                    else f"Save a draft revision of {component}"
+                ),
+                "supersede": f"Retire {component} (anchors return to raw booking)",
+                "undo": f"Restore superseded {component} as a draft",
+                "activate": f"Activate draft {component}",
+            }.get(action, f"Change {component}")
+            if tool.name == "ui.transfers.components.plan":
+                return f"Preview: {effect[0].lower()}{effect[1:]}"
+            return effect
         components = arguments.get("components")
         count = len(components) if isinstance(components, list) else 0
         noun = "component" if count == 1 else "components"

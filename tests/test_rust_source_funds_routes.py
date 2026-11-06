@@ -14,6 +14,7 @@ from kassiber.cli.main import build_parser
 from kassiber.db import open_db
 from tests.test_rust_report_exports import _book, ROOT, RUST_BIN
 from tests.test_rust_source_funds_diagnostics import _compare
+from tests.rust_port.book_schema import TABLES
 
 
 # Every source-funds route is native; none stays Python.
@@ -85,7 +86,7 @@ def test_source_funds_every_route_preserves_all_tables_hashes_and_declared_owner
             connection.execute("PRAGMA key='synthetic-routes-passphrase'")
         result = dump(connection)
         connection.close()
-        assert len(result) == 112
+        assert tuple(sorted(result)) == TABLES
         return result
 
     from tests import cli_runner

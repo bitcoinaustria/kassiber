@@ -14,13 +14,12 @@ describe("setup chain artwork view", () => {
     expect(html).not.toContain("tabindex");
   });
 
-  it("outlines only the next block and shows the mempool above it", () => {
+  it("frames the pixel blocks and shows the mempool above them", () => {
     const html = renderToStaticMarkup(
       <ChainArtwork mined={3} fill={0.5} className="h-56" />,
     );
-    // Every block carries an outline; only the next block's is visible.
     expect(html.match(/kb-chain-shell/g)).toHaveLength(4);
-    expect(html.match(/kb-chain-shell[^"]*opacity-0/g)).toHaveLength(3);
+    expect(html).toContain('shape-rendering="crispEdges"');
     expect(html).toContain("kb-chain-mempool");
   });
 

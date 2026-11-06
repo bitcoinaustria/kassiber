@@ -36,6 +36,7 @@ SAMPLES = {
     "tests/test_ownership.py": "Classification, csv recovery, script scope and privacy redaction are pure/service units; injected verification fetchers must remain explicit test transports.",
     "tests/test_schema_swap_matching.py": "Historical schema downgrades, FK/uniqueness checks and reopens must port to store migration tests; fresh reviewed component behavior remains covered.",
     "tests/test_ai_core_api_format.py": "Provider storage and HTTP client fallback are units; daemon test_connection is in process; two real CLI classes use only external scripted provider setup.",
+    "tests/test_mcp_server.py": "Protocol-era, stdio-loop and catalog-projection classes drive an in-process McpServer with a fake provider and port as Rust MCP units. Book, grant and brokered classes seed books through in-process main() and direct open_db reads and patch broker, lease and agent-access PATH_ENV seams, so they need explicit scenarios. Only the stdio process test launches a real child; the last grant test calls daemon._agent_access_payload directly.",
     "tests/test_custody_authored_migration.py": "Legacy SQL triggers/backfills and partial authored components test store compatibility; Rust must open historical fixtures rather than discard Python seeding intent.",
 }
 

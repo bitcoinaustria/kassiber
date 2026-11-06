@@ -113,5 +113,17 @@
     "connectionNetworkPhrases": [
       "{{network}} Wallet"
     ]
+  },
+  "review": {
+    "journals": {
+      "title": "Journale müssen verarbeitet werden",
+      "subtitle": "Berichte sind veraltet, bis die Journale verarbeitet sind",
+      "action": "Journale verarbeiten"
+    },
+    "queue": {
+      "title": "Review",
+      "subtitle_one": "{{count}} offen zum Prüfen",
+      "subtitle_other": "{{count}} offen zum Prüfen"
+    }
   }
 }

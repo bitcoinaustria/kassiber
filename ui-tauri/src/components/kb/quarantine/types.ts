@@ -168,6 +168,8 @@ export interface QuarantineSnapshot {
     /** The book the page was read from; absent from older daemons. */
     workspace_id?: string | null;
     profile_id?: string | null;
+    /** The book's currency, which a price entered for a row is in. */
+    fiat_currency?: string | null;
     count: number;
     by_reason: QuarantineReason[];
     limit: number;

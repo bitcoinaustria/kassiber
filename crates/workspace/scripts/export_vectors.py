@@ -189,7 +189,7 @@ def generate():
                 "workspace_overview": workspace_overview(conn),
             })
             assert list(conn.iterdump()) == before
-            assert conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").fetchone()[0] == 112
+            assert conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").fetchone()[0] == 113
             conn.close()
     return output
 

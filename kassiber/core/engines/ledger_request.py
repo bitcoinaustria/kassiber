@@ -11,10 +11,10 @@ value (``docs/plan/20-kassiber-tax-engine.md``, design §1.1 and §3):
   policy and its currency, and the INI parse of the names RP2's membership
   checks accept;
 - per row: the normalized kind, the stored rate and value as exact decimals,
-  coarse pricing, the text, the Austrian overrides, privacy-hop evidence,
-  conflict and pending holds (over all rows of the row's asset), chain-order
-  evidence, and the timestamp, both as RP2 parses it and as Kassiber's
-  Austrian rules read it for the Neuvermögen cutoff;
+  coarse pricing still awaiting review, the text, the Austrian overrides,
+  privacy-hop evidence, conflict and pending holds (over all rows of the
+  row's asset), chain-order evidence, and the timestamp, both as RP2 parses
+  it and as Kassiber's Austrian rules read it for the Neuvermögen cutoff;
 - per pair: the move's legs and atomic bundle, and a cross-asset pair's
   legs, policy, and whether it is a Bitcoin rail.
 
@@ -554,6 +554,27 @@ def _row_text(row: Mapping[str, Any]) -> Optional[str]:
     return None
 
 
+def _coarse_needs_review(row: Mapping[str, Any]) -> bool:
+    """A coarse price waits for review unless the owner accepted this price.
+
+    An acceptance is bound to the exact price accepted: a price that changed
+    since (a rate rebuild, a new provider sample) is reviewed again.
+    """
+    if _get(row, "pricing_quality") != pricing.QUALITY_COARSE_FALLBACK:
+        return False
+    accepted = _get(row, "pricing_review_accepted_price")
+    if not accepted:
+        return True
+    # A projected row carries the price of its transaction as reviewed; it
+    # may itself hold a re-sliced rate.
+    reviewed = (
+        _get(row, "pricing_review_price")
+        if hasattr(row, "keys") and "pricing_review_price" in row.keys()
+        else pricing.reviewed_price(row)
+    )
+    return not pricing.same_reviewed_price(accepted, reviewed)
+
+
 def _request_row(row: Mapping[str, Any], holds: Mapping[str, str]) -> dict[str, Any]:
     row_id = str(row["id"])
     regime_override = _get(row, "at_regime_override")
@@ -570,7 +591,7 @@ def _request_row(row: Mapping[str, Any], holds: Mapping[str, str]) -> dict[str, 
         "fee_msat": row["fee"],
         "rate": decimal_text(_get(row, "fiat_rate_exact"), _get(row, "fiat_rate")),
         "value": decimal_text(_get(row, "fiat_value_exact"), _get(row, "fiat_value")),
-        "coarse": _get(row, "pricing_quality") == pricing.QUALITY_COARSE_FALLBACK,
+        "coarse": _coarse_needs_review(row),
         "kind": normalized_transaction_kind(row),
         "text": _row_text(row),
         "regime_override": regime_override if regime_override in REGIME_OVERRIDES else None,

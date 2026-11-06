@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -219,6 +220,92 @@ class CustodyAiAuditTest(unittest.TestCase):
         self.assertEqual(scoped["count"], 1)
         self.assertEqual(scoped["records"][0]["component_id"], "component-selected")
         self.assertNotIn("gap-component-private", str(scoped))
+
+    def _append(self, record_id: str, consent_decision: str, provider_kind: str = "local") -> None:
+        custody_ai_audit.append_assistance_record(
+            self.conn,
+            workspace_id="ws",
+            profile_id="profile",
+            tool_name="ui.custody.review.apply",
+            daemon_kind="ui.custody.review.apply",
+            call_id=record_id,
+            provider_kind=provider_kind,
+            model="claude-code" if provider_kind == "mcp" else "local-model",
+            model_proposal={"gap_id": "gap:1", "expected_input_version": 1},
+            final_proposal=None,
+            consent_decision=consent_decision,
+            consent_requested_at=NOW,
+            consent_decided_at=NOW,
+            execution_status="executed",
+        )
+
+    def test_an_mcp_host_approval_is_a_recorded_consent_decision(self):
+        self._append("mcp-call", "mcp_host", provider_kind="mcp")
+        self.conn.commit()
+        summary = custody_ai_audit.redacted_audit_summary(self.conn, "profile")
+        self.assertEqual(
+            [(r["provider_kind"], r["consent_decision"]) for r in summary["records"]],
+            [("mcp", "mcp_host")],
+        )
+        with self.assertRaises(ValueError):
+            self._append("other", "auto_approved")
+
+    def test_an_existing_audit_table_learns_mcp_host_without_losing_records(self):
+        # A book from before MCP writes: the old CHECK refuses `mcp_host`.
+        self._append("before", "allow_once")
+        self.conn.commit()
+        sql = self.conn.execute(
+            "SELECT sql FROM sqlite_master WHERE name = 'custody_ai_assistance_audits'"
+        ).fetchone()[0]
+        old_sql = sql.replace(",\n        'mcp_host'", "")
+        self.assertNotIn("'mcp_host'", old_sql)
+        self.conn.execute("PRAGMA foreign_keys = OFF")
+        self.conn.execute("ALTER TABLE custody_ai_assistance_audits RENAME TO audit_copy")
+        self.conn.execute(old_sql)
+        self.conn.execute("INSERT INTO custody_ai_assistance_audits SELECT * FROM audit_copy")
+        self.conn.execute("DROP TABLE audit_copy")
+        self.conn.execute(
+            "CREATE TRIGGER trg_custody_ai_assistance_immutable BEFORE UPDATE ON "
+            "custody_ai_assistance_audits BEGIN SELECT RAISE(ABORT, 'custody_ai_assistance_immutable'); END"
+        )
+        self.conn.commit()
+        with self.assertRaises(sqlite3.IntegrityError):
+            self._append("refused", "mcp_host", provider_kind="mcp")
+        self.conn.rollback()
+        self.conn.close()
+
+        self.conn = open_db(Path(self.tmp.name))
+        self.addCleanup(self.conn.close)
+        self._append("after", "mcp_host", provider_kind="mcp")
+        self.conn.commit()
+        rows = self.conn.execute(
+            "SELECT call_id, consent_decision FROM custody_ai_assistance_audits ORDER BY created_at, call_id"
+        ).fetchall()
+        self.assertEqual(sorted(tuple(row) for row in rows), [("after", "mcp_host"), ("before", "allow_once")])
+        names = {
+            row[0]
+            for row in self.conn.execute(
+                "SELECT name FROM sqlite_master WHERE tbl_name = 'custody_ai_assistance_audits'"
+            )
+        }
+        self.assertIn("trg_custody_ai_assistance_immutable", names)
+        self.assertIn("idx_custody_ai_assistance_profile_time", names)
+        with self.assertRaises(sqlite3.DatabaseError):
+            self.conn.execute("UPDATE custody_ai_assistance_audits SET model = 'x'")
+        self.assertEqual(self.conn.execute("PRAGMA integrity_check").fetchone()[0], "ok")
+        # A current table is left alone on the next open.
+        before = self.conn.execute(
+            "SELECT sql FROM sqlite_master WHERE name = 'custody_ai_assistance_audits'"
+        ).fetchone()[0]
+        self.conn.close()
+        self.conn = open_db(Path(self.tmp.name))
+        self.addCleanup(self.conn.close)
+        self.assertEqual(
+            self.conn.execute(
+                "SELECT sql FROM sqlite_master WHERE name = 'custody_ai_assistance_audits'"
+            ).fetchone()[0],
+            before,
+        )
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ import pytest
 from kassiber.db import open_db
 from crates.reports.scripts.gen_source_funds_reads import BASE, outcome
 from tests.test_rust_report_exports import _book, _dump
+from tests.rust_port.book_schema import TABLES
 
 ROOT = Path(__file__).resolve().parents[1]
 SERVICE = os.environ.get('KASSIBER_XLSX_SERVICE_BIN')
@@ -19,7 +20,7 @@ CASES = json.loads((ROOT/'crates/reports/tests/data/source_funds_reads.json').re
 
 def state(root):
     tables = _dump(root, {})
-    assert len(tables) == 112
+    assert tuple(sorted(tables)) == TABLES
     return json.dumps(tables, sort_keys=True, separators=(',', ':')).encode()
 
 
@@ -66,7 +67,7 @@ def test_source_funds_stored_sqlcipher_bytes_and_all_112_tables(tmp_path):
         return c
     def dump(c):
         tables = [row[0] for row in c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")]
-        assert len(tables) == 112
+        assert tuple(sorted(tables)) == TABLES
         records = {table: sorted([dict(row) for row in c.execute(f'SELECT * FROM "{table}"')], key=lambda row: json.dumps(row, sort_keys=True)) for table in tables}
         return json.dumps(records, sort_keys=True, separators=(',', ':')).encode()
     conn = connect()

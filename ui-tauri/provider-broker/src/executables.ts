@@ -68,13 +68,13 @@ export async function runProvider(
   provider: ProviderId,
   executable: string,
   args: string[],
-  options: { cwd?: string; limit?: number } = {},
+  options: { cwd?: string; limit?: number; env?: NodeJS.ProcessEnv } = {},
 ): Promise<{ code: number | null; stdout: string }> {
   const limit = options.limit ?? 512_000;
   return new Promise((resolve, reject) => {
     const child = spawn(executable, args, {
       ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
-      env: providerEnvironment(provider),
+      env: options.env ?? providerEnvironment(provider),
       stdio: ["ignore", "pipe", "ignore"],
     });
     let stdout = "";

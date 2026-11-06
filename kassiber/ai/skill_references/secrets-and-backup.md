@@ -64,6 +64,9 @@ command on an encrypted book returns `interaction_required`, read
   and this MCP server is waiting for the user's approval. Ask the user to
   click Allow for it in that same row, then retry. `agent_pairing_denied`
   means the user refused it; stop.
+- `operator_capability_insufficient`: the lease does not cover this MCP tool.
+  Ask the user to unlock again with the `details.user_command` capability (or
+  to lock and unlock for agents in Kassiber after choosing that grant).
 - `fresh_local_authentication`: admin work (reveal, delete, backup, passphrase
   or unlock-policy changes) needs the user's own fresh authentication. Ask the
   user to run that exact command themselves.

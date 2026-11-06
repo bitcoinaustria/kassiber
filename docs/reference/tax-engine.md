@@ -350,7 +350,7 @@ A row:
 | `cutoff_instant` | The time as Kassiber's Austrian rules read it for the Neuvermögen cutoff (`datetime.fromisoformat`, with `Z` as UTC and a naive time taken as UTC): `{"us": ...}`, or `{"error": ...}` with the `ValueError` message Python raises |
 | `amount_msat`, `fee_msat` | Integer msat |
 | `rate`, `value` | `fiat_rate_exact` and `fiat_value_exact`, else `fiat_rate` and `fiat_value`, as canonical decimals; stored non-finite text passes through as CPython writes it; `null` when unpriced |
-| `coarse` | Priced from a coarse fallback |
+| `coarse` | Priced from a coarse fallback the owner has not accepted at this exact price (`pricing_review_accepted_price`) |
 | `kind` | `normalized_transaction_kind(row)`; the kind tables are the engine's (`manifest.rs`) |
 | `text` | The first non-empty of the row's note, description, and kind |
 | `regime_override`, `category_override`, `taxability_off` | The reviewed Austrian overrides: `alt` or `neu`, a category, and `taxability_override == 0` |

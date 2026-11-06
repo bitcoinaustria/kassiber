@@ -33,10 +33,12 @@ from kassiber.core.transfer_matching import (
     POLICY_CARRYING_VALUE,
     POLICY_TAXABLE,
     SwapCandidate,
+    candidate_exclusion_counts,
     compute_swap_fee,
     compute_swap_fee_components,
     default_kind_for,
     default_ownership_policy_for,
+    dismissal_is_active,
     fee_threshold_msat,
     finalize_candidate_conflicts,
     suggest_swap_candidates,
@@ -2191,6 +2193,54 @@ class PairAndDismissalSuppressionTests(unittest.TestCase):
                 amount=99_500_000,
             ),
         ]
+
+    def test_exclusion_counts_explain_each_silent_skip(self):
+        legs = [
+            *self._legs(),
+            _row(id="booked-out", direction="outbound"),
+            _row(id="booked-in", direction="inbound"),
+            _row(id="ignored", direction="outbound", excluded=1),
+        ]
+        dismissal = {
+            "out_transaction_id": "o",
+            "in_transaction_id": "i",
+            "expires_at": "2099-01-01T00:00:00Z",
+        }
+        counts = candidate_exclusion_counts(
+            legs,
+            dismissals=[dismissal],
+            booked_move_transaction_ids=["booked-out", "booked-in", "ignored"],
+            now_iso="2026-06-01T00:00:00Z",
+        )
+        self.assertEqual(
+            counts,
+            {
+                "excluded_by_active_pair": 0,
+                "excluded_already_journaled": 2,
+                "excluded_by_dismissal": 1,
+            },
+        )
+        paired = candidate_exclusion_counts(
+            legs,
+            pair_records=[
+                {"out_transaction_id": "o", "in_transaction_id": "i", "deleted_at": None}
+            ],
+            dismissals=[dismissal],
+            now_iso="2026-06-01T00:00:00Z",
+        )
+        # A dismissal on legs that are already paired suppresses nothing.
+        self.assertEqual(paired["excluded_by_active_pair"], 2)
+        self.assertEqual(paired["excluded_by_dismissal"], 0)
+        expired = candidate_exclusion_counts(
+            legs,
+            dismissals=[{**dismissal, "expires_at": "2025-01-01T00:00:00Z"}],
+            now_iso="2026-06-01T00:00:00Z",
+        )
+        self.assertEqual(expired["excluded_by_dismissal"], 0)
+        self.assertTrue(dismissal_is_active(dismissal, now_iso="2026-06-01T00:00:00Z"))
+        self.assertTrue(
+            dismissal_is_active({**dismissal, "expires_at": None}, now_iso="2026-06-01T00:00:00Z")
+        )
 
     def test_active_pair_record_skips_pairing(self):
         candidates = suggest_swap_candidates(

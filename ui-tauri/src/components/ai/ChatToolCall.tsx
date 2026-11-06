@@ -1,4 +1,4 @@
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, ShieldCheck, Undo2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 
@@ -14,7 +14,12 @@ import { Button } from "@/components/ui/button";
 import { reviewArtifact, reviewReceipt } from "./reviewWorkflow";
 import { evidenceRequest } from "./evidenceRequest";
 import { EvidenceRequestCard } from "./EvidenceRequestCard";
+import { walletInputRequest } from "./walletInputRequest";
+import { WalletInputRequestCard } from "./WalletInputRequestCard";
 import { overviewSnapshotSummary } from "./overviewToolSummary";
+import { openLocalReference } from "./localReference";
+import { autoApprovalBadgeKey } from "./permissionMode";
+import { cn } from "@/lib/utils";
 
 interface ChatToolCallProps {
   toolCall: AiChatToolCall;
@@ -24,10 +29,16 @@ export function ChatToolCall({ toolCall }: ChatToolCallProps) {
   const { t } = useTranslation("assistant");
   const request = evidenceRequest(toolCall);
   if (request) return <EvidenceRequestCard request={request} />;
+  const walletRequest = walletInputRequest(toolCall);
+  if (walletRequest) return <WalletInputRequestCard request={walletRequest} />;
   const hasArguments = Object.keys(toolCall.arguments).length > 0;
   const hasResult = toolCall.result !== undefined && toolCall.result !== null;
   const summary = summarizeToolResult(toolCall.result, t);
   const localReference = localToolReference(toolCall.result);
+  // Ran without a prompt: say which permission let it. A finished change the
+  // daemon can reverse says so too (the assistant does the undo when asked).
+  const approvalKey = autoApprovalBadgeKey(toolCall.approval);
+  const undoable = toolCall.status === "done" && toolResultUndo(toolCall.result) !== null;
   const errorText =
     toolCall.status === "error" || toolCall.status === "denied"
       ? toolCall.reason
@@ -41,6 +52,36 @@ export function ChatToolCall({ toolCall }: ChatToolCallProps) {
       }
     >
       <ToolHeader name={toolCall.name} state={toolCall.status} />
+      {approvalKey || undoable ? (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-2 pb-1.5">
+          {approvalKey ? (
+            <span
+              data-tool-approval={toolCall.approval}
+              className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-background/60 px-1.5 py-px text-2xs text-muted-foreground"
+            >
+              <ShieldCheck
+                className={cn(
+                  "size-3 shrink-0",
+                  toolCall.approval === "full_access"
+                    ? "text-amber-600 dark:text-amber-400"
+                    : "text-muted-foreground",
+                )}
+                aria-hidden="true"
+              />
+              {t(approvalKey)}
+            </span>
+          ) : null}
+          {undoable ? (
+            <span
+              data-tool-undo
+              className="inline-flex items-center gap-1 text-2xs text-muted-foreground"
+            >
+              <Undo2 className="size-3 shrink-0" aria-hidden="true" />
+              {t("tool.undoHint")}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
       {localReference ? (
         <Button
           type="button"
@@ -73,14 +114,16 @@ export function ChatToolCall({ toolCall }: ChatToolCallProps) {
   );
 }
 
-function openLocalReference(reference: {
-  route: "/transactions";
-  transaction: string;
-}) {
-  if (typeof window === "undefined") return;
-  const target = `${reference.route}?tx=${encodeURIComponent(reference.transaction)}`;
-  window.history.pushState({}, "", target);
-  window.dispatchEvent(new PopStateEvent("popstate"));
+/**
+ * The reverse call a mutating tool's result names (`data.undo`), if any. Only
+ * read to say the change can be undone; the desktop never runs it itself.
+ */
+function toolResultUndo(
+  result: unknown,
+): { tool: string; arguments: Record<string, unknown> } | null {
+  const undo = asRecord(asRecord(asRecord(result)?.data)?.undo);
+  if (!undo || typeof undo.tool !== "string" || !undo.tool) return null;
+  return { tool: undo.tool, arguments: asRecord(undo.arguments) ?? {} };
 }
 
 function localToolReference(
@@ -104,6 +147,14 @@ function summarizeToolResult(
   const kind = typeof envelope?.kind === "string" ? envelope.kind : "";
   const data = asRecord(envelope?.data);
   if (!kind || !data) return null;
+  // Withheld journal figures arrive as nulls; never summarize them as zero.
+  if (
+    data.status === "unavailable" &&
+    typeof data.reason === "string" &&
+    data.reason.startsWith("journals_")
+  ) {
+    return t("tool.journalsUnavailable");
+  }
 
   switch (kind) {
     case "ui.review.cases":
@@ -122,6 +173,23 @@ function summarizeToolResult(
     }
     case "ui.overview.snapshot":
       return overviewSnapshotSummary(data, t);
+    case "ui.visuals.render": {
+      const visual = asRecord(data.visual);
+      const rows = Array.isArray(data.rows) ? data.rows : [];
+      const source = typeof visual?.source === "string" ? visual.source : "";
+      return t("tool.visual.summary", {
+        count: rows.length,
+        source: t(`visual.source.${source}`, { defaultValue: source }),
+      });
+    }
+    case "load_tools": {
+      const added = Array.isArray(data.added_tools) ? data.added_tools : [];
+      const areas = Array.isArray(data.areas) ? data.areas : [];
+      return t("tool.loadTools.summary", {
+        count: added.length,
+        areas: areas.filter((area) => typeof area === "string").join(", "),
+      });
+    }
     case "ui.workspace.health": {
       const booksSet =
         asRecord(data.workspace)?.label ?? t("tool.workspaceHealth.noBooksSet");
@@ -168,6 +236,44 @@ function summarizeToolResult(
           })
         : t("tool.walletsList.withoutLabels", { wallets: walletsLabel });
     }
+    case "ui.wallets.import_attachment.plan":
+    case "ui.wallets.import_attachment.apply": {
+      const rows = asRecord(data.rows);
+      const target = asRecord(data.target) ?? asRecord(data.wallet);
+      const values = {
+        count: Number(rows?.to_import ?? 0),
+        wallet: typeof target?.label === "string" ? target.label : "—",
+      };
+      if (kind === "ui.wallets.import_attachment.apply") {
+        return t("tool.importAttachment.applied", values);
+      }
+      return t(data.ready ? "tool.importAttachment.ready" : "tool.importAttachment.blocked", values);
+    }
+    case "ui.wallets.read_document": {
+      const summary = asRecord(data.summary);
+      return t("tool.readDocument.summary", {
+        count: Number(summary?.rows ?? 0),
+        ready: Number(summary?.ready ?? 0),
+        held: Number(summary?.quarantined ?? 0),
+      });
+    }
+    case "ui.wallets.import_document.plan":
+    case "ui.wallets.import_document.apply": {
+      const rows = asRecord(data.rows);
+      const target = asRecord(data.target) ?? asRecord(data.wallet);
+      const values = {
+        count: Number((kind === "ui.wallets.import_document.apply" ? rows?.imported : rows?.to_import) ?? 0),
+        wallet: typeof target?.label === "string" ? target.label : "—",
+      };
+      if (kind === "ui.wallets.import_document.apply") {
+        return t("tool.importDocument.applied", values);
+      }
+      return t(data.ready ? "tool.importDocument.ready" : "tool.importDocument.blocked", values);
+    }
+    case "ui.imports.rollback":
+      return t("tool.importRollback.done", {
+        count: Number(data.transactions_deleted ?? 0),
+      });
     case "ui.backends.list": {
       const backends = Array.isArray(data.backends) ? data.backends : [];
       const defaultBackend = asRecord(data.summary)?.default_backend;

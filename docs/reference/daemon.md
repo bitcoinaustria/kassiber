@@ -87,6 +87,13 @@ does, and undated transactions left out of a period are counted in `warnings`.
 `ui.transactions.dashboard` reports
 the calendar as `history.accountingTimezone` next to
 `history.accountingYears` (undated transactions are not a year).
+`history.years` lists the years holding activity, newest first, each with its
+`count` and inclusive `since`/`until` bounds, which the page's year choice
+scopes to. They are counted in the request's display `timezone`, like
+`buckets`, so a yearly bar and the year it opens hold the same transactions;
+exports keep the book's calendar. `bucketSize` names how `buckets` are grouped
+(`day`, `week`, `month`, `quarter`, or `year`); `all` over a decade or more
+groups by year.
 
 `ui.reports.cross_check` compares a CoinTracking or Blockpit CSV with the
 book (`kassiber reports cross-check`). The renderer sends `tool`, `filename`
@@ -106,13 +113,45 @@ handoff. It accepts `export` (`transactions`, `year_handoff`, `labels`) plus
 the export's own errors, including the quarantine blocks. It is a local read
 that never writes or fetches; BIP 329 key material is shortened.
 
+`ui.wallets.list` gives each wallet a `completeness_class` and `scan_bounds`
+(first/last observed transaction, last sync, declared scan start, warnings
+such as `incomplete_by_construction`, `never_synced` and
+`history_starts_after_first_funding`), shared with the CLI `wallets list`; see
+[wallet completeness](imports.md#wallet-completeness-and-scan-bounds).
+
+The assistant's attachment import uses AI-only kinds that are not in
+`supported_kinds` and cannot be invoked by the renderer:
+`ui.wallets.import_attachment.plan` / `.apply`, `ui.imports.rollback.plan`,
+`ui.attachments.add_from_chat` and `ui.wallets.request_input`. Each names a
+chat file by its id (`file-1` …), never a path. Its `ui.imports.list` and `ui.imports.rollback`
+calls go through the AI executor with plan-digest binding, not the desktop's
+`dry_run` / `confirm` arguments. See
+[onboarding with the assistant](imports.md#onboarding-an-unsupported-exchange-with-the-assistant).
+
 `supported_kinds` describes daemon capabilities, not renderer authority. The
 desktop forwards only its explicit subset; see the [desktop invoke contract](#desktop-invoke-contract).
 Reveal kinds require their own local-auth flow and must not be added to the
 ordinary webview invoke allowlist.
 
-Chat capability selection, `tool_profile` defaults, and execution validation
-are defined in [AI tool use](ai.md#tool-use).
+Chat capability selection, `tool_profile` defaults (`full` when omitted), and
+execution validation are defined in [AI tool use](ai.md#tool-use).
+
+`ai.chat` accepts `permission_mode` (`approval|auto|full_access`, `approval`
+when omitted). `ai.chat.permission_mode` takes
+`{"target_request_id":"<active ai.chat request_id>","permission_mode":"auto"}`,
+changes that chat's mode at once and returns `permission_mode`,
+`released_call_ids` (waiting calls the new mode approved) and `updated`; an
+unknown or finished chat returns `updated: false` with `reason: "not_found"`.
+Stream records add `approval` to `ai.chat.tool_call` and `reversible`,
+`egresses` and `can_allow_session` to `ai.chat.tool_consent_required`. See
+[permission modes](ai.md#permission-modes).
+
+`ui.transfers.dismissals.delete` takes `dismissal_id`, or `tx_out` and `tx_in`,
+removes that dismissal, invalidates journals and returns `deleted` plus the
+removed `dismissal` (legs, reason, expiry). The desktop's Review screen calls it
+to undo "Not a transfer". `ui.transfers.unpair` now also
+returns the removed `pair`, and `ui.transfers.rules.delete` the removed `rule`,
+so either can be recreated.
 
 `ui.reports.privacy_hygiene` is a local-only, read-only privacy facts payload
 shared by Settings -> Privacy, `kassiber reports privacy-hygiene`, and the
@@ -145,7 +184,12 @@ redaction, and non-goals.
 `ui.transactions.resolve` is the narrow local lookup used by deep links and
 global search: it accepts a Kassiber transaction id or external transaction id
 scoped to the active profile and returns at most one safe transaction display
-row. It does not create a browser-side search index.
+row. When several rows share the external id (a CoinJoin or batched deposit) it
+shows the newest and lists the others, with full ids, in
+`sharedExternalIdMatches`; a query that matches no row exactly may be a
+qualified `<txid>:<wallet id or label>`, `<txid>:in|out`, or both, which
+selects one row or fails with `ambiguous_reference`. It does not create a
+browser-side search index.
 
 `ui.transactions.graph` is the read-only transaction-detail graph model. It
 returns one transaction's safe metadata, public input/output references, fee
@@ -199,11 +243,30 @@ document bytes, backend identities, descriptors, xpubs, and raw importer JSON
 are removed before provider context. The kind is AI-only and intentionally
 absent from the desktop invoke allowlist.
 
+`ui.transfers.dismissals.list` reads the profile's transfer-candidate
+dismissals (`include_expired`, `limit` up to 500) with both legs' full ids,
+wallet, direction, asset, amount and time, and `expires_at` (null: never). It
+backs `transfers dismissals list` and the AI tool, and is absent from the
+desktop invoke allowlist. `ui.transfers.suggest` and
+`ui.transfers.review_context` return profile-wide `exclusions` counts
+(`excluded_by_active_pair`, `excluded_by_dismissal`,
+`excluded_already_journaled`), so an empty candidate list is explained.
+
 `ui.review.worklist` is the AI-only bounded accounting queue. It composes
 report readiness, quarantine, stale edits, transfer candidates, and heuristic
 loan locks by default; commercial and source-funds sections are opt-in
 categories. `ui.workspace.overview.snapshot` is AI-readable only for the
 chat's frozen workspace and keeps every profile/book boundary visible.
+
+`ui.journals.quarantine.groups` (quarantine counts and msat totals by reason
+and root cause, with a journal-state-bound member cursor) and
+`ui.transactions.verify` (a transaction against its stored chain graph, no
+network) are AI- and MCP-only reads, absent from `SUPPORTED_KINDS` and the
+desktop invoke allowlists; the CLI reaches the same core through
+`journals quarantine groups` and `transactions verify`.
+`ui.journals.quarantine.resolve` also takes a `root:` `group_id` and returns
+`dependents_cleared` and `quarantine_delta` after its reprocess (see
+[AI](ai.md)).
 
 `ui.wallets.utxos` accepts `{"wallet":"<wallet id or label>"}` and returns the
 active local UTXO inventory for one wallet. Rows include outpoint, txid, vout,
@@ -287,6 +350,9 @@ without `store: false`; create and update accept it as a boolean, and it is
 refused for a CLI agent. An update that changes `base_url` without restating
 it resets it to `false`. A chat whose endpoint refuses `store: false` fails
 with `ai_store_refused` and is never resent without it.
+Envelopes carry `agent_access` (`full|restricted`, `full` by default); create
+and update accept it. A provider on this device always gets full access in
+chat whatever it says; see [agent access](ai.md#agent-access).
 `ai.test_connection` accepts `base_url`, `api_key`, `kind`, `provider`,
 `api_format`, `model`, `omit_store_field`, and `acknowledged` (an off-device target is refused
 with `ai_remote_ack_required` before any request unless it is `true` or the
@@ -457,11 +523,33 @@ The result also includes `matched`, `skipped_unmatched`, and
 `excluded`, and `reconciliation_records` in Bull Bitcoin/Coinfinity/Pocket full
 mode.
 
-The desktop first uses the privileged native picker to invoke
+No desktop screen starts this flow since the Transactions page's photo/PDF
+dialog was removed; the picker, staging, and kinds below remain for the next
+entry point. The desktop first uses the privileged native picker to invoke
 `internal.document_import.stage`. That kind is supported by the Python daemon
 but intentionally absent from the Tauri and Vite renderer allowlists. It keeps
 the canonical source path in a bounded, expiring, process-local daemon session
 and returns only an opaque `document_token` plus safe filename/type metadata.
+`source.kind` is `spreadsheet`, `delimited`, `pdf` or `image`. The chat's picker
+and a file dropped on the window pass `purpose: "chat_attachment"`, which
+accepts exports as well as images and PDFs; without it only images and PDFs
+are staged. Files dropped on the window are staged by the shell's
+`stage_dropped_chat_attachment` command, which takes no path: it uses the
+paths the native window reported for the drop, once and within ten seconds,
+stages each chat file type among them (up to eight) and returns
+`{staged: [...], dropped_count, unsupported_count}`. The daemon keeps at most
+sixteen staging grants, enough for a chat's eight files and a document
+import.
+
+`ui.chat.attachments.upload` stages a pasted file without a path. The first
+chunk names the file (`filename`, `total_bytes`) at `offset` 0; later chunks
+send the returned `upload_id` and the next `offset`. Each `chunk_base64` holds
+at most 512 KiB, and the whole file at most 25 MB of a chat file type.
+Partial replies are `{complete: false, upload_id, received_bytes}`; the last
+one returns `{complete: true, document_token, source}` like the picker. The
+bytes go to an owner-only temporary file the daemon deletes with the grant.
+Out-of-order, oversized or abandoned uploads are refused and removed. It is an
+AI runtime kind, so the AI switch refuses it.
 
 `ui.wallets.document_import.preview` accepts that `document_token`, optional
 `provider`, optional `model`, `confidence_threshold`, `max_pages`, and an
@@ -911,7 +999,14 @@ I/O and honors the policy's `journals` source class. Its outcome is returned as
 `cancelled`, or `skipped`; a failed or deferred step never turns the finished
 sync or import into an error. `ui.freshness.run` returns the same summary when
 journals were requested, including `disabled` when the policy skips them.
-`ui.journals.process` runs the same step (always rebuilding);
+`ui.journals.process` runs the same step (always rebuilding); its only
+argument, `auto_pair: false`, skips automatic pairing. The Review screen
+passes it after the owner's own decisions, so a recalculation never pairs
+what the owner did not choose. A run without automatic pairing, and a run
+whose automatic pairing paired something, recount the open transfer
+candidates for `ui.review.badges` on the rebuilt journals; so do a review
+apply that pairs, unpairs or dismisses a move (from the assistant or `review
+apply`) and the CLI's `journals process`.
 `kassiber journals process --auto-pair` is the CLI equivalent. The assistant's
 `ui.wallets.sync` and `ui.journals.process` tools rebuild without automatic
 pairing, because their consent does not cover authoring transfer pairs.

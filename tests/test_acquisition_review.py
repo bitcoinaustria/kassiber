@@ -155,8 +155,10 @@ class AcquisitionReviewTest(unittest.TestCase):
             review.apply_review(self.conn,self.profile,artifact=artifact,idempotency_key='economic',hooks=self.hooks)
         self.assertEqual(error.exception.code,'review_plan_stale')
 
-    def test_local_financial_review_cannot_be_requested_through_ai(self):
+    def test_financial_review_needs_full_agent_access_through_ai(self):
         from kassiber.daemon import _validate_ai_review_operations
+        operation = {'type':'kind_override','transaction_id':'a','kind':'income','reason':'Review'}
         with self.assertRaises(AppError) as error:
-            _validate_ai_review_operations([{'type':'kind_override','transaction_id':'a','kind':'income','reason':'Review'}])
-        self.assertEqual(error.exception.code,'interaction_required')
+            _validate_ai_review_operations([operation])
+        self.assertEqual(error.exception.code,'agent_access_restricted')
+        _validate_ai_review_operations([operation], full_access=True)

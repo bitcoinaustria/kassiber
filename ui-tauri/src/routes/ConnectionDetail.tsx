@@ -7,6 +7,7 @@
 
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type FormEvent,
@@ -17,23 +18,16 @@ import type { TFunction } from "i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import {
-  ArrowDownRight,
   ArrowLeft,
-  ArrowLeftRight,
-  ArrowRight,
-  ArrowUpRight,
   AlertTriangle,
   CheckCircle2,
-  CircleDollarSign,
   Copy,
-  ListChecks,
   MoreHorizontal,
   Pencil,
   Plus,
   RefreshCw,
   RotateCcw,
   Scale,
-  ShieldCheck,
   Trash2,
   WifiOff,
 } from "lucide-react";
@@ -41,13 +35,23 @@ import {
 import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
 import { ConnectionAssetBadge } from "@/components/kb/ConnectionAssetBadge";
 import { ConnectionStatusPill } from "@/components/kb/ConnectionStatusPill";
+import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
 import { DetailRow } from "@/components/kb/DetailRow";
 import {
   UtxosInventoryPanel,
-  WalletBalanceHistoryCard,
+  WalletBalanceHistory,
+  useWalletBalanceHistory,
   type WalletUtxosData,
 } from "@/components/kb/wallets";
+import { WalletCoinsBreakdown } from "@/components/kb/wallets/WalletCoinsBreakdown";
+import { WalletTransactionsTable } from "@/components/kb/wallets/WalletTransactionsTable";
+import {
+  activeMarketFiatCurrency,
+  activeMarketFiatRate,
+  toDashboardTransaction,
+} from "@/components/overview-dashboard/model";
 import { useOverviewTransactionDetail } from "@/components/overview-dashboard/useOverviewTransactionDetail";
+import type { TransactionDashboardSnapshot } from "@/components/transactions/dashboard/model";
 import { NodeConnectionDetail } from "./NodeConnectionDetail";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -76,6 +80,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
@@ -95,8 +101,10 @@ import {
 } from "@/daemon/client";
 import { ImportRunsPanel } from "@/components/connections/ImportRunsPanel";
 import { connectionKindLabels } from "@/lib/connectionDisplay";
+import { localeForLanguage } from "@/i18n/config";
 import {
   pageHeaderActionClassName,
+  pageHeaderClassName,
   pageHeaderActionsClassName,
   pageHeaderIconButtonClassName,
   pageTitleClassName,
@@ -118,9 +126,10 @@ import {
 } from "@/lib/syncResults";
 import { transactionBelongsToConnection } from "@/lib/connectionTransactions";
 import { buildBalanceReconciliation } from "@/lib/walletBalanceReconcile";
-import { MISSING_FIAT_LABEL } from "@/lib/currency";
+import { formatBtc, formatFiatAmount } from "@/lib/currency";
+import { eurRateMissing } from "@/lib/fiatCompleteness";
 import { copyTextWithPolicy } from "@/lib/clipboard";
-import { formatCount, formatSats } from "@/lib/localeFormat";
+import { formatCount } from "@/lib/localeFormat";
 import {
   startingSyncProgress,
   syncProgressNotification,
@@ -131,11 +140,6 @@ import {
   type BareXpubScriptType,
   detectWalletMaterial,
 } from "@/lib/walletMaterialFormat";
-import {
-  DEV_LOCK_CLASS,
-  devLockProps,
-  isDevLockedRoute,
-} from "@/components/kb/devMode";
 import { useUiStore } from "@/store/ui";
 import { useSyncProgressNotice } from "@/hooks/useSyncProgressNotice";
 import { useConnectionRefreshState } from "@/hooks/useConnectionRefreshState";
@@ -152,23 +156,14 @@ const isNodeConnection = (connection: Connection) =>
 const blurClass = (hidden: boolean) => (hidden ? "sensitive" : "");
 const MAX_DESCRIPTOR_GAP_LIMIT = 5000;
 
-const fmtBtc = (value: number) => `₿ ${value.toFixed(8)}`;
-const fmtEur = (value: number | null) =>
-  value === null
-    ? MISSING_FIAT_LABEL
-    : "€ " +
-      value.toLocaleString("de-AT", {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      });
-const fmtSatSigned = (amountSat: number) =>
-  `${amountSat >= 0 ? "+ " : "- "}${formatSats(Math.abs(amountSat), { unit: "sat" })}`;
 const formatOptionalCount = (value: number | null | undefined) =>
   value === null || value === undefined ? "—" : formatCount(value);
-const fmtEurSigned = (amountEur: number | null) =>
-  amountEur === null
-    ? MISSING_FIAT_LABEL
-    : `${amountEur >= 0 ? "+ " : "- "}${fmtEur(Math.abs(amountEur))}`;
+const monthYearLabel = (value: string, language: string, timeZone: string) =>
+  new Intl.DateTimeFormat(localeForLanguage(language), {
+    month: "short",
+    year: "numeric",
+    timeZone,
+  }).format(new Date(value));
 const fmtShortTxid = (value?: string) =>
   !value
     ? "no id"
@@ -176,50 +171,12 @@ const fmtShortTxid = (value?: string) =>
       ? value
       : `${value.slice(0, 10)}…${value.slice(-6)}`;
 
-function WalletOverviewStat({
-  label,
-  value,
-  detail,
-}: {
-  label: string;
-  value: ReactNode;
-  detail?: ReactNode;
-}) {
-  return (
-    <div className="kb-surface-inset relative isolate min-w-0 overflow-hidden bg-card/70 p-3.5">
-      <div className="pointer-events-none relative z-20 space-y-1.5">
-        <div className="text-muted-foreground">
-          <span className="text-xs font-medium tracking-[0.01em]">{label}</span>
-        </div>
-        <p className="truncate text-base font-semibold tracking-tight tabular-nums sm:text-lg">
-          {value}
-        </p>
-        {detail != null ? (
-          <p className="truncate text-xs font-medium leading-tight text-muted-foreground">
-            {detail}
-          </p>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-const relatedViewLinkClass =
-  "group flex items-center gap-3 px-4 py-3 transition-[background-color,transform] duration-200 hover:bg-muted/45 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring motion-reduce:transform-none motion-reduce:transition-none";
-const relatedViewIconClass =
-  "flex size-8 shrink-0 items-center justify-center rounded-lg border bg-muted/40 text-muted-foreground transition-colors group-hover:border-foreground/20 group-hover:bg-background/80 group-hover:text-foreground";
-const relatedViewArrowClass =
-  "size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5";
-
 const PLAINTEXT_CHANGE_ACK = "CHANGE LOCAL DATA";
 const PLAINTEXT_DELETE_ACK = "DELETE LOCAL DATA";
 const PLAINTEXT_REVEAL_ACK = "COPY LOCAL SECRET";
 const CLEAR_BACKEND_SELECTION = "__kassiber_clear_backend__";
 const DESCRIPTOR_REVEAL_KIND = "wallets.reveal_descriptor";
 const RECENT_TRANSACTION_PREVIEW_LIMIT = 100;
-const RECENT_TRANSACTION_SKELETON_COUNT = 12;
-const WALLET_TABLE_VIEWPORT_CLASS =
-  "max-h-[clamp(18rem,36dvh,28rem)] min-h-0 overflow-auto";
 
 interface UpdateWalletResult {
   wallet: {
@@ -431,6 +388,39 @@ function isWalletLiveBackendSource(
   );
 }
 
+/** One line of the hero's fact list: label left, value and its context right. */
+function WalletFact({
+  label,
+  value,
+  detail,
+}: {
+  label: string;
+  value: ReactNode;
+  detail?: ReactNode;
+}) {
+  return (
+    <div className="flex min-w-0 items-baseline justify-between gap-3 border-b border-border/60 py-2 last:border-b-0">
+      <dt className="shrink-0 text-xs text-muted-foreground">{label}</dt>
+      <dd className="m-0 min-w-0 text-right">
+        <span className="font-medium tabular-nums">{value}</span>
+        {detail != null ? (
+          <span className="block truncate text-2xs text-muted-foreground">
+            {detail}
+          </span>
+        ) : null}
+      </dd>
+    </div>
+  );
+}
+
+function TabCount({ value }: { value: number }) {
+  return (
+    <span className="text-xs font-normal text-muted-foreground tabular-nums">
+      {formatCount(value)}
+    </span>
+  );
+}
+
 export function ConnectionDetail() {
   const { t } = useTranslation("connections");
   const { connectionId } = useParams({ from: "/_app/connections/$connectionId" });
@@ -481,10 +471,12 @@ export function ConnectionDetail() {
   }
 
   return (
+    // Keyed by wallet: moving to another wallet starts on its first tab,
+    // its whole history and its first page of rows.
     <ConnectionDetailView
+      key={connection.id}
       connection={connection}
       snapshot={snapshot}
-      priceEur={snapshot.priceEur}
       txs={snapshot.txs}
       hideSensitive={hideSensitive}
     />
@@ -579,7 +571,6 @@ function NodeConnectionContainer({
 interface ConnectionDetailViewProps {
   connection: Connection;
   snapshot: OverviewSnapshot;
-  priceEur: number;
   txs: OverviewSnapshot["txs"];
   hideSensitive: boolean;
 }
@@ -587,20 +578,13 @@ interface ConnectionDetailViewProps {
 function ConnectionDetailView({
   connection,
   snapshot,
-  priceEur,
   txs,
   hideSensitive,
 }: ConnectionDetailViewProps) {
-  const { t } = useTranslation(["connections", "common", "nav"]);
+  const { t, i18n } = useTranslation(["connections", "common"]);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const dataMode = useUiStore((state) => state.dataMode);
-  // Source of Funds is early-stage (see devMode.ts) and its route guard would
-  // bounce this link to Overview, so it advertises the feature without opening
-  // it until the switch is on.
-  const developerToolsEnabled = useUiStore((s) => s.developerToolsEnabled);
-  const sourceOfFundsLocked =
-    !developerToolsEnabled && isDevLockedRoute("/source-of-funds");
   const addNotification = useUiStore((state) => state.addNotification);
   const updateNotification = useUiStore((state) => state.updateNotification);
   const identity = useUiStore((state) => state.identity);
@@ -608,7 +592,6 @@ function ConnectionDetailView({
   const currency = useUiStore((state) => state.currency);
   const [pendingUtxoTransactionId, setPendingUtxoTransactionId] =
     useState<string | null>(null);
-  const [balanceUnit, setBalanceUnit] = useState<"btc" | "fiat">("btc");
   const syncNoticeIdRef = useRef<string | null>(null);
   const walletSyncMutationKey = daemonMutationKey(dataMode, "ui.wallets.sync");
   const connectionRefreshing = useConnectionRefreshState(connection);
@@ -654,6 +637,21 @@ function ConnectionDetailView({
     "ui.transactions.list",
     { wallet: connection.id, limit: RECENT_TRANSACTION_PREVIEW_LIMIT },
   );
+  // Wallet-scoped counts from the same read the Transactions page uses, so the
+  // review and missing-price numbers here match the list they link to.
+  const walletDashboardQuery = useDaemon<TransactionDashboardSnapshot>(
+    "ui.transactions.dashboard",
+    {
+      wallet: connection.id,
+      period: "all",
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+    },
+  );
+  const walletDashboard =
+    walletDashboardQuery.data?.kind === "ui.transactions.dashboard"
+      ? walletDashboardQuery.data.data
+      : null;
+  const balanceHistory = useWalletBalanceHistory(connection.id);
   const walletDetail = walletsListQuery.data?.data?.wallets?.find(
     (wallet) =>
       (wallet.id && wallet.id === connection.id) ||
@@ -693,11 +691,28 @@ function ConnectionDetailView({
   );
   const resolvedUtxoTransaction =
     utxoTransactionQuery.data?.data?.transaction ?? null;
+  const walletTransactionRows =
+    walletTransactionsQuery.data?.kind === "ui.transactions.list"
+      ? walletTransactionsQuery.data.data?.txs
+      : undefined;
+  const walletTransactions = useMemo(
+    () =>
+      walletTransactionRows ??
+      txs.filter((tx) => transactionBelongsToConnection(tx, connection)),
+    [connection, txs, walletTransactionRows],
+  );
+  // The wallet's own rows open in the docked detail like Overview's do; the
+  // overview snapshot only carries the book's latest rows.
+  const detailExtraTransactions = useMemo(
+    () =>
+      resolvedUtxoTransaction
+        ? [resolvedUtxoTransaction, ...walletTransactions]
+        : walletTransactions,
+    [resolvedUtxoTransaction, walletTransactions],
+  );
   const { detailSheet, openTransactionDetail } = useOverviewTransactionDetail({
     snapshot,
-    extraTransactions: resolvedUtxoTransaction
-      ? [resolvedUtxoTransaction]
-      : [],
+    extraTransactions: detailExtraTransactions,
     hideSensitive,
     currency,
     explorerSettings,
@@ -760,32 +775,87 @@ function ConnectionDetailView({
     statusDatabaseEncrypted ||
     Boolean(identity?.encrypted) ||
     identity?.databaseMode === "sqlcipher";
-  const sourceValue =
-    walletDetail?.sync_source ||
-    connection.syncSource ||
-    connection.sourceFormat ||
-    connectionKindLabels[connection.kind];
   const sourceDetail =
     connection.syncMode === "live"
       ? t("detail.source.live")
       : connection.syncMode === "file"
         ? t("detail.source.file")
         : t("detail.source.wallet");
-  const hasGapMetric = connection.gap != null;
-  const connectionTxs = txs.filter((tx) =>
-    transactionBelongsToConnection(tx, connection),
-  );
-  const walletTransactions =
-    walletTransactionsQuery.data?.kind === "ui.transactions.list" &&
-    walletTransactionsQuery.data.data?.txs
-      ? walletTransactionsQuery.data.data.txs
-      : connectionTxs;
-  const txsForConnection = walletTransactions.slice(
-    0,
-    RECENT_TRANSACTION_PREVIEW_LIMIT,
+  const recentTransactions = useMemo(
+    () =>
+      walletTransactions
+        .slice(0, RECENT_TRANSACTION_PREVIEW_LIMIT)
+        .map((tx, index) => ({
+          ...toDashboardTransaction(tx, index),
+          // Every row is this wallet, so the row names the transaction
+          // itself: the user's note or counterparty, else its id.
+          counterparty:
+            tx.note?.trim() ||
+            tx.counter?.trim() ||
+            fmtShortTxid(tx.externalId ?? tx.id),
+        })),
+    [walletTransactions],
   );
   const walletTransactionsLoading =
-    walletTransactionsQuery.isLoading && txsForConnection.length === 0;
+    walletTransactionsQuery.isLoading && recentTransactions.length === 0;
+  const fiatCurrency = activeMarketFiatCurrency(snapshot);
+  const fiatRate = activeMarketFiatRate(snapshot);
+  const marketRateMissing = eurRateMissing(snapshot);
+  const showFiatBalance = currency === "eur" && !marketRateMissing;
+  const networkLabel = [walletDetail?.chain, walletDetail?.network]
+    .filter(Boolean)
+    .join(" ");
+  const dashboardSummary = walletDashboard?.summary ?? null;
+  const missingPriceCount = dashboardSummary
+    ? dashboardSummary.incoming.missingPrice +
+      dashboardSummary.outgoing.missingPrice +
+      dashboardSummary.transfers.missingPrice +
+      dashboardSummary.swaps.missingPrice
+    : null;
+  // Months in the book's accounting timezone.
+  const bookTimeZone = walletDashboard?.history.accountingTimezone ?? "UTC";
+  const activitySpan = walletDashboard?.history.earliest
+    ? t("detail.metric.activitySpan", {
+        from: monthYearLabel(
+          walletDashboard.history.earliest,
+          i18n.language,
+          bookTimeZone,
+        ),
+        to: monthYearLabel(
+          walletDashboard.history.latest ?? walletDashboard.history.earliest,
+          i18n.language,
+          bookTimeZone,
+        ),
+      })
+    : t("detail.metric.noActivity");
+  const utxoActiveCount =
+    inventory?.freshness.active_count ?? inventory?.summary?.count ?? null;
+  const utxoPendingCount = (inventory?.utxos ?? []).filter(
+    (row) => row.confirmation_status !== "confirmed",
+  ).length;
+  // A capped inventory lists unconfirmed coins last, so the cut may hide them.
+  const utxoInventoryTruncated = Boolean(inventory?.summary?.truncated);
+  const utxoTracked = !inventory || inventory.support.supported;
+  const utxoMetric =
+    coinsInventoryQuery.isLoading
+      ? { value: "—", detail: undefined }
+      : inventory && !inventory.support.supported
+        ? { value: "—", detail: t("detail.metric.utxosUnsupported") }
+        : utxoActiveCount === null
+          ? { value: "—", detail: undefined }
+          : {
+              value: formatCount(utxoActiveCount),
+              detail:
+                utxoActiveCount === 0
+                  ? t("detail.metric.utxosNone")
+                  : utxoPendingCount > 0
+                    ? t("detail.metric.utxosPending", {
+                        count: utxoPendingCount,
+                      })
+                    : utxoInventoryTruncated
+                      ? undefined
+                      : t("detail.metric.utxosConfirmed"),
+            };
 
   useEffect(() => {
     if (!pendingUtxoTransactionId || utxoTransactionQuery.isLoading) return;
@@ -831,6 +901,10 @@ function ConnectionDetailView({
   const refreshButtonLabel = isWalletSyncRunning
     ? t("detail.refreshing")
     : t("detail.refresh");
+  // The Transactions page's review-queue count, which the notice links to.
+  const openReviewCount = dashboardSummary
+    ? dashboardSummary.review + dashboardSummary.pending + dashboardSummary.failed
+    : 0;
 
   const onSync = async (options?: { forceFull?: boolean }) => {
     if (backendRequired) {
@@ -1380,212 +1454,192 @@ function ConnectionDetailView({
   };
 
   return (
-    <div className={screenShellClassName}>
-      <section className="kb-surface relative isolate overflow-hidden">
-        <div
-          className={cn(
-            // The chain's glow; on white it turns peachy at dark mode's strength.
-            "pointer-events-none absolute inset-0 opacity-35 dark:opacity-70",
-            walletChain === "liquid"
-              ? "bg-[radial-gradient(circle_at_12%_0%,rgba(0,174,199,0.20),transparent_32%),radial-gradient(circle_at_95%_100%,rgba(31,122,140,0.10),transparent_36%)]"
-              : "bg-[radial-gradient(circle_at_12%_0%,rgba(247,147,26,0.22),transparent_32%),radial-gradient(circle_at_95%_100%,rgba(227,0,15,0.08),transparent_36%)]",
-          )}
-          aria-hidden="true"
-        />
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/70 to-transparent dark:via-white/20" />
-
-        <div className="relative p-4 sm:p-5">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div className="flex min-w-0 items-center gap-3 sm:gap-4">
-              <Button
-                asChild
-                variant="outline"
-                size="icon"
-                className="size-8 shrink-0"
-              >
-                <Link to="/connections" aria-label={t("detail.backToWallets")}>
-                  <ArrowLeft className="size-4" aria-hidden="true" />
-                </Link>
-              </Button>
-              <ConnectionAssetBadge
-                connection={connection}
-                size="md"
-                className="size-12 rounded-lg p-1 sm:size-14"
+    // Laid out by its own width, not the window's: docking the transaction
+    // detail or the chat beside it narrows the page on any screen size.
+    <div className={cn(screenShellClassName, "@container/wallet")}>
+      <div className={pageHeaderClassName}>
+        <div className="flex min-w-0 items-center gap-3">
+          <Button
+            asChild
+            variant="outline"
+            size="icon"
+            className={cn(pageHeaderIconButtonClassName, "shrink-0")}
+          >
+            <Link to="/connections" aria-label={t("detail.backToWallets")}>
+              <ArrowLeft className="size-4" aria-hidden="true" />
+            </Link>
+          </Button>
+          <ConnectionAssetBadge connection={connection} size="md" />
+          <div className="min-w-0">
+            <h2 className={cn(pageTitleClassName, "truncate")}>
+              {connection.label}
+            </h2>
+            <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+              <span className="truncate">
+                {[connectionKindLabels[connection.kind], networkLabel]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </span>
+              <ConnectionStatusPill
+                status={connection.status}
+                hideWhenSynced={false}
               />
-              <div className="min-w-0">
-                <h2 className={cn(pageTitleClassName, "truncate")}>
-                  {connection.label}
-                </h2>
-                <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                  <span className="truncate font-medium">
-                    {connectionKindLabels[connection.kind]}
-                  </span>
-                  <ConnectionStatusPill
-                    status={connection.status}
-                    hideWhenSynced={false}
-                    className="rounded-full px-2 py-1"
-                  />
-                  {isDeprecatedWallet ? (
-                    <Badge variant="secondary" className="rounded-full px-2 py-1">
-                      {t("detail.deprecatedBadge")}
-                    </Badge>
-                  ) : null}
-                </div>
-              </div>
+              {isDeprecatedWallet ? (
+                <Badge variant="secondary" className="h-5 rounded-md px-1.5 text-2xs">
+                  {t("detail.deprecatedBadge")}
+                </Badge>
+              ) : null}
             </div>
+          </div>
+        </div>
 
-            <div className={cn(pageHeaderActionsClassName, "shrink-0 self-end sm:self-start")}>
+        <div className={cn(pageHeaderActionsClassName, "shrink-0")}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className={pageHeaderActionClassName}
+            disabled={isWalletSyncRunning}
+            aria-busy={isWalletSyncRunning}
+            aria-label={t("detail.refreshAction", {
+              action: refreshButtonLabel,
+              label: connection.label,
+            })}
+            onClick={() => void onSync()}
+          >
+            <RefreshCw
+              className={cn("size-4", isWalletSyncRunning && "animate-spin")}
+              aria-hidden="true"
+            />
+            {/* One label in both states: the spinning icon and aria-busy say
+                it is running, and a fixed width keeps WKWebView from leaving
+                a ghost of the composited icon behind on resize. */}
+            {t("detail.refresh")}
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
-                className={pageHeaderActionClassName}
-                disabled={isWalletSyncRunning}
-                aria-busy={isWalletSyncRunning}
-                aria-label={t("detail.refreshAction", {
-                  action: refreshButtonLabel,
-                  label: connection.label,
-                })}
-                onClick={() => void onSync()}
+                size="icon"
+                className={pageHeaderIconButtonClassName}
+                aria-label={t("detail.moreActions")}
               >
-                <RefreshCw
-                  className={cn("size-4", isWalletSyncRunning && "animate-spin")}
-                  aria-hidden="true"
-                />
-                {/* Keep the action width stable while its icon is composited by WKWebView. */}
-                <span className="grid justify-items-center">
-                  <span aria-hidden="true" className="invisible col-start-1 row-start-1">
-                    {t("detail.refresh")}
-                  </span>
-                  <span aria-hidden="true" className="invisible col-start-1 row-start-1">
-                    {t("detail.refreshing")}
-                  </span>
-                  <span className="col-start-1 row-start-1">{refreshButtonLabel}</span>
-                </span>
+                <MoreHorizontal className="size-4" aria-hidden="true" />
               </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className={pageHeaderIconButtonClassName}
-                    aria-label={t("detail.moreActions")}
-                  >
-                    <MoreHorizontal className="size-4" aria-hidden="true" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
-                  <DropdownMenuItem onClick={openEditDialog}>
-                    <Pencil className="size-4" aria-hidden="true" />
-                    {t("common:actions.edit")}
-                  </DropdownMenuItem>
-                  {hasStoredDescriptor ? (
-                    <DropdownMenuItem onClick={openRevealDialog}>
-                      <Copy className="size-4" aria-hidden="true" />
-                      {t("detail.reveal.menuItem")}
-                    </DropdownMenuItem>
-                  ) : null}
-                  <DropdownMenuItem
-                    disabled={isWalletSyncRunning || testCore.isPending}
-                    onClick={() => void onSync({ forceFull: true })}
-                  >
-                    <RotateCcw className="size-4" aria-hidden="true" />
-                    {t("detail.fullRescan")}
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    className="text-destructive focus:text-destructive"
-                    onClick={openDeleteDialog}
-                  >
-                    <Trash2 className="size-4" aria-hidden="true" />
-                    {t("common:actions.remove")}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem onClick={openEditDialog}>
+                <Pencil className="size-4" aria-hidden="true" />
+                {t("common:actions.edit")}
+              </DropdownMenuItem>
+              {hasStoredDescriptor ? (
+                <DropdownMenuItem onClick={openRevealDialog}>
+                  <Copy className="size-4" aria-hidden="true" />
+                  {t("detail.reveal.menuItem")}
+                </DropdownMenuItem>
+              ) : null}
+              <DropdownMenuItem
+                disabled={isWalletSyncRunning || testCore.isPending}
+                onClick={() => void onSync({ forceFull: true })}
+              >
+                <RotateCcw className="size-4" aria-hidden="true" />
+                {t("detail.fullRescan")}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                onClick={openDeleteDialog}
+              >
+                <Trash2 className="size-4" aria-hidden="true" />
+                {t("common:actions.remove")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+
+      {/* The wallet itself: what it holds now and how it got there. The facts
+          beside the balance are the ones a user checks before trusting it. */}
+      <section className="kb-surface overflow-hidden">
+        <div
+          className={cn(
+            "grid grid-cols-1",
+            balanceHistory.hasHistory &&
+              "@4xl/wallet:grid-cols-[minmax(16rem,19rem)_minmax(0,1fr)]",
+          )}
+        >
+          <div
+            className={cn(
+              "flex min-w-0 flex-col gap-4 p-4",
+              balanceHistory.hasHistory && "@4xl/wallet:border-r",
+            )}
+          >
+            <div className="min-w-0">
+              <div className="text-xs font-medium text-muted-foreground">
+                {t("detail.metric.balance")}
+              </div>
+              <div
+                className={cn(
+                  "mt-1 truncate text-3xl font-semibold tracking-tight tabular-nums",
+                  blurClass(hideSensitive),
+                )}
+              >
+                <CurrencyToggleText>
+                  {showFiatBalance
+                    ? formatFiatAmount(connection.balance * fiatRate, fiatCurrency)
+                    : formatBtc(connection.balance)}
+                </CurrencyToggleText>
+              </div>
+              <div
+                className={cn(
+                  "mt-1 text-sm text-muted-foreground tabular-nums",
+                  blurClass(hideSensitive),
+                )}
+              >
+                {marketRateMissing
+                  ? t("metrics.balanceNoMarketRate")
+                  : showFiatBalance
+                    ? formatBtc(connection.balance)
+                    : formatFiatAmount(connection.balance * fiatRate, fiatCurrency)}
+              </div>
             </div>
-          </div>
-
-          <div className="mt-4 grid items-stretch gap-3 lg:grid-cols-[minmax(260px,0.72fr)_minmax(360px,1.28fr)]">
-            <button
-              type="button"
-              className="group flex min-w-0 flex-col justify-center rounded-lg px-3 py-3 text-left transition-[background-color,transform] duration-200 hover:bg-background/30 active:scale-[0.985] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transform-none motion-reduce:transition-none sm:px-4"
-              aria-label={
-                balanceUnit === "btc"
-                  ? t("detail.balanceToggle.showFiat")
-                  : t("detail.balanceToggle.showBitcoin")
-              }
-              onClick={() =>
-                setBalanceUnit((current) =>
-                  current === "btc" ? "fiat" : "btc",
-                )
-              }
+            <dl
+              className={cn(
+                "mt-auto grid grid-cols-1 gap-x-6 border-t text-sm",
+                !balanceHistory.hasHistory && "@2xl/wallet:grid-cols-3",
+              )}
             >
-              <span className="flex w-full items-center justify-between gap-3">
-                <span className="text-xs font-medium tracking-[0.02em] text-muted-foreground">
-                  {t("detail.metric.balance")}
-                </span>
-                <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-background/55 px-2 py-1 text-2xs font-semibold text-muted-foreground transition-colors group-hover:text-foreground">
-                  <ArrowLeftRight className="size-3" aria-hidden="true" />
-                  {balanceUnit === "btc" ? "BTC" : "EUR"}
-                </span>
-              </span>
-              <span
-                className={cn(
-                  "mt-1.5 block w-full truncate font-mono text-[clamp(2rem,4vw,3.35rem)] font-semibold leading-none tracking-[-0.055em] tabular-nums",
-                  blurClass(hideSensitive),
-                )}
-                aria-live="polite"
-              >
-                {balanceUnit === "btc"
-                  ? fmtBtc(connection.balance)
-                  : fmtEur(connection.balance * priceEur)}
-              </span>
-              <span
-                className={cn(
-                  "mt-2 font-mono text-sm font-medium tabular-nums text-muted-foreground",
-                  blurClass(hideSensitive),
-                )}
-              >
-                {balanceUnit === "btc"
-                  ? fmtEur(connection.balance * priceEur)
-                  : fmtBtc(connection.balance)}
-              </span>
-            </button>
-            <WalletBalanceHistoryCard
-              walletId={connection.id}
-              hideSensitive={hideSensitive}
-              variant="hero"
-            />
+              <WalletFact
+                label={t("detail.metric.utxos")}
+                value={utxoMetric.value}
+                detail={utxoMetric.detail}
+              />
+              <WalletFact
+                label={t("detail.metric.transactions")}
+                value={formatCount(txCount)}
+                detail={activitySpan}
+              />
+              <WalletFact
+                label={t("detail.metric.lastSync")}
+                value={connection.last}
+                detail={walletDetail?.backend?.name || sourceDetail}
+              />
+            </dl>
           </div>
-
-          <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-3">
-            <WalletOverviewStat
-              label={t("detail.metric.transactions")}
-              value={formatCount(txCount)}
-            />
-            <WalletOverviewStat
-              label={t("detail.metric.lastSync")}
-              value={connection.last}
-            />
-            <WalletOverviewStat
-              label={
-                hasGapMetric
-                  ? t("detail.metric.gapLimit")
-                  : t("detail.metric.source")
-              }
-              value={
-                hasGapMetric
-                  ? formatOptionalCount(connection.gap)
-                  : sourceValue
-              }
-              detail={
-                hasGapMetric
-                  ? t("detail.metric.gapLimitDetail")
-                  : sourceDetail
-              }
-            />
-          </div>
+          {balanceHistory.hasHistory ? (
+            <div className="min-w-0 border-t p-4 @4xl/wallet:border-t-0">
+              <WalletBalanceHistory
+                walletId={connection.id}
+                points={balanceHistory.points}
+                complete={balanceHistory.complete}
+                isLoading={balanceHistory.isLoading}
+                hideSensitive={hideSensitive}
+                currency={currency}
+                fiatCurrency={fiatCurrency}
+              />
+            </div>
+          ) : null}
         </div>
       </section>
 
@@ -1649,7 +1703,7 @@ function ConnectionDetailView({
                       blurClass(hideSensitive),
                     )}
                   >
-                    {fmtBtc(reconciliation.utxoSat / 1e8)}
+                    {formatBtc(reconciliation.utxoSat / 1e8)}
                   </div>
                   <div className="text-2xs text-muted-foreground">
                     {t("detail.reconcile.watchOnlyTruth")}
@@ -1671,7 +1725,7 @@ function ConnectionDetailView({
                       blurClass(hideSensitive),
                     )}
                   >
-                    {fmtBtc(reconciliation.importedSat / 1e8)}
+                    {formatBtc(reconciliation.importedSat / 1e8)}
                   </div>
                   <div className="text-2xs text-muted-foreground">
                     {t("detail.reconcile.feedsTaxReports")}
@@ -1684,10 +1738,10 @@ function ConnectionDetailView({
                 <AlertTriangle className="size-3.5" aria-hidden="true" />
                 {reconciliation.deltaSat < 0
                   ? t("detail.reconcile.onChainNotInBooks", {
-                      amount: fmtBtc(Math.abs(reconciliation.deltaSat) / 1e8),
+                      amount: formatBtc(Math.abs(reconciliation.deltaSat) / 1e8),
                     })
                   : t("detail.reconcile.inBooksNotOnChain", {
-                      amount: fmtBtc(Math.abs(reconciliation.deltaSat) / 1e8),
+                      amount: formatBtc(Math.abs(reconciliation.deltaSat) / 1e8),
                     })}
               </span>
               <div className="mt-1 text-xs text-muted-foreground">
@@ -1700,294 +1754,93 @@ function ConnectionDetailView({
         </Card>
       ) : null}
 
-      <UtxosInventoryPanel
-        inventory={coinsInventoryQuery.data?.data}
-        isLoading={coinsInventoryQuery.isLoading}
-        errorMessage={
-          coinsInventoryQuery.error instanceof Error
-            ? coinsInventoryQuery.error.message
-            : null
-        }
-        hideSensitive={hideSensitive}
-        isRefreshing={isWalletSyncRunning}
-        explorerSettings={explorerSettings}
-        onRefresh={onSync}
-        onOpenTransaction={openUtxoTransaction}
-      />
-
-      <ImportRunsPanel walletId={connection.id} />
-
-      {samouraiMetadata ? (
-        <Card>
-          <CardHeader className="border-b px-4 pb-3">
-            <CardTitle className="flex flex-wrap items-center gap-2 text-sm sm:text-base">
-              {t("detail.samourai.title")}
-              <Badge variant="secondary">
-                {samouraiMetadata.role === "parent"
-                  ? t("detail.samourai.group")
-                  : samouraiSectionLabel(samouraiMetadata.section, t)}
-              </Badge>
-              {samouraiMetadata.privacy_boundary ? (
-                <Badge variant="outline">
-                  {t("detail.samourai.privacyBoundary")}
-                </Badge>
-              ) : null}
-              {samouraiMetadata.paynym ? (
-                <Badge variant="outline">BIP47</Badge>
-              ) : null}
-            </CardTitle>
-            <CardDescription>
-              {t("detail.samourai.description")}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3 px-4 pt-4 md:grid-cols-2">
-            <DetailRow
-              label={t("detail.samourai.source")}
-              value={samouraiSourceLabel(samouraiMetadata.source, t)}
-            />
-            <DetailRow
-              label={t("detail.samourai.group")}
-              value={samouraiMetadata.group_label || connection.label}
-            />
-            {samouraiMetadata.role !== "parent" ? (
-              <>
-                <DetailRow
-                  label={t("detail.samourai.section")}
-                  value={samouraiSectionLabel(samouraiMetadata.section, t)}
-                />
-                <DetailRow
-                  label={t("detail.samourai.script")}
-                  value={samouraiMetadata.script_type || "—"}
-                />
-                <DetailRow
-                  label={t("detail.samourai.root")}
-                  value={samouraiMetadata.root_path || "—"}
-                  mono
-                />
-                <DetailRow
-                  label={t("detail.samourai.gap")}
-                  value={
-                    formatOptionalCount(
-                      samouraiMetadata.gap_limit ?? connection.gap,
-                    )
-                  }
-                />
-              </>
-            ) : (
-              <DetailRow
-                label={t("detail.samourai.sections")}
-                value={(samouraiMetadata.sections ?? [])
-                  .map((section) => samouraiSectionLabel(section, t))
-                  .join(", ")}
-              />
-            )}
-            {samouraiMetadata.minimum_mix_count ? (
-              <DetailRow
-                label={t("detail.samourai.minimumMixCount")}
-                value={t("detail.samourai.minimumMixCountValue", {
-                  value:
-                    formatCount(samouraiMetadata.minimum_mix_count),
-                  confidence:
-                    samouraiMetadata.mix_count_confidence ??
-                    t("detail.samourai.minimumConfidence"),
-                })}
-              />
-            ) : null}
-            {samouraiMetadata.mix_count ? (
-              <DetailRow
-                label={t("detail.samourai.observedMixes")}
-                value={t("detail.samourai.observedMixesValue", {
-                  value: formatCount(samouraiMetadata.mix_count),
-                  confidence:
-                    samouraiMetadata.mix_count_confidence ??
-                    t("detail.samourai.importedConfidence"),
-                })}
-              />
-            ) : null}
-            {samouraiMetadata.target_mix_count ? (
-              <DetailRow
-                label={t("detail.samourai.targetMixes")}
-                value={formatCount(samouraiMetadata.target_mix_count)}
-              />
-            ) : null}
-            {samouraiMetadata.pool_denomination_sat ? (
-              <DetailRow
-                label={t("detail.samourai.pool")}
-                value={t("detail.samourai.poolValue", {
-                  value:
-                    formatCount(samouraiMetadata.pool_denomination_sat),
-                })}
-              />
-            ) : null}
-            {samouraiMetadata.role !== "parent" ? (
-              <DetailRow
-                label={t("detail.samourai.coins")}
-                value={
-                  formatOptionalCount(
-                    samouraiInventory?.freshness.active_count ??
-                      samouraiInventory?.summary?.count,
-                  )
-                }
-              />
-            ) : null}
-          </CardContent>
-          <div className="space-y-2 border-t px-4 py-3 text-sm">
-            {samouraiMetadata.toxic_change ? (
-              <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
-                {t("detail.samourai.toxicChange")}
-              </div>
-            ) : null}
-            {samouraiMetadata.section === "postmix" ? (
-              <div className="rounded-md border bg-background px-3 py-2 text-muted-foreground">
-                {t("detail.samourai.postmixNote")}
-              </div>
-            ) : null}
-            {samouraiInventory?.freshness.stale ? (
-              <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
-                {t("detail.samourai.stale")}
-              </div>
-            ) : null}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={isWalletSyncRunning}
-              onClick={() => void onSync()}
-            >
-              <RefreshCw
-                className={cn("size-4", isWalletSyncRunning && "animate-spin")}
-                aria-hidden="true"
-              />
-              {/* Reserve the widest label's width so the spinning icon can't
-                  ghost on a mid-refresh resize — see the header Refresh button. */}
-              <span className="grid justify-items-center">
-                <span
-                  aria-hidden="true"
-                  className="invisible col-start-1 row-start-1"
-                >
-                  {t("detail.samourai.refreshSource")}
-                </span>
-                <span
-                  aria-hidden="true"
-                  className="invisible col-start-1 row-start-1"
-                >
-                  {t("detail.refreshing")}
-                </span>
-                <span className="col-start-1 row-start-1">
-                  {isWalletSyncRunning
-                    ? t("detail.refreshing")
-                    : t("detail.samourai.refreshSource")}
-                </span>
-              </span>
-            </Button>
+      {openReviewCount > 0 || (missingPriceCount ?? 0) > 0 ? (
+        <div
+          className="flex flex-col gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200 sm:flex-row sm:items-center"
+          role="status"
+        >
+          <div className="flex flex-1 items-center gap-3">
+            <AlertTriangle className="size-4 shrink-0" aria-hidden="true" />
+            <p className="m-0">
+              {[
+                openReviewCount > 0
+                  ? t("detail.attention.review", { count: openReviewCount })
+                  : null,
+                missingPriceCount
+                  ? t("detail.attention.prices", { count: missingPriceCount })
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
           </div>
-        </Card>
-      ) : null}
-
-      {walletProvenanceRoutes.length > 0 ? (
-        <Card>
-          <CardHeader className="border-b px-4 pb-3">
-            <CardTitle className="text-sm sm:text-base">
-              {t("detail.btcpayProvenance.title")}
-            </CardTitle>
-            <CardDescription>
-              {t("detail.btcpayProvenance.description")}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t("detail.btcpayProvenance.instance")}</TableHead>
-                  <TableHead>{t("detail.btcpayProvenance.store")}</TableHead>
-                  <TableHead>
-                    {t("detail.btcpayProvenance.paymentMethod")}
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {walletProvenanceRoutes.map((route, index) => (
-                  <TableRow
-                    key={`${route.backend}-${route.store_id}-${route.payment_method_id}-${index}`}
-                  >
-                    <TableCell>{route.backend}</TableCell>
-                    <TableCell>{route.store_id}</TableCell>
-                    <TableCell>{route.payment_method_id}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-          <div className="border-t px-4 py-2.5 text-xs text-muted-foreground">
-            <Trans
-              t={t}
-              i18nKey="detail.btcpayProvenance.footer"
-              components={{
-                strong: <strong />,
-                em: <em />,
-                code: <code />,
-              }}
-            />
-          </div>
-        </Card>
-      ) : null}
-
-      <div className="grid grid-cols-1 items-start gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.85fr)]">
-        <Card variant="flush">
-          <div className="flex flex-col gap-3 border-b p-3 sm:flex-row sm:items-center sm:gap-4 sm:px-6 sm:py-3.5">
-            <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-2">
-              <div className="min-w-0">
-                <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
-                  {t("detail.recentTransactions.title")}
-                </CardTitle>
-              </div>
-              {txCount > 0 ? (
+          <div className="flex shrink-0 flex-wrap gap-2">
+            {openReviewCount > 0 ? (
+              <Button asChild size="sm" variant="outline" className="h-7">
                 <Link
                   to="/transactions"
-                  search={{ wallet: connection.label }}
+                  search={{ wallet: connection.label, quick: "review_queue" }}
                   hash="transactions-table"
-                  className="shrink-0 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  {t("detail.recentTransactions.showAll")}
+                  {t("detail.attention.openReview")}
                 </Link>
-              ) : null}
-            </div>
+              </Button>
+            ) : null}
+            {missingPriceCount ? (
+              <Button asChild size="sm" variant="outline" className="h-7">
+                <Link
+                  to="/transactions"
+                  search={{ wallet: connection.label, quick: "missing_price" }}
+                  hash="transactions-table"
+                >
+                  {t("detail.attention.openPrices")}
+                </Link>
+              </Button>
+            ) : null}
           </div>
-          <CardContent className="p-0">
-            {walletTransactionsLoading ? (
-              <div className="divide-y">
-                {Array.from(
-                  { length: RECENT_TRANSACTION_SKELETON_COUNT },
-                  (_, index) => (
-                    <div
-                      key={index}
-                      className="flex min-w-0 items-start gap-3 px-5 py-3"
-                    >
-                      <div className="mt-0.5 size-8 shrink-0 animate-pulse rounded-md bg-muted" />
-                      <div className="min-w-0 flex-1 space-y-2">
-                        <div className="h-4 w-2/3 animate-pulse rounded-md bg-muted" />
-                        <div className="h-3 w-1/2 animate-pulse rounded-md bg-muted" />
-                      </div>
-                      <div className="space-y-2">
-                        <div className="h-4 w-20 animate-pulse rounded-md bg-muted" />
-                        <div className="ml-auto h-3 w-12 animate-pulse rounded-md bg-muted" />
-                      </div>
-                    </div>
-                  ),
-                )}
+        </div>
+      ) : null}
+
+      <Tabs defaultValue="transactions" className="gap-(--kb-page-gap)">
+        <TabsList className="w-full justify-start overflow-x-auto sm:w-fit">
+          <TabsTrigger value="transactions" className="px-3">
+            {t("detail.tabs.transactions")}
+            <TabCount value={txCount} />
+          </TabsTrigger>
+          <TabsTrigger value="coins" className="px-3">
+            {t("detail.tabs.coins")}
+            {utxoTracked && utxoActiveCount !== null ? (
+              <TabCount value={utxoActiveCount} />
+            ) : null}
+          </TabsTrigger>
+          <TabsTrigger value="details" className="px-3">
+            {t("detail.tabs.details")}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="transactions">
+          {walletTransactionsLoading ? (
+            <div className="kb-surface space-y-3 p-4">
+              <Skeleton className="h-8 w-full" />
+              <Skeleton className="h-8 w-full" />
+              <Skeleton className="h-8 w-2/3" />
+            </div>
+          ) : recentTransactions.length ? (
+            <WalletTransactionsTable
+              walletLabel={connection.label}
+              transactions={recentTransactions}
+              totalCount={txCount}
+              hideSensitive={hideSensitive}
+              priceEur={fiatRate}
+              fiatCurrency={fiatCurrency}
+              onOpenTransaction={(tx) => openTransactionDetail(tx.id)}
+            />
+          ) : (
+            <div className="kb-surface overflow-hidden">
+              <div className="border-b px-3 py-2.5 text-sm font-medium sm:px-4">
+                {t("detail.recentTransactions.title")}
               </div>
-            ) : txsForConnection.length ? (
-              <div className={cn(WALLET_TABLE_VIEWPORT_CLASS, "divide-y")}>
-                {txsForConnection.map((tx) => (
-                  <ConnectionTransactionRow
-                    key={tx.id}
-                    tx={tx}
-                    hideSensitive={hideSensitive}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="flex flex-col items-start gap-3 px-5 py-8 text-sm text-muted-foreground">
+              <div className="flex flex-col items-start gap-3 px-4 py-6 text-sm text-muted-foreground">
                 <p>{t("detail.recentTransactions.empty")}</p>
                 <div className="flex flex-wrap gap-2">
                   <Button
@@ -2035,21 +1888,52 @@ function ConnectionDetailView({
                   </Button>
                 </div>
               </div>
-            )}
-          </CardContent>
-        </Card>
+            </div>
+          )}
+        </TabsContent>
 
-        <div className="space-y-3 xl:sticky xl:top-4">
+        <TabsContent value="coins" className="space-y-(--kb-page-gap)">
+          <WalletCoinsBreakdown
+            rows={inventory?.utxos ?? []}
+            totalCount={
+              utxoInventoryTruncated ? inventory?.summary?.count : undefined
+            }
+            hideSensitive={hideSensitive}
+          />
+          <UtxosInventoryPanel
+            inventory={coinsInventoryQuery.data?.data}
+            isLoading={coinsInventoryQuery.isLoading}
+            errorMessage={
+              coinsInventoryQuery.error instanceof Error
+                ? coinsInventoryQuery.error.message
+                : null
+            }
+            hideSensitive={hideSensitive}
+            isRefreshing={isWalletSyncRunning}
+            explorerSettings={explorerSettings}
+            onRefresh={onSync}
+            onOpenTransaction={openUtxoTransaction}
+          />
+        </TabsContent>
+
+        <TabsContent value="details" className="space-y-(--kb-page-gap)">
           <Card variant="flush">
-            <CardHeader className="border-b p-3 sm:px-6 sm:py-3.5 [.border-b]:pb-3 sm:[.border-b]:pb-3.5">
-              <CardTitle className="text-sm sm:text-base">
+            <div className="flex items-center justify-between gap-3 border-b px-3 py-2.5 sm:px-4">
+              <span className="text-sm font-medium">
                 {t("detail.connectionDetails.title")}
-              </CardTitle>
-              <CardDescription className="text-xs">
-                {t("detail.connectionDetails.description")}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3 px-3 py-3 sm:px-6">
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="-my-1 h-7 gap-1.5 px-2 text-xs"
+                onClick={openEditDialog}
+              >
+                <Pencil className="size-3.5" aria-hidden="true" />
+                {t("common:actions.edit")}
+              </Button>
+            </div>
+            <CardContent className="grid gap-x-10 gap-y-3 px-3 py-3 sm:px-4 @3xl/wallet:grid-cols-2">
               <DetailRow
                 label={t("detail.connectionDetails.syncMode")}
                 value={
@@ -2114,10 +1998,21 @@ function ConnectionDetailView({
                   </Button>
                 </div>
               ) : null}
+              {connection.gap != null ? (
+                <DetailRow
+                  label={t("detail.metric.gapLimit")}
+                  value={formatCount(connection.gap)}
+                />
+              ) : null}
+              {walletDetail?.birthday ? (
+                <DetailRow
+                  label={t("detail.edit.birthday")}
+                  value={walletDetail.birthday.slice(0, 10)}
+                />
+              ) : null}
               <DetailRow
                 label={t("detail.connectionDetails.created")}
                 value={formatShortDate(walletDetail?.created_at)}
-                mono
               />
               <DetailRow
                 label={t("detail.connectionDetails.kassiberId")}
@@ -2128,112 +2023,224 @@ function ConnectionDetailView({
             </CardContent>
           </Card>
 
-          <Card variant="flush">
-            <CardHeader className="border-b p-3 sm:px-6 sm:py-3.5 [.border-b]:pb-3 sm:[.border-b]:pb-3.5">
-              <CardTitle className="text-sm sm:text-base">
-                {t("detail.relatedViews.title")}
-              </CardTitle>
-              <CardDescription className="text-xs">
-                {t("detail.relatedViews.description")}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="divide-y">
-                <Link
-                  to="/transactions"
-                  search={{ wallet: connection.label }}
-                  hash="transactions-table"
-                  className={relatedViewLinkClass}
+          <ImportRunsPanel walletId={connection.id} />
+
+          {samouraiMetadata ? (
+            <Card>
+              <CardHeader className="border-b px-4 pb-3">
+                <CardTitle className="flex flex-wrap items-center gap-2 text-sm sm:text-base">
+                  {t("detail.samourai.title")}
+                  <Badge variant="secondary">
+                    {samouraiMetadata.role === "parent"
+                      ? t("detail.samourai.group")
+                      : samouraiSectionLabel(samouraiMetadata.section, t)}
+                  </Badge>
+                  {samouraiMetadata.privacy_boundary ? (
+                    <Badge variant="outline">
+                      {t("detail.samourai.privacyBoundary")}
+                    </Badge>
+                  ) : null}
+                  {samouraiMetadata.paynym ? (
+                    <Badge variant="outline">BIP47</Badge>
+                  ) : null}
+                </CardTitle>
+                <CardDescription>
+                  {t("detail.samourai.description")}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-3 px-4 pt-4 md:grid-cols-2">
+                <DetailRow
+                  label={t("detail.samourai.source")}
+                  value={samouraiSourceLabel(samouraiMetadata.source, t)}
+                />
+                <DetailRow
+                  label={t("detail.samourai.group")}
+                  value={samouraiMetadata.group_label || connection.label}
+                />
+                {samouraiMetadata.role !== "parent" ? (
+                  <>
+                    <DetailRow
+                      label={t("detail.samourai.section")}
+                      value={samouraiSectionLabel(samouraiMetadata.section, t)}
+                    />
+                    <DetailRow
+                      label={t("detail.samourai.script")}
+                      value={samouraiMetadata.script_type || "—"}
+                    />
+                    <DetailRow
+                      label={t("detail.samourai.root")}
+                      value={samouraiMetadata.root_path || "—"}
+                      mono
+                    />
+                    <DetailRow
+                      label={t("detail.samourai.gap")}
+                      value={
+                        formatOptionalCount(
+                          samouraiMetadata.gap_limit ?? connection.gap,
+                        )
+                      }
+                    />
+                  </>
+                ) : (
+                  <DetailRow
+                    label={t("detail.samourai.sections")}
+                    value={(samouraiMetadata.sections ?? [])
+                      .map((section) => samouraiSectionLabel(section, t))
+                      .join(", ")}
+                  />
+                )}
+                {samouraiMetadata.minimum_mix_count ? (
+                  <DetailRow
+                    label={t("detail.samourai.minimumMixCount")}
+                    value={t("detail.samourai.minimumMixCountValue", {
+                      value:
+                        formatCount(samouraiMetadata.minimum_mix_count),
+                      confidence:
+                        samouraiMetadata.mix_count_confidence ??
+                        t("detail.samourai.minimumConfidence"),
+                    })}
+                  />
+                ) : null}
+                {samouraiMetadata.mix_count ? (
+                  <DetailRow
+                    label={t("detail.samourai.observedMixes")}
+                    value={t("detail.samourai.observedMixesValue", {
+                      value: formatCount(samouraiMetadata.mix_count),
+                      confidence:
+                        samouraiMetadata.mix_count_confidence ??
+                        t("detail.samourai.importedConfidence"),
+                    })}
+                  />
+                ) : null}
+                {samouraiMetadata.target_mix_count ? (
+                  <DetailRow
+                    label={t("detail.samourai.targetMixes")}
+                    value={formatCount(samouraiMetadata.target_mix_count)}
+                  />
+                ) : null}
+                {samouraiMetadata.pool_denomination_sat ? (
+                  <DetailRow
+                    label={t("detail.samourai.pool")}
+                    value={t("detail.samourai.poolValue", {
+                      value:
+                        formatCount(samouraiMetadata.pool_denomination_sat),
+                    })}
+                  />
+                ) : null}
+                {samouraiMetadata.role !== "parent" ? (
+                  <DetailRow
+                    label={t("detail.samourai.coins")}
+                    value={
+                      formatOptionalCount(
+                        samouraiInventory?.freshness.active_count ??
+                          samouraiInventory?.summary?.count,
+                      )
+                    }
+                  />
+                ) : null}
+              </CardContent>
+              <div className="space-y-2 border-t px-4 py-3 text-sm">
+                {samouraiMetadata.toxic_change ? (
+                  <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
+                    {t("detail.samourai.toxicChange")}
+                  </div>
+                ) : null}
+                {samouraiMetadata.section === "postmix" ? (
+                  <div className="rounded-md border bg-background px-3 py-2 text-muted-foreground">
+                    {t("detail.samourai.postmixNote")}
+                  </div>
+                ) : null}
+                {samouraiInventory?.freshness.stale ? (
+                  <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
+                    {t("detail.samourai.stale")}
+                  </div>
+                ) : null}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={isWalletSyncRunning}
+                  onClick={() => void onSync()}
                 >
-                  <span className={relatedViewIconClass} aria-hidden="true">
-                    <ArrowLeftRight className="size-4" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-medium">
-                      {t("detail.relatedViews.allTransactions")}
+                  <RefreshCw
+                    className={cn("size-4", isWalletSyncRunning && "animate-spin")}
+                    aria-hidden="true"
+                  />
+                  {/* Reserve the widest label's width so the spinning icon can't
+                      ghost on a mid-refresh resize — see the header Refresh button. */}
+                  <span className="grid justify-items-center">
+                    <span
+                      aria-hidden="true"
+                      className="invisible col-start-1 row-start-1"
+                    >
+                      {t("detail.samourai.refreshSource")}
                     </span>
-                    <span className="block text-xs text-muted-foreground">
-                      {t("detail.relatedViews.allTransactionsDetail", {
-                        value: formatCount(txCount),
-                      })}
+                    <span
+                      aria-hidden="true"
+                      className="invisible col-start-1 row-start-1"
+                    >
+                      {t("detail.refreshing")}
                     </span>
-                  </span>
-                  <ArrowRight className={relatedViewArrowClass} aria-hidden="true" />
-                </Link>
-                <Link
-                  to="/transactions"
-                  search={{ wallet: connection.label, quick: "review_queue" }}
-                  hash="transactions-table"
-                  className={relatedViewLinkClass}
-                >
-                  <span className={relatedViewIconClass} aria-hidden="true">
-                    <ListChecks className="size-4" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-medium">
-                      {t("detail.relatedViews.needsReview")}
-                    </span>
-                    <span className="block text-xs text-muted-foreground">
-                      {t("detail.relatedViews.needsReviewDetail")}
+                    <span className="col-start-1 row-start-1">
+                      {isWalletSyncRunning
+                        ? t("detail.refreshing")
+                        : t("detail.samourai.refreshSource")}
                     </span>
                   </span>
-                  <ArrowRight className={relatedViewArrowClass} aria-hidden="true" />
-                </Link>
-                <Link
-                  to="/transactions"
-                  search={{ wallet: connection.label, quick: "missing_price" }}
-                  hash="transactions-table"
-                  className={relatedViewLinkClass}
-                >
-                  <span className={relatedViewIconClass} aria-hidden="true">
-                    <CircleDollarSign className="size-4" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-medium">
-                      {t("detail.relatedViews.missingPrice")}
-                    </span>
-                    <span className="block text-xs text-muted-foreground">
-                      {t("detail.relatedViews.missingPriceDetail")}
-                    </span>
-                  </span>
-                  <ArrowRight className={relatedViewArrowClass} aria-hidden="true" />
-                </Link>
-                {/* Visible even when locked — same sneak-peek treatment the
-                    side nav gives the early-stage rows. */}
-                <Link
-                  to="/source-of-funds"
-                  {...devLockProps(
-                    sourceOfFundsLocked,
-                    `${t("detail.relatedViews.sourceOfFunds")} — ${t("nav:devLocked")}`,
-                  )}
-                  className={cn(
-                    relatedViewLinkClass,
-                    sourceOfFundsLocked && [
-                      DEV_LOCK_CLASS,
-                      // Kill this row's hover tint and press-scale, or a locked
-                      // row still feels clickable under the cursor.
-                      "hover:bg-transparent! active:scale-100!",
-                    ],
-                  )}
-                >
-                  <span className={relatedViewIconClass} aria-hidden="true">
-                    <ShieldCheck className="size-4" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-medium">
-                      {t("detail.relatedViews.sourceOfFunds")}
-                    </span>
-                    <span className="block text-xs text-muted-foreground">
-                      {t("detail.relatedViews.sourceOfFundsDetail")}
-                    </span>
-                  </span>
-                  <ArrowRight className={relatedViewArrowClass} aria-hidden="true" />
-                </Link>
+                </Button>
               </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+            </Card>
+          ) : null}
+
+          {walletProvenanceRoutes.length > 0 ? (
+            <Card>
+              <CardHeader className="border-b px-4 pb-3">
+                <CardTitle className="text-sm sm:text-base">
+                  {t("detail.btcpayProvenance.title")}
+                </CardTitle>
+                <CardDescription>
+                  {t("detail.btcpayProvenance.description")}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{t("detail.btcpayProvenance.instance")}</TableHead>
+                      <TableHead>{t("detail.btcpayProvenance.store")}</TableHead>
+                      <TableHead>
+                        {t("detail.btcpayProvenance.paymentMethod")}
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {walletProvenanceRoutes.map((route, index) => (
+                      <TableRow
+                        key={`${route.backend}-${route.store_id}-${route.payment_method_id}-${index}`}
+                      >
+                        <TableCell>{route.backend}</TableCell>
+                        <TableCell>{route.store_id}</TableCell>
+                        <TableCell>{route.payment_method_id}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+              <div className="border-t px-4 py-2.5 text-xs text-muted-foreground">
+                <Trans
+                  t={t}
+                  i18nKey="detail.btcpayProvenance.footer"
+                  components={{
+                    strong: <strong />,
+                    em: <em />,
+                    code: <code />,
+                  }}
+                />
+              </div>
+            </Card>
+          ) : null}
+        </TabsContent>
+      </Tabs>
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-w-md">
@@ -2784,101 +2791,5 @@ function ConnectionDetailView({
       </Dialog>
       {detailSheet}
     </div>
-  );
-}
-
-function ConnectionTransactionRow({
-  tx,
-  hideSensitive,
-}: {
-  tx: OverviewSnapshot["txs"][number];
-  hideSensitive: boolean;
-}) {
-  const { t } = useTranslation("connections");
-  const flow =
-    tx.type === "Swap" || tx.type === "Transfer" || tx.type === "Rebalance"
-      ? "transfer"
-      : tx.amountSat >= 0
-        ? "incoming"
-        : "outgoing";
-  const Icon =
-    flow === "incoming"
-      ? ArrowDownRight
-      : flow === "outgoing"
-        ? ArrowUpRight
-        : ArrowLeftRight;
-  const tone =
-    flow === "incoming"
-      ? "border-emerald-600/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-      : flow === "outgoing"
-        ? "border-red-600/20 bg-red-500/10 text-red-700 dark:text-red-300"
-        : "border-sky-600/20 bg-sky-500/10 text-sky-700 dark:text-sky-300";
-  const primaryLabel = tx.counter || tx.type;
-  const showTypeBadge = Boolean(tx.counter && tx.counter !== tx.type);
-
-  return (
-    <Link
-      to="/transactions"
-      search={{ tx: tx.id }}
-      className="flex min-w-0 items-start gap-3 px-4 py-2.5 transition-[background-color,transform] duration-200 hover:bg-muted/45 active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transform-none motion-reduce:transition-none"
-    >
-      <span
-        className={cn(
-          "mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md border",
-          tone,
-        )}
-        aria-hidden="true"
-      >
-        <Icon className="size-3.5" />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block min-w-0 truncate text-sm font-medium">
-          {primaryLabel}
-        </span>
-        <span className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-2xs text-muted-foreground sm:text-xs">
-          <span className="shrink-0">{tx.date}</span>
-          <span aria-hidden="true">·</span>
-          <span className={cn("truncate font-mono", blurClass(hideSensitive))}>
-            {fmtShortTxid(tx.externalId ?? tx.id)}
-          </span>
-          {showTypeBadge ? (
-            <Badge variant="outline" className="h-5 rounded-md px-1.5 text-2xs">
-              {tx.type}
-            </Badge>
-          ) : null}
-          {tx.conf > 0 ? null : (
-            <Badge
-              variant="outline"
-              className="h-5 rounded-md px-1.5 text-2xs text-amber-700 ring-amber-600/20 dark:text-amber-300"
-            >
-              {t("detail.recentTransactions.pending")}
-            </Badge>
-          )}
-        </span>
-      </span>
-      <span className="shrink-0 text-right">
-        <span
-          className={cn(
-            "block font-mono text-sm font-semibold tabular-nums",
-            tx.amountSat > 0
-              ? "text-emerald-600 dark:text-emerald-400"
-              : tx.amountSat < 0
-                ? "text-red-600 dark:text-red-400"
-                : "text-muted-foreground",
-            blurClass(hideSensitive),
-          )}
-        >
-          {fmtSatSigned(tx.amountSat)}
-        </span>
-        <span
-          className={cn(
-            "mt-0.5 block font-mono text-2xs text-muted-foreground tabular-nums sm:text-xs",
-            blurClass(hideSensitive),
-          )}
-        >
-          {fmtEurSigned(tx.eur)}
-        </span>
-      </span>
-    </Link>
   );
 }

@@ -13,7 +13,7 @@ defines the same cutoff as `NEU_CUTOFF_US`.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 from zoneinfo import ZoneInfo
 
 # Altvermögen / Neuvermögen cutoff per § 27b EStG. Acquisitions on or before
@@ -48,6 +48,49 @@ AT_CATEGORY_TO_KENNZAHL: dict[str, int | None] = {
     "alt_spekulation": 801,
     "alt_taxfree": None,
 }
+
+
+# The E 1kv's crypto Kennzahlen (172, 174, 176) and their 27.5 % rate cover
+# income and realisations from 1 March 2022 (Europe/Vienna). Earlier ones
+# followed the old rules (Spekulationsgeschäfte, sonstige Einkünfte), and
+# Jan-Feb 2022 only by the taxpayer's option. Kassiber states no crypto field
+# for them and leaves them to an adviser rather than guessing where the old
+# rules put them. KZ 801 (E 1) is unaffected. The classification stays the
+# tax engine's; this is only which field a classified row is stated in.
+CRYPTO_KENNZAHLEN_FROM = datetime(2022, 3, 1, 0, 0, 0, tzinfo=AT_TAX_TZ)
+E1KV_FIRST_TAX_YEAR = CRYPTO_KENNZAHLEN_FROM.year
+E1KV_KENNZAHLEN = frozenset({172, 174, 176})
+
+
+def e1kv_applies(tax_year: int) -> bool:
+    """Whether ``tax_year`` has the E 1kv's crypto Kennzahlen at all."""
+    return int(tax_year) >= E1KV_FIRST_TAX_YEAR
+
+
+def kennzahl_for_event(category: Optional[str], occurred_at: str) -> int | None:
+    """The field a classified row is stated in: none for a crypto Kennzahl
+    before the new rules took effect."""
+    kennzahl = kennzahl_for_disposal_category(category)
+    if kennzahl in E1KV_KENNZAHLEN and _parse_occurred_at(str(occurred_at)) < CRYPTO_KENNZAHLEN_FROM:
+        return None
+    return kennzahl
+
+
+def stated_kennzahl(stored: Any, occurred_at: str) -> int | None:
+    """A journal row's stored field as an export states it: a crypto
+    Kennzahl dated before 1 March 2022 is none."""
+    if stored is None or stored == "":
+        return None
+    kennzahl = int(stored)
+    if kennzahl in E1KV_KENNZAHLEN and _parse_occurred_at(str(occurred_at)) < CRYPTO_KENNZAHLEN_FROM:
+        return None
+    return kennzahl
+
+
+def _row_value(row: Mapping[str, Any], key: str, default: Any = None) -> Any:
+    if hasattr(row, "keys") and key in row.keys():
+        return row[key]
+    return default
 
 
 def _parse_occurred_at(value: str) -> datetime:
@@ -103,6 +146,12 @@ def kennzahl_for_disposal_category(category: Optional[str]) -> int | None:
 
 __all__ = [
     "AT_CATEGORY_TO_KENNZAHL",
+    "CRYPTO_KENNZAHLEN_FROM",
+    "E1KV_FIRST_TAX_YEAR",
+    "E1KV_KENNZAHLEN",
+    "e1kv_applies",
+    "kennzahl_for_event",
+    "stated_kennzahl",
     "AT_DEFAULT_POOL",
     "AT_NEU_CUTOFF",
     "AT_SWAP_QUARANTINE_REASON",

@@ -109,13 +109,14 @@ the brokered accounting commands directly, or explicitly lock the broker and
 select `manual` mode before starting CLI chat. This limitation does not weaken
 the existing in-app AI consent checks. `kassiber mcp serve` is also
 long-lived and is refused as a broker operation, but it submits each tool call
-as a finite `mcp call` read operation, so it works under a lease; see
+as a finite `mcp call` operation, so it works under a lease; see
 [MCP](mcp.md).
 
 The desktop can grant an **agent session** for the encrypted book it has open,
 from the passphrase of its own unlock, when the user enables external agents
-and clicks *Unlock for agents*. It is a `read` lease with three limits
-(`agent_scope` in `status`):
+and clicks *Unlock for agents*. Its capability is the user's External agents
+grant (`read`, `operator`, or `accounting_decisions`, never `admin`), with
+three limits (`agent_scope` in `status`):
 
 - it admits only `mcp call` operations;
 - it admits them only from processes allowed with a control secret the
@@ -371,6 +372,13 @@ routing, and broker admission:
 The first three grants are cumulative. Unknown commands and daemon kinds fail
 closed. Admin work always consumes a fresh, challenge-bound authorization for
 one operation and does not upgrade the lease.
+
+`mcp call` is `read` as a command, but one command line can run any external
+agent tool, so admission classifies it by the tool's own capability (the
+registry entry of the daemon kind it executes, as `kassiber/mcp/tools.py`
+derives it), raised to any `--grant` the call claims; a claimed grant lets a
+read refresh journals, so the lease must cover it too. The worker then runs
+the call with no more than that. No agent tool is ever admin-class.
 
 Backend connection setup is deliberately `operator` work, including creating
 or updating an endpoint and submitting a new caller-supplied token. This lets a

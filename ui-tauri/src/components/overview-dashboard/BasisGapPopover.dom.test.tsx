@@ -58,8 +58,8 @@ describe("cost basis gap explanation", () => {
       href: row.querySelector("a")?.getAttribute("href"),
     }));
     expect(rows).toEqual([
-      { text: "385 transactions in quarantineQuarantine", href: "/quarantine" },
-      { text: "1 transaction without a priceQuarantine", href: "/quarantine" },
+      { text: "385 transactions in quarantineReview", href: "/review" },
+      { text: "1 transaction without a priceReview", href: "/review" },
     ]);
   });
 

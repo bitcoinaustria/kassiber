@@ -1,7 +1,7 @@
 """Freeze full source-funds presentation bytes from the unchanged Python core.
 
 This is a pure-projection oracle, not acceptance of native report routing.
-Every database-backed reference projection checks all 112 tables. Scratch and
+Every database-backed reference projection checks every table. Scratch and
 books stay under this checkout's target directory and the account HOME stays put.
 """
 import argparse
@@ -16,6 +16,7 @@ from kassiber.daemon import _source_funds_hooks
 from kassiber.db import open_db
 from kassiber.errors import AppError
 from crates.reports.scripts.gen_source_funds_reads import BASE
+from tests.rust_port.book_schema import TABLES
 
 ROOT = Path(__file__).resolve().parents[3]
 DESTINATION = ROOT / 'crates/reports/tests/data/source_funds_projection.json'
@@ -28,7 +29,7 @@ def wire(value):
 
 def tables(conn):
     names = [row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")]
-    assert len(names) == 112
+    assert tuple(names) == TABLES
     return wire({name: sorted([dict(row) for row in conn.execute(f'SELECT * FROM "{name}"')], key=wire) for name in names})
 
 
@@ -182,7 +183,7 @@ def main():
         DESTINATION.write_text(generated)
     elif DESTINATION.read_text() != generated:
         raise SystemExit('source-funds projection vectors differ; regenerate intentionally')
-    print(f'{len(json.loads(generated))} source-funds projection cases verified with all 112 tables')
+    print(f'{len(json.loads(generated))} source-funds projection cases verified with all {len(TABLES)} tables')
 
 
 if __name__ == '__main__':

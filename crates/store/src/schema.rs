@@ -28,6 +28,20 @@ pub fn fingerprint(conn: &Connection) -> Result<String> {
             .collect(),
     )
 }
+/// The current schema's table names, sorted. Whole-book comparisons use it to
+/// prove they cover every table.
+pub fn table_names() -> Vec<String> {
+    let expected: Value = serde_json::from_str(MANIFEST).expect("checked-in schema manifest");
+    let mut names: Vec<String> = expected["objects"]
+        .as_array()
+        .expect("object list")
+        .iter()
+        .filter(|object| object[0] == "table")
+        .map(|object| object[1].as_str().expect("table name").to_owned())
+        .collect();
+    names.sort();
+    names
+}
 pub fn verify(conn: &Connection) -> Result<()> {
     let expected: Value = serde_json::from_str(MANIFEST).expect("checked-in schema manifest");
     // Identical SQLite definitions imply identical parsed structure. Avoid
@@ -536,6 +550,44 @@ mod tests {
         conn.execute_batch("DROP TRIGGER chain_index_track_transactions_insert")
             .unwrap();
         assert_ne!(fingerprint(&conn).unwrap(), fingerprint_before);
+    }
+    #[test]
+    fn table_names_list_every_current_table() {
+        let conn = current_schema();
+        let stored: Vec<String> = conn
+            .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap();
+        assert_eq!(table_names(), stored);
+        assert!(stored.iter().any(|name| name == "ai_provider_checks"));
+    }
+    #[test]
+    fn newer_unknown_layouts_and_audits_are_refused() {
+        for drift in [
+            "CREATE TABLE future_storage(value INTEGER)",
+            "ALTER TABLE transactions ADD COLUMN future_column TEXT",
+            "CREATE INDEX idx_future_transactions ON transactions(asset)",
+            "CREATE TRIGGER trg_future BEFORE INSERT ON ai_provider_checks BEGIN SELECT 1; END",
+            "CREATE VIEW future_view AS SELECT 1",
+            "INSERT INTO schema_migration_audits VALUES('future-migration-v1','future-migration-v1',1,'{}','fixed')",
+            "INSERT INTO schema_migration_audits VALUES('at-fee-consumed-regime-v2','at-fee-consumed-regime-v2',1,'{}','fixed')",
+        ] {
+            let conn = current_schema();
+            verify(&conn).unwrap();
+            conn.execute_batch(drift).unwrap();
+            assert_eq!(
+                verify(&conn).unwrap_err().kind,
+                crate::ErrorKind::RequiresPythonMigration,
+                "{drift}"
+            );
+        }
+        // The retired audits Python may still hold remain admitted.
+        let conn = current_schema();
+        conn.execute_batch("INSERT INTO schema_migration_audits VALUES('at-fee-consumed-regime-v1','at-fee-consumed-regime-v1',1,'{}','fixed')").unwrap();
+        verify(&conn).unwrap();
     }
     #[test]
     fn historical_layout_uses_normalized_gate_and_still_refuses_constraint_drift() {

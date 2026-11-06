@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 //
-// Mounted against a fake daemon: Settings → AI providers must contact no
+// Mounted against a fake daemon: Settings → Assistant must contact no
 // provider on its own. Its only automatic reads are the provider list, the
 // offline switch, and cached runtime snapshots (`cached_only`, never a probe);
 // a provider is checked only by an explicit click, only that provider, and
@@ -20,6 +20,8 @@ const mocks = vi.hoisted(() => ({
   providers: [] as Provider[],
   offline: false,
   cachedRuntime: {} as Record<string, Record<string, unknown> | undefined>,
+  // HTTP listings the daemon kept from an earlier launch (`cached_only`).
+  savedModels: {} as Record<string, Array<{ id: string }> | undefined>,
   probeResult: {} as Record<string, Record<string, unknown>>,
   probeError: {} as Record<string, string>,
   ackError: null as string | null,
@@ -50,8 +52,8 @@ vi.mock("@/lib/confirmAction", () => ({
   confirmAction: (message: string) => Promise.resolve(mocks.confirm(message)),
 }));
 // Separate settings surfaces with their own daemon reads.
-vi.mock("@/components/kb/settings/ChatHistorySettingsCard", () => ({
-  ChatHistorySettingsCard: () => null,
+vi.mock("@/components/kb/settings/ChatHistorySettings", () => ({
+  ChatHistorySettings: () => null,
 }));
 vi.mock("@/components/kb/settings/ExternalAgentsSettings", () => ({
   ExternalAgentsSettings: () => null,
@@ -63,6 +65,7 @@ import { useUiStore } from "@/store/ui";
 import { AiProvidersSettingsPanel } from "./AiProvidersSettingsPanel";
 
 const NOW = "2026-10-09T10:00:00Z";
+const SAVED_AT = "2026-10-06T10:00:00Z";
 
 function envelope(kind: string, data: unknown) {
   return { kind, schema_version: 1, data };
@@ -154,6 +157,16 @@ function daemon(request: Request) {
       });
     }
     case "ai.list_models":
+      if (args.cached_only) {
+        const saved = mocks.savedModels[String(args.provider)];
+        return envelope(request.kind, {
+          provider: args.provider,
+          models: saved ?? [],
+          checked_at: saved ? SAVED_AT : null,
+          stale: false,
+          error: null,
+        });
+      }
       if (args.provider === "omlx") {
         return {
           kind: "error",
@@ -223,14 +236,17 @@ function requests(): Request[] {
 function probes(): Request[] {
   return requests().filter(
     (request) =>
-      request.kind === "ai.list_models" ||
-      (request.kind === "ai.provider_runtime.status" && !request.args?.cached_only),
+      (request.kind === "ai.list_models" || request.kind === "ai.provider_runtime.status") &&
+      !request.args?.cached_only,
   );
 }
 
+/** A provider's row, opened so its details and actions are in reach. */
 function card(name: string): HTMLElement {
   const element = document.querySelector<HTMLElement>(`[data-ai-provider-card="${name}"]`);
   if (!element) throw new Error(`no card for ${name}`);
+  const toggle = element.querySelector<HTMLElement>("button[aria-expanded]");
+  if (toggle?.getAttribute("aria-expanded") === "false") fireEvent.click(toggle);
   return element;
 }
 
@@ -251,6 +267,10 @@ async function mount(aiFeaturesEnabled = true, seed?: (client: QueryClient) => v
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
+  // Open every row, so its details and actions are in reach.
+  for (const element of document.querySelectorAll<HTMLElement>("[data-ai-provider-card]")) {
+    card(element.dataset.aiProviderCard!);
+  }
   return client;
 }
 
@@ -263,6 +283,7 @@ describe("AiProvidersSettingsPanel (mounted)", () => {
     mocks.providers = BASE_PROVIDERS.map((provider) => ({ ...provider }));
     mocks.offline = false;
     mocks.cachedRuntime = {};
+    mocks.savedModels = {};
     mocks.probeResult = {};
     mocks.probeError = {};
     mocks.ackError = null;
@@ -278,12 +299,13 @@ describe("AiProvidersSettingsPanel (mounted)", () => {
     expect(probes()).toEqual([]);
     const kinds = new Set(requests().map((request) => request.kind));
     expect([...kinds].sort()).toEqual([
+      "ai.list_models",
       "ai.provider_runtime.status",
       "ai.providers.list",
       "ui.network.offline",
     ]);
     for (const request of requests()) {
-      if (request.kind === "ai.provider_runtime.status") {
+      if (request.kind === "ai.provider_runtime.status" || request.kind === "ai.list_models") {
         expect(request.args).toEqual({
           provider: expect.any(String),
           base_url: expect.any(String),
@@ -292,6 +314,53 @@ describe("AiProvidersSettingsPanel (mounted)", () => {
       }
     }
     expect(within(card("copilot")).getByText("Not checked yet")).toBeTruthy();
+  });
+
+  it("shows an HTTP provider's last check from an earlier launch, without checking it", async () => {
+    mocks.savedModels = { ollama: [{ id: "qwen3:8b" }, { id: "gemma3:4b" }] };
+    await mount();
+    expect(probes()).toEqual([]);
+    await waitFor(() =>
+      expect(within(card("ollama")).getByText(/Reachable · 2 models/)).toBeTruthy(),
+    );
+  });
+
+  it("folds built-in providers that were never used into Not set up", async () => {
+    mocks.providers = BASE_PROVIDERS.map((provider) =>
+      provider.name === "copilot" ? { ...provider, set_up: false } : provider,
+    );
+    await mount();
+    expect(card("ollama")).toBeTruthy();
+    expect(document.querySelector('[data-ai-provider-card="copilot"]')).toBeNull();
+    const group = document.querySelector<HTMLElement>("[data-not-set-up]")!;
+    const toggle = within(group).getByRole("button", { name: /more provider/ });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(toggle);
+    expect(within(group).getByText("GitHub Copilot")).toBeTruthy();
+    // Nothing was contacted to show it.
+    expect(probes()).toEqual([]);
+  });
+
+  it("sets a provider up by checking it, after the off-device acknowledgement", async () => {
+    mocks.providers = BASE_PROVIDERS.map((provider) =>
+      provider.name === "copilot" ? { ...provider, set_up: false, acknowledged_at: null } : provider,
+    );
+    mocks.confirm.mockResolvedValue(true);
+    await mount();
+    const group = document.querySelector<HTMLElement>("[data-not-set-up]")!;
+    fireEvent.click(within(group).getByRole("button", { name: /more provider/ }));
+    await act(async () => {
+      fireEvent.click(within(group).getByRole("button", { name: "Set up GitHub Copilot" }));
+    });
+    await waitFor(() =>
+      expect(probes()).toEqual([
+        expect.objectContaining({
+          kind: "ai.provider_runtime.status",
+          args: expect.objectContaining({ provider: "copilot", refresh: true }),
+        }),
+      ]),
+    );
+    expect(mocks.confirm).toHaveBeenCalledOnce();
   });
 
   it("shows each HTTP provider's API format on its card, quietly", async () => {
@@ -945,5 +1014,24 @@ describe("AiProvidersSettingsPanel (mounted)", () => {
       }),
     );
     expect(probes()).toEqual([]);
+  });
+
+  it("shows each provider's tool set, all tools unless the user picked fewer", async () => {
+    useUiStore.setState({ assistantProviderToolProfiles: { ollama: "core" } });
+    await mount();
+    const tools = (name: string) =>
+      card(name).querySelector<HTMLElement>("[data-provider-tool-profile]");
+    // Never inferred from the model: every other provider offers all tools.
+    expect(tools("ollama")?.dataset.providerToolProfile).toBe("core");
+    expect(tools("ollama")?.textContent).toContain("Minimal");
+    for (const name of ["claude", "codex", "copilot", "opencode"]) {
+      expect(tools(name)?.dataset.providerToolProfile).toBe("full");
+      expect(tools(name)?.textContent).toContain("All tools");
+    }
+    // Kept in this app's settings: no daemon write.
+    expect(requests().some((request) => request.kind === "ai.providers.update")).toBe(false);
+    act(() => useUiStore.getState().setAssistantProviderToolProfile("ollama", null));
+    expect(useUiStore.getState().assistantProviderToolProfiles).toEqual({});
+    useUiStore.setState({ assistantProviderToolProfiles: {} });
   });
 });

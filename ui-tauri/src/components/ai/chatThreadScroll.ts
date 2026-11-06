@@ -31,14 +31,8 @@ export function resolveScrollMode(
 /** Which scroll affordances the given mode/position should surface. */
 export function resolveScrollAffordances(
   mode: ScrollMode,
-  { atBottom, atTop }: { atBottom: boolean; atTop: boolean },
-): { jumpToLatest: boolean; jumpToTop: boolean } {
-  return {
-    // Only offer "jump to latest" when we're not already chasing the tail.
-    jumpToLatest: mode === "free" && !atBottom,
-    // Jumping to the top doesn't fight the stream, so it stays available in
-    // any settled position — hidden only mid-anchor, where the view is being
-    // held deliberately and the pill would sit on the anchored turn.
-    jumpToTop: mode !== "anchoring" && !atTop,
-  };
+  { atBottom }: { atBottom: boolean },
+): { jumpToLatest: boolean } {
+  // Only offer "jump to latest" when we're not already chasing the tail.
+  return { jumpToLatest: mode === "free" && !atBottom };
 }

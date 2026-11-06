@@ -29,10 +29,6 @@ vi.mock("@/components/ai/RecentChats", () => ({
   RecentChats: () => null,
 }));
 
-vi.mock("@/components/ai/ToolConsentDialog", () => ({
-  ToolConsentDialog: () => null,
-}));
-
 vi.mock("@/components/ai/useReasoningEffortSupport", () => ({
   useSupportedReasoningEffort: () => false,
 }));
@@ -50,7 +46,7 @@ function makeAssistantSession(
     messages: [],
     isStreaming: false,
     error: null,
-    pendingConsent: null,
+    pendingConsents: [],
     queuedPrompts: [],
     selection: { provider: "ollama", model: "gemma" },
     thinkingEffort: "auto",
@@ -58,13 +54,13 @@ function makeAssistantSession(
     returnPath: "/overview",
     sessionId: null,
     incognito: false,
-    attachment: null,
+    attachments: [],
     setSelection: vi.fn(),
     setThinkingEffort: vi.fn(),
     setFastMode: vi.fn(),
     setIncognito: vi.fn(),
     attachFile: vi.fn(),
-    clearAttachment: vi.fn(),
+    removeAttachment: vi.fn(),
     sendPrompt: vi.fn(),
     sendConsent: vi.fn(),
     abort: vi.fn(),

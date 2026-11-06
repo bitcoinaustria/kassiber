@@ -10,6 +10,7 @@ import {
   Info,
   Loader2,
   RefreshCw,
+  Inbox,
   ShieldAlert,
   TableProperties,
   WalletCards,
@@ -65,7 +66,7 @@ import {
 import { syncProgressPhaseLabel } from "@/lib/syncProgress";
 import { formatCount } from "@/lib/localeFormat";
 
-type BookRoute = "/overview" | "/transactions" | "/journals" | "/quarantine" | "/connections" | "/reports" | "/exit-tax";
+type BookRoute = "/overview" | "/transactions" | "/journals" | "/review" | "/connections" | "/reports" | "/exit-tax";
 
 interface WorkspaceFreshnessProgress {
   workspace?: { id: string; label: string };
@@ -111,7 +112,7 @@ const BOOK_ROUTES: Array<{
     | "book.overview"
     | "book.transactions"
     | "book.ledger"
-    | "book.quarantine"
+    | "book.review"
     | "book.wallets"
     | "book.reports";
   to: BookRoute;
@@ -126,10 +127,10 @@ const BOOK_ROUTES: Array<{
   },
   { id: "ledger", labelKey: "book.ledger", to: "/journals", icon: BookOpen },
   {
-    id: "quarantine",
-    labelKey: "book.quarantine",
-    to: "/quarantine",
-    icon: ShieldAlert,
+    id: "review",
+    labelKey: "book.review",
+    to: "/review",
+    icon: Inbox,
   },
   {
     id: "wallets",

@@ -1,17 +1,11 @@
 import * as React from "react";
-import {
-  Network,
-  Pencil,
-  ShieldCheck,
-  ShieldOff,
-  type LucideIcon,
-} from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { useOfflineMode } from "@/lib/offlineMode";
 import { cn } from "@/lib/utils";
-import { SettingsSwitchRow } from "./SettingsControls";
+import { SettingsGroup, SettingsRow, SettingsSelect } from "./SettingsControls";
 import {
   backendProtocolLabel,
   backendTrust,
@@ -26,35 +20,31 @@ export const EXPOSURE_FILTERS: Array<{
   id: ExposureFilter;
   labelKey: string;
   hintKey: string;
-  icon: LucideIcon;
-  iconClass: string;
-  barClass: string;
+  /** How the endpoint's posture reads: OK, neutral, or a warning. */
+  toneClass: string;
 }> = [
   {
     id: "first",
     labelKey: "privacy.exposure.firstParty",
     hintKey: "privacy.exposure.firstPartyHint",
-    icon: ShieldCheck,
-    iconClass: "text-emerald-600 dark:text-emerald-400",
-    barClass: "bg-emerald-500",
+    toneClass: "text-emerald-600 dark:text-emerald-400",
   },
   {
     id: "shielded",
     labelKey: "privacy.exposure.shielded",
     hintKey: "privacy.exposure.shieldedHint",
-    icon: Network,
-    iconClass: "text-sky-600 dark:text-sky-400",
-    barClass: "bg-sky-500",
+    toneClass: "text-muted-foreground",
   },
   {
     id: "remote",
     labelKey: "privacy.exposure.thirdParty",
     hintKey: "privacy.exposure.thirdPartyHint",
-    icon: ShieldOff,
-    iconClass: "text-amber-600 dark:text-amber-400",
-    barClass: "bg-amber-500",
+    toneClass: "text-amber-600 dark:text-amber-400",
   },
 ];
+
+/** Stands in for "no filter" in the Show select. */
+const ALL_ENDPOINTS = "all";
 
 export function backendExposureFilter(backend: Backend): ExposureFilter {
   const posture = backendTrust(backend).posture;
@@ -97,83 +87,6 @@ export const EXPOSURE_GROUPS: ExposureGroupDef[] = [
   },
 ];
 
-export function ExposurePostureBar({
-  counts,
-}: {
-  counts: Record<ExposureFilter, number>;
-}) {
-  const { t } = useTranslation("settings");
-  const total = counts.first + counts.shielded + counts.remote;
-  if (total === 0) {
-    return (
-      <div
-        className="h-2 w-full overflow-hidden rounded-full bg-muted"
-        aria-hidden="true"
-      />
-    );
-  }
-  return (
-    <div
-      className="flex h-2 w-full overflow-hidden rounded-full bg-muted"
-      role="img"
-      aria-label={t("privacy.postureBarAria", {
-        first: counts.first,
-        shielded: counts.shielded,
-        remote: counts.remote,
-      })}
-    >
-      {EXPOSURE_FILTERS.map((filter) =>
-        counts[filter.id] > 0 ? (
-          <div
-            key={filter.id}
-            className={filter.barClass}
-            style={{ width: `${(counts[filter.id] / total) * 100}%` }}
-          />
-        ) : null,
-      )}
-    </div>
-  );
-}
-
-export function ExposureFilterTile({
-  filter,
-  count,
-  active,
-  onClick,
-}: {
-  filter: (typeof EXPOSURE_FILTERS)[number];
-  count: number;
-  active: boolean;
-  onClick: () => void;
-}) {
-  const { t } = useTranslation("settings");
-  const Icon = filter.icon;
-  const dim = filter.id === "remote" && count === 0;
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      className={cn(
-        "rounded-lg border bg-background p-3 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        active && "border-foreground/30 bg-muted ring-1 ring-foreground/10",
-      )}
-    >
-      <div className="flex items-center gap-2">
-        <Icon
-          className={cn("size-4", dim ? "text-muted-foreground" : filter.iconClass)}
-          aria-hidden="true"
-        />
-        <span className="font-mono text-lg tabular-nums">{count}</span>
-      </div>
-      {/* dynamic key */}
-      <p className="mt-1 text-sm font-medium">{t(filter.labelKey as never)}</p>
-      {/* dynamic key */}
-      <p className="text-xs text-muted-foreground">{t(filter.hintKey as never)}</p>
-    </button>
-  );
-}
-
 export function ExposureEndpointRow({
   backend,
   canEdit,
@@ -183,42 +96,31 @@ export function ExposureEndpointRow({
   canEdit: boolean;
   onEdit: () => void;
 }) {
-  const { t } = useTranslation("settings");
+  const { t } = useTranslation(["settings", "common"]);
   const trust = backendTrust(backend);
-  const TrustIcon = trust.icon;
+  const tone = EXPOSURE_FILTERS.find(
+    (entry) => entry.id === backendExposureFilter(backend),
+  )?.toneClass;
   return (
-    <div className="rounded-lg border bg-background p-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium">{backend.name}</p>
-          <p className="truncate text-xs text-muted-foreground">
-            {backendProtocolLabel(backend)} · {endpointHostLabel(backend.url)}
-          </p>
-        </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-          <span
-            className={cn(
-              "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium",
-              trust.className,
-            )}
-          >
-            <TrustIcon className="size-3" aria-hidden="true" />
-            {trust.label}
-          </span>
-          {canEdit ? (
-            <Button
-              type="button"
-              size="icon-sm"
-              variant="ghost"
-              aria-label={t("privacy.editEndpoint", { name: backend.name })}
-              onClick={onEdit}
-            >
-              <Pencil className="size-3.5" aria-hidden="true" />
-            </Button>
-          ) : null}
-        </div>
-      </div>
-    </div>
+    <SettingsRow
+      label={backend.name}
+      description={`${backendProtocolLabel(backend)} · ${endpointHostLabel(backend.url)}`}
+    >
+      <span className={cn("text-sm", tone)} title={trust.note}>
+        {trust.label}
+      </span>
+      {canEdit ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          aria-label={t("privacy.editEndpoint", { name: backend.name })}
+          onClick={onEdit}
+        >
+          {t("common:actions.edit")}
+        </Button>
+      ) : null}
+    </SettingsRow>
   );
 }
 
@@ -278,88 +180,88 @@ export function PrivacySettingsPanel({
 
   return (
     <div className="space-y-6">
-      <section className="space-y-3">
-        <h3 className="text-sm font-semibold">
-          {t("privacy.offlineHeading")}
-        </h3>
-        <SettingsSwitchRow
+      <SettingsGroup
+        title={t("privacy.offlineHeading")}
+        footer={
+          offlineMode.environmentBlocked && !offlineMode.offline
+            ? t("privacy.offlineEnvironment")
+            : null
+        }
+      >
+        <SettingsRow
           label={t("privacy.offlineLabel")}
           description={
             offlineMode.offline ? t("privacy.offlineOn") : t("privacy.offlineOff")
           }
-          checked={offlineMode.offline}
-          onCheckedChange={offlineMode.setOffline}
-          disabled={!offlineMode.known || offlineMode.pending}
-        />
-        {offlineMode.environmentBlocked && !offlineMode.offline ? (
-          <p className="text-xs text-muted-foreground">
-            {t("privacy.offlineEnvironment")}
-          </p>
-        ) : null}
+          htmlFor="settings-offline"
+        >
+          <Switch
+            id="settings-offline"
+            checked={offlineMode.offline}
+            onCheckedChange={offlineMode.setOffline}
+            disabled={!offlineMode.known || offlineMode.pending}
+          />
+        </SettingsRow>
         {offlineMode.failed ? (
-          <p className="text-xs text-red-700 dark:text-red-300" role="alert">
+          <p className="px-4 py-3 text-sm text-destructive" role="alert">
             {t("privacy.offlineFailed")}
           </p>
         ) : null}
-      </section>
+      </SettingsGroup>
 
-      <section className="space-y-3">
-        <h3 className="text-sm font-semibold">
-          {t("privacy.onScreenHeading")}
-        </h3>
-        <SettingsSwitchRow
+      <SettingsGroup title={t("privacy.onScreenHeading")}>
+        <SettingsRow
           label={t("privacy.blurLabel")}
-          description={
-            hideSensitive ? t("privacy.blurOn") : t("privacy.blurOff")
-          }
-          checked={hideSensitive}
-          onCheckedChange={setHideSensitive}
-        />
-        <SettingsSwitchRow
+          description={hideSensitive ? t("privacy.blurOn") : t("privacy.blurOff")}
+          htmlFor="settings-blur"
+        >
+          <Switch
+            id="settings-blur"
+            checked={hideSensitive}
+            onCheckedChange={setHideSensitive}
+          />
+        </SettingsRow>
+        <SettingsRow
           label={t("privacy.clipboardLabel")}
           description={
-            clearClipboard
-              ? t("privacy.clipboardOn")
-              : t("privacy.clipboardOff")
+            clearClipboard ? t("privacy.clipboardOn") : t("privacy.clipboardOff")
           }
-          checked={clearClipboard}
-          onCheckedChange={setClearClipboard}
-        />
-      </section>
+          htmlFor="settings-clipboard"
+        >
+          <Switch
+            id="settings-clipboard"
+            checked={clearClipboard}
+            onCheckedChange={setClearClipboard}
+          />
+        </SettingsRow>
+      </SettingsGroup>
 
-      <section className="space-y-3">
-        <h3 className="text-sm font-semibold">
-          {t("privacy.updatesHeading")}
-        </h3>
-        <SettingsSwitchRow
+      <SettingsGroup
+        title={t("privacy.updatesHeading")}
+        footer={t("privacy.updatesTrust")}
+      >
+        <SettingsRow
           label={t("privacy.updatesLabel")}
           description={
-            automaticUpdateChecks
-              ? t("privacy.updatesOn")
-              : t("privacy.updatesOff")
+            automaticUpdateChecks ? t("privacy.updatesOn") : t("privacy.updatesOff")
           }
-          checked={automaticUpdateChecks}
-          onCheckedChange={setAutomaticUpdateChecks}
-        />
-        <p className="text-xs text-muted-foreground">
-          {t("privacy.updatesTrust")}
-        </p>
-      </section>
+          htmlFor="settings-update-checks"
+        >
+          <Switch
+            id="settings-update-checks"
+            checked={automaticUpdateChecks}
+            onCheckedChange={setAutomaticUpdateChecks}
+          />
+        </SettingsRow>
+      </SettingsGroup>
 
-      <section className="space-y-3">
-        <div>
-          <h3 className="text-sm font-semibold">
-            {t("privacy.leavesHeading")}
-          </h3>
-          <p className="text-sm text-muted-foreground">
-            {t("privacy.leavesDescription")}
-          </p>
-        </div>
-
-        <ExposurePostureBar counts={counts} />
+      <SettingsGroup
+        title={t("privacy.leavesHeading")}
+        footer={t("privacy.leavesDescription")}
+      >
         <p
           className={cn(
-            "text-xs",
+            "px-4 py-3 text-sm",
             counts.remote > 0
               ? "text-amber-600 dark:text-amber-400"
               : "text-muted-foreground",
@@ -371,103 +273,90 @@ export function PrivacySettingsPanel({
               ? t("privacy.noThirdPartyWithAi")
               : t("privacy.noThirdParty")}
         </p>
+        <SettingsRow
+          label={t("privacy.assistantHeading")}
+          description={
+            aiFeaturesEnabled
+              ? t("privacy.assistantEnabled")
+              : t("privacy.assistantDisabled")
+          }
+        >
+          <Button type="button" size="sm" variant="outline" onClick={onManageAi}>
+            {t("privacy.reviewAi")}
+          </Button>
+        </SettingsRow>
+        <SettingsRow
+          label={t("privacy.filterLabel")}
+          description={
+            activeFilterEntry
+              ? // dynamic key
+                t(activeFilterEntry.hintKey as never)
+              : t("privacy.filterAllHint")
+          }
+          htmlFor="settings-exposure-filter"
+        >
+          <SettingsSelect
+            value={filter ?? ALL_ENDPOINTS}
+            onValueChange={(value) =>
+              setFilter(value === ALL_ENDPOINTS ? null : (value as ExposureFilter))
+            }
+            options={[
+              {
+                value: ALL_ENDPOINTS,
+                label: t("privacy.filterAll", { count: enabled.length }),
+              },
+              ...EXPOSURE_FILTERS.map((entry) => ({
+                value: entry.id,
+                label: t("privacy.filterOption", {
+                  // dynamic key
+                  label: t(entry.labelKey as never),
+                  count: counts[entry.id],
+                }),
+              })),
+            ]}
+            triggerProps={{
+              id: "settings-exposure-filter",
+              "data-exposure-filter": filter ?? ALL_ENDPOINTS,
+            }}
+          />
+        </SettingsRow>
+      </SettingsGroup>
 
-        <div className="grid gap-2 sm:grid-cols-3">
-          {EXPOSURE_FILTERS.map((entry) => (
-            <ExposureFilterTile
-              key={entry.id}
-              filter={entry}
-              count={counts[entry.id]}
-              active={filter === entry.id}
-              onClick={() =>
-                setFilter((current) => (current === entry.id ? null : entry.id))
-              }
-            />
-          ))}
-        </div>
-
-        {filter ? (
-          <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-            <span>{t("privacy.showingFilter", { label: activeFilterLabel })}</span>
-            <button
-              type="button"
-              className="underline-offset-4 hover:underline"
-              onClick={() => setFilter(null)}
-            >
-              {t("privacy.clearFilter")}
-            </button>
-          </div>
-        ) : null}
-
-        {EXPOSURE_GROUPS.map((group) => {
-          const all = enabled.filter((backend) =>
-            group.nets.includes(backend.net),
-          );
-          if (all.length === 0) return null;
-          const rows = filter
-            ? all.filter((backend) => backendExposureFilter(backend) === filter)
-            : all;
-          return (
-            <div key={group.id} className="space-y-2">
-              <div>
-                {/* dynamic key */}
-                <p className="text-sm font-medium">{t(group.titleKey as never)}</p>
-                <p className="text-xs text-muted-foreground">
-                  {/* dynamic key */}
-                  {t(group.subtitleKey as never)}
-                </p>
-              </div>
-              {rows.length > 0 ? (
-                <div className="grid gap-2">
-                  {rows.map((backend) => (
-                    <ExposureEndpointRow
-                      key={backend.id}
-                      backend={backend}
-                      canEdit={group.canEdit}
-                      onEdit={() =>
-                        group.id === "market"
-                          ? onManageMarketData()
-                          : onEditBackend(backend)
-                      }
-                    />
-                  ))}
-                </div>
-              ) : (
-                <p className="rounded-md border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-                  {t("privacy.noneMatchFilter", { label: activeFilterLabel })}
-                </p>
-              )}
-            </div>
-          );
-        })}
-
-        <div className="space-y-2">
-          <div>
-            <p className="text-sm font-medium">
-              {t("privacy.assistantHeading")}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {t("privacy.assistantDescription")}
-            </p>
-          </div>
-          <div className="flex flex-col gap-2 rounded-lg border bg-background p-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-muted-foreground">
-              {aiFeaturesEnabled
-                ? t("privacy.assistantEnabled")
-                : t("privacy.assistantDisabled")}
-            </p>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="shrink-0"
-              onClick={onManageAi}
-            >
-              {t("privacy.reviewAi")}
-            </Button>
-          </div>
-        </div>
-      </section>
+      {EXPOSURE_GROUPS.map((group) => {
+        const all = enabled.filter((backend) => group.nets.includes(backend.net));
+        if (all.length === 0) return null;
+        const rows = filter
+          ? all.filter((backend) => backendExposureFilter(backend) === filter)
+          : all;
+        return (
+          <SettingsGroup
+            key={group.id}
+            // dynamic key
+            title={t(group.titleKey as never)}
+            // dynamic key
+            footer={t(group.subtitleKey as never)}
+          >
+            {rows.length > 0 ? (
+              rows.map((backend) => (
+                <ExposureEndpointRow
+                  key={backend.id}
+                  backend={backend}
+                  canEdit={group.canEdit}
+                  onEdit={() =>
+                    group.id === "market"
+                      ? onManageMarketData()
+                      : onEditBackend(backend)
+                  }
+                />
+              ))
+            ) : (
+              <p className="px-4 py-3 text-sm text-muted-foreground">
+                {t("privacy.noneMatchFilter", { label: activeFilterLabel })}
+              </p>
+            )}
+          </SettingsGroup>
+        );
+      })}
     </div>
   );
 }

@@ -696,6 +696,69 @@ Off-device AI providers are hard-disabled for this path even if they are
 configured for chat. URLs are also rejected: open Google Drive/Docs links in
 the logged-in browser, download the PDF/image, and import the local file.
 
+### From the assistant
+
+A photo or PDF attached to a chat can go the same way. `ui_wallets_read_document`
+reads it with the first enabled local provider (or one named), runs the model
+off the daemon's main thread, and keeps the draft like the desktop preview. The
+model gets each row's values, status, flags and confidence with full agent
+access, counts only when restricted, and never the path, evidence text or
+source regions. `ui_wallets_import_document_plan` then plans importing the
+draft's **ready** rows into a file or exchange wallet or a new `custom` one,
+without changing the book, and `ui_wallets_import_document_apply` imports
+exactly that plan after once-only consent: it is bound to the draft's rows
+(a second read of the page is a new plan, even if only a fiat value moved),
+the document's SHA-256, the book's input version and the plan digest. Rows held
+for review are never imported from chat; the plan says how many and points to
+the desktop's OCR import. An import whose evidence copies would exceed the
+storage budget is blocked in the plan, before consent is asked. The document
+is kept as evidence on each imported row, and the rows, their evidence and the
+import run are written together or not at all; because rolling the run back
+would also delete that evidence, the rollback is done in the desktop.
+
+## Wallet completeness and scan bounds
+
+Kassiber cannot prove that a book holds every wallet you own, and most sources
+cannot prove that one wallet's history is whole. `wallets list` and the daemon's
+`ui.wallets.list` (and so the assistant) therefore state, per wallet, what kind
+of source it is and the observed edges of its history. Both come from
+`kassiber/core/wallet_completeness.py`; they read the wallet kind, whether a
+source is configured (never its descriptor, xpub, addresses or path), the last
+sync time and the wallet's non-excluded transactions.
+
+`completeness_class`:
+
+| Class | Source | What it can miss |
+| --- | --- | --- |
+| `descriptor-derived` | descriptor, xpub, Silent Payments scan key, Samourai group | scripts past the gap limit; anything before a declared scan start |
+| `address-list` | a fixed address list | change and unlisted addresses (incomplete by construction) |
+| `lightning-node` | a connected CLN/LND node | history the node itself no longer has |
+| `provider-api` | exchange API, BTCPay store | what the provider does not return |
+| `exchange-export` | a custodial platform's file export | everything outside the exported file |
+| `file-import` | another wallet or tool's file export | everything outside the exported file |
+| `manual` | generic ledger or no source | everything not entered |
+| `untracked` | no source; reviewed-custody placeholder | everything |
+
+`scan_bounds`: `first_transaction_at` / `last_transaction_at` (dated rows only),
+`undated_transactions`, `last_synced_at`, `declared_scan_start_at` /
+`declared_scan_start_height` (wallet birthday or Silent Payments scan start),
+`deficit_assets`, `history_before_first_transaction`, and `warnings`.
+`history_before_first_transaction` is `scanned` when a synced live source
+(descriptor, address list, node) covers every earlier block, `declared_start`
+when the scan begins at a declared birthday or scan start, and `unknown`
+otherwise — every file, export, API and manual source, and any live source that
+has never synced. Warnings:
+
+- `incomplete_by_construction` — `address-list` or `untracked`.
+- `never_synced` — a live source with no successful sync.
+- `history_starts_after_first_funding` — some asset's running balance goes
+  negative, so the wallet spends coins its history never received; the earlier
+  funding history is missing. `deficit_assets` names the assets.
+- `no_transactions`, `undated_transactions`.
+
+These are bounds, not verdicts: a `scanned` wallet can still be one of several
+wallets you own that the book does not know about.
+
 ## Import runs and rolling one back
 
 File imports normally record a run (`import_batches`), so an import that
@@ -716,7 +779,8 @@ kassiber imports rollback --batch <id> --confirm   # deletes
 
 Daemon kinds are `ui.imports.list` and `ui.imports.rollback` (`dry_run` for the
 plan, then `confirm: "DELETE"`); the desktop shows the runs on the connection's
-detail screen with a rollback action.
+detail screen with a rollback action. The assistant's rollback is plan-bound
+instead; see [onboarding with the assistant](#onboarding-an-unsupported-exchange-with-the-assistant).
 
 What a rollback does and does not remove:
 
@@ -748,18 +812,55 @@ importer. Attach the export to a chat and say what it is:
 kassiber chat --file export.csv --file-context "2024 export from exchange XYZ, custodial account"
 ```
 
-In the desktop Assistant, use the composer's attach button (**+**) and describe
-the file in your message. The assistant then calls the read-only
+Repeat `--file` to attach several files (up to eight); the nth
+`--file-context` describes the nth file, and the assistant names them
+`file-1`, `file-2`, ... when it calls a tool.
+
+In the desktop Assistant, use the composer's attach button (**+**), drop the
+files on the assistant or paste them, and describe them in your message. The assistant then calls the read-only
 `ui.wallets.analyze_file` tool, proposes a `column_map` (and a `type_map` when
 the labels are not English), previews it against the real normalizer, and asks
 about anything genuinely ambiguous.
 
-**The assistant proposes the plan; you run the import.** There is deliberately no
-import tool in the chat catalog and no way to import a chat attachment: the file
-reaches the daemon as a staging grant, and the import path takes a real file. So
-the assistant's output is a finished `column_map` you pass to
-`wallets import-ledger --column-map` (the desktop ships the CLI), and the run it
-creates is rolled back from the connection's Import-runs panel, not from chat.
+**The assistant plans the import; you approve it.** Once the mapping is ready,
+`ui.wallets.import_attachment.plan` runs the same import path as the desktop
+(`core/attachment_import.py`) inside a savepoint and rolls it back. It reports
+the target wallet, the rows to import and the rows already present, the date
+range, per-asset totals in msat, rows of the wallet already in that date range,
+transaction ids also present in other wallets, the wallet's
+[scan bounds](#wallet-completeness-and-scan-bounds) after the import, warnings
+and blockers, plus `apply_with`: the plan digest, the file's SHA-256 and the
+book's input version. `ui.wallets.import_attachment.apply` takes the same
+request and those three values, asks for your consent once (never for the whole
+chat), and runs the import again; it commits only if the file bytes, the input
+version and the recomputed plan digest all still match, so what lands is what
+the approval showed. The approval shows the plan as the daemon computes it at
+that moment, not figures from the model.
+
+The target is an existing wallet whose
+[completeness class](#wallet-completeness-and-scan-bounds) is `exchange-export`,
+`file-import` or `manual`, or a new `custom` wallet the apply creates. Chain,
+node and API wallets are refused (`target_not_file_wallet`): their history comes
+from their own source. The assistant never creates descriptor, xpub, address,
+Silent Payments, node or API connections; `ui.wallets.request_input` returns a
+typed handoff that the desktop shows as a button opening its own setup dialog.
+
+A plan is blocked, and the apply refuses it, when the columns are not
+recognized, a row would be rejected, the first row is a preamble, the amount
+unit is unstated and implausible as BTC (`amount_units_unconfirmed`; the unit
+is set in the desktop or CLI import), no Type or direction column exists and
+the user has not confirmed the file is transfers only
+(`transfers_only_confirmed`), or no row is new (an import with no new row
+leaves no run to roll back). Re-pricing rows the wallet already holds is
+reported as `updates_existing_rows_not_rolled_back`. Errors are
+`attachment_changed`, `import_plan_stale` and `import_plan_blocked`.
+
+Each applied import is an ordinary import run. The assistant can list runs
+(`ui.imports.list`), plan a rollback (`ui.imports.rollback.plan`) and, with
+consent, apply it (`ui.imports.rollback`, bound to the rollback plan's digest
+and the input version). A rollback that would also delete reviewed work
+attached to the run's rows is blocked for the assistant
+(`rollback_removes_reviewed_work`); use the connection's Import-runs panel.
 Resolving the resulting quarantine, filling
 pricing gaps, and spotting holes in the history are the assistant's existing
 tools (`ui.journals.quarantine`, `ui.rates.coverage`, `ui.report.blockers`,
@@ -774,13 +875,17 @@ Two rules define what leaves the device:
   refused outright from chat. The one judgement it does make is `type_map`: a
   mapped Type is guaranteed to *exist*, not to be *right*, so review a proposed
   `type_map` before importing.
-- **Header-only for off-device models.** Proposing a plan needs the header row,
-  not the rows, so when the AI provider does not run on this machine the
-  analysis carries no cell values at all — no amounts, dates, counterparties,
-  txids, filename, or local path — and is marked `cell_values_withheld`.
-  Rejected-row messages quote offending cells, so they are reduced to a count.
-  Only a loopback provider (the strict test: `kind = local` *and* a loopback
-  host, the same rule as OCR above) may see sample rows.
+- **Header-only for restricted providers.** Proposing a plan needs the header
+  row, not the rows, so when the provider's
+  [agent access](ai.md#agent-access) is restricted the analysis carries no cell
+  values at all — no amounts, dates, counterparties, txids, filename, or local
+  path — and is marked `cell_values_withheld`. The import plan and result keep
+  their counts, column plan, warnings and blockers but drop the date range,
+  amounts and filename the same way. Rejected-row messages quote offending
+  cells, so they are reduced to a count. A provider with full access (the
+  default) and a loopback provider (the strict test: `kind = local` *and* a
+  loopback host, the same rule as OCR above) see the values; the local path
+  never crosses.
 
   A "header" is only disclosed when the file actually has one. Kassiber reads the
   first non-empty row, which for a bank-style preamble or a headerless export is
@@ -790,8 +895,10 @@ Two rules define what leaves the device:
   indistinguishable from a column name in isolation.
 
 The file reaches the daemon as an opaque staging grant minted by the native file
-picker, never as a path: the assistant cannot point the tool at another file, and
-the tool takes no file argument. Grants are scoped to the workspace/profile that
+picker, never as a path: the assistant cannot point a tool at another file, and
+no analysis, import or rollback tool takes a file argument. Results never carry
+the local path. Importing reads only the local file and makes no network
+request. Grants are scoped to the workspace/profile that
 staged them and expire on the daemon's staging TTL; a new chat drops the grant.
 
 CSV/TSV/XLSX go through the generic ledger importer as above. A PDF or photo is
