@@ -2541,7 +2541,7 @@ def sync_wallet(
             wallet
             for wallet in wallet_rows
             if not core_wallets.wallet_is_deprecated(
-                json.loads(wallet["config_json"] or "{}")
+                core_wallets.stored_wallet_config(wallet)
             )
         ]
     else:
