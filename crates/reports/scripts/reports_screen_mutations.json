@@ -173,7 +173,8 @@
     "find": "                .filter(|cents| **cents != 0)",
     "replace": "                .filter(|_| true)",
     "expect_failing": [
-      "tax_estimate::tests::income_and_gains_net_against_losses_at_the_special_rate"
+      "tax_estimate::tests::a_zero_kz_801_is_not_listed",
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
     ],
     "rule": "Only a nonzero KZ 801 is listed for the progressive rate."
   },

@@ -145,6 +145,17 @@ mod tests {
     }
 
     #[test]
+    fn a_zero_kz_801_is_not_listed() {
+        // The Kennzahl summary always carries KZ 801, usually at zero.
+        let r = austrian_indicative_tax(2025, &rows(&[(174, 100), (801, 0)]), &[], 0);
+        assert_eq!(
+            value(&r, "progressive_rate_amounts_eur_cents"),
+            &dict::<&str>([])
+        );
+        assert!(!notes(&r).contains("progressive"));
+    }
+
+    #[test]
     fn rounds_half_up_to_the_cent() {
         let r = austrian_indicative_tax(2025, &rows(&[(174, 2)]), &[], 0);
         assert_eq!(cents(&r, "estimated_tax_eur_cents"), Some(1));

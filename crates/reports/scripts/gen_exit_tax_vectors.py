@@ -124,7 +124,9 @@ def cases():
     # on 1 March 2022, by the departure day as the owner names it.
     for departure in ('2022-02-28','2022-03-01','2022-02-28T22:30:00Z','2022-02-28T23:30:00Z','2022-02-28T23:30:00+01:00'):
         for country in ('at','generic'):
-            result.append((f'old-rules-{country}-{departure}', {'departure_date':departure}, f"UPDATE profiles SET tax_country='{country}';"))
+            # Neubestand held at the departure, priced within the last day.
+            held = clear + "UPDATE journal_entries SET occurred_at='2021-06-01T00:00:00Z' WHERE id='new';" + cache('2022-02-28T12:00:00Z') + cache('2022-03-01T12:00:00Z', 70000)
+            result.append((f'old-rules-{country}-{departure}', {'departure_date':departure}, f"UPDATE profiles SET tax_country='{country}';" + held))
     for source in ('cache','transaction'):
         for label, at in [('24h','2024-12-30T23:00:00Z'),('too-old','2024-12-30T22:59:59.999999Z'),('inside','2024-12-31T22:59:59.999999Z'),('cutoff','2024-12-31T23:00:00Z'),('future','2024-12-31T23:00:00.000001Z'),('offset','2025-01-01T00:59:59.123456+02:00')]:
             sql = cache(at) if source == 'cache' else f"UPDATE transactions SET occurred_at='{at}',fiat_rate=70000 WHERE id='in';"

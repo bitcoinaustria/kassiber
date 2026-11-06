@@ -81,7 +81,7 @@ def cases():
              "UPDATE journal_entries SET occurred_at='2022-02-28T23:00:00Z',at_category='neu_gain',at_kennzahl=174 WHERE id='z'; "
              "UPDATE journal_entries SET occurred_at='2022-02-10T00:00:00Z',at_category='alt_spekulation',at_kennzahl=801 WHERE id='first'; "
              "UPDATE journal_entries SET occurred_at='2022-01-05T00:00:00Z' WHERE id='income'; "
-             "UPDATE journal_entries SET at_kennzahl='' WHERE id='fee';")
+             "UPDATE journal_entries SET at_kennzahl='',occurred_at='2022-01-05T00:00:00Z' WHERE id='fee';")
     for country in ('at', 'generic'):
         result.append((f'kennzahl-2022-{country}', {'year': 2022}, f"UPDATE profiles SET tax_country='{country}'; " + early))
     return result
