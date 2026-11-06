@@ -591,6 +591,93 @@ impl Detached {
     }
 }
 
+/// A detached row's fields as its JSON object (`Detached::json_with`) holds
+/// them, without building the object. Fields `exact` converts and integer
+/// fields are built once, when the view is; every other field is borrowed.
+#[derive(Debug)]
+pub struct RowView<'a> {
+    source: RowRef<'a>,
+    overrides: &'a [(&'static str, Stored)],
+    canonical: Option<&'a Canonical>,
+    /// Converted and integer fields, by name.
+    built: Vec<(&'a str, Value)>,
+}
+
+impl<'a> RowView<'a> {
+    /// The view of `row`. `exact` returns a field's conversion, or `None`
+    /// when the field is its own JSON; as in `json_with`, the first field
+    /// whose conversion fails, in key order, fails the view.
+    pub(super) fn new<E>(
+        row: &'a Detached,
+        records: &'a [Record],
+        canonical: Option<&'a Canonical>,
+        exact: &impl Fn(&Value) -> Result<Option<Value>, E>,
+    ) -> Result<Self, E> {
+        let mut built = Vec::new();
+        for (key, value) in row.fields(records, canonical) {
+            match value {
+                Written::Value(value) => {
+                    if let Some(value) = exact(value)? {
+                        built.push((key, value));
+                    }
+                }
+                Written::Int(n) => built.push((key, Value::from(n))),
+            }
+        }
+        Ok(Self {
+            source: row.source(records),
+            overrides: &row.overrides,
+            canonical,
+            built,
+        })
+    }
+
+    /// The field `key`, as the row's JSON object holds it.
+    pub fn get(&self, key: &str) -> Option<&Value> {
+        if let Some((_, value)) = self.built.iter().find(|(name, _)| *name == key) {
+            return Some(value);
+        }
+        match self
+            .overrides
+            .binary_search_by(|(name, _)| (*name).cmp(key))
+        {
+            Ok(at) => Some(match &self.overrides[at].1 {
+                Stored::Value(value) => value,
+                Stored::Static(value) => value,
+                Stored::Leg(position, slot) => self
+                    .canonical
+                    .and_then(|canonical| canonical.leg_at(*position))
+                    .expect("detached observation in the projection's input")
+                    .field(*slot),
+                Stored::Int(_) => unreachable!("integer fields are built"),
+            }),
+            Err(_) => self.source.get(key),
+        }
+    }
+
+    /// Whether the row has a field whose name satisfies `test`.
+    pub fn any_key(&self, test: impl Fn(&str) -> bool) -> bool {
+        self.overrides.iter().any(|(name, _)| test(name))
+            || self.source.entries().any(|(name, _)| test(name))
+    }
+
+    /// The row's JSON object.
+    pub fn json(&self) -> Value {
+        let mut fields = serde_json::Map::new();
+        for (key, value) in self.source.entries() {
+            fields.insert(key.clone(), value.clone());
+        }
+        for (key, _) in self.overrides {
+            let value = self.get(key).expect("an override is a field");
+            fields.insert((*key).to_owned(), value.clone());
+        }
+        for (key, value) in &self.built {
+            fields.insert((*key).to_owned(), value.clone());
+        }
+        Value::Object(fields)
+    }
+}
+
 impl Fields for FinalizedRow<'_> {
     fn get(&self, key: &str) -> Option<&Value> {
         self.overrides
@@ -747,5 +834,85 @@ mod tests {
             codec::dumps(&emitted, true).unwrap(),
             r#"{"amount":0,"id":"generated"}"#
         );
+    }
+
+    #[test]
+    fn views_read_the_fields_json_with_writes() {
+        use crate::snapshot::Record;
+        let source: serde_json::Map<String, Value> = serde_json::from_str(
+            r#"{"amount": 5, "custody_x": 1, "fee": 1.5, "id": "s", "kept": "k", "zz": 2.25}"#,
+        )
+        .unwrap();
+        let records = vec![Record::from(source)];
+        let owned = json!({"a": 1, "fiat_rate": 0.5, "id": "o"});
+        static FIXED: Value = Value::Null;
+        let build = |of: RowRef<'_>| {
+            let mut row = FinalizedRow::of(of);
+            row.set("id", json!("generated"));
+            row.set("fiat_value", json!(1.25));
+            row.set_int("amount", 7);
+            row.set_int("custody_slice_end_msat", 9);
+            row.set_static("privacy_boundary", &FIXED);
+            row.set("b_unknown", json!(["x", 3.5]));
+            row.detach(&records, None)
+        };
+        // `plain` JSON is its own conversion; any other value converts to a
+        // tagged copy, and 1.5 and 2.25 fail: the first in key order wins.
+        let exact = |v: &Value| -> Result<Value, String> {
+            if crate::quantity::runtime::plain(v) {
+                Ok(v.clone())
+            } else if v == &json!(1.5) || v == &json!(2.25) {
+                Err(format!("cannot convert {v}"))
+            } else {
+                Ok(json!({"converted": v}))
+            }
+        };
+        let built = |v: &Value| -> Result<Option<Value>, String> {
+            if crate::quantity::runtime::plain(v) {
+                Ok(None)
+            } else {
+                exact(v).map(Some)
+            }
+        };
+        for detached in [
+            build(RowRef::Record(&records[0])),
+            build(RowRef::Value(&owned)),
+        ] {
+            let json = detached.json_with(&records, None, &exact);
+            let view = RowView::new(&detached, &records, None, &built);
+            let (json, view) = match (json, view) {
+                (Err(a), Err(b)) => {
+                    assert_eq!(a, b);
+                    assert_eq!(a, "cannot convert 1.5");
+                    continue;
+                }
+                (Ok(json), Ok(view)) => (json, view),
+                (json, view) => panic!("{json:?} / {view:?}"),
+            };
+            assert_eq!(view.json(), json);
+            let object = json.as_object().unwrap();
+            for (key, value) in object {
+                assert_eq!(view.get(key), Some(value), "{key}");
+            }
+            assert_eq!(view.get("absent"), None);
+            assert_eq!(view.get("custody_slice_start_msat"), None);
+            for prefix in ["custody_", "kept", "b_", "missing"] {
+                assert_eq!(
+                    view.any_key(|k| k.starts_with(prefix)),
+                    object.keys().any(|k| k.starts_with(prefix)),
+                    "{prefix}"
+                );
+            }
+            assert_eq!(view.get("amount"), Some(&json!(7)));
+            assert_eq!(view.get("fiat_value"), Some(&json!({"converted": 1.25})));
+        }
+        // The record source fails on its own fields `fee` and `zz`; without
+        // them it gives a view.
+        let mut source = records[0].clone().into_map();
+        source.remove("fee");
+        source.remove("zz");
+        let records = vec![Record::from(source)];
+        let detached = build(RowRef::Record(&records[0]));
+        assert!(RowView::new(&detached, &records, None, &built).is_ok());
     }
 }

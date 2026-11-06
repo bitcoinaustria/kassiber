@@ -1289,6 +1289,60 @@ enum Slot {
     Owned(Value),
 }
 
+/// A projection observation as `json_with` writes it: read in place when
+/// its JSON object is its own conversion, else the converted object.
+pub enum ObservationView<'a> {
+    Read(LegRef<'a>),
+    Built(Value),
+}
+impl<'a> ObservationView<'a> {
+    /// `owned(o.value())` of `json_with`, read in place where that is the
+    /// observation's own JSON: a typed observation's fields are booleans,
+    /// integers and strings, and a JSON one is read when it is `plain`.
+    fn of<E>(
+        o: LegRef<'a>,
+        owned: impl Fn(std::borrow::Cow<'_, Value>) -> Result<Value, E>,
+    ) -> Result<Self, E> {
+        match o {
+            LegRef::Json(value) if !plain(value) => {
+                Ok(Self::Built(owned(std::borrow::Cow::Borrowed(value))?))
+            }
+            _ => Ok(Self::Read(o)),
+        }
+    }
+
+    /// The field `key` of the observation's JSON object, or null.
+    pub fn at(&self, key: &str) -> &Value {
+        match self {
+            Self::Read(o) => &o[key],
+            Self::Built(o) => &o[key],
+        }
+    }
+}
+
+impl std::ops::Index<&str> for ObservationView<'_> {
+    type Output = Value;
+    fn index(&self, key: &str) -> &Value {
+        self.at(key)
+    }
+}
+
+impl std::fmt::Debug for QuantityViews<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("QuantityViews")
+            .field("observations", &self.observations.len())
+            .field("postings", &self.postings.len())
+            .finish()
+    }
+}
+
+/// The projection's observations and postings, as `json_with_views` reads
+/// them in place of their JSON.
+pub struct QuantityViews<'a> {
+    pub observations: Vec<ObservationView<'a>>,
+    pub postings: Vec<super::PostingView<'a>>,
+}
+
 /// The quantity stage. Observations stay in their canonical events; its
 /// Python value is built only on request.
 pub struct QuantityState {
@@ -1356,6 +1410,28 @@ impl QuantityState {
         canonical: bool,
         convert: impl Fn(&kassiber_pyjson::Value) -> Result<Value, E>,
     ) -> Result<Value, E> {
+        Ok(self.json_parts(canonical, convert, false)?.0)
+    }
+
+    /// `json_with` without the canonical input, with the projection's
+    /// observations and postings as views instead of JSON: the object
+    /// without `projection.observations` and `projection.postings`, and
+    /// the views. Every part is converted, and the first failure returned,
+    /// in `json_with`'s order.
+    pub fn json_with_views<E: From<String>>(
+        &self,
+        convert: impl Fn(&kassiber_pyjson::Value) -> Result<Value, E>,
+    ) -> Result<(Value, QuantityViews<'_>), E> {
+        let (value, views) = self.json_parts(false, convert, true)?;
+        Ok((value, views.expect("views requested")))
+    }
+
+    fn json_parts<E: From<String>>(
+        &self,
+        canonical: bool,
+        convert: impl Fn(&kassiber_pyjson::Value) -> Result<Value, E>,
+        views: bool,
+    ) -> Result<(Value, Option<QuantityViews<'_>>), E> {
         let exact = |v: &Value| -> Result<Value, E> {
             if plain(v) {
                 Ok(v.clone())
@@ -1438,20 +1514,41 @@ impl QuantityState {
                 convert(&super::borrowed_py(&v)?)
             }
         };
-        let observations = self
-            .observations()
-            .map(|o| owned(o.value()))
-            .collect::<Result<Vec<_>, E>>()?;
-        let postings = self
-            .projection
-            .postings_json(|at| self.located(at), &exact)?;
-        let projection = object([
-            ("$type", json!("QuantityProjection")),
-            ("claim_errors", errors),
-            ("decisions", Value::Array(decisions)),
-            ("observations", Value::Array(observations)),
-            ("postings", Value::Array(postings)),
-        ]);
+        let (projection, views) = if views {
+            let observations = self
+                .observations()
+                .map(|o| ObservationView::of(o, owned))
+                .collect::<Result<Vec<_>, E>>()?;
+            let postings = self
+                .projection
+                .posting_views(|at| self.located(at), &exact)?;
+            let projection = object([
+                ("$type", json!("QuantityProjection")),
+                ("claim_errors", errors),
+                ("decisions", Value::Array(decisions)),
+            ]);
+            let views = QuantityViews {
+                observations,
+                postings,
+            };
+            (projection, Some(views))
+        } else {
+            let observations = self
+                .observations()
+                .map(|o| owned(o.value()))
+                .collect::<Result<Vec<_>, E>>()?;
+            let postings = self
+                .projection
+                .postings_json(|at| self.located(at), &exact)?;
+            let projection = object([
+                ("$type", json!("QuantityProjection")),
+                ("claim_errors", errors),
+                ("decisions", Value::Array(decisions)),
+                ("observations", Value::Array(observations)),
+                ("postings", Value::Array(postings)),
+            ]);
+            (projection, None)
+        };
         let pairs = exact(&self.reviewed_conversion_pairs)?;
         let payouts = exact(&self.reviewed_direct_payouts)?;
         let tax = match (&self.tax, tax) {
@@ -1477,7 +1574,7 @@ impl QuantityState {
             ]
             .map(|(k, v)| (k.to_owned(), v)),
         );
-        Ok(Value::Object(std::mem::take(state)))
+        Ok((Value::Object(std::mem::take(state)), views))
     }
 
     /// The stage's Python value, as Python's composition returns it.
@@ -1673,6 +1770,50 @@ mod tests {
         for text in ["1e5", "1.5", "-0.0", "[1,{\"a\":1e5}]"] {
             assert!(!plain(&serde_json::from_str(text).unwrap()), "{text}");
         }
+    }
+
+    #[test]
+    fn observation_views_read_what_json_with_writes() {
+        use std::borrow::Cow;
+        let owned = |v: Cow<'_, Value>| -> Result<Value, String> {
+            if plain(&v) {
+                Ok(v.into_owned())
+            } else if v["fail"] == true {
+                Err("conversion".into())
+            } else {
+                Ok(json!({"converted": v.into_owned()}))
+            }
+        };
+        // Typed observations are their own JSON, so they are read.
+        let row = |id: &str, event: &str| json!({"id":id,"profile_id":"p","wallet_id":"w","wallet_kind":"descriptor","direction":"inbound","asset":"BTC","amount":1000,"fee":0,"occurred_at":"2024-01-01T00:00:00+00:00","source_ref":"src","external_id":event,"raw_json":"{}","network":"regtest"});
+        let typed =
+            crate::evidence::canonical_of_rows(&[row("t1", "e1"), row("t2", "e2")]).unwrap();
+        let mut legs = 0;
+        for event in typed.events() {
+            for leg in EventRef::Typed(event).legs() {
+                assert!(plain(&leg.value()));
+                let view = ObservationView::of(leg, owned).unwrap();
+                assert!(matches!(view, ObservationView::Read(LegRef::Typed(_))));
+                assert_eq!(view.at("quantity_hash"), &leg.value()["quantity_hash"]);
+                legs += 1;
+            }
+        }
+        assert_eq!(legs, 2);
+        // A JSON observation is read when plain, else converted whole.
+        let read = json!({"asset": "BTC", "amount_msat": 5});
+        let view = ObservationView::of(LegRef::Json(&read), owned).unwrap();
+        assert!(matches!(view, ObservationView::Read(_)));
+        assert_eq!(view.at("amount_msat"), &json!(5));
+        assert!(view.at("absent").is_null());
+        let float = json!({"asset": "BTC", "fiat": 1.5});
+        let view = ObservationView::of(LegRef::Json(&float), owned).unwrap();
+        assert_eq!(view.at("converted"), &float);
+        assert_eq!(view["converted"]["fiat"], json!(1.5));
+        let failing = json!({"fail": true, "fiat": 1.5});
+        assert_eq!(
+            ObservationView::of(LegRef::Json(&failing), owned).err(),
+            Some("conversion".to_owned())
+        );
     }
 
     #[test]

@@ -17,6 +17,7 @@ mod row;
 pub mod runtime;
 pub use fees::FeeAllocation;
 pub use principal::slice_row;
+pub use row::RowView;
 
 /// The finalized projection stage. Its rows name their snapshot source rows,
 /// so its Python value and JSON are built only on request.
@@ -126,6 +127,55 @@ impl FinalizedProjection {
             ),
         );
         Ok(Value::Object(result))
+    }
+
+    /// `json_with` with its rows as views instead of JSON objects: the
+    /// object without `rows`, and a view of each row. Every field is
+    /// converted, and the first failure returned, in `json_with`'s order.
+    pub fn json_with_views<'a, E: From<String>>(
+        &'a self,
+        rows: &'a [crate::snapshot::Record],
+        convert: impl Fn(&Py) -> Result<Value, E>,
+    ) -> Result<(Value, Vec<RowView<'a>>), E> {
+        let exact = |v: &Value| -> Result<Value, E> {
+            if crate::quantity::runtime::plain(v) {
+                Ok(v.clone())
+            } else {
+                convert(&codec::from_json(v)?)
+            }
+        };
+        let list = |items: &[Value]| -> Result<Value, E> {
+            Ok(Value::Array(
+                items.iter().map(&exact).collect::<Result<_, E>>()?,
+            ))
+        };
+        let mut result = serde_json::Map::new();
+        result.insert("$type".into(), json!("FinalizedTaxProjection"));
+        result.insert("cross_asset_pairs".into(), list(&self.cross)?);
+        result.insert("intra_pairs".into(), list(&self.intra)?);
+        let built = |v: &Value| -> Result<Option<Value>, E> {
+            if crate::quantity::runtime::plain(v) {
+                Ok(None)
+            } else {
+                convert(&codec::from_json(v)?).map(Some)
+            }
+        };
+        let views = self
+            .rows
+            .iter()
+            .map(|row| RowView::new(row, rows, self.canonical.as_deref(), &built))
+            .collect::<Result<Vec<_>, E>>()?;
+        result.insert("selected_move_ids".into(), list(&self.moves)?);
+        result.insert(
+            "quarantines".into(),
+            Value::Array(
+                self.quarantines
+                    .iter()
+                    .map(&convert)
+                    .collect::<Result<_, E>>()?,
+            ),
+        );
+        Ok((Value::Object(result), views))
     }
 }
 
@@ -574,5 +624,85 @@ pub(crate) fn request_decimal(value: &Value) -> Result<String, String> {
     match money::Money::parse(value)? {
         money::Money::Finite(value) => Ok(value.to_canonical()),
         money::Money::Special(value) => Ok(value),
+    }
+}
+
+/// A projection of whole JSON rows and nothing else, for tests of code that
+/// reads row views.
+#[doc(hidden)]
+pub fn of_rows(rows: Vec<Value>) -> FinalizedProjection {
+    FinalizedProjection {
+        rows: rows
+            .into_iter()
+            .map(|row| row::FinalizedRow::owned(row).detach(&[], None))
+            .collect(),
+        cross: vec![],
+        intra: vec![],
+        moves: vec![],
+        quarantines: vec![],
+        canonical: None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn json_with_views_converts_in_json_with_order() {
+        use crate::snapshot::Record;
+        let source: serde_json::Map<String, Value> =
+            serde_json::from_str(r#"{"fee": 1.5, "id": "s", "kept": "k"}"#).unwrap();
+        let records = vec![Record::from(source)];
+        let mut row = row::FinalizedRow::of(row::RowRef::Record(&records[0]));
+        row.set("x", json!(2.5));
+        let projection = FinalizedProjection {
+            rows: vec![row.detach(&records, None)],
+            cross: vec![json!({"c": 0.5})],
+            intra: vec![json!({"i": 3.5})],
+            moves: vec![json!(4.5)],
+            quarantines: vec![Py::Float(5.5)],
+            canonical: None,
+        };
+        for failing in [
+            &[][..],
+            &[0.5],
+            &[3.5],
+            &[1.5],
+            &[2.5],
+            &[4.5],
+            &[5.5],
+            &[1.5, 0.5],
+            &[2.5, 4.5],
+            &[5.5, 2.5],
+        ] {
+            fn first(py: &Py, failing: &[f64]) -> Option<f64> {
+                match py {
+                    Py::Float(f) if failing.contains(f) => Some(*f),
+                    Py::List(items) => items.iter().find_map(|item| first(item, failing)),
+                    Py::Dict(items) => items.iter().find_map(|(_, item)| first(item, failing)),
+                    _ => None,
+                }
+            }
+            let convert = |py: &Py| -> Result<Value, String> {
+                match first(py, failing) {
+                    Some(f) => Err(format!("cannot convert {f}")),
+                    None => Ok(codec::to_json(py)),
+                }
+            };
+            let json = projection.json_with(&records, convert);
+            let views = projection.json_with_views(&records, convert);
+            match (json, views) {
+                (Err(a), Err(b)) => assert_eq!(a, b, "{failing:?}"),
+                (Ok(mut json), Ok((head, views))) => {
+                    assert!(failing.is_empty());
+                    let rows = json.as_object_mut().unwrap().remove("rows").unwrap();
+                    assert_eq!(head, json);
+                    let viewed: Vec<Value> = views.iter().map(RowView::json).collect();
+                    assert_eq!(Value::Array(viewed), rows);
+                }
+                (json, views) => panic!("{failing:?}: {json:?} / {:?}", views.err()),
+            }
+        }
     }
 }

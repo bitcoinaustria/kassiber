@@ -11,12 +11,28 @@ pub fn canonical_internal_transfer_rows(
     eligible: &[Value],
     refs: &Value,
 ) -> Result<Value, String> {
-    let observations: BTreeMap<_, _> = array(&projection["observations"])
+    transfer_rows(
+        array(&projection["observations"]),
+        array(&projection["decisions"]),
+        eligible,
+        refs,
+    )
+}
+
+/// `canonical_internal_transfer_rows` of a projection whose observations
+/// are given apart, as their JSON objects or as views of them.
+pub fn transfer_rows<O: crate::evidence::canonical::Obs>(
+    observations: &[O],
+    decisions: &[Value],
+    eligible: &[Value],
+    refs: &Value,
+) -> Result<Value, String> {
+    let observations: BTreeMap<_, _> = observations
         .iter()
         .map(|o| (codec::text(&o["quantity_hash"]), o))
         .collect();
     let mut rows = Vec::new();
-    for decision in array(&projection["decisions"]) {
+    for decision in decisions {
         if !matches!(
             decision["state"].as_str(),
             Some("internal_verified" | "internal_reviewed")
@@ -30,7 +46,7 @@ pub fn canonical_internal_transfer_rows(
         let target = observations
             .get(&codec::text(&decision["target"]["observation_hash"]))
             .ok_or("KeyError")?;
-        let label = |o: &Value| {
+        let label = |o: &O| {
             refs.get(codec::text(&o["wallet_id"]))
                 .and_then(|r| r.get("label"))
                 .unwrap_or(&o["wallet_id"])

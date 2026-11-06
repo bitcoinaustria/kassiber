@@ -2007,5 +2007,35 @@
       "typed_ledger_checks_its_header"
     ],
     "rule": "The typed ledger entry point must reject operations that do not return a ledger response."
+  },
+  {
+    "id": "PAR-sequential-enter",
+    "file": "tax-engine/core/src/par.rs",
+    "find": "flag.replace(true)",
+    "replace": "flag.replace(false)",
+    "expect_failing": [
+      "sequential_maps_stay_on_the_calling_thread_and_keep_results"
+    ],
+    "rule": "A sequential scope keeps every map on its thread."
+  },
+  {
+    "id": "PAR-sequential-restore",
+    "file": "tax-engine/core/src/par.rs",
+    "find": "SEQUENTIAL.with(|flag| flag.set(self.0));",
+    "replace": "SEQUENTIAL.with(|flag| flag.set(true));",
+    "expect_failing": [
+      "sequential_maps_stay_on_the_calling_thread_and_keep_results"
+    ],
+    "rule": "Leaving a sequential scope restores parallel maps."
+  },
+  {
+    "id": "PAR-sequential-workers",
+    "file": "tax-engine/core/src/par.rs",
+    "find": "    if SEQUENTIAL.with(std::cell::Cell::get) {\n        return 1;",
+    "replace": "    if SEQUENTIAL.with(std::cell::Cell::get) {\n        return 2;",
+    "expect_failing": [
+      "sequential_maps_stay_on_the_calling_thread_and_keep_results"
+    ],
+    "rule": "Inside a sequential scope a map has one worker."
   }
 ]

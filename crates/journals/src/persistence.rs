@@ -250,7 +250,16 @@ fn store<O: storage::WriteObserver>(
     }
     writer.observer.phase("quantity");
     quantity::reconciliations(writer, profile, state, at)?;
-    let quantity_counts = quantity::store(writer, &wid, &pid, state.custody_quantity, at)?;
+    let (observations, postings) = state.quantity_refs();
+    let quantity_counts = quantity::store(
+        writer,
+        &wid,
+        &pid,
+        state.custody_quantity,
+        &observations,
+        &postings,
+        at,
+    )?;
     writer.observer.phase("pricing");
     let pricing: HashMap<String, (Sql, Sql)> = writer
         .conn

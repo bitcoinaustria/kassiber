@@ -1,4 +1,5 @@
 use crate::*;
+use kassiber_custody::finalized_projection::RowView;
 use kassiber_pydecimal::{Context, Decimal, Rounding};
 use kassiber_pyjson::{Key, Value as Py};
 use kassiber_tax_core::{
@@ -162,16 +163,58 @@ fn lookup<'a>(map: &HashMap<Cow<'_, str>, &'a Value>, id: &str) -> Result<&'a Va
         .copied()
         .ok_or_else(|| Refusal::new("KeyError", format!("'{id}'")))
 }
-fn pricing_fields(row: &Value) -> [&Value; 12] {
-    row.as_object()
-        .map(|fields| {
-            std::array::from_fn(|i| {
-                fields
-                    .get(FRAGMENT_PRICING_FIELDS[i])
-                    .unwrap_or(&Value::Null)
-            })
-        })
-        .unwrap_or([&Value::Null; 12])
+fn pricing_fields(row: Row<'_>) -> [&Value; 12] {
+    std::array::from_fn(|i| row.at(FRAGMENT_PRICING_FIELDS[i]))
+}
+/// A projection row: its JSON object, or a view whose fields are that object's.
+#[derive(Clone, Copy)]
+enum Row<'r> {
+    Json(&'r Value),
+    View(&'r RowView<'r>),
+}
+const NULL_ROW: Row<'static> = Row::Json(&Value::Null);
+impl<'r> Row<'r> {
+    /// The field `key`; none when the row is not an object or lacks it.
+    fn get(self, key: &str) -> Option<&'r Value> {
+        match self {
+            Self::Json(row) => row.as_object().and_then(|fields| fields.get(key)),
+            Self::View(row) => row.get(key),
+        }
+    }
+    /// The field `key`, or null.
+    fn at(self, key: &str) -> &'r Value {
+        self.get(key).unwrap_or(&Value::Null)
+    }
+    /// `row[key]` as Python reads it, refusing as `required` does.
+    fn required(self, key: &str) -> Result<&'r Value, Refusal> {
+        match self {
+            Self::Json(row) => required(row, key),
+            Self::View(row) => row
+                .get(key)
+                .ok_or_else(|| Refusal::new("KeyError", format!("'{key}'"))),
+        }
+    }
+    /// The row's JSON object.
+    fn json(self) -> Value {
+        match self {
+            Self::Json(row) => row.clone(),
+            Self::View(row) => row.json(),
+        }
+    }
+    /// Whether both name the same row.
+    fn same(self, other: Row<'_>) -> bool {
+        match (self, other) {
+            (Self::Json(a), Row::Json(b)) => std::ptr::eq(a, b),
+            (Self::View(a), Row::View(b)) => std::ptr::eq(a, b),
+            _ => false,
+        }
+    }
+}
+impl std::ops::Index<&str> for Row<'_> {
+    type Output = Value;
+    fn index(&self, key: &str) -> &Value {
+        self.at(key)
+    }
 }
 pub struct LedgerState<'i> {
     pub entries: Vec<JournalEntryRow<'i>>,
@@ -186,14 +229,27 @@ pub struct LedgerState<'i> {
 pub struct LedgerInputs<'a> {
     pub profile: &'a Value,
     pub projection: &'a Value,
+    /// The projection's rows as views, read in place of `projection["rows"]`.
+    pub rows: Option<&'a [RowView<'a>]>,
     pub wallets: &'a [Value],
     pub direct_payout_records: &'a [Value],
 }
+impl<'a> LedgerInputs<'a> {
+    fn rows(&self) -> Vec<Row<'a>> {
+        match self.rows {
+            Some(views) => views.iter().map(Row::View).collect(),
+            None => array(&self.projection["rows"])
+                .iter()
+                .map(Row::Json)
+                .collect(),
+        }
+    }
+}
 struct Reader<'a, 'i> {
     inputs: &'a LedgerInputs<'i>,
-    original_rows: &'i [Value],
+    original_rows: Vec<Row<'i>>,
     rows: HashMap<Cow<'a, str>, usize>,
-    row_values: Vec<&'a Value>,
+    row_values: Vec<Row<'a>>,
     labels: HashMap<Cow<'i, str>, &'i Value>,
     iso: HashMap<String, String>,
     utc_dates: HashMap<String, bool>,
@@ -290,21 +346,18 @@ impl<'a, 'i> Reader<'a, 'i> {
         let provenance = if let Some(p) = slot.and_then(|slot| self.sources[slot].as_ref()) {
             p.clone()
         } else {
-            let row = slot
-                .map(|slot| self.row_values[slot])
-                .unwrap_or(&Value::Null);
-            let iso = self.iso(field(row, "occurred_at"))?;
+            let row = slot.map(|slot| self.row_values[slot]).unwrap_or(NULL_ROW);
+            let iso = self.iso(row.at("occurred_at"))?;
             let pricing = if let Some(original) = slot
                 .and_then(|slot| self.original_rows.get(slot))
-                .filter(|original| std::ptr::eq(*original, row))
+                .filter(|original| original.same(row))
             {
-                PricingFacts::Borrowed(pricing_fields(original))
+                PricingFacts::Borrowed(pricing_fields(*original))
             } else {
                 PricingFacts::Owned(Box::new(pricing_fields(row).map(Clone::clone)))
             };
             let provenance = std::sync::Arc::new(SourceProvenance {
-                transaction_id: fallback(field(row, "journal_transaction_id"), field(row, "id"))
-                    .clone(),
+                transaction_id: fallback(row.at("journal_transaction_id"), row.at("id")).clone(),
                 engine_event_id: Cow::Borrowed(id),
                 occurred_at: iso,
                 pricing,
@@ -390,7 +443,7 @@ impl<'a, 'i> Reader<'a, 'i> {
     fn head(
         &mut self,
         wallet: &'i Value,
-        row: &Value,
+        row: Row<'_>,
         fallback_id: &str,
         occurred_at: Value,
         ids: &mut impl FnMut() -> String,
@@ -420,7 +473,7 @@ impl<'a, 'i> Reader<'a, 'i> {
     }
     fn entry_head(
         head: &HeadValues<'i>,
-        row: &Value,
+        row: Row<'_>,
         fallback_id: &str,
         occurred_at: Value,
         id: String,
@@ -430,8 +483,7 @@ impl<'a, 'i> Reader<'a, 'i> {
             workspace_id: head.workspace_id,
             profile_id: head.profile_id,
             transaction_id: Value::String(
-                row.as_object()
-                    .and_then(|fields| fields.get("journal_transaction_id"))
+                row.get("journal_transaction_id")
                     .map(string)
                     .unwrap_or_else(|| fallback_id.into()),
             ),
@@ -453,10 +505,10 @@ impl<'a, 'i> Reader<'a, 'i> {
             calculation: None,
         }
     }
-    fn row(&self, id: &str) -> Option<&'a Value> {
+    fn row(&self, id: &str) -> Option<Row<'a>> {
         self.rows.get(id).map(|slot| self.row_values[*slot])
     }
-    fn required_row(&self, id: &str) -> Result<&'a Value, Refusal> {
+    fn required_row(&self, id: &str) -> Result<Row<'a>, Refusal> {
         self.row(id)
             .ok_or_else(|| Refusal::new("KeyError", format!("'{id}'")))
     }
@@ -479,12 +531,12 @@ impl<'a, 'i> Reader<'a, 'i> {
     ) -> Result<JournalEntryRow<'i>, Refusal> {
         match item {
             EntryOut::Acquisition(a) => {
-                let row = self.row(&a.row).unwrap_or(&Value::Null);
+                let row = self.row(&a.row).unwrap_or(NULL_ROW);
                 let mut e = self.head(
                     self.wallet(&a.wallet)?,
                     row,
                     &a.row,
-                    required(row, "occurred_at")?.clone(),
+                    row.required("occurred_at")?.clone(),
                     ids,
                 )?;
                 e.asset = Cow::Borrowed(&a.asset);
@@ -495,12 +547,12 @@ impl<'a, 'i> Reader<'a, 'i> {
                 Ok(e)
             }
             EntryOut::Realized(a) => {
-                let row = self.row(&a.row).unwrap_or(&Value::Null);
+                let row = self.row(&a.row).unwrap_or(NULL_ROW);
                 let mut e = self.head(
                     self.wallet(&a.wallet)?,
                     row,
                     &a.row,
-                    required(row, "occurred_at")?.clone(),
+                    row.required("occurred_at")?.clone(),
                     ids,
                 )?;
                 e.entry_type = a.entry_type.as_str();
@@ -562,7 +614,7 @@ impl<'a, 'i> Reader<'a, 'i> {
                 );
                 let wallet = lookup(&self.labels, &label)?;
                 let row_id = string(&audit[if outbound { "out_id" } else { "in_id" }]);
-                let row = self.row(&row_id).unwrap_or(&Value::Null);
+                let row = self.row(&row_id).unwrap_or(NULL_ROW);
                 let qty = JournalQuantity::from_audit(
                     if outbound {
                         rendered.crypto_sent
@@ -590,17 +642,18 @@ pub fn render_ledger<'i>(
 ) -> Result<LedgerState<'i>, Refusal> {
     let span = kassiber_custody::timing::span("render.inputs");
     let mut carried = HashMap::new();
-    let mut row_values: Vec<_> = array(&inputs.projection["rows"]).iter().collect();
+    let original_rows = inputs.rows();
+    let mut row_values: Vec<Row<'_>> = original_rows.clone();
     let mut rows = HashMap::with_capacity(row_values.len());
     for (slot, row) in row_values.iter().enumerate() {
-        rows.insert(row_key(required(row, "id")?), slot);
+        rows.insert(row_key(row.required("id")?), slot);
     }
     for carry in &response.carried_rows {
         let row = carried.entry(carry.row.clone()).or_insert_with(|| {
             rows.get(carry.row.as_str())
                 .map(|slot| row_values[*slot])
-                .unwrap_or(&Value::Null)
-                .clone()
+                .unwrap_or(NULL_ROW)
+                .json()
         });
         if row.is_null() {
             return Err(Refusal::new("KeyError", format!("'{}'", carry.row)));
@@ -645,7 +698,7 @@ pub fn render_ledger<'i>(
         }
     }
     for (id, row) in &carried {
-        row_values[rows[id.as_str()]] = row;
+        row_values[rows[id.as_str()]] = Row::Json(row);
     }
     let sources = vec![None; row_values.len()];
     let source_values = std::iter::repeat_with(|| None)
@@ -660,7 +713,7 @@ pub fn render_ledger<'i>(
     }
     let mut reader = Reader {
         inputs,
-        original_rows: array(&inputs.projection["rows"]),
+        original_rows,
         rows,
         row_values,
         labels,
@@ -811,7 +864,7 @@ fn py_detail(value: &Py, compact: bool) -> Result<String, Refusal> {
     kassiber_pyjson::dumps(value, &options)
         .map_err(|error| Refusal::new("ValueError", error.to_string()))
 }
-fn quarantine(profile: &Value, row: &Value, q: &QuarantineOut) -> Result<QuarantineRow, Refusal> {
+fn quarantine(profile: &Value, row: Row<'_>, q: &QuarantineOut) -> Result<QuarantineRow, Refusal> {
     let mut detail = detail_value(&Value::Object(q.detail.clone()))?;
     let mut enriched = json!({});
     match q.detail_kind {
@@ -875,7 +928,7 @@ fn quarantine(profile: &Value, row: &Value, q: &QuarantineOut) -> Result<Quarant
         }
     }
     Ok(QuarantineRow {
-        transaction_id: fallback(&row["journal_transaction_id"], required(row, "id")?).clone(),
+        transaction_id: fallback(&row["journal_transaction_id"], row.required("id")?).clone(),
         workspace_id: required(profile, "workspace_id")?.clone(),
         profile_id: required(profile, "id")?.clone(),
         reason: q.reason.as_str().into(),
@@ -1021,8 +1074,8 @@ fn direct_payouts(inputs: &LedgerInputs<'_>) -> Result<Value, Refusal> {
     if inputs.direct_payout_records.is_empty() {
         return Ok(json!([]));
     }
-    let mut rows: HashMap<String, Vec<&Value>> = HashMap::new();
-    for r in array(&inputs.projection["rows"]) {
+    let mut rows: HashMap<String, Vec<Row<'_>>> = HashMap::new();
+    for r in inputs.rows() {
         if truth(&r["journal_transaction_id"]) && r["direction"] == "outbound" {
             rows.entry(string(&r["journal_transaction_id"]))
                 .or_default()
@@ -1056,7 +1109,7 @@ fn direct_payouts(inputs: &LedgerInputs<'_>) -> Result<Value, Refusal> {
         let source = if candidates.len() == 1 {
             *candidates[0]
         } else {
-            &Value::Null
+            NULL_ROW
         };
         let mut v = json!({"payout_id":string(id),"out_id":string(out),"out_asset":fallback(&r["out_asset"],&source["asset"]),"out_amount_msat":crate::integer::integer_or_zero(fallback(amount,&source["amount"]))?,"payout_amount_msat":crate::integer::integer_or_zero(&r["payout_amount"])?,"swap_fee_msat":crate::integer::integer_or_zero(&r["swap_fee_msat"])?});
         for k in [

@@ -126,6 +126,7 @@ fn state(value: &Value) -> JournalState<'_> {
             .collect(),
         custody_component_blockers: &value["custody_component_blockers"],
         custody_quantity: &value["custody_quantity"],
+        quantity_views: None,
         cross_asset_pairs: &Value::Null,
         direct_swap_payouts: Value::Null,
         ownership_review_counts: Value::Null,

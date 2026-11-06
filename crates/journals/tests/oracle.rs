@@ -22,6 +22,7 @@ fn check_cases(text: &str, group: Option<&str>) {
                 let inputs = kassiber_journals::LedgerInputs {
                     profile: &c["profile"],
                     projection: &c["custody"]["finalized_tax_projection"],
+                    rows: None,
                     wallets: c["wallets"].as_array().unwrap(),
                     direct_payout_records: c["custody"]["direct_payout_records"]
                         .as_array()
@@ -135,6 +136,68 @@ fn malformed_response_refusals_consume_exact_uuid_tapes() {
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
+/// Every case again with the projection's rows as views, against the same
+/// rows as JSON: rendering, joins and refusals must agree.
+#[test]
+fn projection_row_views_render_as_their_json() {
+    use kassiber_custody::finalized_projection::of_rows;
+    let convert =
+        |py: &kassiber_pyjson::Value| Ok::<_, String>(kassiber_custody::codec::to_json(py));
+    let outcome =
+        |c: &Value,
+         custody: &Value,
+         views: Option<&[kassiber_custody::finalized_projection::RowView<'_>]>| {
+            let response = if c["response"].is_null() {
+                Ok(boundary::empty_response())
+            } else {
+                boundary::ledger_response(&c["response"])
+            };
+            let mut ids = c["entry_ids"].as_array().unwrap().iter();
+            let mut operands = boundary::RenderOperands::from_json(custody);
+            operands.projection_rows = views;
+            let state = response.and_then(|r| {
+                boundary::build_operands(
+                    &c["profile"],
+                    &operands,
+                    c["wallets"].as_array().unwrap(),
+                    &r,
+                    || ids.next().unwrap().as_str().unwrap().to_owned(),
+                )
+                .map(|state| boundary::canonical(&state).unwrap())
+            });
+            match state {
+                Ok(state) => state,
+                Err(error) => serde_json::to_string(&serde_json::to_value(error).unwrap()).unwrap(),
+            }
+        };
+    let cases: Vec<Value> = serde_json::from_str(include_str!("data/render.json")).unwrap();
+    let mut viewed = 0;
+    for c in &cases {
+        let rows = c["custody"]["finalized_tax_projection"]["rows"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        viewed += rows.len();
+        let projection = of_rows(rows);
+        let converted = projection.json_with(&[], convert).unwrap()["rows"].take();
+        let (_, views) = projection.json_with_views(&[], convert).unwrap();
+        let mut reference = c["custody"].clone();
+        if reference["finalized_tax_projection"].is_object() {
+            reference["finalized_tax_projection"]["rows"] = converted;
+        }
+        let mut native = reference.clone();
+        if let Some(projection) = native["finalized_tax_projection"].as_object_mut() {
+            projection.remove("rows");
+        }
+        assert_eq!(
+            outcome(c, &native, Some(&views)),
+            outcome(c, &reference, None),
+            "{}",
+            c["name"]
+        );
+    }
+    assert!(viewed > 0);
+}
 #[test]
 fn ledger_rendering_matches_python() {
     corpus("ledger");
@@ -163,6 +226,7 @@ fn native_render_and_finish_match_combined_stage() {
         let input = kassiber_journals::LedgerInputs {
             profile: &case["profile"],
             projection: &case["custody"]["finalized_tax_projection"],
+            rows: None,
             wallets: case["wallets"].as_array().unwrap(),
             direct_payout_records: case["custody"]["direct_payout_records"].as_array().unwrap(),
         };

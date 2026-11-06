@@ -12,44 +12,56 @@ pub(super) fn key(v: &Value) -> Cow<'_, str> {
 
 #[derive(Clone, Copy)]
 struct Observation<'a> {
-    row: &'a Value,
+    row: ObservationRef<'a>,
     transaction: &'a Value,
     occurred: &'a Value,
 }
 impl<'a> Observation<'a> {
-    fn new(row: &'a Value) -> Self {
+    fn new(row: ObservationRef<'a>) -> Self {
         Self {
             row,
-            transaction: &row["anchor_transaction_id"],
-            occurred: &row["occurred_at"],
+            transaction: row.at("anchor_transaction_id"),
+            occurred: row.at("occurred_at"),
         }
     }
 }
-impl std::ops::Deref for Observation<'_> {
-    type Target = Value;
-    fn deref(&self) -> &Value {
-        self.row
+impl std::ops::Index<&str> for Observation<'_> {
+    type Output = Value;
+    fn index(&self, key: &str) -> &Value {
+        self.row.at(key)
     }
 }
 
-fn posting_fields(posting: &Value) -> [&Value; 7] {
-    let mut fields = [&Value::Null; 7];
-    if let Some(object) = posting.as_object() {
-        for (key, value) in object {
-            let index = match key.as_str() {
-                "posting_id" => 0,
-                "observation_hash" => 1,
-                "asset" => 2,
-                "location_kind" => 3,
-                "location_id" => 4,
-                "amount_msat" => 5,
-                "state" => 6,
-                _ => continue,
-            };
-            fields[index] = value;
+fn posting_fields(posting: PostingRef<'_>) -> [&Value; 7] {
+    if let PostingRef::Json(posting) = posting {
+        let mut fields = [&Value::Null; 7];
+        if let Some(object) = posting.as_object() {
+            for (key, value) in object {
+                let index = match key.as_str() {
+                    "posting_id" => 0,
+                    "observation_hash" => 1,
+                    "asset" => 2,
+                    "location_kind" => 3,
+                    "location_id" => 4,
+                    "amount_msat" => 5,
+                    "state" => 6,
+                    _ => continue,
+                };
+                fields[index] = value;
+            }
         }
+        return fields;
     }
-    fields
+    [
+        "posting_id",
+        "observation_hash",
+        "asset",
+        "location_kind",
+        "location_id",
+        "amount_msat",
+        "state",
+    ]
+    .map(|key| posting.at(key))
 }
 
 fn relation_source_id(relation: &Value) -> String {
@@ -71,7 +83,7 @@ fn nullable(v: &Value) -> Result<Sql, Refusal> {
 fn hash(v: &Value) -> Result<Sql, Refusal> {
     Ok(t(kassiber_custody::codec::sha256(&pyjson(v, true)?)))
 }
-fn network(o: &Value) -> Value {
+fn network<O: for<'k> std::ops::Index<&'k str, Output = Value> + ?Sized>(o: &O) -> Value {
     match o["event_key"]["network"].as_str() {
         Some("liquidv1") => json!("main"),
         Some("liquidtestnet") => json!("test"),
@@ -79,7 +91,7 @@ fn network(o: &Value) -> Value {
         _ => o["event_key"]["network"].clone(),
     }
 }
-fn exposure(o: &Value) -> String {
+fn exposure<O: for<'k> std::ops::Index<&'k str, Output = Value> + ?Sized>(o: &O) -> String {
     if matches!(o["asset"].as_str(), Some("BTC" | "LBTC")) {
         "bitcoin".into()
     } else {
@@ -95,7 +107,10 @@ fn slice_amount(slice: &Value) -> Result<i128, Refusal> {
         .ok_or_else(|| Refusal::new("OverflowError", "slice end does not fit SQLite INTEGER"))?;
     Ok(i128::from(end) - i128::from(start))
 }
-fn barrier(q: &Value, o: &Value) -> Value {
+fn barrier<O: for<'k> std::ops::Index<&'k str, Output = Value> + ?Sized>(
+    q: &Value,
+    o: &O,
+) -> Value {
     array(&q["tax_eligibility"]["pool_barriers"])
         .iter()
         .find(|p| {
@@ -113,6 +128,8 @@ pub(super) fn store<O: storage::WriteObserver>(
     wid: &str,
     pid: &str,
     q: &Value,
+    observations: &[ObservationRef<'_>],
+    postings: &[PostingRef<'_>],
     at: &str,
 ) -> Result<HashMap<&'static str, usize>, Refusal> {
     let mut counts = HashMap::from([
@@ -133,20 +150,21 @@ pub(super) fn store<O: storage::WriteObserver>(
         w.clear(table, pid)?;
     }
     w.observer.phase("quantity_postings_prepare");
-    let observations: HashMap<_, _> = array(&q["projection"]["observations"])
+    let observation_list = observations;
+    let observations: HashMap<_, _> = observation_list
         .iter()
-        .map(|o| (key(&o["quantity_hash"]), Observation::new(o)))
+        .map(|o| (key(o.at("quantity_hash")), Observation::new(*o)))
         .collect();
     w.observer.phase("quantity_postings_bind");
-    let input_postings = array(&q["projection"]["postings"]);
+    let input_postings = postings;
     let mut postings = Vec::with_capacity(input_postings.len());
     let mut balances = BTreeMap::<_, i128>::new();
     for p in input_postings {
-        let [id, observation, asset, kind, location, amount, state] = posting_fields(p);
+        let [id, observation, asset, kind, location, amount, state] = posting_fields(*p);
         let o = observations
             .get(&key(observation))
             .copied()
-            .unwrap_or_else(|| Observation::new(&Value::Null));
+            .unwrap_or_else(|| Observation::new(ObservationRef::Json(&Value::Null)));
         postings.push([
             borrowed(id)?,
             ValueRef::Text(wid.as_bytes()),
@@ -370,8 +388,9 @@ pub(super) fn store<O: storage::WriteObserver>(
         ],
         rows,
     )?;
-    let by_tx: HashMap<_, _> = array(&q["projection"]["observations"])
+    let by_tx: HashMap<_, _> = observation_list
         .iter()
+        .copied()
         .filter(|o| {
             (!array(&q["reviewed_conversion_pairs"]).is_empty()
                 || !array(&q["reviewed_direct_payouts"]).is_empty())
@@ -393,7 +412,7 @@ pub(super) fn store<O: storage::WriteObserver>(
             let target = by_tx
                 .get(&string(target_id))
                 .copied()
-                .unwrap_or(&Value::Null);
+                .unwrap_or(ObservationRef::Json(&Value::Null));
             let absent = |v: &Value| v.is_null() || v == "";
             let mut source_amount = &r["out_amount"];
             if absent(source_amount) {
@@ -410,7 +429,7 @@ pub(super) fn store<O: storage::WriteObserver>(
             }
             let target_principal;
             if absent(target_amount) && !target.is_null() {
-                target_principal = kassiber_custody::quantity::principal_msat(target)?;
+                target_principal = kassiber_custody::quantity::principal_msat(&target)?;
                 target_amount = &target_principal;
             }
             let source_amount = kassiber_custody::codec::integer(source_amount)?;

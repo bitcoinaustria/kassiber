@@ -3,6 +3,7 @@
 pub mod allocation;
 mod arbitration;
 pub(crate) use arbitration::DecisionRef;
+pub use arbitration::PostingView;
 pub mod balances;
 pub mod hashes;
 pub mod holds;
@@ -90,7 +91,7 @@ pub(super) fn exact(v: &Value) -> Result<BigInt, String> {
     }
     BigInt::from_str(&v.to_string()).map_err(|_| "ValueError".into())
 }
-pub fn principal_msat(v: &Value) -> Result<Value, String> {
+pub fn principal_msat<O: Obs + ?Sized>(v: &O) -> Result<Value, String> {
     principal(v).map(|n| number(&n))
 }
 
