@@ -470,5 +470,15 @@
    "pair_sequences_match_python_complete_database_rows_and_refusals"
   ],
   "rule": "Unpair returns the removed pair (#684)."
+ },
+ {
+  "id": "S4-auto-pair-summary-ownership",
+  "file": "crates/transfers/src/pairing/service.rs",
+  "find": "                    \"rule_matches\",\n                    \"ownership\",\n                ],\n",
+  "replace": "                    \"rule_matches\",\n                ],\n",
+  "expect_failing": [
+   "pairing_services_match_python_seeded_complete_database_rows_and_ordered_results"
+  ],
+  "rule": "The automatic pairing summary's before and remaining counts carry `ownership` (#707)."
  }
 ]

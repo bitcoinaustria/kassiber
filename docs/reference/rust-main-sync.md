@@ -554,7 +554,7 @@ coarse price, so the differential tests above cover those paths.
   authoring, component-read, pairing-service, refresh, native-process and
   workspace vectors. Every `kassiber-transfers` test binary passes, and so
   do the journals `process_refresh` and `process_native` binaries.
-- Mutation catalogs, every entry killed: 23 S4 entries in
+- Mutation catalogs, every entry killed: 24 S4 entries in
   `crates/transfers/scripts/sync_mutations.json` (cargo tests) and 9 in
   `review_process_mutations.json`, run by `review_process_mutation_check.py`
   against a test-harness binary rebuilt from each mutated tree (the Python
