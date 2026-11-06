@@ -455,7 +455,9 @@ fn freshness(conn: &Connection, profile: &Row) -> Result<Freshness, AppError> {
             let built = int_or_zero(profile.get("journal_semantics_version"))?;
             required == BigInt::from(0)
                 || (built
-                    == BigInt::from(kassiber_store::semantics::JOURNAL_CALCULATION_SEMANTICS_VERSION)
+                    == BigInt::from(
+                        kassiber_store::semantics::JOURNAL_CALCULATION_SEMANTICS_VERSION,
+                    )
                     && built >= required)
         };
     let (status, reason) = if active == 0 {

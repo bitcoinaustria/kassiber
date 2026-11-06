@@ -510,7 +510,9 @@ fn journal_freshness(conn: &Connection, profile_id: &str) -> Result<Py, AppError
             let built = int_or_zero(row.get("journal_semantics_version"))?;
             let semantics_current = required == BigInt::from(0)
                 || (built
-                    == BigInt::from(kassiber_store::semantics::JOURNAL_CALCULATION_SEMANTICS_VERSION)
+                    == BigInt::from(
+                        kassiber_store::semantics::JOURNAL_CALCULATION_SEMANTICS_VERSION,
+                    )
                     && built >= required);
             let status = if active == BigInt::from(0) {
                 "no_transactions"
