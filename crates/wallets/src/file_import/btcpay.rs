@@ -231,11 +231,7 @@ fn record(row: Py) -> Result<csv::Row, AppError> {
 
 pub(super) fn load(file: &str, json: bool) -> Result<Vec<csv::Row>, AppError> {
     let rows = if json {
-        let text = csv::read_text(file)?
-            .replace("\r\n", "\n")
-            .replace('\r', "\n");
-        let payload = kassiber_pytext::loads(&text)
-            .map_err(|e| AppError::new("internal_error", e.to_string()))?;
+        let payload = csv::read_json(file, "BTCPay JSON export", true)?;
         let Py::List(rows) = payload else {
             return Err(AppError::new(
                 "app_error",

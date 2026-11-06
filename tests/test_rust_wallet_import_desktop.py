@@ -126,6 +126,25 @@ class RustDesktopImportTest(UnlockingParity, unittest.TestCase):
             {"source_format": "strike_csv", "source_file": files["rows.csv"], "wallet": "imports"},
         ])
 
+    def non_json_files(self):
+        files = self.base / "files"
+        (files / "latin.json").write_bytes(b'[{"description": "caf\xe9"}]')
+        (files / "bom.json").write_bytes(b"\xef\xbb\xbf[]")
+        return [{"source_format": source_format, "source_file": path, "wallet": "imports"}
+                for path in (self.files["rows.csv"], str(files / "latin.json"), str(files / "bom.json"))
+                for source_format in ("json", "btcpay_json", "wasabi_bundle")]
+
+    def test_non_json_files_under_json_formats_are_validation_refusals(self):
+        # tests/rust_port/repro_import_json_format_on_csv.py
+        responses = self.compare(self.non_json_files())
+        self.assertEqual({(r["error"]["code"], r["error"]["hint"]) for r in responses},
+                         {("validation", "Choose the import format that matches the file.")})
+
+    def test_sqlcipher_non_json_files_are_validation_refusals(self):
+        self.encrypt("synthetic import key")
+        responses = self.compare(self.non_json_files()[:3])
+        self.assertEqual([r["error"]["code"] for r in responses if r["kind"] == "error"], ["validation"] * 3)
+
     def test_json_import_runs_the_journal_step(self):
         self.imports([{"source_format": "json", "source_file": self.files["rows.json"], "wallet": " Imports "}])
 
