@@ -1038,7 +1038,7 @@ fn enrich(
     if !allow_public_lookup {
         return Ok(raw);
     }
-    // Public lookups are network work behind kassiber-net; this read refuses
+    // Public lookups are network work for the egress crate; this read refuses
     // instead of falling back.
     let _ = (label, prefix);
     Err(AppError::new(

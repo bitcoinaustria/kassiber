@@ -18,6 +18,10 @@ fn bypass(source: &str) -> bool {
             "useReviewedAddressLiteral;",
         )
         .replace(
+            "parse::<std::net::Ipv4Addr>()",
+            "parse::<ReviewedAddressLiteral>()",
+        )
+        .replace(
             "parse::<std::net::Ipv6Addr>()",
             "parse::<ReviewedAddressLiteral>()",
         )
@@ -321,6 +325,10 @@ fn walk(path: &Path, root: &Path, own: &Path, in_crate: bool, failures: &mut Vec
                     "use ReviewedAddressLiteral;",
                 )
                 .replace(
+                    "parse::<std::net::Ipv4Addr>()",
+                    "parse::<ReviewedAddressLiteral>()",
+                )
+                .replace(
                     "parse::<std::net::Ipv6Addr>()",
                     "parse::<ReviewedAddressLiteral>()",
                 )
@@ -427,6 +435,7 @@ fn scanner_catches_common_import_and_dependency_forms() {
     assert!(bypass(
         "use std::net::{IpAddr, Ipv4Addr, Ipv6Addr}; std::net::TcpStream::connect(addr)"
     ));
+    assert!(!bypass("address.parse::<std::net::Ipv4Addr>().is_ok()"));
     assert!(!bypass("address.parse::<std::net::Ipv6Addr>().is_ok()"));
     assert!(!bypass("address.parse::<std::net::IpAddr>().is_ok()"));
     assert!(!bypass("match ip {std::net::IpAddr::V4(v)=>v.is_private(),std::net::IpAddr::V6(v)=>v.is_loopback()}"));
@@ -438,6 +447,9 @@ fn scanner_catches_common_import_and_dependency_forms() {
     ));
     assert!(bypass(
         "address.parse::<std::net::Ipv6Addr>(); std::net::TcpStream::connect(addr)"
+    ));
+    assert!(bypass(
+        "address.parse::<std::net::Ipv4Addr>(); std::net::TcpStream::connect(addr)"
     ));
     for source in [
         "[dependencies]\nunknown-network = \"1\"",
